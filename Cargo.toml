@@ -1,0 +1,48 @@
+[package]
+name = "quickgui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+description = "A damage-driven, GPU-accelerated desktop GUI foundation"
+license = "MIT"
+repository = "https://github.com/egoist/quickgui"
+keywords = ["gui", "wgpu", "desktop", "graphics"]
+categories = ["gui", "graphics"]
+
+[features]
+default = []
+
+[dependencies]
+bitflags = "2.9"
+bytemuck = { version = "1.23", features = ["derive"] }
+glyphon = "0.12.0"
+pollster = "0.4"
+taffy = { version = "0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "block_layout", "content_size"] }
+thiserror = "2.0"
+tracing = "0.1"
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "wgsl"] }
+winit = "0.30.13"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = ["metal"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = ["dx12"] }
+
+[target.'cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))'.dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = ["gles", "vulkan"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = ["webgpu"] }
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[[bench]]
+name = "virtual_list"
+harness = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

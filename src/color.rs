@@ -1,0 +1,90 @@
+/// A premultiplication-neutral, linear-light RGBA color.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Color {
+    pub const TRANSPARENT: Self = Self::linear(0.0, 0.0, 0.0, 0.0);
+    pub const BLACK: Self = Self::linear(0.0, 0.0, 0.0, 1.0);
+    pub const WHITE: Self = Self::linear(1.0, 1.0, 1.0, 1.0);
+
+    /// Construct a color whose RGB components are already in linear-light space.
+    pub const fn linear(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// Construct from 8-bit sRGB components, converting to linear light.
+    pub fn rgb8(r: u8, g: u8, b: u8) -> Self {
+        Self::rgba8(r, g, b, 255)
+    }
+
+    /// Construct from 8-bit sRGB components and an 8-bit linear alpha.
+    pub fn rgba8(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self {
+            r: srgb_to_linear(r as f32 / 255.0),
+            g: srgb_to_linear(g as f32 / 255.0),
+            b: srgb_to_linear(b as f32 / 255.0),
+            a: a as f32 / 255.0,
+        }
+    }
+
+    pub fn with_alpha(self, alpha: f32) -> Self {
+        Self {
+            a: alpha.clamp(0.0, 1.0),
+            ..self
+        }
+    }
+
+    pub(crate) fn as_array(self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+
+    pub(crate) fn to_srgba8(self) -> [u8; 4] {
+        [
+            (linear_to_srgb(self.r) * 255.0).round() as u8,
+            (linear_to_srgb(self.g) * 255.0).round() as u8,
+            (linear_to_srgb(self.b) * 255.0).round() as u8,
+            (self.a.clamp(0.0, 1.0) * 255.0).round() as u8,
+        ]
+    }
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Self::TRANSPARENT
+    }
+}
+
+fn srgb_to_linear(value: f32) -> f32 {
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(value: f32) -> f32 {
+    let value = value.clamp(0.0, 1.0);
+    if value <= 0.003_130_8 {
+        value * 12.92
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn srgb_round_trip_is_exact_to_one_byte() {
+        for value in 0..=255 {
+            let color = Color::rgba8(value, value, value, value);
+            assert_eq!(color.to_srgba8(), [value, value, value, value]);
+        }
+    }
+}
