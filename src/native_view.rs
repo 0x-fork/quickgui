@@ -29,6 +29,10 @@ impl MacNativeView {
         &self.view
     }
 
+    pub(crate) fn retained(&self) -> Retained<NSView> {
+        self.view.clone()
+    }
+
     pub(crate) fn pointer(&self) -> NonNull<c_void> {
         NonNull::from(self.view.as_ref()).cast()
     }

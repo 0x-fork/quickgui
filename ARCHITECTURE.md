@@ -7,6 +7,8 @@ Winit + AccessKit events
     │
     ├─ coalesced wheel input ───────────────┐
     ├─ retained hover/focus/input state ────┤
+    ├─ contextual keymap → typed action ────┤
+    ├─ native menu id → typed action ───────┤
     └─ app mutation → explicit invalidate ──┤
                                             ▼
                                   retained Element tree
@@ -47,7 +49,51 @@ An element ID owns:
 - text-input caret, selection, composition, and horizontal offset;
 - text-layout and glyph-cache identity.
 
-`ViewContext::listener` stores callbacks in a registry parameterized by the concrete view type. `Element::on_click` only carries the stable ID, keeping the element tree non-generic and compact while callbacks can still mutate `&mut Self` without `Rc<RefCell<_>>` application state.
+`ViewContext::listener` and `ViewContext::action_listener` store callbacks in a registry
+parameterized by the concrete view type. `Element::on_click` and `Element::on_action` only carry the
+stable ID, keeping the element tree non-generic and compact while callbacks can still mutate
+`&mut Self` without `Rc<RefCell<_>>` application state.
+
+## Focused action and key dispatch
+
+Typed actions separate command meaning from input source. Keyboard bindings, ordinary buttons,
+command palettes, and native menu adapters all dispatch the same type-erased action value back into
+a typed handler. The retained tree records a parent pointer and optional `KeyContext` for each
+element. Dispatch follows only the root-to-focus path: key predicates resolve on that context stack,
+then matching handlers bubble from the focused node toward the root. A bubble handler consumes by
+default and must call `EventContext::propagate()` to continue, preventing accidental duplicate
+workspace/editor commands.
+
+Contextual precedence is deepest match first, then latest binding at the same depth. Global
+bindings behave as though they match the deepest context, allowing user bindings loaded last to
+override defaults. The keymap indexes bindings by their first normalized stroke instead of scanning
+the complete map on each keypress.
+
+Multi-stroke prefixes are retained per window with the focus identity that started them. A focus
+change clears the prefix. A mismatch or timeout replays the longest exact action prefix, or the raw
+key input when no action matched, before processing the new stroke. Pending storage cannot grow
+beyond a registered binding sequence. The only scheduling cost is `ControlFlow::WaitUntil` for one
+prefix deadline; a clean window otherwise remains on `ControlFlow::Wait`.
+
+## Native application menus
+
+The cross-platform `Menu`/`MenuItem` model owns the same concrete action values as the keymap.
+Action equality includes payloads, so two commands of the same Rust type do not accidentally share
+a displayed shortcut. On macOS, QuickGUI appends only its declared root items to Winit's existing
+menu bar and removes those exact Objective-C objects on drop; Winit continues to own About,
+Services, Hide, and Quit.
+
+Each native action item stores a small numeric ID. Its Objective-C target sends only that `usize`
+through Winit's thread-safe event proxy, while the runtime retains the non-atomic, main-thread-only
+typed action value. Focused handler availability and contextual single-stroke key equivalents are
+recomputed only after a retained-tree change, focus boundary, or menu-open event. AppKit owns menu
+tracking and submenu keyboard navigation, so a clean application still sleeps.
+
+Cut, Copy, Paste, Select All, Undo, and Redo can carry an `OsAction`. The target first asks AppKit's
+responder chain to perform the selector, preserving native behavior in embedded `NSView` controls.
+If no responder accepts it, the numeric event returns to focused QuickGUI action dispatch and then
+the retained text-input implementation. Menu-open events clear pending multi-stroke input, matching
+keyboard dispatch semantics rather than replaying a prefix while a native menu is active.
 
 ## Layout
 
@@ -73,6 +119,19 @@ An ordinary window still uses one WGPU surface. A macOS window with native child
 transparent overlay surface only when overlay content or input first becomes active, then retains
 that swapchain for reuse. Recreating it on every close/open cycle is intentionally avoided because
 Core Animation may keep old IOSurface drawables alive beyond the Rust `Surface` lifetime.
+
+On macOS, a single opaque AppKit launch shield uses the configured background color and stays above
+all three planes until the base renderer completes `Presented`. Surface retries and occlusion keep
+the shield mounted. Before ordering the window onscreen, QuickGUI runs view declaration, Flexbox,
+text shaping, scene construction, native reconciliation, and GPU buffer preparation. A hidden Metal
+surface is occluded before a render pass can execute, and WGPU intentionally refuses to acquire its
+drawable. For the first surface submission only, QuickGUI retains and detaches the Winit content
+view from the still-hidden `NSWindow`. Its CAMetalLayer then has no hosting window, so WGPU can
+acquire, render, present, and await the actual surface drawable without exposing any AppKit window.
+RAII reattaches the same content view to the same window at its unchanged frame after completion;
+only then is the window ordered onscreen. This avoids partial native content, black launch covers,
+and cross-monitor movement without polling. Failure to produce that hidden first surface frame is a
+startup error rather than permission to reveal a partial window. Later occlusion sleeps normally.
 
 ## Overlays and native composition
 
@@ -114,15 +173,17 @@ CPU frame time, primitive counts, text cache hits, and draw-call counts are expo
 
 The retained tree owns semantic focus and exposes it through AccessKit before the macOS window becomes visible. Pointer focus, Tab/Shift-Tab traversal, Space/Return button activation, programmatic focus handles, and accessibility actions all update the same focus owner.
 
-Single-line input keeps UTF-8 byte ranges internally but moves and deletes at Unicode grapheme boundaries. Cosmic Text provides visual caret hit testing and bidirectional selection spans. Composing text is retained separately from the controlled value, Winit preedit cursor offsets remain byte-indexed, and the native IME candidate rectangle follows the painted caret. AccessKit receives a stable `TextRun` child, grapheme character lengths, editable value, and native text-selection state. Clipboard objects are created lazily so applications that never copy or paste pay no startup cost.
+Single-line input keeps UTF-8 byte ranges internally but moves and deletes at Unicode grapheme boundaries. Cosmic Text provides visual caret hit testing and bidirectional selection spans. Composing text is retained separately from the controlled value, Winit preedit cursor offsets remain byte-indexed, and the native IME candidate rectangle follows the painted caret. AccessKit receives a stable `TextRun` child, grapheme character lengths, editable value, and native text-selection state. Clipboard objects are created lazily so applications that never copy or paste pay no startup cost. Undo and redo retain at most 100 snapshots and 512 KiB per direction for each mounted input; an external controlled-value replacement clears history.
+
+When native AppKit children are mounted, QuickGUI installs a no-ivar Objective-C subclass above AccessKit's existing Winit-view subclass. Its child and navigation queries preserve AccessKit's virtual nodes and append the live native accessibility roots in composition order. Accessibility focus and screen-point hit testing route into a native subtree when its responder owns focus or its frame contains the point; otherwise they fall through to AccessKit. Identity/order changes post one AppKit layout notification, while ordinary redraws allocate nothing and post nothing. Teardown restores AccessKit's exact class before AccessKit later restores Winit's class.
 
 ## Current boundaries
 
 This milestone establishes the performance architecture, ordered overlays, macOS native child
-composition, semantic focus/accessibility, and a production-oriented single-line editing path. The
-AccessKit adapter currently owns the Winit view's virtual accessibility children, so embedded native
-AppKit accessibility subtrees are not yet merged into the same navigation tree. A complete platform
-toolkit also still needs rich and multiline editing, images, shadows, full menus, focus
-scopes/keymaps, drag/drop, multi-window ownership, and broader platform acceptance. Those features
-should extend the retained tree and narrow renderer rather than bypass its scheduling and cache
-invariants.
+composition, hybrid AccessKit/AppKit accessibility, semantic focus, and a production-oriented
+single-line editing path, typed actions, focus scopes, contextual keymaps, and native macOS
+application menus. A complete platform toolkit still needs rich and multiline editing, images,
+shadows, command palettes, drag/drop, multi-window ownership, non-macOS menu projection, and broader
+platform acceptance. Those
+features should extend the retained tree and narrow renderer rather than bypass its scheduling and
+cache invariants.

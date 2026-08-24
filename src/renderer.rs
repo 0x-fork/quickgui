@@ -66,6 +66,8 @@ pub(crate) enum RendererError {
     RecreateSurface(String),
     #[error("could not initialize native-view composition: {0}")]
     NativeComposition(String),
+    #[error("GPU submission did not complete: {0}")]
+    DevicePoll(#[from] wgpu::PollError),
 }
 
 pub(crate) enum RenderOutcome {
@@ -271,6 +273,12 @@ impl GpuRenderer {
     ) -> Vec<(f32, f32)> {
         self.text
             .selection_spans(id, content, style, width, scale_factor, start, end)
+    }
+
+    /// Wait for the latest submitted frame before removing a platform launch cover.
+    pub(crate) fn wait_for_submitted_work(&self) -> Result<(), RendererError> {
+        self.device.poll(wgpu::PollType::wait_indefinitely())?;
+        Ok(())
     }
 
     pub fn render(

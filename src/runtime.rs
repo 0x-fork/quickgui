@@ -1,6 +1,12 @@
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Instant};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    marker::PhantomData,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use accesskit::{Action, ActionData, ActionRequest};
+use accesskit::{Action as AccessibilityAction, ActionData, ActionRequest};
 use accesskit_winit::{
     Adapter as AccessibilityAdapter, Event as AccessibilityEvent,
     WindowEvent as AccessibilityWindowEvent,
@@ -17,8 +23,10 @@ use winit::{
 };
 
 use crate::{
-    Color, ElementId, FocusHandle, IntoElement, Point, Scene, Size, Vector,
+    Action, ActionListener, AnyAction, Color, ElementId, FocusHandle, IntoElement, KeyBinding,
+    Keymap, Keystroke, Menu, OsAction, Point, Scene, Size, Vector,
     event::{Event, EventContext, Key, Modifiers, MouseButton},
+    menu::{MenuAction, collect_menu_actions},
     metrics::{FrameMetrics, MetricsTracker},
     renderer::{GpuRenderer, RenderOutcome},
     scheduler::FrameScheduler,
@@ -26,7 +34,21 @@ use crate::{
 };
 
 #[cfg(target_os = "macos")]
-use crate::macos::MacNativeHost;
+use crate::macos::{MacFirstFrameGuard, MacNativeHost};
+#[cfg(target_os = "macos")]
+use crate::macos_menu::{MacMenuHost, MacMenuItemState};
+
+pub(crate) enum RuntimeEvent {
+    Accessibility(AccessibilityEvent),
+    MenuWillOpen,
+    MenuAction(usize),
+}
+
+impl From<AccessibilityEvent> for RuntimeEvent {
+    fn from(event: AccessibilityEvent) -> Self {
+        Self::Accessibility(event)
+    }
+}
 
 /// GPU selection policy. `Balanced` lets WGPU choose the most appropriate adapter.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -47,6 +69,8 @@ pub struct AppConfig {
     pub performance_profile: PerformanceProfile,
     /// Logical pixels represented by one platform line-wheel unit.
     pub line_scroll_pixels: f32,
+    /// How long an incomplete multi-stroke key binding waits before its prefix is replayed.
+    pub key_sequence_timeout: Duration,
 }
 
 impl Default for AppConfig {
@@ -58,6 +82,7 @@ impl Default for AppConfig {
             background: Color::rgb8(18, 18, 20),
             performance_profile: PerformanceProfile::Balanced,
             line_scroll_pixels: 40.0,
+            key_sequence_timeout: Duration::from_secs(1),
         }
     }
 }
@@ -74,6 +99,7 @@ pub struct ViewContext<'a, V> {
     scale_factor: f32,
     metrics: FrameMetrics,
     focused: Option<ElementId>,
+    focused_path: Vec<ElementId>,
     request_animation_frame: bool,
     listeners: &'a mut ListenerRegistry<V>,
 }
@@ -103,6 +129,11 @@ impl<V> ViewContext<'_, V> {
 
     pub fn is_focused(&self, handle: FocusHandle) -> bool {
         self.focused == Some(handle.id())
+    }
+
+    /// Whether this scope is the focused element or an ancestor of it.
+    pub fn contains_focused(&self, handle: FocusHandle) -> bool {
+        self.focused_path.contains(&handle.id())
     }
 
     /// Keep rendering at the display's cadence until a future frame omits this call.
@@ -163,15 +194,41 @@ impl<V> ViewContext<'_, V> {
             marker: PhantomData,
         }
     }
+
+    /// Register a typed action callback for attachment with [`crate::Element::on_action`].
+    pub fn action_listener<A: Action>(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &A, &mut EventContext) + 'static,
+    ) -> ActionListener<V, A> {
+        let id = id.into();
+        let erased: ActionCallback<V> = Arc::new(move |view, action, context| {
+            let action = action
+                .downcast_ref::<A>()
+                .expect("action listener received the wrong concrete action type");
+            callback(view, action, context);
+        });
+        self.listeners
+            .actions
+            .entry((id, TypeId::of::<A>()))
+            .or_default()
+            .push(erased);
+        ActionListener {
+            id,
+            marker: PhantomData,
+        }
+    }
 }
 
 type ClickCallback<V> = Arc<dyn Fn(&mut V, &mut EventContext)>;
 type InputCallback<V> = Arc<dyn Fn(&mut V, &str, &mut EventContext)>;
+type ActionCallback<V> = Arc<dyn Fn(&mut V, &dyn Any, &mut EventContext)>;
 
 struct ListenerRegistry<V> {
     clicks: HashMap<ElementId, ClickCallback<V>>,
     inputs: HashMap<ElementId, InputCallback<V>>,
     dismisses: HashMap<ElementId, ClickCallback<V>>,
+    actions: HashMap<(ElementId, TypeId), Vec<ActionCallback<V>>>,
 }
 
 impl<V> ListenerRegistry<V> {
@@ -179,6 +236,7 @@ impl<V> ListenerRegistry<V> {
         self.clicks.clear();
         self.inputs.clear();
         self.dismisses.clear();
+        self.actions.clear();
     }
 }
 
@@ -188,6 +246,7 @@ impl<V> Default for ListenerRegistry<V> {
             clicks: HashMap::new(),
             inputs: HashMap::new(),
             dismisses: HashMap::new(),
+            actions: HashMap::new(),
         }
     }
 }
@@ -240,12 +299,16 @@ pub enum AppError {
     Render(String),
     #[error("view layout or painting failed: {0}")]
     View(String),
+    #[error("platform integration failed: {0}")]
+    Platform(String),
 }
 
 /// Configures and runs one retained QuickGUI view.
 pub struct App<V> {
     view: V,
     config: AppConfig,
+    keymap: Keymap,
+    menus: Vec<Menu>,
 }
 
 impl<V: View> App<V> {
@@ -253,6 +316,8 @@ impl<V: View> App<V> {
         Self {
             view,
             config: AppConfig::default(),
+            keymap: Keymap::default(),
+            menus: Vec::new(),
         }
     }
 
@@ -276,10 +341,40 @@ impl<V: View> App<V> {
         self
     }
 
+    /// Add application key bindings. Later bindings take precedence at equal context depth.
+    pub fn bind_keys(mut self, bindings: impl IntoIterator<Item = KeyBinding>) -> Self {
+        self.keymap.add_bindings(bindings);
+        self
+    }
+
+    /// Replace the complete application keymap.
+    pub fn keymap(mut self, keymap: Keymap) -> Self {
+        self.keymap = keymap;
+        self
+    }
+
+    /// Append one declarative application menu.
+    pub fn menu(mut self, menu: Menu) -> Self {
+        self.menus.push(menu);
+        self
+    }
+
+    /// Replace the complete declarative application menu set.
+    pub fn menus(mut self, menus: impl IntoIterator<Item = Menu>) -> Self {
+        self.menus = menus.into_iter().collect();
+        self
+    }
+
     pub fn run(self) -> Result<(), AppError> {
         let event_loop = EventLoop::with_user_event().build()?;
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut runtime = Runtime::new(self.view, self.config, event_loop.create_proxy());
+        let mut runtime = Runtime::new(
+            self.view,
+            self.config,
+            self.keymap,
+            self.menus,
+            event_loop.create_proxy(),
+        );
         event_loop.run_app(&mut runtime)?;
         match runtime.fatal_error {
             Some(error) => Err(error),
@@ -292,6 +387,8 @@ struct RuntimeWindow<V> {
     renderer: GpuRenderer,
     #[cfg(target_os = "macos")]
     native_host: Option<MacNativeHost>,
+    #[cfg(target_os = "macos")]
+    first_frame_guard: Option<MacFirstFrameGuard>,
     ui: UiTree,
     scheduler: FrameScheduler,
     scene: Scene,
@@ -311,26 +408,64 @@ struct RuntimeWindow<V> {
 struct Runtime<V> {
     view: V,
     config: AppConfig,
+    keymap: Keymap,
+    #[cfg(target_os = "macos")]
+    menus: Vec<Menu>,
+    menu_actions: Vec<MenuAction>,
+    #[cfg(target_os = "macos")]
+    menu_host: Option<MacMenuHost>,
+    pending_input: Option<PendingInput>,
     window: Option<RuntimeWindow<V>>,
     modifiers: Modifiers,
     fatal_error: Option<AppError>,
-    accessibility_proxy: EventLoopProxy<AccessibilityEvent>,
+    event_proxy: EventLoopProxy<RuntimeEvent>,
     clipboard: Option<Clipboard>,
+}
+
+#[derive(Clone, Debug)]
+struct PendingKey {
+    key: Key,
+    modifiers: Modifiers,
+    repeat: bool,
+    text: Option<String>,
+}
+
+impl PendingKey {
+    fn keystroke(&self) -> Keystroke {
+        Keystroke::from_key_event(&self.key, self.modifiers)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct PendingInput {
+    keys: Vec<PendingKey>,
+    focus: Option<ElementId>,
+    deadline: Instant,
 }
 
 impl<V: View> Runtime<V> {
     fn new(
         view: V,
         config: AppConfig,
-        accessibility_proxy: EventLoopProxy<AccessibilityEvent>,
+        keymap: Keymap,
+        menus: Vec<Menu>,
+        event_proxy: EventLoopProxy<RuntimeEvent>,
     ) -> Self {
+        let menu_actions = collect_menu_actions(&menus);
         Self {
             view,
             config,
+            keymap,
+            #[cfg(target_os = "macos")]
+            menus,
+            menu_actions,
+            #[cfg(target_os = "macos")]
+            menu_host: None,
+            pending_input: None,
             window: None,
             modifiers: Modifiers::default(),
             fatal_error: None,
-            accessibility_proxy,
+            event_proxy,
             clipboard: None,
         }
     }
@@ -350,7 +485,7 @@ impl<V: View> Runtime<V> {
     fn apply_event_context(
         &mut self,
         event_loop: &ActiveEventLoop,
-        cx: EventContext,
+        mut cx: EventContext,
         force_redraw: bool,
         announce_focus: bool,
     ) -> bool {
@@ -358,6 +493,8 @@ impl<V: View> Runtime<V> {
             event_loop.exit();
             return false;
         }
+        let actions = std::mem::take(&mut cx.actions);
+        let menus = cx.menus.take();
         let mut focus_changed = false;
         if let Some(state) = &mut self.window {
             let previous_focus = state.ui.focused();
@@ -372,6 +509,9 @@ impl<V: View> Runtime<V> {
                 }
             }
             focus_changed = previous_focus != state.ui.focused();
+            if focus_changed {
+                self.pending_input = None;
+            }
             #[cfg(target_os = "macos")]
             if focus_changed
                 && state.ui.focused().is_some()
@@ -391,9 +531,232 @@ impl<V: View> Runtime<V> {
             let mut focus_cx = EventContext::default();
             self.view
                 .event(&Event::FocusChanged(focused), &mut focus_cx);
-            return self.apply_event_context(event_loop, focus_cx, false, false);
+            if !self.apply_event_context(event_loop, focus_cx, false, false) {
+                return false;
+            }
+        }
+        #[cfg(target_os = "macos")]
+        if focus_changed {
+            self.sync_native_menu_state();
+        }
+        if let Some(menus) = menus
+            && !self.replace_menus(event_loop, menus)
+        {
+            return false;
+        }
+        for action in actions {
+            if self.invoke_action(event_loop, &action).is_none() {
+                return false;
+            }
         }
         true
+    }
+
+    /// Returns `None` after exit, otherwise whether a handler consumed the action.
+    fn invoke_action(&mut self, event_loop: &ActiveEventLoop, action: &AnyAction) -> Option<bool> {
+        let path = self
+            .window
+            .as_ref()
+            .map(|window| window.ui.focus_path())
+            .unwrap_or_default();
+        for id in path.into_iter().rev() {
+            let listeners = self
+                .window
+                .as_ref()
+                .and_then(|window| {
+                    window
+                        .listeners
+                        .actions
+                        .get(&(id, action.type_id()))
+                        .cloned()
+                })
+                .unwrap_or_default();
+            for listener in listeners {
+                let mut cx = EventContext::default();
+                listener(&mut self.view, action.as_any(), &mut cx);
+                let propagate = cx.propagate_action;
+                if !self.apply_event_context(event_loop, cx, false, true) {
+                    return None;
+                }
+                if !propagate {
+                    return Some(true);
+                }
+            }
+        }
+        Some(false)
+    }
+
+    fn action_available(&self, action: &AnyAction) -> bool {
+        let Some(window) = &self.window else {
+            return false;
+        };
+        window.ui.focus_path().into_iter().rev().any(|id| {
+            window
+                .listeners
+                .actions
+                .contains_key(&(id, action.type_id()))
+        })
+    }
+
+    fn replace_menus(&mut self, event_loop: &ActiveEventLoop, menus: Vec<Menu>) -> bool {
+        let menu_actions = collect_menu_actions(&menus);
+        #[cfg(target_os = "macos")]
+        let next_host = if menus.is_empty() {
+            None
+        } else {
+            match MacMenuHost::new(&menus, self.event_proxy.clone()) {
+                Ok(host) => Some(host),
+                Err(error) => {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return false;
+                }
+            }
+        };
+
+        self.menu_actions = menu_actions;
+        #[cfg(target_os = "macos")]
+        {
+            self.menus = menus;
+            self.menu_host = next_host;
+            self.sync_native_menu_state();
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = menus;
+        true
+    }
+
+    fn os_action_available(&self, action: OsAction) -> bool {
+        let Some(window) = &self.window else {
+            return false;
+        };
+        if window.ui.focused_text_input().is_none() {
+            return false;
+        }
+        match action {
+            OsAction::Cut | OsAction::Copy => window
+                .ui
+                .selected_text()
+                .is_some_and(|selection| !selection.is_empty()),
+            OsAction::Paste | OsAction::SelectAll => true,
+            OsAction::Undo => window.ui.input_can_undo(),
+            OsAction::Redo => window.ui.input_can_redo(),
+        }
+    }
+
+    fn invoke_os_action(&mut self, event_loop: &ActiveEventLoop, action: OsAction) -> bool {
+        if self
+            .window
+            .as_ref()
+            .and_then(|window| window.ui.focused_text_input())
+            .is_none()
+        {
+            return false;
+        }
+        match action {
+            OsAction::Copy => {
+                let selected = self
+                    .window
+                    .as_ref()
+                    .and_then(|window| window.ui.selected_text());
+                if let Some(selected) = selected
+                    && let Some(clipboard) = self.clipboard()
+                {
+                    let _ = clipboard.set_text(selected.as_ref());
+                }
+                true
+            }
+            OsAction::Cut => {
+                let selected = self
+                    .window
+                    .as_ref()
+                    .and_then(|window| window.ui.selected_text());
+                let copied = selected.is_some_and(|selection| {
+                    self.clipboard()
+                        .is_some_and(|clipboard| clipboard.set_text(selection.as_ref()).is_ok())
+                });
+                if copied {
+                    let result = self
+                        .window
+                        .as_mut()
+                        .map(|window| window.ui.input_backspace())
+                        .unwrap_or_default();
+                    self.apply_input_result(event_loop, result, true);
+                }
+                true
+            }
+            OsAction::Paste => {
+                let pasted = self
+                    .clipboard()
+                    .and_then(|clipboard| clipboard.get_text().ok());
+                if let Some(value) = pasted {
+                    let result = self
+                        .window
+                        .as_mut()
+                        .map(|window| window.ui.input_replace(&value))
+                        .unwrap_or_default();
+                    self.apply_input_result(event_loop, result, true);
+                }
+                true
+            }
+            OsAction::SelectAll => {
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_select_all())
+                    .unwrap_or_default();
+                self.apply_input_result(event_loop, result, false);
+                true
+            }
+            OsAction::Undo => {
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_undo())
+                    .unwrap_or_default();
+                self.apply_input_result(event_loop, result, true)
+            }
+            OsAction::Redo => {
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_redo())
+                    .unwrap_or_default();
+                self.apply_input_result(event_loop, result, true)
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn sync_native_menu_state(&self) {
+        let Some(host) = &self.menu_host else {
+            return;
+        };
+        let contexts = self
+            .window
+            .as_ref()
+            .map(|window| window.ui.key_context_stack())
+            .unwrap_or_default();
+        let states = self
+            .menu_actions
+            .iter()
+            .map(|item| MacMenuItemState {
+                disabled: item.disabled,
+                action_available: self.action_available(&item.action)
+                    || item
+                        .os_action
+                        .is_some_and(|action| self.os_action_available(action)),
+                checked: item.checked,
+                shortcut: self
+                    .keymap
+                    .shortcut_for_action_value(&item.action, &contexts),
+            })
+            .collect::<Vec<_>>();
+        let native_focus_active = self
+            .window
+            .as_ref()
+            .and_then(|window| window.native_host.as_ref())
+            .is_some_and(MacNativeHost::native_focus_active);
+        host.update(&states, native_focus_active);
     }
 
     fn invoke_click(&mut self, event_loop: &ActiveEventLoop, id: ElementId) {
@@ -467,7 +830,12 @@ impl<V: View> Runtime<V> {
         self.clipboard.as_mut()
     }
 
-    fn handle_text_input_key(&mut self, event_loop: &ActiveEventLoop, key: &Key) -> bool {
+    fn handle_text_input_key(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        key: &Key,
+        modifiers: Modifiers,
+    ) -> bool {
         let focused = self
             .window
             .as_ref()
@@ -476,8 +844,8 @@ impl<V: View> Runtime<V> {
             return false;
         }
 
-        let extend = self.modifiers.contains(Modifiers::SHIFT);
-        let primary = primary_modifier(self.modifiers);
+        let extend = modifiers.contains(Modifiers::SHIFT);
+        let primary = primary_modifier(modifiers);
         let result = match key {
             Key::ArrowLeft if primary => self
                 .window
@@ -508,6 +876,19 @@ impl<V: View> Runtime<V> {
                 .as_mut()
                 .map(|window| window.ui.input_backspace()),
             Key::Delete => self.window.as_mut().map(|window| window.ui.input_delete()),
+            Key::Character(value)
+                if primary
+                    && modifiers.contains(Modifiers::SHIFT)
+                    && value.eq_ignore_ascii_case("z") =>
+            {
+                self.window.as_mut().map(|window| window.ui.input_redo())
+            }
+            Key::Character(value) if primary && value.eq_ignore_ascii_case("z") => {
+                self.window.as_mut().map(|window| window.ui.input_undo())
+            }
+            Key::Character(value) if primary && value.eq_ignore_ascii_case("y") => {
+                self.window.as_mut().map(|window| window.ui.input_redo())
+            }
             Key::Character(value) if primary && value.eq_ignore_ascii_case("a") => self
                 .window
                 .as_mut()
@@ -559,11 +940,202 @@ impl<V: View> Runtime<V> {
         true
     }
 
+    fn dispatch_binding_actions(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        bindings: &[KeyBinding],
+    ) -> Option<bool> {
+        for binding in bindings {
+            match self.invoke_action(event_loop, binding.action()) {
+                None => return None,
+                Some(true) => return Some(true),
+                Some(false) => {}
+            }
+        }
+        Some(false)
+    }
+
+    fn handle_pressed_key(&mut self, event_loop: &ActiveEventLoop, key: PendingKey) -> bool {
+        let focused = self.window.as_ref().and_then(|window| window.ui.focused());
+        let mut prefix = self
+            .pending_input
+            .take()
+            .filter(|pending| pending.focus == focused)
+            .map(|pending| pending.keys)
+            .unwrap_or_default();
+        let mut input = prefix.iter().map(PendingKey::keystroke).collect::<Vec<_>>();
+        input.push(key.keystroke());
+        let contexts = self
+            .window
+            .as_ref()
+            .map(|window| window.ui.key_context_stack())
+            .unwrap_or_default();
+        let matched = self.keymap.bindings_for_input(&input, &contexts);
+
+        if matched.pending {
+            prefix.push(key);
+            self.pending_input = Some(PendingInput {
+                keys: prefix,
+                focus: focused,
+                deadline: Instant::now() + self.config.key_sequence_timeout,
+            });
+            return true;
+        }
+
+        if !matched.bindings.is_empty() {
+            match self.dispatch_binding_actions(event_loop, &matched.bindings) {
+                None => return false,
+                Some(true) => return true,
+                Some(false) => return self.handle_pressed_key_fallback(event_loop, key),
+            }
+        }
+
+        if prefix.is_empty() {
+            return self.handle_pressed_key_fallback(event_loop, key);
+        }
+        if !self.replay_pending_keys(event_loop, prefix) {
+            return false;
+        }
+        self.handle_pressed_key(event_loop, key)
+    }
+
+    /// Replay timed-out or mismatched prefixes without recursively re-entering key matching.
+    fn replay_pending_keys(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        mut keys: Vec<PendingKey>,
+    ) -> bool {
+        while !keys.is_empty() {
+            let contexts = self
+                .window
+                .as_ref()
+                .map(|window| window.ui.key_context_stack())
+                .unwrap_or_default();
+            let strokes = keys.iter().map(PendingKey::keystroke).collect::<Vec<_>>();
+            let exact_prefix = (1..=strokes.len()).rev().find_map(|length| {
+                let matched = self
+                    .keymap
+                    .bindings_for_input(&strokes[..length], &contexts);
+                (!matched.bindings.is_empty()).then_some((length, matched.bindings))
+            });
+
+            if let Some((length, bindings)) = exact_prefix {
+                let replay_key = keys[length - 1].clone();
+                keys.drain(..length);
+                match self.dispatch_binding_actions(event_loop, &bindings) {
+                    None => return false,
+                    Some(true) => {}
+                    Some(false) => {
+                        if !self.handle_pressed_key_fallback(event_loop, replay_key) {
+                            return false;
+                        }
+                    }
+                }
+            } else {
+                let replay_key = keys.remove(0);
+                if !self.handle_pressed_key_fallback(event_loop, replay_key) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    fn flush_pending_input(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        let Some(pending) = self.pending_input.take() else {
+            return true;
+        };
+        let focused = self.window.as_ref().and_then(|window| window.ui.focused());
+        if pending.focus != focused {
+            return true;
+        }
+        self.replay_pending_keys(event_loop, pending.keys)
+    }
+
+    fn handle_pressed_key_fallback(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        key_event: PendingKey,
+    ) -> bool {
+        let PendingKey {
+            key,
+            modifiers,
+            repeat,
+            text,
+        } = key_event;
+        if !repeat
+            && matches!(&key, Key::Escape)
+            && let Some(request) = self
+                .window
+                .as_ref()
+                .and_then(|window| window.ui.dismiss_topmost())
+        {
+            self.invoke_dismiss(event_loop, request);
+            return true;
+        }
+
+        let mut handled_by_input = self.handle_text_input_key(event_loop, &key, modifiers);
+        if !handled_by_input
+            && !modifiers.intersects(Modifiers::CONTROL | Modifiers::SUPER)
+            && let Some(text) = text.as_deref().filter(|text| {
+                !text.is_empty() && text.chars().all(|character| !character.is_control())
+            })
+            && self
+                .window
+                .as_ref()
+                .is_some_and(|window| window.ui.focused_text_input().is_some())
+        {
+            let result = self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_replace(text))
+                .unwrap_or_default();
+            if !self.apply_input_result(event_loop, result, true)
+                || !self.dispatch(event_loop, Event::TextInput(text.to_owned()), false)
+            {
+                return false;
+            }
+            handled_by_input = true;
+        }
+
+        match &key {
+            _ if handled_by_input => {}
+            Key::Tab => {
+                let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
+                if let Some(window) = &mut self.window {
+                    window.ui.focus_next(modifiers.contains(Modifiers::SHIFT));
+                }
+                self.announce_focus_change(event_loop, previous_focus);
+            }
+            Key::Enter | Key::Space if !repeat => {
+                let target = self
+                    .window
+                    .as_ref()
+                    .and_then(|window| window.ui.activate_focused());
+                if let Some(id) = target {
+                    self.invoke_click(event_loop, id);
+                }
+            }
+            _ => {}
+        }
+
+        self.dispatch(
+            event_loop,
+            Event::KeyDown {
+                key,
+                modifiers,
+                repeat,
+            },
+            false,
+        )
+    }
+
     fn announce_focus_change(&mut self, event_loop: &ActiveEventLoop, previous: Option<ElementId>) {
         let focused = self.window.as_ref().and_then(|state| state.ui.focused());
         if previous == focused {
             return;
         }
+        self.pending_input = None;
         if let Some(state) = &mut self.window {
             #[cfg(target_os = "macos")]
             if focused.is_some()
@@ -578,6 +1150,8 @@ impl<V: View> Runtime<V> {
         let mut cx = EventContext::default();
         self.view.event(&Event::FocusChanged(focused), &mut cx);
         self.apply_event_context(event_loop, cx, false, false);
+        #[cfg(target_os = "macos")]
+        self.sync_native_menu_state();
     }
 
     fn redraw(&mut self, event_loop: &ActiveEventLoop) {
@@ -619,11 +1193,13 @@ impl<V: View> Runtime<V> {
         let started = Instant::now();
         let mut request_animation_frame = false;
         if state.view_dirty {
+            let focused_path = state.ui.focus_path();
             let mut view_cx = ViewContext {
                 size: state.logical_size,
                 scale_factor: state.scale_factor,
                 metrics: state.metrics.current(),
                 focused: state.ui.focused(),
+                focused_path,
                 request_animation_frame: false,
                 listeners: &mut state.listeners,
             };
@@ -679,7 +1255,10 @@ impl<V: View> Runtime<V> {
                 state.native_host = Some(host);
             }
             if let Some(host) = &mut state.native_host {
-                host.reconcile(state.ui.native_views());
+                if let Err(error) = host.reconcile(state.ui.native_views()) {
+                    self.fail(event_loop, AppError::View(error));
+                    return;
+                }
                 let overlay_active = has_native_views
                     && (state.scene.has_content_in_plane(crate::ScenePlane::Overlay)
                         || state.ui.overlay_input_active());
@@ -692,6 +1271,9 @@ impl<V: View> Runtime<V> {
             state
                 .renderer
                 .set_native_composition_active(has_native_views);
+            if let Some(guard) = state.first_frame_guard.as_ref() {
+                guard.cover();
+            }
         }
         if ime_target.is_some()
             && let Some(caret) = state.ui.ime_cursor_area()
@@ -709,7 +1291,18 @@ impl<V: View> Runtime<V> {
 
         match state.renderer.render(&state.scene, state.scale_factor) {
             Ok(RenderOutcome::Presented(stats)) => {
+                #[cfg(target_os = "macos")]
+                if state.first_frame_guard.is_some()
+                    && let Err(error) = state.renderer.wait_for_submitted_work()
+                {
+                    self.fail(event_loop, AppError::Render(error.to_string()));
+                    return;
+                }
                 state.metrics.record(started.elapsed(), stats);
+                #[cfg(target_os = "macos")]
+                if let Some(guard) = state.first_frame_guard.take() {
+                    guard.reveal();
+                }
                 if request_animation_frame && state.scheduler.invalidate() {
                     state.view_dirty = true;
                     state.window.request_redraw();
@@ -725,10 +1318,12 @@ impl<V: View> Runtime<V> {
             }
             Err(error) => self.fail(event_loop, AppError::Render(error.to_string())),
         }
+        #[cfg(target_os = "macos")]
+        self.sync_native_menu_state();
     }
 }
 
-impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
+impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() || self.fatal_error.is_some() {
             return;
@@ -756,10 +1351,20 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
             }
         };
         window.set_ime_allowed(false);
+        #[cfg(target_os = "macos")]
+        if self.menu_host.is_none() && !self.menus.is_empty() {
+            self.menu_host = match MacMenuHost::new(&self.menus, self.event_proxy.clone()) {
+                Ok(host) => Some(host),
+                Err(error) => {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return;
+                }
+            };
+        }
         let accessibility = AccessibilityAdapter::with_event_loop_proxy(
             event_loop,
             &window,
-            self.accessibility_proxy.clone(),
+            self.event_proxy.clone(),
         );
         let renderer = match pollster::block_on(GpuRenderer::new(
             window.clone(),
@@ -775,6 +1380,14 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
                 return;
             }
         };
+        #[cfg(target_os = "macos")]
+        let first_frame_guard = match MacFirstFrameGuard::new(&window, self.config.background) {
+            Ok(guard) => Some(guard),
+            Err(error) => {
+                self.fail(event_loop, AppError::Platform(error));
+                return;
+            }
+        };
         let scale_factor = sane_scale_factor(window.scale_factor());
         let physical = window.inner_size();
         let logical_size = Size::new(
@@ -783,11 +1396,12 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
         );
         let mut scheduler = FrameScheduler::default();
         scheduler.invalidate();
-        window.request_redraw();
         self.window = Some(RuntimeWindow {
             renderer,
             #[cfg(target_os = "macos")]
             native_host: None,
+            #[cfg(target_os = "macos")]
+            first_frame_guard,
             ui: UiTree::new(),
             scheduler,
             scene: Scene::new(),
@@ -802,10 +1416,6 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
             accessibility,
             window,
         });
-        if let Some(state) = &self.window {
-            state.window.set_visible(true);
-        }
-
         self.dispatch(
             event_loop,
             Event::Resized {
@@ -814,6 +1424,57 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
             },
             false,
         );
+
+        #[cfg(target_os = "macos")]
+        {
+            // Populate layout, text, scene, and native composition while the window is hidden.
+            // This attached preparation pass stops at the expected surface-occlusion boundary.
+            self.redraw(event_loop);
+            if self.fatal_error.is_some() {
+                return;
+            }
+            let detached = match self
+                .window
+                .as_ref()
+                .and_then(|state| state.first_frame_guard.as_ref())
+                .map(|guard| guard.detach_content_for_first_present())
+                .transpose()
+            {
+                Ok(detached) => detached,
+                Err(error) => {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return;
+                }
+            };
+
+            // With the content detached, WGPU can acquire the actual CAMetalLayer drawable even
+            // though the NSWindow remains hidden. The renderer completes that real surface frame
+            // and removes the shield before RAII reattaches the unchanged content view.
+            self.redraw(event_loop);
+            drop(detached);
+            if self.fatal_error.is_some() {
+                return;
+            }
+            if self
+                .window
+                .as_ref()
+                .is_some_and(|state| state.first_frame_guard.is_some())
+            {
+                self.fail(
+                    event_loop,
+                    AppError::Render(
+                        "the hidden Metal surface did not present its first frame".to_owned(),
+                    ),
+                );
+                return;
+            }
+        }
+
+        if let Some(state) = &mut self.window {
+            state.window.set_visible(true);
+            state.scheduler.invalidate();
+            state.window.request_redraw();
+        }
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
@@ -880,6 +1541,12 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
                     true,
                 );
             }
+            WindowEvent::Occluded(false) => {
+                let state = self.window.as_mut().expect("window checked above");
+                state.scheduler.invalidate();
+                state.window.request_redraw();
+            }
+            WindowEvent::Occluded(true) => {}
             WindowEvent::RedrawRequested => self.redraw(event_loop),
             WindowEvent::CursorMoved { position, .. } => {
                 let state = self.window.as_mut().expect("window checked above");
@@ -975,81 +1642,26 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let key = map_key(&event.logical_key);
-                if event.state == ElementState::Pressed
-                    && !event.repeat
-                    && matches!(&key, Key::Escape)
-                    && let Some(request) = self
-                        .window
-                        .as_ref()
-                        .and_then(|window| window.ui.dismiss_topmost())
-                {
-                    self.invoke_dismiss(event_loop, request);
-                    return;
-                }
                 if event.state == ElementState::Pressed {
-                    let mut handled_by_input = self.handle_text_input_key(event_loop, &key);
-                    if !handled_by_input
-                        && !self
-                            .modifiers
-                            .intersects(Modifiers::CONTROL | Modifiers::SUPER)
-                        && let Some(text) = event.text.as_deref().filter(|text| {
-                            !text.is_empty()
-                                && text.chars().all(|character| !character.is_control())
-                        })
-                        && self
-                            .window
-                            .as_ref()
-                            .is_some_and(|window| window.ui.focused_text_input().is_some())
-                    {
-                        let result = self
-                            .window
-                            .as_mut()
-                            .map(|window| window.ui.input_replace(text))
-                            .unwrap_or_default();
-                        if !self.apply_input_result(event_loop, result, true)
-                            || !self.dispatch(event_loop, Event::TextInput(text.to_owned()), false)
-                        {
-                            return;
-                        }
-                        handled_by_input = true;
-                    }
-                    match &key {
-                        _ if handled_by_input => {}
-                        Key::Tab => {
-                            let previous_focus =
-                                self.window.as_ref().and_then(|window| window.ui.focused());
-                            if let Some(window) = &mut self.window {
-                                window
-                                    .ui
-                                    .focus_next(self.modifiers.contains(Modifiers::SHIFT));
-                            }
-                            self.announce_focus_change(event_loop, previous_focus);
-                        }
-                        Key::Enter | Key::Space if !event.repeat => {
-                            let target = self
-                                .window
-                                .as_ref()
-                                .and_then(|window| window.ui.activate_focused());
-                            if let Some(id) = target {
-                                self.invoke_click(event_loop, id);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                let event = if event.state == ElementState::Pressed {
-                    Event::KeyDown {
-                        key,
-                        modifiers: self.modifiers,
-                        repeat: event.repeat,
-                    }
+                    self.handle_pressed_key(
+                        event_loop,
+                        PendingKey {
+                            key,
+                            modifiers: self.modifiers,
+                            repeat: event.repeat,
+                            text: event.text.map(|text| text.to_string()),
+                        },
+                    );
                 } else {
-                    Event::KeyUp {
-                        key,
-                        modifiers: self.modifiers,
-                    }
-                };
-                self.dispatch(event_loop, event, false);
+                    self.dispatch(
+                        event_loop,
+                        Event::KeyUp {
+                            key,
+                            modifiers: self.modifiers,
+                        },
+                        false,
+                    );
+                }
             }
             WindowEvent::Ime(Ime::Preedit(text, cursor)) => {
                 let result = self
@@ -1085,7 +1697,34 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
         }
     }
 
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AccessibilityEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: RuntimeEvent) {
+        let event = match event {
+            RuntimeEvent::Accessibility(event) => event,
+            RuntimeEvent::MenuWillOpen => {
+                self.pending_input = None;
+                #[cfg(target_os = "macos")]
+                self.sync_native_menu_state();
+                return;
+            }
+            RuntimeEvent::MenuAction(action_id) => {
+                let item = self
+                    .menu_actions
+                    .get(action_id)
+                    .filter(|item| !item.disabled)
+                    .map(|item| (item.action.clone(), item.os_action));
+                if let Some((action, os_action)) = item {
+                    let Some(handled) = self.invoke_action(event_loop, &action) else {
+                        return;
+                    };
+                    if !handled && let Some(os_action) = os_action {
+                        self.invoke_os_action(event_loop, os_action);
+                    }
+                    #[cfg(target_os = "macos")]
+                    self.sync_native_menu_state();
+                }
+                return;
+            }
+        };
         let Some(window) = self.window.as_ref() else {
             return;
         };
@@ -1117,19 +1756,19 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
                 };
                 let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
                 match action {
-                    Action::Focus => {
+                    AccessibilityAction::Focus => {
                         if let Some(window) = &mut self.window {
                             window.ui.focus(target);
                         }
                     }
-                    Action::Blur => {
+                    AccessibilityAction::Blur => {
                         if let Some(window) = &mut self.window
                             && window.ui.focused() == Some(target)
                         {
                             window.ui.blur();
                         }
                     }
-                    Action::Click => {
+                    AccessibilityAction::Click => {
                         if let Some(window) = &mut self.window {
                             window.ui.focus(target);
                         }
@@ -1137,7 +1776,7 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
                         self.invoke_click(event_loop, target);
                         return;
                     }
-                    Action::SetValue => {
+                    AccessibilityAction::SetValue => {
                         let Some(ActionData::Value(value)) = data else {
                             return;
                         };
@@ -1149,7 +1788,7 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
                         self.apply_input_result(event_loop, result, true);
                         return;
                     }
-                    Action::SetTextSelection => {
+                    AccessibilityAction::SetTextSelection => {
                         let Some(ActionData::SetTextSelection(selection)) = data else {
                             return;
                         };
@@ -1174,7 +1813,18 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        event_loop.set_control_flow(ControlFlow::Wait);
+        if self
+            .pending_input
+            .as_ref()
+            .is_some_and(|pending| pending.deadline <= Instant::now())
+        {
+            self.flush_pending_input(event_loop);
+        }
+        if let Some(pending) = &self.pending_input {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(pending.deadline));
+        } else {
+            event_loop.set_control_flow(ControlFlow::Wait);
+        }
     }
 }
 
@@ -1231,6 +1881,31 @@ fn map_key(key: &WinitKey) -> Key {
         WinitKey::Named(NamedKey::Tab) => Key::Tab,
         WinitKey::Named(NamedKey::Backspace) => Key::Backspace,
         WinitKey::Named(NamedKey::Delete) => Key::Delete,
+        WinitKey::Named(NamedKey::Insert) => Key::Insert,
+        WinitKey::Named(NamedKey::F1) => Key::Function(1),
+        WinitKey::Named(NamedKey::F2) => Key::Function(2),
+        WinitKey::Named(NamedKey::F3) => Key::Function(3),
+        WinitKey::Named(NamedKey::F4) => Key::Function(4),
+        WinitKey::Named(NamedKey::F5) => Key::Function(5),
+        WinitKey::Named(NamedKey::F6) => Key::Function(6),
+        WinitKey::Named(NamedKey::F7) => Key::Function(7),
+        WinitKey::Named(NamedKey::F8) => Key::Function(8),
+        WinitKey::Named(NamedKey::F9) => Key::Function(9),
+        WinitKey::Named(NamedKey::F10) => Key::Function(10),
+        WinitKey::Named(NamedKey::F11) => Key::Function(11),
+        WinitKey::Named(NamedKey::F12) => Key::Function(12),
+        WinitKey::Named(NamedKey::F13) => Key::Function(13),
+        WinitKey::Named(NamedKey::F14) => Key::Function(14),
+        WinitKey::Named(NamedKey::F15) => Key::Function(15),
+        WinitKey::Named(NamedKey::F16) => Key::Function(16),
+        WinitKey::Named(NamedKey::F17) => Key::Function(17),
+        WinitKey::Named(NamedKey::F18) => Key::Function(18),
+        WinitKey::Named(NamedKey::F19) => Key::Function(19),
+        WinitKey::Named(NamedKey::F20) => Key::Function(20),
+        WinitKey::Named(NamedKey::F21) => Key::Function(21),
+        WinitKey::Named(NamedKey::F22) => Key::Function(22),
+        WinitKey::Named(NamedKey::F23) => Key::Function(23),
+        WinitKey::Named(NamedKey::F24) => Key::Function(24),
         _ => Key::Other,
     }
 }

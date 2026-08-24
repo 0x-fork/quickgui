@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::{ElementId, FocusHandle, Point, Size, Vector};
+use crate::{Action, AnyAction, ElementId, FocusHandle, Menu, Point, Size, Vector};
 
 /// Framework-level input and window events, expressed in logical pixels.
 #[derive(Clone, Debug, PartialEq)]
@@ -48,7 +48,7 @@ pub enum MouseButton {
     Other(u16),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Key {
     Character(String),
     ArrowUp,
@@ -65,11 +65,13 @@ pub enum Key {
     Tab,
     Backspace,
     Delete,
+    Insert,
+    Function(u8),
     Other,
 }
 
 bitflags! {
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct Modifiers: u8 {
         const SHIFT = 1 << 0;
         const CONTROL = 1 << 1;
@@ -84,6 +86,9 @@ pub struct EventContext {
     pub(crate) invalidate: bool,
     pub(crate) exit: bool,
     pub(crate) focus: Option<Option<ElementId>>,
+    pub(crate) actions: Vec<AnyAction>,
+    pub(crate) menus: Option<Vec<Menu>>,
+    pub(crate) propagate_action: bool,
 }
 
 impl EventContext {
@@ -105,5 +110,28 @@ impl EventContext {
     /// Clear keyboard focus within the window.
     pub fn blur(&mut self) {
         self.focus = Some(None);
+    }
+
+    /// Dispatch a typed action through the currently focused element path.
+    ///
+    /// This is useful for buttons, menus, command palettes, and native menu items that should use
+    /// exactly the same command handlers as keyboard bindings.
+    pub fn dispatch_action<A: Action>(&mut self, action: A) {
+        self.actions.push(AnyAction::new(action));
+    }
+
+    /// Replace the application's native menu declaration.
+    ///
+    /// Use this after state changes that affect labels, checked state, or static availability.
+    /// Focused action-handler availability and contextual key equivalents update automatically.
+    pub fn set_menus(&mut self, menus: impl IntoIterator<Item = Menu>) {
+        self.menus = Some(menus.into_iter().collect());
+    }
+
+    /// Allow the current action to continue bubbling to the next ancestor handler.
+    ///
+    /// Action handlers consume by default, matching GPUI's command dispatch behavior.
+    pub fn propagate(&mut self) {
+        self.propagate_action = true;
     }
 }

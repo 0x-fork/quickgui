@@ -11,7 +11,7 @@ use taffy::{
     style::Overflow,
 };
 
-use crate::{Color, FontFamily, ScenePlane, TextStyle, TextWrap};
+use crate::{Color, FontFamily, KeyContext, ScenePlane, TextStyle, TextWrap};
 
 #[cfg(target_os = "macos")]
 use crate::native_view::MacNativeView;
@@ -285,6 +285,7 @@ pub struct Element {
     pub(crate) cursor_pointer: bool,
     pub(crate) cursor_text: bool,
     pub(crate) focusable: bool,
+    pub(crate) key_context: Option<KeyContext>,
     pub(crate) tab_index: i16,
     pub(crate) auto_focus: bool,
     pub(crate) accessibility: AccessibilityStyle,
@@ -359,6 +360,7 @@ impl Element {
             cursor_pointer: false,
             cursor_text: false,
             focusable: false,
+            key_context: None,
             tab_index: 0,
             auto_focus: false,
             accessibility: AccessibilityStyle::default(),
@@ -939,6 +941,21 @@ impl Element {
         self
     }
 
+    /// Give a non-focusable ancestor a stable identity for scoped action dispatch.
+    ///
+    /// Descendant focus is still tracked through this element, but the scope itself is not added to
+    /// Tab traversal.
+    pub fn focus_scope(mut self, handle: FocusHandle) -> Self {
+        self.explicit_id = Some(handle.id());
+        self
+    }
+
+    /// Attach contextual keymap properties to this node in the focused ancestor path.
+    pub fn key_context(mut self, context: impl Into<KeyContext>) -> Self {
+        self.key_context = Some(context.into());
+        self
+    }
+
     /// Set keyboard traversal order. Negative values remove the element from Tab traversal.
     pub fn tab_index(mut self, index: i16) -> Self {
         self.tab_index = index;
@@ -981,6 +998,12 @@ impl Element {
         self.focusable = true;
         self.cursor_text = true;
         self.accessibility.role = AccessibilityRole::TextInput;
+        self
+    }
+
+    /// Attach a typed action handler registered by [`crate::ViewContext::action_listener`].
+    pub fn on_action<V, A>(mut self, listener: crate::ActionListener<V, A>) -> Self {
+        self.explicit_id = Some(listener.id());
         self
     }
 

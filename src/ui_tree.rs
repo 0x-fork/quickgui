@@ -13,9 +13,9 @@ use taffy::{
 use thiserror::Error;
 
 use crate::{
-    AccessibilityRole, AnchorPlacement, Color, Element, ElementId, Insets, Point, Quad, Rect,
-    Scene, Size, TextId, TextRun, TextStyle, Vector, element::ElementKind, renderer::GpuRenderer,
-    scene::PaintLayerKey, text_input::TextInputState,
+    AccessibilityRole, AnchorPlacement, Color, Element, ElementId, Insets, KeyContext, Point, Quad,
+    Rect, Scene, Size, TextId, TextRun, TextStyle, Vector, element::ElementKind,
+    renderer::GpuRenderer, scene::PaintLayerKey, text_input::TextInputState,
 };
 
 #[cfg(target_os = "macos")]
@@ -150,6 +150,8 @@ pub(crate) struct UiTree {
     focusable_ids: HashSet<ElementId>,
     clickable_ids: HashSet<ElementId>,
     focus_order: Vec<ElementId>,
+    parents: HashMap<ElementId, ElementId>,
+    key_contexts: HashMap<ElementId, KeyContext>,
     focus_initialized: bool,
     viewport: Size,
     scale_factor: f32,
@@ -181,6 +183,8 @@ impl UiTree {
             focusable_ids: HashSet::with_capacity(32),
             clickable_ids: HashSet::with_capacity(32),
             focus_order: Vec::with_capacity(32),
+            parents: HashMap::with_capacity(256),
+            key_contexts: HashMap::with_capacity(32),
             focus_initialized: false,
             viewport: Size::ZERO,
             scale_factor: 1.0,
@@ -228,6 +232,7 @@ impl UiTree {
             }
         }
         self.rebuild_focus_index();
+        self.rebuild_dispatch_index();
         self.scroll_offsets
             .retain(|id, _| self.seen_ids.contains(id));
         self.hovered.retain(|id| self.seen_ids.contains(id));
@@ -600,6 +605,26 @@ impl UiTree {
         self.edit_focused_input(|state| state.replace_selection(value))
     }
 
+    pub fn input_can_undo(&self) -> bool {
+        self.focused_text_input()
+            .and_then(|id| self.text_inputs.get(&id))
+            .is_some_and(TextInputState::can_undo)
+    }
+
+    pub fn input_can_redo(&self) -> bool {
+        self.focused_text_input()
+            .and_then(|id| self.text_inputs.get(&id))
+            .is_some_and(TextInputState::can_redo)
+    }
+
+    pub fn input_undo(&mut self) -> InputResult {
+        self.edit_focused_input(TextInputState::undo)
+    }
+
+    pub fn input_redo(&mut self) -> InputResult {
+        self.edit_focused_input(TextInputState::redo)
+    }
+
     pub fn input_preedit(&mut self, value: &str, cursor: Option<(usize, usize)>) -> InputResult {
         self.edit_focused_input(|state| state.set_preedit(value, cursor))
     }
@@ -668,6 +693,35 @@ impl UiTree {
 
     pub fn focused(&self) -> Option<ElementId> {
         self.focused
+    }
+
+    /// Return the retained root-to-focus element path used for scoped command dispatch.
+    pub fn focus_path(&self) -> Vec<ElementId> {
+        let Some(root) = self.root.as_ref().map(|root| root.runtime_id) else {
+            return Vec::new();
+        };
+        let Some(mut current) = self.focused else {
+            return vec![root];
+        };
+        let mut path = Vec::with_capacity(8);
+        path.push(current);
+        while let Some(parent) = self.parents.get(&current).copied() {
+            path.push(parent);
+            current = parent;
+        }
+        path.reverse();
+        if path.first().copied() != Some(root) {
+            vec![root]
+        } else {
+            path
+        }
+    }
+
+    pub fn key_context_stack(&self) -> Vec<KeyContext> {
+        self.focus_path()
+            .into_iter()
+            .filter_map(|id| self.key_contexts.get(&id).cloned())
+            .collect()
     }
 
     pub fn focus(&mut self, id: ElementId) -> bool {
@@ -777,6 +831,15 @@ impl UiTree {
         });
         self.focus_order
             .extend(candidates.into_iter().map(|candidate| candidate.id));
+    }
+
+    fn rebuild_dispatch_index(&mut self) {
+        self.parents.clear();
+        self.key_contexts.clear();
+        let Some(root) = &self.root else {
+            return;
+        };
+        collect_dispatch_metadata(root, None, &mut self.parents, &mut self.key_contexts);
     }
 }
 
@@ -1499,6 +1562,23 @@ fn collect_focus_candidates(
     }
 }
 
+fn collect_dispatch_metadata(
+    element: &Element,
+    parent: Option<ElementId>,
+    parents: &mut HashMap<ElementId, ElementId>,
+    key_contexts: &mut HashMap<ElementId, KeyContext>,
+) {
+    if let Some(parent) = parent {
+        parents.insert(element.runtime_id, parent);
+    }
+    if let Some(context) = &element.key_context {
+        key_contexts.insert(element.runtime_id, context.clone());
+    }
+    for child in &element.children {
+        collect_dispatch_metadata(child, Some(element.runtime_id), parents, key_contexts);
+    }
+}
+
 fn find_auto_focus(element: &Element) -> Option<ElementId> {
     if element.auto_focus && element.focusable && !element.accessibility.disabled {
         return Some(element.runtime_id);
@@ -1716,7 +1796,7 @@ fn sync_accessibility_text_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{button, div, text};
+    use crate::{FocusHandle, button, div, text};
 
     #[test]
     fn generated_ids_are_path_stable() {
@@ -1763,6 +1843,40 @@ mod tests {
         assert!(tree.focus_next(true));
         assert_eq!(tree.focused(), Some(ElementId::new(20)));
         assert!(!tree.focusable_ids.contains(&ElementId::new(40)));
+    }
+
+    #[test]
+    fn focused_path_retains_scopes_and_contexts_without_making_them_tab_stops() {
+        let mut root = div()
+            .focus_scope(FocusHandle::new(10_u64))
+            .key_context("Workspace")
+            .child(
+                div()
+                    .focus_scope(FocusHandle::new(20_u64))
+                    .key_context("Pane active=true")
+                    .child(
+                        div()
+                            .track_focus(FocusHandle::new(30_u64))
+                            .key_context("Editor mode=insert"),
+                    ),
+            );
+        assign_runtime_ids(&mut root);
+
+        let mut tree = UiTree::new();
+        tree.root = Some(root);
+        tree.rebuild_focus_index();
+        tree.rebuild_dispatch_index();
+        assert!(tree.focus(ElementId::new(30)));
+        assert_eq!(
+            tree.focus_path(),
+            vec![ElementId::new(10), ElementId::new(20), ElementId::new(30)]
+        );
+        assert!(tree.focus_path().contains(&ElementId::new(10)));
+        assert!(!tree.focusable_ids.contains(&ElementId::new(10)));
+        let contexts = tree.key_context_stack();
+        assert_eq!(contexts.len(), 3);
+        assert_eq!(contexts[1].value("active"), Some("true"));
+        assert_eq!(contexts[2].value("mode"), Some("insert"));
     }
 
     #[test]

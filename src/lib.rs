@@ -4,12 +4,17 @@
 //! windows sleep while clean, long lists are virtualized, rectangles are
 //! instanced in one draw call, and shaped text is cached by stable [`TextId`]s.
 
+mod action;
 mod color;
 mod element;
 mod event;
 mod geometry;
+mod keymap;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod macos_menu;
+mod menu;
 mod metrics;
 #[cfg(target_os = "macos")]
 mod native_view;
@@ -21,6 +26,7 @@ mod text_input;
 mod ui_tree;
 mod virtual_list;
 
+pub use action::{Action, ActionListener, AnyAction};
 pub use color::Color;
 #[cfg(target_os = "macos")]
 pub use element::native_view;
@@ -31,6 +37,10 @@ pub use element::{
 pub use event::{Event, EventContext, Key, Modifiers, MouseButton};
 pub use geometry::{Insets, Point, Rect, Size, Vector};
 pub use glyphon::Weight as FontWeight;
+pub use keymap::{
+    ContextPredicate, KeyBinding, KeyContext, Keymap, KeymapError, KeymapMatch, Keystroke,
+};
+pub use menu::{Menu, MenuItem, OsAction, OsMenu, SystemMenuType};
 pub use metrics::{FrameMetrics, RenderStats};
 #[cfg(target_os = "macos")]
 pub use native_view::MacNativeView;

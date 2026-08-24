@@ -1,4 +1,4 @@
-use std::{ops::Range, sync::Arc};
+use std::{collections::VecDeque, ops::Range, sync::Arc};
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -10,6 +10,10 @@ pub(crate) struct TextInputState {
     marked: Option<Range<usize>>,
     composition_backup: Option<CompositionBackup>,
     scroll_x: f32,
+    undo: VecDeque<EditSnapshot>,
+    redo: VecDeque<EditSnapshot>,
+    undo_bytes: usize,
+    redo_bytes: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -18,6 +22,16 @@ struct CompositionBackup {
     anchor: usize,
     caret: usize,
 }
+
+#[derive(Clone, Debug)]
+struct EditSnapshot {
+    text: Arc<str>,
+    anchor: usize,
+    caret: usize,
+}
+
+const MAX_HISTORY_ENTRIES: usize = 100;
+const MAX_HISTORY_BYTES_PER_STACK: usize = 512 * 1024;
 
 impl TextInputState {
     pub fn new(value: &str) -> Self {
@@ -28,6 +42,10 @@ impl TextInputState {
             marked: None,
             composition_backup: None,
             scroll_x: 0.0,
+            undo: VecDeque::new(),
+            redo: VecDeque::new(),
+            undo_bytes: 0,
+            redo_bytes: 0,
         }
     }
 
@@ -80,6 +98,7 @@ impl TextInputState {
         self.marked = None;
         self.composition_backup = None;
         self.scroll_x = 0.0;
+        self.clear_history();
     }
 
     pub fn move_left(&mut self, extend: bool) -> bool {
@@ -153,6 +172,9 @@ impl TextInputState {
             || self.anchor != value.len()
             || self.caret != value.len()
             || self.marked.is_some();
+        if changed {
+            self.record_edit();
+        }
         self.text = Arc::from(value);
         self.anchor = self.text.len();
         self.caret = self.text.len();
@@ -198,9 +220,9 @@ impl TextInputState {
             if start == self.caret {
                 return false;
             }
-            self.replace_range(start..self.caret, "");
+            self.replace_range(start..self.caret, "", true);
         } else {
-            self.replace_range(selection, "");
+            self.replace_range(selection, "", true);
         }
         true
     }
@@ -212,9 +234,9 @@ impl TextInputState {
             if end == self.caret {
                 return false;
             }
-            self.replace_range(self.caret..end, "");
+            self.replace_range(self.caret..end, "", true);
         } else {
-            self.replace_range(selection, "");
+            self.replace_range(selection, "", true);
         }
         true
     }
@@ -224,8 +246,9 @@ impl TextInputState {
         if value.is_empty() && self.selection().is_empty() {
             return false;
         }
+        self.record_edit();
         let range = self.marked.take().unwrap_or_else(|| self.selection());
-        self.replace_range(range, &value);
+        self.replace_range(range, &value, false);
         true
     }
 
@@ -260,7 +283,7 @@ impl TextInputState {
             });
         let range = self.marked.take().unwrap_or_else(|| self.selection());
         let start = range.start;
-        self.replace_range(range, &value);
+        self.replace_range(range, &value, false);
         self.composition_backup = Some(backup);
 
         let end = start + value.len();
@@ -281,7 +304,77 @@ impl TextInputState {
             || self.composition_backup.is_some() != previous_backup.is_some()
     }
 
-    fn replace_range(&mut self, range: Range<usize>, value: &str) {
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+
+    pub fn undo(&mut self) -> bool {
+        let Some(snapshot) = self.undo.pop_back() else {
+            return false;
+        };
+        self.undo_bytes = self.undo_bytes.saturating_sub(snapshot.text.len());
+        let current = self.snapshot();
+        push_bounded_history(&mut self.redo, &mut self.redo_bytes, current);
+        self.restore(snapshot);
+        true
+    }
+
+    pub fn redo(&mut self) -> bool {
+        let Some(snapshot) = self.redo.pop_back() else {
+            return false;
+        };
+        self.redo_bytes = self.redo_bytes.saturating_sub(snapshot.text.len());
+        let current = self.snapshot();
+        push_bounded_history(&mut self.undo, &mut self.undo_bytes, current);
+        self.restore(snapshot);
+        true
+    }
+
+    fn snapshot(&self) -> EditSnapshot {
+        self.composition_backup
+            .as_ref()
+            .map(|backup| EditSnapshot {
+                text: backup.text.clone(),
+                anchor: backup.anchor,
+                caret: backup.caret,
+            })
+            .unwrap_or_else(|| EditSnapshot {
+                text: self.text.clone(),
+                anchor: self.anchor,
+                caret: self.caret,
+            })
+    }
+
+    fn record_edit(&mut self) {
+        let snapshot = self.snapshot();
+        push_bounded_history(&mut self.undo, &mut self.undo_bytes, snapshot);
+        self.redo.clear();
+        self.redo_bytes = 0;
+    }
+
+    fn clear_history(&mut self) {
+        self.undo.clear();
+        self.redo.clear();
+        self.undo_bytes = 0;
+        self.redo_bytes = 0;
+    }
+
+    fn restore(&mut self, snapshot: EditSnapshot) {
+        self.text = snapshot.text;
+        self.anchor = snapshot.anchor;
+        self.caret = snapshot.caret;
+        self.marked = None;
+        self.composition_backup = None;
+    }
+
+    fn replace_range(&mut self, range: Range<usize>, value: &str, record: bool) {
+        if record {
+            self.record_edit();
+        }
         let mut text = self.text.to_string();
         text.replace_range(range.clone(), value);
         self.text = Arc::from(text);
@@ -291,6 +384,29 @@ impl TextInputState {
         self.marked = None;
         self.composition_backup = None;
     }
+}
+
+fn push_bounded_history(
+    history: &mut VecDeque<EditSnapshot>,
+    retained_bytes: &mut usize,
+    snapshot: EditSnapshot,
+) {
+    let bytes = snapshot.text.len();
+    if bytes > MAX_HISTORY_BYTES_PER_STACK {
+        history.clear();
+        *retained_bytes = 0;
+        return;
+    }
+    while history.len() >= MAX_HISTORY_ENTRIES
+        || retained_bytes.saturating_add(bytes) > MAX_HISTORY_BYTES_PER_STACK
+    {
+        let Some(evicted) = history.pop_front() else {
+            break;
+        };
+        *retained_bytes = retained_bytes.saturating_sub(evicted.text.len());
+    }
+    *retained_bytes += bytes;
+    history.push_back(snapshot);
 }
 
 fn previous_boundary(text: &str, offset: usize) -> usize {
@@ -420,6 +536,53 @@ mod tests {
         let mut input = TextInputState::new("");
         input.replace_selection("one\r\ntwo\nthree");
         assert_eq!(input.text(), "one two three");
+    }
+
+    #[test]
+    fn undo_and_redo_restore_text_and_selection() {
+        let mut input = TextInputState::new("a");
+        assert!(input.replace_selection("b"));
+        assert!(input.replace_selection("c"));
+        assert_eq!(input.text(), "abc");
+
+        assert!(input.undo());
+        assert_eq!(input.text(), "ab");
+        assert_eq!(input.selection(), 2..2);
+        assert!(input.undo());
+        assert_eq!(input.text(), "a");
+        assert!(input.redo());
+        assert_eq!(input.text(), "ab");
+
+        assert!(input.replace_selection("!"));
+        assert_eq!(input.text(), "ab!");
+        assert!(!input.can_redo());
+    }
+
+    #[test]
+    fn composition_commit_creates_one_undo_step() {
+        let mut input = TextInputState::new("hello ");
+        assert!(input.set_preedit("n", Some((1, 1))));
+        assert!(input.set_preedit("ni", Some((2, 2))));
+        assert!(input.replace_selection("你"));
+        assert_eq!(input.text(), "hello 你");
+        assert_eq!(input.undo.len(), 1);
+        assert!(input.undo());
+        assert_eq!(input.text(), "hello ");
+    }
+
+    #[test]
+    fn edit_history_is_bounded_by_count_and_bytes() {
+        let mut input = TextInputState::new("");
+        for _ in 0..(MAX_HISTORY_ENTRIES + 50) {
+            assert!(input.replace_selection("x"));
+        }
+        assert!(input.undo.len() <= MAX_HISTORY_ENTRIES);
+        assert!(input.undo_bytes <= MAX_HISTORY_BYTES_PER_STACK);
+
+        input.set_value(&"x".repeat(MAX_HISTORY_BYTES_PER_STACK + 1));
+        assert!(input.replace_selection("y"));
+        assert!(!input.can_undo());
+        assert_eq!(input.undo_bytes, 0);
     }
 
     #[test]
