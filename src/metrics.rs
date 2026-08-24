@@ -4,6 +4,30 @@ use std::time::Duration;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RenderStats {
     pub quads: usize,
+    /// Analytic drop and inset shadows submitted with the instanced shape draw.
+    pub shadows: usize,
+    pub images: usize,
+    /// Images uploaded to a GPU texture during this frame.
+    pub image_uploads: usize,
+    /// Decoded RGBA bytes retained in the renderer's bounded texture cache.
+    pub gpu_image_cache_bytes: u64,
+    /// Decoded RGBA bytes retained by asynchronous image resources on the CPU.
+    pub cpu_image_cache_bytes: u64,
+    pub image_resource_entries: usize,
+    pub image_resources_loading: usize,
+    pub image_resources_failed: usize,
+    pub animated_images: usize,
+    pub active_animations: usize,
+    pub svgs: usize,
+    /// SVG masks rasterized and uploaded during this frame.
+    pub svg_rasterizations: usize,
+    /// One-channel alpha bytes retained in the renderer's bounded SVG cache.
+    pub gpu_svg_cache_bytes: u64,
+    pub paths: usize,
+    /// De-indexed tessellated path vertices uploaded during this frame.
+    pub path_vertices: usize,
+    /// Visible paths omitted because the bounded per-frame GPU path budget was exhausted.
+    pub skipped_paths: usize,
     pub text_areas: usize,
     pub draw_calls: usize,
     /// Text buffers whose content, metrics, or wrapping changed this frame.

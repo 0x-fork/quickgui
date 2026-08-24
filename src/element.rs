@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, fmt, rc::Rc, sync::Arc};
 
 use glyphon::Weight;
 use taffy::{
@@ -11,7 +11,10 @@ use taffy::{
     style::Overflow,
 };
 
-use crate::{Color, FontFamily, KeyContext, ScenePlane, TextStyle, TextWrap};
+use crate::{
+    AnimatedImage, Background, BoxShadow, Canvas, Color, FontFamily, Image, ImageSource,
+    KeyContext, ObjectFit, Path, Rect, ScenePlane, Svg, SvgTransform, TextStyle, TextWrap,
+};
 
 #[cfg(target_os = "macos")]
 use crate::native_view::MacNativeView;
@@ -176,9 +179,77 @@ impl IntoElement for Cow<'_, str> {
 pub(crate) enum ElementKind {
     Container,
     Text(Arc<str>),
+    Image(ImageElement),
+    Svg(SvgElement),
+    Path(PathElement),
+    Canvas(CanvasElement),
     TextInput(TextInputElement),
     #[cfg(target_os = "macos")]
     NativeView(MacNativeView),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ImageElement {
+    pub source: ImageSource,
+    pub object_fit: ObjectFit,
+    pub grayscale: bool,
+    pub resolved: ImageResolution,
+    pub loading: Option<ImageReplacement>,
+    pub fallback: Option<ImageReplacement>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SvgElement {
+    pub svg: Svg,
+    pub object_fit: ObjectFit,
+    pub transform: SvgTransform,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PathElement {
+    pub path: Path,
+    pub object_fit: ObjectFit,
+    pub background: Option<Background>,
+}
+
+#[derive(Clone)]
+pub(crate) struct CanvasElement {
+    pub painter: Rc<CanvasPainter>,
+}
+
+type CanvasPainter = dyn for<'a> Fn(Rect, &mut Canvas<'a>);
+
+impl fmt::Debug for CanvasElement {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("CanvasElement(..)")
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum ImageResolution {
+    Ready(Image),
+    Animated(AnimatedImage),
+    Loading,
+    Failed,
+}
+
+#[derive(Clone)]
+pub(crate) struct ImageReplacement(Rc<dyn Fn() -> Element>);
+
+impl ImageReplacement {
+    fn new<E: IntoElement + 'static>(render: impl Fn() -> E + 'static) -> Self {
+        Self(Rc::new(move || render().into_element()))
+    }
+
+    pub(crate) fn render(&self) -> Element {
+        (self.0)()
+    }
+}
+
+impl fmt::Debug for ImageReplacement {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ImageReplacement(..)")
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -187,21 +258,23 @@ pub(crate) struct TextInputElement {
     pub placeholder: Arc<str>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct VisualStyle {
     pub background: Option<Color>,
     pub border_color: Option<Color>,
     pub border_width: f32,
     pub radius: f32,
+    pub shadows: Option<Arc<[BoxShadow]>>,
 }
 
-/// Paint-only overrides for hover and pressed states. They never trigger layout.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// Paint-only overrides for hover, pressed, and focus states. They never trigger layout.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ElementStateStyle {
     pub(crate) background: Option<Color>,
     pub(crate) border_color: Option<Color>,
     pub(crate) border_width: Option<f32>,
     pub(crate) text_color: Option<Color>,
+    pub(crate) shadows: Option<Arc<[BoxShadow]>>,
 }
 
 impl ElementStateStyle {
@@ -226,6 +299,87 @@ impl ElementStateStyle {
         self.text_color = Some(color);
         self
     }
+
+    /// Replace the element's shadows while this state is active.
+    pub fn shadow(mut self, shadow: BoxShadow) -> Self {
+        self.shadows = Some(Arc::from([shadow]));
+        self
+    }
+
+    /// Replace the element's shadows while this state is active.
+    pub fn shadows(mut self, shadows: impl IntoIterator<Item = BoxShadow>) -> Self {
+        self.shadows = Some(Arc::from(shadows.into_iter().collect::<Vec<_>>()));
+        self
+    }
+
+    /// Remove all shadows while this state is active.
+    pub fn shadow_none(mut self) -> Self {
+        self.shadows = Some(Arc::from([]));
+        self
+    }
+
+    pub fn shadow_sm(self) -> Self {
+        self.shadow(shadow_sm_preset())
+    }
+
+    pub fn shadow_md(self) -> Self {
+        self.shadows(shadow_md_preset())
+    }
+
+    pub fn shadow_lg(self) -> Self {
+        self.shadows(shadow_lg_preset())
+    }
+
+    pub fn shadow_xl(self) -> Self {
+        self.shadows(shadow_xl_preset())
+    }
+
+    pub fn shadow_2xl(self) -> Self {
+        self.shadow(shadow_2xl_preset())
+    }
+}
+
+fn shadow_sm_preset() -> BoxShadow {
+    BoxShadow::new(0.0, 1.0, Color::rgba8(0, 0, 0, 13)).blur_radius(2.0)
+}
+
+fn shadow_md_preset() -> [BoxShadow; 2] {
+    [
+        BoxShadow::new(0.0, 4.0, Color::rgba8(0, 0, 0, 26))
+            .blur_radius(6.0)
+            .spread_radius(-1.0),
+        BoxShadow::new(0.0, 2.0, Color::rgba8(0, 0, 0, 26))
+            .blur_radius(4.0)
+            .spread_radius(-2.0),
+    ]
+}
+
+fn shadow_lg_preset() -> [BoxShadow; 2] {
+    [
+        BoxShadow::new(0.0, 10.0, Color::rgba8(0, 0, 0, 26))
+            .blur_radius(15.0)
+            .spread_radius(-3.0),
+        BoxShadow::new(0.0, 4.0, Color::rgba8(0, 0, 0, 26))
+            .blur_radius(6.0)
+            .spread_radius(-4.0),
+    ]
+}
+
+fn shadow_xl_preset() -> [BoxShadow; 2] {
+    [
+        BoxShadow::new(0.0, 20.0, Color::rgba8(0, 0, 0, 26))
+            .blur_radius(25.0)
+            .spread_radius(-5.0),
+        BoxShadow::new(0.0, 8.0, Color::rgba8(0, 0, 0, 26))
+            .blur_radius(10.0)
+            .spread_radius(-6.0),
+    ]
+}
+
+fn shadow_2xl_preset() -> BoxShadow {
+    BoxShadow::new(0.0, 25.0, Color::rgba8(0, 0, 0, 64))
+        .blur_radius(50.0)
+        .spread_radius(-12.0)
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -326,6 +480,28 @@ pub fn text(content: impl Into<Arc<str>>) -> Element {
     Element::text(content.into())
 }
 
+/// Create an image element with intrinsic sizing and `object-fit: contain` behavior.
+pub fn img(source: impl Into<ImageSource>) -> Element {
+    Element::image(source.into())
+}
+
+/// Create a monochrome SVG element with intrinsic sizing and inherited text color.
+pub fn svg(source: impl Into<Svg>) -> Element {
+    Element::svg(source.into())
+}
+
+/// Create a retained vector path element with intrinsic sizing and inherited text color.
+pub fn path(source: impl Into<Path>) -> Element {
+    Element::path(source.into())
+}
+
+/// Create a web-like custom paint surface. The callback runs only when the view repaints.
+///
+/// Callback coordinates are local to the element and are clipped to its layout box.
+pub fn canvas(painter: impl for<'a> Fn(Rect, &mut Canvas<'a>) + 'static) -> Element {
+    Element::canvas(painter)
+}
+
 /// Create a controlled, single-line text input.
 ///
 /// Attach a stable [`crate::InputListener`] with [`Element::on_input`].
@@ -380,6 +556,63 @@ impl Element {
         let mut element = Self::container();
         element.kind = ElementKind::Text(content);
         element.accessibility.role = AccessibilityRole::Label;
+        element
+    }
+
+    fn image(source: ImageSource) -> Self {
+        let mut element = Self::container();
+        let resolved = if let Some(image) = source.image() {
+            ImageResolution::Ready(image.clone())
+        } else if let Some(animation) = source.animated() {
+            ImageResolution::Animated(animation.clone())
+        } else {
+            ImageResolution::Loading
+        };
+        element.kind = ElementKind::Image(ImageElement {
+            source,
+            object_fit: ObjectFit::Contain,
+            grayscale: false,
+            resolved,
+            loading: None,
+            fallback: None,
+        });
+        element.accessibility.role = AccessibilityRole::Image;
+        element
+    }
+
+    fn svg(svg: Svg) -> Self {
+        let mut element = Self::container();
+        element.kind = ElementKind::Svg(SvgElement {
+            svg,
+            object_fit: ObjectFit::Contain,
+            transform: SvgTransform::IDENTITY,
+        });
+        element.accessibility.role = AccessibilityRole::Image;
+        element
+    }
+
+    fn path(path: Path) -> Self {
+        let mut element = Self::container();
+        element.kind = ElementKind::Path(PathElement {
+            path,
+            object_fit: ObjectFit::Contain,
+            background: None,
+        });
+        element.accessibility.role = AccessibilityRole::Image;
+        element
+    }
+
+    fn canvas(painter: impl for<'a> Fn(Rect, &mut Canvas<'a>) + 'static) -> Self {
+        let mut element = Self::container();
+        element.kind = ElementKind::Canvas(CanvasElement {
+            painter: Rc::new(painter),
+        });
+        // Match the default dimensions of the web canvas element while still allowing normal
+        // width/height utilities to override them.
+        element.layout.size = TaffySize {
+            width: Dimension::length(300.0),
+            height: Dimension::length(150.0),
+        };
         element
     }
 
@@ -696,6 +929,102 @@ impl Element {
     }
     pub fn rounded_xl(self) -> Self {
         self.rounded(12.0)
+    }
+
+    /// Paint one CSS-like box shadow without affecting layout.
+    pub fn shadow(mut self, shadow: BoxShadow) -> Self {
+        self.visual.shadows = Some(Arc::from([shadow]));
+        self
+    }
+
+    /// Paint multiple CSS-like box shadows in declaration order.
+    ///
+    /// As on the web, the first shadow is painted on top of later shadows.
+    pub fn shadows(mut self, shadows: impl IntoIterator<Item = BoxShadow>) -> Self {
+        self.visual.shadows = Some(Arc::from(shadows.into_iter().collect::<Vec<_>>()));
+        self
+    }
+
+    pub fn shadow_none(mut self) -> Self {
+        self.visual.shadows = None;
+        self
+    }
+
+    pub fn shadow_sm(self) -> Self {
+        self.shadow(shadow_sm_preset())
+    }
+
+    pub fn shadow_md(self) -> Self {
+        self.shadows(shadow_md_preset())
+    }
+
+    pub fn shadow_lg(self) -> Self {
+        self.shadows(shadow_lg_preset())
+    }
+
+    pub fn shadow_xl(self) -> Self {
+        self.shadows(shadow_xl_preset())
+    }
+
+    pub fn shadow_2xl(self) -> Self {
+        self.shadow(shadow_2xl_preset())
+    }
+
+    /// Choose how image, SVG, or path content is fitted into its layout box.
+    pub fn object_fit(mut self, fit: ObjectFit) -> Self {
+        match &mut self.kind {
+            ElementKind::Image(image) => image.object_fit = fit,
+            ElementKind::Svg(svg) => svg.object_fit = fit,
+            ElementKind::Path(path) => path.object_fit = fit,
+            _ => {}
+        }
+        self
+    }
+
+    /// Override a path element's inherited text color with a solid color or linear gradient.
+    pub fn path_background(mut self, background: impl Into<Background>) -> Self {
+        if let ElementKind::Path(path) = &mut self.kind {
+            path.background = Some(background.into());
+        }
+        self
+    }
+
+    /// Apply a render-only transform to SVG content without affecting flexbox layout.
+    pub fn svg_transform(mut self, transform: SvgTransform) -> Self {
+        if let ElementKind::Svg(svg) = &mut self.kind {
+            svg.transform = transform;
+        }
+        self
+    }
+
+    /// Render an image in grayscale without creating another decoded image.
+    pub fn grayscale(mut self, grayscale: bool) -> Self {
+        if let ElementKind::Image(image) = &mut self.kind {
+            image.grayscale = grayscale;
+        }
+        self
+    }
+
+    /// Render a replacement element when an image resource has been loading for 200 ms.
+    pub fn with_loading<E: IntoElement + 'static>(
+        mut self,
+        render: impl Fn() -> E + 'static,
+    ) -> Self {
+        if let ElementKind::Image(image) = &mut self.kind {
+            image.loading = Some(ImageReplacement::new(render));
+        }
+        self
+    }
+
+    /// Render a replacement element when an image resource fails to load.
+    pub fn with_fallback<E: IntoElement + 'static>(
+        mut self,
+        render: impl Fn() -> E + 'static,
+    ) -> Self {
+        if let ElementKind::Image(image) = &mut self.kind {
+            image.fallback = Some(ImageReplacement::new(render));
+        }
+        self
     }
 
     pub fn text_color(mut self, color: Color) -> Self {
@@ -1078,6 +1407,54 @@ mod tests {
     }
 
     #[test]
+    fn svg_elements_retain_asset_fit_and_render_transform() {
+        let asset = Svg::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10"/></svg>"#,
+        )
+        .unwrap();
+        let transform = SvgTransform::new().scale(1.5).translate(2.0, 3.0);
+        let element = svg(&asset)
+            .object_fit(ObjectFit::Cover)
+            .svg_transform(transform);
+        let ElementKind::Svg(svg) = element.kind else {
+            panic!("expected an SVG element");
+        };
+        assert_eq!(svg.svg, asset);
+        assert_eq!(svg.object_fit, ObjectFit::Cover);
+        assert_eq!(svg.transform, transform);
+    }
+
+    #[test]
+    fn path_elements_retain_fit_and_optional_background() {
+        let mut builder = crate::PathBuilder::fill();
+        builder.move_to(crate::Point::new(0.0, 0.0));
+        builder.line_to(crate::Point::new(20.0, 0.0));
+        builder.line_to(crate::Point::new(10.0, 10.0));
+        builder.close();
+        let asset = builder.build().unwrap();
+        let color = Color::rgb8(14, 165, 233);
+        let element = path(&asset)
+            .object_fit(ObjectFit::Cover)
+            .path_background(color);
+        let ElementKind::Path(path) = element.kind else {
+            panic!("expected a path element");
+        };
+        assert_eq!(path.path, asset);
+        assert_eq!(path.object_fit, ObjectFit::Cover);
+        assert_eq!(path.background, Some(Background::Solid(color)));
+    }
+
+    #[test]
+    fn canvas_uses_web_default_dimensions() {
+        let element = canvas(|bounds, context| {
+            assert_eq!(bounds, context.bounds());
+        });
+        assert_eq!(element.layout.size.width, Dimension::length(300.0));
+        assert_eq!(element.layout.size.height, Dimension::length(150.0));
+        assert!(matches!(element.kind, ElementKind::Canvas(_)));
+    }
+
+    #[test]
     fn named_ids_are_stable() {
         assert_eq!(ElementId::named("save"), ElementId::named("save"));
         assert_ne!(ElementId::named("save"), ElementId::named("cancel"));
@@ -1110,5 +1487,24 @@ mod tests {
             ElementKind::TextInput(input)
                 if input.value.as_ref() == "hello" && input.placeholder.as_ref() == "Type here"
         ));
+    }
+
+    #[test]
+    fn shadow_utilities_are_paint_only_and_state_styles_can_remove_them() {
+        let element = div().shadow_md().hover(|style| style.shadow_none());
+        let shadows = element.visual.shadows.as_deref().unwrap();
+        assert_eq!(shadows.len(), 2);
+        assert_eq!(shadows[0].offset().y, 4.0);
+        assert_eq!(element.layout, Style::default());
+        assert!(
+            element
+                .hover
+                .shadows
+                .as_deref()
+                .is_some_and(<[BoxShadow]>::is_empty)
+        );
+
+        let hover_elevation = ElementStateStyle::default().shadow_lg();
+        assert_eq!(hover_elevation.shadows.as_deref().unwrap().len(), 2);
     }
 }

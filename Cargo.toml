@@ -2,7 +2,7 @@
 name = "quickgui"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.88"
 description = "A damage-driven, GPU-accelerated desktop GUI foundation"
 license = "MIT"
 repository = "https://github.com/egoist/quickgui"
@@ -18,8 +18,12 @@ accesskit_winit = "0.33.2"
 arboard = { version = "3.6.1", default-features = false }
 bitflags = "2.9"
 bytemuck = { version = "1.23", features = ["derive"] }
+flate2 = "1.1"
 glyphon = "0.12.0"
+image-codecs = { package = "image", version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+lyon = { version = "1.0.19", default-features = false }
 pollster = "0.4"
+resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
 taffy = { version = "0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "block_layout", "content_size"] }
 thiserror = "2.0"
 tracing = "0.1"
@@ -30,9 +34,10 @@ winit = "0.30.13"
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.5.1"
 objc2 = "0.5.2"
-objc2-app-kit = { version = "0.2.2", features = ["NSAccessibility", "NSAccessibilityConstants", "NSAccessibilityProtocols", "NSApplication", "NSBox", "NSCell", "NSColor", "NSEvent", "NSControl", "NSGraphics", "NSMenu", "NSMenuItem", "NSResponder", "NSTextField", "NSView", "NSWindow", "block2", "objc2-quartz-core"] }
+objc2-app-kit = { version = "0.2.2", features = ["NSAccessibility", "NSAccessibilityConstants", "NSAccessibilityProtocols", "NSApplication", "NSBox", "NSCell", "NSColor", "NSEvent", "NSControl", "NSGraphics", "NSMenu", "NSMenuItem", "NSResponder", "NSTextField", "NSView", "NSWindow", "NSWorkspace", "block2", "objc2-quartz-core"] }
 objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSGeometry", "NSString"] }
-objc2-quartz-core = { version = "0.2.2", features = ["CALayer"] }
+objc2-quartz-core = { version = "0.2.2", features = ["CALayer", "CAMetalLayer"] }
+raw-window-metal = "1.1.0"
 wgpu = { version = "30.0.1", default-features = false, features = ["metal"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

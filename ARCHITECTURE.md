@@ -22,8 +22,11 @@ Winit + AccessKit events
                                 ordered plane/z layers
                               ┌─────────────┴─────────────┐
                               ▼                           ▼
-                   instanced quad pipeline      cached Glyphon text
-                              └─────────────┬─────────────┘
+                  instanced shape pipeline      cached Glyphon text
+                              ├──── retained path pipeline ────┤
+                              ├──── sampled image pipeline ────┤
+                              ├──── cached SVG mask pipeline ──┤
+                              └─────────────┬───────────────────┘
                                             ▼
                          ┌──────── base WGPU surface
                          ├──────── macOS native NSViews (when mounted)
@@ -34,7 +37,7 @@ Winit + AccessKit events
 
 The event loop runs with `ControlFlow::Wait`. Invalidation queues at most one Winit redraw. Multiple wheel events accumulate into one logical delta before the redraw handler runs. An occluded or zero-sized window is skipped and is not placed in a retry loop.
 
-Hover, pressed state, and retained scroll-container offsets only mark paint dirty. They reuse the existing element declaration and Taffy layout. An application mutation calls `EventContext::invalidate()`, which rebuilds the declarative tree at the next redraw. `request_animation_frame()` is explicit and keeps rebuilding only while a view requests it.
+Hover, pressed state, and retained scroll-container offsets only mark paint dirty. They reuse the existing element declaration and Taffy layout. An application mutation calls `EventContext::invalidate()`, which rebuilds the declarative tree at the next redraw. `request_animation_frame()` is explicit and keeps rebuilding only while a view requests it. Asynchronous images use Winit user events for completion and one `WaitUntil` deadline for the 200 ms loading threshold. Animated images add only the earliest visible frame deadline to that same event-loop calculation; none of these states introduces polling or a permanent frame loop.
 
 ## Element identity and ownership
 
@@ -103,22 +106,101 @@ Scrollable nodes retain offsets outside the declaration tree. Fixed-height `Virt
 
 ## Rendering
 
-The current renderer has two specialized pipelines:
+The current renderer has five specialized pipelines:
 
-1. Quads use six shader-generated vertices and an instance containing logical bounds, fill, inside border, radius, and clip. Rounded-corner antialiasing is analytic in WGSL. All visible quads share one upload and each non-empty stacking layer is submitted in one draw call.
-2. Text uses Cosmic Text for Unicode shaping/fallback and Glyphon for Swash rasterization plus atlas rendering. Stable `TextId`s prevent reshaping unless content, width, metrics, family, weight, wrap mode, or display scale changes.
+1. Shapes use six shader-generated vertices and one declaration-ordered instance stream. Quads carry logical bounds, fill, inside border, radius, and clip. Drop and inset shadows carry the element box, translated/spread subject box, color, blur radius, and clip. Rounded-corner antialiasing and Gaussian-CDF shadow falloff are analytic in WGSL, so shadows allocate no blur textures or retained cache entries. Outer shadows, the element quad, and inset shadows preserve CSS paint order while every non-empty stacking layer remains one draw call.
+2. Images use six shader-generated vertices and one shared instance upload. Straight-alpha RGBA8 pixels are sampled from sRGB textures, converted to premultiplied linear output in the shader, and masked by the same logical clip and rounded box used for layout. Consecutive primitives with the same image identity share one draw call; texture switches preserve image source order.
+3. SVGs retain a parsed `resvg` tree and rasterize only an identity-and-physical-size cache miss.
+   The GPU stores `R8Unorm` alpha masks, while inherited tint, rounded clipping, translation, and
+   rotation remain per-instance shader data. Scale participates in the raster key to preserve edge
+   quality. Consecutive primitives with the same mask share a draw without making color part of the
+   cache identity.
+4. Paths retain CPU-tessellated Lyon triangles. Each uploaded vertex carries barycentric coordinates,
+   a true-boundary mask, and a paint index; WGSL derives edge coverage only for outline edges, so
+   internal triangulation stays opaque without a permanent multisample framebuffer. One storage
+   paint record supplies scale/translation, clip, solid or two-stop linear gradient, and
+   linear-sRGB/sRGB/Oklab interpolation. All paths at one overlap order share one draw.
+5. Text uses Cosmic Text for Unicode shaping/fallback and Glyphon for Swash rasterization plus atlas rendering. Stable `TextId`s prevent reshaping unless content, width, metrics, family, weight, wrap mode, or display scale changes.
 
-Colors are stored in linear-light space. Eight-bit constructors decode sRGB on the CPU, and the sRGB surface performs the output transfer. Quad output is premultiplied before using premultiplied-alpha blending. Text wraps at word boundaries by default; intrinsic measurements reserve one physical pixel before a max-content width is fed back as a wrap constraint, preventing rounding-only reflow between layout and paint.
+Colors are stored in linear-light space. Eight-bit constructors decode sRGB on the CPU, and the sRGB surface performs the output transfer. Shape, image, SVG, and path output is premultiplied before using premultiplied-alpha blending. Text wraps at word boundaries by default; intrinsic measurements reserve one physical pixel before a max-content width is fed back as a wrap constraint, preventing rounding-only reflow between layout and paint.
 
-Quad instance uploads rotate across three GPU buffers. Capacity grows geometrically. Text layouts are age-evicted every frame and have a hard cap of 256 retained areas; Glyphon's atlas is trimmed after presentation. The deliberately small layout cache keeps long, disjoint scrolling from retaining whole off-screen text buffers while still covering several nearby viewports.
+Shape instance uploads rotate across three GPU buffers. Capacity grows geometrically. A shape
+instance is 96 bytes, and shadow overdraw is clipped to the viewport and limited to three Gaussian
+standard deviations. Text layouts are age-evicted every frame and have a hard cap of 256 retained
+areas; Glyphon's atlas is trimmed after presentation. The deliberately small layout cache keeps
+long, disjoint scrolling from retaining whole off-screen text buffers while still covering several
+nearby viewports.
+
+Image instances also rotate across three geometrically growing buffers. Decoded CPU images are
+immutable `Arc` allocations, so cloning an `Image` preserves cache identity without copying pixels.
+Only viewport-visible image identities are admitted for upload. The per-renderer GPU cache is capped
+at both 256 textures and 128 MiB of RGBA texels; an upload evicts the least-recently-used identity
+that is not visible in the current frame. If one visible working set itself exceeds either cap,
+admission is deterministic in scene order and later images remain unsubmitted rather than allowing
+unbounded residency. Cache bytes, image count, uploads, and total draws are exposed in
+`RenderStats`.
+
+SVG parsing accepts at most 4 MiB of source or bounded SVGZ output and loads the system-font
+database only if the source may contain text. SVG `<image>` references are disabled, keeping the
+asset path vector-only. A raster target is derived from the fitted source UVs, display scale, and
+render scale, then constrained to 4096 px per axis and 16 million pixels. Only visible unique keys
+are admitted in scene order. The per-renderer cache retains at most 512 one-channel textures and 32
+MiB, evicting the least-recently-used key outside the visible working set. First-use rasterization
+is synchronous; cache hits perform no SVG parsing or CPU raster work, and recoloring never uploads a
+new texture.
+
+`PathBuilder` validates coordinates and styles before tessellating fills or strokes. A retained path
+is immutable and shared by identity; it owns de-indexed triangles plus one three-bit boundary mask
+per triangle. Commands are capped at 65,536, retained vertices at 196,605, dash expansion at 262,144
+segments, and retained geometry at 4 MiB. The renderer rotates both vertex and paint uploads across
+three geometrically growing buffers. Frame admission follows source order and is capped at 262,144
+vertices and 16,384 paints; later paths are omitted rather than growing transient memory without a
+bound. Declarative path elements use intrinsic Flexbox measurement and all five `ObjectFit` modes.
+Canvas callbacks receive local bounds and a scoped painter whose commands are translated and clipped
+to the element before entering the same retained scene.
+
+Asynchronous image resources are resolved before Taffy layout. Filesystem paths share a stable path key, while
+custom loaders use a retained handle identity. The first resource lazily creates two sleeping decode
+workers backed by a 64-job synchronous channel. Completed decodes return through the event-loop
+proxy, so a clean window wakes once rather than polling worker state. Loading and fallback closures
+produce ordinary child elements and therefore participate in the same flexbox and text-wrapping
+rules as the rest of the tree. The per-window CPU cache independently caps all resource states at
+256 entries and decoded residency at 128 MiB, evicting least-recently-used entries outside the
+current tree. Each file is capped at 64 MiB encoded, and every decoded image retains the existing
+4096 px per-axis and 64 MiB allocation limits. Worker panics become failed resources, and teardown
+detaches instead of waiting indefinitely on application-provided blocking loaders.
+
+Animated GIF/WebP resources decode their composited RGBA frames on the same bounded workers.
+Direct `AnimatedImage` values and loaded animations share one immutable representation capped at
+256 frames and 64 MiB of unique decoded pixels; repeated `Image` identities are counted once. Frame
+delays are clamped to 16.667 ms so malformed assets cannot force more than 60 presentations per
+second. Playback state is keyed by the element's stable runtime ID rather than the asset, allowing
+two uses of one animation to retain independent phases across view rebuilds. Only elements that
+intersect the current clip remain active. Occlusion, explicit motion reduction, and macOS's system
+Reduce Motion preference pause deadlines while preserving the current frame. Finite loop metadata
+stops on the final frame. A delayed event advances elapsed time arithmetically and performs at most
+one repaint, rather than iterating through every missed frame.
 
 The scene groups primitives by `(plane, z_index)` and retains at most 16 inactive layer buffers.
-Quads and text are interleaved per layer, while every overlay layer is ordered after every base
-layer. Glyphon renderers are shared by text-bearing layers and capped at eight retained instances.
+Every accepted primitive also enters one global paint stream. An allocation-reusing R-tree assigns
+each primitive one greater than the maximum order of intersecting earlier bounds; primitives sharing
+an order are provably disjoint and may batch by pipeline or texture without changing pixels. The
+renderer walks orders globally across shapes, paths, images, SVGs, and text, preserving web sibling
+overlap while avoiding one draw per primitive. Effective bounds include clips, masks, and render
+transforms. Every overlay layer remains after every base layer. Glyphon renderers are shared by
+text-bearing order batches and capped at eight retained instances.
 An ordinary window still uses one WGPU surface. A macOS window with native children creates its
 transparent overlay surface only when overlay content or input first becomes active, then retains
 that swapchain for reuse. Recreating it on every close/open cycle is intentionally avoided because
 Core Animation may keep old IOSurface drawables alive beyond the Rust `Surface` lifetime.
+
+On macOS, QuickGUI creates and retains each `CAMetalLayer` itself, then gives WGPU the documented
+`CoreAnimationLayer` surface target. AppKit live-resize callbacks only record the newest physical
+size; WGPU reconfiguration is deferred to the next coalesced redraw immediately before drawable
+acquisition. During AppKit's live-resize transaction, the owned base and overlay layers enable
+`presentsWithTransaction`; ordinary frames disable it again. This keeps resize presentation in the
+window-server transaction without reaching through WGPU's backend internals or configuring a
+surface repeatedly inside `frameDidChange:`.
 
 On macOS, a single opaque AppKit launch shield uses the configured background color and stays above
 all three planes until the base renderer completes `Presented`. Surface retries and occlusion keep
@@ -167,7 +249,11 @@ Changes should preserve these invariants:
 - no blocking wait for GPU completion on the UI thread;
 - no layout-affecting hover style.
 
-CPU frame time, primitive counts, text cache hits, and draw-call counts are exposed through `FrameMetrics`. These are application-side timings through queue submission, not GPU timestamps or end-to-end display latency.
+CPU frame time, quad/shadow/image/SVG/path/text counts, path vertices and skipped paths, CPU/GPU image residency, GPU SVG-mask residency,
+resource loading/failure counts, mounted/active animation counts, image uploads, SVG
+rasterizations, text cache hits, and draw-call counts are exposed through `FrameMetrics`. These are
+application-side timings through queue submission, not GPU timestamps or end-to-end display
+latency.
 
 ## Native input and accessibility
 
@@ -181,9 +267,10 @@ When native AppKit children are mounted, QuickGUI installs a no-ivar Objective-C
 
 This milestone establishes the performance architecture, ordered overlays, macOS native child
 composition, hybrid AccessKit/AppKit accessibility, semantic focus, and a production-oriented
-single-line editing path, typed actions, focus scopes, contextual keymaps, and native macOS
-application menus. A complete platform toolkit still needs rich and multiline editing, images,
-shadows, command palettes, drag/drop, multi-window ownership, non-macOS menu projection, and broader
-platform acceptance. Those
+single-line editing path, typed actions, focus scopes, contextual keymaps, native macOS application
+menus, bounded static/asynchronous/animated raster images, retained SVG icons, retained paths and
+custom canvas painting, and analytic CSS-ordered box shadows. A complete platform toolkit still
+needs rich and multiline editing, custom shaders, command palettes,
+drag/drop, multi-window ownership, non-macOS menu projection, and broader platform acceptance. Those
 features should extend the retained tree and narrow renderer rather than bypass its scheduling and
 cache invariants.

@@ -8,21 +8,24 @@ struct ViewUniform {
 var<uniform> view: ViewUniform;
 
 struct VertexInput {
-    @location(0) rect: vec4<f32>,
-    @location(1) fill: vec4<f32>,
-    @location(2) border: vec4<f32>,
+    @location(0) geometry: vec4<f32>,
+    @location(1) primary: vec4<f32>,
+    @location(2) secondary: vec4<f32>,
     @location(3) clip: vec4<f32>,
-    @location(4) radius_and_border: vec2<f32>,
+    // mode, subject radius, border width / element radius, blur radius
+    @location(4) params: vec4<f32>,
+    @location(5) subject: vec4<f32>,
 }
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) local_position: vec2<f32>,
-    @location(1) size: vec2<f32>,
-    @location(2) fill: vec4<f32>,
-    @location(3) border: vec4<f32>,
+    @location(0) logical_position: vec2<f32>,
+    @location(1) geometry: vec4<f32>,
+    @location(2) primary: vec4<f32>,
+    @location(3) secondary: vec4<f32>,
     @location(4) clip: vec4<f32>,
-    @location(5) radius_and_border: vec2<f32>,
+    @location(5) params: vec4<f32>,
+    @location(6) subject: vec4<f32>,
 }
 
 @vertex
@@ -36,7 +39,7 @@ fn vs_main(input: VertexInput, @builtin(vertex_index) vertex_index: u32) -> Vert
         vec2<f32>(1.0, 1.0),
     );
     let corner = corners[vertex_index];
-    let logical_position = input.rect.xy + corner * input.rect.zw;
+    let logical_position = input.geometry.xy + corner * input.geometry.zw;
     let physical_position = logical_position * view.scale;
 
     var output: VertexOutput;
@@ -46,12 +49,13 @@ fn vs_main(input: VertexInput, @builtin(vertex_index) vertex_index: u32) -> Vert
         0.0,
         1.0,
     );
-    output.local_position = corner * input.rect.zw;
-    output.size = input.rect.zw;
-    output.fill = input.fill;
-    output.border = input.border;
+    output.logical_position = logical_position;
+    output.geometry = input.geometry;
+    output.primary = input.primary;
+    output.secondary = input.secondary;
     output.clip = input.clip * view.scale;
-    output.radius_and_border = input.radius_and_border;
+    output.params = input.params;
+    output.subject = input.subject;
     return output;
 }
 
@@ -62,9 +66,34 @@ fn rounded_box_distance(point: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 {
     return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - safe_radius;
 }
 
+fn rounded_rect_distance(point: vec2<f32>, rect: vec4<f32>, radius: f32) -> f32 {
+    return rounded_box_distance(point - rect.xy, rect.zw, radius);
+}
+
 fn coverage(distance: f32) -> f32 {
     let antialias_width = max(fwidth(distance), 0.0001);
     return 1.0 - smoothstep(-antialias_width, antialias_width, distance);
+}
+
+// Maximum absolute error is about 1.5e-7, which is far below an 8-bit alpha step.
+fn erf_approx(value: f32) -> f32 {
+    let x = abs(value);
+    let t = 1.0 / (1.0 + 0.3275911 * x);
+    let polynomial = (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t
+        - 0.284496736) * t + 0.254829592) * t);
+    let result = 1.0 - polynomial * exp(-x * x);
+    return select(-result, result, value >= 0.0);
+}
+
+fn blurred_coverage(distance: f32, blur_radius: f32) -> f32 {
+    let crisp = coverage(distance);
+    if blur_radius <= 0.001 {
+        return crisp;
+    }
+    // CSS blur radii map closely to a Gaussian whose standard deviation is half the radius.
+    let sigma = max(blur_radius * 0.5, 0.0001);
+    let blurred = 0.5 * (1.0 - erf_approx(distance / (1.41421356237 * sigma)));
+    return clamp(blurred, 0.0, 1.0);
 }
 
 @fragment
@@ -75,31 +104,47 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    let outer = coverage(rounded_box_distance(
-        input.local_position,
-        input.size,
-        input.radius_and_border.x,
-    ));
-    let border_width = min(
-        max(input.radius_and_border.y, 0.0),
-        min(input.size.x, input.size.y) * 0.5,
+    let subject_distance = rounded_rect_distance(
+        input.logical_position,
+        input.subject,
+        input.params.y,
     );
-
-    var inner = outer;
-    if border_width > 0.0 {
-        inner = coverage(rounded_box_distance(
-            input.local_position - vec2<f32>(border_width),
-            max(input.size - vec2<f32>(border_width * 2.0), vec2<f32>(0.0)),
-            max(input.radius_and_border.x - border_width, 0.0),
+    let subject_coverage = blurred_coverage(subject_distance, input.params.w);
+    // Regular rounded rectangle with an inside border.
+    if input.params.x < 0.5 {
+        let border_width = min(
+            max(input.params.z, 0.0),
+            min(input.subject.z, input.subject.w) * 0.5,
+        );
+        let inner_rect = vec4<f32>(
+            input.subject.xy + vec2<f32>(border_width),
+            max(input.subject.zw - vec2<f32>(border_width * 2.0), vec2<f32>(0.0)),
+        );
+        let inner = coverage(rounded_rect_distance(
+            input.logical_position,
+            inner_rect,
+            max(input.params.y - border_width, 0.0),
         ));
+        let fill_alpha = input.primary.a * inner;
+        let border_alpha = input.secondary.a * max(subject_coverage - inner, 0.0);
+        let alpha = fill_alpha + border_alpha;
+        let rgb = input.primary.rgb * fill_alpha + input.secondary.rgb * border_alpha;
+        return vec4<f32>(rgb, alpha);
     }
 
-    let fill_coverage = inner;
-    let border_coverage = max(outer - inner, 0.0);
-    let fill_alpha = input.fill.a * fill_coverage;
-    let border_alpha = input.border.a * border_coverage;
-    let alpha = fill_alpha + border_alpha;
-    let rgb = input.fill.rgb * fill_alpha + input.border.rgb * border_alpha;
-    return vec4<f32>(rgb, alpha);
-}
+    // Drop shadow. Its element is painted by a later instance in the same ordered draw.
+    if input.params.x < 1.5 {
+        let alpha = input.primary.a * subject_coverage;
+        return vec4<f32>(input.primary.rgb * alpha, alpha);
+    }
 
+    // Inset shadow: the element is the mask and the translated subject is its clear hole.
+    let geometry_coverage = coverage(rounded_rect_distance(
+        input.logical_position,
+        input.geometry,
+        input.params.z,
+    ));
+    let inset_coverage = geometry_coverage * (1.0 - subject_coverage);
+    let alpha = input.primary.a * inset_coverage;
+    return vec4<f32>(input.primary.rgb * alpha, alpha);
+}

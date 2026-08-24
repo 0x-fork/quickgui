@@ -15,7 +15,7 @@ use arboard::Clipboard;
 use thiserror::Error;
 use winit::{
     application::ApplicationHandler,
-    dpi::{LogicalPosition, LogicalSize},
+    dpi::{LogicalPosition, LogicalSize, PhysicalSize},
     event::{ElementState, Ime, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::{Key as WinitKey, ModifiersState, NamedKey},
@@ -26,6 +26,7 @@ use crate::{
     Action, ActionListener, AnyAction, Color, ElementId, FocusHandle, IntoElement, KeyBinding,
     Keymap, Keystroke, Menu, OsAction, Point, Scene, Size, Vector,
     event::{Event, EventContext, Key, Modifiers, MouseButton},
+    image_resource::{ImageAssetCache, ImageLoadCompletion},
     menu::{MenuAction, collect_menu_actions},
     metrics::{FrameMetrics, MetricsTracker},
     renderer::{GpuRenderer, RenderOutcome},
@@ -34,12 +35,13 @@ use crate::{
 };
 
 #[cfg(target_os = "macos")]
-use crate::macos::{MacFirstFrameGuard, MacNativeHost};
+use crate::macos::{MacFirstFrameGuard, MacNativeHost, configure_gpu_window_resize};
 #[cfg(target_os = "macos")]
 use crate::macos_menu::{MacMenuHost, MacMenuItemState};
 
 pub(crate) enum RuntimeEvent {
     Accessibility(AccessibilityEvent),
+    ImageLoaded(ImageLoadCompletion),
     MenuWillOpen,
     MenuAction(usize),
 }
@@ -71,6 +73,8 @@ pub struct AppConfig {
     pub line_scroll_pixels: f32,
     /// How long an incomplete multi-stroke key binding waits before its prefix is replayed.
     pub key_sequence_timeout: Duration,
+    /// Disable non-essential image animation. macOS Reduce Motion is always respected as well.
+    pub reduce_motion: bool,
 }
 
 impl Default for AppConfig {
@@ -83,6 +87,7 @@ impl Default for AppConfig {
             performance_profile: PerformanceProfile::Balanced,
             line_scroll_pixels: 40.0,
             key_sequence_timeout: Duration::from_secs(1),
+            reduce_motion: false,
         }
     }
 }
@@ -341,6 +346,11 @@ impl<V: View> App<V> {
         self
     }
 
+    pub fn reduce_motion(mut self, reduce_motion: bool) -> Self {
+        self.config.reduce_motion = reduce_motion;
+        self
+    }
+
     /// Add application key bindings. Later bindings take precedence at equal context depth.
     pub fn bind_keys(mut self, bindings: impl IntoIterator<Item = KeyBinding>) -> Self {
         self.keymap.add_bindings(bindings);
@@ -385,6 +395,7 @@ impl<V: View> App<V> {
 
 struct RuntimeWindow<V> {
     renderer: GpuRenderer,
+    image_assets: ImageAssetCache,
     #[cfg(target_os = "macos")]
     native_host: Option<MacNativeHost>,
     #[cfg(target_os = "macos")]
@@ -398,6 +409,8 @@ struct RuntimeWindow<V> {
     pointer: Option<Point>,
     cursor: CursorIcon,
     ime_target: Option<ElementId>,
+    occluded: bool,
+    reduce_motion: bool,
     view_dirty: bool,
     listeners: ListenerRegistry<V>,
     accessibility: AccessibilityAdapter,
@@ -1174,6 +1187,21 @@ impl<V: View> Runtime<V> {
         let Some(state) = &mut self.window else {
             return;
         };
+        // `NSViewLayerContentsRedrawDuringViewResize` can make AppKit ask for a draw before
+        // Winit's frame-change notification reaches `WindowEvent::Resized`. Always reconcile the
+        // retained layout with the drawable's current geometry before building that frame, so a
+        // new-size surface never presents text or overlays laid out for the preceding size.
+        let physical_size = state.window.inner_size();
+        let scale_factor = sane_scale_factor(state.window.scale_factor());
+        let logical_size = logical_window_size(physical_size, scale_factor);
+        if state.scale_factor != scale_factor || state.logical_size != logical_size {
+            state.scale_factor = scale_factor;
+            state.logical_size = logical_size;
+            state
+                .renderer
+                .resize(physical_size.width, physical_size.height);
+            state.view_dirty = true;
+        }
         state.scheduler.begin_redraw();
 
         let scroll = state.scheduler.take_scroll();
@@ -1204,8 +1232,9 @@ impl<V: View> Runtime<V> {
                 listeners: &mut state.listeners,
             };
             view_cx.listeners.clear();
-            let root = self.view.render(&mut view_cx).into_element();
+            let mut root = self.view.render(&mut view_cx).into_element();
             request_animation_frame = view_cx.request_animation_frame;
+            state.image_assets.resolve_tree(&mut root);
             if let Err(error) = state.ui.set_root(
                 root,
                 state.logical_size,
@@ -1229,6 +1258,7 @@ impl<V: View> Runtime<V> {
             }
         }
 
+        state.ui.advance_animations(Instant::now());
         state.scene.clear(self.config.background);
         if let Err(error) = state.ui.paint(&mut state.scene, &mut state.renderer) {
             self.fail(event_loop, AppError::View(error.to_string()));
@@ -1290,7 +1320,7 @@ impl<V: View> Runtime<V> {
         accessibility.update_if_active(|| ui.accessibility_update(window_title));
 
         match state.renderer.render(&state.scene, state.scale_factor) {
-            Ok(RenderOutcome::Presented(stats)) => {
+            Ok(RenderOutcome::Presented(mut stats)) => {
                 #[cfg(target_os = "macos")]
                 if state.first_frame_guard.is_some()
                     && let Err(error) = state.renderer.wait_for_submitted_work()
@@ -1298,6 +1328,12 @@ impl<V: View> Runtime<V> {
                     self.fail(event_loop, AppError::Render(error.to_string()));
                     return;
                 }
+                let image_assets = state.image_assets.stats();
+                stats.cpu_image_cache_bytes = image_assets.decoded_bytes;
+                stats.image_resource_entries = image_assets.entries;
+                stats.image_resources_loading = image_assets.loading;
+                stats.image_resources_failed = image_assets.failed;
+                (stats.animated_images, stats.active_animations) = state.ui.animation_counts();
                 state.metrics.record(started.elapsed(), stats);
                 #[cfg(target_os = "macos")]
                 if let Some(guard) = state.first_frame_guard.take() {
@@ -1381,6 +1417,11 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             }
         };
         #[cfg(target_os = "macos")]
+        if let Err(error) = configure_gpu_window_resize(&window) {
+            self.fail(event_loop, AppError::Platform(error));
+            return;
+        }
+        #[cfg(target_os = "macos")]
         let first_frame_guard = match MacFirstFrameGuard::new(&window, self.config.background) {
             Ok(guard) => Some(guard),
             Err(error) => {
@@ -1390,19 +1431,23 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
         };
         let scale_factor = sane_scale_factor(window.scale_factor());
         let physical = window.inner_size();
-        let logical_size = Size::new(
-            physical.width as f32 / scale_factor,
-            physical.height as f32 / scale_factor,
-        );
+        let logical_size = logical_window_size(physical, scale_factor);
         let mut scheduler = FrameScheduler::default();
         scheduler.invalidate();
+        #[cfg(target_os = "macos")]
+        let reduce_motion = self.config.reduce_motion || crate::macos::system_reduce_motion();
+        #[cfg(not(target_os = "macos"))]
+        let reduce_motion = self.config.reduce_motion;
+        let mut ui = UiTree::new();
+        ui.set_animations_enabled(!reduce_motion, Instant::now());
         self.window = Some(RuntimeWindow {
             renderer,
+            image_assets: ImageAssetCache::new(self.event_proxy.clone()),
             #[cfg(target_os = "macos")]
             native_host: None,
             #[cfg(target_os = "macos")]
             first_frame_guard,
-            ui: UiTree::new(),
+            ui,
             scheduler,
             scene: Scene::new(),
             metrics: MetricsTracker::default(),
@@ -1411,6 +1456,8 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             pointer: None,
             cursor: CursorIcon::Default,
             ime_target: None,
+            occluded: false,
+            reduce_motion,
             view_dirty: true,
             listeners: ListenerRegistry::default(),
             accessibility,
@@ -1504,10 +1551,7 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             WindowEvent::Resized(physical) => {
                 let state = self.window.as_mut().expect("window checked above");
                 state.renderer.resize(physical.width, physical.height);
-                state.logical_size = Size::new(
-                    physical.width as f32 / state.scale_factor,
-                    physical.height as f32 / state.scale_factor,
-                );
+                state.logical_size = logical_window_size(physical, state.scale_factor);
                 let logical_size = state.logical_size;
                 let scale_factor = state.scale_factor;
                 state.view_dirty = true;
@@ -1525,10 +1569,7 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
                 state.scale_factor = sane_scale_factor(scale_factor);
                 let physical = state.window.inner_size();
                 state.renderer.resize(physical.width, physical.height);
-                state.logical_size = Size::new(
-                    physical.width as f32 / state.scale_factor,
-                    physical.height as f32 / state.scale_factor,
-                );
+                state.logical_size = logical_window_size(physical, state.scale_factor);
                 let logical_size = state.logical_size;
                 let scale_factor = state.scale_factor;
                 state.view_dirty = true;
@@ -1543,10 +1584,18 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             }
             WindowEvent::Occluded(false) => {
                 let state = self.window.as_mut().expect("window checked above");
+                state.occluded = false;
+                state
+                    .ui
+                    .set_animations_enabled(!state.reduce_motion, Instant::now());
                 state.scheduler.invalidate();
                 state.window.request_redraw();
             }
-            WindowEvent::Occluded(true) => {}
+            WindowEvent::Occluded(true) => {
+                let state = self.window.as_mut().expect("window checked above");
+                state.occluded = true;
+                state.ui.set_animations_enabled(false, Instant::now());
+            }
             WindowEvent::RedrawRequested => self.redraw(event_loop),
             WindowEvent::CursorMoved { position, .. } => {
                 let state = self.window.as_mut().expect("window checked above");
@@ -1691,6 +1740,16 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             }
             WindowEvent::Ime(Ime::Enabled) => {}
             WindowEvent::Focused(focused) => {
+                #[cfg(target_os = "macos")]
+                if focused {
+                    let reduce_motion =
+                        self.config.reduce_motion || crate::macos::system_reduce_motion();
+                    let state = self.window.as_mut().expect("window checked above");
+                    state.reduce_motion = reduce_motion;
+                    state
+                        .ui
+                        .set_animations_enabled(!state.occluded && !reduce_motion, Instant::now());
+                }
                 self.dispatch(event_loop, Event::Focused(focused), true);
             }
             _ => {}
@@ -1700,6 +1759,18 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: RuntimeEvent) {
         let event = match event {
             RuntimeEvent::Accessibility(event) => event,
+            RuntimeEvent::ImageLoaded(completion) => {
+                let Some(state) = &mut self.window else {
+                    return;
+                };
+                if state.image_assets.complete(completion) {
+                    state.view_dirty = true;
+                    if state.scheduler.invalidate() {
+                        state.window.request_redraw();
+                    }
+                }
+                return;
+            }
             RuntimeEvent::MenuWillOpen => {
                 self.pending_input = None;
                 #[cfg(target_os = "macos")]
@@ -1813,15 +1884,43 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = Instant::now();
         if self
             .pending_input
             .as_ref()
-            .is_some_and(|pending| pending.deadline <= Instant::now())
+            .is_some_and(|pending| pending.deadline <= now)
         {
             self.flush_pending_input(event_loop);
         }
-        if let Some(pending) = &self.pending_input {
-            event_loop.set_control_flow(ControlFlow::WaitUntil(pending.deadline));
+
+        let (image_deadline, animation_deadline) = self
+            .window
+            .as_mut()
+            .map(|state| {
+                let mut redraw = false;
+                if state.image_assets.announce_due_loading(now) {
+                    state.view_dirty = true;
+                    redraw = true;
+                }
+                if state.ui.advance_animations(now) {
+                    redraw = true;
+                }
+                if redraw && state.scheduler.invalidate() {
+                    state.window.request_redraw();
+                }
+                (
+                    state.image_assets.next_loading_deadline(),
+                    state.ui.next_animation_deadline(),
+                )
+            })
+            .unwrap_or((None, None));
+        let pending_deadline = self.pending_input.as_ref().map(|pending| pending.deadline);
+        let deadline = [pending_deadline, image_deadline, animation_deadline]
+            .into_iter()
+            .flatten()
+            .min();
+        if let Some(deadline) = deadline {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
         } else {
             event_loop.set_control_flow(ControlFlow::Wait);
         }
@@ -1834,6 +1933,13 @@ fn sane_scale_factor(value: f64) -> f32 {
     } else {
         1.0
     }
+}
+
+fn logical_window_size(physical: PhysicalSize<u32>, scale_factor: f32) -> Size {
+    Size::new(
+        physical.width as f32 / scale_factor,
+        physical.height as f32 / scale_factor,
+    )
 }
 
 fn map_mouse_button(button: winit::event::MouseButton) -> MouseButton {
@@ -1919,6 +2025,14 @@ mod tests {
         assert_eq!(sane_scale_factor(0.0), 1.0);
         assert_eq!(sane_scale_factor(f64::NAN), 1.0);
         assert_eq!(sane_scale_factor(2.0), 2.0);
+    }
+
+    #[test]
+    fn drawable_geometry_converts_to_logical_points() {
+        assert_eq!(
+            logical_window_size(PhysicalSize::new(1200, 800), 2.0),
+            Size::new(600.0, 400.0)
+        );
     }
 
     #[test]

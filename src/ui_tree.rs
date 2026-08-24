@@ -1,5 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use accesskit::{
     Action, Affine, Node as AccessibilityNode, NodeId as AccessibilityNodeId,
@@ -13,9 +16,15 @@ use taffy::{
 use thiserror::Error;
 
 use crate::{
-    AccessibilityRole, AnchorPlacement, Color, Element, ElementId, Insets, KeyContext, Point, Quad,
-    Rect, Scene, Size, TextId, TextRun, TextStyle, Vector, element::ElementKind,
-    renderer::GpuRenderer, scene::PaintLayerKey, text_input::TextInputState,
+    AccessibilityRole, AnchorPlacement, AnimatedImage, BoxShadow, Canvas, Color, Element,
+    ElementId, ImagePrimitive, Insets, KeyContext, ObjectFit, Path, PathPrimitive, Point, Quad,
+    Rect, Scene, Shadow, Size, SvgPrimitive, TextId, TextRun, TextStyle, Vector,
+    animated_image::AnimatedImageId,
+    element::{ElementKind, ElementStateStyle, ImageResolution},
+    image::fit_image,
+    renderer::GpuRenderer,
+    scene::PaintLayerKey,
+    text_input::TextInputState,
 };
 
 #[cfg(target_os = "macos")]
@@ -42,10 +51,15 @@ pub(crate) enum UiError {
 }
 
 #[derive(Clone)]
-struct MeasureContext {
-    id: TextId,
-    content: Arc<str>,
-    style: TextStyle,
+enum MeasureContext {
+    Text {
+        id: TextId,
+        content: Arc<str>,
+        style: TextStyle,
+    },
+    Image {
+        intrinsic: Size,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -143,6 +157,9 @@ pub(crate) struct UiTree {
     text_inputs: HashMap<ElementId, TextInputState>,
     accessibility_text_ids: HashMap<ElementId, AccessibilityNodeId>,
     next_accessibility_text_id: u64,
+    animations: HashMap<ElementId, AnimationPlayback>,
+    animation_ids: HashSet<ElementId>,
+    animations_enabled: bool,
     selecting_input: Option<ElementId>,
     hovered: HashSet<ElementId>,
     pressed: Option<ElementId>,
@@ -155,6 +172,73 @@ pub(crate) struct UiTree {
     focus_initialized: bool,
     viewport: Size,
     scale_factor: f32,
+}
+
+struct AnimationPlayback {
+    asset: AnimatedImage,
+    asset_id: AnimatedImageId,
+    frame_index: usize,
+    elapsed: Duration,
+    last_advanced_at: Instant,
+    active: bool,
+    seen: bool,
+    completed: bool,
+}
+
+impl AnimationPlayback {
+    fn new(asset: AnimatedImage, now: Instant) -> Self {
+        Self {
+            asset_id: asset.id(),
+            asset,
+            frame_index: 0,
+            elapsed: Duration::ZERO,
+            last_advanced_at: now,
+            active: false,
+            seen: false,
+            completed: false,
+        }
+    }
+
+    fn activate(&mut self, now: Instant, enabled: bool) {
+        self.seen = true;
+        if enabled && !self.completed && self.asset.frame_count() > 1 && !self.active {
+            self.active = true;
+            self.last_advanced_at = now;
+        }
+    }
+
+    fn advance(&mut self, now: Instant) -> bool {
+        if !self.active || self.completed {
+            return false;
+        }
+        self.elapsed = self
+            .elapsed
+            .saturating_add(now.saturating_duration_since(self.last_advanced_at));
+        self.last_advanced_at = now;
+        let previous = self.frame_index;
+        (self.frame_index, self.completed) = self.asset.frame_index_at(self.elapsed);
+        if self.completed {
+            self.active = false;
+        }
+        self.frame_index != previous
+    }
+
+    fn finish_visibility(&mut self) {
+        if !self.seen {
+            self.active = false;
+        }
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        (self.active && !self.completed && self.asset.frame_count() > 1)
+            .then(|| {
+                self.last_advanced_at.checked_add(
+                    self.asset
+                        .remaining_in_frame(self.elapsed, self.frame_index),
+                )
+            })
+            .flatten()
+    }
 }
 
 impl UiTree {
@@ -176,6 +260,9 @@ impl UiTree {
             text_inputs: HashMap::with_capacity(8),
             accessibility_text_ids: HashMap::with_capacity(8),
             next_accessibility_text_id: ACCESSIBILITY_ROOT_ID.0 - 1,
+            animations: HashMap::with_capacity(8),
+            animation_ids: HashSet::with_capacity(8),
+            animations_enabled: true,
             selecting_input: None,
             hovered: HashSet::with_capacity(8),
             pressed: None,
@@ -212,6 +299,15 @@ impl UiTree {
             0,
             &inherited,
         )?;
+        self.animation_ids.clear();
+        sync_animations(
+            &root,
+            &mut self.animations,
+            &mut self.animation_ids,
+            Instant::now(),
+        );
+        self.animations
+            .retain(|id, _| self.animation_ids.contains(id));
         self.root = Some(root);
         self.root_node = Some(root_node);
         if let Some(root) = &self.root {
@@ -256,6 +352,51 @@ impl UiTree {
         self.layout(viewport, scale_factor, renderer)
     }
 
+    pub fn set_animations_enabled(&mut self, enabled: bool, now: Instant) {
+        if self.animations_enabled == enabled {
+            return;
+        }
+        if !enabled {
+            for playback in self.animations.values_mut() {
+                playback.advance(now);
+                playback.active = false;
+            }
+        }
+        self.animations_enabled = enabled;
+    }
+
+    pub fn advance_animations(&mut self, now: Instant) -> bool {
+        if !self.animations_enabled {
+            return false;
+        }
+        let mut changed = false;
+        for playback in self.animations.values_mut() {
+            changed |= playback.advance(now);
+        }
+        changed
+    }
+
+    pub fn next_animation_deadline(&self) -> Option<Instant> {
+        self.animations_enabled
+            .then(|| {
+                self.animations
+                    .values()
+                    .filter_map(AnimationPlayback::deadline)
+                    .min()
+            })
+            .flatten()
+    }
+
+    pub fn animation_counts(&self) -> (usize, usize) {
+        (
+            self.animations.len(),
+            self.animations
+                .values()
+                .filter(|state| state.active)
+                .count(),
+        )
+    }
+
     pub fn layout(
         &mut self,
         viewport: Size,
@@ -280,21 +421,23 @@ impl UiTree {
                 if let (Some(width), Some(height)) = (known.width, known.height) {
                     return TaffySize { width, height };
                 }
-                let max_width = known.width.or_else(|| match available.width {
-                    AvailableSpace::Definite(width) => Some(width.max(0.0)),
-                    AvailableSpace::MinContent => Some(0.0),
-                    AvailableSpace::MaxContent => None,
-                });
-                let measured = renderer.measure_text(
-                    context.id,
-                    &context.content,
-                    &context.style,
-                    max_width,
-                    scale_factor,
-                );
-                TaffySize {
-                    width: known.width.unwrap_or(measured.width),
-                    height: known.height.unwrap_or(measured.height),
+                match context {
+                    MeasureContext::Text { id, content, style } => {
+                        let max_width = known.width.or_else(|| match available.width {
+                            AvailableSpace::Definite(width) => Some(width.max(0.0)),
+                            AvailableSpace::MinContent => Some(0.0),
+                            AvailableSpace::MaxContent => None,
+                        });
+                        let measured =
+                            renderer.measure_text(*id, content, style, max_width, scale_factor);
+                        TaffySize {
+                            width: known.width.unwrap_or(measured.width),
+                            height: known.height.unwrap_or(measured.height),
+                        }
+                    }
+                    MeasureContext::Image { intrinsic } => {
+                        measure_image(known.width, known.height, *intrinsic)
+                    }
                 }
             },
         )?;
@@ -310,9 +453,13 @@ impl UiTree {
         #[cfg(target_os = "macos")]
         self.native_views.clear();
         self.text_input_regions.clear();
+        for playback in self.animations.values_mut() {
+            playback.seen = false;
+        }
         let Some(root) = &self.root else {
             return Ok(());
         };
+        let paint_time = Instant::now();
         let viewport = Rect::from_size(self.viewport);
         collect_layout_bounds(
             root,
@@ -322,7 +469,7 @@ impl UiTree {
             Point::ZERO,
         )?;
         let mut source_order = 0;
-        paint_element(
+        let result = paint_element(
             root,
             &self.taffy,
             &self.natural_bounds,
@@ -335,6 +482,9 @@ impl UiTree {
             scene,
             renderer,
             &mut self.text_inputs,
+            &mut self.animations,
+            self.animations_enabled,
+            paint_time,
             &mut self.hit_regions,
             &mut self.scroll_regions,
             &mut self.dismiss_regions,
@@ -347,7 +497,11 @@ impl UiTree {
             PaintLayerKey::default(),
             &mut source_order,
             None,
-        )?;
+        );
+        for playback in self.animations.values_mut() {
+            playback.finish_visibility();
+        }
+        result?;
         self.hit_regions.sort_by_key(|region| region.order);
         self.scroll_regions.sort_by_key(|region| region.order);
         self.dismiss_regions.sort_by_key(|region| region.order);
@@ -874,6 +1028,47 @@ fn text_input_index_at(
     )
 }
 
+fn measure_image(width: Option<f32>, height: Option<f32>, intrinsic: Size) -> TaffySize<f32> {
+    match (width, height) {
+        (Some(width), Some(height)) => TaffySize { width, height },
+        (Some(width), None) => TaffySize {
+            width,
+            height: width * intrinsic.height / intrinsic.width,
+        },
+        (None, Some(height)) => TaffySize {
+            width: height * intrinsic.width / intrinsic.height,
+            height,
+        },
+        (None, None) => TaffySize {
+            width: intrinsic.width,
+            height: intrinsic.height,
+        },
+    }
+}
+
+fn fit_path(bounds: Rect, path: &Path, fit: ObjectFit) -> Option<([f32; 2], Vector)> {
+    let intrinsic = path.size();
+    if bounds.is_empty() || intrinsic.is_empty() {
+        return None;
+    }
+    let fitted = fit_image(bounds, intrinsic, fit);
+    let source_width = intrinsic.width * fitted.source_uv.width;
+    let source_height = intrinsic.height * fitted.source_uv.height;
+    if source_width <= 0.0 || source_height <= 0.0 {
+        return None;
+    }
+    let scale = [
+        fitted.destination.width / source_width,
+        fitted.destination.height / source_height,
+    ];
+    let source_bounds = path.bounds();
+    let translation = Vector::new(
+        fitted.destination.x - (source_bounds.x + intrinsic.width * fitted.source_uv.x) * scale[0],
+        fitted.destination.y - (source_bounds.y + intrinsic.height * fitted.source_uv.y) * scale[1],
+    );
+    Some((scale, translation))
+}
+
 fn build_layout_node(
     taffy: &mut TaffyTree<MeasureContext>,
     seen_ids: &mut HashSet<ElementId>,
@@ -912,12 +1107,51 @@ fn build_layout_node(
         ElementKind::Container => taffy.new_with_children(element.layout.clone(), &child_nodes)?,
         ElementKind::Text(content) => taffy.new_leaf_with_context(
             element.layout.clone(),
-            MeasureContext {
+            MeasureContext::Text {
                 id: TextId::new(id.value()),
                 content: content.clone(),
                 style: element.resolved_typography.clone(),
             },
         )?,
+        ElementKind::Image(image) => match &image.resolved {
+            ImageResolution::Ready(source) => taffy.new_leaf_with_context(
+                element.layout.clone(),
+                MeasureContext::Image {
+                    intrinsic: source.size(),
+                },
+            )?,
+            ImageResolution::Animated(animation) => taffy.new_leaf_with_context(
+                element.layout.clone(),
+                MeasureContext::Image {
+                    intrinsic: animation.size(),
+                },
+            )?,
+            ImageResolution::Loading | ImageResolution::Failed => {
+                if child_nodes.is_empty() {
+                    taffy.new_leaf(element.layout.clone())?
+                } else {
+                    taffy.new_with_children(element.layout.clone(), &child_nodes)?
+                }
+            }
+        },
+        ElementKind::Svg(svg) => taffy.new_leaf_with_context(
+            element.layout.clone(),
+            MeasureContext::Image {
+                intrinsic: svg.svg.size(),
+            },
+        )?,
+        ElementKind::Path(path) => {
+            let intrinsic = path.path.size();
+            if intrinsic.is_empty() {
+                taffy.new_leaf(element.layout.clone())?
+            } else {
+                taffy.new_leaf_with_context(
+                    element.layout.clone(),
+                    MeasureContext::Image { intrinsic },
+                )?
+            }
+        }
+        ElementKind::Canvas(_) => taffy.new_leaf(element.layout.clone())?,
         ElementKind::TextInput(input) => {
             let content = if input.value.is_empty() {
                 input.placeholder.clone()
@@ -926,7 +1160,7 @@ fn build_layout_node(
             };
             taffy.new_leaf_with_context(
                 element.layout.clone(),
-                MeasureContext {
+                MeasureContext::Text {
                     id: TextId::new(id.value()),
                     content,
                     style: element.resolved_typography.clone(),
@@ -1120,6 +1354,29 @@ fn clamp_surface_axis(origin: f32, size: f32, minimum: f32, maximum: f32) -> f32
 }
 
 #[allow(clippy::too_many_arguments)]
+fn push_element_shadows(
+    scene: &mut Scene,
+    layer: PaintLayerKey,
+    bounds: Rect,
+    radius: f32,
+    clip: Rect,
+    shadows: &[BoxShadow],
+    inset: bool,
+) {
+    // CSS paints the first declared shadow on top, so display-list insertion is reversed.
+    for shadow in shadows
+        .iter()
+        .rev()
+        .filter(|shadow| shadow.is_inset() == inset)
+    {
+        scene.push_shadow_in(
+            layer,
+            Shadow::new(bounds, *shadow).radius(radius).clip(clip),
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn paint_element(
     element: &Element,
     taffy: &TaffyTree<MeasureContext>,
@@ -1133,6 +1390,9 @@ fn paint_element(
     scene: &mut Scene,
     renderer: &mut GpuRenderer,
     text_inputs: &mut HashMap<ElementId, TextInputState>,
+    animations: &mut HashMap<ElementId, AnimationPlayback>,
+    animations_enabled: bool,
+    paint_time: Instant,
     hit_regions: &mut Vec<HitRegion>,
     scroll_regions: &mut Vec<ScrollRegion>,
     dismiss_regions: &mut Vec<DismissRegion>,
@@ -1197,17 +1457,18 @@ fn paint_element(
         parent_clip
     };
 
+    let empty_state = ElementStateStyle::default();
     let interaction_state = if pressed == Some(element.runtime_id) {
-        element.active
+        &element.active
     } else if hovered.contains(&element.runtime_id) {
-        element.hover
+        &element.hover
     } else {
-        Default::default()
+        &empty_state
     };
     let focus_state = if focused == Some(element.runtime_id) {
-        element.focus
+        &element.focus
     } else {
-        Default::default()
+        &empty_state
     };
     let fill = interaction_state
         .background
@@ -1223,6 +1484,21 @@ fn paint_element(
         .border_width
         .or(focus_state.border_width)
         .unwrap_or(element.visual.border_width);
+    let shadows = interaction_state
+        .shadows
+        .as_deref()
+        .or(focus_state.shadows.as_deref())
+        .or(element.visual.shadows.as_deref())
+        .unwrap_or_default();
+    push_element_shadows(
+        scene,
+        layer,
+        bounds,
+        element.visual.radius,
+        parent_clip,
+        shadows,
+        false,
+    );
     if fill.a > 0.0 || (border.a > 0.0 && border_width > 0.0) {
         scene.push_quad_in(
             layer,
@@ -1232,6 +1508,15 @@ fn paint_element(
                 .clip(parent_clip),
         );
     }
+    push_element_shadows(
+        scene,
+        layer,
+        bounds,
+        element.visual.radius,
+        parent_clip,
+        shadows,
+        true,
+    );
 
     if element.clickable
         || element.cursor_pointer
@@ -1283,6 +1568,86 @@ fn paint_element(
                 )
                 .clip(parent_clip),
             );
+        }
+        ElementKind::Image(image) => {
+            if !bounds.is_empty()
+                && let Some(clip) = parent_clip.intersection(bounds)
+                && let Some(source) = match &image.resolved {
+                    ImageResolution::Ready(source) => Some(source),
+                    ImageResolution::Animated(animation) => {
+                        let frame_index = animations
+                            .get_mut(&element.runtime_id)
+                            .map(|playback| {
+                                playback.activate(paint_time, animations_enabled);
+                                playback.frame_index
+                            })
+                            .unwrap_or(0);
+                        animation.frame(frame_index).map(|frame| frame.image())
+                    }
+                    ImageResolution::Loading | ImageResolution::Failed => None,
+                }
+            {
+                let fitted = fit_image(bounds, source.size(), image.object_fit);
+                scene.push_image_in(
+                    layer,
+                    ImagePrimitive::new(source.clone(), fitted.destination)
+                        .source_uv(fitted.source_uv)
+                        .mask(bounds)
+                        .radius(element.visual.radius)
+                        .grayscale(image.grayscale)
+                        .clip(clip),
+                );
+            }
+        }
+        ElementKind::Svg(svg) => {
+            if !bounds.is_empty()
+                && let Some(clip) = parent_clip.intersection(bounds)
+            {
+                let fitted = fit_image(bounds, svg.svg.size(), svg.object_fit);
+                let color = state_text_color.unwrap_or(element.resolved_typography.color);
+                scene.push_svg_in(
+                    layer,
+                    SvgPrimitive::new(svg.svg.clone(), fitted.destination, color)
+                        .source_uv(fitted.source_uv)
+                        .mask(bounds)
+                        .radius(element.visual.radius)
+                        .transform(svg.transform)
+                        .clip(clip),
+                );
+            }
+        }
+        ElementKind::Path(path) => {
+            if let Some(clip) = parent_clip.intersection(bounds)
+                && let Some((scale, translation)) = fit_path(bounds, &path.path, path.object_fit)
+            {
+                let background = path.background.unwrap_or_else(|| {
+                    state_text_color
+                        .unwrap_or(element.resolved_typography.color)
+                        .into()
+                });
+                scene.push_path_in(
+                    layer,
+                    PathPrimitive::new(&path.path, background)
+                        .scale_xy(scale[0], scale[1])
+                        .translate(translation.x, translation.y)
+                        .clip(clip),
+                );
+            }
+        }
+        ElementKind::Canvas(canvas) => {
+            if !bounds.is_empty()
+                && let Some(clip) = parent_clip.intersection(bounds)
+            {
+                let local_bounds = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+                let mut context = Canvas::new(
+                    scene,
+                    layer,
+                    Point::new(bounds.x, bounds.y),
+                    Size::new(bounds.width, bounds.height),
+                    clip,
+                );
+                (canvas.painter.as_ref())(local_bounds, &mut context);
+            }
         }
         ElementKind::TextInput(input) => {
             let input_state = text_inputs
@@ -1488,6 +1853,9 @@ fn paint_element(
             scene,
             renderer,
             text_inputs,
+            animations,
+            animations_enabled,
+            paint_time,
             hit_regions,
             scroll_regions,
             dismiss_regions,
@@ -1766,6 +2134,31 @@ fn sync_text_inputs(
     }
 }
 
+fn sync_animations(
+    element: &Element,
+    animations: &mut HashMap<ElementId, AnimationPlayback>,
+    ids: &mut HashSet<ElementId>,
+    now: Instant,
+) {
+    if let ElementKind::Image(image) = &element.kind
+        && let ImageResolution::Animated(asset) = &image.resolved
+    {
+        ids.insert(element.runtime_id);
+        let replace = animations
+            .get(&element.runtime_id)
+            .is_none_or(|playback| playback.asset_id != asset.id());
+        if replace {
+            animations.insert(
+                element.runtime_id,
+                AnimationPlayback::new(asset.clone(), now),
+            );
+        }
+    }
+    for child in &element.children {
+        sync_animations(child, animations, ids, now);
+    }
+}
+
 fn sync_accessibility_text_ids(
     input_ids: &HashSet<ElementId>,
     element_ids: &HashSet<ElementId>,
@@ -1796,12 +2189,178 @@ fn sync_accessibility_text_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FocusHandle, button, div, text};
+    use crate::{
+        AnimatedImageFrame, AnimationRepeat, FocusHandle, Image, PathBuilder, button, div, text,
+    };
+
+    fn playback_animation(repeat: AnimationRepeat) -> AnimatedImage {
+        AnimatedImage::with_repeat(
+            [
+                AnimatedImageFrame::new(
+                    Image::from_rgba(1, 1, vec![1, 0, 0, 255]).unwrap(),
+                    Duration::from_millis(40),
+                ),
+                AnimatedImageFrame::new(
+                    Image::from_rgba(1, 1, vec![2, 0, 0, 255]).unwrap(),
+                    Duration::from_millis(60),
+                ),
+            ],
+            repeat,
+        )
+        .unwrap()
+    }
 
     #[test]
     fn generated_ids_are_path_stable() {
         assert_eq!(mix_id(42, 3), mix_id(42, 3));
         assert_ne!(mix_id(42, 3), mix_id(42, 4));
+    }
+
+    #[test]
+    fn box_shadows_keep_css_declaration_order_around_the_element_quad() {
+        let first_drop = Color::rgb8(220, 38, 38);
+        let first_inset = Color::rgb8(22, 163, 74);
+        let second_drop = Color::rgb8(37, 99, 235);
+        let second_inset = Color::rgb8(147, 51, 234);
+        let shadows = [
+            BoxShadow::new(0.0, 2.0, first_drop),
+            BoxShadow::new(0.0, 1.0, first_inset).inset(true),
+            BoxShadow::new(0.0, 4.0, second_drop),
+            BoxShadow::new(0.0, 2.0, second_inset).inset(true),
+        ];
+        let bounds = Rect::new(10.0, 10.0, 80.0, 40.0);
+        let clip = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let mut scene = Scene::new();
+        push_element_shadows(
+            &mut scene,
+            PaintLayerKey::default(),
+            bounds,
+            8.0,
+            clip,
+            &shadows,
+            false,
+        );
+        scene.push_quad_in(PaintLayerKey::default(), Quad::new(bounds, Color::WHITE));
+        push_element_shadows(
+            &mut scene,
+            PaintLayerKey::default(),
+            bounds,
+            8.0,
+            clip,
+            &shadows,
+            true,
+        );
+
+        let layer = &scene.paint_layers()[0];
+        assert_eq!(
+            layer.shapes(),
+            &[
+                crate::scene::ShapeRef::Shadow(0),
+                crate::scene::ShapeRef::Shadow(1),
+                crate::scene::ShapeRef::Quad(0),
+                crate::scene::ShapeRef::Shadow(2),
+                crate::scene::ShapeRef::Shadow(3),
+            ]
+        );
+        let colors: Vec<_> = layer
+            .shadows()
+            .iter()
+            .map(|shadow| shadow.style.color())
+            .collect();
+        assert_eq!(
+            colors,
+            vec![second_drop, first_drop, second_inset, first_inset]
+        );
+    }
+
+    #[test]
+    fn images_preserve_intrinsic_ratio_when_one_axis_is_known() {
+        assert_eq!(
+            measure_image(Some(200.0), None, Size::new(400.0, 100.0)),
+            TaffySize {
+                width: 200.0,
+                height: 50.0,
+            }
+        );
+        assert_eq!(
+            measure_image(None, Some(75.0), Size::new(400.0, 100.0)),
+            TaffySize {
+                width: 300.0,
+                height: 75.0,
+            }
+        );
+    }
+
+    #[test]
+    fn path_fitting_accounts_for_nonzero_source_bounds_and_cover_cropping() {
+        let mut builder = PathBuilder::fill();
+        builder.move_to(Point::new(10.0, 20.0));
+        builder.line_to(Point::new(110.0, 20.0));
+        builder.line_to(Point::new(110.0, 70.0));
+        builder.line_to(Point::new(10.0, 70.0));
+        builder.close();
+        let path = builder.build().unwrap();
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        let (contain_scale, contain_translation) =
+            fit_path(bounds, &path, ObjectFit::Contain).unwrap();
+        assert_eq!(contain_scale, [1.0, 1.0]);
+        assert_eq!(contain_translation, Vector::new(-10.0, 5.0));
+
+        let (cover_scale, cover_translation) = fit_path(bounds, &path, ObjectFit::Cover).unwrap();
+        assert_eq!(cover_scale, [2.0, 2.0]);
+        assert_eq!(cover_translation, Vector::new(-70.0, -40.0));
+    }
+
+    #[test]
+    fn animation_playback_uses_exact_deadlines_and_pauses_without_catching_up() {
+        let started = Instant::now();
+        let mut playback =
+            AnimationPlayback::new(playback_animation(AnimationRepeat::Infinite), started);
+        playback.activate(started, true);
+        assert_eq!(
+            playback.deadline(),
+            Some(started + Duration::from_millis(40))
+        );
+
+        assert!(!playback.advance(started + Duration::from_millis(39)));
+        assert_eq!(playback.frame_index, 0);
+        assert!(playback.advance(started + Duration::from_millis(40)));
+        assert_eq!(playback.frame_index, 1);
+        assert_eq!(
+            playback.deadline(),
+            Some(started + Duration::from_millis(100))
+        );
+
+        playback.active = false;
+        playback.activate(started + Duration::from_secs(10), true);
+        assert_eq!(
+            playback.deadline(),
+            Some(started + Duration::from_secs(10) + Duration::from_millis(60))
+        );
+
+        playback.active = false;
+        playback.activate(started + Duration::from_secs(20), false);
+        assert!(!playback.active);
+        assert_eq!(playback.deadline(), None);
+
+        playback.activate(started + Duration::from_secs(30), true);
+        playback.seen = false;
+        playback.finish_visibility();
+        assert!(!playback.active);
+        assert_eq!(playback.deadline(), None);
+    }
+
+    #[test]
+    fn finite_animation_playback_stops_scheduling_on_the_last_frame() {
+        let started = Instant::now();
+        let repeat = AnimationRepeat::Finite(1);
+        let mut playback = AnimationPlayback::new(playback_animation(repeat), started);
+        playback.activate(started, true);
+        assert!(playback.advance(started + Duration::from_millis(100)));
+        assert_eq!(playback.frame_index, 1);
+        assert!(playback.completed);
+        assert_eq!(playback.deadline(), None);
     }
 
     #[test]

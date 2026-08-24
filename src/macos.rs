@@ -24,7 +24,8 @@ use objc2::{
 use objc2_app_kit::{
     NSAccessibilityLayoutChangedNotification, NSAccessibilityPostNotification,
     NSAccessibilityUnignoredChildren, NSAutoresizingMaskOptions, NSBox, NSBoxType, NSColor,
-    NSEvent, NSEventMask, NSResponder, NSTitlePosition, NSView, NSWindow, NSWindowOrderingMode,
+    NSEvent, NSEventMask, NSResponder, NSTitlePosition, NSView, NSViewLayerContentsRedrawPolicy,
+    NSWindow, NSWindowOrderingMode, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSArray, NSObject, NSPoint, NSRect, NSSize};
 use winit::{
@@ -33,6 +34,35 @@ use winit::{
 };
 
 use crate::{ElementId, native_view::NativeViewPlacement};
+
+pub(crate) fn system_reduce_motion() -> bool {
+    unsafe { NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion() }
+}
+
+/// Configure AppKit to ask the layer-backed Winit view for fresh content throughout live resize.
+///
+/// The default policy can preserve and stretch an old layer snapshot. GPU windows instead need a
+/// draw callback inside AppKit's resize transaction so their layout and native children stay in
+/// lockstep with the window frame.
+pub(crate) fn configure_gpu_window_resize(window: &Arc<Window>) -> Result<(), String> {
+    MainThreadMarker::new().ok_or_else(|| {
+        "GPU window resize must be configured on the AppKit main thread".to_owned()
+    })?;
+    let handle = window
+        .window_handle()
+        .map_err(|error| format!("could not access the AppKit window handle: {error}"))?;
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return Err("the active window does not expose an AppKit view".to_owned());
+    };
+    let view = unsafe { handle.ns_view.as_ptr().cast::<NSView>().as_ref() }
+        .ok_or_else(|| "the AppKit content view pointer is null".to_owned())?;
+    unsafe {
+        view.setLayerContentsRedrawPolicy(
+            NSViewLayerContentsRedrawPolicy::NSViewLayerContentsRedrawDuringViewResize,
+        );
+    }
+    Ok(())
+}
 
 /// Covers an ordered-on-screen AppKit window until WGPU presents its first frame.
 ///
