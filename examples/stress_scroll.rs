@@ -5,8 +5,8 @@ use std::{
 };
 
 use quickgui::{
-    App, ClickListener, Color, Element, ElementId, Event, EventContext, Key, View, ViewContext,
-    VirtualList, div, text,
+    App, ClickListener, Color, Element, ElementId, Event, EventContext, Key, MouseButton,
+    PointerEvent, PointerPhase, View, ViewContext, VirtualList, div, text,
 };
 
 const ROWS: usize = 100_000;
@@ -38,6 +38,9 @@ struct ScrollDemo {
     help: Arc<str>,
     metrics_text: Arc<str>,
     last_metrics_update: Instant,
+    scrollbar_drag_origin: Option<f32>,
+    synthetic_scroll: bool,
+    synthetic_scroll_forward: bool,
 }
 
 impl ScrollDemo {
@@ -50,9 +53,14 @@ impl ScrollDemo {
             subtitle: Arc::from(
                 "100,000 rows · only visible rows are shaped, laid out, and painted",
             ),
-            help: Arc::from("Scroll or use ↑ ↓ Page Up Page Down Home End · Esc quits"),
+            help: Arc::from(
+                "Scroll or use ↑ ↓ Page Up Page Down Home End · Space stress scroll · Esc quits",
+            ),
             metrics_text: Arc::from("Waiting for the first frame…"),
             last_metrics_update: Instant::now(),
+            scrollbar_drag_origin: None,
+            synthetic_scroll: false,
+            synthetic_scroll_forward: true,
         }
     }
 
@@ -129,7 +137,11 @@ impl ScrollDemo {
             .child(
                 text(self.label(index))
                     .text_sm()
+                    .h(20.0)
+                    .flex_1()
+                    .min_w(0.0)
                     .no_wrap()
+                    .text_shaping_basic()
                     .text_color(Color::rgb8(218, 221, 228)),
             )
     }
@@ -167,6 +179,11 @@ impl View for ScrollDemo {
                     Key::PageDown => Some(selected.saturating_add(page)),
                     Key::Home => Some(0),
                     Key::End => Some(self.list.len().saturating_sub(1)),
+                    Key::Space => {
+                        self.synthetic_scroll = !self.synthetic_scroll;
+                        cx.invalidate();
+                        None
+                    }
                     Key::Escape => {
                         cx.exit();
                         None
@@ -185,6 +202,21 @@ impl View for ScrollDemo {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl quickgui::IntoElement {
         let list_height = (cx.size().height - HEADER_HEIGHT - FOOTER_HEIGHT).max(0.0);
         self.list.set_viewport_height(list_height);
+        if self.synthetic_scroll {
+            let step = (list_height * 6.0).max(ROW_HEIGHT);
+            let next = if self.synthetic_scroll_forward {
+                self.list.scroll_offset() + step
+            } else {
+                self.list.scroll_offset() - step
+            };
+            if next >= self.list.max_scroll_offset() {
+                self.synthetic_scroll_forward = false;
+            } else if next <= 0.0 {
+                self.synthetic_scroll_forward = true;
+            }
+            self.list.scroll_to(next);
+            cx.request_animation_frame();
+        }
         let visible = self.list.visible_rows();
         let rows: Vec<_> = visible
             .range
@@ -214,13 +246,63 @@ impl View for ScrollDemo {
         }
 
         let scrollbar = self.list.scrollbar_thumb(28.0).map(|(offset, height)| {
+            let listener = cx.pointer_listener(
+                "virtual-list-scrollbar-thumb",
+                |this, event: &PointerEvent, event_cx| {
+                    if event.button != MouseButton::Left {
+                        return;
+                    }
+                    match event.phase {
+                        PointerPhase::Down => {
+                            this.scrollbar_drag_origin = Some(this.list.scroll_offset());
+                            event_cx.invalidate();
+                        }
+                        PointerPhase::Move => {
+                            let Some(start) = this.scrollbar_drag_origin else {
+                                return;
+                            };
+                            let Some((_, thumb_height)) = this.list.scrollbar_thumb(28.0) else {
+                                return;
+                            };
+                            let travel = this.list.viewport_height() - thumb_height;
+                            if travel <= 0.0 {
+                                return;
+                            }
+                            let pointer_delta = event.position.y - event.origin.y;
+                            let scroll_delta =
+                                pointer_delta * this.list.max_scroll_offset() / travel;
+                            if this.list.scroll_to(start + scroll_delta) {
+                                event_cx.invalidate();
+                            }
+                        }
+                        PointerPhase::Up | PointerPhase::Cancel => {
+                            if this.scrollbar_drag_origin.take().is_some() {
+                                event_cx.invalidate();
+                            }
+                        }
+                    }
+                },
+            );
+            let thumb_color = if self.scrollbar_drag_origin.is_some() {
+                Color::rgba8(174, 181, 197, 230)
+            } else {
+                Color::rgba8(133, 139, 153, 175)
+            };
             div()
+                .on_pointer(listener)
                 .absolute()
-                .top(offset + 2.0)
-                .right(3.0)
-                .size(5.0, (height - 4.0).max(4.0))
-                .rounded(2.5)
-                .bg(Color::rgba8(133, 139, 153, 150))
+                .top(offset)
+                .right(0.0)
+                .size(12.0, height)
+                .child(
+                    div()
+                        .absolute()
+                        .top(2.0)
+                        .right(3.0)
+                        .size(5.0, (height - 4.0).max(4.0))
+                        .rounded(2.5)
+                        .bg(thumb_color),
+                )
         });
 
         let tree = div()

@@ -46,16 +46,19 @@ The application owns its `View`. Each render returns a declarative `Element` tre
 An element ID owns:
 
 - hover and pressed paint state;
+- captured pointer-listener identity;
 - focus identity and keyboard traversal position;
 - click or controlled-input listener lookup;
 - scroll-container offset;
 - text-input caret, selection, composition, and horizontal offset;
 - text-layout and glyph-cache identity.
 
-`ViewContext::listener` and `ViewContext::action_listener` store callbacks in a registry
-parameterized by the concrete view type. `Element::on_click` and `Element::on_action` only carry the
-stable ID, keeping the element tree non-generic and compact while callbacks can still mutate
-`&mut Self` without `Rc<RefCell<_>>` application state.
+`ViewContext::listener`, `ViewContext::pointer_listener`, and `ViewContext::action_listener` store
+callbacks in a registry parameterized by the concrete view type. `Element::on_click`,
+`Element::on_pointer`, and `Element::on_action` only carry the stable ID, keeping the element tree
+non-generic and compact while callbacks can still mutate `&mut Self` without `Rc<RefCell<_>>`
+application state. Pointer capture retains only one target, origin, and latest position per window;
+it ends on button release or window-focus cancellation and does not schedule frames while idle.
 
 ## Focused action and key dispatch
 

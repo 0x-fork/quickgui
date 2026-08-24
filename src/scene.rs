@@ -33,7 +33,7 @@ impl TextId {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum FontFamily {
     SansSerif,
     Serif,
@@ -41,11 +41,23 @@ pub enum FontFamily {
     Named(Arc<str>),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum TextWrap {
     None,
     Word,
     Glyph,
+}
+
+/// Text shaping strategy.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TextShaping {
+    /// Full script shaping, ligatures, and system-font fallback.
+    Advanced,
+    /// Cheap one-glyph-per-character shaping for app-controlled text and fonts.
+    ///
+    /// This does not provide complex-script shaping or general font fallback. It is intended for
+    /// known ASCII/code/log content where the selected font contains every required glyph.
+    Basic,
 }
 
 /// Text metrics and shaping properties. Colors do not invalidate shaping.
@@ -56,6 +68,7 @@ pub struct TextStyle {
     pub family: FontFamily,
     pub weight: Weight,
     pub wrap: TextWrap,
+    pub shaping: TextShaping,
     pub color: Color,
 }
 
@@ -67,6 +80,7 @@ impl TextStyle {
             family: FontFamily::SansSerif,
             weight: Weight::NORMAL,
             wrap: TextWrap::Word,
+            shaping: TextShaping::Advanced,
             color,
         }
     }
@@ -88,6 +102,11 @@ impl TextStyle {
 
     pub fn wrap(mut self, wrap: TextWrap) -> Self {
         self.wrap = wrap;
+        self
+    }
+
+    pub fn shaping(mut self, shaping: TextShaping) -> Self {
+        self.shaping = shaping;
         self
     }
 }

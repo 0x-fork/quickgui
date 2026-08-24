@@ -49,7 +49,7 @@ pub use element::{
     AccessibilityRole, AnchorPlacement, Element, ElementId, ElementStateStyle, FocusHandle,
     IntoElement, button, canvas, div, img, overlay, path, svg, text, text_input,
 };
-pub use event::{Event, EventContext, Key, Modifiers, MouseButton};
+pub use event::{Event, EventContext, Key, Modifiers, MouseButton, PointerEvent, PointerPhase};
 pub use geometry::{Insets, Point, Rect, Size, Vector};
 pub use glyphon::Weight as FontWeight;
 pub use image::{
@@ -77,12 +77,12 @@ pub use path::{
 pub use path_renderer::{MAX_GPU_PATH_VERTICES, MAX_GPU_PATHS_PER_FRAME};
 pub use runtime::{
     App, AppConfig, AppError, ClickListener, DismissListener, InputListener, PerformanceProfile,
-    View, ViewContext,
+    PointerListener, View, ViewContext,
 };
 pub use scene::{
     BoxShadow, FontFamily, ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS, MAX_BOX_SHADOW_EXTENT,
-    PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextId, TextRun, TextStyle,
-    TextWrap,
+    PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextId, TextRun, TextShaping,
+    TextStyle, TextWrap,
 };
 pub use svg::{
     MAX_SVG_RASTER_DIMENSION, MAX_SVG_RASTER_PIXELS, MAX_SVG_SOURCE_BYTES, Svg, SvgError,

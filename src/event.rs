@@ -48,6 +48,33 @@ pub enum MouseButton {
     Other(u16),
 }
 
+/// The stage of a captured pointer interaction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PointerPhase {
+    Down,
+    Move,
+    Up,
+    /// The window lost focus before the pressed button was released.
+    Cancel,
+}
+
+/// A pointer event delivered to an element that owns pointer capture.
+///
+/// Positions and deltas use logical pixels. Once an element receives [`PointerPhase::Down`], it
+/// continues to receive move events and the terminal up or cancel event even when the pointer is
+/// outside its bounds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointerEvent {
+    pub phase: PointerPhase,
+    pub position: Point,
+    /// Position at which this capture started.
+    pub origin: Point,
+    /// Motion since the preceding captured event.
+    pub delta: Vector,
+    pub button: MouseButton,
+    pub modifiers: Modifiers,
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Key {
     Character(String),

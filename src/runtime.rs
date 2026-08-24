@@ -25,7 +25,7 @@ use winit::{
 use crate::{
     Action, ActionListener, AnyAction, Color, ElementId, FocusHandle, IntoElement, KeyBinding,
     Keymap, Keystroke, Menu, OsAction, Point, Scene, Size, Vector,
-    event::{Event, EventContext, Key, Modifiers, MouseButton},
+    event::{Event, EventContext, Key, Modifiers, MouseButton, PointerEvent, PointerPhase},
     image_resource::{ImageAssetCache, ImageLoadCompletion},
     menu::{MenuAction, collect_menu_actions},
     metrics::{FrameMetrics, MetricsTracker},
@@ -164,6 +164,27 @@ impl<V> ViewContext<'_, V> {
         }
     }
 
+    /// Register a stable callback for a captured pointer interaction.
+    ///
+    /// Attach the returned handle with [`crate::Element::on_pointer`]. A press inside the element
+    /// starts capture; move events and the terminal up/cancel event continue outside its bounds.
+    pub fn pointer_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &PointerEvent, &mut EventContext) + 'static,
+    ) -> PointerListener<V> {
+        let id = id.into();
+        let previous = self.listeners.pointers.insert(id, Arc::new(callback));
+        assert!(
+            previous.is_none(),
+            "pointer listener id {id:?} was registered more than once"
+        );
+        PointerListener {
+            id,
+            marker: PhantomData,
+        }
+    }
+
     /// Register a stable controlled-value callback for [`crate::Element::on_input`].
     pub fn input_listener(
         &mut self,
@@ -226,11 +247,13 @@ impl<V> ViewContext<'_, V> {
 }
 
 type ClickCallback<V> = Arc<dyn Fn(&mut V, &mut EventContext)>;
+type PointerCallback<V> = Arc<dyn Fn(&mut V, &PointerEvent, &mut EventContext)>;
 type InputCallback<V> = Arc<dyn Fn(&mut V, &str, &mut EventContext)>;
 type ActionCallback<V> = Arc<dyn Fn(&mut V, &dyn Any, &mut EventContext)>;
 
 struct ListenerRegistry<V> {
     clicks: HashMap<ElementId, ClickCallback<V>>,
+    pointers: HashMap<ElementId, PointerCallback<V>>,
     inputs: HashMap<ElementId, InputCallback<V>>,
     dismisses: HashMap<ElementId, ClickCallback<V>>,
     actions: HashMap<(ElementId, TypeId), Vec<ActionCallback<V>>>,
@@ -239,6 +262,7 @@ struct ListenerRegistry<V> {
 impl<V> ListenerRegistry<V> {
     fn clear(&mut self) {
         self.clicks.clear();
+        self.pointers.clear();
         self.inputs.clear();
         self.dismisses.clear();
         self.actions.clear();
@@ -249,6 +273,7 @@ impl<V> Default for ListenerRegistry<V> {
     fn default() -> Self {
         Self {
             clicks: HashMap::new(),
+            pointers: HashMap::new(),
             inputs: HashMap::new(),
             dismisses: HashMap::new(),
             actions: HashMap::new(),
@@ -260,6 +285,18 @@ impl<V> Default for ListenerRegistry<V> {
 pub struct ClickListener<V> {
     id: ElementId,
     marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque captured-pointer binding returned by [`ViewContext::pointer_listener`].
+pub struct PointerListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+impl<V> PointerListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
 }
 
 impl<V> ClickListener<V> {
@@ -407,6 +444,7 @@ struct RuntimeWindow<V> {
     scale_factor: f32,
     logical_size: Size,
     pointer: Option<Point>,
+    pointer_capture: Option<PointerCapture>,
     cursor: CursorIcon,
     ime_target: Option<ElementId>,
     occluded: bool,
@@ -416,6 +454,14 @@ struct RuntimeWindow<V> {
     accessibility: AccessibilityAdapter,
     // The window is last so GPU surface state is dropped before its native handle.
     window: Arc<Window>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PointerCapture {
+    target: ElementId,
+    button: MouseButton,
+    origin: Point,
+    position: Point,
 }
 
 struct Runtime<V> {
@@ -785,6 +831,24 @@ impl<V: View> Runtime<V> {
             }
         }
         self.dispatch(event_loop, Event::Click(id), false);
+    }
+
+    fn invoke_pointer(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        id: ElementId,
+        event: PointerEvent,
+    ) -> bool {
+        let listener = self
+            .window
+            .as_ref()
+            .and_then(|window| window.listeners.pointers.get(&id).cloned());
+        let Some(listener) = listener else {
+            return true;
+        };
+        let mut cx = EventContext::default();
+        listener(&mut self.view, &event, &mut cx);
+        self.apply_event_context(event_loop, cx, false, true)
     }
 
     fn invoke_dismiss(&mut self, event_loop: &ActiveEventLoop, request: DismissRequest) {
@@ -1454,6 +1518,7 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             scale_factor,
             logical_size,
             pointer: None,
+            pointer_capture: None,
             cursor: CursorIcon::Default,
             ime_target: None,
             occluded: false,
@@ -1602,6 +1667,21 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
                 let scale = state.scale_factor;
                 let point = Point::new(position.x as f32 / scale, position.y as f32 / scale);
                 state.pointer = Some(point);
+                let captured = state.pointer_capture.as_mut().map(|capture| {
+                    let delta = point - capture.position;
+                    capture.position = point;
+                    (
+                        capture.target,
+                        PointerEvent {
+                            phase: PointerPhase::Move,
+                            position: point,
+                            origin: capture.origin,
+                            delta,
+                            button: capture.button,
+                            modifiers: self.modifiers,
+                        },
+                    )
+                });
                 let repaint = {
                     let RuntimeWindow { ui, renderer, .. } = state;
                     ui.pointer_moved(point, renderer)
@@ -1620,6 +1700,11 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
                 if repaint && state.scheduler.invalidate() {
                     state.window.request_redraw();
                 }
+                if let Some((target, event)) = captured
+                    && !self.invoke_pointer(event_loop, target, event)
+                {
+                    return;
+                }
                 self.dispatch(event_loop, Event::PointerMoved(point), false);
             }
             WindowEvent::CursorLeft { .. } => {
@@ -1637,7 +1722,7 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 let button = map_mouse_button(button);
-                let (pointer_result, previous_focus) = {
+                let (pointer_result, previous_focus, captured) = {
                     let window = self.window.as_mut().expect("window checked above");
                     let previous_focus = window.ui.focused();
                     let result = if button == MouseButton::Left {
@@ -1653,14 +1738,68 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
                             repaint: false,
                             clicked: None,
                             dismissed: None,
+                            pointer_listener: window
+                                .pointer
+                                .and_then(|point| window.ui.pointer_listener_at(point)),
                         }
+                    };
+                    let captured = if pressed {
+                        if window.pointer_capture.is_none() {
+                            result.pointer_listener.and_then(|target| {
+                                let position = window.pointer?;
+                                let capture = PointerCapture {
+                                    target,
+                                    button,
+                                    origin: position,
+                                    position,
+                                };
+                                window.pointer_capture = Some(capture);
+                                Some((
+                                    target,
+                                    PointerEvent {
+                                        phase: PointerPhase::Down,
+                                        position,
+                                        origin: position,
+                                        delta: Vector::ZERO,
+                                        button,
+                                        modifiers: self.modifiers,
+                                    },
+                                ))
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        window
+                            .pointer_capture
+                            .filter(|capture| capture.button == button)
+                            .map(|capture| {
+                                window.pointer_capture = None;
+                                let position = window.pointer.unwrap_or(capture.position);
+                                (
+                                    capture.target,
+                                    PointerEvent {
+                                        phase: PointerPhase::Up,
+                                        position,
+                                        origin: capture.origin,
+                                        delta: position - capture.position,
+                                        button,
+                                        modifiers: self.modifiers,
+                                    },
+                                )
+                            })
                     };
                     if result.repaint && window.scheduler.invalidate() {
                         window.window.request_redraw();
                     }
-                    (result, previous_focus)
+                    (result, previous_focus, captured)
                 };
                 self.announce_focus_change(event_loop, previous_focus);
+                if let Some((target, event)) = captured
+                    && !self.invoke_pointer(event_loop, target, event)
+                {
+                    return;
+                }
                 self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
                 if let Some(request) = pointer_result.dismissed {
                     self.invoke_dismiss(event_loop, request);
@@ -1740,6 +1879,32 @@ impl<V: View> ApplicationHandler<RuntimeEvent> for Runtime<V> {
             }
             WindowEvent::Ime(Ime::Enabled) => {}
             WindowEvent::Focused(focused) => {
+                if !focused {
+                    let cancelled = self.window.as_mut().and_then(|state| {
+                        let capture = state.pointer_capture.take();
+                        let repaint = state.ui.cancel_pointer_interaction();
+                        if repaint && state.scheduler.invalidate() {
+                            state.window.request_redraw();
+                        }
+                        let capture = capture?;
+                        Some((
+                            capture.target,
+                            PointerEvent {
+                                phase: PointerPhase::Cancel,
+                                position: capture.position,
+                                origin: capture.origin,
+                                delta: Vector::ZERO,
+                                button: capture.button,
+                                modifiers: self.modifiers,
+                            },
+                        ))
+                    });
+                    if let Some((target, event)) = cancelled
+                        && !self.invoke_pointer(event_loop, target, event)
+                    {
+                        return;
+                    }
+                }
                 #[cfg(target_os = "macos")]
                 if focused {
                     let reduce_motion =

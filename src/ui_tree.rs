@@ -11,14 +11,14 @@ use accesskit::{
 use taffy::{
     geometry::Size as TaffySize,
     prelude::{AvailableSpace, NodeId, TaffyTree},
-    style::Overflow,
+    style::{CompactLength, Dimension, Overflow, Style as TaffyStyle},
 };
 use thiserror::Error;
 
 use crate::{
     AccessibilityRole, AnchorPlacement, AnimatedImage, BoxShadow, Canvas, Color, Element,
     ElementId, ImagePrimitive, Insets, KeyContext, ObjectFit, Path, PathPrimitive, Point, Quad,
-    Rect, Scene, Shadow, Size, SvgPrimitive, TextId, TextRun, TextStyle, Vector,
+    Rect, Scene, Shadow, Size, SvgPrimitive, TextId, TextRun, TextStyle, TextWrap, Vector,
     animated_image::AnimatedImageId,
     element::{ElementKind, ElementStateStyle, ImageResolution},
     image::fit_image,
@@ -68,6 +68,7 @@ struct HitRegion {
     bounds: Rect,
     clip: Rect,
     clickable: bool,
+    pointer_listener: bool,
     focusable: bool,
     cursor_pointer: bool,
     cursor_text: bool,
@@ -423,6 +424,10 @@ impl UiTree {
                 }
                 match context {
                     MeasureContext::Text { id, content, style } => {
+                        if let Some(size) = fixed_text_layout_size(known, available, _style, style)
+                        {
+                            return size;
+                        }
                         let max_width = known.width.or_else(|| match available.width {
                             AvailableSpace::Definite(width) => Some(width.max(0.0)),
                             AvailableSpace::MinContent => Some(0.0),
@@ -519,7 +524,7 @@ impl UiTree {
             if region.stateful && region.contains(point) {
                 next.insert(region.id);
             }
-            if region.blocks_pointer && region.contains(point) {
+            if (region.blocks_pointer || region.pointer_listener) && region.contains(point) {
                 break;
             }
         }
@@ -557,6 +562,12 @@ impl UiTree {
         }
     }
 
+    /// Clear press/selection state when a platform pointer sequence is cancelled.
+    pub(crate) fn cancel_pointer_interaction(&mut self) -> bool {
+        self.selecting_input = None;
+        self.pressed.take().is_some()
+    }
+
     pub fn pointer_button(
         &mut self,
         point: Option<Point>,
@@ -577,9 +588,11 @@ impl UiTree {
                     id: dismiss.id,
                     restore_focus: dismiss.restore_focus,
                 }),
+                pointer_listener: None,
             };
         }
 
+        let pointer_listener = point.and_then(|point| self.pointer_listener_at(point));
         let region = point.and_then(|point| self.interactive_region_at(point));
         let target = region
             .filter(|region| region.clickable)
@@ -612,6 +625,7 @@ impl UiTree {
                 repaint,
                 clicked: None,
                 dismissed: None,
+                pointer_listener,
             }
         } else {
             self.selecting_input = None;
@@ -623,6 +637,7 @@ impl UiTree {
                 repaint,
                 clicked,
                 dismissed: None,
+                pointer_listener: None,
             }
         }
     }
@@ -693,6 +708,21 @@ impl UiTree {
             if region.clickable || region.focusable {
                 return Some(*region);
             }
+            if region.blocks_pointer || region.pointer_listener {
+                return None;
+            }
+        }
+        None
+    }
+
+    pub(crate) fn pointer_listener_at(&self, point: Point) -> Option<ElementId> {
+        for region in self.hit_regions.iter().rev() {
+            if !region.contains(point) {
+                continue;
+            }
+            if region.pointer_listener {
+                return Some(region.id);
+            }
             if region.blocks_pointer {
                 return None;
             }
@@ -708,7 +738,7 @@ impl UiTree {
             if cursor(*region) {
                 return true;
             }
-            if region.blocks_pointer {
+            if region.blocks_pointer || region.pointer_listener {
                 return false;
             }
         }
@@ -997,6 +1027,43 @@ impl UiTree {
     }
 }
 
+fn fixed_text_layout_size(
+    known: TaffySize<Option<f32>>,
+    available: TaffySize<AvailableSpace>,
+    layout: &TaffyStyle,
+    text: &TextStyle,
+) -> Option<TaffySize<f32>> {
+    let width = known.width.or_else(|| absolute_length(layout.size.width));
+    let height = known.height.or_else(|| absolute_length(layout.size.height));
+    if let (Some(width), Some(height)) = (width, height) {
+        return Some(TaffySize { width, height });
+    }
+
+    // Taffy invokes leaf measurement again during PerformLayout to calculate content metadata,
+    // even when flexbox has already assigned the leaf a definite main-axis size. A web-style
+    // `flex: 1 1 0; min-width: 0` no-wrap label explicitly opts out of intrinsic width sizing, so
+    // shaping it here cannot affect layout. Its fixed line box also makes the height definite.
+    let fills_available_width = text.wrap == TextWrap::None
+        && absolute_length(layout.flex_basis) == Some(0.0)
+        && absolute_length(layout.min_size.width) == Some(0.0);
+    if !fills_available_width {
+        return None;
+    }
+
+    let width = width.unwrap_or_else(|| match available.width {
+        AvailableSpace::Definite(width) => width.max(0.0),
+        // This element has explicitly disabled intrinsic width participation. Taffy may still
+        // request content metadata during PerformLayout; reporting zero here cannot influence
+        // the final flex width, which was established from the zero basis and flex growth.
+        AvailableSpace::MinContent | AvailableSpace::MaxContent => 0.0,
+    });
+    height.map(|height| TaffySize { width, height })
+}
+
+fn absolute_length(dimension: Dimension) -> Option<f32> {
+    (dimension.tag() == CompactLength::LENGTH_TAG).then(|| dimension.value().max(0.0))
+}
+
 impl Default for UiTree {
     fn default() -> Self {
         Self::new()
@@ -1007,6 +1074,7 @@ pub(crate) struct PointerResult {
     pub repaint: bool,
     pub clicked: Option<ElementId>,
     pub dismissed: Option<DismissRequest>,
+    pub pointer_listener: Option<ElementId>,
 }
 
 fn text_input_index_at(
@@ -1519,6 +1587,7 @@ fn paint_element(
     );
 
     if element.clickable
+        || element.pointer_listener
         || element.cursor_pointer
         || element.cursor_text
         || element.focusable
@@ -1530,6 +1599,7 @@ fn paint_element(
             bounds,
             clip: parent_clip,
             clickable: element.clickable && !element.accessibility.disabled,
+            pointer_listener: element.pointer_listener && !element.accessibility.disabled,
             focusable: element.focusable && !element.accessibility.disabled,
             cursor_pointer: element.cursor_pointer && !element.accessibility.disabled,
             cursor_text: element.cursor_text && !element.accessibility.disabled,
@@ -2448,6 +2518,87 @@ mod tests {
     }
 
     #[test]
+    fn no_wrap_flex_text_skips_intrinsic_shaping_during_layout() {
+        let layout = TaffyStyle {
+            flex_basis: Dimension::length(0.0),
+            min_size: TaffySize {
+                width: Dimension::length(0.0),
+                height: Dimension::auto(),
+            },
+            size: TaffySize {
+                width: Dimension::auto(),
+                height: Dimension::length(20.0),
+            },
+            ..TaffyStyle::default()
+        };
+        let known = TaffySize {
+            width: None,
+            height: None,
+        };
+        let max_content = TaffySize {
+            width: AvailableSpace::MaxContent,
+            height: AvailableSpace::MaxContent,
+        };
+        let text = TextStyle::new(14.0, Color::WHITE).wrap(TextWrap::None);
+
+        assert_eq!(
+            fixed_text_layout_size(known, max_content, &layout, &text),
+            Some(TaffySize {
+                width: 0.0,
+                height: 20.0,
+            })
+        );
+        assert_eq!(
+            fixed_text_layout_size(
+                known,
+                TaffySize {
+                    width: AvailableSpace::Definite(640.0),
+                    height: AvailableSpace::MaxContent,
+                },
+                &layout,
+                &text,
+            ),
+            Some(TaffySize {
+                width: 640.0,
+                height: 20.0,
+            })
+        );
+    }
+
+    #[test]
+    fn wrapped_flex_text_keeps_intrinsic_measurement() {
+        let layout = TaffyStyle {
+            flex_basis: Dimension::length(0.0),
+            min_size: TaffySize {
+                width: Dimension::length(0.0),
+                height: Dimension::auto(),
+            },
+            size: TaffySize {
+                width: Dimension::auto(),
+                height: Dimension::length(20.0),
+            },
+            ..TaffyStyle::default()
+        };
+        let text = TextStyle::new(14.0, Color::WHITE).wrap(TextWrap::Word);
+
+        assert_eq!(
+            fixed_text_layout_size(
+                TaffySize {
+                    width: None,
+                    height: None,
+                },
+                TaffySize {
+                    width: AvailableSpace::MaxContent,
+                    height: AvailableSpace::MaxContent,
+                },
+                &layout,
+                &text,
+            ),
+            None
+        );
+    }
+
+    #[test]
     fn anchored_placement_keeps_the_preferred_side_when_it_fits() {
         let placed = place_anchored(
             Rect::new(50.0, 50.0, 30.0, 20.0),
@@ -2508,6 +2659,7 @@ mod tests {
             bounds,
             clip: bounds,
             clickable: true,
+            pointer_listener: false,
             focusable: true,
             cursor_pointer: true,
             cursor_text: false,
@@ -2523,6 +2675,7 @@ mod tests {
             bounds,
             clip: bounds,
             clickable: false,
+            pointer_listener: false,
             focusable: false,
             cursor_pointer: false,
             cursor_text: false,
@@ -2541,6 +2694,51 @@ mod tests {
         assert!(tree.interactive_region_at(Point::new(10.0, 10.0)).is_none());
         #[cfg(target_os = "macos")]
         assert!(tree.overlay_input_active());
+    }
+
+    #[test]
+    fn pointer_listeners_capture_the_top_hit_without_clicking_through() {
+        let mut tree = UiTree::new();
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        tree.hit_regions.push(HitRegion {
+            id: ElementId::new(1),
+            bounds,
+            clip: bounds,
+            clickable: true,
+            pointer_listener: false,
+            focusable: true,
+            cursor_pointer: true,
+            cursor_text: false,
+            stateful: false,
+            blocks_pointer: false,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source: 0,
+            },
+        });
+        tree.hit_regions.push(HitRegion {
+            id: ElementId::new(2),
+            bounds,
+            clip: bounds,
+            clickable: false,
+            pointer_listener: true,
+            focusable: false,
+            cursor_pointer: true,
+            cursor_text: false,
+            stateful: false,
+            blocks_pointer: false,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source: 1,
+            },
+        });
+
+        assert_eq!(
+            tree.pointer_listener_at(Point::new(10.0, 10.0)),
+            Some(ElementId::new(2))
+        );
+        assert!(tree.interactive_region_at(Point::new(10.0, 10.0)).is_none());
+        assert!(tree.wants_pointer_cursor(Point::new(10.0, 10.0)));
     }
 
     fn assign_runtime_ids(element: &mut Element) {

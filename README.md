@@ -346,7 +346,7 @@ See `cargo run --release --example native_view` and
 cargo run --release --example stress_scroll
 ```
 
-The demo renders a selectable 100,000-row list while mounting only the visible rows plus two rows of overscan. It supports trackpad/wheel scrolling, hover and pressed feedback, click listeners, arrow/page navigation, Home/End, a proportional scrollbar, and in-window CPU/render telemetry.
+The demo renders a selectable 100,000-row list while mounting only the visible rows plus two rows of overscan. It supports trackpad/wheel scrolling, a captured draggable scrollbar, hover and pressed feedback, click listeners, arrow/page navigation, Home/End, and in-window CPU/render telemetry.
 
 Run validation and the CPU-side list benchmarks with:
 
@@ -365,7 +365,7 @@ Implemented now:
 - declarative elements, Taffy flexbox, absolute positioning, clipping, inherited text styles, and Tailwind-like helpers;
 - ordered `z_index` stacking layers plus portal-style overlays with anchor flip/shift, pointer blocking, outside/Escape dismissal, and focus restoration;
 - macOS `NSView` children composed between the base and transparent overlay WGPU surfaces, with atomic first-frame reveal, keyed lifetime, clipping, sizing, first-responder handoff, and merged AccessKit/AppKit accessibility routing;
-- keyed hover/active/focus/click state, Tab traversal, keyboard button activation, and type-safe `ViewContext` listeners;
+- keyed hover/active/focus/click state, captured pointer gestures, Tab traversal, keyboard button activation, and type-safe `ViewContext` listeners;
 - typed actions, non-focusable focus scopes, focused-path bubbling, contextual keymaps, programmatic command dispatch, and replay-safe multi-stroke bindings;
 - native macOS application menus with nested/system menus, contextual key equivalents, focused command validation, dynamic replacement, checked/disabled items, and AppKit responder-chain actions;
 - controlled single-line text input with grapheme-safe movement/deletion, mouse caret and drag selection, horizontal scrolling, copy/cut/paste, and bounded undo/redo history;

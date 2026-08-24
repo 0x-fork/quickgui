@@ -13,7 +13,8 @@ use taffy::{
 
 use crate::{
     AnimatedImage, Background, BoxShadow, Canvas, Color, FontFamily, Image, ImageSource,
-    KeyContext, ObjectFit, Path, Rect, ScenePlane, Svg, SvgTransform, TextStyle, TextWrap,
+    KeyContext, ObjectFit, Path, Rect, ScenePlane, Svg, SvgTransform, TextShaping, TextStyle,
+    TextWrap,
 };
 
 #[cfg(target_os = "macos")]
@@ -399,6 +400,7 @@ pub(crate) struct TypographyStyle {
     pub family: Option<FontFamily>,
     pub weight: Option<Weight>,
     pub wrap: Option<TextWrap>,
+    pub shaping: Option<TextShaping>,
 }
 
 impl TypographyStyle {
@@ -417,6 +419,7 @@ impl TypographyStyle {
                 .unwrap_or_else(|| inherited.family.clone()),
             weight: self.weight.unwrap_or(inherited.weight),
             wrap: self.wrap.unwrap_or(inherited.wrap),
+            shaping: self.shaping.unwrap_or(inherited.shaping),
             color: self.color.unwrap_or(inherited.color),
         }
     }
@@ -436,6 +439,7 @@ pub struct Element {
     pub(crate) active: ElementStateStyle,
     pub(crate) focus: ElementStateStyle,
     pub(crate) clickable: bool,
+    pub(crate) pointer_listener: bool,
     pub(crate) cursor_pointer: bool,
     pub(crate) cursor_text: bool,
     pub(crate) focusable: bool,
@@ -533,6 +537,7 @@ impl Element {
             active: ElementStateStyle::default(),
             focus: ElementStateStyle::default(),
             clickable: false,
+            pointer_listener: false,
             cursor_pointer: false,
             cursor_text: false,
             focusable: false,
@@ -1091,6 +1096,19 @@ impl Element {
         self
     }
 
+    /// Use cheap one-glyph-per-character shaping for app-controlled text and fonts.
+    ///
+    /// Keep the default advanced mode for complex scripts, ligatures, or general font fallback.
+    pub fn text_shaping_basic(mut self) -> Self {
+        self.typography.shaping = Some(TextShaping::Basic);
+        self
+    }
+
+    pub fn text_shaping(mut self, shaping: TextShaping) -> Self {
+        self.typography.shaping = Some(shaping);
+        self
+    }
+
     pub fn wrap(mut self) -> Self {
         self.typography.wrap = Some(TextWrap::Word);
         self
@@ -1318,6 +1336,16 @@ impl Element {
         if self.accessibility.role == AccessibilityRole::GenericContainer {
             self.accessibility.role = AccessibilityRole::Button;
         }
+        self
+    }
+
+    /// Capture pointer motion from press through release, including outside this element.
+    ///
+    /// Attach a listener registered by [`crate::ViewContext::pointer_listener`]. The element also
+    /// occludes click and hover hit testing behind its bounds while allowing wheel scrolling.
+    pub fn on_pointer<V>(mut self, listener: crate::PointerListener<V>) -> Self {
+        self.explicit_id = Some(listener.id());
+        self.pointer_listener = true;
         self
     }
 

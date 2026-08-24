@@ -57,6 +57,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 name = "virtual_list"
 harness = false
 
+[profile.dev]
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

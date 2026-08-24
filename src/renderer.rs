@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    hash::{Hash, Hasher},
     mem,
     ops::Range,
     sync::Arc,
@@ -7,8 +8,8 @@ use std::{
 
 use bytemuck::{Pod, Zeroable};
 use glyphon::{
-    Attrs, Buffer, Cache, Cursor, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
-    TextArea, TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
+    Attrs, Buffer, Cache, Cursor, Family, FontSystem, Metrics, Resolution, Shaping as GlyphShaping,
+    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
 };
 use thiserror::Error;
 use wgpu::{
@@ -24,7 +25,7 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 
 use crate::{
     FontFamily, PerformanceProfile, Quad, Rect, RenderStats, Scene, ScenePlane, Size, TextId,
-    TextStyle, TextWrap,
+    TextShaping, TextStyle, TextWrap,
     image_renderer::ImageRenderer,
     path_renderer::PathRenderer,
     scene::{PrimitiveRef, Shadow, ShapeRef},
@@ -49,8 +50,10 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 const INITIAL_SHAPE_CAPACITY: usize = 256;
 const BUFFERED_FRAMES: usize = 3;
 const MAX_RETAINED_TEXT_AREAS: usize = 256;
+const MAX_RETAINED_TEXT_LAYOUTS: usize = 256;
 const MAX_RETAINED_TEXT_RENDERERS: usize = 8;
 const TEXT_RETENTION_FRAMES: u64 = 8;
+const BASIC_FRAGMENT_MIN_BYTES: usize = 24;
 
 #[derive(Debug, Error)]
 pub(crate) enum RendererInitError {
@@ -1108,7 +1111,7 @@ fn create_shape_instance_buffer(device: &Device, capacity: usize) -> wgpu::Buffe
     })
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct TextLayoutKey {
     content: Arc<str>,
     width: Option<f32>,
@@ -1117,12 +1120,48 @@ struct TextLayoutKey {
     family: FontFamily,
     weight: glyphon::Weight,
     wrap: TextWrap,
+    shaping: TextShaping,
     scale: f32,
+}
+
+impl PartialEq for TextLayoutKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.content == other.content
+            && self.width.map(f32::to_bits) == other.width.map(f32::to_bits)
+            && self.font_size.to_bits() == other.font_size.to_bits()
+            && self.line_height.to_bits() == other.line_height.to_bits()
+            && self.family == other.family
+            && self.weight == other.weight
+            && self.wrap == other.wrap
+            && self.shaping == other.shaping
+            && self.scale.to_bits() == other.scale.to_bits()
+    }
+}
+
+impl Eq for TextLayoutKey {}
+
+impl Hash for TextLayoutKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.content.hash(state);
+        self.width.map(f32::to_bits).hash(state);
+        self.font_size.to_bits().hash(state);
+        self.line_height.to_bits().hash(state);
+        self.family.hash(state);
+        self.weight.hash(state);
+        self.wrap.hash(state);
+        self.shaping.hash(state);
+        self.scale.to_bits().hash(state);
+    }
 }
 
 struct TextEntry {
     key: TextLayoutKey,
-    buffer: Buffer,
+    buffer: Arc<Buffer>,
+    last_used_frame: u64,
+}
+
+struct SharedTextEntry {
+    buffer: Arc<Buffer>,
     last_used_frame: u64,
 }
 
@@ -1133,18 +1172,20 @@ struct TextSystem {
     atlas: TextAtlas,
     renderers: Vec<TextRenderer>,
     buffers: HashMap<TextId, TextEntry>,
+    shared_buffers: HashMap<TextLayoutKey, SharedTextEntry>,
     seen: HashSet<TextId>,
     visible: Vec<VisibleText>,
     batches: Vec<TextBatch>,
     layer_batches: Vec<Range<usize>>,
     eviction_keys: Vec<TextId>,
+    shared_eviction_keys: Vec<TextLayoutKey>,
     frame: u64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct VisibleText {
     order: u32,
-    id: TextId,
+    buffer: Arc<Buffer>,
     left: f32,
     top: f32,
     bounds: TextBounds,
@@ -1172,11 +1213,13 @@ impl TextSystem {
             atlas,
             renderers: vec![renderer],
             buffers: HashMap::with_capacity(512),
+            shared_buffers: HashMap::with_capacity(512),
             seen: HashSet::with_capacity(128),
             visible: Vec::with_capacity(128),
             batches: Vec::with_capacity(16),
             layer_batches: Vec::with_capacity(4),
             eviction_keys: Vec::new(),
+            shared_eviction_keys: Vec::new(),
             frame: 0,
         }
     }
@@ -1197,6 +1240,7 @@ impl TextSystem {
         self.visible.clear();
         self.batches.clear();
         self.layer_batches.clear();
+        let mut text_count = 0;
         let mut reshaped = 0;
 
         for layer in scene.paint_layers() {
@@ -1216,25 +1260,54 @@ impl TextSystem {
                 if !self.seen.insert(run.id) {
                     return Err(RendererError::DuplicateTextId(run.id));
                 }
-                if self.update_text_entry(
-                    run.id,
-                    &run.content,
-                    &run.style,
-                    Some(run.bounds.width),
-                    scale,
-                    self.frame,
-                ) {
+                text_count += 1;
+                let rgba = run.style.color.to_srgba8();
+                let color = glyphon::Color::rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+                let bounds = physical_text_bounds(clip, scale);
+                let left = run.bounds.x * scale;
+                let top = run.bounds.y * scale;
+                let run_reshaped = if should_fragment_basic_text(&run.content, &run.style) {
+                    let mut fragment_left = left;
+                    let mut fragment_reshaped = false;
+                    for fragment in BasicTextFragments::new(&run.content) {
+                        let content = Arc::<str>::from(fragment);
+                        let (buffer, was_reshaped) = self
+                            .update_shared_text_entry(content, &run.style, None, scale, self.frame);
+                        let width = text_buffer_width(&buffer);
+                        self.visible.push(VisibleText {
+                            order: item.order,
+                            buffer,
+                            left: fragment_left,
+                            top,
+                            bounds,
+                            color,
+                        });
+                        fragment_left += width;
+                        fragment_reshaped |= was_reshaped;
+                    }
+                    fragment_reshaped
+                } else {
+                    let was_reshaped = self.update_text_entry(
+                        run.id,
+                        &run.content,
+                        &run.style,
+                        Some(run.bounds.width),
+                        scale,
+                        self.frame,
+                    );
+                    self.visible.push(VisibleText {
+                        order: item.order,
+                        buffer: Arc::clone(&self.buffers[&run.id].buffer),
+                        left,
+                        top,
+                        bounds,
+                        color,
+                    });
+                    was_reshaped
+                };
+                if run_reshaped {
                     reshaped += 1;
                 }
-                let rgba = run.style.color.to_srgba8();
-                self.visible.push(VisibleText {
-                    order: item.order,
-                    id: run.id,
-                    left: run.bounds.x * scale,
-                    top: run.bounds.y * scale,
-                    bounds: physical_text_bounds(clip, scale),
-                    color: glyphon::Color::rgba(rgba[0], rgba[1], rgba[2], rgba[3]),
-                });
             }
             self.visible[start..].sort_unstable_by_key(|text| text.order);
             let batch_start = self.batches.len();
@@ -1279,14 +1352,13 @@ impl TextSystem {
             viewport,
             atlas,
             renderers,
-            buffers,
             visible,
             batches,
             ..
         } = self;
         for batch in batches.iter() {
             let areas = visible[batch.visible.clone()].iter().map(|item| TextArea {
-                buffer: &buffers[&item.id].buffer,
+                buffer: item.buffer.as_ref(),
                 left: item.left,
                 top: item.top,
                 scale: 1.0,
@@ -1304,7 +1376,7 @@ impl TextSystem {
                 swash_cache,
             )?;
         }
-        Ok((visible.len(), reshaped, draw_calls))
+        Ok((text_count, reshaped, draw_calls))
     }
 
     fn measure(
@@ -1452,6 +1524,30 @@ impl TextSystem {
                 self.buffers.remove(&id);
             }
         }
+
+        self.shared_eviction_keys.clear();
+        self.shared_eviction_keys.extend(
+            self.shared_buffers
+                .iter()
+                .filter(|(_, entry)| entry.last_used_frame < oldest_allowed)
+                .map(|(key, _)| key.clone()),
+        );
+        for key in self.shared_eviction_keys.drain(..) {
+            self.shared_buffers.remove(&key);
+        }
+
+        if self.shared_buffers.len() > MAX_RETAINED_TEXT_LAYOUTS {
+            let mut by_age: Vec<_> = self
+                .shared_buffers
+                .iter()
+                .map(|(key, entry)| (key.clone(), entry.last_used_frame))
+                .collect();
+            by_age.sort_unstable_by_key(|(_, age)| *age);
+            let remove_count = self.shared_buffers.len() - MAX_RETAINED_TEXT_LAYOUTS;
+            for (key, _) in by_age.into_iter().take(remove_count) {
+                self.shared_buffers.remove(&key);
+            }
+        }
     }
 
     fn update_text_entry(
@@ -1463,6 +1559,10 @@ impl TextSystem {
         scale: f32,
         frame: u64,
     ) -> bool {
+        // An unwrapped line's glyph layout is independent of its paint bounds. Taffy measures
+        // intrinsic text with no width, while painting supplies the element width for clipping;
+        // keeping that irrelevant width in the cache key would shape every no-wrap label twice.
+        let width = canonical_text_width(style.wrap, width);
         let key = TextLayoutKey {
             content: content.clone(),
             width,
@@ -1471,36 +1571,26 @@ impl TextSystem {
             family: style.family.clone(),
             weight: style.weight,
             wrap: style.wrap,
+            shaping: style.shaping,
             scale,
         };
 
-        if let Some(entry) = self.buffers.get_mut(&id) {
+        if let Some(buffer) = self.buffers.get_mut(&id).and_then(|entry| {
             entry.last_used_frame = frame;
-            if entry.key == key {
-                return false;
-            }
-            configure_text_buffer(
-                &mut entry.buffer,
-                &mut self.font_system,
-                content,
-                style,
-                width,
-                scale,
-            );
-            entry.key = key;
-            return true;
+            (entry.key == key).then(|| Arc::clone(&entry.buffer))
+        }) {
+            self.shared_buffers
+                .entry(key)
+                .and_modify(|entry| entry.last_used_frame = frame)
+                .or_insert(SharedTextEntry {
+                    buffer,
+                    last_used_frame: frame,
+                });
+            return false;
         }
 
-        let metrics = Metrics::new(style.font_size * scale, style.line_height * scale);
-        let mut buffer = Buffer::new(&mut self.font_system, metrics);
-        configure_text_buffer(
-            &mut buffer,
-            &mut self.font_system,
-            content,
-            style,
-            width,
-            scale,
-        );
+        let (buffer, reshaped) =
+            self.update_shared_text_entry_for_key(key.clone(), style, scale, frame);
         self.buffers.insert(
             id,
             TextEntry {
@@ -1509,7 +1599,119 @@ impl TextSystem {
                 last_used_frame: frame,
             },
         );
-        true
+        reshaped
+    }
+
+    fn update_shared_text_entry(
+        &mut self,
+        content: Arc<str>,
+        style: &TextStyle,
+        width: Option<f32>,
+        scale: f32,
+        frame: u64,
+    ) -> (Arc<Buffer>, bool) {
+        let key = TextLayoutKey {
+            content,
+            width: canonical_text_width(style.wrap, width),
+            font_size: style.font_size,
+            line_height: style.line_height,
+            family: style.family.clone(),
+            weight: style.weight,
+            wrap: style.wrap,
+            shaping: style.shaping,
+            scale,
+        };
+        self.update_shared_text_entry_for_key(key, style, scale, frame)
+    }
+
+    fn update_shared_text_entry_for_key(
+        &mut self,
+        key: TextLayoutKey,
+        style: &TextStyle,
+        scale: f32,
+        frame: u64,
+    ) -> (Arc<Buffer>, bool) {
+        if let Some(entry) = self.shared_buffers.get_mut(&key) {
+            entry.last_used_frame = frame;
+            (Arc::clone(&entry.buffer), false)
+        } else {
+            let metrics = Metrics::new(style.font_size * scale, style.line_height * scale);
+            let mut buffer = Buffer::new(&mut self.font_system, metrics);
+            configure_text_buffer(
+                &mut buffer,
+                &mut self.font_system,
+                &key.content,
+                style,
+                key.width,
+                scale,
+            );
+            let buffer = Arc::new(buffer);
+            self.shared_buffers.insert(
+                key.clone(),
+                SharedTextEntry {
+                    buffer: Arc::clone(&buffer),
+                    last_used_frame: frame,
+                },
+            );
+            (buffer, true)
+        }
+    }
+}
+
+fn should_fragment_basic_text(content: &str, style: &TextStyle) -> bool {
+    style.shaping == TextShaping::Basic
+        && style.wrap == TextWrap::None
+        && content.len() >= BASIC_FRAGMENT_MIN_BYTES
+        && content
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() || byte == b' ')
+        && content.bytes().any(|byte| byte.is_ascii_digit())
+}
+
+struct BasicTextFragments<'a> {
+    content: &'a str,
+    cursor: usize,
+}
+
+impl<'a> BasicTextFragments<'a> {
+    fn new(content: &'a str) -> Self {
+        Self { content, cursor: 0 }
+    }
+}
+
+impl<'a> Iterator for BasicTextFragments<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let bytes = self.content.as_bytes();
+        let start = self.cursor;
+        let first = *bytes.get(start)?;
+        if first.is_ascii_digit() {
+            self.cursor += 1;
+            if self.cursor < bytes.len() && bytes[self.cursor].is_ascii_digit() {
+                self.cursor += 1;
+            }
+        } else {
+            self.cursor += 1;
+            while self.cursor < bytes.len() && !bytes[self.cursor].is_ascii_digit() {
+                self.cursor += 1;
+            }
+        }
+        Some(&self.content[start..self.cursor])
+    }
+}
+
+fn text_buffer_width(buffer: &Buffer) -> f32 {
+    buffer
+        .layout_runs()
+        .next()
+        .map_or(0.0, |layout| layout.line_w)
+}
+
+fn canonical_text_width(wrap: TextWrap, width: Option<f32>) -> Option<f32> {
+    match wrap {
+        TextWrap::None => None,
+        TextWrap::Word | TextWrap::Glyph => width,
     }
 }
 
@@ -1535,7 +1737,11 @@ fn configure_text_buffer(
         FontFamily::Named(name) => Family::Name(name),
     };
     let attrs = Attrs::new().family(family).weight(style.weight);
-    buffer.set_text(content, &attrs, Shaping::Advanced, None);
+    let shaping = match style.shaping {
+        TextShaping::Advanced => GlyphShaping::Advanced,
+        TextShaping::Basic => GlyphShaping::Basic,
+    };
+    buffer.set_text(content, &attrs, shaping, None);
     buffer.shape_until_scroll(font_system, false);
 }
 
@@ -1582,6 +1788,43 @@ mod tests {
             (bounds.left, bounds.top, bounds.right, bounds.bottom),
             (2, 4, 9, 14)
         );
+    }
+
+    #[test]
+    fn no_wrap_text_layout_ignores_paint_width() {
+        assert_eq!(canonical_text_width(TextWrap::None, Some(640.0)), None);
+        assert_eq!(
+            canonical_text_width(TextWrap::Word, Some(640.0)),
+            Some(640.0)
+        );
+        assert_eq!(
+            canonical_text_width(TextWrap::Glyph, Some(640.0)),
+            Some(640.0)
+        );
+    }
+
+    #[test]
+    fn basic_text_fragments_isolate_changing_numeric_fields() {
+        let fragments: Vec<_> =
+            BasicTextFragments::new("Row 014440    The quick brown fox").collect();
+        assert_eq!(
+            fragments,
+            ["Row ", "01", "44", "40", "    The quick brown fox"]
+        );
+    }
+
+    #[test]
+    fn basic_text_fragmentation_requires_explicit_safe_shaping() {
+        let content = "Row 014440    The quick brown fox";
+        let mut style = TextStyle::new(14.0, Color::WHITE).wrap(TextWrap::None);
+        assert!(!should_fragment_basic_text(content, &style));
+        style.shaping = TextShaping::Basic;
+        assert!(should_fragment_basic_text(content, &style));
+        assert!(!should_fragment_basic_text("short 123", &style));
+        assert!(!should_fragment_basic_text(
+            "Row 014440\tThe quick brown fox",
+            &style
+        ));
     }
 
     #[test]
