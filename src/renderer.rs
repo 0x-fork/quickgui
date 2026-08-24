@@ -6,8 +6,8 @@ use std::{
 
 use bytemuck::{Pod, Zeroable};
 use glyphon::{
-    Attrs, Buffer, Cache, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea,
-    TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
+    Attrs, Buffer, Cache, Cursor, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
+    TextArea, TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
 };
 use thiserror::Error;
 use wgpu::{
@@ -147,6 +147,47 @@ impl GpuRenderer {
     ) -> Size {
         self.text
             .measure(id, content, style, max_width, scale_factor)
+    }
+
+    pub(crate) fn text_caret_x(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        width: f32,
+        scale_factor: f32,
+        index: usize,
+    ) -> f32 {
+        self.text
+            .caret_x(id, content, style, width, scale_factor, index)
+    }
+
+    pub(crate) fn text_index_for_x(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        width: f32,
+        scale_factor: f32,
+        x: f32,
+    ) -> usize {
+        self.text
+            .index_for_x(id, content, style, width, scale_factor, x)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn text_selection_spans(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        width: f32,
+        scale_factor: f32,
+        start: usize,
+        end: usize,
+    ) -> Vec<(f32, f32)> {
+        self.text
+            .selection_spans(id, content, style, width, scale_factor, start, end)
     }
 
     pub fn render(
@@ -657,7 +698,78 @@ impl TextSystem {
         if measured_height == 0.0 {
             measured_height = style.line_height * scale;
         }
-        Size::new(measured_width / scale, measured_height / scale)
+        // Cosmic Text's unbounded `line_w` can land exactly on its later wrapping threshold.
+        // Reserve one physical pixel so an intrinsically sized single line does not reflow only
+        // after Taffy feeds that measured width back into the paint layout.
+        let measured_width = (measured_width.ceil() + 1.0) / scale;
+        let measured_width = match width {
+            Some(width) => measured_width.min(width),
+            None => measured_width,
+        };
+        Size::new(measured_width, measured_height.ceil() / scale)
+    }
+
+    fn caret_x(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        width: f32,
+        scale: f32,
+        index: usize,
+    ) -> f32 {
+        let next_frame = self.frame.wrapping_add(1);
+        self.update_text_entry(id, content, style, Some(width), scale, next_frame);
+        self.buffers[&id]
+            .buffer
+            .cursor_position(&Cursor::new(0, index.min(content.len())))
+            .map(|(x, _)| x / scale)
+            .unwrap_or(0.0)
+    }
+
+    fn index_for_x(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        width: f32,
+        scale: f32,
+        x: f32,
+    ) -> usize {
+        let next_frame = self.frame.wrapping_add(1);
+        self.update_text_entry(id, content, style, Some(width), scale, next_frame);
+        self.buffers[&id]
+            .buffer
+            .hit(x.max(0.0) * scale, style.line_height * scale * 0.5)
+            .map(|cursor| cursor.index.min(content.len()))
+            .unwrap_or(content.len())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn selection_spans(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        width: f32,
+        scale: f32,
+        start: usize,
+        end: usize,
+    ) -> Vec<(f32, f32)> {
+        let next_frame = self.frame.wrapping_add(1);
+        self.update_text_entry(id, content, style, Some(width), scale, next_frame);
+        let start = Cursor::new(0, start.min(content.len()));
+        let end = Cursor::new(0, end.min(content.len()));
+        self.buffers[&id]
+            .buffer
+            .layout_runs()
+            .next()
+            .map(|run| {
+                run.highlight(start, end)
+                    .map(|(x, width)| (x / scale, width / scale))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn render<'pass>(&'pass self, pass: &mut wgpu::RenderPass<'pass>) -> Result<(), RendererError> {

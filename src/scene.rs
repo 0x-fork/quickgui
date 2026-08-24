@@ -57,7 +57,7 @@ impl TextStyle {
             line_height: font_size * 1.35,
             family: FontFamily::SansSerif,
             weight: Weight::NORMAL,
-            wrap: TextWrap::None,
+            wrap: TextWrap::Word,
             color,
         }
     }
@@ -223,5 +223,12 @@ mod tests {
         let mut scene = Scene::new();
         scene.fill(Rect::new(0.0, 0.0, 10.0, 10.0), Color::TRANSPARENT);
         assert!(scene.quads().is_empty());
+    }
+
+    #[test]
+    fn text_wraps_by_default_and_can_opt_out() {
+        let style = TextStyle::new(14.0, Color::WHITE);
+        assert_eq!(style.wrap, TextWrap::Word);
+        assert_eq!(style.wrap(TextWrap::None).wrap, TextWrap::None);
     }
 }

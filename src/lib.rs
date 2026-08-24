@@ -13,16 +13,22 @@ mod renderer;
 mod runtime;
 mod scene;
 mod scheduler;
+mod text_input;
 mod ui_tree;
 mod virtual_list;
 
 pub use color::Color;
-pub use element::{Element, ElementId, ElementStateStyle, IntoElement, div, text};
+pub use element::{
+    AccessibilityRole, Element, ElementId, ElementStateStyle, FocusHandle, IntoElement, button,
+    div, text, text_input,
+};
 pub use event::{Event, EventContext, Key, Modifiers, MouseButton};
 pub use geometry::{Insets, Point, Rect, Size, Vector};
 pub use glyphon::Weight as FontWeight;
 pub use metrics::{FrameMetrics, RenderStats};
-pub use runtime::{App, AppConfig, AppError, ClickListener, PerformanceProfile, View, ViewContext};
+pub use runtime::{
+    App, AppConfig, AppError, ClickListener, InputListener, PerformanceProfile, View, ViewContext,
+};
 pub use scene::{FontFamily, Quad, Scene, TextId, TextRun, TextStyle, TextWrap};
 pub use virtual_list::{VirtualList, VisibleRows};
 

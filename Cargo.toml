@@ -13,6 +13,9 @@ categories = ["gui", "graphics"]
 default = []
 
 [dependencies]
+accesskit = "0.24.1"
+accesskit_winit = "0.33.2"
+arboard = { version = "3.6.1", default-features = false }
 bitflags = "2.9"
 bytemuck = { version = "1.23", features = ["derive"] }
 glyphon = "0.12.0"
@@ -20,6 +23,7 @@ pollster = "0.4"
 taffy = { version = "0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "block_layout", "content_size"] }
 thiserror = "2.0"
 tracing = "0.1"
+unicode-segmentation = "1.12"
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "wgsl"] }
 winit = "0.30.13"
 

@@ -1,22 +1,28 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Instant};
 
+use accesskit::{Action, ActionData, ActionRequest};
+use accesskit_winit::{
+    Adapter as AccessibilityAdapter, Event as AccessibilityEvent,
+    WindowEvent as AccessibilityWindowEvent,
+};
+use arboard::Clipboard;
 use thiserror::Error;
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
+    dpi::{LogicalPosition, LogicalSize},
     event::{ElementState, Ime, MouseScrollDelta, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::{Key as WinitKey, ModifiersState, NamedKey},
     window::{CursorIcon, Window, WindowId},
 };
 
 use crate::{
-    Color, ElementId, IntoElement, Point, Scene, Size, Vector,
+    Color, ElementId, FocusHandle, IntoElement, Point, Scene, Size, Vector,
     event::{Event, EventContext, Key, Modifiers, MouseButton},
     metrics::{FrameMetrics, MetricsTracker},
     renderer::{GpuRenderer, RenderOutcome},
     scheduler::FrameScheduler,
-    ui_tree::UiTree,
+    ui_tree::{InputResult, UiTree},
 };
 
 /// GPU selection policy. `Balanced` lets WGPU choose the most appropriate adapter.
@@ -64,6 +70,7 @@ pub struct ViewContext<'a, V> {
     size: Size,
     scale_factor: f32,
     metrics: FrameMetrics,
+    focused: Option<ElementId>,
     request_animation_frame: bool,
     listeners: &'a mut ListenerRegistry<V>,
 }
@@ -82,6 +89,19 @@ impl<V> ViewContext<'_, V> {
         self.metrics
     }
 
+    /// Create a stable identity that can be attached with [`crate::Element::track_focus`].
+    pub fn focus_handle(&self, id: impl Into<ElementId>) -> FocusHandle {
+        FocusHandle::new(id)
+    }
+
+    pub fn focused(&self) -> Option<ElementId> {
+        self.focused
+    }
+
+    pub fn is_focused(&self, handle: FocusHandle) -> bool {
+        self.focused == Some(handle.id())
+    }
+
     /// Keep rendering at the display's cadence until a future frame omits this call.
     pub fn request_animation_frame(&mut self) {
         self.request_animation_frame = true;
@@ -94,7 +114,7 @@ impl<V> ViewContext<'_, V> {
         callback: impl Fn(&mut V, &mut EventContext) + 'static,
     ) -> ClickListener<V> {
         let id = id.into();
-        let previous = self.listeners.insert(id, Arc::new(callback));
+        let previous = self.listeners.clicks.insert(id, Arc::new(callback));
         assert!(
             previous.is_none(),
             "listener id {id:?} was registered more than once"
@@ -104,9 +124,49 @@ impl<V> ViewContext<'_, V> {
             marker: PhantomData,
         }
     }
+
+    /// Register a stable controlled-value callback for [`crate::Element::on_input`].
+    pub fn input_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &str, &mut EventContext) + 'static,
+    ) -> InputListener<V> {
+        let id = id.into();
+        let previous = self.listeners.inputs.insert(id, Arc::new(callback));
+        assert!(
+            previous.is_none(),
+            "input listener id {id:?} was registered more than once"
+        );
+        InputListener {
+            id,
+            marker: PhantomData,
+        }
+    }
 }
 
-type ListenerRegistry<V> = HashMap<ElementId, Arc<dyn Fn(&mut V, &mut EventContext)>>;
+type ClickCallback<V> = Arc<dyn Fn(&mut V, &mut EventContext)>;
+type InputCallback<V> = Arc<dyn Fn(&mut V, &str, &mut EventContext)>;
+
+struct ListenerRegistry<V> {
+    clicks: HashMap<ElementId, ClickCallback<V>>,
+    inputs: HashMap<ElementId, InputCallback<V>>,
+}
+
+impl<V> ListenerRegistry<V> {
+    fn clear(&mut self) {
+        self.clicks.clear();
+        self.inputs.clear();
+    }
+}
+
+impl<V> Default for ListenerRegistry<V> {
+    fn default() -> Self {
+        Self {
+            clicks: HashMap::new(),
+            inputs: HashMap::new(),
+        }
+    }
+}
 
 /// An opaque click binding returned by [`ViewContext::listener`].
 pub struct ClickListener<V> {
@@ -115,6 +175,18 @@ pub struct ClickListener<V> {
 }
 
 impl<V> ClickListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
+/// An opaque text-change binding returned by [`ViewContext::input_listener`].
+pub struct InputListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+impl<V> InputListener<V> {
     pub(crate) fn id(&self) -> ElementId {
         self.id
     }
@@ -169,9 +241,9 @@ impl<V: View> App<V> {
     }
 
     pub fn run(self) -> Result<(), AppError> {
-        let event_loop = EventLoop::new()?;
+        let event_loop = EventLoop::with_user_event().build()?;
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut runtime = Runtime::new(self.view, self.config);
+        let mut runtime = Runtime::new(self.view, self.config, event_loop.create_proxy());
         event_loop.run_app(&mut runtime)?;
         match runtime.fatal_error {
             Some(error) => Err(error),
@@ -189,9 +261,11 @@ struct RuntimeWindow<V> {
     scale_factor: f32,
     logical_size: Size,
     pointer: Option<Point>,
-    pointer_cursor: bool,
+    cursor: CursorIcon,
+    ime_target: Option<ElementId>,
     view_dirty: bool,
     listeners: ListenerRegistry<V>,
+    accessibility: AccessibilityAdapter,
     // The window is last so GPU surface state is dropped before its native handle.
     window: Arc<Window>,
 }
@@ -202,16 +276,24 @@ struct Runtime<V> {
     window: Option<RuntimeWindow<V>>,
     modifiers: Modifiers,
     fatal_error: Option<AppError>,
+    accessibility_proxy: EventLoopProxy<AccessibilityEvent>,
+    clipboard: Option<Clipboard>,
 }
 
 impl<V: View> Runtime<V> {
-    fn new(view: V, config: AppConfig) -> Self {
+    fn new(
+        view: V,
+        config: AppConfig,
+        accessibility_proxy: EventLoopProxy<AccessibilityEvent>,
+    ) -> Self {
         Self {
             view,
             config,
             window: None,
             modifiers: Modifiers::default(),
             fatal_error: None,
+            accessibility_proxy,
+            clipboard: None,
         }
     }
 
@@ -221,21 +303,212 @@ impl<V: View> Runtime<V> {
         event_loop.exit();
     }
 
-    fn dispatch(&mut self, event_loop: &ActiveEventLoop, event: Event, force_redraw: bool) {
+    fn dispatch(&mut self, event_loop: &ActiveEventLoop, event: Event, force_redraw: bool) -> bool {
         let mut cx = EventContext::default();
         self.view.event(&event, &mut cx);
+        self.apply_event_context(event_loop, cx, force_redraw, true)
+    }
+
+    fn apply_event_context(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        cx: EventContext,
+        force_redraw: bool,
+        announce_focus: bool,
+    ) -> bool {
         if cx.exit {
             event_loop.exit();
-            return;
+            return false;
         }
+        let mut focus_changed = false;
         if let Some(state) = &mut self.window {
+            let previous_focus = state.ui.focused();
+            if let Some(request) = cx.focus {
+                match request {
+                    Some(id) => {
+                        state.ui.focus(id);
+                    }
+                    None => {
+                        state.ui.blur();
+                    }
+                }
+            }
+            focus_changed = previous_focus != state.ui.focused();
             if cx.invalidate {
                 state.view_dirty = true;
             }
-            if (force_redraw || cx.invalidate) && state.scheduler.invalidate() {
+            if (force_redraw || cx.invalidate || focus_changed) && state.scheduler.invalidate() {
                 state.window.request_redraw();
             }
         }
+        if focus_changed && announce_focus {
+            let focused = self.window.as_ref().and_then(|state| state.ui.focused());
+            let mut focus_cx = EventContext::default();
+            self.view
+                .event(&Event::FocusChanged(focused), &mut focus_cx);
+            return self.apply_event_context(event_loop, focus_cx, false, false);
+        }
+        true
+    }
+
+    fn invoke_click(&mut self, event_loop: &ActiveEventLoop, id: ElementId) {
+        let listener = self
+            .window
+            .as_ref()
+            .and_then(|window| window.listeners.clicks.get(&id).cloned());
+        if let Some(listener) = listener {
+            let mut cx = EventContext::default();
+            listener(&mut self.view, &mut cx);
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return;
+            }
+        }
+        self.dispatch(event_loop, Event::Click(id), false);
+    }
+
+    fn invoke_input(&mut self, event_loop: &ActiveEventLoop, id: ElementId, value: &str) -> bool {
+        let listener = self
+            .window
+            .as_ref()
+            .and_then(|window| window.listeners.inputs.get(&id).cloned());
+        if let Some(listener) = listener {
+            let mut cx = EventContext::default();
+            listener(&mut self.view, value, &mut cx);
+            return self.apply_event_context(event_loop, cx, false, true);
+        }
+        true
+    }
+
+    fn apply_input_result(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        result: InputResult,
+        notify_listener: bool,
+    ) -> bool {
+        if result.repaint
+            && let Some(state) = &mut self.window
+            && state.scheduler.invalidate()
+        {
+            state.window.request_redraw();
+        }
+        if notify_listener && let Some(change) = result.change {
+            return self.invoke_input(event_loop, change.id, &change.value);
+        }
+        true
+    }
+
+    fn clipboard(&mut self) -> Option<&mut Clipboard> {
+        if self.clipboard.is_none() {
+            self.clipboard = Clipboard::new().ok();
+        }
+        self.clipboard.as_mut()
+    }
+
+    fn handle_text_input_key(&mut self, event_loop: &ActiveEventLoop, key: &Key) -> bool {
+        let focused = self
+            .window
+            .as_ref()
+            .and_then(|window| window.ui.focused_text_input());
+        if focused.is_none() {
+            return false;
+        }
+
+        let extend = self.modifiers.contains(Modifiers::SHIFT);
+        let primary = primary_modifier(self.modifiers);
+        let result = match key {
+            Key::ArrowLeft if primary => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_move_home(extend)),
+            Key::ArrowRight if primary => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_move_end(extend)),
+            Key::ArrowLeft => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_move_left(extend)),
+            Key::ArrowRight => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_move_right(extend)),
+            Key::Home => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_move_home(extend)),
+            Key::End => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_move_end(extend)),
+            Key::Backspace => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_backspace()),
+            Key::Delete => self.window.as_mut().map(|window| window.ui.input_delete()),
+            Key::Character(value) if primary && value.eq_ignore_ascii_case("a") => self
+                .window
+                .as_mut()
+                .map(|window| window.ui.input_select_all()),
+            Key::Character(value) if primary && value.eq_ignore_ascii_case("c") => {
+                let selected = self
+                    .window
+                    .as_ref()
+                    .and_then(|window| window.ui.selected_text());
+                if let Some(selected) = selected
+                    && let Some(clipboard) = self.clipboard()
+                {
+                    let _ = clipboard.set_text(selected.as_ref());
+                }
+                return true;
+            }
+            Key::Character(value) if primary && value.eq_ignore_ascii_case("x") => {
+                let selected = self
+                    .window
+                    .as_ref()
+                    .and_then(|window| window.ui.selected_text());
+                let copied = selected.is_some_and(|selected| {
+                    self.clipboard()
+                        .is_some_and(|clipboard| clipboard.set_text(selected.as_ref()).is_ok())
+                });
+                if !copied {
+                    return true;
+                }
+                self.window
+                    .as_mut()
+                    .map(|window| window.ui.input_backspace())
+            }
+            Key::Character(value) if primary && value.eq_ignore_ascii_case("v") => {
+                let pasted = self
+                    .clipboard()
+                    .and_then(|clipboard| clipboard.get_text().ok());
+                pasted.and_then(|value| {
+                    self.window
+                        .as_mut()
+                        .map(|window| window.ui.input_replace(&value))
+                })
+            }
+            _ => return false,
+        };
+
+        if let Some(result) = result {
+            self.apply_input_result(event_loop, result, true);
+        }
+        true
+    }
+
+    fn announce_focus_change(&mut self, event_loop: &ActiveEventLoop, previous: Option<ElementId>) {
+        let focused = self.window.as_ref().and_then(|state| state.ui.focused());
+        if previous == focused {
+            return;
+        }
+        if let Some(state) = &mut self.window
+            && state.scheduler.invalidate()
+        {
+            state.window.request_redraw();
+        }
+        let mut cx = EventContext::default();
+        self.view.event(&Event::FocusChanged(focused), &mut cx);
+        self.apply_event_context(event_loop, cx, false, false);
     }
 
     fn redraw(&mut self, event_loop: &ActiveEventLoop) {
@@ -245,18 +518,19 @@ impl<V: View> Runtime<V> {
         state.scheduler.begin_redraw();
 
         let scroll = state.scheduler.take_scroll();
-        if !scroll.is_zero() && !state.ui.scroll_at(state.pointer, scroll) {
+        let scroll_for_view =
+            (!scroll.is_zero() && !state.ui.scroll_at(state.pointer, scroll)).then_some(scroll);
+        if let Some(scroll) = scroll_for_view {
             let mut event_cx = EventContext::default();
             self.view.event(&Event::Scroll(scroll), &mut event_cx);
-            if event_cx.exit {
-                event_loop.exit();
+            if !self.apply_event_context(event_loop, event_cx, false, true) {
                 return;
-            }
-            if event_cx.invalidate {
-                state.view_dirty = true;
             }
         }
 
+        let Some(state) = &mut self.window else {
+            return;
+        };
         let started = Instant::now();
         let mut request_animation_frame = false;
         if state.view_dirty {
@@ -264,6 +538,7 @@ impl<V: View> Runtime<V> {
                 size: state.logical_size,
                 scale_factor: state.scale_factor,
                 metrics: state.metrics.current(),
+                focused: state.ui.focused(),
                 request_animation_frame: false,
                 listeners: &mut state.listeners,
             };
@@ -281,11 +556,36 @@ impl<V: View> Runtime<V> {
             }
             state.view_dirty = false;
         }
+        let ime_target = state.ui.focused_text_input();
+        if ime_target != state.ime_target {
+            let previous_target = state.ime_target;
+            if let Some(previous_target) = previous_target {
+                state.ui.input_cancel_preedit(previous_target);
+            }
+            state.ime_target = ime_target;
+            if previous_target.is_some() != ime_target.is_some() {
+                state.window.set_ime_allowed(ime_target.is_some());
+            }
+        }
+
         state.scene.clear(self.config.background);
-        if let Err(error) = state.ui.paint(&mut state.scene) {
+        if let Err(error) = state.ui.paint(&mut state.scene, &mut state.renderer) {
             self.fail(event_loop, AppError::View(error.to_string()));
             return;
         }
+        if ime_target.is_some()
+            && let Some(caret) = state.ui.ime_cursor_area()
+        {
+            state.window.set_ime_cursor_area(
+                LogicalPosition::new(caret.x as f64, caret.y as f64),
+                LogicalSize::new(caret.width.max(1.0) as f64, caret.height.max(1.0) as f64),
+            );
+        }
+        let window_title = self.config.title.as_str();
+        let RuntimeWindow {
+            accessibility, ui, ..
+        } = state;
+        accessibility.update_if_active(|| ui.accessibility_update(window_title));
 
         match state.renderer.render(&state.scene, state.scale_factor) {
             Ok(RenderOutcome::Presented(stats)) => {
@@ -308,7 +608,7 @@ impl<V: View> Runtime<V> {
     }
 }
 
-impl<V: View> ApplicationHandler for Runtime<V> {
+impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() || self.fatal_error.is_some() {
             return;
@@ -317,6 +617,7 @@ impl<V: View> ApplicationHandler for Runtime<V> {
         event_loop.set_control_flow(ControlFlow::Wait);
         let mut attributes = Window::default_attributes()
             .with_title(self.config.title.clone())
+            .with_visible(false)
             .with_inner_size(LogicalSize::new(
                 self.config.size.width as f64,
                 self.config.size.height as f64,
@@ -334,7 +635,12 @@ impl<V: View> ApplicationHandler for Runtime<V> {
                 return;
             }
         };
-        window.set_ime_allowed(true);
+        window.set_ime_allowed(false);
+        let accessibility = AccessibilityAdapter::with_event_loop_proxy(
+            event_loop,
+            &window,
+            self.accessibility_proxy.clone(),
+        );
         let renderer = match pollster::block_on(GpuRenderer::new(
             window.clone(),
             event_loop,
@@ -367,11 +673,16 @@ impl<V: View> ApplicationHandler for Runtime<V> {
             scale_factor,
             logical_size,
             pointer: None,
-            pointer_cursor: false,
+            cursor: CursorIcon::Default,
+            ime_target: None,
             view_dirty: true,
-            listeners: HashMap::new(),
+            listeners: ListenerRegistry::default(),
+            accessibility,
             window,
         });
+        if let Some(state) = &self.window {
+            state.window.set_visible(true);
+        }
 
         self.dispatch(
             event_loop,
@@ -393,6 +704,11 @@ impl<V: View> ApplicationHandler for Runtime<V> {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        if let Some(state) = self.window.as_mut()
+            && state.window.id() == window_id
+        {
+            state.accessibility.process_event(&state.window, &event);
+        }
         let Some(state) = self.window.as_ref() else {
             return;
         };
@@ -448,15 +764,20 @@ impl<V: View> ApplicationHandler for Runtime<V> {
                 let scale = state.scale_factor;
                 let point = Point::new(position.x as f32 / scale, position.y as f32 / scale);
                 state.pointer = Some(point);
-                let repaint = state.ui.pointer_moved(point);
-                let pointer_cursor = state.ui.wants_pointer_cursor(point);
-                if pointer_cursor != state.pointer_cursor {
-                    state.pointer_cursor = pointer_cursor;
-                    state.window.set_cursor(if pointer_cursor {
-                        CursorIcon::Pointer
-                    } else {
-                        CursorIcon::Default
-                    });
+                let repaint = {
+                    let RuntimeWindow { ui, renderer, .. } = state;
+                    ui.pointer_moved(point, renderer)
+                };
+                let cursor = if state.ui.wants_text_cursor(point) {
+                    CursorIcon::Text
+                } else if state.ui.wants_pointer_cursor(point) {
+                    CursorIcon::Pointer
+                } else {
+                    CursorIcon::Default
+                };
+                if cursor != state.cursor {
+                    state.cursor = cursor;
+                    state.window.set_cursor(cursor);
                 }
                 if repaint && state.scheduler.invalidate() {
                     state.window.request_redraw();
@@ -466,8 +787,10 @@ impl<V: View> ApplicationHandler for Runtime<V> {
             WindowEvent::CursorLeft { .. } => {
                 let state = self.window.as_mut().expect("window checked above");
                 state.pointer = None;
-                state.pointer_cursor = false;
-                state.window.set_cursor(CursorIcon::Default);
+                if state.cursor != CursorIcon::Default {
+                    state.cursor = CursorIcon::Default;
+                    state.window.set_cursor(CursorIcon::Default);
+                }
                 if state.ui.pointer_left() && state.scheduler.invalidate() {
                     state.window.request_redraw();
                 }
@@ -475,44 +798,33 @@ impl<V: View> ApplicationHandler for Runtime<V> {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
-                let pointer_result = {
+                let button = map_mouse_button(button);
+                let (pointer_result, previous_focus) = {
                     let window = self.window.as_mut().expect("window checked above");
-                    let result = window.ui.pointer_button(window.pointer, pressed);
+                    let previous_focus = window.ui.focused();
+                    let result = if button == MouseButton::Left {
+                        let RuntimeWindow { ui, renderer, .. } = window;
+                        ui.pointer_button(
+                            window.pointer,
+                            pressed,
+                            self.modifiers.contains(Modifiers::SHIFT),
+                            renderer,
+                        )
+                    } else {
+                        crate::ui_tree::PointerResult {
+                            repaint: false,
+                            clicked: None,
+                        }
+                    };
                     if result.repaint && window.scheduler.invalidate() {
                         window.window.request_redraw();
                     }
-                    result
+                    (result, previous_focus)
                 };
-                self.dispatch(
-                    event_loop,
-                    Event::MouseButton {
-                        button: map_mouse_button(button),
-                        pressed,
-                    },
-                    false,
-                );
+                self.announce_focus_change(event_loop, previous_focus);
+                self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
                 if let Some(id) = pointer_result.clicked {
-                    let listener = self
-                        .window
-                        .as_ref()
-                        .and_then(|window| window.listeners.get(&id).cloned());
-                    if let Some(listener) = listener {
-                        let mut cx = EventContext::default();
-                        listener(&mut self.view, &mut cx);
-                        if cx.exit {
-                            event_loop.exit();
-                            return;
-                        }
-                        if cx.invalidate
-                            && let Some(window) = &mut self.window
-                        {
-                            window.view_dirty = true;
-                            if window.scheduler.invalidate() {
-                                window.window.request_redraw();
-                            }
-                        }
-                    }
-                    self.dispatch(event_loop, Event::Click(id), false);
+                    self.invoke_click(event_loop, id);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -537,6 +849,57 @@ impl<V: View> ApplicationHandler for Runtime<V> {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let key = map_key(&event.logical_key);
+                if event.state == ElementState::Pressed {
+                    let mut handled_by_input = self.handle_text_input_key(event_loop, &key);
+                    if !handled_by_input
+                        && !self
+                            .modifiers
+                            .intersects(Modifiers::CONTROL | Modifiers::SUPER)
+                        && let Some(text) = event.text.as_deref().filter(|text| {
+                            !text.is_empty()
+                                && text.chars().all(|character| !character.is_control())
+                        })
+                        && self
+                            .window
+                            .as_ref()
+                            .is_some_and(|window| window.ui.focused_text_input().is_some())
+                    {
+                        let result = self
+                            .window
+                            .as_mut()
+                            .map(|window| window.ui.input_replace(text))
+                            .unwrap_or_default();
+                        if !self.apply_input_result(event_loop, result, true)
+                            || !self.dispatch(event_loop, Event::TextInput(text.to_owned()), false)
+                        {
+                            return;
+                        }
+                        handled_by_input = true;
+                    }
+                    match &key {
+                        _ if handled_by_input => {}
+                        Key::Tab => {
+                            let previous_focus =
+                                self.window.as_ref().and_then(|window| window.ui.focused());
+                            if let Some(window) = &mut self.window {
+                                window
+                                    .ui
+                                    .focus_next(self.modifiers.contains(Modifiers::SHIFT));
+                            }
+                            self.announce_focus_change(event_loop, previous_focus);
+                        }
+                        Key::Enter | Key::Space if !event.repeat => {
+                            let target = self
+                                .window
+                                .as_ref()
+                                .and_then(|window| window.ui.activate_focused());
+                            if let Some(id) = target {
+                                self.invoke_click(event_loop, id);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 let event = if event.state == ElementState::Pressed {
                     Event::KeyDown {
                         key,
@@ -551,13 +914,125 @@ impl<V: View> ApplicationHandler for Runtime<V> {
                 };
                 self.dispatch(event_loop, event, false);
             }
-            WindowEvent::Ime(Ime::Commit(text)) => {
-                self.dispatch(event_loop, Event::TextInput(text), false);
+            WindowEvent::Ime(Ime::Preedit(text, cursor)) => {
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_preedit(&text, cursor))
+                    .unwrap_or_default();
+                self.apply_input_result(event_loop, result, false);
             }
+            WindowEvent::Ime(Ime::Commit(text)) => {
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_replace(&text))
+                    .unwrap_or_default();
+                if self.apply_input_result(event_loop, result, true) {
+                    self.dispatch(event_loop, Event::TextInput(text), false);
+                }
+            }
+            WindowEvent::Ime(Ime::Disabled) => {
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_preedit("", None))
+                    .unwrap_or_default();
+                self.apply_input_result(event_loop, result, false);
+            }
+            WindowEvent::Ime(Ime::Enabled) => {}
             WindowEvent::Focused(focused) => {
                 self.dispatch(event_loop, Event::Focused(focused), true);
             }
             _ => {}
+        }
+    }
+
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AccessibilityEvent) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        if window.window.id() != event.window_id {
+            return;
+        }
+
+        match event.window_event {
+            AccessibilityWindowEvent::InitialTreeRequested => {
+                let window_title = self.config.title.as_str();
+                let window = self.window.as_mut().expect("window checked above");
+                let RuntimeWindow {
+                    accessibility, ui, ..
+                } = window;
+                accessibility.update_if_active(|| ui.accessibility_update(window_title));
+            }
+            AccessibilityWindowEvent::ActionRequested(ActionRequest {
+                action,
+                target_node,
+                data,
+                ..
+            }) => {
+                let target = self
+                    .window
+                    .as_ref()
+                    .and_then(|window| window.ui.accessibility_element(target_node));
+                let Some(target) = target else {
+                    return;
+                };
+                let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
+                match action {
+                    Action::Focus => {
+                        if let Some(window) = &mut self.window {
+                            window.ui.focus(target);
+                        }
+                    }
+                    Action::Blur => {
+                        if let Some(window) = &mut self.window
+                            && window.ui.focused() == Some(target)
+                        {
+                            window.ui.blur();
+                        }
+                    }
+                    Action::Click => {
+                        if let Some(window) = &mut self.window {
+                            window.ui.focus(target);
+                        }
+                        self.announce_focus_change(event_loop, previous_focus);
+                        self.invoke_click(event_loop, target);
+                        return;
+                    }
+                    Action::SetValue => {
+                        let Some(ActionData::Value(value)) = data else {
+                            return;
+                        };
+                        let result = self
+                            .window
+                            .as_mut()
+                            .map(|window| window.ui.input_set_value(target, &value))
+                            .unwrap_or_default();
+                        self.apply_input_result(event_loop, result, true);
+                        return;
+                    }
+                    Action::SetTextSelection => {
+                        let Some(ActionData::SetTextSelection(selection)) = data else {
+                            return;
+                        };
+                        let result = self
+                            .window
+                            .as_mut()
+                            .map(|window| {
+                                window
+                                    .ui
+                                    .input_set_accessibility_selection(target, &selection)
+                            })
+                            .unwrap_or_default();
+                        self.apply_input_result(event_loop, result, false);
+                        return;
+                    }
+                    _ => return,
+                }
+                self.announce_focus_change(event_loop, previous_focus);
+            }
+            AccessibilityWindowEvent::AccessibilityDeactivated => {}
         }
     }
 
@@ -592,6 +1067,14 @@ fn map_modifiers(state: ModifiersState) -> Modifiers {
     result.set(Modifiers::ALT, state.alt_key());
     result.set(Modifiers::SUPER, state.super_key());
     result
+}
+
+fn primary_modifier(modifiers: Modifiers) -> bool {
+    if cfg!(target_os = "macos") {
+        modifiers.contains(Modifiers::SUPER)
+    } else {
+        modifiers.contains(Modifiers::CONTROL)
+    }
 }
 
 fn map_key(key: &WinitKey) -> Key {
@@ -634,5 +1117,16 @@ mod tests {
         assert!(mapped.contains(Modifiers::CONTROL));
         assert!(mapped.contains(Modifiers::SUPER));
         assert!(!mapped.contains(Modifiers::ALT));
+    }
+
+    #[test]
+    fn platform_primary_modifier_matches_native_shortcuts() {
+        if cfg!(target_os = "macos") {
+            assert!(primary_modifier(Modifiers::SUPER));
+            assert!(!primary_modifier(Modifiers::CONTROL));
+        } else {
+            assert!(primary_modifier(Modifiers::CONTROL));
+            assert!(!primary_modifier(Modifiers::SUPER));
+        }
     }
 }

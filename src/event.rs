@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::{Point, Size, Vector};
+use crate::{ElementId, FocusHandle, Point, Size, Vector};
 
 /// Framework-level input and window events, expressed in logical pixels.
 #[derive(Clone, Debug, PartialEq)]
@@ -26,6 +26,9 @@ pub enum Event {
     /// Committed text from the platform input method.
     TextInput(String),
     ModifiersChanged(Modifiers),
+    /// The focused element changed within the window.
+    FocusChanged(Option<ElementId>),
+    /// The native window itself gained or lost focus.
     Focused(bool),
     Resized {
         logical_size: Size,
@@ -78,6 +81,7 @@ bitflags! {
 pub struct EventContext {
     pub(crate) invalidate: bool,
     pub(crate) exit: bool,
+    pub(crate) focus: Option<Option<ElementId>>,
 }
 
 impl EventContext {
@@ -89,5 +93,15 @@ impl EventContext {
     /// Ask the application event loop to exit cleanly.
     pub fn exit(&mut self) {
         self.exit = true;
+    }
+
+    /// Move keyboard focus to a stable element handle.
+    pub fn focus(&mut self, handle: FocusHandle) {
+        self.focus = Some(Some(handle.id()));
+    }
+
+    /// Clear keyboard focus within the window.
+    pub fn blur(&mut self) {
+        self.focus = Some(None);
     }
 }

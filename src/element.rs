@@ -61,6 +61,42 @@ impl From<String> for ElementId {
     }
 }
 
+/// A stable handle for programmatic and keyboard focus.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct FocusHandle(ElementId);
+
+impl FocusHandle {
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self(id.into())
+    }
+
+    pub const fn id(self) -> ElementId {
+        self.0
+    }
+}
+
+impl From<FocusHandle> for ElementId {
+    fn from(value: FocusHandle) -> Self {
+        value.id()
+    }
+}
+
+/// Platform-neutral semantics used to build the native accessibility tree.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum AccessibilityRole {
+    #[default]
+    GenericContainer,
+    Label,
+    Button,
+    Link,
+    Image,
+    List,
+    ListItem,
+    Heading,
+    CheckBox,
+    TextInput,
+}
+
 /// Converts common values into an [`Element`] for `.child(...)` and `.children(...)`.
 pub trait IntoElement {
     fn into_element(self) -> Element;
@@ -100,6 +136,13 @@ impl IntoElement for Cow<'_, str> {
 pub(crate) enum ElementKind {
     Container,
     Text(Arc<str>),
+    TextInput(TextInputElement),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TextInputElement {
+    pub value: Arc<str>,
+    pub placeholder: Arc<str>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -115,6 +158,7 @@ pub(crate) struct VisualStyle {
 pub struct ElementStateStyle {
     pub(crate) background: Option<Color>,
     pub(crate) border_color: Option<Color>,
+    pub(crate) border_width: Option<f32>,
     pub(crate) text_color: Option<Color>,
 }
 
@@ -129,10 +173,26 @@ impl ElementStateStyle {
         self
     }
 
+    /// Paint an inside border without changing layout.
+    pub fn border(mut self, width: f32, color: Color) -> Self {
+        self.border_width = Some(width.max(0.0));
+        self.border_color = Some(color);
+        self
+    }
+
     pub fn text_color(mut self, color: Color) -> Self {
         self.text_color = Some(color);
         self
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct AccessibilityStyle {
+    pub role: AccessibilityRole,
+    pub label: Option<Arc<str>>,
+    pub value: Option<Arc<str>>,
+    pub disabled: bool,
+    pub selected: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -178,8 +238,14 @@ pub struct Element {
     pub(crate) resolved_typography: TextStyle,
     pub(crate) hover: ElementStateStyle,
     pub(crate) active: ElementStateStyle,
+    pub(crate) focus: ElementStateStyle,
     pub(crate) clickable: bool,
     pub(crate) cursor_pointer: bool,
+    pub(crate) cursor_text: bool,
+    pub(crate) focusable: bool,
+    pub(crate) tab_index: i16,
+    pub(crate) auto_focus: bool,
+    pub(crate) accessibility: AccessibilityStyle,
     pub(crate) children: Vec<Element>,
     pub(crate) taffy_node: Option<taffy::NodeId>,
 }
@@ -189,9 +255,24 @@ pub fn div() -> Element {
     Element::container()
 }
 
+/// Create a semantic, keyboard-focusable button container.
+pub fn button() -> Element {
+    div()
+        .accessibility_role(AccessibilityRole::Button)
+        .focusable()
+        .cursor_pointer()
+}
+
 /// Create a text element. Strings are owned through `Arc<str>` and cheap to retain.
 pub fn text(content: impl Into<Arc<str>>) -> Element {
     Element::text(content.into())
+}
+
+/// Create a controlled, single-line text input.
+///
+/// Attach a stable [`crate::InputListener`] with [`Element::on_input`].
+pub fn text_input(value: impl Into<Arc<str>>) -> Element {
+    Element::text_input(value.into())
 }
 
 impl Element {
@@ -207,8 +288,14 @@ impl Element {
             resolved_typography: default_text,
             hover: ElementStateStyle::default(),
             active: ElementStateStyle::default(),
+            focus: ElementStateStyle::default(),
             clickable: false,
             cursor_pointer: false,
+            cursor_text: false,
+            focusable: false,
+            tab_index: 0,
+            auto_focus: false,
+            accessibility: AccessibilityStyle::default(),
             children: Vec::new(),
             taffy_node: None,
         }
@@ -217,6 +304,29 @@ impl Element {
     fn text(content: Arc<str>) -> Self {
         let mut element = Self::container();
         element.kind = ElementKind::Text(content);
+        element.accessibility.role = AccessibilityRole::Label;
+        element
+    }
+
+    fn text_input(value: Arc<str>) -> Self {
+        let mut element = Self::container();
+        element.kind = ElementKind::TextInput(TextInputElement {
+            value,
+            placeholder: Arc::from(""),
+        });
+        element.layout.size = TaffySize {
+            width: Dimension::length(240.0),
+            height: Dimension::length(40.0),
+        };
+        element.visual.background = Some(Color::rgb8(28, 30, 35));
+        element.visual.border_color = Some(Color::rgb8(70, 74, 85));
+        element.visual.border_width = 1.0;
+        element.visual.radius = 8.0;
+        element.focus = ElementStateStyle::default().border(2.0, Color::rgb8(94, 234, 212));
+        element.focusable = true;
+        element.cursor_text = true;
+        element.accessibility.role = AccessibilityRole::TextInput;
+        element.typography.wrap = Some(TextWrap::None);
         element
     }
 
@@ -405,12 +515,16 @@ impl Element {
         self.padding(value, value, value, value)
     }
 
-    pub fn px(self, value: f32) -> Self {
-        self.padding_axis(0.0, value)
+    pub fn px(mut self, value: f32) -> Self {
+        self.layout.padding.left = LengthPercentage::length(value);
+        self.layout.padding.right = LengthPercentage::length(value);
+        self
     }
 
-    pub fn py(self, value: f32) -> Self {
-        self.padding_axis(value, 0.0)
+    pub fn py(mut self, value: f32) -> Self {
+        self.layout.padding.top = LengthPercentage::length(value);
+        self.layout.padding.bottom = LengthPercentage::length(value);
+        self
     }
 
     pub fn p_1(self) -> Self {
@@ -633,10 +747,79 @@ impl Element {
         self
     }
 
+    /// Paint-only styling while this element owns keyboard focus.
+    pub fn focus(mut self, style: impl FnOnce(ElementStateStyle) -> ElementStateStyle) -> Self {
+        self.focus = style(ElementStateStyle::default());
+        self
+    }
+
+    pub fn accessibility_role(mut self, role: AccessibilityRole) -> Self {
+        self.accessibility.role = role;
+        self
+    }
+
+    pub fn accessibility_label(mut self, label: impl Into<Arc<str>>) -> Self {
+        self.accessibility.label = Some(label.into());
+        self
+    }
+
+    pub fn accessibility_value(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.accessibility.value = Some(value.into());
+        self
+    }
+
+    /// Set placeholder text for a [`text_input`] element.
+    pub fn placeholder(mut self, placeholder: impl Into<Arc<str>>) -> Self {
+        if let ElementKind::TextInput(input) = &mut self.kind {
+            input.placeholder = placeholder.into();
+        }
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.accessibility.disabled = disabled;
+        self
+    }
+
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.accessibility.selected = selected;
+        self
+    }
+
+    /// Include this element in the window's focus path and Tab traversal.
+    pub fn focusable(mut self) -> Self {
+        self.focusable = true;
+        self
+    }
+
+    /// Assign a stable focus identity to this element.
+    pub fn track_focus(mut self, handle: FocusHandle) -> Self {
+        self.explicit_id = Some(handle.id());
+        self.focusable = true;
+        self
+    }
+
+    /// Set keyboard traversal order. Negative values remove the element from Tab traversal.
+    pub fn tab_index(mut self, index: i16) -> Self {
+        self.tab_index = index;
+        self
+    }
+
+    /// Focus this element the first time it appears if the window has no focused element.
+    pub fn auto_focus(mut self) -> Self {
+        self.auto_focus = true;
+        self.focusable = true;
+        self
+    }
+
     /// Include this node in click hit testing. Clicks arrive as [`crate::Event::Click`].
     pub fn clickable(mut self) -> Self {
         self.clickable = true;
         self.cursor_pointer = true;
+        self.focusable = true;
+        if self.accessibility.role == AccessibilityRole::GenericContainer {
+            self.accessibility.role = AccessibilityRole::Button;
+        }
         self
     }
 
@@ -645,6 +828,19 @@ impl Element {
         self.explicit_id = Some(listener.id());
         self.clickable = true;
         self.cursor_pointer = true;
+        self.focusable = true;
+        if self.accessibility.role == AccessibilityRole::GenericContainer {
+            self.accessibility.role = AccessibilityRole::Button;
+        }
+        self
+    }
+
+    /// Attach a controlled-value listener registered by [`crate::ViewContext::input_listener`].
+    pub fn on_input<V>(mut self, listener: crate::InputListener<V>) -> Self {
+        self.explicit_id = Some(listener.id());
+        self.focusable = true;
+        self.cursor_text = true;
+        self.accessibility.role = AccessibilityRole::TextInput;
         self
     }
 
@@ -653,8 +849,15 @@ impl Element {
         self
     }
 
+    pub fn cursor_text(mut self) -> Self {
+        self.cursor_text = true;
+        self
+    }
+
     pub(crate) fn has_stateful_paint(&self) -> bool {
-        self.hover != ElementStateStyle::default() || self.active != ElementStateStyle::default()
+        self.hover != ElementStateStyle::default()
+            || self.active != ElementStateStyle::default()
+            || self.focus != ElementStateStyle::default()
     }
 }
 
@@ -680,6 +883,15 @@ mod tests {
     }
 
     #[test]
+    fn axis_padding_utilities_compose_like_tailwind() {
+        let element = div().px_4().py_2();
+        assert_eq!(element.layout.padding.left, LengthPercentage::length(16.0));
+        assert_eq!(element.layout.padding.right, LengthPercentage::length(16.0));
+        assert_eq!(element.layout.padding.top, LengthPercentage::length(8.0));
+        assert_eq!(element.layout.padding.bottom, LengthPercentage::length(8.0));
+    }
+
+    #[test]
     fn string_children_become_text_nodes() {
         let element = div().child("hello").child(String::from("world"));
         assert_eq!(element.children.len(), 2);
@@ -692,5 +904,34 @@ mod tests {
     fn named_ids_are_stable() {
         assert_eq!(ElementId::named("save"), ElementId::named("save"));
         assert_ne!(ElementId::named("save"), ElementId::named("cancel"));
+    }
+
+    #[test]
+    fn button_is_semantic_and_focusable() {
+        let element = button().focus(|style| style.border(2.0, Color::WHITE));
+        assert_eq!(element.accessibility.role, AccessibilityRole::Button);
+        assert!(element.focusable);
+        assert_eq!(element.focus.border_width, Some(2.0));
+    }
+
+    #[test]
+    fn click_handlers_upgrade_plain_divs_to_buttons() {
+        let element = div().clickable();
+        assert_eq!(element.accessibility.role, AccessibilityRole::Button);
+        assert!(element.focusable);
+    }
+
+    #[test]
+    fn text_inputs_have_native_semantics_and_single_line_defaults() {
+        let element = text_input("hello").placeholder("Type here");
+        assert_eq!(element.accessibility.role, AccessibilityRole::TextInput);
+        assert!(element.focusable);
+        assert!(element.cursor_text);
+        assert_eq!(element.typography.wrap, Some(TextWrap::None));
+        assert!(matches!(
+            &element.kind,
+            ElementKind::TextInput(input)
+                if input.value.as_ref() == "hello" && input.placeholder.as_ref() == "Type here"
+        ));
     }
 }

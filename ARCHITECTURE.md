@@ -3,10 +3,10 @@
 QuickGUI separates application declaration, retained interaction state, scene preparation, and GPU submission. That separation keeps ergonomic view code away from renderer details without rebuilding every layer for every pointer or wheel event.
 
 ```text
-Winit events
+Winit + AccessKit events
     │
     ├─ coalesced wheel input ───────────────┐
-    ├─ retained hover/press/scroll state ───┤
+    ├─ retained hover/focus/input state ────┤
     └─ app mutation → explicit invalidate ──┤
                                             ▼
                                   retained Element tree
@@ -38,8 +38,10 @@ The application owns its `View`. Each render returns a declarative `Element` tre
 An element ID owns:
 
 - hover and pressed paint state;
-- click listener lookup;
+- focus identity and keyboard traversal position;
+- click or controlled-input listener lookup;
 - scroll-container offset;
+- text-input caret, selection, composition, and horizontal offset;
 - text-layout and glyph-cache identity.
 
 `ViewContext::listener` stores callbacks in a registry parameterized by the concrete view type. `Element::on_click` only carries the stable ID, keeping the element tree non-generic and compact while callbacks can still mutate `&mut Self` without `Rc<RefCell<_>>` application state.
@@ -57,7 +59,7 @@ The current renderer has two specialized pipelines:
 1. Quads use six shader-generated vertices and an instance containing logical bounds, fill, inside border, radius, and clip. Rounded-corner antialiasing is analytic in WGSL. All visible quads are submitted in one draw call.
 2. Text uses Cosmic Text for Unicode shaping/fallback and Glyphon for Swash rasterization plus atlas rendering. Stable `TextId`s prevent reshaping unless content, width, metrics, family, weight, wrap mode, or display scale changes.
 
-Colors are stored in linear-light space. Eight-bit constructors decode sRGB on the CPU, and the sRGB surface performs the output transfer. Quad output is premultiplied before using premultiplied-alpha blending.
+Colors are stored in linear-light space. Eight-bit constructors decode sRGB on the CPU, and the sRGB surface performs the output transfer. Quad output is premultiplied before using premultiplied-alpha blending. Text wraps at word boundaries by default; intrinsic measurements reserve one physical pixel before a max-content width is fed back as a wrap constraint, preventing rounding-only reflow between layout and paint.
 
 Quad instance uploads rotate across three GPU buffers. Capacity grows geometrically. Text layouts are age-evicted every frame and have a hard cap of 256 retained areas; Glyphon's atlas is trimmed after presentation. The deliberately small layout cache keeps long, disjoint scrolling from retaining whole off-screen text buffers while still covering several nearby viewports.
 
@@ -77,6 +79,12 @@ Changes should preserve these invariants:
 
 CPU frame time, primitive counts, text cache hits, and draw-call counts are exposed through `FrameMetrics`. These are application-side timings through queue submission, not GPU timestamps or end-to-end display latency.
 
+## Native input and accessibility
+
+The retained tree owns semantic focus and exposes it through AccessKit before the macOS window becomes visible. Pointer focus, Tab/Shift-Tab traversal, Space/Return button activation, programmatic focus handles, and accessibility actions all update the same focus owner.
+
+Single-line input keeps UTF-8 byte ranges internally but moves and deletes at Unicode grapheme boundaries. Cosmic Text provides visual caret hit testing and bidirectional selection spans. Composing text is retained separately from the controlled value, Winit preedit cursor offsets remain byte-indexed, and the native IME candidate rectangle follows the painted caret. AccessKit receives a stable `TextRun` child, grapheme character lengths, editable value, and native text-selection state. Clipboard objects are created lazily so applications that never copy or paste pay no startup cost.
+
 ## Current boundaries
 
-This milestone establishes the performance architecture and view ergonomics, but a complete platform toolkit also needs accessibility, editable text, clipboard, semantic focus, images, ordered compositing/layers, menus, and broader platform acceptance. Those features should extend the retained tree and narrow renderer rather than bypass its scheduling and cache invariants.
+This milestone establishes the performance architecture, semantic focus/accessibility, and a production-oriented single-line editing path. A complete platform toolkit still needs rich and multiline editing, images, ordered compositing/layers, menus, focus scopes/keymaps, multi-window ownership, and broader platform acceptance. Those features should extend the retained tree and narrow renderer rather than bypass its scheduling and cache invariants.

@@ -1,6 +1,6 @@
 # QuickGUI
 
-QuickGUI is a damage-driven, GPU-accelerated GUI foundation for Rust desktop apps. It combines a GPUI-style fluent view API, Taffy flexbox layout, a purpose-built WGPU renderer, cached Unicode text shaping, and bounded virtual scrolling.
+QuickGUI is a damage-driven, GPU-accelerated GUI foundation for Rust desktop apps. It combines a GPUI-style fluent view API, Taffy flexbox layout, a purpose-built WGPU renderer, cached Unicode text shaping, native accessibility, and bounded virtual scrolling.
 
 The hot path is intentionally small:
 
@@ -16,7 +16,7 @@ The current milestone is a runnable framework core, not a claim that every produ
 
 ## View API
 
-Views use regular Rust with JSX-like composition, Tailwind-style spacing, inherited typography, flexbox, stable identities, and view-local listeners:
+Views use regular Rust with JSX-like composition, composable Tailwind-style spacing, inherited typography, flexbox, stable identities, and view-local listeners:
 
 ```rust
 use quickgui::{
@@ -70,6 +70,21 @@ fn main() -> Result<(), quickgui::AppError> {
 
 `Scene` and `Quad` remain public as the lower-level escape hatch for specialized widgets and future custom paint elements. Ordinary application views should use `Element` builders.
 
+Ordinary text wraps at word boundaries by default and contributes its wrapped height to flex layout; use `.no_wrap()` where a single line is intentional. Controlled native text input uses the same listener pattern:
+
+```rust
+let edit_name = cx.input_listener("name", |this, value, cx| {
+    this.name = value.into();
+    cx.invalidate();
+});
+
+text_input(self.name.clone())
+    .on_input(edit_name)
+    .placeholder("Type a name…")
+    .accessibility_label("Name")
+    .w_full()
+```
+
 ## Run the stress test
 
 ```console
@@ -91,19 +106,20 @@ cargo clippy --all-targets --all-features -- -D warnings
 Implemented now:
 
 - macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
-- sleeping single-window runtime with resize, DPI, pointer, wheel, keyboard, IME commit, and focus events;
+- sleeping single-window runtime with resize, DPI, pointer, wheel, keyboard, full IME preedit/commit routing, and focus events;
 - declarative elements, Taffy flexbox, absolute positioning, clipping, inherited text styles, and Tailwind-like helpers;
-- keyed hover/active/click state and type-safe `ViewContext` listeners;
+- keyed hover/active/focus/click state, Tab traversal, keyboard button activation, and type-safe `ViewContext` listeners;
+- controlled single-line text input with grapheme-safe movement/deletion, mouse caret and drag selection, horizontal scrolling, and macOS copy/cut/paste shortcuts;
+- AccessKit trees with semantic roles, labels, disabled/selected state, native focus/click actions, and editable value/selection actions;
 - linear-light colors, premultiplied blending, analytic rounded rectangles, borders, and HiDPI rendering;
 - Cosmic Text/Glyphon shaping, fallback, rasterization, atlas reuse, and bounded text-layout retention;
 - fixed-height virtualization, clamped scrolling, scrollbar math, and performance telemetry.
 
 Still required before calling it a production-complete general GUI framework:
 
-- accessibility trees and semantic controls;
-- editable text widgets, selection, clipboard, and full IME composition;
+- rich and multiline text editing, undo/redo, word navigation, and input validation hooks;
 - image/SVG/path primitives, shadows, and ordered overlay layers;
-- focus traversal, menus, popovers, drag/drop, and multi-window APIs;
+- focus scopes, configurable keymaps, menus, popovers, drag/drop, and multi-window APIs;
 - Windows/Linux runtime and visual CI, plus a portable benchmark matrix.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the renderer and ownership model.
