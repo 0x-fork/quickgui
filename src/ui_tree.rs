@@ -13,10 +13,13 @@ use taffy::{
 use thiserror::Error;
 
 use crate::{
-    AccessibilityRole, Color, Element, ElementId, Insets, Point, Quad, Rect, Scene, Size, TextId,
-    TextRun, TextStyle, Vector, element::ElementKind, renderer::GpuRenderer,
-    text_input::TextInputState,
+    AccessibilityRole, AnchorPlacement, Color, Element, ElementId, Insets, Point, Quad, Rect,
+    Scene, Size, TextId, TextRun, TextStyle, Vector, element::ElementKind, renderer::GpuRenderer,
+    scene::PaintLayerKey, text_input::TextInputState,
 };
+
+#[cfg(target_os = "macos")]
+use crate::{ScenePlane, native_view::NativeViewPlacement};
 
 const ACCESSIBILITY_ROOT_ID: AccessibilityNodeId = AccessibilityNodeId(u64::MAX);
 
@@ -28,6 +31,14 @@ pub(crate) enum UiError {
     DuplicateId(ElementId),
     #[error("element id {0:?} is reserved by the accessibility root")]
     ReservedId(ElementId),
+    #[error("anchored element {element:?} refers to missing element {anchor:?}")]
+    MissingAnchor {
+        element: ElementId,
+        anchor: ElementId,
+    },
+    #[cfg(target_os = "macos")]
+    #[error("native AppKit view {0:?} must stay in the base composition plane")]
+    NativeViewInOverlay(ElementId),
 }
 
 #[derive(Clone)]
@@ -47,6 +58,8 @@ struct HitRegion {
     cursor_pointer: bool,
     cursor_text: bool,
     stateful: bool,
+    blocks_pointer: bool,
+    order: PaintOrder,
 }
 
 impl HitRegion {
@@ -60,6 +73,34 @@ struct ScrollRegion {
     id: ElementId,
     bounds: Rect,
     max_offset: Vector,
+    order: PaintOrder,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PaintOrder {
+    layer: PaintLayerKey,
+    source: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DismissRegion {
+    id: ElementId,
+    bounds: Rect,
+    clip: Rect,
+    restore_focus: Option<ElementId>,
+    order: PaintOrder,
+}
+
+impl DismissRegion {
+    fn contains(self, point: Point) -> bool {
+        self.bounds.contains(point) && self.clip.contains(point)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DismissRequest {
+    pub id: ElementId,
+    pub restore_focus: Option<ElementId>,
 }
 
 #[derive(Clone)]
@@ -91,8 +132,13 @@ pub(crate) struct UiTree {
     root_node: Option<NodeId>,
     seen_ids: HashSet<ElementId>,
     scroll_offsets: HashMap<ElementId, Vector>,
+    natural_bounds: HashMap<ElementId, Rect>,
+    element_bounds: HashMap<ElementId, Rect>,
     hit_regions: Vec<HitRegion>,
     scroll_regions: Vec<ScrollRegion>,
+    dismiss_regions: Vec<DismissRegion>,
+    #[cfg(target_os = "macos")]
+    native_views: Vec<NativeViewPlacement>,
     text_input_regions: Vec<TextInputRegion>,
     text_inputs: HashMap<ElementId, TextInputState>,
     accessibility_text_ids: HashMap<ElementId, AccessibilityNodeId>,
@@ -117,8 +163,13 @@ impl UiTree {
             root_node: None,
             seen_ids: HashSet::with_capacity(256),
             scroll_offsets: HashMap::new(),
+            natural_bounds: HashMap::with_capacity(256),
+            element_bounds: HashMap::with_capacity(256),
             hit_regions: Vec::with_capacity(128),
             scroll_regions: Vec::with_capacity(8),
+            dismiss_regions: Vec::with_capacity(4),
+            #[cfg(target_os = "macos")]
+            native_views: Vec::with_capacity(4),
             text_input_regions: Vec::with_capacity(8),
             text_inputs: HashMap::with_capacity(8),
             accessibility_text_ids: HashMap::with_capacity(8),
@@ -246,16 +297,31 @@ impl UiTree {
     }
 
     pub fn paint(&mut self, scene: &mut Scene, renderer: &mut GpuRenderer) -> Result<(), UiError> {
+        self.natural_bounds.clear();
+        self.element_bounds.clear();
         self.hit_regions.clear();
         self.scroll_regions.clear();
+        self.dismiss_regions.clear();
+        #[cfg(target_os = "macos")]
+        self.native_views.clear();
         self.text_input_regions.clear();
         let Some(root) = &self.root else {
             return Ok(());
         };
         let viewport = Rect::from_size(self.viewport);
+        collect_layout_bounds(
+            root,
+            &self.taffy,
+            &mut self.scroll_offsets,
+            &mut self.natural_bounds,
+            Point::ZERO,
+        )?;
+        let mut source_order = 0;
         paint_element(
             root,
             &self.taffy,
+            &self.natural_bounds,
+            &mut self.element_bounds,
             &mut self.scroll_offsets,
             &self.hovered,
             self.pressed,
@@ -266,20 +332,36 @@ impl UiTree {
             &mut self.text_inputs,
             &mut self.hit_regions,
             &mut self.scroll_regions,
+            &mut self.dismiss_regions,
+            #[cfg(target_os = "macos")]
+            &mut self.native_views,
             &mut self.text_input_regions,
             Point::ZERO,
             viewport,
+            viewport,
+            PaintLayerKey::default(),
+            &mut source_order,
             None,
         )?;
+        self.hit_regions.sort_by_key(|region| region.order);
+        self.scroll_regions.sort_by_key(|region| region.order);
+        self.dismiss_regions.sort_by_key(|region| region.order);
+        #[cfg(target_os = "macos")]
+        self.native_views
+            .sort_by_key(|region| (region.z_index, region.source_order));
+        scene.finish();
         Ok(())
     }
 
     /// Returns true when paint-only hover state changed.
     pub fn pointer_moved(&mut self, point: Point, renderer: &mut GpuRenderer) -> bool {
         let mut next = HashSet::with_capacity(self.hovered.capacity().max(4));
-        for region in &self.hit_regions {
+        for region in self.hit_regions.iter().rev() {
             if region.stateful && region.contains(point) {
                 next.insert(region.id);
+            }
+            if region.blocks_pointer && region.contains(point) {
+                break;
             }
         }
         let hover_changed = next != self.hovered;
@@ -323,13 +405,23 @@ impl UiTree {
         extend_selection: bool,
         renderer: &mut GpuRenderer,
     ) -> PointerResult {
-        let region = point.and_then(|point| {
-            self.hit_regions
-                .iter()
-                .rev()
-                .find(|region| (region.clickable || region.focusable) && region.contains(point))
-                .copied()
-        });
+        if pressed
+            && let Some(dismiss) = self.dismiss_regions.last().copied()
+            && point.is_none_or(|point| !dismiss.contains(point))
+        {
+            self.selecting_input = None;
+            let repaint = self.pressed.take().is_some();
+            return PointerResult {
+                repaint,
+                clicked: None,
+                dismissed: Some(DismissRequest {
+                    id: dismiss.id,
+                    restore_focus: dismiss.restore_focus,
+                }),
+            };
+        }
+
+        let region = point.and_then(|point| self.interactive_region_at(point));
         let target = region
             .filter(|region| region.clickable)
             .map(|region| region.id);
@@ -360,6 +452,7 @@ impl UiTree {
             PointerResult {
                 repaint,
                 clicked: None,
+                dismissed: None,
             }
         } else {
             self.selecting_input = None;
@@ -367,7 +460,11 @@ impl UiTree {
                 .pressed
                 .filter(|pressed_id| Some(*pressed_id) == target);
             let repaint = self.pressed.take().is_some();
-            PointerResult { repaint, clicked }
+            PointerResult {
+                repaint,
+                clicked,
+                dismissed: None,
+            }
         }
     }
 
@@ -376,8 +473,17 @@ impl UiTree {
         let Some(point) = point else {
             return false;
         };
+        let blocker = self
+            .hit_regions
+            .iter()
+            .rev()
+            .find(|region| region.blocks_pointer && region.contains(point))
+            .map(|region| region.order);
         for region in self.scroll_regions.iter().rev() {
             if !region.bounds.contains(point) {
+                continue;
+            }
+            if blocker.is_some_and(|blocker| region.order < blocker) {
                 continue;
             }
             let offset = self.scroll_offsets.entry(region.id).or_default();
@@ -394,17 +500,60 @@ impl UiTree {
     }
 
     pub fn wants_pointer_cursor(&self, point: Point) -> bool {
-        self.hit_regions
-            .iter()
-            .rev()
-            .any(|region| region.cursor_pointer && region.contains(point))
+        self.cursor_at(point, |region| region.cursor_pointer)
     }
 
     pub fn wants_text_cursor(&self, point: Point) -> bool {
-        self.hit_regions
-            .iter()
-            .rev()
-            .any(|region| region.cursor_text && region.contains(point))
+        self.cursor_at(point, |region| region.cursor_text)
+    }
+
+    pub fn dismiss_topmost(&self) -> Option<DismissRequest> {
+        self.dismiss_regions.last().map(|region| DismissRequest {
+            id: region.id,
+            restore_focus: region.restore_focus,
+        })
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn native_views(&self) -> &[NativeViewPlacement] {
+        &self.native_views
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn overlay_input_active(&self) -> bool {
+        self.hit_regions.iter().any(|region| {
+            region.order.layer.plane == crate::ScenePlane::Overlay && region.blocks_pointer
+        })
+    }
+
+    fn interactive_region_at(&self, point: Point) -> Option<HitRegion> {
+        for region in self.hit_regions.iter().rev() {
+            if !region.contains(point) {
+                continue;
+            }
+            if region.clickable || region.focusable {
+                return Some(*region);
+            }
+            if region.blocks_pointer {
+                return None;
+            }
+        }
+        None
+    }
+
+    fn cursor_at(&self, point: Point, cursor: impl Fn(HitRegion) -> bool) -> bool {
+        for region in self.hit_regions.iter().rev() {
+            if !region.contains(point) {
+                continue;
+            }
+            if cursor(*region) {
+                return true;
+            }
+            if region.blocks_pointer {
+                return false;
+            }
+        }
+        false
     }
 
     pub fn focused_text_input(&self) -> Option<ElementId> {
@@ -585,12 +734,10 @@ impl UiTree {
             root.set_children([accessibility_id(element.runtime_id)]);
             build_accessibility_nodes(
                 element,
-                &self.taffy,
-                &self.scroll_offsets,
+                &self.element_bounds,
                 &self.text_inputs,
                 &self.accessibility_text_ids,
                 &mut nodes,
-                Point::ZERO,
             );
         }
         nodes.insert(0, (ACCESSIBILITY_ROOT_ID, root));
@@ -642,6 +789,7 @@ impl Default for UiTree {
 pub(crate) struct PointerResult {
     pub repaint: bool,
     pub clicked: Option<ElementId>,
+    pub dismissed: Option<DismissRequest>,
 }
 
 fn text_input_index_at(
@@ -722,15 +870,198 @@ fn build_layout_node(
                 },
             )?
         }
+        #[cfg(target_os = "macos")]
+        ElementKind::NativeView(_) => taffy.new_leaf(element.layout.clone())?,
     };
     element.taffy_node = Some(node);
     Ok(node)
+}
+
+fn collect_layout_bounds(
+    element: &Element,
+    taffy: &TaffyTree<MeasureContext>,
+    scroll_offsets: &mut HashMap<ElementId, Vector>,
+    bounds: &mut HashMap<ElementId, Rect>,
+    parent_origin: Point,
+) -> Result<(), UiError> {
+    let node = element
+        .taffy_node
+        .expect("layout nodes are assigned before bounds collection");
+    let layout = taffy.layout(node)?;
+    let element_bounds = Rect::new(
+        parent_origin.x + layout.location.x,
+        parent_origin.y + layout.location.y,
+        layout.size.width,
+        layout.size.height,
+    );
+    bounds.insert(element.runtime_id, element_bounds);
+
+    let is_scrollable = element.layout.overflow.x == Overflow::Scroll
+        || element.layout.overflow.y == Overflow::Scroll;
+    let mut scroll = Vector::ZERO;
+    if is_scrollable {
+        let max_offset = Vector::new(
+            (layout.content_size.width - layout.size.width).max(0.0),
+            (layout.content_size.height - layout.size.height).max(0.0),
+        );
+        let offset = scroll_offsets.entry(element.runtime_id).or_default();
+        offset.x = offset.x.clamp(0.0, max_offset.x);
+        offset.y = offset.y.clamp(0.0, max_offset.y);
+        scroll = *offset;
+    }
+
+    let child_origin = Point::new(element_bounds.x - scroll.x, element_bounds.y - scroll.y);
+    for child in &element.children {
+        collect_layout_bounds(child, taffy, scroll_offsets, bounds, child_origin)?;
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AnchorSide {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AnchorAlign {
+    Start,
+    Center,
+    End,
+}
+
+fn place_anchored(
+    anchor: Rect,
+    size: Size,
+    viewport: Rect,
+    placement: AnchorPlacement,
+    gap: f32,
+    margin: f32,
+) -> Rect {
+    let (preferred_side, preferred_align) = anchor_placement_parts(placement);
+    let inner = viewport.inset(Insets::all(margin.max(0.0)));
+    let gap = gap.max(0.0);
+    let preferred_space = available_anchor_space(anchor, inner, preferred_side, gap);
+    let opposite_side = opposite_anchor_side(preferred_side);
+    let opposite_space = available_anchor_space(anchor, inner, opposite_side, gap);
+    let primary_size = match preferred_side {
+        AnchorSide::Top | AnchorSide::Bottom => size.height,
+        AnchorSide::Left | AnchorSide::Right => size.width,
+    };
+    let side = if primary_size > preferred_space && opposite_space > preferred_space {
+        opposite_side
+    } else {
+        preferred_side
+    };
+
+    let alignments = match preferred_align {
+        AnchorAlign::Start => [AnchorAlign::Start, AnchorAlign::End, AnchorAlign::Center],
+        AnchorAlign::Center => [AnchorAlign::Center, AnchorAlign::Start, AnchorAlign::End],
+        AnchorAlign::End => [AnchorAlign::End, AnchorAlign::Start, AnchorAlign::Center],
+    };
+    let align = alignments
+        .into_iter()
+        .min_by(|left, right| {
+            let left = anchored_origin(anchor, size, side, *left, gap);
+            let right = anchored_origin(anchor, size, side, *right, gap);
+            cross_axis_overflow(left, size, inner, side)
+                .total_cmp(&cross_axis_overflow(right, size, inner, side))
+        })
+        .unwrap_or(preferred_align);
+    let mut origin = anchored_origin(anchor, size, side, align, gap);
+    origin.x = clamp_surface_axis(origin.x, size.width, inner.x, inner.right());
+    origin.y = clamp_surface_axis(origin.y, size.height, inner.y, inner.bottom());
+    Rect::new(origin.x, origin.y, size.width, size.height)
+}
+
+fn anchor_placement_parts(placement: AnchorPlacement) -> (AnchorSide, AnchorAlign) {
+    match placement {
+        AnchorPlacement::TopStart => (AnchorSide::Top, AnchorAlign::Start),
+        AnchorPlacement::Top => (AnchorSide::Top, AnchorAlign::Center),
+        AnchorPlacement::TopEnd => (AnchorSide::Top, AnchorAlign::End),
+        AnchorPlacement::BottomStart => (AnchorSide::Bottom, AnchorAlign::Start),
+        AnchorPlacement::Bottom => (AnchorSide::Bottom, AnchorAlign::Center),
+        AnchorPlacement::BottomEnd => (AnchorSide::Bottom, AnchorAlign::End),
+        AnchorPlacement::LeftStart => (AnchorSide::Left, AnchorAlign::Start),
+        AnchorPlacement::Left => (AnchorSide::Left, AnchorAlign::Center),
+        AnchorPlacement::LeftEnd => (AnchorSide::Left, AnchorAlign::End),
+        AnchorPlacement::RightStart => (AnchorSide::Right, AnchorAlign::Start),
+        AnchorPlacement::Right => (AnchorSide::Right, AnchorAlign::Center),
+        AnchorPlacement::RightEnd => (AnchorSide::Right, AnchorAlign::End),
+    }
+}
+
+fn opposite_anchor_side(side: AnchorSide) -> AnchorSide {
+    match side {
+        AnchorSide::Top => AnchorSide::Bottom,
+        AnchorSide::Bottom => AnchorSide::Top,
+        AnchorSide::Left => AnchorSide::Right,
+        AnchorSide::Right => AnchorSide::Left,
+    }
+}
+
+fn available_anchor_space(anchor: Rect, viewport: Rect, side: AnchorSide, gap: f32) -> f32 {
+    match side {
+        AnchorSide::Top => anchor.y - viewport.y - gap,
+        AnchorSide::Bottom => viewport.bottom() - anchor.bottom() - gap,
+        AnchorSide::Left => anchor.x - viewport.x - gap,
+        AnchorSide::Right => viewport.right() - anchor.right() - gap,
+    }
+    .max(0.0)
+}
+
+fn anchored_origin(
+    anchor: Rect,
+    size: Size,
+    side: AnchorSide,
+    align: AnchorAlign,
+    gap: f32,
+) -> Point {
+    let cross_x = match align {
+        AnchorAlign::Start => anchor.x,
+        AnchorAlign::Center => anchor.x + (anchor.width - size.width) * 0.5,
+        AnchorAlign::End => anchor.right() - size.width,
+    };
+    let cross_y = match align {
+        AnchorAlign::Start => anchor.y,
+        AnchorAlign::Center => anchor.y + (anchor.height - size.height) * 0.5,
+        AnchorAlign::End => anchor.bottom() - size.height,
+    };
+    match side {
+        AnchorSide::Top => Point::new(cross_x, anchor.y - gap - size.height),
+        AnchorSide::Bottom => Point::new(cross_x, anchor.bottom() + gap),
+        AnchorSide::Left => Point::new(anchor.x - gap - size.width, cross_y),
+        AnchorSide::Right => Point::new(anchor.right() + gap, cross_y),
+    }
+}
+
+fn cross_axis_overflow(origin: Point, size: Size, viewport: Rect, side: AnchorSide) -> f32 {
+    match side {
+        AnchorSide::Top | AnchorSide::Bottom => {
+            (viewport.x - origin.x).max(0.0) + (origin.x + size.width - viewport.right()).max(0.0)
+        }
+        AnchorSide::Left | AnchorSide::Right => {
+            (viewport.y - origin.y).max(0.0) + (origin.y + size.height - viewport.bottom()).max(0.0)
+        }
+    }
+}
+
+fn clamp_surface_axis(origin: f32, size: f32, minimum: f32, maximum: f32) -> f32 {
+    if size >= maximum - minimum {
+        minimum
+    } else {
+        origin.clamp(minimum, maximum - size)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
 fn paint_element(
     element: &Element,
     taffy: &TaffyTree<MeasureContext>,
+    natural_bounds: &HashMap<ElementId, Rect>,
+    element_bounds: &mut HashMap<ElementId, Rect>,
     scroll_offsets: &mut HashMap<ElementId, Vector>,
     hovered: &HashSet<ElementId>,
     pressed: Option<ElementId>,
@@ -741,21 +1072,67 @@ fn paint_element(
     text_inputs: &mut HashMap<ElementId, TextInputState>,
     hit_regions: &mut Vec<HitRegion>,
     scroll_regions: &mut Vec<ScrollRegion>,
+    dismiss_regions: &mut Vec<DismissRegion>,
+    #[cfg(target_os = "macos")] native_views: &mut Vec<NativeViewPlacement>,
     text_input_regions: &mut Vec<TextInputRegion>,
     parent_origin: Point,
     parent_clip: Rect,
+    viewport: Rect,
+    parent_layer: PaintLayerKey,
+    source_order: &mut usize,
     inherited_state_text_color: Option<Color>,
 ) -> Result<(), UiError> {
     let node = element
         .taffy_node
         .expect("layout nodes are assigned before paint");
     let layout = taffy.layout(node)?;
-    let bounds = Rect::new(
+    let natural = Rect::new(
         parent_origin.x + layout.location.x,
         parent_origin.y + layout.location.y,
         layout.size.width,
         layout.size.height,
     );
+    let bounds = if let Some(anchor) = element.anchor {
+        let anchor_bounds =
+            natural_bounds
+                .get(&anchor.target)
+                .copied()
+                .ok_or(UiError::MissingAnchor {
+                    element: element.runtime_id,
+                    anchor: anchor.target,
+                })?;
+        place_anchored(
+            anchor_bounds,
+            Size::new(layout.size.width, layout.size.height),
+            viewport,
+            anchor.placement,
+            anchor.gap,
+            anchor.viewport_margin,
+        )
+    } else {
+        natural
+    };
+    element_bounds.insert(element.runtime_id, bounds);
+
+    let plane = element.plane.unwrap_or(parent_layer.plane);
+    let z_index = if plane == parent_layer.plane {
+        parent_layer
+            .z_index
+            .saturating_add(element.z_index.unwrap_or(0))
+    } else {
+        element.z_index.unwrap_or(0)
+    };
+    let layer = PaintLayerKey { plane, z_index };
+    let order = PaintOrder {
+        layer,
+        source: *source_order,
+    };
+    *source_order = (*source_order).saturating_add(1);
+    let parent_clip = if element.portal {
+        viewport
+    } else {
+        parent_clip
+    };
 
     let interaction_state = if pressed == Some(element.runtime_id) {
         element.active
@@ -784,7 +1161,8 @@ fn paint_element(
         .or(focus_state.border_width)
         .unwrap_or(element.visual.border_width);
     if fill.a > 0.0 || (border.a > 0.0 && border_width > 0.0) {
-        scene.push_quad(
+        scene.push_quad_in(
+            layer,
             Quad::new(bounds, fill)
                 .radius(element.visual.radius)
                 .border(border_width, border)
@@ -794,7 +1172,9 @@ fn paint_element(
 
     if element.clickable
         || element.cursor_pointer
+        || element.cursor_text
         || element.focusable
+        || element.blocks_pointer
         || element.has_stateful_paint()
     {
         hit_regions.push(HitRegion {
@@ -806,6 +1186,17 @@ fn paint_element(
             cursor_pointer: element.cursor_pointer && !element.accessibility.disabled,
             cursor_text: element.cursor_text && !element.accessibility.disabled,
             stateful: element.has_stateful_paint(),
+            blocks_pointer: element.blocks_pointer,
+            order,
+        });
+    }
+    if element.dismissible {
+        dismiss_regions.push(DismissRegion {
+            id: element.runtime_id,
+            bounds,
+            clip: parent_clip,
+            restore_focus: element.restore_focus.map(|handle| handle.id()),
+            order,
         });
     }
 
@@ -819,7 +1210,8 @@ fn paint_element(
             if let Some(color) = state_text_color {
                 style.color = color;
             }
-            scene.push_text(
+            scene.push_text_in(
+                layer,
                 TextRun::new(
                     TextId::new(element.runtime_id.value()),
                     content.clone(),
@@ -888,7 +1280,8 @@ fn paint_element(
                         selection.start,
                         selection.end,
                     ) {
-                        scene.push_quad(
+                        scene.push_quad_in(
+                            layer,
                             Quad::new(
                                 Rect::new(
                                     text_viewport.x + x - scroll_x,
@@ -903,7 +1296,8 @@ fn paint_element(
                     }
                 }
                 if is_focused && selection.is_empty() {
-                    scene.push_quad(
+                    scene.push_quad_in(
+                        layer,
                         Quad::new(caret_bounds, Color::rgb8(226, 232, 240)).clip(text_clip),
                     );
                 }
@@ -920,7 +1314,8 @@ fn paint_element(
                         marked.start,
                         marked.end,
                     ) {
-                        scene.push_quad(
+                        scene.push_quad_in(
+                            layer,
                             Quad::new(
                                 Rect::new(
                                     text_viewport.x + x - scroll_x,
@@ -949,7 +1344,8 @@ fn paint_element(
                     text_viewport.width + scroll_x,
                     text_viewport.height,
                 );
-                scene.push_text(
+                scene.push_text_in(
+                    layer,
                     TextRun::new(text_id, display_text, text_bounds, display_style).clip(text_clip),
                 );
                 text_input_regions.push(TextInputRegion {
@@ -960,6 +1356,23 @@ fn paint_element(
                     style,
                     scroll_x,
                     caret_bounds,
+                });
+            }
+        }
+        #[cfg(target_os = "macos")]
+        ElementKind::NativeView(view) => {
+            if layer.plane != ScenePlane::Base {
+                return Err(UiError::NativeViewInOverlay(element.runtime_id));
+            }
+            if let Some(clip) = parent_clip.intersection(bounds) {
+                native_views.push(NativeViewPlacement {
+                    id: element.runtime_id,
+                    view: view.clone(),
+                    bounds,
+                    clip,
+                    corner_radius: element.visual.radius,
+                    z_index: layer.z_index,
+                    source_order: order.source,
                 });
             }
         }
@@ -993,6 +1406,7 @@ fn paint_element(
             id: element.runtime_id,
             bounds,
             max_offset,
+            order,
         });
     }
 
@@ -1001,6 +1415,8 @@ fn paint_element(
         paint_element(
             child,
             taffy,
+            natural_bounds,
+            element_bounds,
             scroll_offsets,
             hovered,
             pressed,
@@ -1011,9 +1427,15 @@ fn paint_element(
             text_inputs,
             hit_regions,
             scroll_regions,
+            dismiss_regions,
+            #[cfg(target_os = "macos")]
+            native_views,
             text_input_regions,
             child_origin,
             child_clip,
+            viewport,
+            layer,
+            source_order,
             state_text_color,
         )?;
     }
@@ -1027,7 +1449,8 @@ fn paint_element(
             let travel = layout.size.height - thumb_height;
             let max_scroll = (content_height - layout.size.height).max(1.0);
             let thumb_y = bounds.y + travel * (scroll.y / max_scroll);
-            scene.push_quad(
+            scene.push_quad_in(
+                layer,
                 Quad::new(
                     Rect::new(
                         bounds.right() - 6.0,
@@ -1085,25 +1508,14 @@ fn find_auto_focus(element: &Element) -> Option<ElementId> {
 
 fn build_accessibility_nodes(
     element: &Element,
-    taffy: &TaffyTree<MeasureContext>,
-    scroll_offsets: &HashMap<ElementId, Vector>,
+    element_bounds: &HashMap<ElementId, Rect>,
     text_inputs: &HashMap<ElementId, TextInputState>,
     accessibility_text_ids: &HashMap<ElementId, AccessibilityNodeId>,
     nodes: &mut Vec<(AccessibilityNodeId, AccessibilityNode)>,
-    parent_origin: Point,
 ) {
-    let Some(node_id) = element.taffy_node else {
+    let Some(bounds) = element_bounds.get(&element.runtime_id).copied() else {
         return;
     };
-    let Ok(layout) = taffy.layout(node_id) else {
-        return;
-    };
-    let bounds = Rect::new(
-        parent_origin.x + layout.location.x,
-        parent_origin.y + layout.location.y,
-        layout.size.width,
-        layout.size.height,
-    );
     let mut node = AccessibilityNode::new(accessibility_role(element.accessibility.role));
     node.set_bounds(accessibility_rect(bounds));
     let mut children = element
@@ -1165,20 +1577,13 @@ fn build_accessibility_nodes(
     }
     nodes.push((accessibility_id(element.runtime_id), node));
 
-    let scroll = scroll_offsets
-        .get(&element.runtime_id)
-        .copied()
-        .unwrap_or_default();
-    let child_origin = Point::new(bounds.x - scroll.x, bounds.y - scroll.y);
     for child in &element.children {
         build_accessibility_nodes(
             child,
-            taffy,
-            scroll_offsets,
+            element_bounds,
             text_inputs,
             accessibility_text_ids,
             nodes,
-            child_origin,
         );
     }
 }
@@ -1235,6 +1640,10 @@ fn accessibility_role(role: AccessibilityRole) -> Role {
         AccessibilityRole::Heading => Role::Heading,
         AccessibilityRole::CheckBox => Role::CheckBox,
         AccessibilityRole::TextInput => Role::TextInput,
+        AccessibilityRole::Dialog => Role::Dialog,
+        AccessibilityRole::Menu => Role::Menu,
+        AccessibilityRole::MenuItem => Role::MenuItem,
+        AccessibilityRole::Tooltip => Role::Tooltip,
     }
 }
 
@@ -1363,6 +1772,102 @@ mod tests {
             accessibility_label(&control).as_deref(),
             Some("Save changes")
         );
+    }
+
+    #[test]
+    fn anchored_placement_keeps_the_preferred_side_when_it_fits() {
+        let placed = place_anchored(
+            Rect::new(50.0, 50.0, 30.0, 20.0),
+            Size::new(80.0, 40.0),
+            Rect::new(0.0, 0.0, 240.0, 180.0),
+            AnchorPlacement::BottomStart,
+            8.0,
+            8.0,
+        );
+        assert_eq!(placed, Rect::new(50.0, 78.0, 80.0, 40.0));
+    }
+
+    #[test]
+    fn anchored_placement_flips_before_it_shifts() {
+        let placed = place_anchored(
+            Rect::new(70.0, 150.0, 30.0, 20.0),
+            Size::new(80.0, 48.0),
+            Rect::new(0.0, 0.0, 240.0, 180.0),
+            AnchorPlacement::BottomStart,
+            8.0,
+            8.0,
+        );
+        assert_eq!(placed, Rect::new(70.0, 94.0, 80.0, 48.0));
+    }
+
+    #[test]
+    fn anchored_placement_tries_opposite_alignment_near_an_edge() {
+        let placed = place_anchored(
+            Rect::new(210.0, 40.0, 20.0, 24.0),
+            Size::new(96.0, 40.0),
+            Rect::new(0.0, 0.0, 240.0, 180.0),
+            AnchorPlacement::BottomStart,
+            8.0,
+            8.0,
+        );
+        assert_eq!(placed, Rect::new(134.0, 72.0, 96.0, 40.0));
+    }
+
+    #[test]
+    fn oversized_anchored_surfaces_pin_to_the_viewport_margin() {
+        let placed = place_anchored(
+            Rect::new(80.0, 70.0, 20.0, 20.0),
+            Size::new(300.0, 220.0),
+            Rect::new(0.0, 0.0, 240.0, 180.0),
+            AnchorPlacement::Right,
+            8.0,
+            8.0,
+        );
+        assert_eq!(placed, Rect::new(8.0, 8.0, 300.0, 220.0));
+    }
+
+    #[test]
+    fn overlay_pointer_blockers_hide_lower_layer_cursors_and_targets() {
+        let mut tree = UiTree::new();
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        tree.hit_regions.push(HitRegion {
+            id: ElementId::new(1),
+            bounds,
+            clip: bounds,
+            clickable: true,
+            focusable: true,
+            cursor_pointer: true,
+            cursor_text: false,
+            stateful: false,
+            blocks_pointer: false,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source: 0,
+            },
+        });
+        tree.hit_regions.push(HitRegion {
+            id: ElementId::new(2),
+            bounds,
+            clip: bounds,
+            clickable: false,
+            focusable: false,
+            cursor_pointer: false,
+            cursor_text: false,
+            stateful: false,
+            blocks_pointer: true,
+            order: PaintOrder {
+                layer: PaintLayerKey {
+                    plane: crate::ScenePlane::Overlay,
+                    z_index: 0,
+                },
+                source: 1,
+            },
+        });
+
+        assert!(!tree.wants_pointer_cursor(Point::new(10.0, 10.0)));
+        assert!(tree.interactive_region_at(Point::new(10.0, 10.0)).is_none());
+        #[cfg(target_os = "macos")]
+        assert!(tree.overlay_input_active());
     }
 
     fn assign_runtime_ids(element: &mut Element) {

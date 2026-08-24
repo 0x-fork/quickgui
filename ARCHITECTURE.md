@@ -17,12 +17,15 @@ Winit + AccessKit events
                                             │ layout changes only
                                             ▼
                                       reusable Scene
+                                ordered plane/z layers
                               ┌─────────────┴─────────────┐
                               ▼                           ▼
                    instanced quad pipeline      cached Glyphon text
                               └─────────────┬─────────────┘
                                             ▼
-                                       WGPU surface
+                         ┌──────── base WGPU surface
+                         ├──────── macOS native NSViews (when mounted)
+                         └──────── transparent overlay WGPU surface
 ```
 
 ## Frame scheduling
@@ -56,12 +59,40 @@ Scrollable nodes retain offsets outside the declaration tree. Fixed-height `Virt
 
 The current renderer has two specialized pipelines:
 
-1. Quads use six shader-generated vertices and an instance containing logical bounds, fill, inside border, radius, and clip. Rounded-corner antialiasing is analytic in WGSL. All visible quads are submitted in one draw call.
+1. Quads use six shader-generated vertices and an instance containing logical bounds, fill, inside border, radius, and clip. Rounded-corner antialiasing is analytic in WGSL. All visible quads share one upload and each non-empty stacking layer is submitted in one draw call.
 2. Text uses Cosmic Text for Unicode shaping/fallback and Glyphon for Swash rasterization plus atlas rendering. Stable `TextId`s prevent reshaping unless content, width, metrics, family, weight, wrap mode, or display scale changes.
 
 Colors are stored in linear-light space. Eight-bit constructors decode sRGB on the CPU, and the sRGB surface performs the output transfer. Quad output is premultiplied before using premultiplied-alpha blending. Text wraps at word boundaries by default; intrinsic measurements reserve one physical pixel before a max-content width is fed back as a wrap constraint, preventing rounding-only reflow between layout and paint.
 
 Quad instance uploads rotate across three GPU buffers. Capacity grows geometrically. Text layouts are age-evicted every frame and have a hard cap of 256 retained areas; Glyphon's atlas is trimmed after presentation. The deliberately small layout cache keeps long, disjoint scrolling from retaining whole off-screen text buffers while still covering several nearby viewports.
+
+The scene groups primitives by `(plane, z_index)` and retains at most 16 inactive layer buffers.
+Quads and text are interleaved per layer, while every overlay layer is ordered after every base
+layer. Glyphon renderers are shared by text-bearing layers and capped at eight retained instances.
+An ordinary window still uses one WGPU surface. A macOS window with native children creates its
+transparent overlay surface only when overlay content or input first becomes active, then retains
+that swapchain for reuse. Recreating it on every close/open cycle is intentionally avoided because
+Core Animation may keep old IOSurface drawables alive beyond the Rust `Surface` lifetime.
+
+## Overlays and native composition
+
+Anchored overlays resolve after natural Flexbox layout so their target bounds are stable. The
+placement algorithm prefers the requested side, flips when the opposite side has more available
+space, tries alternate alignment, shifts to the viewport margin, and pins oversized surfaces to
+that margin. Portal overlays escape ancestor clips. Hit, scroll, hover, and dismissal regions use
+the same plane/z/source order as paint, preventing click-through to visually covered content.
+
+On macOS, each native child is retained by identity and mounted inside two flipped AppKit wrappers:
+an outer clipping view and an inner rounded-corner view. Bounds are expressed in QuickGUI logical
+points. The parent Winit/WGPU view remains the base surface and a transparent sibling is always
+ordered above native children. Its hit test is disabled while no overlay is interactive; while an
+overlay is open it forwards input to Winit so outside-click dismissal cannot activate the native
+control underneath.
+
+AppKit mouse-down monitoring only queues a redraw for the affected window. At that event boundary,
+QuickGUI compares the real first responder with the Winit view and clears stale semantic focus.
+Focusing a QuickGUI element makes the Winit view first responder again. This preserves an idle
+event loop while giving native controls normal keyboard and IME ownership.
 
 The surface uses guaranteed FIFO presentation and a two-frame latency hint. A latency of one is intentionally not the default because WGPU documents that it prevents CPU/GPU overlap and prioritizes latency over throughput.
 
@@ -87,4 +118,11 @@ Single-line input keeps UTF-8 byte ranges internally but moves and deletes at Un
 
 ## Current boundaries
 
-This milestone establishes the performance architecture, semantic focus/accessibility, and a production-oriented single-line editing path. A complete platform toolkit still needs rich and multiline editing, images, ordered compositing/layers, menus, focus scopes/keymaps, multi-window ownership, and broader platform acceptance. Those features should extend the retained tree and narrow renderer rather than bypass its scheduling and cache invariants.
+This milestone establishes the performance architecture, ordered overlays, macOS native child
+composition, semantic focus/accessibility, and a production-oriented single-line editing path. The
+AccessKit adapter currently owns the Winit view's virtual accessibility children, so embedded native
+AppKit accessibility subtrees are not yet merged into the same navigation tree. A complete platform
+toolkit also still needs rich and multiline editing, images, shadows, full menus, focus
+scopes/keymaps, drag/drop, multi-window ownership, and broader platform acceptance. Those features
+should extend the retained tree and narrow renderer rather than bypass its scheduling and cache
+invariants.

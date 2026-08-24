@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     mem,
+    ops::Range,
     sync::Arc,
 };
 
@@ -22,12 +23,23 @@ use wgpu::{
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
 use crate::{
-    FontFamily, PerformanceProfile, Rect, RenderStats, Scene, Size, TextId, TextStyle, TextWrap,
+    FontFamily, PerformanceProfile, Rect, RenderStats, Scene, ScenePlane, Size, TextId, TextStyle,
+    TextWrap,
+};
+
+#[cfg(target_os = "macos")]
+use std::{ffi::c_void, ptr::NonNull};
+#[cfg(target_os = "macos")]
+use wgpu::SurfaceTargetUnsafe;
+#[cfg(target_os = "macos")]
+use winit::raw_window_handle::{
+    AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 
 const INITIAL_QUAD_CAPACITY: usize = 256;
 const BUFFERED_FRAMES: usize = 3;
 const MAX_RETAINED_TEXT_AREAS: usize = 256;
+const MAX_RETAINED_TEXT_RENDERERS: usize = 8;
 const TEXT_RETENTION_FRAMES: u64 = 8;
 
 #[derive(Debug, Error)]
@@ -52,6 +64,8 @@ pub(crate) enum RendererError {
     RenderText(#[from] glyphon::RenderError),
     #[error("could not recreate a lost window surface: {0}")]
     RecreateSurface(String),
+    #[error("could not initialize native-view composition: {0}")]
+    NativeComposition(String),
 }
 
 pub(crate) enum RenderOutcome {
@@ -69,7 +83,22 @@ pub(crate) struct GpuRenderer {
     config: SurfaceConfiguration,
     quad: QuadRenderer,
     text: TextSystem,
+    #[cfg(target_os = "macos")]
+    overlay_surface: Option<OverlaySurface>,
+    #[cfg(target_os = "macos")]
+    overlay_view: Option<NonNull<c_void>>,
+    #[cfg(target_os = "macos")]
+    composition_active: bool,
+    #[cfg(target_os = "macos")]
+    overlay_active: bool,
     window: Arc<Window>,
+}
+
+#[cfg(target_os = "macos")]
+struct OverlaySurface {
+    surface: Surface<'static>,
+    config: SurfaceConfiguration,
+    view: NonNull<c_void>,
 }
 
 impl GpuRenderer {
@@ -125,6 +154,14 @@ impl GpuRenderer {
             config,
             quad,
             text,
+            #[cfg(target_os = "macos")]
+            overlay_surface: None,
+            #[cfg(target_os = "macos")]
+            overlay_view: None,
+            #[cfg(target_os = "macos")]
+            composition_active: false,
+            #[cfg(target_os = "macos")]
+            overlay_active: false,
             window,
         })
     }
@@ -134,7 +171,53 @@ impl GpuRenderer {
         self.config.height = height.max(1);
         if width > 0 && height > 0 {
             self.surface.configure(&self.device, &self.config);
+            #[cfg(target_os = "macos")]
+            if let Some(overlay) = &mut self.overlay_surface {
+                overlay.config.width = width;
+                overlay.config.height = height;
+                overlay.surface.configure(&self.device, &overlay.config);
+            }
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn enable_native_composition(
+        &mut self,
+        view: NonNull<c_void>,
+    ) -> Result<(), RendererError> {
+        if self.overlay_view != Some(view) {
+            self.overlay_surface = None;
+            self.overlay_view = Some(view);
+        }
+        self.composition_active = true;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn set_native_composition_active(&mut self, active: bool) {
+        self.composition_active = active && self.overlay_view.is_some();
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn set_native_overlay_active(&mut self, active: bool) -> Result<(), RendererError> {
+        if !active {
+            self.overlay_active = false;
+            return Ok(());
+        }
+        if self.overlay_surface.is_none() {
+            let view = self
+                .overlay_view
+                .ok_or_else(|| RendererError::NativeComposition("missing overlay view".into()))?;
+            self.overlay_surface = Some(create_overlay_surface(
+                &self.instance,
+                &self.adapter,
+                &self.device,
+                &self.config,
+                view,
+            )?);
+        }
+        self.overlay_active = true;
+        Ok(())
     }
 
     pub(crate) fn measure_text(
@@ -206,7 +289,7 @@ impl GpuRenderer {
             physical_size.width as f32 / scale_factor,
             physical_size.height as f32 / scale_factor,
         );
-        let quad_count = self.quad.prepare(
+        let (quad_count, quad_draw_calls) = self.quad.prepare(
             &self.device,
             &self.queue,
             scene,
@@ -215,7 +298,7 @@ impl GpuRenderer {
             physical_size.height,
             scale_factor,
         );
-        let (text_count, reshaped) = self.text.prepare(
+        let (text_count, reshaped, text_draw_calls) = self.text.prepare(
             &self.device,
             &self.queue,
             scene,
@@ -224,6 +307,11 @@ impl GpuRenderer {
             physical_size.height,
             scale_factor,
         )?;
+
+        #[cfg(target_os = "macos")]
+        let composed = self.composition_active;
+        #[cfg(not(target_os = "macos"))]
+        let composed = false;
 
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -249,7 +337,48 @@ impl GpuRenderer {
             }
         };
 
+        #[cfg(target_os = "macos")]
+        let overlay_frame = if composed && self.overlay_active {
+            let overlay = self
+                .overlay_surface
+                .as_mut()
+                .expect("active composition owns an overlay surface");
+            match overlay.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(frame) => Some(frame),
+                wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                    overlay.surface.configure(&self.device, &overlay.config);
+                    Some(frame)
+                }
+                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Outdated => {
+                    overlay.surface.configure(&self.device, &overlay.config);
+                    return Ok(RenderOutcome::Retry);
+                }
+                wgpu::CurrentSurfaceTexture::Occluded => return Ok(RenderOutcome::Occluded),
+                wgpu::CurrentSurfaceTexture::Lost => {
+                    let view = overlay.view;
+                    self.overlay_surface = Some(create_overlay_surface(
+                        &self.instance,
+                        &self.adapter,
+                        &self.device,
+                        &self.config,
+                        view,
+                    )?);
+                    return Ok(RenderOutcome::Retry);
+                }
+                wgpu::CurrentSurfaceTexture::Validation => {
+                    panic!("WGPU reported an overlay surface validation error")
+                }
+            }
+        } else {
+            None
+        };
+        #[cfg(not(target_os = "macos"))]
+        let overlay_frame: Option<wgpu::SurfaceTexture> = None;
+
         let view = frame.texture.create_view(&TextureViewDescriptor::default());
+        let overlay_view = overlay_frame
+            .as_ref()
+            .map(|frame| frame.texture.create_view(&TextureViewDescriptor::default()));
         let mut encoder = self
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
@@ -278,19 +407,52 @@ impl GpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            self.quad.render(&mut pass);
-            self.text.render(&mut pass)?;
+            for (layer, paint_layer) in scene.paint_layers().iter().enumerate() {
+                if composed && paint_layer.key().plane != ScenePlane::Base {
+                    continue;
+                }
+                self.quad.render_layer(&mut pass, layer);
+                self.text.render_layer(&mut pass, layer)?;
+            }
+        }
+        if let Some(view) = &overlay_view {
+            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("quickgui overlay pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            for (layer, paint_layer) in scene.paint_layers().iter().enumerate() {
+                if paint_layer.key().plane != ScenePlane::Overlay {
+                    continue;
+                }
+                self.quad.render_layer(&mut pass, layer);
+                self.text.render_layer(&mut pass, layer)?;
+            }
         }
 
         self.window.pre_present_notify();
         self.queue.submit(Some(encoder.finish()));
         self.queue.present(frame);
+        if let Some(frame) = overlay_frame {
+            self.queue.present(frame);
+        }
         self.text.finish_frame();
 
         Ok(RenderOutcome::Presented(RenderStats {
             quads: quad_count,
             text_areas: text_count,
-            draw_calls: usize::from(quad_count > 0) + usize::from(text_count > 0),
+            draw_calls: quad_draw_calls + text_draw_calls,
             reshaped_text_areas: reshaped,
             cached_text_areas: text_count.saturating_sub(reshaped),
         }))
@@ -300,6 +462,61 @@ impl GpuRenderer {
     pub fn adapter_info(&self) -> wgpu::AdapterInfo {
         self.adapter.get_info()
     }
+}
+
+#[cfg(target_os = "macos")]
+fn create_overlay_surface(
+    instance: &Instance,
+    adapter: &Adapter,
+    device: &Device,
+    base_config: &SurfaceConfiguration,
+    view: NonNull<c_void>,
+) -> Result<OverlaySurface, RendererError> {
+    let surface = unsafe {
+        instance.create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
+            raw_display_handle: Some(RawDisplayHandle::AppKit(AppKitDisplayHandle::new())),
+            raw_window_handle: RawWindowHandle::AppKit(AppKitWindowHandle::new(view)),
+        })
+    }
+    .map_err(|error| RendererError::NativeComposition(error.to_string()))?;
+    let capabilities = surface.get_capabilities(adapter);
+    if !capabilities.formats.contains(&base_config.format) {
+        return Err(RendererError::NativeComposition(
+            "the overlay surface does not support the base surface format".to_owned(),
+        ));
+    }
+    let alpha_mode = capabilities
+        .alpha_modes
+        .iter()
+        .copied()
+        .find(|mode| *mode == CompositeAlphaMode::PreMultiplied)
+        .or_else(|| {
+            capabilities
+                .alpha_modes
+                .iter()
+                .copied()
+                .find(|mode| *mode == CompositeAlphaMode::PostMultiplied)
+        })
+        .or_else(|| {
+            capabilities
+                .alpha_modes
+                .iter()
+                .copied()
+                .find(|mode| *mode == CompositeAlphaMode::Auto)
+        })
+        .ok_or_else(|| {
+            RendererError::NativeComposition(
+                "the overlay surface does not expose a transparent alpha mode".to_owned(),
+            )
+        })?;
+    let mut config = base_config.clone();
+    config.alpha_mode = alpha_mode;
+    surface.configure(device, &config);
+    Ok(OverlaySurface {
+        surface,
+        config,
+        view,
+    })
 }
 
 fn preferred_surface_format(formats: &[TextureFormat]) -> Option<TextureFormat> {
@@ -336,7 +553,7 @@ struct QuadRenderer {
     instance_buffers: Vec<wgpu::Buffer>,
     instance_capacities: Vec<usize>,
     active_buffer: usize,
-    active_instances: u32,
+    layer_ranges: Vec<Range<u32>>,
     instances: Vec<QuadInstance>,
 }
 
@@ -444,7 +661,7 @@ impl QuadRenderer {
             instance_buffers,
             instance_capacities: vec![INITIAL_QUAD_CAPACITY; BUFFERED_FRAMES],
             active_buffer: 0,
-            active_instances: 0,
+            layer_ranges: Vec::with_capacity(4),
             instances: Vec::with_capacity(INITIAL_QUAD_CAPACITY),
         }
     }
@@ -459,24 +676,32 @@ impl QuadRenderer {
         physical_width: u32,
         physical_height: u32,
         scale: f32,
-    ) -> usize {
+    ) -> (usize, usize) {
         self.instances.clear();
-        for quad in scene.quads() {
-            let clip = quad.clip.unwrap_or(viewport);
-            let Some(clip) = clip.intersection(viewport) else {
-                continue;
-            };
-            if !quad.rect.intersects(clip) {
-                continue;
+        self.layer_ranges.clear();
+        let mut draw_calls = 0;
+        for layer in scene.paint_layers() {
+            let start = self.instances.len() as u32;
+            for quad in layer.quads() {
+                let clip = quad.clip.unwrap_or(viewport);
+                let Some(clip) = clip.intersection(viewport) else {
+                    continue;
+                };
+                if !quad.rect.intersects(clip) {
+                    continue;
+                }
+                self.instances.push(QuadInstance {
+                    rect: [quad.rect.x, quad.rect.y, quad.rect.width, quad.rect.height],
+                    fill: quad.fill.as_array(),
+                    border: quad.border_color.as_array(),
+                    clip: [clip.x, clip.y, clip.right(), clip.bottom()],
+                    radius_and_border: [quad.radius, quad.border_width],
+                    _padding: [0.0; 2],
+                });
             }
-            self.instances.push(QuadInstance {
-                rect: [quad.rect.x, quad.rect.y, quad.rect.width, quad.rect.height],
-                fill: quad.fill.as_array(),
-                border: quad.border_color.as_array(),
-                clip: [clip.x, clip.y, clip.right(), clip.bottom()],
-                radius_and_border: [quad.radius, quad.border_width],
-                _padding: [0.0; 2],
-            });
+            let end = self.instances.len() as u32;
+            draw_calls += usize::from(start != end);
+            self.layer_ranges.push(start..end);
         }
 
         queue.write_buffer(
@@ -502,18 +727,20 @@ impl QuadRenderer {
                 bytemuck::cast_slice(&self.instances),
             );
         }
-        self.active_instances = self.instances.len() as u32;
-        self.instances.len()
+        (self.instances.len(), draw_calls)
     }
 
-    fn render<'pass>(&'pass self, pass: &mut wgpu::RenderPass<'pass>) {
-        if self.active_instances == 0 {
+    fn render_layer<'pass>(&'pass self, pass: &mut wgpu::RenderPass<'pass>, layer: usize) {
+        let Some(range) = self.layer_ranges.get(layer) else {
+            return;
+        };
+        if range.is_empty() {
             return;
         }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
         pass.set_vertex_buffer(0, self.instance_buffers[self.active_buffer].slice(..));
-        pass.draw(0..6, 0..self.active_instances);
+        pass.draw(0..6, range.clone());
     }
 }
 
@@ -549,10 +776,12 @@ struct TextSystem {
     swash_cache: SwashCache,
     viewport: Viewport,
     atlas: TextAtlas,
-    renderer: TextRenderer,
+    renderers: Vec<TextRenderer>,
     buffers: HashMap<TextId, TextEntry>,
     seen: HashSet<TextId>,
     visible: Vec<VisibleText>,
+    layer_ranges: Vec<Range<usize>>,
+    layer_renderers: Vec<Option<usize>>,
     eviction_keys: Vec<TextId>,
     frame: u64,
 }
@@ -579,10 +808,12 @@ impl TextSystem {
             swash_cache,
             viewport,
             atlas,
-            renderer,
+            renderers: vec![renderer],
             buffers: HashMap::with_capacity(512),
             seen: HashSet::with_capacity(128),
             visible: Vec::with_capacity(128),
+            layer_ranges: Vec::with_capacity(4),
+            layer_renderers: Vec::with_capacity(4),
             eviction_keys: Vec::new(),
             frame: 0,
         }
@@ -598,41 +829,47 @@ impl TextSystem {
         physical_width: u32,
         physical_height: u32,
         scale: f32,
-    ) -> Result<(usize, usize), RendererError> {
+    ) -> Result<(usize, usize, usize), RendererError> {
         self.frame = self.frame.wrapping_add(1);
         self.seen.clear();
         self.visible.clear();
+        self.layer_ranges.clear();
+        self.layer_renderers.clear();
         let mut reshaped = 0;
 
-        for run in scene.text_runs() {
-            let clip = run.clip.unwrap_or(viewport_rect);
-            let Some(clip) = clip.intersection(viewport_rect) else {
-                continue;
-            };
-            if !run.bounds.intersects(clip) {
-                continue;
+        for layer in scene.paint_layers() {
+            let start = self.visible.len();
+            for run in layer.text_runs() {
+                let clip = run.clip.unwrap_or(viewport_rect);
+                let Some(clip) = clip.intersection(viewport_rect) else {
+                    continue;
+                };
+                if !run.bounds.intersects(clip) {
+                    continue;
+                }
+                if !self.seen.insert(run.id) {
+                    return Err(RendererError::DuplicateTextId(run.id));
+                }
+                if self.update_text_entry(
+                    run.id,
+                    &run.content,
+                    &run.style,
+                    Some(run.bounds.width),
+                    scale,
+                    self.frame,
+                ) {
+                    reshaped += 1;
+                }
+                let rgba = run.style.color.to_srgba8();
+                self.visible.push(VisibleText {
+                    id: run.id,
+                    left: run.bounds.x * scale,
+                    top: run.bounds.y * scale,
+                    bounds: physical_text_bounds(clip, scale),
+                    color: glyphon::Color::rgba(rgba[0], rgba[1], rgba[2], rgba[3]),
+                });
             }
-            if !self.seen.insert(run.id) {
-                return Err(RendererError::DuplicateTextId(run.id));
-            }
-            if self.update_text_entry(
-                run.id,
-                &run.content,
-                &run.style,
-                Some(run.bounds.width),
-                scale,
-                self.frame,
-            ) {
-                reshaped += 1;
-            }
-            let rgba = run.style.color.to_srgba8();
-            self.visible.push(VisibleText {
-                id: run.id,
-                left: run.bounds.x * scale,
-                top: run.bounds.y * scale,
-                bounds: physical_text_bounds(clip, scale),
-                color: glyphon::Color::rgba(rgba[0], rgba[1], rgba[2], rgba[3]),
-            });
+            self.layer_ranges.push(start..self.visible.len());
         }
 
         self.viewport.update(
@@ -643,35 +880,60 @@ impl TextSystem {
             },
         );
 
+        let draw_calls = self
+            .layer_ranges
+            .iter()
+            .filter(|range| !range.is_empty())
+            .count();
+        while self.renderers.len() < draw_calls.max(1) {
+            self.renderers.push(TextRenderer::new(
+                &mut self.atlas,
+                device,
+                MultisampleState::default(),
+                None,
+            ));
+        }
+
         let Self {
             font_system,
             swash_cache,
             viewport,
             atlas,
-            renderer,
+            renderers,
             buffers,
             visible,
+            layer_ranges,
+            layer_renderers,
             ..
         } = self;
-        let areas = visible.iter().map(|item| TextArea {
-            buffer: &buffers[&item.id].buffer,
-            left: item.left,
-            top: item.top,
-            scale: 1.0,
-            bounds: item.bounds,
-            default_color: item.color,
-            custom_glyphs: &[],
-        });
-        renderer.prepare(
-            device,
-            queue,
-            font_system,
-            atlas,
-            viewport,
-            areas,
-            swash_cache,
-        )?;
-        Ok((visible.len(), reshaped))
+        let mut renderer_index = 0;
+        for range in layer_ranges.iter() {
+            if range.is_empty() {
+                layer_renderers.push(None);
+                continue;
+            }
+            let areas = visible[range.clone()].iter().map(|item| TextArea {
+                buffer: &buffers[&item.id].buffer,
+                left: item.left,
+                top: item.top,
+                scale: 1.0,
+                bounds: item.bounds,
+                default_color: item.color,
+                custom_glyphs: &[],
+            });
+            renderers[renderer_index].prepare(
+                device,
+                queue,
+                font_system,
+                atlas,
+                viewport,
+                areas,
+                swash_cache,
+            )?;
+            layer_renderers.push(Some(renderer_index));
+            renderer_index += 1;
+        }
+        Ok((visible.len(), reshaped, draw_calls))
     }
 
     fn measure(
@@ -772,13 +1034,27 @@ impl TextSystem {
             .unwrap_or_default()
     }
 
-    fn render<'pass>(&'pass self, pass: &mut wgpu::RenderPass<'pass>) -> Result<(), RendererError> {
-        self.renderer.render(&self.atlas, &self.viewport, pass)?;
+    fn render_layer<'pass>(
+        &'pass self,
+        pass: &mut wgpu::RenderPass<'pass>,
+        layer: usize,
+    ) -> Result<(), RendererError> {
+        let Some(renderer) = self
+            .layer_renderers
+            .get(layer)
+            .and_then(|renderer| *renderer)
+        else {
+            return Ok(());
+        };
+        self.renderers[renderer].render(&self.atlas, &self.viewport, pass)?;
         Ok(())
     }
 
     fn finish_frame(&mut self) {
         self.atlas.trim();
+        if self.renderers.len() > MAX_RETAINED_TEXT_RENDERERS {
+            self.renderers.truncate(MAX_RETAINED_TEXT_RENDERERS);
+        }
         let oldest_allowed = self.frame.saturating_sub(TEXT_RETENTION_FRAMES);
         self.eviction_keys.clear();
         self.eviction_keys.extend(

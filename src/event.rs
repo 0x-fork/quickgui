@@ -12,6 +12,8 @@ pub enum Event {
         pressed: bool,
     },
     Click(crate::ElementId),
+    /// A top-level surface was dismissed by Escape or an outside pointer press.
+    Dismiss(crate::ElementId),
     /// A coalesced scroll delta. Multiple platform wheel events may become one event.
     Scroll(Vector),
     KeyDown {

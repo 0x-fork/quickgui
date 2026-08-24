@@ -11,9 +11,16 @@ use taffy::{
     style::Overflow,
 };
 
-use crate::{Color, FontFamily, TextStyle, TextWrap};
+use crate::{Color, FontFamily, ScenePlane, TextStyle, TextWrap};
+
+#[cfg(target_os = "macos")]
+use crate::native_view::MacNativeView;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::NSView;
 
 const SPACING_UNIT: f32 = 4.0;
+const DEFAULT_ANCHOR_GAP: f32 = 8.0;
+const DEFAULT_VIEWPORT_MARGIN: f32 = 8.0;
 
 /// A stable identifier used for hit testing and retained state.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -81,6 +88,35 @@ impl From<FocusHandle> for ElementId {
     }
 }
 
+/// Preferred placement for a floating element relative to its anchor.
+///
+/// Placement automatically flips to the opposite side when it has more usable space, then shifts
+/// inside the window's content viewport.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum AnchorPlacement {
+    TopStart,
+    Top,
+    TopEnd,
+    #[default]
+    BottomStart,
+    Bottom,
+    BottomEnd,
+    LeftStart,
+    Left,
+    LeftEnd,
+    RightStart,
+    Right,
+    RightEnd,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct AnchorStyle {
+    pub target: ElementId,
+    pub placement: AnchorPlacement,
+    pub gap: f32,
+    pub viewport_margin: f32,
+}
+
 /// Platform-neutral semantics used to build the native accessibility tree.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum AccessibilityRole {
@@ -95,6 +131,10 @@ pub enum AccessibilityRole {
     Heading,
     CheckBox,
     TextInput,
+    Dialog,
+    Menu,
+    MenuItem,
+    Tooltip,
 }
 
 /// Converts common values into an [`Element`] for `.child(...)` and `.children(...)`.
@@ -137,6 +177,8 @@ pub(crate) enum ElementKind {
     Container,
     Text(Arc<str>),
     TextInput(TextInputElement),
+    #[cfg(target_os = "macos")]
+    NativeView(MacNativeView),
 }
 
 #[derive(Clone, Debug)]
@@ -246,6 +288,13 @@ pub struct Element {
     pub(crate) tab_index: i16,
     pub(crate) auto_focus: bool,
     pub(crate) accessibility: AccessibilityStyle,
+    pub(crate) plane: Option<ScenePlane>,
+    pub(crate) z_index: Option<i16>,
+    pub(crate) portal: bool,
+    pub(crate) anchor: Option<AnchorStyle>,
+    pub(crate) blocks_pointer: bool,
+    pub(crate) dismissible: bool,
+    pub(crate) restore_focus: Option<FocusHandle>,
     pub(crate) children: Vec<Element>,
     pub(crate) taffy_node: Option<taffy::NodeId>,
 }
@@ -253,6 +302,14 @@ pub struct Element {
 /// Create a container element.
 pub fn div() -> Element {
     Element::container()
+}
+
+/// Create a viewport-level element painted on the overlay plane.
+///
+/// Overlay elements are removed from normal flow, escape ancestor clipping, and block pointer
+/// events inside their bounds. Use [`Element::anchor_to`] for popovers and menus.
+pub fn overlay() -> Element {
+    div().overlay()
 }
 
 /// Create a semantic, keyboard-focusable button container.
@@ -273,6 +330,15 @@ pub fn text(content: impl Into<Arc<str>>) -> Element {
 /// Attach a stable [`crate::InputListener`] with [`Element::on_input`].
 pub fn text_input(value: impl Into<Arc<str>>) -> Element {
     Element::text_input(value.into())
+}
+
+/// Embed an AppKit view as a declarative leaf on macOS.
+///
+/// QuickGUI synchronizes layout, clipping, visibility, and sibling order while AppKit keeps
+/// ownership of the view's rendering and input behavior.
+#[cfg(target_os = "macos")]
+pub fn native_view(view: &NSView) -> Element {
+    Element::native_view(MacNativeView::new(view))
 }
 
 impl Element {
@@ -296,6 +362,13 @@ impl Element {
             tab_index: 0,
             auto_focus: false,
             accessibility: AccessibilityStyle::default(),
+            plane: None,
+            z_index: None,
+            portal: false,
+            anchor: None,
+            blocks_pointer: false,
+            dismissible: false,
+            restore_focus: None,
             children: Vec::new(),
             taffy_node: None,
         }
@@ -327,6 +400,18 @@ impl Element {
         element.cursor_text = true;
         element.accessibility.role = AccessibilityRole::TextInput;
         element.typography.wrap = Some(TextWrap::None);
+        element
+    }
+
+    #[cfg(target_os = "macos")]
+    fn native_view(view: MacNativeView) -> Self {
+        let mut element = Self::container();
+        element.kind = ElementKind::NativeView(view);
+        element.layout.size = TaffySize {
+            width: Dimension::length(320.0),
+            height: Dimension::length(200.0),
+        };
+        element.blocks_pointer = true;
         element
     }
 
@@ -701,6 +786,61 @@ impl Element {
         self
     }
 
+    /// Create a stacking context within the current render plane.
+    ///
+    /// Values are relative to the nearest ancestor stacking context. Elements sharing a value stay
+    /// batched and retain source order.
+    pub fn z_index(mut self, value: i16) -> Self {
+        self.z_index = Some(value);
+        self
+    }
+
+    /// Paint this subtree in the viewport overlay plane above ordinary application content.
+    ///
+    /// The element becomes absolutely positioned, escapes ancestor clipping, and blocks pointer
+    /// events from falling through its own bounds.
+    pub fn overlay(mut self) -> Self {
+        self.layout.position = Position::Absolute;
+        self.plane = Some(ScenePlane::Overlay);
+        self.portal = true;
+        self.blocks_pointer = true;
+        self
+    }
+
+    /// Position this floating element relative to a stable element ID.
+    pub fn anchor_to(mut self, target: impl Into<ElementId>, placement: AnchorPlacement) -> Self {
+        self = self.overlay();
+        self.anchor = Some(AnchorStyle {
+            target: target.into(),
+            placement,
+            gap: DEFAULT_ANCHOR_GAP,
+            viewport_margin: DEFAULT_VIEWPORT_MARGIN,
+        });
+        self
+    }
+
+    /// Set the distance between an anchored surface and its trigger.
+    pub fn anchor_gap(mut self, gap: f32) -> Self {
+        if let Some(anchor) = &mut self.anchor {
+            anchor.gap = gap.max(0.0);
+        }
+        self
+    }
+
+    /// Set the minimum distance between an anchored surface and the content viewport edge.
+    pub fn viewport_margin(mut self, margin: f32) -> Self {
+        if let Some(anchor) = &mut self.anchor {
+            anchor.viewport_margin = margin.max(0.0);
+        }
+        self
+    }
+
+    /// Prevent pointer events inside this element from reaching lower visual layers.
+    pub fn block_pointer(mut self) -> Self {
+        self.blocks_pointer = true;
+        self
+    }
+
     pub fn relative(mut self) -> Self {
         self.layout.position = Position::Relative;
         self
@@ -841,6 +981,20 @@ impl Element {
         self.focusable = true;
         self.cursor_text = true;
         self.accessibility.role = AccessibilityRole::TextInput;
+        self
+    }
+
+    /// Dismiss this surface on Escape or a pointer press outside its bounds.
+    pub fn on_dismiss<V>(mut self, listener: crate::DismissListener<V>) -> Self {
+        self.explicit_id = Some(listener.id());
+        self.dismissible = true;
+        self.blocks_pointer = true;
+        self
+    }
+
+    /// Restore focus to this handle when a dismissible surface closes.
+    pub fn restore_focus_to(mut self, handle: FocusHandle) -> Self {
+        self.restore_focus = Some(handle);
         self
     }
 

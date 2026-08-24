@@ -22,8 +22,11 @@ use crate::{
     metrics::{FrameMetrics, MetricsTracker},
     renderer::{GpuRenderer, RenderOutcome},
     scheduler::FrameScheduler,
-    ui_tree::{InputResult, UiTree},
+    ui_tree::{DismissRequest, InputResult, UiTree},
 };
+
+#[cfg(target_os = "macos")]
+use crate::macos::MacNativeHost;
 
 /// GPU selection policy. `Balanced` lets WGPU choose the most appropriate adapter.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -142,6 +145,24 @@ impl<V> ViewContext<'_, V> {
             marker: PhantomData,
         }
     }
+
+    /// Register a callback for Escape and outside-pointer dismissal.
+    pub fn dismiss_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &mut EventContext) + 'static,
+    ) -> DismissListener<V> {
+        let id = id.into();
+        let previous = self.listeners.dismisses.insert(id, Arc::new(callback));
+        assert!(
+            previous.is_none(),
+            "dismiss listener id {id:?} was registered more than once"
+        );
+        DismissListener {
+            id,
+            marker: PhantomData,
+        }
+    }
 }
 
 type ClickCallback<V> = Arc<dyn Fn(&mut V, &mut EventContext)>;
@@ -150,12 +171,14 @@ type InputCallback<V> = Arc<dyn Fn(&mut V, &str, &mut EventContext)>;
 struct ListenerRegistry<V> {
     clicks: HashMap<ElementId, ClickCallback<V>>,
     inputs: HashMap<ElementId, InputCallback<V>>,
+    dismisses: HashMap<ElementId, ClickCallback<V>>,
 }
 
 impl<V> ListenerRegistry<V> {
     fn clear(&mut self) {
         self.clicks.clear();
         self.inputs.clear();
+        self.dismisses.clear();
     }
 }
 
@@ -164,6 +187,7 @@ impl<V> Default for ListenerRegistry<V> {
         Self {
             clicks: HashMap::new(),
             inputs: HashMap::new(),
+            dismisses: HashMap::new(),
         }
     }
 }
@@ -187,6 +211,18 @@ pub struct InputListener<V> {
 }
 
 impl<V> InputListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
+/// An opaque dismissal binding returned by [`ViewContext::dismiss_listener`].
+pub struct DismissListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+impl<V> DismissListener<V> {
     pub(crate) fn id(&self) -> ElementId {
         self.id
     }
@@ -254,6 +290,8 @@ impl<V: View> App<V> {
 
 struct RuntimeWindow<V> {
     renderer: GpuRenderer,
+    #[cfg(target_os = "macos")]
+    native_host: Option<MacNativeHost>,
     ui: UiTree,
     scheduler: FrameScheduler,
     scene: Scene,
@@ -334,6 +372,13 @@ impl<V: View> Runtime<V> {
                 }
             }
             focus_changed = previous_focus != state.ui.focused();
+            #[cfg(target_os = "macos")]
+            if focus_changed
+                && state.ui.focused().is_some()
+                && let Some(host) = &state.native_host
+            {
+                host.focus_framework();
+            }
             if cx.invalidate {
                 state.view_dirty = true;
             }
@@ -364,6 +409,24 @@ impl<V: View> Runtime<V> {
             }
         }
         self.dispatch(event_loop, Event::Click(id), false);
+    }
+
+    fn invoke_dismiss(&mut self, event_loop: &ActiveEventLoop, request: DismissRequest) {
+        let listener = self
+            .window
+            .as_ref()
+            .and_then(|window| window.listeners.dismisses.get(&request.id).cloned());
+        let mut cx = EventContext::default();
+        if let Some(focus) = request.restore_focus {
+            cx.focus = Some(Some(focus));
+        }
+        if let Some(listener) = listener {
+            listener(&mut self.view, &mut cx);
+        }
+        if !self.apply_event_context(event_loop, cx, false, true) {
+            return;
+        }
+        self.dispatch(event_loop, Event::Dismiss(request.id), false);
     }
 
     fn invoke_input(&mut self, event_loop: &ActiveEventLoop, id: ElementId, value: &str) -> bool {
@@ -501,10 +564,16 @@ impl<V: View> Runtime<V> {
         if previous == focused {
             return;
         }
-        if let Some(state) = &mut self.window
-            && state.scheduler.invalidate()
-        {
-            state.window.request_redraw();
+        if let Some(state) = &mut self.window {
+            #[cfg(target_os = "macos")]
+            if focused.is_some()
+                && let Some(host) = &state.native_host
+            {
+                host.focus_framework();
+            }
+            if state.scheduler.invalidate() {
+                state.window.request_redraw();
+            }
         }
         let mut cx = EventContext::default();
         self.view.event(&Event::FocusChanged(focused), &mut cx);
@@ -512,6 +581,22 @@ impl<V: View> Runtime<V> {
     }
 
     fn redraw(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(target_os = "macos")]
+        {
+            let previous_focus = self.window.as_ref().and_then(|state| state.ui.focused());
+            let native_focus_active = self
+                .window
+                .as_ref()
+                .and_then(|state| state.native_host.as_ref())
+                .is_some_and(MacNativeHost::native_focus_active);
+            if native_focus_active && previous_focus.is_some() {
+                if let Some(state) = &mut self.window {
+                    state.ui.blur();
+                    state.view_dirty = true;
+                }
+                self.announce_focus_change(event_loop, previous_focus);
+            }
+        }
         let Some(state) = &mut self.window else {
             return;
         };
@@ -572,6 +657,41 @@ impl<V: View> Runtime<V> {
         if let Err(error) = state.ui.paint(&mut state.scene, &mut state.renderer) {
             self.fail(event_loop, AppError::View(error.to_string()));
             return;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let has_native_views = !state.ui.native_views().is_empty();
+            if has_native_views && state.native_host.is_none() {
+                let host = match MacNativeHost::new(&state.window) {
+                    Ok(host) => host,
+                    Err(error) => {
+                        self.fail(event_loop, AppError::View(error));
+                        return;
+                    }
+                };
+                if let Err(error) = state
+                    .renderer
+                    .enable_native_composition(host.overlay_pointer())
+                {
+                    self.fail(event_loop, AppError::Render(error.to_string()));
+                    return;
+                }
+                state.native_host = Some(host);
+            }
+            if let Some(host) = &mut state.native_host {
+                host.reconcile(state.ui.native_views());
+                let overlay_active = has_native_views
+                    && (state.scene.has_content_in_plane(crate::ScenePlane::Overlay)
+                        || state.ui.overlay_input_active());
+                host.set_overlay_active(overlay_active);
+                if let Err(error) = state.renderer.set_native_overlay_active(overlay_active) {
+                    self.fail(event_loop, AppError::Render(error.to_string()));
+                    return;
+                }
+            }
+            state
+                .renderer
+                .set_native_composition_active(has_native_views);
         }
         if ime_target.is_some()
             && let Some(caret) = state.ui.ime_cursor_area()
@@ -666,6 +786,8 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
         window.request_redraw();
         self.window = Some(RuntimeWindow {
             renderer,
+            #[cfg(target_os = "macos")]
+            native_host: None,
             ui: UiTree::new(),
             scheduler,
             scene: Scene::new(),
@@ -814,6 +936,7 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
                         crate::ui_tree::PointerResult {
                             repaint: false,
                             clicked: None,
+                            dismissed: None,
                         }
                     };
                     if result.repaint && window.scheduler.invalidate() {
@@ -823,6 +946,9 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
                 };
                 self.announce_focus_change(event_loop, previous_focus);
                 self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
+                if let Some(request) = pointer_result.dismissed {
+                    self.invoke_dismiss(event_loop, request);
+                }
                 if let Some(id) = pointer_result.clicked {
                     self.invoke_click(event_loop, id);
                 }
@@ -849,6 +975,17 @@ impl<V: View> ApplicationHandler<AccessibilityEvent> for Runtime<V> {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let key = map_key(&event.logical_key);
+                if event.state == ElementState::Pressed
+                    && !event.repeat
+                    && matches!(&key, Key::Escape)
+                    && let Some(request) = self
+                        .window
+                        .as_ref()
+                        .and_then(|window| window.ui.dismiss_topmost())
+                {
+                    self.invoke_dismiss(event_loop, request);
+                    return;
+                }
                 if event.state == ElementState::Pressed {
                     let mut handled_by_input = self.handle_text_input_key(event_loop, &key);
                     if !handled_by_input

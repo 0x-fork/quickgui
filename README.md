@@ -7,7 +7,7 @@ The hot path is intentionally small:
 - windows use `ControlFlow::Wait` and do no application rendering while clean;
 - wheel events are coalesced at the OS frame boundary;
 - retained element trees can repaint hover and scroll state without rebuilding the view or rerunning flex layout;
-- rectangles, borders, and rounded corners are one instanced GPU draw call;
+- rectangles, borders, and rounded corners share one instance upload and one draw per non-empty stacking layer;
 - text shaping and rasterization are retained by stable element IDs;
 - dynamic instance buffers are triple-buffered rather than overwritten while the GPU may still read them;
 - `VirtualList` computes the mounted range in O(1), independent of item count.
@@ -85,6 +85,45 @@ text_input(self.name.clone())
     .w_full()
 ```
 
+Overlays use a document-independent GPU plane, so they escape ancestor clipping and can be
+anchored to any stable element ID:
+
+```rust
+overlay()
+    .anchor_to(trigger.id(), AnchorPlacement::BottomEnd)
+    .anchor_gap(8.0)
+    .viewport_margin(12.0)
+    .on_dismiss(dismiss)
+    .restore_focus_to(trigger)
+    .accessibility_role(AccessibilityRole::Menu)
+    .child("Popover content")
+```
+
+Placement follows web popover behavior: use the preferred side when it fits, flip to the opposite
+side when it has more room, try alternate alignment, then shift inside the viewport. A dismissible
+overlay blocks pointer input behind it, dismisses on outside press or Escape, and restores its
+trigger's focus.
+
+On macOS, any retained AppKit `NSView` subclass can participate in the same layout:
+
+```rust
+let field: Retained<NSTextField> = /* construct on the main thread */;
+
+native_view(field.as_ref())
+    .id("native-field")
+    .w_full()
+    .h(44.0)
+    .rounded_lg()
+```
+
+QuickGUI switches that window to three-plane composition: WGPU base content, native child views,
+then a transparent WGPU overlay. The second full-window swapchain is created only when the first
+overlay opens, then retained for low-latency reuse. Native views are retained by Objective-C
+identity, clipped and resized in logical points, reordered by `z_index`, and removed when their
+elements disappear. AppKit and QuickGUI first-responder focus are synchronized without an idle
+polling loop. See `cargo run --release --example native_view` and
+`cargo run --release --example overlays`.
+
 ## Run the stress test
 
 ```console
@@ -108,6 +147,8 @@ Implemented now:
 - macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
 - sleeping single-window runtime with resize, DPI, pointer, wheel, keyboard, full IME preedit/commit routing, and focus events;
 - declarative elements, Taffy flexbox, absolute positioning, clipping, inherited text styles, and Tailwind-like helpers;
+- ordered `z_index` stacking layers plus portal-style overlays with anchor flip/shift, pointer blocking, outside/Escape dismissal, and focus restoration;
+- macOS `NSView` children composed between the base and transparent overlay WGPU surfaces, with keyed lifetime, clipping, sizing, and first-responder handoff;
 - keyed hover/active/focus/click state, Tab traversal, keyboard button activation, and type-safe `ViewContext` listeners;
 - controlled single-line text input with grapheme-safe movement/deletion, mouse caret and drag selection, horizontal scrolling, and macOS copy/cut/paste shortcuts;
 - AccessKit trees with semantic roles, labels, disabled/selected state, native focus/click actions, and editable value/selection actions;
@@ -118,8 +159,9 @@ Implemented now:
 Still required before calling it a production-complete general GUI framework:
 
 - rich and multiline text editing, undo/redo, word navigation, and input validation hooks;
-- image/SVG/path primitives, shadows, and ordered overlay layers;
-- focus scopes, configurable keymaps, menus, popovers, drag/drop, and multi-window APIs;
+- image/SVG/path primitives and shadows;
+- focus scopes, configurable keymaps, complete menu/submenu navigation, drag/drop, and multi-window APIs;
+- merged accessibility navigation between the AccessKit virtual tree and embedded native AppKit subtrees;
 - Windows/Linux runtime and visual CI, plus a portable benchmark matrix.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the renderer and ownership model.

@@ -8,7 +8,11 @@ mod color;
 mod element;
 mod event;
 mod geometry;
+#[cfg(target_os = "macos")]
+mod macos;
 mod metrics;
+#[cfg(target_os = "macos")]
+mod native_view;
 mod renderer;
 mod runtime;
 mod scene;
@@ -18,18 +22,23 @@ mod ui_tree;
 mod virtual_list;
 
 pub use color::Color;
+#[cfg(target_os = "macos")]
+pub use element::native_view;
 pub use element::{
-    AccessibilityRole, Element, ElementId, ElementStateStyle, FocusHandle, IntoElement, button,
-    div, text, text_input,
+    AccessibilityRole, AnchorPlacement, Element, ElementId, ElementStateStyle, FocusHandle,
+    IntoElement, button, div, overlay, text, text_input,
 };
 pub use event::{Event, EventContext, Key, Modifiers, MouseButton};
 pub use geometry::{Insets, Point, Rect, Size, Vector};
 pub use glyphon::Weight as FontWeight;
 pub use metrics::{FrameMetrics, RenderStats};
+#[cfg(target_os = "macos")]
+pub use native_view::MacNativeView;
 pub use runtime::{
-    App, AppConfig, AppError, ClickListener, InputListener, PerformanceProfile, View, ViewContext,
+    App, AppConfig, AppError, ClickListener, DismissListener, InputListener, PerformanceProfile,
+    View, ViewContext,
 };
-pub use scene::{FontFamily, Quad, Scene, TextId, TextRun, TextStyle, TextWrap};
+pub use scene::{FontFamily, Quad, Scene, ScenePlane, TextId, TextRun, TextStyle, TextWrap};
 pub use virtual_list::{VirtualList, VisibleRows};
 
 /// Run a view with the default application configuration.
