@@ -5,8 +5,8 @@ use std::{
 };
 
 use quickgui::{
-    App, ClickListener, Color, Element, ElementId, Event, EventContext, Key, MouseButton,
-    PointerEvent, PointerPhase, View, ViewContext, VirtualList, div, text,
+    App, Color, Element, ElementId, Event, EventContext, Key, View, ViewContext, VirtualList, div,
+    text,
 };
 
 const ROWS: usize = 100_000;
@@ -15,7 +15,6 @@ const HEADER_HEIGHT: f32 = 72.0;
 const FOOTER_HEIGHT: f32 = 34.0;
 const ROW_ID_BASE: u64 = 0x1000_0000_0000_0000;
 const LABEL_CACHE_LIMIT: usize = 512;
-
 fn main() -> Result<(), quickgui::AppError> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -38,7 +37,6 @@ struct ScrollDemo {
     help: Arc<str>,
     metrics_text: Arc<str>,
     last_metrics_update: Instant,
-    scrollbar_drag_origin: Option<f32>,
     synthetic_scroll: bool,
     synthetic_scroll_forward: bool,
 }
@@ -58,7 +56,6 @@ impl ScrollDemo {
             ),
             metrics_text: Arc::from("Waiting for the first frame…"),
             last_metrics_update: Instant::now(),
-            scrollbar_drag_origin: None,
             synthetic_scroll: false,
             synthetic_scroll_forward: true,
         }
@@ -87,11 +84,12 @@ impl ScrollDemo {
             .clone()
     }
 
-    fn row(&mut self, index: usize, listener: ClickListener<Self>) -> Element {
+    fn row(&mut self, index: usize) -> Element {
         let top = index as f32 * ROW_HEIGHT - self.list.scroll_offset();
         let selected = self.selected == Some(index);
         div()
-            .on_click(listener)
+            .id(ElementId::new(ROW_ID_BASE | index as u64))
+            .clickable()
             .absolute()
             .top(top)
             .left(0.0)
@@ -161,11 +159,11 @@ impl ScrollDemo {
 impl View for ScrollDemo {
     fn event(&mut self, event: &Event, cx: &mut EventContext) {
         match event {
-            Event::Scroll(delta) => {
-                // Platform deltas describe content motion; list offsets move oppositely.
-                if self.list.scroll_by(-delta.y) {
-                    cx.invalidate();
-                }
+            Event::Click(id)
+                if (ROW_ID_BASE..ROW_ID_BASE + self.list.len() as u64).contains(&id.as_u64()) =>
+            {
+                self.selected = Some((id.as_u64() - ROW_ID_BASE) as usize);
+                cx.invalidate();
             }
             Event::KeyDown { key, .. } => {
                 let selected = self
@@ -218,20 +216,7 @@ impl View for ScrollDemo {
             cx.request_animation_frame();
         }
         let visible = self.list.visible_rows();
-        let rows: Vec<_> = visible
-            .range
-            .clone()
-            .map(|index| {
-                let listener = cx.listener(
-                    ElementId::new(ROW_ID_BASE | index as u64),
-                    move |this, event_cx| {
-                        this.selected = Some(index);
-                        event_cx.invalidate();
-                    },
-                );
-                self.row(index, listener)
-            })
-            .collect();
+        let rows: Vec<_> = visible.range.clone().map(|index| self.row(index)).collect();
 
         if self.last_metrics_update.elapsed() >= Duration::from_millis(250) {
             let metrics = cx.metrics();
@@ -244,66 +229,6 @@ impl View for ScrollDemo {
             ));
             self.last_metrics_update = Instant::now();
         }
-
-        let scrollbar = self.list.scrollbar_thumb(28.0).map(|(offset, height)| {
-            let listener = cx.pointer_listener(
-                "virtual-list-scrollbar-thumb",
-                |this, event: &PointerEvent, event_cx| {
-                    if event.button != MouseButton::Left {
-                        return;
-                    }
-                    match event.phase {
-                        PointerPhase::Down => {
-                            this.scrollbar_drag_origin = Some(this.list.scroll_offset());
-                            event_cx.invalidate();
-                        }
-                        PointerPhase::Move => {
-                            let Some(start) = this.scrollbar_drag_origin else {
-                                return;
-                            };
-                            let Some((_, thumb_height)) = this.list.scrollbar_thumb(28.0) else {
-                                return;
-                            };
-                            let travel = this.list.viewport_height() - thumb_height;
-                            if travel <= 0.0 {
-                                return;
-                            }
-                            let pointer_delta = event.position.y - event.origin.y;
-                            let scroll_delta =
-                                pointer_delta * this.list.max_scroll_offset() / travel;
-                            if this.list.scroll_to(start + scroll_delta) {
-                                event_cx.invalidate();
-                            }
-                        }
-                        PointerPhase::Up | PointerPhase::Cancel => {
-                            if this.scrollbar_drag_origin.take().is_some() {
-                                event_cx.invalidate();
-                            }
-                        }
-                    }
-                },
-            );
-            let thumb_color = if self.scrollbar_drag_origin.is_some() {
-                Color::rgba8(174, 181, 197, 230)
-            } else {
-                Color::rgba8(133, 139, 153, 175)
-            };
-            div()
-                .on_pointer(listener)
-                .absolute()
-                .top(offset)
-                .right(0.0)
-                .size(12.0, height)
-                .child(
-                    div()
-                        .absolute()
-                        .top(2.0)
-                        .right(3.0)
-                        .size(5.0, (height - 4.0).max(4.0))
-                        .rounded(2.5)
-                        .bg(thumb_color),
-                )
-        });
 
         let tree = div()
             .size_full()
@@ -350,10 +275,8 @@ impl View for ScrollDemo {
                     .flex_1()
                     .w_full()
                     .overflow_hidden()
-                    .children(rows)
-                    .when(scrollbar.is_some(), |element| {
-                        element.child(scrollbar.expect("checked above"))
-                    }),
+                    .virtual_scroll(&self.list)
+                    .children(rows),
             )
             .child(
                 div()

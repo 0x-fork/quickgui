@@ -1,5 +1,6 @@
 use crate::{
-    Background, Color, Path, PathPrimitive, Point, Quad, Rect, Scene, Vector, scene::PaintLayerKey,
+    Background, Color, CustomShader, CustomShaderPrimitive, Path, PathPrimitive, Point, Quad, Rect,
+    Scene, ShaderParameters, Vector, scene::PaintLayerKey,
 };
 
 /// Immediate paint access scoped to one declarative canvas element.
@@ -91,6 +92,24 @@ impl<'a> Canvas<'a> {
         );
     }
 
+    /// Paint validated WGSL into a local rectangle.
+    ///
+    /// Parameters are copied into the renderer's bounded instanced buffer; this does not allocate
+    /// a bind group or command encoder per call.
+    pub fn paint_shader(
+        &mut self,
+        rect: Rect,
+        shader: &CustomShader,
+        parameters: impl Into<ShaderParameters>,
+    ) {
+        self.scene.push_custom_shader_in(
+            self.layer,
+            CustomShaderPrimitive::new(shader.clone(), self.absolute_rect(rect))
+                .parameters(parameters)
+                .clip(self.clip),
+        );
+    }
+
     fn absolute_rect(&self, rect: Rect) -> Rect {
         rect.translate(Vector::new(self.origin.x, self.origin.y))
     }
@@ -122,6 +141,19 @@ mod tests {
             assert_eq!(canvas.bounds(), Rect::new(0.0, 0.0, 40.0, 30.0));
             canvas.fill_rect(Rect::new(1.0, 2.0, 5.0, 6.0), Color::WHITE);
             canvas.paint_path_at(&path, Point::new(3.0, 4.0), Color::WHITE);
+            let shader = CustomShader::new(
+                r#"
+fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
+    return vec4<f32>(input.uv, 0.0, 1.0);
+}
+"#,
+            )
+            .unwrap();
+            canvas.paint_shader(
+                Rect::new(2.0, 3.0, 8.0, 9.0),
+                &shader,
+                ShaderParameters::new().float(0, 0.75),
+            );
         }
 
         assert_eq!(scene.quads()[0].rect, Rect::new(11.0, 22.0, 5.0, 6.0));
@@ -131,5 +163,11 @@ mod tests {
             Rect::new(13.0, 24.0, 10.0, 10.0)
         );
         assert_eq!(scene.paths()[0].clip, Some(clip));
+        assert_eq!(
+            scene.custom_shaders()[0].rect,
+            Rect::new(12.0, 23.0, 8.0, 9.0)
+        );
+        assert_eq!(scene.custom_shaders()[0].clip, Some(clip));
+        assert_eq!(scene.custom_shaders()[0].parameters.vectors()[0][0], 0.75);
     }
 }

@@ -3,7 +3,8 @@ use std::sync::Arc;
 use glyphon::Weight;
 
 use crate::{
-    Background, Color, Image, Path, Rect, Svg, SvgTransform, Vector,
+    Background, Color, CustomShader, Image, Path, Rect, ShaderParameters, Svg, SvgTransform,
+    TextHighlight, Vector,
     paint_order::{BoundsOrderTree, valid_bounds},
 };
 
@@ -378,6 +379,36 @@ impl PathPrimitive {
     }
 }
 
+/// One retained rectangle painted by validated application WGSL.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CustomShaderPrimitive {
+    pub shader: CustomShader,
+    pub rect: Rect,
+    pub parameters: ShaderParameters,
+    pub clip: Option<Rect>,
+}
+
+impl CustomShaderPrimitive {
+    pub fn new(shader: impl Into<CustomShader>, rect: Rect) -> Self {
+        Self {
+            shader: shader.into(),
+            rect,
+            parameters: ShaderParameters::default(),
+            clip: None,
+        }
+    }
+
+    pub fn parameters(mut self, parameters: impl Into<ShaderParameters>) -> Self {
+        self.parameters = parameters.into();
+        self
+    }
+
+    pub fn clip(mut self, clip: Rect) -> Self {
+        self.clip = Some(clip);
+        self
+    }
+}
+
 const MAX_PATH_PRIMITIVE_SCALE: f32 = 1_024.0;
 
 fn sanitize_path_scale(value: f32) -> f32 {
@@ -448,6 +479,7 @@ pub struct TextRun {
     pub bounds: Rect,
     pub style: TextStyle,
     pub clip: Option<Rect>,
+    pub(crate) highlights: Option<Arc<[TextHighlight]>>,
 }
 
 impl TextRun {
@@ -458,12 +490,33 @@ impl TextRun {
             bounds,
             style,
             clip: None,
+            highlights: None,
         }
     }
 
     pub fn clip(mut self, clip: Rect) -> Self {
         self.clip = Some(clip);
         self
+    }
+
+    pub(crate) fn with_highlights(mut self, highlights: Arc<[TextHighlight]>) -> Self {
+        if !highlights.is_empty() {
+            self.highlights = Some(highlights);
+        }
+        self
+    }
+
+    fn has_visible_paint(&self) -> bool {
+        self.style.color.a > 0.0
+            || self.highlights.as_deref().is_some_and(|highlights| {
+                highlights.iter().any(|highlight| {
+                    let style = &highlight.style;
+                    style.color.is_some_and(|color| color.a > 0.0)
+                        || style.background.is_some_and(|color| color.a > 0.0)
+                        || style.underline_color.is_some_and(|color| color.a > 0.0)
+                        || style.strikethrough_color.is_some_and(|color| color.a > 0.0)
+                })
+            })
     }
 }
 
@@ -494,6 +547,7 @@ pub(crate) struct PaintLayer {
     images: Vec<ImagePrimitive>,
     svgs: Vec<SvgPrimitive>,
     paths: Vec<PathPrimitive>,
+    custom_shaders: Vec<CustomShaderPrimitive>,
     text: Vec<TextRun>,
     paint: Vec<PaintItem>,
     order_tree: BoundsOrderTree,
@@ -512,6 +566,7 @@ pub(crate) enum PrimitiveRef {
     Image(usize),
     Svg(usize),
     Path(usize),
+    CustomShader(usize),
     Text(usize),
 }
 
@@ -531,6 +586,7 @@ impl PaintLayer {
             images: Vec::new(),
             svgs: Vec::new(),
             paths: Vec::new(),
+            custom_shaders: Vec::new(),
             text: Vec::new(),
             paint: Vec::new(),
             order_tree: BoundsOrderTree::default(),
@@ -567,6 +623,10 @@ impl PaintLayer {
         &self.paths
     }
 
+    pub(crate) fn custom_shaders(&self) -> &[CustomShaderPrimitive] {
+        &self.custom_shaders
+    }
+
     pub(crate) fn text_runs(&self) -> &[TextRun] {
         &self.text
     }
@@ -593,6 +653,7 @@ impl PaintLayer {
         self.images.clear();
         self.svgs.clear();
         self.paths.clear();
+        self.custom_shaders.clear();
         self.text.clear();
         self.paint.clear();
         self.order_tree.clear();
@@ -620,6 +681,7 @@ impl Scene {
                 images: Vec::with_capacity(64),
                 svgs: Vec::with_capacity(64),
                 paths: Vec::with_capacity(64),
+                custom_shaders: Vec::with_capacity(16),
                 text: Vec::with_capacity(128),
                 paint: Vec::with_capacity(512),
                 order_tree: BoundsOrderTree::with_capacity(512),
@@ -719,6 +781,23 @@ impl Scene {
         }
     }
 
+    pub fn push_custom_shader(&mut self, shader: CustomShaderPrimitive) {
+        self.push_custom_shader_in(PaintLayerKey::default(), shader);
+    }
+
+    pub(crate) fn push_custom_shader_in(
+        &mut self,
+        key: PaintLayerKey,
+        shader: CustomShaderPrimitive,
+    ) {
+        if let Some(bounds) = clipped_paint_bounds(shader.rect, [shader.clip]) {
+            let layer = self.layer_mut(key);
+            let index = layer.custom_shaders.len();
+            layer.custom_shaders.push(shader);
+            layer.push_paint(bounds, PrimitiveRef::CustomShader(index));
+        }
+    }
+
     pub(crate) fn push_svg_in(&mut self, key: PaintLayerKey, svg: SvgPrimitive) {
         if !svg.destination.is_empty()
             && !svg.source_uv.is_empty()
@@ -739,7 +818,7 @@ impl Scene {
     }
 
     pub(crate) fn push_text_in(&mut self, key: PaintLayerKey, text: TextRun) {
-        if text.style.color.a > 0.0
+        if text.has_visible_paint()
             && let Some(bounds) = clipped_paint_bounds(text.bounds, [text.clip])
         {
             let layer = self.layer_mut(key);
@@ -804,6 +883,15 @@ impl Scene {
             .take(self.used_layers)
             .find(|layer| layer.key == PaintLayerKey::default())
             .map(PaintLayer::paths)
+            .unwrap_or_default()
+    }
+
+    pub fn custom_shaders(&self) -> &[CustomShaderPrimitive] {
+        self.layers
+            .iter()
+            .take(self.used_layers)
+            .find(|layer| layer.key == PaintLayerKey::default())
+            .map(PaintLayer::custom_shaders)
             .unwrap_or_default()
     }
 
@@ -1013,6 +1101,29 @@ mod tests {
             ]
         );
         assert_eq!(layer.max_order(), 2);
+    }
+
+    #[test]
+    fn custom_shaders_participate_in_cross_primitive_paint_order() {
+        let shader = CustomShader::new(
+            r#"
+fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
+    return vec4<f32>(input.uv, 0.0, 1.0);
+}
+"#,
+        )
+        .unwrap();
+        let mut scene = Scene::new();
+        scene.push_quad(Quad::new(Rect::new(0.0, 0.0, 20.0, 20.0), Color::WHITE));
+        scene.push_custom_shader(CustomShaderPrimitive::new(
+            shader,
+            Rect::new(5.0, 5.0, 10.0, 10.0),
+        ));
+
+        let layer = &scene.paint_layers()[0];
+        assert_eq!(layer.custom_shaders().len(), 1);
+        assert_eq!(layer.paint()[1].order, 1);
+        assert_eq!(layer.paint()[1].primitive, PrimitiveRef::CustomShader(0));
     }
 
     #[test]

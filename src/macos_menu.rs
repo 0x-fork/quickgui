@@ -103,6 +103,7 @@ pub(crate) struct MacMenuHost {
     main_menu: Retained<NSMenu>,
     root_items: Vec<Retained<NSMenuItem>>,
     action_items: Vec<Retained<NSMenuItem>>,
+    fallback_close_item: Retained<NSMenuItem>,
     target: Retained<QuickGuiMenuTarget>,
 }
 
@@ -116,9 +117,10 @@ impl MacMenuHost {
             .ok_or_else(|| "AppKit did not install an application menu bar".to_owned())?;
         let services_menu = unsafe { app.servicesMenu() };
         let target = QuickGuiMenuTarget::new(mtm, proxy);
-        let mut root_items = Vec::with_capacity(menus.len());
+        let mut root_items = Vec::with_capacity(menus.len() + 1);
         let mut action_items = Vec::new();
         let mut next_action_id = 0;
+        let mut file_menu = None;
 
         for menu in menus {
             let submenu = build_menu(
@@ -134,17 +136,47 @@ impl MacMenuHost {
             unsafe { root_item.setEnabled(!menu.disabled) };
             main_menu.addItem(&root_item);
             root_items.push(root_item);
+            if menu.name.eq_ignore_ascii_case("file") {
+                file_menu = Some(submenu);
+            }
         }
+
+        let file_menu = file_menu.unwrap_or_else(|| {
+            let submenu =
+                unsafe { NSMenu::initWithTitle(mtm.alloc(), &NSString::from_str("File")) };
+            unsafe { submenu.setAutoenablesItems(false) };
+            let delegate = ProtocolObject::from_ref(&*target);
+            unsafe { submenu.setDelegate(Some(delegate)) };
+            let root = menu_item(mtm, "File", None, "");
+            root.setSubmenu(Some(&submenu));
+            main_menu.addItem(&root);
+            root_items.push(root);
+            submenu
+        });
+        if unsafe { file_menu.numberOfItems() } > 0 {
+            file_menu.addItem(&NSMenuItem::separatorItem(mtm));
+        }
+        let fallback_close_item = menu_item(mtm, "Close Window", Some(sel!(performClose:)), "w");
+        fallback_close_item
+            .setKeyEquivalentModifierMask(NSEventModifierFlags::NSEventModifierFlagCommand);
+        unsafe { fallback_close_item.setEnabled(true) };
+        file_menu.addItem(&fallback_close_item);
 
         Ok(Self {
             main_menu,
             root_items,
             action_items,
+            fallback_close_item,
             target,
         })
     }
 
-    pub fn update(&self, states: &[MacMenuItemState], native_focus_active: bool) {
+    pub fn update(
+        &self,
+        states: &[MacMenuItemState],
+        native_focus_active: bool,
+        keymap_claims_close: bool,
+    ) {
         debug_assert_eq!(self.action_items.len(), states.len());
         self.target
             .ivars()
@@ -154,6 +186,7 @@ impl MacMenuHost {
             .expect("QuickGUI native menu updates stay on the AppKit main thread");
         let app = NSApplication::sharedApplication(mtm);
         let os_actions = self.target.ivars().os_actions.borrow();
+        let mut application_claims_close = keymap_claims_close;
         for (index, (item, state)) in self.action_items.iter().zip(states).enumerate() {
             let native_available = native_focus_active
                 && os_actions
@@ -180,8 +213,27 @@ impl MacMenuHost {
                 item.setKeyEquivalent(&NSString::from_str(&key));
             }
             item.setKeyEquivalentModifierMask(modifiers);
+            application_claims_close |= !state.disabled
+                && (state.action_available || native_available)
+                && state.shortcut.as_ref().is_some_and(is_close_shortcut);
+        }
+        unsafe {
+            self.fallback_close_item.setHidden(application_claims_close);
+            self.fallback_close_item
+                .setEnabled(!application_claims_close);
+            self.fallback_close_item
+                .setKeyEquivalent(&NSString::from_str(if application_claims_close {
+                    ""
+                } else {
+                    "w"
+                }));
         }
     }
+}
+
+fn is_close_shortcut(stroke: &Keystroke) -> bool {
+    stroke.modifiers == Modifiers::SUPER
+        && matches!(&stroke.key, Key::Character(value) if value.eq_ignore_ascii_case("w"))
 }
 
 impl Drop for MacMenuHost {
@@ -365,5 +417,14 @@ mod tests {
             ))
             .is_none()
         );
+    }
+
+    #[test]
+    fn native_close_fallback_yields_only_to_exact_cmd_w() {
+        assert!(is_close_shortcut(&Keystroke::parse("cmd-w").unwrap()));
+        assert!(!is_close_shortcut(
+            &Keystroke::parse("cmd-shift-w").unwrap()
+        ));
+        assert!(!is_close_shortcut(&Keystroke::parse("ctrl-w").unwrap()));
     }
 }

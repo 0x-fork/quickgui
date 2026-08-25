@@ -28,6 +28,14 @@ pub struct RenderStats {
     pub path_vertices: usize,
     /// Visible paths omitted because the bounded per-frame GPU path budget was exhausted.
     pub skipped_paths: usize,
+    /// Visible application-WGSL rectangles submitted through the instanced custom pipeline.
+    pub custom_shader_instances: usize,
+    /// New custom shader pipelines compiled during this frame.
+    pub custom_shader_compilations: usize,
+    /// Custom pipelines retained by this window's bounded cache.
+    pub cached_custom_shader_pipelines: usize,
+    /// Visible custom rectangles omitted by the per-frame shader or instance limits.
+    pub skipped_custom_shader_instances: usize,
     pub text_areas: usize,
     pub draw_calls: usize,
     /// Text buffers whose content, metrics, or wrapping changed this frame.

@@ -16,6 +16,7 @@ default = []
 accesskit = "0.24.1"
 accesskit_winit = "0.33.2"
 arboard = { version = "3.6.1", default-features = false }
+async-task = "4.7"
 bitflags = "2.9"
 bytemuck = { version = "1.23", features = ["derive"] }
 flate2 = "1.1"
@@ -24,7 +25,7 @@ image-codecs = { package = "image", version = "0.25.10", default-features = fals
 lyon = { version = "1.0.19", default-features = false }
 pollster = "0.4"
 resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
-taffy = { version = "0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "block_layout", "content_size"] }
+taffy = { version = "0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "block_layout", "content_size"] }
 thiserror = "2.0"
 tracing = "0.1"
 unicode-segmentation = "1.12"
@@ -34,9 +35,10 @@ winit = "0.30.13"
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.5.1"
 objc2 = "0.5.2"
-objc2-app-kit = { version = "0.2.2", features = ["NSAccessibility", "NSAccessibilityConstants", "NSAccessibilityProtocols", "NSApplication", "NSBox", "NSCell", "NSColor", "NSEvent", "NSControl", "NSGraphics", "NSMenu", "NSMenuItem", "NSResponder", "NSTextField", "NSView", "NSWindow", "NSWorkspace", "block2", "objc2-quartz-core"] }
-objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSGeometry", "NSString"] }
+objc2-app-kit = { version = "0.2.2", features = ["NSAccessibility", "NSAccessibilityConstants", "NSAccessibilityProtocols", "NSAlert", "NSApplication", "NSBox", "NSButton", "NSCell", "NSColor", "NSControl", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSGraphics", "NSImage", "NSMenu", "NSMenuItem", "NSOpenPanel", "NSPanel", "NSPasteboard", "NSResponder", "NSSavePanel", "NSTextField", "NSView", "NSWindow", "NSWorkspace", "block2", "objc2-quartz-core"] }
+objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSBundle", "NSGeometry", "NSNotification", "NSRange", "NSSet", "NSString", "NSURL", "NSUUID"] }
 objc2-quartz-core = { version = "0.2.2", features = ["CALayer", "CAMetalLayer"] }
+objc2-user-notifications = { version = "0.2.2", features = ["UNNotification", "UNNotificationAction", "UNNotificationCategory", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationTrigger", "UNUserNotificationCenter", "block2"] }
 raw-window-metal = "1.1.0"
 wgpu = { version = "30.0.1", default-features = false, features = ["metal"] }
 
@@ -51,14 +53,24 @@ wgpu = { version = "30.0.1", default-features = false, features = ["webgpu"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
+serde = { version = "1.0", features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+ureq = { version = "3.4", features = ["json"] }
 
 [[bench]]
 name = "virtual_list"
 harness = false
 
+[[bench]]
+name = "picker"
+harness = false
+
 [profile.dev]
 opt-level = 3
+# The examples are interactive performance probes. Keeping debug assertions enabled makes objc2
+# verify every AppKit message signature at runtime and makes `cargo run --example ...` measure the
+# validation layer instead of QuickGUI's steady-state rendering path.
+debug-assertions = false
 
 [profile.dev.package."*"]
 opt-level = 3

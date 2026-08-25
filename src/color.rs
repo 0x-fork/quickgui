@@ -1,3 +1,8 @@
+use std::sync::LazyLock;
+
+static SRGB_U8_TO_LINEAR: LazyLock<[f32; 256]> =
+    LazyLock::new(|| std::array::from_fn(|component| srgb_to_linear(component as f32 / 255.0)));
+
 /// A premultiplication-neutral, linear-light RGBA color.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {
@@ -25,9 +30,9 @@ impl Color {
     /// Construct from 8-bit sRGB components and an 8-bit linear alpha.
     pub fn rgba8(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self {
-            r: srgb_to_linear(r as f32 / 255.0),
-            g: srgb_to_linear(g as f32 / 255.0),
-            b: srgb_to_linear(b as f32 / 255.0),
+            r: SRGB_U8_TO_LINEAR[r as usize],
+            g: SRGB_U8_TO_LINEAR[g as usize],
+            b: SRGB_U8_TO_LINEAR[b as usize],
             a: a as f32 / 255.0,
         }
     }

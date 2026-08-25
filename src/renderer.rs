@@ -8,10 +8,16 @@ use std::{
 
 use bytemuck::{Pod, Zeroable};
 use glyphon::{
-    Attrs, Buffer, Cache, Cursor, Family, FontSystem, Metrics, Resolution, Shaping as GlyphShaping,
-    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
+    Attrs, Buffer, Cache, Color as GlyphColor, Cursor, Family, FontSystem, Metrics, Resolution,
+    Shaping as GlyphShaping, Style as GlyphStyle, SwashCache, TextArea, TextAtlas, TextBounds,
+    TextRenderer, Viewport, Wrap,
+    cosmic_text::{
+        LayoutRun, PhysicalGlyph, Renderer as CosmicRenderer,
+        UnderlineStyle as GlyphUnderlineStyle, render_decoration,
+    },
 };
 use thiserror::Error;
+use unicode_segmentation::UnicodeSegmentation;
 use wgpu::{
     Adapter, BindGroup, BufferAddress, ColorTargetState, CommandEncoderDescriptor,
     CompositeAlphaMode, Device, DeviceDescriptor, FragmentState, Instance, InstanceDescriptor,
@@ -24,13 +30,24 @@ use wgpu::{
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
 use crate::{
-    FontFamily, PerformanceProfile, Quad, Rect, RenderStats, Scene, ScenePlane, Size, TextId,
-    TextShaping, TextStyle, TextWrap,
+    Color as UiColor, FontFamily, PerformanceProfile, Point, Quad, Rect, RenderStats, Scene,
+    ScenePlane, Size, TextHighlight, TextId, TextShaping, TextStyle, TextUnderline, TextWrap,
+    custom_shader_renderer::CustomShaderRenderer,
     image_renderer::ImageRenderer,
     path_renderer::PathRenderer,
     scene::{PrimitiveRef, Shadow, ShapeRef},
     svg_renderer::SvgRenderer,
 };
+
+pub(crate) struct StyledTextGeometry {
+    pub backgrounds: Vec<TextPaintRect>,
+    pub decorations: Vec<TextPaintRect>,
+}
+
+pub(crate) struct TextPaintRect {
+    pub rect: Rect,
+    pub color: UiColor,
+}
 
 #[cfg(target_os = "macos")]
 use objc2::rc::Retained;
@@ -51,7 +68,11 @@ const INITIAL_SHAPE_CAPACITY: usize = 256;
 const BUFFERED_FRAMES: usize = 3;
 const MAX_RETAINED_TEXT_AREAS: usize = 256;
 const MAX_RETAINED_TEXT_LAYOUTS: usize = 256;
-const MAX_RETAINED_TEXT_RENDERERS: usize = 8;
+// Text separated by intersecting paint primitives needs independent glyph vertex buffers to
+// preserve painter's order. Keep enough for a layered application scene without retaining every
+// pathological overlap forever. Each Glyphon renderer starts with a 4 KiB buffer.
+const MAX_RETAINED_TEXT_RENDERERS: usize = 32;
+const MAX_RETAINED_TEXT_COLORS: usize = 64;
 const TEXT_RETENTION_FRAMES: u64 = 8;
 const BASIC_FRAGMENT_MIN_BYTES: usize = 24;
 
@@ -83,12 +104,24 @@ pub(crate) enum RendererError {
     NativeComposition(String),
     #[error("GPU submission did not complete: {0}")]
     DevicePoll(#[from] wgpu::PollError),
+    #[error("custom shader pipeline creation failed: {0}")]
+    CustomShader(String),
 }
 
 pub(crate) enum RenderOutcome {
     Presented(RenderStats),
     Retry,
     Occluded,
+}
+
+/// Share the heavyweight WGPU instance, adapter, device, and queue across compatible windows.
+/// Surface state and all bounded render caches remain window-local.
+#[derive(Clone)]
+pub(crate) struct GpuContext {
+    instance: Instance,
+    adapter: Adapter,
+    device: Device,
+    queue: Queue,
 }
 
 pub(crate) struct GpuRenderer {
@@ -107,6 +140,7 @@ pub(crate) struct GpuRenderer {
     live_resize_transaction: bool,
     shapes: ShapeRenderer,
     path: PathRenderer,
+    custom_shader: CustomShaderRenderer,
     image: ImageRenderer,
     svg: SvgRenderer,
     text: TextSystem,
@@ -134,22 +168,39 @@ impl GpuRenderer {
         window: Arc<Window>,
         event_loop: &ActiveEventLoop,
         profile: PerformanceProfile,
+        shared: Option<&GpuContext>,
     ) -> Result<Self, RendererInitError> {
-        let instance = Instance::new(InstanceDescriptor::new_with_display_handle(Box::new(
-            event_loop.owned_display_handle(),
-        )));
+        let instance = shared.map_or_else(
+            || {
+                Instance::new(InstanceDescriptor::new_with_display_handle(Box::new(
+                    event_loop.owned_display_handle(),
+                )))
+            },
+            |context| context.instance.clone(),
+        );
         #[cfg(target_os = "macos")]
         let (surface, metal_layer, appkit_view) = create_macos_window_surface(&instance, &window)?;
         #[cfg(not(target_os = "macos"))]
         let surface = instance.create_surface(window.clone())?;
-        let adapter = instance
-            .request_adapter(&RequestAdapterOptions {
-                power_preference: profile.into(),
-                compatible_surface: Some(&surface),
-                ..Default::default()
-            })
-            .await?;
-        let (device, queue) = adapter.request_device(&DeviceDescriptor::default()).await?;
+        let (adapter, device, queue) = if let Some(context) =
+            shared.filter(|context| context.adapter.is_surface_supported(&surface))
+        {
+            (
+                context.adapter.clone(),
+                context.device.clone(),
+                context.queue.clone(),
+            )
+        } else {
+            let adapter = instance
+                .request_adapter(&RequestAdapterOptions {
+                    power_preference: profile.into(),
+                    compatible_surface: Some(&surface),
+                    ..Default::default()
+                })
+                .await?;
+            let (device, queue) = adapter.request_device(&DeviceDescriptor::default()).await?;
+            (adapter, device, queue)
+        };
         let capabilities = surface.get_capabilities(&adapter);
         let format = preferred_surface_format(&capabilities.formats)
             .ok_or(RendererInitError::IncompatibleSurface)?;
@@ -179,6 +230,7 @@ impl GpuRenderer {
 
         let shapes = ShapeRenderer::new(&device, format);
         let path = PathRenderer::new(&device, format);
+        let custom_shader = CustomShaderRenderer::new(&device, format);
         let image = ImageRenderer::new(&device, format);
         let svg = SvgRenderer::new(&device, format);
         let text = TextSystem::new(&device, &queue, format);
@@ -198,6 +250,7 @@ impl GpuRenderer {
             live_resize_transaction: false,
             shapes,
             path,
+            custom_shader,
             image,
             svg,
             text,
@@ -211,6 +264,15 @@ impl GpuRenderer {
             overlay_active: false,
             window,
         })
+    }
+
+    pub(crate) fn context(&self) -> GpuContext {
+        GpuContext {
+            instance: self.instance.clone(),
+            adapter: self.adapter.clone(),
+            device: self.device.clone(),
+            queue: self.queue.clone(),
+        }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -309,48 +371,113 @@ impl GpuRenderer {
         scale_factor: f32,
     ) -> Size {
         self.text
-            .measure(id, content, style, max_width, scale_factor)
+            .measure(id, content, style, None, max_width, scale_factor)
     }
 
-    pub(crate) fn text_caret_x(
+    pub(crate) fn measure_styled_text(
         &mut self,
         id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
-        width: f32,
+        highlights: &Arc<[TextHighlight]>,
+        max_width: Option<f32>,
         scale_factor: f32,
-        index: usize,
-    ) -> f32 {
-        self.text
-            .caret_x(id, content, style, width, scale_factor, index)
-    }
-
-    pub(crate) fn text_index_for_x(
-        &mut self,
-        id: TextId,
-        content: &Arc<str>,
-        style: &TextStyle,
-        width: f32,
-        scale_factor: f32,
-        x: f32,
-    ) -> usize {
-        self.text
-            .index_for_x(id, content, style, width, scale_factor, x)
+    ) -> Size {
+        self.text.measure(
+            id,
+            content,
+            style,
+            Some(highlights),
+            max_width,
+            scale_factor,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn text_selection_spans(
+    pub(crate) fn styled_text_geometry(
         &mut self,
         id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
+        highlights: &Arc<[TextHighlight]>,
         width: f32,
         scale_factor: f32,
+        visible_y: Range<f32>,
+    ) -> StyledTextGeometry {
+        self.text.styled_geometry(
+            id,
+            content,
+            style,
+            highlights,
+            width,
+            scale_factor,
+            visible_y,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn text_caret_position_with_highlights(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        highlights: Option<&Arc<[TextHighlight]>>,
+        width: f32,
+        scale_factor: f32,
+        index: usize,
+    ) -> Point {
+        self.text
+            .caret_position(id, content, style, highlights, width, scale_factor, index)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn text_index_for_point_with_highlights(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        highlights: Option<&Arc<[TextHighlight]>>,
+        width: f32,
+        scale_factor: f32,
+        point: Point,
+    ) -> usize {
+        self.text.index_for_point(
+            id,
+            content,
+            style,
+            highlights,
+            TextHitTest {
+                width,
+                scale: scale_factor,
+                point,
+            },
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn text_selection_rects_with_highlights(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        highlights: Option<&Arc<[TextHighlight]>>,
+        width: f32,
+        scale_factor: f32,
+        visible_y: Range<f32>,
         start: usize,
         end: usize,
-    ) -> Vec<(f32, f32)> {
-        self.text
-            .selection_spans(id, content, style, width, scale_factor, start, end)
+    ) -> Vec<Rect> {
+        self.text.selection_rects(
+            id,
+            content,
+            style,
+            highlights,
+            width,
+            scale_factor,
+            visible_y,
+            start,
+            end,
+        )
     }
 
     /// Wait for the latest submitted frame before removing a platform launch cover.
@@ -397,6 +524,18 @@ impl GpuRenderer {
             physical_size.height,
             scale_factor,
         );
+        let custom_shader_stats = self
+            .custom_shader
+            .prepare(
+                &self.device,
+                &self.queue,
+                scene,
+                logical_viewport,
+                physical_size.width,
+                physical_size.height,
+                scale_factor,
+            )
+            .map_err(RendererError::CustomShader)?;
         let image_stats = self.image.prepare(
             &self.device,
             &self.queue,
@@ -541,6 +680,7 @@ impl GpuRenderer {
                 for order in 0..=paint_layer.max_order() {
                     self.shapes.render_order(&mut pass, layer, order);
                     self.path.render_order(&mut pass, layer, order);
+                    self.custom_shader.render_order(&mut pass, layer, order);
                     self.image.render_order(&mut pass, layer, order);
                     self.svg.render_order(&mut pass, layer, order);
                     self.text.render_order(&mut pass, layer, order)?;
@@ -571,6 +711,7 @@ impl GpuRenderer {
                 for order in 0..=paint_layer.max_order() {
                     self.shapes.render_order(&mut pass, layer, order);
                     self.path.render_order(&mut pass, layer, order);
+                    self.custom_shader.render_order(&mut pass, layer, order);
                     self.image.render_order(&mut pass, layer, order);
                     self.svg.render_order(&mut pass, layer, order);
                     self.text.render_order(&mut pass, layer, order)?;
@@ -604,9 +745,14 @@ impl GpuRenderer {
             paths: path_stats.paths,
             path_vertices: path_stats.vertices,
             skipped_paths: path_stats.skipped_paths,
+            custom_shader_instances: custom_shader_stats.instances,
+            custom_shader_compilations: custom_shader_stats.compiled_pipelines,
+            cached_custom_shader_pipelines: custom_shader_stats.cached_pipelines,
+            skipped_custom_shader_instances: custom_shader_stats.skipped_instances,
             text_areas: text_count,
             draw_calls: shape_draw_calls
                 + path_stats.draw_calls
+                + custom_shader_stats.draw_calls
                 + image_stats.draw_calls
                 + svg_stats.draw_calls
                 + text_draw_calls,
@@ -1114,6 +1260,7 @@ fn create_shape_instance_buffer(device: &Device, capacity: usize) -> wgpu::Buffe
 #[derive(Clone, Debug)]
 struct TextLayoutKey {
     content: Arc<str>,
+    highlights: Option<Arc<[TextHighlight]>>,
     width: Option<f32>,
     font_size: f32,
     line_height: f32,
@@ -1127,6 +1274,7 @@ struct TextLayoutKey {
 impl PartialEq for TextLayoutKey {
     fn eq(&self, other: &Self) -> bool {
         self.content == other.content
+            && highlights_equal(&self.highlights, &other.highlights)
             && self.width.map(f32::to_bits) == other.width.map(f32::to_bits)
             && self.font_size.to_bits() == other.font_size.to_bits()
             && self.line_height.to_bits() == other.line_height.to_bits()
@@ -1143,6 +1291,7 @@ impl Eq for TextLayoutKey {}
 impl Hash for TextLayoutKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.content.hash(state);
+        hash_highlights(&self.highlights, state);
         self.width.map(f32::to_bits).hash(state);
         self.font_size.to_bits().hash(state);
         self.line_height.to_bits().hash(state);
@@ -1152,6 +1301,56 @@ impl Hash for TextLayoutKey {
         self.shaping.hash(state);
         self.scale.to_bits().hash(state);
     }
+}
+
+fn highlights_equal(
+    left: &Option<Arc<[TextHighlight]>>,
+    right: &Option<Arc<[TextHighlight]>>,
+) -> bool {
+    let left = left.as_deref().unwrap_or_default();
+    let right = right.as_deref().unwrap_or_default();
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.range == right.range
+                && optional_color_bits(left.style.color) == optional_color_bits(right.style.color)
+                && left.style.family == right.style.family
+                && left.style.weight == right.style.weight
+                && left.style.glyph_style == right.style.glyph_style
+                && left.style.underline == right.style.underline
+                && optional_color_bits(left.style.underline_color)
+                    == optional_color_bits(right.style.underline_color)
+                && left.style.strikethrough == right.style.strikethrough
+                && optional_color_bits(left.style.strikethrough_color)
+                    == optional_color_bits(right.style.strikethrough_color)
+        })
+}
+
+fn hash_highlights<H: Hasher>(highlights: &Option<Arc<[TextHighlight]>>, state: &mut H) {
+    let highlights = highlights.as_deref().unwrap_or_default();
+    highlights.len().hash(state);
+    for highlight in highlights {
+        highlight.range.start.hash(state);
+        highlight.range.end.hash(state);
+        optional_color_bits(highlight.style.color).hash(state);
+        highlight.style.family.hash(state);
+        highlight.style.weight.hash(state);
+        highlight.style.glyph_style.hash(state);
+        highlight.style.underline.hash(state);
+        optional_color_bits(highlight.style.underline_color).hash(state);
+        highlight.style.strikethrough.hash(state);
+        optional_color_bits(highlight.style.strikethrough_color).hash(state);
+    }
+}
+
+fn optional_color_bits(color: Option<UiColor>) -> Option<[u32; 4]> {
+    color.map(|color| {
+        [
+            color.r.to_bits(),
+            color.g.to_bits(),
+            color.b.to_bits(),
+            color.a.to_bits(),
+        ]
+    })
 }
 
 struct TextEntry {
@@ -1173,6 +1372,7 @@ struct TextSystem {
     renderers: Vec<TextRenderer>,
     buffers: HashMap<TextId, TextEntry>,
     shared_buffers: HashMap<TextLayoutKey, SharedTextEntry>,
+    colors: HashMap<[u32; 4], glyphon::Color>,
     seen: HashSet<TextId>,
     visible: Vec<VisibleText>,
     batches: Vec<TextBatch>,
@@ -1198,9 +1398,16 @@ struct TextBatch {
     renderer: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct TextHitTest {
+    width: f32,
+    scale: f32,
+    point: Point,
+}
+
 impl TextSystem {
     fn new(device: &Device, queue: &Queue, format: TextureFormat) -> Self {
-        let font_system = FontSystem::new();
+        let font_system = create_font_system();
         let swash_cache = SwashCache::new();
         let cache = Cache::new(device);
         let viewport = Viewport::new(device, &cache);
@@ -1214,6 +1421,7 @@ impl TextSystem {
             renderers: vec![renderer],
             buffers: HashMap::with_capacity(512),
             shared_buffers: HashMap::with_capacity(512),
+            colors: HashMap::with_capacity(MAX_RETAINED_TEXT_COLORS),
             seen: HashSet::with_capacity(128),
             visible: Vec::with_capacity(128),
             batches: Vec::with_capacity(16),
@@ -1261,12 +1469,29 @@ impl TextSystem {
                     return Err(RendererError::DuplicateTextId(run.id));
                 }
                 text_count += 1;
-                let rgba = run.style.color.to_srgba8();
-                let color = glyphon::Color::rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+                let color_key = [
+                    run.style.color.r.to_bits(),
+                    run.style.color.g.to_bits(),
+                    run.style.color.b.to_bits(),
+                    run.style.color.a.to_bits(),
+                ];
+                let color = if let Some(color) = self.colors.get(&color_key) {
+                    *color
+                } else {
+                    if self.colors.len() >= MAX_RETAINED_TEXT_COLORS {
+                        self.colors.clear();
+                    }
+                    let rgba = run.style.color.to_srgba8();
+                    let color = glyphon::Color::rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+                    self.colors.insert(color_key, color);
+                    color
+                };
                 let bounds = physical_text_bounds(clip, scale);
                 let left = run.bounds.x * scale;
                 let top = run.bounds.y * scale;
-                let run_reshaped = if should_fragment_basic_text(&run.content, &run.style) {
+                let run_reshaped = if run.highlights.is_none()
+                    && should_fragment_basic_text(&run.content, &run.style)
+                {
                     let mut fragment_left = left;
                     let mut fragment_reshaped = false;
                     for fragment in BasicTextFragments::new(&run.content) {
@@ -1291,6 +1516,7 @@ impl TextSystem {
                         run.id,
                         &run.content,
                         &run.style,
+                        run.highlights.as_ref(),
                         Some(run.bounds.width),
                         scale,
                         self.frame,
@@ -1384,6 +1610,7 @@ impl TextSystem {
         id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
+        highlights: Option<&Arc<[TextHighlight]>>,
         max_width: Option<f32>,
         scale: f32,
     ) -> Size {
@@ -1392,7 +1619,7 @@ impl TextSystem {
             TextWrap::Word | TextWrap::Glyph => max_width,
         };
         let next_frame = self.frame.wrapping_add(1);
-        self.update_text_entry(id, content, style, width, scale, next_frame);
+        self.update_text_entry(id, content, style, highlights, width, scale, next_frame);
         let buffer = &self.buffers[&id].buffer;
         let mut measured_width = 0.0_f32;
         let mut measured_height = 0.0_f32;
@@ -1414,67 +1641,140 @@ impl TextSystem {
         Size::new(measured_width, measured_height.ceil() / scale)
     }
 
-    fn caret_x(
+    #[allow(clippy::too_many_arguments)]
+    fn caret_position(
         &mut self,
         id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
+        highlights: Option<&Arc<[TextHighlight]>>,
         width: f32,
         scale: f32,
         index: usize,
-    ) -> f32 {
+    ) -> Point {
         let next_frame = self.frame.wrapping_add(1);
-        self.update_text_entry(id, content, style, Some(width), scale, next_frame);
+        self.update_text_entry(
+            id,
+            content,
+            style,
+            highlights,
+            Some(width),
+            scale,
+            next_frame,
+        );
+        let cursor = text_cursor_for_byte_index(content, index);
         self.buffers[&id]
             .buffer
-            .cursor_position(&Cursor::new(0, index.min(content.len())))
-            .map(|(x, _)| x / scale)
-            .unwrap_or(0.0)
+            .cursor_position(&cursor)
+            .map(|(x, y)| Point::new(x / scale, y / scale))
+            .unwrap_or(Point::ZERO)
     }
 
-    fn index_for_x(
+    fn index_for_point(
         &mut self,
         id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
-        width: f32,
-        scale: f32,
-        x: f32,
+        highlights: Option<&Arc<[TextHighlight]>>,
+        hit: TextHitTest,
     ) -> usize {
         let next_frame = self.frame.wrapping_add(1);
-        self.update_text_entry(id, content, style, Some(width), scale, next_frame);
+        self.update_text_entry(
+            id,
+            content,
+            style,
+            highlights,
+            Some(hit.width),
+            hit.scale,
+            next_frame,
+        );
         self.buffers[&id]
             .buffer
-            .hit(x.max(0.0) * scale, style.line_height * scale * 0.5)
-            .map(|cursor| cursor.index.min(content.len()))
+            .hit(
+                hit.point.x.max(0.0) * hit.scale,
+                hit.point.y.max(0.0) * hit.scale,
+            )
+            .map(|cursor| byte_index_for_text_cursor(content, cursor))
             .unwrap_or(content.len())
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn selection_spans(
+    fn selection_rects(
         &mut self,
         id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
+        highlights: Option<&Arc<[TextHighlight]>>,
         width: f32,
         scale: f32,
+        visible_y: Range<f32>,
         start: usize,
         end: usize,
-    ) -> Vec<(f32, f32)> {
+    ) -> Vec<Rect> {
         let next_frame = self.frame.wrapping_add(1);
-        self.update_text_entry(id, content, style, Some(width), scale, next_frame);
-        let start = Cursor::new(0, start.min(content.len()));
-        let end = Cursor::new(0, end.min(content.len()));
+        self.update_text_entry(
+            id,
+            content,
+            style,
+            highlights,
+            Some(width),
+            scale,
+            next_frame,
+        );
+        let start = text_cursor_for_byte_index(content, start);
+        let end = text_cursor_for_byte_index(content, end);
         self.buffers[&id]
             .buffer
             .layout_runs()
-            .next()
-            .map(|run| {
-                run.highlight(start, end)
-                    .map(|(x, width)| (x / scale, width / scale))
-                    .collect()
+            .filter(|run| {
+                let top = run.line_top / scale;
+                let bottom = top + run.line_height / scale;
+                top < visible_y.end && bottom > visible_y.start
             })
-            .unwrap_or_default()
+            .flat_map(|run| {
+                let line_top = run.line_top;
+                text_selection_spans(&run, start, end)
+                    .into_iter()
+                    .map(move |(x, width)| {
+                        Rect::new(
+                            x / scale,
+                            line_top / scale,
+                            width / scale,
+                            run.line_height / scale,
+                        )
+                    })
+            })
+            .collect()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn styled_geometry(
+        &mut self,
+        id: TextId,
+        content: &Arc<str>,
+        style: &TextStyle,
+        highlights: &Arc<[TextHighlight]>,
+        width: f32,
+        scale: f32,
+        visible_y: Range<f32>,
+    ) -> StyledTextGeometry {
+        let next_frame = self.frame.wrapping_add(1);
+        self.update_text_entry(
+            id,
+            content,
+            style,
+            Some(highlights),
+            Some(width),
+            scale,
+            next_frame,
+        );
+        collect_styled_text_geometry(
+            self.buffers[&id].buffer.as_ref(),
+            highlights,
+            style.color,
+            scale,
+            visible_y,
+        )
     }
 
     fn render_order<'pass>(
@@ -1550,11 +1850,13 @@ impl TextSystem {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn update_text_entry(
         &mut self,
         id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
+        highlights: Option<&Arc<[TextHighlight]>>,
         width: Option<f32>,
         scale: f32,
         frame: u64,
@@ -1565,6 +1867,7 @@ impl TextSystem {
         let width = canonical_text_width(style.wrap, width);
         let key = TextLayoutKey {
             content: content.clone(),
+            highlights: highlights.cloned(),
             width,
             font_size: style.font_size,
             line_height: style.line_height,
@@ -1612,6 +1915,7 @@ impl TextSystem {
     ) -> (Arc<Buffer>, bool) {
         let key = TextLayoutKey {
             content,
+            highlights: None,
             width: canonical_text_width(style.wrap, width),
             font_size: style.font_size,
             line_height: style.line_height,
@@ -1642,6 +1946,7 @@ impl TextSystem {
                 &mut self.font_system,
                 &key.content,
                 style,
+                key.highlights.as_deref(),
                 key.width,
                 scale,
             );
@@ -1656,6 +1961,130 @@ impl TextSystem {
             (buffer, true)
         }
     }
+}
+
+fn create_font_system() -> FontSystem {
+    #[cfg(target_os = "macos")]
+    {
+        let mut font_system = FontSystem::new();
+        // NISC18030.ttf advertises `GB18030 Bitmap` as a monospaced CJK face, but its
+        // non-scalable metrics produce infinite advances in Cosmic Text and Swash cannot
+        // rasterize its glyphs. Cosmic Text otherwise ranks it ahead of the scalable macOS CJK
+        // fallbacks for `Family::Monospace`, which invalidates the complete wrapped buffer.
+        // Remove the unusable face once, before any font-match cache is populated; this adds no
+        // shaping or frame-time work and allows the normal script fallback to select a scalable
+        // face such as PingFang.
+        let incompatible = font_system
+            .db()
+            .faces()
+            .filter(|face| face.monospaced && face.post_script_name == "GB18030Bitmap")
+            .map(|face| face.id)
+            .collect::<Vec<_>>();
+        if !incompatible.is_empty() {
+            let database = font_system.db_mut();
+            for id in incompatible {
+                database.remove_face(id);
+            }
+        }
+        font_system
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        FontSystem::new()
+    }
+}
+
+fn text_cursor_for_byte_index(content: &str, index: usize) -> Cursor {
+    let mut index = index.min(content.len());
+    while !content.is_char_boundary(index) {
+        index -= 1;
+    }
+
+    let mut offset = 0;
+    for (line, text) in content.split('\n').enumerate() {
+        let line_end = offset + text.len();
+        if index <= line_end {
+            return Cursor::new(line, index - offset);
+        }
+        offset = line_end.saturating_add(1);
+    }
+    Cursor::new(content.lines().count(), 0)
+}
+
+/// Return the visual selection spans for one retained layout run.
+///
+/// Cosmic Text 0.19's `LayoutRun::highlight` treats every line outside a same-line selection as
+/// selected because it only compares line equality. Keep its grapheme/BiDi span construction but
+/// reject lines outside the ordered cursor interval explicitly.
+fn text_selection_spans(
+    run: &LayoutRun<'_>,
+    cursor_start: Cursor,
+    cursor_end: Cursor,
+) -> Vec<(f32, f32)> {
+    if run.line_i < cursor_start.line || run.line_i > cursor_end.line {
+        return Vec::new();
+    }
+    let selection_start = if run.line_i == cursor_start.line {
+        cursor_start.index.min(run.text.len())
+    } else {
+        0
+    };
+    let selection_end = if run.line_i == cursor_end.line {
+        cursor_end.index.min(run.text.len())
+    } else {
+        run.text.len()
+    };
+    if selection_start >= selection_end {
+        return Vec::new();
+    }
+
+    let mut results = Vec::new();
+    let mut visual_range: Option<(f32, f32)> = None;
+    for glyph in run.glyphs {
+        let cluster = &run.text[glyph.start..glyph.end];
+        let grapheme_count = cluster.grapheme_indices(true).count().max(1);
+        let grapheme_width = glyph.w / grapheme_count as f32;
+        let mut grapheme_x = glyph.x;
+        for (offset, grapheme) in cluster.grapheme_indices(true) {
+            let grapheme_start = glyph.start + offset;
+            let grapheme_end = grapheme_start + grapheme.len();
+            if grapheme_end > selection_start && grapheme_start < selection_end {
+                visual_range = Some(match visual_range {
+                    Some((minimum, maximum)) => (
+                        minimum.min(grapheme_x),
+                        maximum.max(grapheme_x + grapheme_width),
+                    ),
+                    None => (grapheme_x, grapheme_x + grapheme_width),
+                });
+            } else if let Some((minimum, maximum)) = visual_range.take()
+                && maximum > minimum
+            {
+                results.push((minimum, maximum - minimum));
+            }
+            grapheme_x += grapheme_width;
+        }
+    }
+    if let Some((minimum, maximum)) = visual_range
+        && maximum > minimum
+    {
+        results.push((minimum, maximum - minimum));
+    }
+    results
+}
+
+fn byte_index_for_text_cursor(content: &str, cursor: Cursor) -> usize {
+    let mut offset = 0;
+    for (line, text) in content.split('\n').enumerate() {
+        if line == cursor.line {
+            let mut index = cursor.index.min(text.len());
+            while !text.is_char_boundary(index) {
+                index -= 1;
+            }
+            return offset + index;
+        }
+        offset = offset.saturating_add(text.len()).saturating_add(1);
+    }
+    content.len()
 }
 
 fn should_fragment_basic_text(content: &str, style: &TextStyle) -> bool {
@@ -1715,11 +2144,97 @@ fn canonical_text_width(wrap: TextWrap, width: Option<f32>) -> Option<f32> {
     }
 }
 
+fn collect_styled_text_geometry(
+    buffer: &Buffer,
+    highlights: &[TextHighlight],
+    default_color: UiColor,
+    scale: f32,
+    visible_y: Range<f32>,
+) -> StyledTextGeometry {
+    let scale = scale.max(f32::EPSILON);
+    let mut backgrounds = Vec::with_capacity(highlights.len().min(32));
+    let mut decoration_collector = DecorationCollector {
+        scale,
+        rectangles: Vec::with_capacity(highlights.len().min(32)),
+    };
+    for run in buffer.layout_runs() {
+        let line_top = run.line_top / scale;
+        let line_bottom = (run.line_top + run.line_height) / scale;
+        if line_top >= visible_y.end || line_bottom <= visible_y.start {
+            continue;
+        }
+
+        let mut start = 0;
+        while start < run.glyphs.len() {
+            let metadata = run.glyphs[start].metadata;
+            let mut end = start + 1;
+            while end < run.glyphs.len() && run.glyphs[end].metadata == metadata {
+                end += 1;
+            }
+            if let Some(background) = metadata
+                .checked_sub(1)
+                .and_then(|index| highlights.get(index))
+                .and_then(|highlight| highlight.style.background)
+                .filter(|color| color.a > 0.0)
+            {
+                let mut left = f32::INFINITY;
+                let mut right = f32::NEG_INFINITY;
+                for glyph in &run.glyphs[start..end] {
+                    left = left.min(glyph.x);
+                    right = right.max(glyph.x + glyph.w);
+                }
+                if right > left {
+                    backgrounds.push(TextPaintRect {
+                        rect: Rect::new(
+                            left / scale,
+                            line_top,
+                            (right - left) / scale,
+                            run.line_height / scale,
+                        ),
+                        color: background,
+                    });
+                }
+            }
+            start = end;
+        }
+        render_decoration(&mut decoration_collector, &run, glyph_color(default_color));
+    }
+    StyledTextGeometry {
+        backgrounds,
+        decorations: decoration_collector.rectangles,
+    }
+}
+
+struct DecorationCollector {
+    scale: f32,
+    rectangles: Vec<TextPaintRect>,
+}
+
+impl CosmicRenderer for DecorationCollector {
+    fn rectangle(&mut self, x: i32, y: i32, width: u32, height: u32, color: GlyphColor) {
+        if width == 0 || height == 0 || color.a() == 0 {
+            return;
+        }
+        self.rectangles.push(TextPaintRect {
+            rect: Rect::new(
+                x as f32 / self.scale,
+                y as f32 / self.scale,
+                width as f32 / self.scale,
+                height as f32 / self.scale,
+            ),
+            color: ui_color(color),
+        });
+    }
+
+    fn glyph(&mut self, _physical_glyph: PhysicalGlyph, _color: GlyphColor) {}
+}
+
 fn configure_text_buffer(
     buffer: &mut Buffer,
     font_system: &mut FontSystem,
     content: &str,
     style: &TextStyle,
+    highlights: Option<&[TextHighlight]>,
     width: Option<f32>,
     scale: f32,
 ) {
@@ -1730,19 +2245,79 @@ fn configure_text_buffer(
         TextWrap::Word => Wrap::Word,
         TextWrap::Glyph => Wrap::Glyph,
     });
-    let family = match &style.family {
-        FontFamily::SansSerif => Family::SansSerif,
-        FontFamily::Serif => Family::Serif,
-        FontFamily::Monospace => Family::Monospace,
-        FontFamily::Named(name) => Family::Name(name),
-    };
-    let attrs = Attrs::new().family(family).weight(style.weight);
+    let attrs = Attrs::new()
+        .family(glyph_family(&style.family))
+        .weight(style.weight);
     let shaping = match style.shaping {
         TextShaping::Advanced => GlyphShaping::Advanced,
         TextShaping::Basic => GlyphShaping::Basic,
     };
-    buffer.set_text(content, &attrs, shaping, None);
+    if let Some(highlights) = highlights.filter(|highlights| !highlights.is_empty()) {
+        let mut spans = Vec::with_capacity(highlights.len() * 2 + 1);
+        let mut cursor = 0;
+        for (index, highlight) in highlights.iter().enumerate() {
+            if cursor < highlight.range.start {
+                spans.push((&content[cursor..highlight.range.start], attrs.clone()));
+            }
+            let mut highlight_attrs = attrs
+                .clone()
+                .metadata(index + 1)
+                .family(
+                    highlight
+                        .style
+                        .family
+                        .as_ref()
+                        .map_or_else(|| glyph_family(&style.family), glyph_family),
+                )
+                .weight(highlight.style.weight.unwrap_or(style.weight))
+                .style(highlight.style.glyph_style.unwrap_or(GlyphStyle::Normal));
+            if let Some(color) = highlight.style.color {
+                highlight_attrs = highlight_attrs.color(glyph_color(color));
+            }
+            highlight_attrs = match highlight.style.underline {
+                TextUnderline::None => highlight_attrs,
+                TextUnderline::Single => highlight_attrs.underline(GlyphUnderlineStyle::Single),
+                TextUnderline::Double => highlight_attrs.underline(GlyphUnderlineStyle::Double),
+            };
+            if let Some(color) = highlight.style.underline_color {
+                highlight_attrs = highlight_attrs.underline_color(glyph_color(color));
+            }
+            if highlight.style.strikethrough {
+                highlight_attrs = highlight_attrs.strikethrough();
+            }
+            if let Some(color) = highlight.style.strikethrough_color {
+                highlight_attrs = highlight_attrs.strikethrough_color(glyph_color(color));
+            }
+            spans.push((&content[highlight.range.clone()], highlight_attrs));
+            cursor = highlight.range.end;
+        }
+        if cursor < content.len() {
+            spans.push((&content[cursor..], attrs.clone()));
+        }
+        buffer.set_rich_text(spans, &attrs, shaping, None);
+    } else {
+        buffer.set_text(content, &attrs, shaping, None);
+    }
     buffer.shape_until_scroll(font_system, false);
+}
+
+fn glyph_family(family: &FontFamily) -> Family<'_> {
+    match family {
+        FontFamily::SansSerif => Family::SansSerif,
+        FontFamily::Serif => Family::Serif,
+        FontFamily::Monospace => Family::Monospace,
+        FontFamily::Named(name) => Family::Name(name),
+    }
+}
+
+fn glyph_color(color: UiColor) -> GlyphColor {
+    let [red, green, blue, alpha] = color.to_srgba8();
+    GlyphColor::rgba(red, green, blue, alpha)
+}
+
+fn ui_color(color: GlyphColor) -> UiColor {
+    let [red, green, blue, alpha] = color.as_rgba();
+    UiColor::rgba8(red, green, blue, alpha)
 }
 
 fn physical_text_bounds(rect: Rect, scale: f32) -> TextBounds {
@@ -1771,7 +2346,7 @@ impl From<PerformanceProfile> for wgpu::PowerPreference {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BoxShadow, Color};
+    use crate::{BoxShadow, Color, HighlightStyle, StyledText};
 
     #[test]
     fn surface_format_prefers_srgb() {
@@ -1801,6 +2376,317 @@ mod tests {
             canonical_text_width(TextWrap::Glyph, Some(640.0)),
             Some(640.0)
         );
+    }
+
+    #[test]
+    fn multiline_layout_maps_carets_hits_and_selection_per_line() {
+        let content = "first line\nsecond line";
+        let style = TextStyle::new(14.0, Color::WHITE).line_height(20.0);
+        let mut font_system = create_font_system();
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size, style.line_height),
+        );
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            content,
+            &style,
+            None,
+            Some(240.0),
+            1.0,
+        );
+
+        let second_line = content.find("second").expect("second line exists");
+        let caret = text_cursor_for_byte_index(content, second_line + 3);
+        let (_, caret_y) = buffer.cursor_position(&caret).expect("caret is laid out");
+        assert!(caret_y >= style.line_height);
+        let hit = buffer
+            .hit(0.0, caret_y + style.line_height * 0.5)
+            .expect("second line is hittable");
+        assert_eq!(hit.line, 1);
+        assert_eq!(byte_index_for_text_cursor(content, hit), second_line);
+
+        let selection_start = text_cursor_for_byte_index(content, 2);
+        let selection_end = text_cursor_for_byte_index(content, content.len() - 2);
+        let highlighted_lines = buffer
+            .layout_runs()
+            .filter(|run| !text_selection_spans(run, selection_start, selection_end).is_empty())
+            .count();
+        assert_eq!(highlighted_lines, 2);
+
+        let trailing_newline = "first line\n";
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            trailing_newline,
+            &style,
+            None,
+            Some(240.0),
+            1.0,
+        );
+        let trailing_caret = text_cursor_for_byte_index(trailing_newline, trailing_newline.len());
+        let (_, trailing_y) = buffer
+            .cursor_position(&trailing_caret)
+            .expect("a trailing empty line has caret geometry");
+        assert!(trailing_y >= style.line_height);
+
+        let wrapped = "alpha beta gamma delta epsilon";
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            wrapped,
+            &style,
+            None,
+            Some(60.0),
+            1.0,
+        );
+        assert!(buffer.layout_runs().count() >= 3);
+        let gamma = wrapped.find("gamma").expect("gamma exists");
+        let wrapped_caret = text_cursor_for_byte_index(wrapped, gamma + 2);
+        let (wrapped_x, wrapped_y) = buffer
+            .cursor_position(&wrapped_caret)
+            .expect("a wrapped caret has visual-line geometry");
+        assert!(wrapped_y >= style.line_height);
+        let wrapped_hit = buffer
+            .hit(wrapped_x, wrapped_y + style.line_height * 0.5)
+            .expect("the wrapped visual line is hittable");
+        let wrapped_index = byte_index_for_text_cursor(wrapped, wrapped_hit);
+        assert!((gamma..=gamma + "gamma".len()).contains(&wrapped_index));
+    }
+
+    #[test]
+    fn styled_text_uses_one_wrapped_buffer_for_glyphs_backgrounds_and_decorations() {
+        let content: Arc<str> = Arc::from("status ready deprecated");
+        let ready = content.find("ready").unwrap();
+        let deprecated = content.find("deprecated").unwrap();
+        let styled = StyledText::new(content.clone()).with_highlights([
+            (
+                0..6,
+                HighlightStyle::default()
+                    .background(Color::rgba8(30, 64, 175, 96))
+                    .font_semibold(),
+            ),
+            (
+                ready..ready + "ready".len(),
+                HighlightStyle::default()
+                    .color(Color::rgb8(56, 189, 248))
+                    .double_underline(),
+            ),
+            (
+                deprecated..content.len(),
+                HighlightStyle::default()
+                    .italic()
+                    .strikethrough_color(Color::rgb8(248, 113, 113)),
+            ),
+        ]);
+        let style = TextStyle::new(14.0, Color::WHITE).line_height(20.0);
+        let mut font_system = create_font_system();
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size, style.line_height),
+        );
+
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            &content,
+            &style,
+            Some(styled.highlights()),
+            Some(90.0),
+            1.0,
+        );
+
+        assert!(buffer.layout_runs().count() >= 2);
+        let metadata: HashSet<_> = buffer
+            .layout_runs()
+            .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.metadata))
+            .collect();
+        assert!(metadata.contains(&1));
+        assert!(metadata.contains(&2));
+        assert!(metadata.contains(&3));
+
+        let geometry = collect_styled_text_geometry(
+            &buffer,
+            styled.highlights(),
+            style.color,
+            1.0,
+            0.0..1_000.0,
+        );
+        assert!(!geometry.backgrounds.is_empty());
+        assert!(geometry.decorations.len() >= 3);
+        assert_eq!(geometry.backgrounds[0].color, Color::rgba8(30, 64, 175, 96));
+
+        let clipped = collect_styled_text_geometry(
+            &buffer,
+            styled.highlights(),
+            style.color,
+            1.0,
+            10_000.0..10_020.0,
+        );
+        assert!(clipped.backgrounds.is_empty());
+        assert!(clipped.decorations.is_empty());
+    }
+
+    #[test]
+    fn styled_multiline_selection_respects_exact_byte_range() {
+        let content: Arc<str> =
+            Arc::from("fn render() {\n    let state = \"GPU cached\";\n    deprecated_api();\n}");
+        let selected_start = content.find("GPU cached").unwrap();
+        let selected_end = selected_start + "GPU cached".len();
+        let deprecated = content.find("deprecated_api").unwrap();
+        let styled = StyledText::new(content.clone()).with_highlights([
+            (0..2, HighlightStyle::default().font_bold()),
+            (
+                selected_start..selected_end,
+                HighlightStyle::default().background(Color::rgba8(14, 116, 144, 72)),
+            ),
+            (
+                deprecated..deprecated + "deprecated_api".len(),
+                HighlightStyle::default().strikethrough(),
+            ),
+        ]);
+        let style = TextStyle::new(14.0, Color::WHITE)
+            .family(FontFamily::Monospace)
+            .wrap(TextWrap::None)
+            .line_height(22.0);
+        let mut font_system = create_font_system();
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size, style.line_height),
+        );
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            &content,
+            &style,
+            Some(styled.highlights()),
+            Some(640.0),
+            1.0,
+        );
+
+        let start = text_cursor_for_byte_index(&content, selected_start);
+        let end = text_cursor_for_byte_index(&content, selected_end);
+        let selections = buffer
+            .layout_runs()
+            .flat_map(|run| {
+                let line_width = run.line_w;
+                text_selection_spans(&run, start, end)
+                    .into_iter()
+                    .map(move |(_, width)| (run.line_i, width, line_width))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(selections.len(), 1);
+        assert_eq!(selections[0].0, 1);
+        assert!(selections[0].1 < selections[0].2);
+    }
+
+    #[test]
+    fn background_color_only_changes_reuse_the_shaped_highlight_key() {
+        use std::collections::hash_map::DefaultHasher;
+
+        let cool = StyledText::new("cached").with_highlights([(
+            0..6,
+            HighlightStyle::default().background(Color::rgb8(14, 116, 144)),
+        )]);
+        let warm = StyledText::new("cached").with_highlights([(
+            0..6,
+            HighlightStyle::default().background(Color::rgb8(190, 24, 93)),
+        )]);
+        let cool = Some(cool.shared_highlights().clone());
+        let warm = Some(warm.shared_highlights().clone());
+
+        assert!(highlights_equal(&cool, &warm));
+        let mut cool_hash = DefaultHasher::new();
+        hash_highlights(&cool, &mut cool_hash);
+        let mut warm_hash = DefaultHasher::new();
+        hash_highlights(&warm, &mut warm_hash);
+        assert_eq!(cool_hash.finish(), warm_hash.finish());
+
+        let foreground = StyledText::new("cached").with_highlights([(
+            0..6,
+            HighlightStyle::default().color(Color::rgb8(14, 116, 144)),
+        )]);
+        assert!(!highlights_equal(
+            &cool,
+            &Some(foreground.shared_highlights().clone())
+        ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_font_fallback_excludes_the_unscalable_gb18030_bitmap_face() {
+        let font_system = create_font_system();
+        assert!(
+            font_system
+                .db()
+                .faces()
+                .all(|face| face.post_script_name != "GB18030Bitmap")
+        );
+    }
+
+    #[test]
+    fn multiline_monospaced_styled_text_keeps_rasterizable_glyphs_on_every_line() {
+        let content: Arc<str> = Arc::from("first red\nsecond blue\nthird 東京 مرحبا 🙂");
+        let red = content.find("red").unwrap();
+        let blue = content.find("blue").unwrap();
+        let styled = StyledText::new(content.clone()).with_highlights([
+            (
+                red..red + 3,
+                HighlightStyle::default()
+                    .color(Color::rgb8(248, 113, 113))
+                    .background(Color::rgba8(127, 29, 29, 96)),
+            ),
+            (
+                blue..blue + 4,
+                HighlightStyle::default()
+                    .color(Color::rgb8(96, 165, 250))
+                    .underline(),
+            ),
+        ]);
+        let style = TextStyle::new(14.0, Color::WHITE)
+            .family(FontFamily::Monospace)
+            .line_height(22.0);
+        let mut font_system = create_font_system();
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size, style.line_height),
+        );
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            &content,
+            &style,
+            Some(styled.highlights()),
+            Some(400.0),
+            1.0,
+        );
+
+        let runs: Vec<_> = buffer.layout_runs().collect();
+        assert_eq!(runs.len(), 3);
+        assert_eq!(
+            runs.iter().map(|run| run.text).collect::<Vec<_>>(),
+            ["first red", "second blue", "third 東京 مرحبا 🙂"]
+        );
+        assert!(runs.iter().all(|run| run.line_w.is_finite()));
+        assert!(runs.iter().all(|run| !run.glyphs.is_empty()));
+
+        let mut swash = SwashCache::new();
+        for run in runs {
+            for glyph in run.glyphs.iter().filter(|glyph| glyph.w > 0.0) {
+                assert!(glyph.x.is_finite() && glyph.w.is_finite());
+                assert!(
+                    swash
+                        .get_image_uncached(
+                            &mut font_system,
+                            glyph.physical((0.0, 0.0), 1.0).cache_key,
+                        )
+                        .is_some(),
+                    "every fallback glyph in a monospaced rich-text buffer must rasterize"
+                );
+            }
+        }
     }
 
     #[test]

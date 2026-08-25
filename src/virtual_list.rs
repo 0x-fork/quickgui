@@ -1,4 +1,11 @@
-use std::ops::Range;
+use std::{
+    fmt,
+    ops::Range,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
+};
 
 use crate::Rect;
 
@@ -19,13 +26,54 @@ impl VisibleRows {
 }
 
 /// Constant-height virtual scrolling with bounded memory and O(1) range calculation.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct VirtualList {
     len: usize,
     row_height: f32,
     overscan: usize,
     viewport_height: f32,
-    scroll_offset: f32,
+    scroll_offset: Arc<AtomicU32>,
+}
+
+/// Shared offset storage used by a retained virtual-scroll viewport.
+///
+/// This stays crate-private: applications bind a [`VirtualList`] directly with
+/// [`crate::Element::virtual_scroll`].
+#[derive(Clone)]
+pub(crate) struct VirtualScrollHandle(Arc<AtomicU32>);
+
+impl VirtualScrollHandle {
+    pub(crate) fn offset(&self) -> f32 {
+        f32::from_bits(self.0.load(Ordering::Relaxed))
+    }
+
+    pub(crate) fn set_offset(&self, offset: f32) {
+        debug_assert!(offset.is_finite() && offset >= 0.0);
+        self.0.store(offset.to_bits(), Ordering::Relaxed);
+    }
+}
+
+impl fmt::Debug for VirtualScrollHandle {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("VirtualScrollHandle")
+            .field(&self.offset())
+            .finish()
+    }
+}
+
+impl Clone for VirtualList {
+    fn clone(&self) -> Self {
+        // Preserve VirtualList's value-like clone semantics. Element bindings clone only the
+        // private handle above, while cloning the list itself starts an independent scroll state.
+        Self {
+            len: self.len,
+            row_height: self.row_height,
+            overscan: self.overscan,
+            viewport_height: self.viewport_height,
+            scroll_offset: Arc::new(AtomicU32::new(self.scroll_offset().to_bits())),
+        }
+    }
 }
 
 impl VirtualList {
@@ -39,7 +87,7 @@ impl VirtualList {
             row_height,
             overscan: 2,
             viewport_height: 0.0,
-            scroll_offset: 0.0,
+            scroll_offset: Arc::new(AtomicU32::new(0.0_f32.to_bits())),
         }
     }
 
@@ -88,7 +136,7 @@ impl VirtualList {
     }
 
     pub fn scroll_offset(&self) -> f32 {
-        self.scroll_offset
+        f32::from_bits(self.scroll_offset.load(Ordering::Relaxed))
     }
 
     pub fn max_scroll_offset(&self) -> f32 {
@@ -96,17 +144,40 @@ impl VirtualList {
     }
 
     pub fn scroll_by(&mut self, delta: f32) -> bool {
-        self.scroll_to(self.scroll_offset + delta)
+        self.scroll_to(self.scroll_offset() + delta)
     }
 
     pub fn scroll_to(&mut self, offset: f32) -> bool {
-        let old = self.scroll_offset;
-        self.scroll_offset = if offset.is_finite() {
+        let old = self.scroll_offset();
+        let next = if offset.is_finite() {
             offset.clamp(0.0, self.max_scroll_offset())
         } else {
             old
         };
-        old != self.scroll_offset
+        if old == next {
+            false
+        } else {
+            self.scroll_offset.store(next.to_bits(), Ordering::Relaxed);
+            true
+        }
+    }
+
+    /// Scroll the smallest distance needed to expose one complete row.
+    pub fn scroll_to_reveal(&mut self, index: usize) -> bool {
+        if index >= self.len || self.viewport_height <= 0.0 {
+            return false;
+        }
+        let top = index as f32 * self.row_height;
+        let bottom = top + self.row_height;
+        let viewport_top = self.scroll_offset();
+        let viewport_bottom = viewport_top + self.viewport_height;
+        if top < viewport_top {
+            self.scroll_to(top)
+        } else if bottom > viewport_bottom {
+            self.scroll_to(bottom - self.viewport_height)
+        } else {
+            false
+        }
     }
 
     pub fn visible_rows(&self) -> VisibleRows {
@@ -114,9 +185,10 @@ impl VirtualList {
             return VisibleRows { range: 0..0 };
         }
 
-        let first = (self.scroll_offset / self.row_height).floor() as usize;
+        let scroll_offset = self.scroll_offset();
+        let first = (scroll_offset / self.row_height).floor() as usize;
         let visible_end =
-            ((self.scroll_offset + self.viewport_height) / self.row_height).ceil() as usize;
+            ((scroll_offset + self.viewport_height) / self.row_height).ceil() as usize;
         VisibleRows {
             range: first.saturating_sub(self.overscan)
                 ..visible_end.saturating_add(self.overscan).min(self.len),
@@ -128,7 +200,7 @@ impl VirtualList {
         debug_assert!(index < self.len);
         Rect::new(
             viewport_x,
-            viewport_y + index as f32 * self.row_height - self.scroll_offset,
+            viewport_y + index as f32 * self.row_height - self.scroll_offset(),
             width,
             self.row_height,
         )
@@ -144,12 +216,18 @@ impl VirtualList {
             .max(minimum_height)
             .min(self.viewport_height);
         let travel = self.viewport_height - thumb_height;
-        let offset = travel * (self.scroll_offset / self.max_scroll_offset());
+        let offset = travel * (self.scroll_offset() / self.max_scroll_offset());
         Some((offset, thumb_height))
     }
 
     fn clamp_offset(&mut self) {
-        self.scroll_offset = self.scroll_offset.clamp(0.0, self.max_scroll_offset());
+        let offset = self.scroll_offset().clamp(0.0, self.max_scroll_offset());
+        self.scroll_offset
+            .store(offset.to_bits(), Ordering::Relaxed);
+    }
+
+    pub(crate) fn scroll_handle(&self) -> VirtualScrollHandle {
+        VirtualScrollHandle(Arc::clone(&self.scroll_offset))
     }
 }
 
@@ -182,5 +260,31 @@ mod tests {
         assert_eq!(list.scrollbar_thumb(10.0), Some((0.0, 10.0)));
         list.scroll_to(list.max_scroll_offset());
         assert_eq!(list.scrollbar_thumb(10.0), Some((90.0, 10.0)));
+    }
+
+    #[test]
+    fn cloned_lists_keep_independent_scroll_offsets() {
+        let mut list = VirtualList::new(100, 10.0);
+        list.set_viewport_height(100.0);
+        list.scroll_to(240.0);
+        let mut clone = list.clone();
+
+        clone.scroll_to(500.0);
+
+        assert_eq!(list.scroll_offset(), 240.0);
+        assert_eq!(clone.scroll_offset(), 500.0);
+    }
+
+    #[test]
+    fn revealing_rows_moves_only_when_the_complete_row_is_outside() {
+        let mut list = VirtualList::new(100, 20.0);
+        list.set_viewport_height(100.0);
+
+        assert!(!list.scroll_to_reveal(4));
+        assert!(list.scroll_to_reveal(5));
+        assert_eq!(list.scroll_offset(), 20.0);
+        assert!(list.scroll_to_reveal(0));
+        assert_eq!(list.scroll_offset(), 0.0);
+        assert!(!list.scroll_to_reveal(100));
     }
 }

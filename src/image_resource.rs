@@ -9,7 +9,7 @@ use std::{
 use winit::event_loop::EventLoopProxy;
 
 use crate::{
-    Element, ImageResource,
+    Element, ImageResource, WindowHandle,
     animated_image::ImageAsset,
     element::{ElementKind, ImageResolution},
     image::ImageResourceKey,
@@ -44,6 +44,7 @@ pub(crate) struct ImageLoadCompletion {
 }
 
 struct ImageLoadJob {
+    window: WindowHandle,
     resource: ImageResource,
     request_id: u64,
 }
@@ -53,6 +54,49 @@ struct ImageWorkerPool {
     // Dropping a JoinHandle detaches it. Shutdown must never wait on an application-provided
     // loader that may be blocked in file or network code.
     _workers: Vec<thread::JoinHandle<()>>,
+}
+
+enum SharedWorkerState {
+    Dormant,
+    Ready(ImageWorkerPool),
+    Failed,
+}
+
+/// One lazily-created, bounded decode pool shared by every window in an application runtime.
+#[derive(Clone)]
+pub(crate) struct ImageWorkerPoolHandle {
+    proxy: EventLoopProxy<RuntimeEvent>,
+    state: Arc<Mutex<SharedWorkerState>>,
+}
+
+impl ImageWorkerPoolHandle {
+    pub(crate) fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Self {
+        Self {
+            proxy,
+            state: Arc::new(Mutex::new(SharedWorkerState::Dormant)),
+        }
+    }
+
+    fn try_load(&self, job: ImageLoadJob) -> Result<(), WorkerQueueError> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if matches!(*state, SharedWorkerState::Dormant) {
+            *state = match ImageWorkerPool::new(self.proxy.clone()) {
+                Ok(workers) => SharedWorkerState::Ready(workers),
+                Err(error) => {
+                    tracing::warn!(%error, "image decode workers could not be started");
+                    SharedWorkerState::Failed
+                }
+            };
+        }
+        match &*state {
+            SharedWorkerState::Ready(workers) => workers.try_load(job),
+            SharedWorkerState::Dormant => unreachable!("the worker pool was initialized above"),
+            SharedWorkerState::Failed => Err(WorkerQueueError::Disconnected),
+        }
+    }
 }
 
 impl ImageWorkerPool {
@@ -99,11 +143,14 @@ fn image_worker(
         let key = job.resource.key().clone();
         let result = catch_unwind(AssertUnwindSafe(|| job.resource.load()))
             .unwrap_or_else(|_| Err(Arc::from("the application image loader panicked")));
-        let _ = proxy.send_event(RuntimeEvent::ImageLoaded(ImageLoadCompletion {
-            key,
-            request_id: job.request_id,
-            result,
-        }));
+        let _ = proxy.send_event(RuntimeEvent::ImageLoaded(
+            job.window,
+            ImageLoadCompletion {
+                key,
+                request_id: job.request_id,
+                result,
+            },
+        ));
     }
 }
 
@@ -142,9 +189,8 @@ enum ResourceStatus {
 }
 
 pub(crate) struct ImageAssetCache {
-    proxy: EventLoopProxy<RuntimeEvent>,
-    workers: Option<ImageWorkerPool>,
-    workers_failed: bool,
+    window: WindowHandle,
+    workers: ImageWorkerPoolHandle,
     entries: HashMap<ImageResourceKey, ResourceEntry>,
     deferred: VecDeque<ImageResourceKey>,
     frame: u64,
@@ -153,11 +199,10 @@ pub(crate) struct ImageAssetCache {
 }
 
 impl ImageAssetCache {
-    pub(crate) fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Self {
+    pub(crate) fn new(window: WindowHandle, workers: ImageWorkerPoolHandle) -> Self {
         Self {
-            proxy,
-            workers: None,
-            workers_failed: false,
+            window,
+            workers,
             entries: HashMap::with_capacity(32),
             deferred: VecDeque::with_capacity(16),
             frame: 0,
@@ -221,6 +266,11 @@ impl ImageAssetCache {
         }
         let deferred_changed = self.pump_deferred();
         active || deferred_changed
+    }
+
+    /// Retry this window's deferred jobs after the application-wide worker queue releases a slot.
+    pub(crate) fn resume_deferred(&mut self) -> bool {
+        self.pump_deferred()
     }
 
     pub(crate) fn announce_due_loading(&mut self, now: Instant) -> bool {
@@ -324,6 +374,9 @@ impl ImageAssetCache {
             if let Some(replacement) = replacement {
                 element.children.push(replacement);
             }
+        }
+        if let Some(tooltip) = &mut element.tooltip {
+            self.resolve_element(tooltip.content_mut(), replacement_depth);
         }
         let child_depth = replacement_depth + usize::from(is_image && !element.children.is_empty());
         for child in &mut element.children {
@@ -441,27 +494,11 @@ impl ImageAssetCache {
             let request_id = self.next_request_id;
             self.next_request_id = self.next_request_id.wrapping_add(1).max(1);
             let job = ImageLoadJob {
+                window: self.window,
                 resource: entry.resource.clone(),
                 request_id,
             };
-            if self.workers.is_none() && !self.workers_failed {
-                match ImageWorkerPool::new(self.proxy.clone()) {
-                    Ok(workers) => self.workers = Some(workers),
-                    Err(error) => {
-                        tracing::warn!(%error, "image decode workers could not be started");
-                        self.workers_failed = true;
-                    }
-                }
-            }
-            let Some(workers) = &self.workers else {
-                self.entries
-                    .get_mut(&key)
-                    .expect("unavailable image resource remains resident")
-                    .state = ResourceState::Failed;
-                active_failure = true;
-                continue;
-            };
-            match workers.try_load(job) {
+            match self.workers.try_load(job) {
                 Ok(()) => {
                     let entry = self
                         .entries
