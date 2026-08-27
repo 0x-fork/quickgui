@@ -85,10 +85,13 @@ The versions are intentionally exact: `quickgui-winit = 0.30.13-quickgui.1`, the
 `quickgui = 0.1.0`. Never rerun a successful publish;
 registry releases are immutable, so any correction requires a new version.
 
-QuickGUI 0.1 is the first release of these package names, so it must be published manually. crates.io
-Trusted Publishing can replace long-lived API tokens only after that first manual release and
-publisher configuration; it is intentionally not guessed or enabled by this workflow.
+QuickGUI 0.1 was the first release of these package names and was published manually on 2026-08-27.
+crates.io Trusted Publishing can now replace long-lived API tokens after explicit publisher
+configuration; it is intentionally not guessed or enabled by this workflow.
 
 Finally, create a fresh crate outside this repository, add `quickgui = "=0.1.0"` without any
 `[patch]` or path dependency, and run `cargo check`. Run all three live macOS gates once more from the
 tagged source if the published archives differ from the previously recorded checksums.
+
+The 2026-08-27 publication completed this check with Rust 1.89 using only the indexed crates.io
+packages; all five exact versions resolved and the fresh downstream crate compiled successfully.

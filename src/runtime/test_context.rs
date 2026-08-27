@@ -5886,7 +5886,7 @@ mod tests {
         let mut colored_pixels = 0_usize;
         let mut colored_rows = HashSet::new();
         let mut columns = HashMap::<u32, (u64, u32)>::new();
-        for (index, pixel) in first.rgba().chunks_exact(4).enumerate() {
+        for (index, pixel) in first.rgba().as_chunks::<4>().0.iter().enumerate() {
             if pixel[0] > 180
                 && (70..=160).contains(&pixel[1])
                 && (70..=160).contains(&pixel[2])
@@ -6198,7 +6198,9 @@ mod tests {
         fn brightest(snapshot: &crate::VisualSnapshot) -> u8 {
             snapshot
                 .rgba()
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|pixel| pixel[0].max(pixel[1]).max(pixel[2]))
                 .max()
                 .unwrap_or(0)
@@ -6276,7 +6278,9 @@ mod tests {
         fn brightest(snapshot: &crate::VisualSnapshot) -> u8 {
             snapshot
                 .rgba()
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|pixel| pixel[0].max(pixel[1]).max(pixel[2]))
                 .max()
                 .unwrap_or(0)

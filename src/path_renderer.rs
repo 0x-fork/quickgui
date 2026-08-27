@@ -414,7 +414,9 @@ fn append_path_vertices(
     for (triangle, boundary_mask) in primitive
         .path
         .positions()
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .zip(primitive.path.boundary_masks())
     {
         let edge_mask = [

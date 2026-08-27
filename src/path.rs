@@ -299,7 +299,7 @@ impl Path {
         }
 
         let mut edge_counts = HashMap::<(u32, u32), u8>::with_capacity(geometry.indices.len());
-        for triangle in geometry.indices.chunks_exact(3) {
+        for triangle in geometry.indices.as_chunks::<3>().0 {
             for (first, second) in [
                 (triangle[1], triangle[2]),
                 (triangle[2], triangle[0]),
@@ -319,7 +319,7 @@ impl Path {
         let mut boundary_masks = Vec::with_capacity(geometry.indices.len() / 3);
         let mut minimum = [f32::INFINITY; 2];
         let mut maximum = [f32::NEG_INFINITY; 2];
-        for triangle in geometry.indices.chunks_exact(3) {
+        for triangle in geometry.indices.as_chunks::<3>().0 {
             let edges = [
                 (triangle[1], triangle[2]),
                 (triangle[2], triangle[0]),

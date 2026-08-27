@@ -94,8 +94,10 @@ impl VisualSnapshot {
         let mut total_channel_delta = 0_u64;
         for (actual, expected) in self
             .rgba()
-            .chunks_exact(4)
-            .zip(expected.rgba().chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(expected.rgba().as_chunks::<4>().0.iter())
         {
             let mut pixel_delta = 0_u8;
             for channel in 0..4 {

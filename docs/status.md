@@ -135,17 +135,16 @@ Roadmap state has a strict meaning:
 - **Release-ready** additionally requires the clean candidate, package, toolchain, and publication
   gates. Passing a unit test or compiling an example is never promoted to native visual proof.
 
-The current judgment is that QuickGUI has the core macOS framework surface and local release
-evidence needed for 0.1. It is not yet an official release, and broad ecosystem parity is not
-claimed. The remaining 0.1 work is a clean GitHub candidate and explicitly authorized delivery,
-not more components, unrelated input devices, or application-owned services. A new API becomes a
-0.1 blocker only when it fixes a release-critical correctness, accessibility, lifecycle,
-performance, or resource-ownership defect.
+QuickGUI 0.1.0 was published to crates.io on 2026-08-27 after the core macOS framework surface,
+local release evidence, and registry package checks completed. Broad ecosystem parity is not
+claimed. Further components, unrelated input devices, and application-owned services belong to
+later releases; a 0.1 correction now requires a new patch version because registry releases are
+immutable.
 Milestones are evidence-gated rather than date-gated:
 
 | Milestone | Product boundary | Exit criteria |
 | --- | --- | --- |
-| 0.1 | macOS-first framework foundation for editor-class applications. | P0.1 through P0.3 below, a clean automated GitHub candidate, reviewed release archives, and explicitly authorized P0.4 registry delivery. |
+| 0.1 | **Released 2026-08-27.** macOS-first framework foundation for editor-class applications. | P0.1 through P0.4 below, including a clean downstream Rust 1.89 check using only the published registry crates. |
 | 0.2 | Productive macOS application development above the rendering/runtime foundation. | An unstyled component contract with live-accepted popup menu, select/autocomplete/combobox, dialog, document-window, inspector, table, and tree workflows plus broader assistive-technology coverage. |
 | 0.3 | Credible Windows and Linux runtime parity. | Native visual, IME, accessibility, clipboard, drag/drop, window-role, and performance gates on both platforms; compilation alone does not qualify. |
 | 1.0 | Stable cross-platform contract. | Supported-platform acceptance and resource budgets are green, public API compatibility/deprecation policy is documented, and no known release-blocking lifecycle, text, input, window, or accessibility defects remain. |
@@ -171,10 +170,10 @@ component work:
 | P0.1 | Desktop mouse dispatch verification | **Complete in the current working tree.** Focused tests cover bounded ordering, stop/prevent independence, payloads, overlay blocking, callback invalidation, disabled nodes, hover, and idle sleep. The passing live WindowServer gate posts native AppKit events and verifies left/right down/up, outside capture, root-to-target capture, target-to-root bubble, independent stop/prevent behavior, exact buffered AppKit click counts, pressed-button drag motion, hover entry/exit, targeted window exit, and zero prevented default clicks. | No implementation or repeat run remains unless mouse dispatch changes. |
 | P0.2 | Window-constraint verification | **Complete in the current working tree.** Initial/runtime minimum size is validated, observable through `WindowState`, mutable through current/target-window set and clear commands, and applied without a correction loop. The passing live gate starts below a larger runtime minimum, verifies one-time growth and exact `NSWindow.contentMinSize`, clears both retained/native state, then resizes below the former minimum while wrapped text and native composition remain stable. Explicit programmatic geometry remains application-authored. | No implementation or repeat run remains unless window constraints, resizing, text layout, or native composition changes. |
 | P0.3 | macOS release-candidate acceptance | **Complete for the 2026-08-27 source candidate.** The current tree passes the full 561-test all-target suite, downstream test-support check, every example and benchmark target, current-stable and Rust 1.89 all-target checks, warning-free all-target Clippy, formatting/script/diff checks, rustdoc, and the five-archive Rust 1.89 downstream-consumer gate. The latest focused current-tree scroll run reached 95.0496 Hz at 9.9708% framework CPU and 14.650% whole-process CPU, with 1.3496 ms p95 frame CPU, 106.906 MiB peak RSS, 154.204 MiB peak footprint, bounded caches/draws, and zero extra idle frames. The current-tree schema-3 display gate passed first-render centering plus settled retained/native identity, 2x scale, native-frame origin, screen/work-area agreement, full native-frame containment, and no focus steal on both connected displays. The last complete full AppKit composition/mouse/popup/lifecycle soak passed before the display-startup correction; that correction is covered by the newer focused two-display gate and did not change those unrelated paths, so the full soak is not repeated. Both connected displays are 2x, so mixed-scale status is explicitly unavailable rather than passed. | No further local gate is required for 0.1 unless covered runtime code changes. Manual VoiceOver component wording, mixed-scale hardware, and broader product workflows continue under the 0.2 acceptance ledger; native system tabs remain out of scope. |
-| P0.4 | Registry delivery | **Prepared in the current working tree.** All five normalized archives compile as a fresh Rust 1.89 downstream crate. CI now verifies tag/version agreement, writes `SHA256SUMS`, and uploads the five archives plus release notes on clean non-PR runs without publishing. | Commit and push the candidate, require the clean GitHub workflow to pass, review its immutable artifact, then—only after explicit authorization—publish the four support crates and `quickgui` in dependency order and verify a fresh `quickgui = "=0.1.0"` project without path or patch dependencies. |
+| P0.4 | Registry delivery | **Complete.** On 2026-08-27, `quickgui-winit = 0.30.13-quickgui.1`, `quickgui-accesskit-winit = 0.33.2-quickgui.1`, `quickgui-cosmic-text = 0.19.0-quickgui.1`, `quickgui-glyphon = 0.12.0-quickgui.1`, and `quickgui = 0.1.0` were published in dependency order and confirmed indexed. A fresh Rust 1.89 crate using only `quickgui = "=0.1.0"` from crates.io compiled successfully without path or patch dependencies. | No 0.1 registry work remains. GitHub commit, tag, workflow artifact, and source-release delivery are tracked separately from the completed crates.io publication. |
 
-Publication is last, not the next feature. P0.1 through P0.3 are complete; P0.4 waits only for a
-clean GitHub candidate, artifact review, and explicit authorization to change crates.io state.
+P0.1 through P0.4 are complete and QuickGUI 0.1.0 is an official crates.io release. Any subsequent
+registry correction requires a new version rather than overwriting 0.1.0.
 
 ### 0.2 execution roadmap: macOS parity and developer experience
 

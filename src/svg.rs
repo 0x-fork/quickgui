@@ -138,7 +138,9 @@ impl Svg {
         resvg::render(&self.0.tree, transform, &mut pixmap.as_mut());
         let alpha = pixmap
             .data()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|pixel| pixel[3])
             .collect();
         Ok(SvgMask {
