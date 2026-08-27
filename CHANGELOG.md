@@ -2,6 +2,15 @@
 
 All notable user-facing changes to QuickGUI are recorded here.
 
+## Unreleased
+
+### JavaScript tooling
+
+- Added `@quickgui/cli` project initialization, target-aware production builds, and a stable native
+  development host. On macOS, development runs a signed `.app`, loads project TS/TSX on demand,
+  restarts without repackaging on source edits, and keeps the prior app alive when a candidate
+  cannot start.
+
 ## 0.1.0 - 2026-08-27
 
 Initial macOS-first framework release.

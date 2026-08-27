@@ -6,19 +6,17 @@
   "exports": {
     ".": "./index.ts",
     "./compiler": "./compiler.ts",
-    "./register": "./register.ts",
     "./jsx-runtime": "./jsx-runtime.ts",
     "./jsx-dev-runtime": "./jsx-runtime.ts"
   },
   "files": [
     "index.ts",
     "compiler.ts",
-    "register.ts",
     "jsx-runtime.ts",
     "README.md"
   ],
   "scripts": {
-    "test": "bun test --conditions=browser --preload ./register.ts"
+    "test": "bun test --conditions=browser"
   },
   "dependencies": {
     "@quickgui/native": "workspace:*",

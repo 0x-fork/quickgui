@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "allowImportingTsExtensions": true,
-    "allowJs": true,
     "exactOptionalPropertyTypes": true,
     "jsx": "preserve",
     "jsxImportSource": "@quickgui/solid",
@@ -9,11 +8,9 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "noEmit": true,
-    "noUncheckedIndexedAccess": true,
     "strict": true,
     "target": "ES2023",
     "types": ["bun"]
   },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx", "examples/solid/**/*.ts", "examples/solid/**/*.tsx"],
-  "exclude": ["packages/cli/templates"]
+  "include": ["src"]
 }

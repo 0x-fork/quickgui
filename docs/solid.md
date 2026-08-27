@@ -12,17 +12,15 @@ nodes, and one binary batch crosses N-API before QuickGUI invalidates the WGPU w
 
 ## Run an application
 
-Solid publishes a server runtime for Bun's default `node` export condition. Native windows need
-Solid's interactive client runtime, so launch with Bun's `browser` condition and preload the
-QuickGUI JSX compiler:
+For application development, the preferred path is the [QuickGUI CLI](cli.md):
 
-```json
-{
-  "scripts": {
-    "start": "bun --conditions=browser --preload @quickgui/solid/register app.tsx"
-  }
-}
+```console
+quickgui dev
 ```
+
+On macOS this runs a real signed `.app` whose stable host loads the project TSX directly from disk.
+Source changes restart that host without rebundling or repackaging the application. The CLI owns
+the Solid compiler setup, so applications do not need a Bun preload or a special start command.
 
 ```tsx
 import { App, Button, Text, View, Window, render } from "@quickgui/solid";
@@ -76,7 +74,8 @@ for the currently bridged QuickGUI layout, text, paint, overflow, cursor, positi
 `appRegion` properties. Native events are flushed at a Solid 2 event boundary before the retained
 mutation batch is submitted.
 
-The runnable source is in [`examples/solid/app.tsx`](../examples/solid/app.tsx).
+The runnable source and CLI configuration are in
+[`examples/solid`](../examples/solid).
 
 ## Current boundary
 

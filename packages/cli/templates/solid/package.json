@@ -1,5 +1,5 @@
 {
-  "name": "quickgui-solid-example",
+  "name": {{PACKAGE_NAME}},
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,10 +7,13 @@
     "build": "quickgui build"
   },
   "dependencies": {
-    "@quickgui/solid": "workspace:*",
+    "@quickgui/native": "^0.0.1",
+    "@quickgui/solid": "^0.0.1",
     "solid-js": "2.0.0-rc.3"
   },
   "devDependencies": {
-    "@quickgui/cli": "workspace:*"
+    "@quickgui/cli": "^0.0.1",
+    "@types/bun": "latest",
+    "typescript": "latest"
   }
 }

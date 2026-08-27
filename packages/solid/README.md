@@ -3,10 +3,10 @@
 Solid 2 renderer for QuickGUI. It exports unstyled `View`, `Text`, and `Button` host components,
 plus `App`, `Window`, and `render`. Import reactive primitives from `solid-js` itself.
 
-Run TSX through the package's Bun preload and select Solid's interactive client condition:
+Run applications through the QuickGUI CLI:
 
 ```console
-bun --conditions=browser --preload @quickgui/solid/register app.tsx
+bun run dev
 ```
 
 ```tsx

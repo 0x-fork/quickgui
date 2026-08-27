@@ -1,0 +1,275 @@
+import { watch, type FSWatcher } from "node:fs";
+import { isAbsolute, relative, resolve, sep } from "node:path";
+
+import { buildProject, type BuildResult } from "./build.ts";
+import { loadConfig, type ResolvedQuickGuiConfig } from "./config.ts";
+import { CliError, errorMessage } from "./error.ts";
+import { hostTarget, type QuickGuiTarget } from "./targets.ts";
+
+export interface DevOptions {
+  project: string;
+  configFile: string;
+  once: boolean;
+  launch: boolean;
+  target?: QuickGuiTarget;
+  signingIdentity?: string;
+}
+
+type AppProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
+
+export async function runDev(options: DevOptions): Promise<number> {
+  const projectRoot = resolve(options.project);
+  const target = options.target ?? hostTarget();
+  const host = hostTarget();
+  if (target !== host) {
+    throw new CliError(
+      `Development apps must run on the host target (${host}); use \`quickgui build --target ${target}\` for cross-compilation`,
+    );
+  }
+
+  let config = await loadConfig(projectRoot, options.configFile);
+  let build = await packageDevelopmentHost(config, target, options.signingIdentity);
+  console.log(`[quickgui] Development app: ${build.artifactPath}`);
+  if (!options.launch) return 0;
+
+  if (options.once) {
+    const child = await launchApplication(build, config);
+    console.log(`[quickgui] App ready (pid ${child.pid})`);
+    return await child.exited;
+  }
+
+  const abortController = new AbortController();
+  let currentProcess: AppProcess | undefined;
+  let bundleKey = developmentBundleKey(config, options.signingIdentity);
+  let stopping = false;
+  let reloadQueued = false;
+  let reloadPromise: Promise<void> | undefined;
+  let changedPath: string | undefined;
+  let debounce: ReturnType<typeof setTimeout> | undefined;
+
+  const reload = async (): Promise<void> => {
+    try {
+      const nextConfig = await loadConfig(projectRoot, options.configFile);
+      const nextBundleKey = developmentBundleKey(nextConfig, options.signingIdentity);
+      let nextBuild = build;
+      if (
+        nextBundleKey !== bundleKey ||
+        (changedPath && touchesBundleInput(changedPath, nextConfig))
+      ) {
+        nextBuild = await packageDevelopmentHost(nextConfig, target, options.signingIdentity);
+      }
+      const candidate = await launchApplication(nextBuild, nextConfig, abortController.signal);
+      if (stopping) {
+        await stopApplication(candidate);
+        return;
+      }
+      const previous = currentProcess;
+      currentProcess = candidate;
+      config = nextConfig;
+      build = nextBuild;
+      bundleKey = nextBundleKey;
+      if (previous) await stopApplication(previous);
+      console.log(`[quickgui] Reloaded (pid ${candidate.pid})`);
+    } catch (error) {
+      if (!stopping) {
+        console.error(
+          `[quickgui] Reload failed; keeping the previous app running.\n${errorMessage(error)}`,
+        );
+      }
+    }
+  };
+
+  const queueReload = (path: string | undefined): void => {
+    if (stopping) return;
+    changedPath = path;
+    reloadQueued = true;
+    if (reloadPromise) return;
+    reloadPromise = (async () => {
+      while (reloadQueued && !stopping) {
+        reloadQueued = false;
+        await reload();
+      }
+    })().finally(() => {
+      reloadPromise = undefined;
+      if (reloadQueued && !stopping) queueReload(changedPath);
+    });
+  };
+
+  let watcher: FSWatcher;
+  try {
+    watcher = watch(projectRoot, { recursive: true }, (_event, filename) => {
+      const path = filename ? resolve(projectRoot, String(filename)) : undefined;
+      if (path && shouldIgnoreChange(projectRoot, path, config.outDir)) return;
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => queueReload(path), 80);
+    });
+  } catch (error) {
+    throw new CliError(`Could not watch ${projectRoot}`, { cause: error });
+  }
+  watcher.on("error", (error) => {
+    console.error(`[quickgui] File watcher error: ${errorMessage(error)}`);
+  });
+
+  try {
+    try {
+      currentProcess = await launchApplication(build, config, abortController.signal);
+      console.log(`[quickgui] App ready (pid ${currentProcess.pid}); watching for changes`);
+    } catch (error) {
+      console.error(`[quickgui] App failed to start; watching for changes.\n${errorMessage(error)}`);
+    }
+
+    await waitForShutdown();
+  } finally {
+    stopping = true;
+    abortController.abort();
+    if (debounce) clearTimeout(debounce);
+    watcher.close();
+    if (reloadPromise) await reloadPromise;
+    if (currentProcess) await stopApplication(currentProcess);
+  }
+  return 0;
+}
+
+async function packageDevelopmentHost(
+  config: ResolvedQuickGuiConfig,
+  target: QuickGuiTarget,
+  signingIdentity?: string,
+): Promise<BuildResult> {
+  const started = performance.now();
+  const result = await buildProject(config, {
+    mode: "development",
+    target,
+    ...(signingIdentity ? { signingIdentity } : {}),
+  });
+  console.log(`[quickgui] Packaged dev host in ${Math.round(performance.now() - started)} ms`);
+  return result;
+}
+
+async function launchApplication(
+  build: BuildResult,
+  config: ResolvedQuickGuiConfig,
+  signal?: AbortSignal,
+): Promise<AppProcess> {
+  let ready = false;
+  let resolveReady!: () => void;
+  let rejectReady!: (error: Error) => void;
+  const readyPromise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolveReady = resolvePromise;
+    rejectReady = rejectPromise;
+  });
+  const child = Bun.spawn([build.executablePath], {
+    cwd: config.projectRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "development",
+      QUICKGUI_DEV: "1",
+      QUICKGUI_ENTRY: config.entry,
+      QUICKGUI_PROJECT_ROOT: config.projectRoot,
+    },
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
+    ipc(message) {
+      if (isReadyMessage(message) && !ready) {
+        ready = true;
+        resolveReady();
+      }
+    },
+  });
+  void child.exited.then((status) => {
+    if (!ready) {
+      rejectReady(
+        new CliError(`Application exited before its first window was ready (status ${status})`),
+      );
+    }
+  });
+
+  const abort = (): void => rejectReady(new CliError("Development launch cancelled"));
+  signal?.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(() => {
+    rejectReady(new CliError("Application did not report a ready window within 15 seconds"));
+  }, 15_000);
+  try {
+    await readyPromise;
+    return child;
+  } catch (error) {
+    await stopApplication(child);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
+  }
+}
+
+async function stopApplication(child: AppProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    await child.exited;
+    return;
+  }
+  child.kill("SIGTERM");
+  await Promise.race([child.exited, Bun.sleep(1_500)]);
+  if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  await child.exited;
+}
+
+function developmentBundleKey(
+  config: ResolvedQuickGuiConfig,
+  signingIdentity?: string,
+): string {
+  return JSON.stringify({
+    name: config.name,
+    executableName: config.executableName,
+    identifier: config.identifier,
+    version: config.version,
+    buildVersion: config.buildVersion,
+    entry: config.entry,
+    resources: config.resources,
+    macos: config.macos,
+    windows: config.windows,
+    signingIdentity: signingIdentity ?? null,
+  });
+}
+
+function touchesBundleInput(path: string, config: ResolvedQuickGuiConfig): boolean {
+  const inputs = [
+    ...config.resources,
+    config.macos.icon,
+    config.macos.entitlements,
+    config.windows.icon,
+  ].filter((value): value is string => !!value);
+  return inputs.some((input) => path === input || path.startsWith(`${input}${sep}`));
+}
+
+function shouldIgnoreChange(root: string, path: string, outDir: string): boolean {
+  const pathFromRoot = relative(root, path);
+  if (pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) return true;
+  const parts = pathFromRoot.split(sep);
+  if (parts.some((part) => [".git", ".quickgui", "node_modules", "target"].includes(part))) {
+    return true;
+  }
+  const outDirFromRoot = relative(root, outDir);
+  const outDirIsInsideRoot =
+    outDirFromRoot !== "" && !outDirFromRoot.startsWith("..") && !isAbsolute(outDirFromRoot);
+  if (!outDirIsInsideRoot) return false;
+  const pathFromOutDir = relative(outDir, path);
+  return pathFromOutDir === "" ||
+    (!pathFromOutDir.startsWith("..") && !isAbsolute(pathFromOutDir));
+}
+
+function isReadyMessage(value: unknown): value is { type: "quickgui-ready" } {
+  return (
+    typeof value === "object" && value !== null && Reflect.get(value, "type") === "quickgui-ready"
+  );
+}
+
+async function waitForShutdown(): Promise<void> {
+  await new Promise<void>((resolvePromise) => {
+    const finish = (): void => {
+      process.off("SIGINT", finish);
+      process.off("SIGTERM", finish);
+      resolvePromise();
+    };
+    process.once("SIGINT", finish);
+    process.once("SIGTERM", finish);
+  });
+}

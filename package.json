@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build:native": "bun run --filter @quickgui/native build",
-    "test:js": "bun test --conditions=browser --preload ./packages/solid/register.ts packages/native packages/solid",
+    "test:js": "bun test --conditions=browser packages/native packages/solid packages/cli",
     "typecheck:js": "bunx tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

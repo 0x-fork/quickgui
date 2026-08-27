@@ -6,6 +6,7 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 
 - [View API and layout](view-api.md) — declarative views, Tailwind-style helpers, Flexbox, CSS Grid, and parent-size container queries.
 - [Solid 2 renderer](solid.md) — Bun/N-API hosting, unstyled native components, JSX compilation, reactive event boundaries, and the current binding scope.
+- [Project CLI and application packaging](cli.md) — initialization, on-demand TSX development in a real native app, restart ownership, target builds, and macOS signing.
 - [Windows and shared state](windows.md) — multiple native windows, entities, globals, roles, bounds, appearance, backgrounds, and commands.
 - [Native document windows](document-windows.md) — represented files, edited state, character palette, system tabs, and bounded observation.
 - [Displays and window placement](displays.md) — bounded monitor snapshots, work areas, scale factors, stable macOS identities, and targeted placement.

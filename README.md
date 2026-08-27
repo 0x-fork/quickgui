@@ -82,6 +82,7 @@ Start at the [documentation index](docs/README.md).
 
 - [View API and layout](docs/view-api.md)
 - [Solid 2 renderer](docs/solid.md)
+- [Project CLI and application packaging](docs/cli.md)
 - [Windows and shared state](docs/windows.md)
 - [Native document windows](docs/document-windows.md)
 - [Displays and window placement](docs/displays.md)
@@ -109,6 +110,17 @@ Start at the [documentation index](docs/README.md).
 - [Architecture](docs/architecture/README.md)
 
 ## Try it
+
+For the experimental Solid 2 host:
+
+```console
+bun install
+cd examples/solid
+bun run dev
+```
+
+This creates and runs a real development `.app` on macOS while loading `app.tsx` from disk. Rust
+framework examples remain available directly through Cargo:
 
 ```console
 cargo run --release --example gesture_input

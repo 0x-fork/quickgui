@@ -103,6 +103,7 @@ export class App {
     this.flush();
     binding.startApp(this.nativeId);
     this.#started = true;
+    notifyDevelopmentHostReady();
   }
 
   pump(sliceMs = 16): number {
@@ -168,6 +169,15 @@ export class App {
 
   #assertAlive(): void {
     if (this.#destroyed) throw new Error("this QuickGUI app has been destroyed");
+  }
+}
+
+function notifyDevelopmentHostReady(): void {
+  if (process.env.QUICKGUI_DEV !== "1" || typeof process.send !== "function") return;
+  try {
+    process.send({ type: "quickgui-ready" });
+  } catch {
+    // The CLI may have exited while the application was starting.
   }
 }
 
