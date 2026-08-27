@@ -47,8 +47,7 @@ struct ImageInstance {
     uv: [f32; 4],
     clip: [f32; 4],
     mask: [f32; 4],
-    radius_and_grayscale: [f32; 2],
-    _padding: [f32; 2],
+    radius_grayscale_opacity_padding: [f32; 4],
 }
 
 struct CachedImage {
@@ -180,7 +179,7 @@ impl ImageRenderer {
                 shader_location: 3,
             },
             VertexAttribute {
-                format: VertexFormat::Float32x2,
+                format: VertexFormat::Float32x4,
                 offset: 64,
                 shader_location: 4,
             },
@@ -343,8 +342,12 @@ impl ImageRenderer {
                             primitive.mask.width,
                             primitive.mask.height,
                         ],
-                        radius_and_grayscale: [primitive.radius, f32::from(primitive.grayscale)],
-                        _padding: [0.0; 2],
+                        radius_grayscale_opacity_padding: [
+                            primitive.radius,
+                            f32::from(primitive.grayscale),
+                            primitive.opacity,
+                            0.0,
+                        ],
                     },
                 });
             }

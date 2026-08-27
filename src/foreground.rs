@@ -475,17 +475,53 @@ struct ForegroundReadyQueue {
     wake_pending: AtomicBool,
     closed: AtomicBool,
     owner_thread: ThreadId,
-    proxy: EventLoopProxy<RuntimeEvent>,
+    wake: ForegroundWake,
+}
+
+enum ForegroundWake {
+    EventLoop(EventLoopProxy<RuntimeEvent>),
+    #[cfg(any(test, feature = "test-support"))]
+    Test,
+}
+
+#[derive(Clone)]
+enum ForegroundClock {
+    System,
+    #[cfg(any(test, feature = "test-support"))]
+    Controlled(Rc<Cell<Instant>>),
+}
+
+impl ForegroundClock {
+    fn system() -> Self {
+        Self::System
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    fn controlled(now: Rc<Cell<Instant>>) -> Self {
+        Self::Controlled(now)
+    }
+
+    fn now(&self) -> Instant {
+        match self {
+            Self::System => Instant::now(),
+            #[cfg(any(test, feature = "test-support"))]
+            Self::Controlled(now) => now.get(),
+        }
+    }
 }
 
 impl ForegroundReadyQueue {
     fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Arc<Self> {
+        Self::with_wake(ForegroundWake::EventLoop(proxy))
+    }
+
+    fn with_wake(wake: ForegroundWake) -> Arc<Self> {
         Arc::new(Self {
             queue: Mutex::new(VecDeque::with_capacity(8)),
             wake_pending: AtomicBool::new(false),
             closed: AtomicBool::new(false),
             owner_thread: thread::current().id(),
-            proxy,
+            wake,
         })
     }
 
@@ -513,11 +549,14 @@ impl ForegroundReadyQueue {
         if self.wake_pending.swap(true, Ordering::AcqRel) {
             return;
         }
-        if self
-            .proxy
-            .send_event(RuntimeEvent::ForegroundTasksReady)
-            .is_err()
-        {
+        let signaled = match &self.wake {
+            ForegroundWake::EventLoop(proxy) => {
+                proxy.send_event(RuntimeEvent::ForegroundTasksReady).is_ok()
+            }
+            #[cfg(any(test, feature = "test-support"))]
+            ForegroundWake::Test => true,
+        };
+        if !signaled {
             self.wake_pending.store(false, Ordering::Release);
         }
     }
@@ -569,6 +608,7 @@ impl ForegroundReadyQueue {
 pub(crate) struct ForegroundTaskSpawner {
     registry: Rc<RefCell<ForegroundTaskRegistry>>,
     ready: Arc<ForegroundReadyQueue>,
+    clock: ForegroundClock,
 }
 
 impl ForegroundTaskSpawner {
@@ -576,6 +616,18 @@ impl ForegroundTaskSpawner {
         Self {
             registry: Rc::new(RefCell::new(ForegroundTaskRegistry::default())),
             ready: ForegroundReadyQueue::new(proxy),
+            clock: ForegroundClock::system(),
+        }
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn new_for_test(now: Rc<Cell<Instant>>) -> Self {
+        Self {
+            registry: Rc::new(RefCell::new(ForegroundTaskRegistry::default())),
+            // Tests explicitly drain the ready queue. Recording the coalesced wake as successful
+            // preserves the production queue contract without creating an OS event loop.
+            ready: ForegroundReadyQueue::with_wake(ForegroundWake::Test),
+            clock: ForegroundClock::controlled(now),
         }
     }
 
@@ -598,6 +650,7 @@ impl ForegroundTaskSpawner {
             task: task_id,
             window,
             registry: Rc::downgrade(&self.registry),
+            clock: self.clock.clone(),
             marker: PhantomData,
         };
         let future = match catch_unwind(AssertUnwindSafe(|| build(async_context))) {
@@ -685,6 +738,7 @@ pub struct AsyncViewContext<V> {
     task: ForegroundTaskId,
     window: WindowHandle,
     registry: Weak<RefCell<ForegroundTaskRegistry>>,
+    clock: ForegroundClock,
     marker: PhantomData<fn(&mut V)>,
 }
 
@@ -694,6 +748,7 @@ impl<V> Clone for AsyncViewContext<V> {
             task: self.task,
             window: self.window,
             registry: self.registry.clone(),
+            clock: self.clock.clone(),
             marker: PhantomData,
         }
     }
@@ -702,6 +757,14 @@ impl<V> Clone for AsyncViewContext<V> {
 impl<V: 'static> AsyncViewContext<V> {
     pub fn window(&self) -> WindowHandle {
         self.window
+    }
+
+    /// Read the monotonic application clock used by this task's exact timers.
+    ///
+    /// Native applications receive the system monotonic clock. A deterministic
+    /// `TestAppContext` supplies its controlled clock instead.
+    pub fn now(&self) -> Instant {
+        self.clock.now()
     }
 
     /// Update the owning view after the current future poll has returned.
@@ -724,9 +787,9 @@ impl<V: 'static> AsyncViewContext<V> {
     /// Sleep until one exact application event-loop deadline.
     pub fn sleep(&self, duration: Duration) -> ForegroundTimer {
         self.sleep_until(
-            Instant::now()
+            self.now()
                 .checked_add(duration)
-                .unwrap_or_else(Instant::now),
+                .unwrap_or_else(|| self.now()),
         )
     }
 
@@ -735,6 +798,7 @@ impl<V: 'static> AsyncViewContext<V> {
         ForegroundTimer {
             task: self.task,
             registry: self.registry.clone(),
+            clock: self.clock.clone(),
             state: Rc::new(ForegroundTimerState {
                 deadline,
                 ready: Cell::new(false),
@@ -868,6 +932,7 @@ struct ForegroundTimerState {
 pub struct ForegroundTimer {
     task: ForegroundTaskId,
     registry: Weak<RefCell<ForegroundTaskRegistry>>,
+    clock: ForegroundClock,
     state: Rc<ForegroundTimerState>,
     timer: Option<ForegroundTimerId>,
     finished: bool,
@@ -878,7 +943,7 @@ impl Future for ForegroundTimer {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        if this.state.ready.get() || Instant::now() >= this.state.deadline {
+        if this.state.ready.get() || this.clock.now() >= this.state.deadline {
             if let Some(timer) = this.timer.take()
                 && let Some(registry) = this.registry.upgrade()
             {
@@ -1006,6 +1071,7 @@ mod tests {
             task,
             window,
             registry: Rc::downgrade(&registry),
+            clock: ForegroundClock::system(),
             marker: PhantomData,
         };
         let mut update = Box::pin(context.update(|view, cx| {

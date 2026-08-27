@@ -1,14 +1,18 @@
 use std::{
     any::{Any, TypeId},
     collections::{HashMap, HashSet},
+    ops::Range,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use accesskit::{
-    Action, Affine, Invalid as AccessibilityInvalid, Live, Node as AccessibilityNode,
-    NodeId as AccessibilityNodeId, Rect as AccessibilityRect, Role, TextPosition, TextSelection,
-    Tree, TreeId, TreeUpdate,
+    Action, Affine, AutoComplete as NativeAccessibilityAutoComplete,
+    HasPopup as AccessibilityHasPopup, Invalid as AccessibilityInvalid, Live,
+    Node as AccessibilityNode, NodeId as AccessibilityNodeId,
+    Orientation as NativeAccessibilityOrientation, Rect as AccessibilityRect, Role,
+    SortDirection as NativeAccessibilitySortDirection, TextPosition, TextSelection,
+    Toggled as AccessibilityToggled, Tree, TreeId, TreeUpdate,
 };
 use taffy::{
     geometry::Size as TaffySize,
@@ -19,22 +23,31 @@ use thiserror::Error;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    AccessibilityRole, AnchorPlacement, AnimatedImage, AppRegion, BoxShadow, Canvas, Color,
-    CustomShaderPrimitive, Element, ElementId, ImagePrimitive, Insets, KeyContext,
-    MAX_TOOLTIPS_PER_WINDOW, ObjectFit, Path, PathPrimitive, Point, Quad, Rect, Scene, Shadow,
-    Size, SvgPrimitive, TextHighlight, TextId, TextRun, TextStyle, TextWrap, Tooltip, UserSelect,
-    Vector,
+    AccessibilityAutoComplete, AccessibilityPopup, AccessibilityRole, AccessibilitySortDirection,
+    AnchorPlacement, AnimatedImage, AppRegion, BoxShadow, Canvas, Color, CursorStyle,
+    CustomShaderPrimitive, DispatchPhase, Element, ElementId, ImagePrimitive, Insets, Interpolate,
+    KeyContext, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
+    MAX_CONTAINER_QUERY_DEPTH, MAX_DECLARATIVE_ANIMATIONS_PER_WINDOW,
+    MAX_STYLE_TRANSITIONS_PER_WINDOW, MAX_TOOLTIPS_PER_WINDOW, MouseButton, ObjectFit, Path,
+    PathPrimitive, Point, Quad, Rect, Scene, Shadow, Size, SvgPrimitive, TextHighlight, TextId,
+    TextRun, TextStyle, TextWrap, ToggleState, Tooltip, Transition, TransitionProperties,
+    UserSelect, Vector,
+    action::ActionListenerBinding,
     animated_image::AnimatedImageId,
+    animation::{Animation, ElementAnimation},
     element::{
-        AnchorTarget, DropPredicateCallback, ElementKind, ElementStateStyle, ImageResolution,
+        AccessibilityOrientation, AnchorTarget, DismissPolicy, DropPredicateCallback, ElementKind,
+        ElementStateStyle, ImageResolution, KeyListenerBinding, KeyListenerKind,
+        MouseListenerBinding, MouseListenerKey, MouseListenerKind,
     },
     event::{
         FormField, FormSubmitEvent, MAX_FORM_FIELDS, MAX_VALIDATION_ISSUES,
         MAX_VALIDATION_MESSAGE_BYTES, ValidationIssue, ValidationReport,
     },
     image::fit_image,
-    renderer::GpuRenderer,
-    scene::PaintLayerKey,
+    renderer::{TextLayoutEngine, TextPaintKind, TextPaintRect},
+    scene::{PaintLayerKey, WavyUnderline},
+    spring::{ElementSpring, SpringConfig, SpringPlayback, SpringState},
     text_input::{
         TextInputState, accessibility_byte_index, accessibility_character_index,
         boundary_at_or_before, selectable_character_lengths,
@@ -49,6 +62,24 @@ const ACCESSIBILITY_ROOT_ID: AccessibilityNodeId = AccessibilityNodeId(u64::MAX)
 const SCROLLBAR_AUTO_HIDE_DELAY: Duration = Duration::from_millis(900);
 const STATIC_TEXT_MULTI_CLICK_INTERVAL: Duration = Duration::from_millis(500);
 const STATIC_TEXT_MULTI_CLICK_DISTANCE: f32 = 4.0;
+
+/// Maximum retained ancestor depth traversed by one targeted desktop mouse event.
+pub const MAX_MOUSE_EVENT_PATH: usize = 256;
+
+/// Maximum retained ancestor depth traversed by one focused action or key event.
+pub const MAX_FOCUSED_EVENT_PATH: usize = 256;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct MouseHoverChange {
+    pub(crate) key: MouseListenerKey,
+    pub(crate) hovered: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct TabNavigationTarget {
+    pub(crate) id: ElementId,
+    pub(crate) activate: bool,
+}
 
 /// Maximum retained hit regions consulted synchronously by one native macOS drag.
 ///
@@ -89,6 +120,16 @@ pub(crate) enum UiError {
     DuplicateId(ElementId),
     #[error("element id {0:?} is reserved by the accessibility root")]
     ReservedId(ElementId),
+    #[error("animation id {0:?} appears more than once in the same view")]
+    DuplicateAnimationId(ElementId),
+    #[error(
+        "a window cannot retain more than {MAX_DECLARATIVE_ANIMATIONS_PER_WINDOW} declarative animations"
+    )]
+    TooManyDeclarativeAnimations,
+    #[error(
+        "a window cannot retain more than {MAX_STYLE_TRANSITIONS_PER_WINDOW} style transitions"
+    )]
+    TooManyStyleTransitions,
     #[error("anchored element {element:?} refers to missing element {anchor:?}")]
     MissingAnchor {
         element: ElementId,
@@ -96,6 +137,14 @@ pub(crate) enum UiError {
     },
     #[error("a window cannot retain more than {MAX_TOOLTIPS_PER_WINDOW} tooltips")]
     TooManyTooltips,
+    #[error(
+        "a window cannot retain more than {MAX_CONTAINER_QUERIES_PER_WINDOW} container queries"
+    )]
+    TooManyContainerQueries,
+    #[error("container queries cannot nest deeper than {MAX_CONTAINER_QUERY_DEPTH} levels")]
+    ContainerQueryDepthExceeded,
+    #[error("container query layout did not converge within the bounded nesting limit")]
+    ContainerQueryDidNotConverge,
     #[cfg(target_os = "macos")]
     #[error("native AppKit view {0:?} must stay in the base composition plane")]
     NativeViewInOverlay(ElementId),
@@ -115,21 +164,31 @@ enum MeasureContext {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct HitRegion {
-    id: ElementId,
-    bounds: Rect,
-    clip: Rect,
-    clickable: bool,
-    pointer_listener: bool,
-    drag_source: bool,
-    drop_target: bool,
-    focusable: bool,
-    cursor_pointer: bool,
-    cursor_text: bool,
-    stateful: bool,
-    blocks_pointer: bool,
-    app_region: Option<AppRegion>,
-    order: PaintOrder,
+pub(crate) struct HitRegion {
+    pub(crate) id: ElementId,
+    pub(crate) bounds: Rect,
+    pub(crate) clip: Rect,
+    pub(crate) clickable: bool,
+    pub(crate) pointer_listener: bool,
+    pub(crate) drag_source: bool,
+    pub(crate) drop_target: bool,
+    pub(crate) focusable: bool,
+    pub(crate) cursor_style: Option<CursorStyle>,
+    cursor_states: CursorStateStyles,
+    pub(crate) stateful: bool,
+    pub(crate) blocks_pointer: bool,
+    pub(crate) app_region: Option<AppRegion>,
+    pub(crate) order: PaintOrder,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct CursorStateStyles {
+    hover: Option<CursorStyle>,
+    active: Option<CursorStyle>,
+    focus: Option<CursorStyle>,
+    invalid: Option<CursorStyle>,
+    dragging: Option<CursorStyle>,
+    drag_over: Option<CursorStyle>,
 }
 
 impl HitRegion {
@@ -275,6 +334,12 @@ struct ScrollRegion {
     scrollbar_order: PaintOrder,
 }
 
+#[derive(Clone, Debug)]
+struct RetainedVirtualScroll {
+    handle: VirtualScrollHandle,
+    measurement_revision: u64,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ScrollbarDrag {
     id: ElementId,
@@ -303,9 +368,9 @@ struct VerticalScrollbarGeometry {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct PaintOrder {
-    layer: PaintLayerKey,
-    source: usize,
+pub(crate) struct PaintOrder {
+    pub(crate) layer: PaintLayerKey,
+    pub(crate) source: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -313,6 +378,7 @@ struct DismissRegion {
     id: ElementId,
     bounds: Rect,
     clip: Rect,
+    policy: DismissPolicy,
     restore_focus: Option<ElementId>,
     order: PaintOrder,
 }
@@ -416,14 +482,32 @@ pub(crate) struct UiTree {
     root: Option<Element>,
     taffy: TaffyTree<MeasureContext>,
     root_node: Option<NodeId>,
+    mounted_state_dirty: bool,
     seen_ids: HashSet<ElementId>,
+    /// IDs whose complete ancestor chain participates in layout (`display != none`).
+    displayed_ids: HashSet<ElementId>,
+    /// Displayed IDs whose complete ancestor chain is painted (`visibility != hidden`).
+    visible_ids: HashSet<ElementId>,
     scroll_offsets: HashMap<ElementId, Vector>,
-    virtual_scroll_handles: HashMap<ElementId, VirtualScrollHandle>,
+    virtual_scroll_handles: HashMap<ElementId, RetainedVirtualScroll>,
     natural_bounds: HashMap<ElementId, Rect>,
     element_bounds: HashMap<ElementId, Rect>,
     hit_regions: Vec<HitRegion>,
     drop_predicates: HashMap<(ElementId, TypeId), DropPredicateCallback>,
     context_menu_ids: HashSet<ElementId>,
+    mouse_listener_bindings: Vec<MouseListenerBinding>,
+    mouse_listener_ranges: HashMap<ElementId, Range<usize>>,
+    mouse_listener_elements: Vec<ElementId>,
+    key_listener_bindings: Vec<KeyListenerBinding>,
+    key_listener_ranges: HashMap<ElementId, Range<usize>>,
+    action_listener_bindings: Vec<ActionListenerBinding>,
+    action_listener_ranges: HashMap<ElementId, Range<usize>>,
+    scroll_wheel_ids: HashSet<ElementId>,
+    touch_ids: HashSet<ElementId>,
+    mouse_pressure_ids: HashSet<ElementId>,
+    pinch_ids: HashSet<ElementId>,
+    rotation_ids: HashSet<ElementId>,
+    smart_magnify_ids: HashSet<ElementId>,
     tooltips: HashMap<ElementId, Tooltip>,
     pointer_tooltip: Option<ElementId>,
     hovered_tooltip: Option<ElementId>,
@@ -449,17 +533,36 @@ pub(crate) struct UiTree {
     next_accessibility_text_id: u64,
     animations: HashMap<ElementId, AnimationPlayback>,
     animation_ids: HashSet<ElementId>,
+    declarative_animations: HashMap<ElementId, DeclarativeAnimationPlayback>,
+    declarative_time_animation_ids: HashSet<ElementId>,
+    declarative_springs: HashMap<ElementId, DeclarativeSpringPlayback>,
+    declarative_spring_ids: HashSet<ElementId>,
+    /// Shared namespace across time animations and springs for one declaration.
+    declarative_animation_ids: HashSet<ElementId>,
+    declarative_animation_frame_requested: bool,
+    declarative_animation_deadline: Option<Instant>,
+    style_transitions: HashMap<ElementId, StyleTransitionPlayback>,
+    style_transition_ids: HashSet<ElementId>,
+    style_transition_frame_requested: bool,
+    animation_epoch: Instant,
     animations_enabled: bool,
+    reduce_motion: bool,
     selecting_input: Option<ElementId>,
     hovered: HashSet<ElementId>,
+    hover_scratch: HashSet<ElementId>,
+    mouse_hover_path: Vec<ElementId>,
+    mouse_hover_path_scratch: Vec<ElementId>,
+    pending_mouse_hover_changes: Vec<MouseHoverChange>,
     pressed: Option<ElementId>,
     dragging: Option<ElementId>,
     external_drag_active: bool,
     drag_over: Option<ElementId>,
     drag_preview: Option<DragPreview>,
     focused: Option<ElementId>,
+    active_focus_trap: Option<ElementId>,
     focusable_ids: HashSet<ElementId>,
     clickable_ids: HashSet<ElementId>,
+    activation_targets: HashMap<ElementId, ElementId>,
     invalid_ids: HashSet<ElementId>,
     form_ids: HashSet<ElementId>,
     form_submitter_ids: HashSet<ElementId>,
@@ -483,16 +586,248 @@ struct AnimationPlayback {
     completed: bool,
 }
 
-struct DragPreview {
+#[derive(Clone, Copy, Debug)]
+struct DeclarativeAnimationSample {
+    animation_ix: usize,
+    value: f32,
+    request_frame: bool,
+    deadline: Option<Instant>,
+}
+
+#[derive(Clone, Debug)]
+struct DeclarativeAnimationPlayback {
+    animation_ix: usize,
+    elapsed: Duration,
+    last_advanced_at: Instant,
+    next_frame_at: Option<Instant>,
+    scheduled_stage: usize,
+    last_value: f32,
+    completed: bool,
+    active: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DeclarativeSpringSample {
+    value: f32,
+    request_frame: bool,
+}
+
+#[derive(Clone, Debug)]
+struct DeclarativeSpringPlayback {
+    state: SpringState,
+    target: f32,
+    config: SpringConfig,
+    initial: f32,
+    playback: SpringPlayback,
+    updated_at: Instant,
+    active: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TransitionShadowList {
+    values: [BoxShadow; MAX_BOX_SHADOWS_PER_ELEMENT],
+    len: u8,
+}
+
+impl TransitionShadowList {
+    fn empty() -> Self {
+        Self {
+            values: [neutral_transition_shadow(false); MAX_BOX_SHADOWS_PER_ELEMENT],
+            len: 0,
+        }
+    }
+
+    fn from_slice(shadows: &[BoxShadow]) -> Self {
+        debug_assert!(shadows.len() <= MAX_BOX_SHADOWS_PER_ELEMENT);
+        let mut list = Self::empty();
+        for (index, shadow) in shadows
+            .iter()
+            .copied()
+            .take(MAX_BOX_SHADOWS_PER_ELEMENT)
+            .enumerate()
+        {
+            list.values[index] = sane_transition_shadow(shadow);
+            list.len += 1;
+        }
+        list
+    }
+
+    fn as_slice(&self) -> &[BoxShadow] {
+        &self.values[..usize::from(self.len)]
+    }
+
+    fn interpolate(from: Self, to: Self, phase: f32) -> Self {
+        if phase == 0.0 {
+            return from;
+        }
+        if phase == 1.0 {
+            return to;
+        }
+        let len = usize::from(from.len.max(to.len));
+        let mut result = Self::empty();
+        result.len = len as u8;
+        for index in 0..len {
+            let from_shadow = if index < usize::from(from.len) {
+                from.values[index]
+            } else {
+                neutral_transition_shadow(to.values[index].is_inset())
+            };
+            let to_shadow = if index < usize::from(to.len) {
+                to.values[index]
+            } else {
+                neutral_transition_shadow(from.values[index].is_inset())
+            };
+            result.values[index] = interpolate_transition_shadow(from_shadow, to_shadow, phase);
+        }
+        result
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TransitionPaintStyle {
+    background: Color,
+    border_color: Color,
+    border_width: f32,
+    radius: f32,
+    opacity: f32,
+    text_color: Option<Color>,
+    text_fallback: Color,
+    shadows: TransitionShadowList,
+}
+
+impl TransitionPaintStyle {
+    fn interpolate(from: Self, to: Self, phase: f32, properties: TransitionProperties) -> Self {
+        let selected = |property| properties.contains(property);
+        Self {
+            background: if selected(TransitionProperties::BACKGROUND) {
+                Color::interpolate(from.background, to.background, phase)
+            } else {
+                to.background
+            },
+            border_color: if selected(TransitionProperties::BORDER_COLOR) {
+                Color::interpolate(from.border_color, to.border_color, phase)
+            } else {
+                to.border_color
+            },
+            border_width: if selected(TransitionProperties::BORDER_WIDTH) {
+                f32::interpolate(from.border_width, to.border_width, phase).max(0.0)
+            } else {
+                to.border_width
+            },
+            radius: if selected(TransitionProperties::BORDER_RADIUS) {
+                f32::interpolate(from.radius, to.radius, phase).max(0.0)
+            } else {
+                to.radius
+            },
+            opacity: if selected(TransitionProperties::OPACITY) {
+                f32::interpolate(from.opacity, to.opacity, phase).clamp(0.0, 1.0)
+            } else {
+                to.opacity
+            },
+            text_color: if selected(TransitionProperties::TEXT_COLOR) {
+                if phase == 0.0 {
+                    from.text_color
+                } else if phase == 1.0 {
+                    to.text_color
+                } else {
+                    Some(Color::interpolate(
+                        from.text_color.unwrap_or(from.text_fallback),
+                        to.text_color.unwrap_or(to.text_fallback),
+                        phase,
+                    ))
+                }
+            } else {
+                to.text_color
+            },
+            text_fallback: if selected(TransitionProperties::TEXT_COLOR) {
+                Color::interpolate(from.text_fallback, to.text_fallback, phase)
+            } else {
+                to.text_fallback
+            },
+            shadows: if selected(TransitionProperties::BOX_SHADOW) {
+                TransitionShadowList::interpolate(from.shadows, to.shadows, phase)
+            } else {
+                to.shadows
+            },
+        }
+    }
+
+    fn differs_for(self, other: Self, properties: TransitionProperties) -> bool {
+        (properties.contains(TransitionProperties::BACKGROUND)
+            && self.background != other.background)
+            || (properties.contains(TransitionProperties::BORDER_COLOR)
+                && self.border_color != other.border_color)
+            || (properties.contains(TransitionProperties::BORDER_WIDTH)
+                && self.border_width != other.border_width)
+            || (properties.contains(TransitionProperties::BORDER_RADIUS)
+                && self.radius != other.radius)
+            || (properties.contains(TransitionProperties::OPACITY) && self.opacity != other.opacity)
+            || (properties.contains(TransitionProperties::TEXT_COLOR)
+                && (self.text_color.unwrap_or(self.text_fallback)
+                    != other.text_color.unwrap_or(other.text_fallback)))
+            || (properties.contains(TransitionProperties::BOX_SHADOW)
+                && self.shadows != other.shadows)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct StyleTransitionPlayback {
+    from: TransitionPaintStyle,
+    current: TransitionPaintStyle,
+    target: TransitionPaintStyle,
+    config: Transition,
+    elapsed: Duration,
+    last_advanced_at: Instant,
+    next_frame_at: Option<Instant>,
+    in_progress: bool,
+    active: bool,
+}
+
+struct StyleTransitionPaintContext<'a> {
+    playbacks: Option<&'a mut HashMap<ElementId, StyleTransitionPlayback>>,
+    request_frame: &'a mut bool,
+    enabled: bool,
+    reduce_motion: bool,
+    now: Instant,
+}
+
+/// A detached declaration owns its template and motion clock independently from the application
+/// view. Dropping the enclosing tooltip or drag preview therefore drops every playback and exact
+/// deadline at the same time.
+struct DetachedMotionState {
+    template: Element,
+    animations: HashMap<ElementId, DeclarativeAnimationPlayback>,
+    time_animation_ids: HashSet<ElementId>,
+    springs: HashMap<ElementId, DeclarativeSpringPlayback>,
+    spring_ids: HashSet<ElementId>,
+    motion_ids: HashSet<ElementId>,
+    frame_requested: bool,
+    deadline: Option<Instant>,
+    needs_resolve: bool,
+    animation_epoch: Instant,
+}
+
+/// Retained layout and image state for a pointer-passive tree painted outside the main view.
+struct DetachedTree {
+    motion: DetachedMotionState,
     root: Element,
     taffy: TaffyTree<MeasureContext>,
-    root_node: NodeId,
-    cursor_offset: Point,
-    position: Point,
+    root_node: Option<NodeId>,
+    root_seed: ElementId,
+    seen_ids: HashSet<ElementId>,
+    input_ids: HashSet<ElementId>,
+    animation_ids: HashSet<ElementId>,
     scroll_offsets: HashMap<ElementId, Vector>,
     natural_bounds: HashMap<ElementId, Rect>,
+    paint_bounds: HashMap<ElementId, Rect>,
     text_inputs: HashMap<ElementId, TextInputState>,
     animations: HashMap<ElementId, AnimationPlayback>,
+}
+
+struct DragPreview {
+    tree: DetachedTree,
+    cursor_offset: Point,
+    position: Point,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -507,13 +842,7 @@ struct TooltipOverlay {
     placement: AnchorPlacement,
     gap: f32,
     viewport_margin: f32,
-    root: Element,
-    taffy: TaffyTree<MeasureContext>,
-    root_node: NodeId,
-    scroll_offsets: HashMap<ElementId, Vector>,
-    natural_bounds: HashMap<ElementId, Rect>,
-    text_inputs: HashMap<ElementId, TextInputState>,
-    animations: HashMap<ElementId, AnimationPlayback>,
+    tree: DetachedTree,
 }
 
 impl AnimationPlayback {
@@ -572,14 +901,803 @@ impl AnimationPlayback {
     }
 }
 
-impl DragPreview {
+impl DeclarativeAnimationPlayback {
+    fn new(now: Instant) -> Self {
+        Self {
+            animation_ix: 0,
+            elapsed: Duration::ZERO,
+            last_advanced_at: now,
+            next_frame_at: None,
+            scheduled_stage: 0,
+            last_value: 0.0,
+            completed: false,
+            active: false,
+        }
+    }
+
+    fn pause(&mut self, now: Instant) {
+        if self.active && !self.completed {
+            self.elapsed = self
+                .elapsed
+                .saturating_add(now.saturating_duration_since(self.last_advanced_at));
+        }
+        self.last_advanced_at = now;
+        self.next_frame_at = None;
+        self.active = false;
+    }
+
+    fn resume(&mut self, now: Instant) {
+        self.last_advanced_at = now;
+        self.next_frame_at = None;
+    }
+
+    fn sample(
+        &mut self,
+        stages: &[Animation],
+        now: Instant,
+        animation_epoch: Instant,
+        enabled: bool,
+        reduce_motion: bool,
+    ) -> DeclarativeAnimationSample {
+        debug_assert!(!stages.is_empty());
+        if self.animation_ix >= stages.len() {
+            self.animation_ix = stages.len() - 1;
+            self.elapsed = Duration::ZERO;
+            self.completed = false;
+            self.next_frame_at = None;
+        }
+
+        if reduce_motion {
+            let animation_ix = stages.len() - 1;
+            let phase = if stages[animation_ix].oneshot {
+                1.0
+            } else {
+                0.0
+            };
+            self.active = false;
+            self.next_frame_at = None;
+            self.last_value = stages[animation_ix].eased(phase);
+            return DeclarativeAnimationSample {
+                animation_ix,
+                value: self.last_value,
+                request_frame: false,
+                deadline: None,
+            };
+        }
+
+        if !enabled {
+            return DeclarativeAnimationSample {
+                animation_ix: self.animation_ix,
+                value: self.last_value,
+                request_frame: false,
+                deadline: None,
+            };
+        }
+
+        if !self.completed {
+            self.elapsed = self
+                .elapsed
+                .saturating_add(now.saturating_duration_since(self.last_advanced_at));
+        }
+        self.last_advanced_at = now;
+
+        let (animation_ix, phase, active) = self.resolve_phase(stages, now, animation_epoch);
+        let stage = &stages[animation_ix];
+        self.last_value = stage.eased(phase);
+        self.active = active;
+
+        let (request_frame, deadline) = if active {
+            if let Some(interval) = stage.frame_interval() {
+                if self.scheduled_stage != animation_ix
+                    || self.next_frame_at.is_none_or(|deadline| deadline <= now)
+                {
+                    let delay = if stage.oneshot {
+                        interval.min(stage.duration.saturating_sub(self.elapsed))
+                    } else {
+                        interval
+                    };
+                    self.next_frame_at = now.checked_add(delay);
+                    self.scheduled_stage = animation_ix;
+                }
+                (false, self.next_frame_at)
+            } else {
+                self.next_frame_at = None;
+                (true, None)
+            }
+        } else {
+            self.next_frame_at = None;
+            (false, None)
+        };
+
+        DeclarativeAnimationSample {
+            animation_ix,
+            value: self.last_value,
+            request_frame,
+            deadline,
+        }
+    }
+
+    fn resolve_phase(
+        &mut self,
+        stages: &[Animation],
+        now: Instant,
+        animation_epoch: Instant,
+    ) -> (usize, f32, bool) {
+        if self.completed {
+            return (self.animation_ix, 1.0, false);
+        }
+
+        loop {
+            let stage = &stages[self.animation_ix];
+            if stage.duration.is_zero() {
+                if stage.oneshot && self.animation_ix + 1 < stages.len() {
+                    self.animation_ix += 1;
+                    self.elapsed = Duration::ZERO;
+                    self.next_frame_at = None;
+                    continue;
+                }
+                self.completed = stage.oneshot;
+                return (
+                    self.animation_ix,
+                    if stage.oneshot { 1.0 } else { 0.0 },
+                    false,
+                );
+            }
+
+            if !stage.oneshot && stage.synced {
+                let elapsed = now.saturating_duration_since(animation_epoch);
+                let remainder = elapsed.as_nanos() % stage.duration.as_nanos();
+                let phase = remainder as f64 / stage.duration.as_nanos() as f64;
+                return (self.animation_ix, phase as f32, true);
+            }
+
+            if stage.oneshot {
+                if self.elapsed >= stage.duration {
+                    if self.animation_ix + 1 < stages.len() {
+                        self.elapsed = self.elapsed.saturating_sub(stage.duration);
+                        self.animation_ix += 1;
+                        self.next_frame_at = None;
+                        continue;
+                    }
+                    self.elapsed = stage.duration;
+                    self.completed = true;
+                    return (self.animation_ix, 1.0, false);
+                }
+                return (
+                    self.animation_ix,
+                    self.elapsed.as_secs_f32() / stage.duration.as_secs_f32(),
+                    true,
+                );
+            }
+
+            let remainder = self.elapsed.as_nanos() % stage.duration.as_nanos();
+            let phase = remainder as f64 / stage.duration.as_nanos() as f64;
+            return (self.animation_ix, phase as f32, true);
+        }
+    }
+}
+
+impl DeclarativeSpringPlayback {
+    fn new(declaration: &ElementSpring, now: Instant) -> Self {
+        let target = finite_spring_value(declaration.target, 0.0);
+        let initial = declaration
+            .initial
+            .filter(|value| value.is_finite())
+            .unwrap_or(target);
+        Self {
+            state: SpringState {
+                position: initial,
+                velocity: 0.0,
+            },
+            target,
+            config: declaration.config,
+            initial,
+            playback: declaration.playback,
+            updated_at: now,
+            active: false,
+        }
+    }
+
+    fn pause(&mut self, now: Instant) {
+        self.advance_previous_target(now);
+        self.updated_at = now;
+        self.active = false;
+    }
+
+    fn resume(&mut self, now: Instant) {
+        self.updated_at = now;
+    }
+
+    fn sample(
+        &mut self,
+        declaration: &ElementSpring,
+        now: Instant,
+        enabled: bool,
+        reduce_motion: bool,
+    ) -> DeclarativeSpringSample {
+        self.advance_previous_target(now);
+        self.updated_at = now;
+        self.config = declaration.config;
+        self.target = finite_spring_value(declaration.target, self.target);
+        self.playback = declaration.playback;
+
+        if reduce_motion {
+            self.state = SpringState {
+                position: self.target,
+                velocity: 0.0,
+            };
+            self.active = false;
+            return DeclarativeSpringSample {
+                value: self.state.position,
+                request_frame: false,
+            };
+        }
+
+        if !enabled {
+            self.active = false;
+            return DeclarativeSpringSample {
+                value: self.state.position,
+                request_frame: false,
+            };
+        }
+
+        let epsilon = sane_spring_epsilon(declaration.epsilon);
+        self.active = match self.playback {
+            SpringPlayback::Running if self.config.is_valid() => {
+                let settled = self.config.is_settled(self.state, self.target, epsilon);
+                if settled {
+                    self.state = SpringState {
+                        position: self.target,
+                        velocity: 0.0,
+                    };
+                }
+                !settled
+            }
+            SpringPlayback::Running => {
+                self.state = SpringState {
+                    position: self.target,
+                    velocity: 0.0,
+                };
+                false
+            }
+            SpringPlayback::Paused => false,
+            SpringPlayback::Stopped => {
+                self.state.velocity = 0.0;
+                false
+            }
+            SpringPlayback::Completed => {
+                self.state = SpringState {
+                    position: self.target,
+                    velocity: 0.0,
+                };
+                false
+            }
+            SpringPlayback::Cancelled => {
+                self.state = SpringState {
+                    position: self.initial,
+                    velocity: 0.0,
+                };
+                false
+            }
+        };
+
+        DeclarativeSpringSample {
+            value: self.state.position,
+            request_frame: self.active,
+        }
+    }
+
+    fn advance_previous_target(&mut self, now: Instant) {
+        if !self.active || self.playback != SpringPlayback::Running || !self.config.is_valid() {
+            return;
+        }
+        let elapsed = now.saturating_duration_since(self.updated_at);
+        let seconds = elapsed.as_secs_f64().min(60.0) as f32;
+        self.state = self.config.step(self.state, self.target, seconds);
+    }
+}
+
+impl StyleTransitionPlayback {
+    fn new(target: TransitionPaintStyle, config: &Transition, now: Instant) -> Self {
+        Self {
+            from: target,
+            current: target,
+            target,
+            config: config.clone(),
+            elapsed: Duration::ZERO,
+            last_advanced_at: now,
+            next_frame_at: None,
+            in_progress: false,
+            active: false,
+        }
+    }
+
+    fn sample(
+        &mut self,
+        target: TransitionPaintStyle,
+        config: &Transition,
+        now: Instant,
+        enabled: bool,
+        reduce_motion: bool,
+    ) -> TransitionPaintStyle {
+        self.advance_to(now);
+        let target_changed = self.target != target;
+        let properties_changed = self.config.properties != config.properties;
+        let cadence_changed =
+            self.config.max_fps.map(f32::to_bits) != config.max_fps.map(f32::to_bits);
+        let configuration_changed = !self.config.same_configuration(config);
+        if target_changed || properties_changed {
+            self.from = self.current;
+            self.target = target;
+            self.elapsed = Duration::ZERO;
+            self.next_frame_at = None;
+        }
+        if configuration_changed {
+            self.config = config.clone();
+        }
+        if cadence_changed {
+            self.next_frame_at = None;
+        }
+
+        if reduce_motion || self.config.duration.is_zero() || self.config.properties.is_empty() {
+            self.finish();
+            return self.current;
+        }
+
+        if target_changed || properties_changed {
+            self.in_progress = self.from.differs_for(self.target, self.config.properties);
+            if !self.in_progress {
+                self.finish();
+                return self.current;
+            }
+        }
+
+        if !enabled {
+            self.active = false;
+            self.next_frame_at = None;
+            self.last_advanced_at = now;
+            return self.current;
+        }
+
+        if self.in_progress {
+            self.active = true;
+            self.resolve_current();
+        }
+        if self.active {
+            if let Some(interval) = self.config.frame_interval() {
+                if self.next_frame_at.is_none_or(|deadline| deadline <= now) {
+                    let remaining = self.config.duration.saturating_sub(self.elapsed);
+                    self.next_frame_at = now.checked_add(interval.min(remaining));
+                }
+            } else {
+                self.next_frame_at = None;
+            }
+        }
+        self.current
+    }
+
+    fn advance_to(&mut self, now: Instant) {
+        if self.active && self.in_progress {
+            self.elapsed = self
+                .elapsed
+                .saturating_add(now.saturating_duration_since(self.last_advanced_at));
+            self.resolve_current();
+        }
+        self.last_advanced_at = now;
+    }
+
+    fn resolve_current(&mut self) {
+        if self.config.duration.is_zero() || self.elapsed >= self.config.duration {
+            self.finish();
+            return;
+        }
+        let phase = self.elapsed.as_secs_f32() / self.config.duration.as_secs_f32();
+        self.current = TransitionPaintStyle::interpolate(
+            self.from,
+            self.target,
+            self.config.eased(phase),
+            self.config.properties,
+        );
+    }
+
+    fn finish(&mut self) {
+        self.current = self.target;
+        self.elapsed = self.config.duration;
+        self.next_frame_at = None;
+        self.in_progress = false;
+        self.active = false;
+    }
+
+    fn pause(&mut self, now: Instant) {
+        self.advance_to(now);
+        self.active = false;
+        self.next_frame_at = None;
+    }
+
+    fn resume(&mut self, now: Instant) {
+        self.last_advanced_at = now;
+        self.next_frame_at = None;
+        self.active = self.in_progress;
+    }
+
+    fn deadline_due(&mut self, now: Instant) -> bool {
+        if self.active && self.next_frame_at.is_some_and(|deadline| deadline <= now) {
+            self.next_frame_at = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        (self.active && self.in_progress)
+            .then_some(self.next_frame_at)
+            .flatten()
+    }
+
+    fn requests_frame(&self) -> bool {
+        self.active && self.in_progress && self.config.frame_interval().is_none()
+    }
+}
+
+impl StyleTransitionPaintContext<'_> {
+    fn sample(
+        &mut self,
+        id: ElementId,
+        target: TransitionPaintStyle,
+        config: &Transition,
+    ) -> TransitionPaintStyle {
+        let Some(playbacks) = self.playbacks.as_deref_mut() else {
+            return target;
+        };
+        let playback = playbacks
+            .entry(id)
+            .or_insert_with(|| StyleTransitionPlayback::new(target, config, self.now));
+        let value = playback.sample(target, config, self.now, self.enabled, self.reduce_motion);
+        *self.request_frame |= playback.requests_frame();
+        value
+    }
+}
+
+fn sane_transition_color(color: Color, fallback: Color) -> Color {
+    if [color.r, color.g, color.b, color.a]
+        .into_iter()
+        .all(f32::is_finite)
+    {
+        color
+    } else {
+        fallback
+    }
+}
+
+fn sane_transition_shadow(shadow: BoxShadow) -> BoxShadow {
+    BoxShadow::new(
+        shadow.offset().x,
+        shadow.offset().y,
+        sane_transition_color(shadow.color(), Color::TRANSPARENT),
+    )
+    .blur_radius(shadow.blur())
+    .spread_radius(shadow.spread())
+    .inset(shadow.is_inset())
+}
+
+fn neutral_transition_shadow(inset: bool) -> BoxShadow {
+    BoxShadow::new(0.0, 0.0, Color::TRANSPARENT).inset(inset)
+}
+
+fn interpolate_transition_shadow(from: BoxShadow, to: BoxShadow, phase: f32) -> BoxShadow {
+    if from.is_inset() != to.is_inset() {
+        return if phase < 0.5 { from } else { to };
+    }
+    BoxShadow::new(
+        f32::interpolate(from.offset().x, to.offset().x, phase),
+        f32::interpolate(from.offset().y, to.offset().y, phase),
+        Color::interpolate(from.color(), to.color(), phase),
+    )
+    .blur_radius(f32::interpolate(from.blur(), to.blur(), phase))
+    .spread_radius(f32::interpolate(from.spread(), to.spread(), phase))
+    .inset(from.is_inset())
+}
+
+fn sane_spring_epsilon(epsilon: f32) -> f32 {
+    if epsilon.is_finite() && epsilon >= 0.0 {
+        epsilon
+    } else {
+        0.001
+    }
+}
+
+fn finite_spring_value(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() { value } else { fallback }
+}
+
+impl DetachedMotionState {
+    fn new(mut template: Element, animation_epoch: Instant) -> Self {
+        sanitize_detached_element(&mut template, true);
+        Self {
+            template,
+            animations: HashMap::with_capacity(4),
+            time_animation_ids: HashSet::with_capacity(4),
+            springs: HashMap::with_capacity(4),
+            spring_ids: HashSet::with_capacity(4),
+            motion_ids: HashSet::with_capacity(4),
+            frame_requested: false,
+            deadline: None,
+            needs_resolve: true,
+            animation_epoch,
+        }
+    }
+
+    #[cfg(test)]
+    fn resolve(
+        &mut self,
+        now: Instant,
+        enabled: bool,
+        reduce_motion: bool,
+    ) -> Result<Element, UiError> {
+        let root = self.begin_resolution(now, enabled, reduce_motion)?;
+        self.finish_resolution();
+        Ok(root)
+    }
+
+    fn begin_resolution(
+        &mut self,
+        now: Instant,
+        enabled: bool,
+        reduce_motion: bool,
+    ) -> Result<Element, UiError> {
+        let mut root = self.template.clone();
+        self.motion_ids.clear();
+        self.time_animation_ids.clear();
+        self.spring_ids.clear();
+        self.frame_requested = false;
+        self.deadline = None;
+        let mut resolved_motion_ids = Vec::new();
+        resolve_declarative_animations(
+            &mut root,
+            &mut self.animations,
+            &mut self.motion_ids,
+            &mut self.time_animation_ids,
+            &mut self.springs,
+            &mut self.spring_ids,
+            &mut self.frame_requested,
+            &mut self.deadline,
+            now,
+            self.animation_epoch,
+            enabled,
+            reduce_motion,
+            &mut resolved_motion_ids,
+        )?;
+        // Animators may construct fresh interactive descendants. Detached surfaces stay strictly
+        // pointer-passive even when their resolved shape changes from frame to frame.
+        sanitize_detached_element(&mut root, false);
+        self.needs_resolve = false;
+        Ok(root)
+    }
+
+    fn finish_resolution(&mut self) {
+        self.animations
+            .retain(|id, _| self.time_animation_ids.contains(id));
+        self.springs.retain(|id, _| self.spring_ids.contains(id));
+    }
+
+    fn pause(&mut self, now: Instant) {
+        for playback in self.animations.values_mut() {
+            playback.pause(now);
+        }
+        for playback in self.springs.values_mut() {
+            playback.pause(now);
+        }
+        self.frame_requested = false;
+        self.deadline = None;
+    }
+
+    fn resume(&mut self, now: Instant) {
+        for playback in self.animations.values_mut() {
+            playback.resume(now);
+        }
+        for playback in self.springs.values_mut() {
+            playback.resume(now);
+        }
+        self.frame_requested = false;
+        self.deadline = None;
+        self.needs_resolve = !self.animations.is_empty() || !self.springs.is_empty();
+    }
+
+    fn mark_needs_resolve(&mut self) {
+        self.needs_resolve |= !self.animations.is_empty() || !self.springs.is_empty();
+    }
+
+    fn deadline_due(&mut self, now: Instant) -> bool {
+        if self.deadline.is_some_and(|deadline| deadline <= now) {
+            self.deadline = None;
+            self.needs_resolve = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn active_count(&self) -> usize {
+        self.animations
+            .values()
+            .filter(|playback| playback.active)
+            .count()
+            + self
+                .springs
+                .values()
+                .filter(|playback| playback.active)
+                .count()
+    }
+}
+
+impl DetachedTree {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        template: Element,
+        root_seed: ElementId,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+        now: Instant,
+        animation_epoch: Instant,
+        animations_enabled: bool,
+        reduce_motion: bool,
+    ) -> Result<Self, UiError> {
+        let mut tree = Self {
+            motion: DetachedMotionState::new(template, animation_epoch),
+            root: crate::div(),
+            taffy: TaffyTree::with_capacity(32),
+            root_node: None,
+            root_seed,
+            seen_ids: HashSet::with_capacity(32),
+            input_ids: HashSet::with_capacity(4),
+            animation_ids: HashSet::with_capacity(4),
+            scroll_offsets: HashMap::new(),
+            natural_bounds: HashMap::new(),
+            paint_bounds: HashMap::with_capacity(32),
+            text_inputs: HashMap::new(),
+            animations: HashMap::new(),
+        };
+        tree.refresh(
+            viewport,
+            scale_factor,
+            renderer,
+            now,
+            animations_enabled,
+            reduce_motion,
+        )?;
+        Ok(tree)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn refresh(
+        &mut self,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+        now: Instant,
+        animations_enabled: bool,
+        reduce_motion: bool,
+    ) -> Result<bool, UiError> {
+        if !self.motion.needs_resolve {
+            return Ok(false);
+        }
+        let mut root = self
+            .motion
+            .begin_resolution(now, animations_enabled, reduce_motion)?;
+        let mut final_root_node = None;
+        let mut converged = false;
+        for _ in 0..=MAX_CONTAINER_QUERY_DEPTH {
+            self.taffy.clear();
+            self.seen_ids.clear();
+            self.seen_ids
+                .insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
+            validate_container_query_limits(&root)?;
+            let inherited = TextStyle::new(14.0, Color::WHITE);
+            let root_node = build_layout_node(
+                &mut self.taffy,
+                &mut self.seen_ids,
+                &mut root,
+                self.root_seed,
+                0,
+                &inherited,
+                false,
+            )?;
+            compute_detached_layout(&mut self.taffy, root_node, viewport, scale_factor, renderer)?;
+            compute_container_query_child_layouts(&root, &mut self.taffy, scale_factor, renderer)?;
+
+            let resolution = {
+                let mut prepare = |_: &mut Element| {};
+                let motion = &mut self.motion;
+                let mut context = ContainerQueryResolveContext {
+                    taffy: &self.taffy,
+                    prepare: &mut prepare,
+                    animations: &mut motion.animations,
+                    motion_ids: &mut motion.motion_ids,
+                    time_animation_ids: &mut motion.time_animation_ids,
+                    springs: &mut motion.springs,
+                    spring_ids: &mut motion.spring_ids,
+                    request_frame: &mut motion.frame_requested,
+                    deadline: &mut motion.deadline,
+                    now,
+                    animation_epoch: motion.animation_epoch,
+                    enabled: animations_enabled,
+                    reduce_motion,
+                    sanitize_detached: true,
+                };
+                context.resolve(&mut root)?
+            };
+            if !resolution.changed {
+                final_root_node = Some(root_node);
+                converged = true;
+                break;
+            }
+        }
+        if !converged {
+            return Err(UiError::ContainerQueryDidNotConverge);
+        }
+        self.motion.finish_resolution();
+        let root_node = final_root_node.expect("a converged detached declaration has a root node");
+
+        self.input_ids.clear();
+        sync_text_inputs(&root, &mut self.text_inputs, &mut self.input_ids);
+        self.text_inputs.retain(|id, _| self.input_ids.contains(id));
+        self.animation_ids.clear();
+        sync_animations(&root, &mut self.animations, &mut self.animation_ids, now);
+        self.animations
+            .retain(|id, _| self.animation_ids.contains(id));
+        let mut displayed_ids = HashSet::with_capacity(self.seen_ids.len());
+        collect_displayed_ids(&root, &mut displayed_ids);
+        self.scroll_offsets
+            .retain(|id, _| displayed_ids.contains(id));
+        self.natural_bounds.clear();
+        self.root = root;
+        self.root_node = Some(root_node);
+        Ok(true)
+    }
+
+    fn layout(
+        &mut self,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+    ) -> Result<(), UiError> {
+        if self.motion.needs_resolve {
+            return Ok(());
+        }
+        if let Some(root_node) = self.root_node {
+            compute_detached_layout(&mut self.taffy, root_node, viewport, scale_factor, renderer)?;
+            compute_container_query_child_layouts(
+                &self.root,
+                &mut self.taffy,
+                scale_factor,
+                renderer,
+            )?;
+            if container_queries_need_resolution(&self.root, &self.taffy)? {
+                self.motion.needs_resolve = true;
+            }
+        }
+        Ok(())
+    }
+
+    fn root_layout(&self) -> Result<&taffy::tree::Layout, UiError> {
+        let root = self
+            .root_node
+            .expect("a detached tree is laid out before it is painted");
+        Ok(self.taffy.layout(root)?)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn paint(
         &mut self,
+        origin: Point,
+        layer: PaintLayerKey,
         scene: &mut Scene,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
         scale_factor: f32,
         animations_enabled: bool,
+        reduce_motion: bool,
         paint_time: Instant,
         viewport: Rect,
         source_order: &mut usize,
@@ -588,10 +1706,6 @@ impl DragPreview {
         for playback in self.animations.values_mut() {
             playback.seen = false;
         }
-        let origin = Point::new(
-            self.position.x - self.cursor_offset.x,
-            self.position.y - self.cursor_offset.y,
-        );
         collect_layout_bounds(
             &self.root,
             &self.taffy,
@@ -600,7 +1714,7 @@ impl DragPreview {
             origin,
         )?;
 
-        let mut element_bounds = HashMap::new();
+        self.paint_bounds.clear();
         let hovered = HashSet::new();
         let mut hit_regions = Vec::new();
         let mut scroll_regions = Vec::new();
@@ -611,11 +1725,19 @@ impl DragPreview {
         let mut text_input_regions = Vec::new();
         let selectable_text_indices = HashMap::new();
         let mut selectable_text_regions = Vec::new();
+        let mut transition_frame_requested = false;
+        let mut transition_context = StyleTransitionPaintContext {
+            playbacks: None,
+            request_frame: &mut transition_frame_requested,
+            enabled: animations_enabled,
+            reduce_motion,
+            now: paint_time,
+        };
         let result = paint_element(
             &self.root,
             &self.taffy,
             &self.natural_bounds,
-            &mut element_bounds,
+            &mut self.paint_bounds,
             &mut self.scroll_offsets,
             &hovered,
             None,
@@ -629,6 +1751,7 @@ impl DragPreview {
             &mut self.animations,
             animations_enabled,
             paint_time,
+            &mut transition_context,
             &mut hit_regions,
             &mut scroll_regions,
             &mut scrollbar_states,
@@ -642,64 +1765,133 @@ impl DragPreview {
             origin,
             viewport,
             viewport,
-            PaintLayerKey {
-                plane: crate::ScenePlane::Overlay,
-                z_index: i16::MAX,
-            },
+            layer,
             source_order,
             None,
         );
         for playback in self.animations.values_mut() {
             playback.finish_visibility();
         }
+        // An unthrottled declaration samples once per presented paint. Marking the next sample
+        // here avoids resolving a newly created tooltip twice inside its first paint.
+        self.motion.needs_resolve |= self.motion.frame_requested;
         result
+    }
+
+    fn pause(&mut self, now: Instant) {
+        self.motion.pause(now);
+        for playback in self.animations.values_mut() {
+            playback.advance(now);
+            playback.active = false;
+        }
+    }
+
+    fn resume(&mut self, now: Instant) {
+        self.motion.resume(now);
+    }
+
+    fn advance_animations(&mut self, now: Instant) -> bool {
+        let mut changed = self.motion.deadline_due(now);
+        for playback in self.animations.values_mut() {
+            changed |= playback.advance(now);
+        }
+        changed
+    }
+
+    fn next_animation_deadline(&self) -> Option<Instant> {
+        self.animations
+            .values()
+            .filter_map(AnimationPlayback::deadline)
+            .chain(self.motion.deadline)
+            .min()
+    }
+
+    fn animation_counts(&self) -> (usize, usize) {
+        (
+            self.animations.len(),
+            self.animations
+                .values()
+                .filter(|playback| playback.active)
+                .count()
+                + self.motion.active_count(),
+        )
+    }
+}
+
+impl DragPreview {
+    #[allow(clippy::too_many_arguments)]
+    fn paint(
+        &mut self,
+        scene: &mut Scene,
+        renderer: &mut impl TextLayoutEngine,
+        scale_factor: f32,
+        animations_enabled: bool,
+        reduce_motion: bool,
+        paint_time: Instant,
+        viewport: Rect,
+        source_order: &mut usize,
+    ) -> Result<(), UiError> {
+        self.tree.refresh(
+            Size::new(viewport.width, viewport.height),
+            scale_factor,
+            renderer,
+            paint_time,
+            animations_enabled,
+            reduce_motion,
+        )?;
+        let origin = Point::new(
+            self.position.x - self.cursor_offset.x,
+            self.position.y - self.cursor_offset.y,
+        );
+        self.tree.paint(
+            origin,
+            PaintLayerKey {
+                plane: crate::ScenePlane::Overlay,
+                z_index: i16::MAX,
+            },
+            scene,
+            renderer,
+            scale_factor,
+            animations_enabled,
+            reduce_motion,
+            paint_time,
+            viewport,
+            source_order,
+        )
     }
 }
 
 impl TooltipOverlay {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         target: ElementId,
         tooltip: &Tooltip,
         viewport: Size,
         scale_factor: f32,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
+        now: Instant,
+        animation_epoch: Instant,
+        animations_enabled: bool,
+        reduce_motion: bool,
     ) -> Result<Self, UiError> {
-        let mut root = tooltip.content.as_ref().clone();
-        sanitize_drag_preview(&mut root);
-        let mut taffy = TaffyTree::with_capacity(32);
-        let mut seen_ids = HashSet::with_capacity(32);
-        seen_ids.insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
-        let inherited = TextStyle::new(14.0, Color::WHITE);
-        let root_node = build_layout_node(
-            &mut taffy,
-            &mut seen_ids,
-            &mut root,
+        let tree = DetachedTree::new(
+            tooltip.content.as_ref().clone(),
             ElementId::new(0x7474_6970_6f6f_6c00),
-            0,
-            &inherited,
-            false,
+            viewport,
+            scale_factor,
+            renderer,
+            now,
+            animation_epoch,
+            animations_enabled,
+            reduce_motion,
         )?;
-        compute_detached_layout(&mut taffy, root_node, viewport, scale_factor, renderer)?;
-
-        let mut text_inputs = HashMap::new();
-        let mut input_ids = HashSet::new();
-        sync_text_inputs(&root, &mut text_inputs, &mut input_ids);
-        let mut animations = HashMap::new();
-        let mut animation_ids = HashSet::new();
-        sync_animations(&root, &mut animations, &mut animation_ids, Instant::now());
         Ok(Self {
             target,
             content_identity: tooltip.content_identity(),
             placement: tooltip.placement,
             gap: tooltip.gap,
             viewport_margin: tooltip.viewport_margin,
-            root,
-            taffy,
-            root_node,
-            scroll_offsets: HashMap::new(),
-            natural_bounds: HashMap::new(),
-            text_inputs,
-            animations,
+            tree,
         })
     }
 
@@ -712,18 +1904,23 @@ impl TooltipOverlay {
         &mut self,
         anchor: Rect,
         scene: &mut Scene,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
         scale_factor: f32,
         animations_enabled: bool,
+        reduce_motion: bool,
         paint_time: Instant,
         viewport: Rect,
         source_order: &mut usize,
     ) -> Result<(), UiError> {
-        self.natural_bounds.clear();
-        for playback in self.animations.values_mut() {
-            playback.seen = false;
-        }
-        let layout = self.taffy.layout(self.root_node)?;
+        self.tree.refresh(
+            Size::new(viewport.width, viewport.height),
+            scale_factor,
+            renderer,
+            paint_time,
+            animations_enabled,
+            reduce_motion,
+        )?;
+        let layout = *self.tree.root_layout()?;
         let placed = place_anchored(
             anchor,
             Size::new(layout.size.width, layout.size.height),
@@ -733,77 +1930,38 @@ impl TooltipOverlay {
             self.viewport_margin,
         );
         let origin = Point::new(placed.x - layout.location.x, placed.y - layout.location.y);
-        collect_layout_bounds(
-            &self.root,
-            &self.taffy,
-            &mut self.scroll_offsets,
-            &mut self.natural_bounds,
+        self.tree.paint(
             origin,
-        )?;
-
-        let mut element_bounds = HashMap::new();
-        let hovered = HashSet::new();
-        let mut hit_regions = Vec::new();
-        let mut scroll_regions = Vec::new();
-        let mut scrollbar_states = HashMap::new();
-        let mut dismiss_regions = Vec::new();
-        #[cfg(target_os = "macos")]
-        let mut native_views = Vec::new();
-        let mut text_input_regions = Vec::new();
-        let selectable_text_indices = HashMap::new();
-        let mut selectable_text_regions = Vec::new();
-        let result = paint_element(
-            &self.root,
-            &self.taffy,
-            &self.natural_bounds,
-            &mut element_bounds,
-            &mut self.scroll_offsets,
-            &hovered,
-            None,
-            None,
-            None,
-            None,
-            scale_factor,
-            scene,
-            renderer,
-            &mut self.text_inputs,
-            &mut self.animations,
-            animations_enabled,
-            paint_time,
-            &mut hit_regions,
-            &mut scroll_regions,
-            &mut scrollbar_states,
-            &mut dismiss_regions,
-            #[cfg(target_os = "macos")]
-            &mut native_views,
-            &mut text_input_regions,
-            &selectable_text_indices,
-            &mut selectable_text_regions,
-            None,
-            origin,
-            viewport,
-            viewport,
             PaintLayerKey {
                 plane: crate::ScenePlane::Overlay,
                 z_index: i16::MAX - 1,
             },
+            scene,
+            renderer,
+            scale_factor,
+            animations_enabled,
+            reduce_motion,
+            paint_time,
+            viewport,
             source_order,
-            None,
-        );
-        for playback in self.animations.values_mut() {
-            playback.finish_visibility();
-        }
-        result
+        )
     }
 }
 
 impl UiTree {
     pub fn new() -> Self {
+        Self::new_at(Instant::now())
+    }
+
+    pub(crate) fn new_at(animation_epoch: Instant) -> Self {
         Self {
             root: None,
             taffy: TaffyTree::with_capacity(256),
             root_node: None,
+            mounted_state_dirty: false,
             seen_ids: HashSet::with_capacity(256),
+            displayed_ids: HashSet::with_capacity(256),
+            visible_ids: HashSet::with_capacity(256),
             scroll_offsets: HashMap::new(),
             virtual_scroll_handles: HashMap::with_capacity(8),
             natural_bounds: HashMap::with_capacity(256),
@@ -811,6 +1969,19 @@ impl UiTree {
             hit_regions: Vec::with_capacity(128),
             drop_predicates: HashMap::with_capacity(8),
             context_menu_ids: HashSet::with_capacity(8),
+            mouse_listener_bindings: Vec::with_capacity(16),
+            mouse_listener_ranges: HashMap::with_capacity(8),
+            mouse_listener_elements: Vec::with_capacity(8),
+            key_listener_bindings: Vec::with_capacity(16),
+            key_listener_ranges: HashMap::with_capacity(8),
+            action_listener_bindings: Vec::with_capacity(16),
+            action_listener_ranges: HashMap::with_capacity(8),
+            scroll_wheel_ids: HashSet::with_capacity(8),
+            touch_ids: HashSet::with_capacity(8),
+            mouse_pressure_ids: HashSet::with_capacity(8),
+            pinch_ids: HashSet::with_capacity(8),
+            rotation_ids: HashSet::with_capacity(8),
+            smart_magnify_ids: HashSet::with_capacity(8),
             tooltips: HashMap::with_capacity(8),
             pointer_tooltip: None,
             hovered_tooltip: None,
@@ -836,17 +2007,35 @@ impl UiTree {
             next_accessibility_text_id: ACCESSIBILITY_ROOT_ID.0 - 1,
             animations: HashMap::with_capacity(8),
             animation_ids: HashSet::with_capacity(8),
+            declarative_animations: HashMap::with_capacity(8),
+            declarative_time_animation_ids: HashSet::with_capacity(8),
+            declarative_springs: HashMap::with_capacity(8),
+            declarative_spring_ids: HashSet::with_capacity(8),
+            declarative_animation_ids: HashSet::with_capacity(8),
+            declarative_animation_frame_requested: false,
+            declarative_animation_deadline: None,
+            style_transitions: HashMap::with_capacity(8),
+            style_transition_ids: HashSet::with_capacity(8),
+            style_transition_frame_requested: false,
+            animation_epoch,
             animations_enabled: true,
+            reduce_motion: false,
             selecting_input: None,
             hovered: HashSet::with_capacity(8),
+            hover_scratch: HashSet::with_capacity(8),
+            mouse_hover_path: Vec::with_capacity(8),
+            mouse_hover_path_scratch: Vec::with_capacity(8),
+            pending_mouse_hover_changes: Vec::with_capacity(8),
             pressed: None,
             dragging: None,
             external_drag_active: false,
             drag_over: None,
             drag_preview: None,
             focused: None,
+            active_focus_trap: None,
             focusable_ids: HashSet::with_capacity(32),
             clickable_ids: HashSet::with_capacity(32),
+            activation_targets: HashMap::with_capacity(8),
             invalid_ids: HashSet::with_capacity(8),
             form_ids: HashSet::with_capacity(4),
             form_submitter_ids: HashSet::with_capacity(4),
@@ -860,17 +2049,138 @@ impl UiTree {
         }
     }
 
-    pub fn set_root(
+    /// Copy the current painted application tree into one reusable, bounded inspector snapshot.
+    ///
+    /// This method exists only in explicit `inspector` builds. Ordinary builds contain neither
+    /// the traversal nor any snapshot storage or paint-path branch.
+    #[cfg(feature = "inspector")]
+    pub(crate) fn inspector_snapshot_into(
+        &self,
+        snapshot: &mut crate::inspector::InspectorSnapshot,
+        hit_lookup: &mut HashMap<ElementId, HitRegion>,
+    ) {
+        snapshot.nodes.clear();
+        snapshot.focus_path.clear();
+        snapshot.nodes_truncated = false;
+        snapshot.hit_regions_truncated =
+            self.hit_regions.len() > crate::inspector::MAX_INSPECTOR_NODES;
+
+        hit_lookup.clear();
+        hit_lookup.extend(
+            self.hit_regions
+                .iter()
+                .copied()
+                .take(crate::inspector::MAX_INSPECTOR_NODES)
+                .map(|region| (region.id, region)),
+        );
+
+        snapshot.focus_path.extend(self.focus_path());
+        let Some(root) = self.root.as_ref() else {
+            return;
+        };
+        let viewport = Rect::from_size(self.viewport);
+        let mut source_order = 0;
+        collect_inspector_nodes(
+            root,
+            None,
+            0,
+            PaintLayerKey::default(),
+            viewport,
+            viewport,
+            &self.element_bounds,
+            hit_lookup,
+            self.focused,
+            &mut source_order,
+            snapshot,
+        );
+    }
+
+    #[cfg(test)]
+    fn set_root(
+        &mut self,
+        root: Element,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+    ) -> Result<(), UiError> {
+        self.set_root_with_prepare(root, viewport, scale_factor, renderer, |_| {})
+    }
+
+    /// Mount a declaration while preparing each size-dependent subtree before its first layout.
+    ///
+    /// The production runtime uses this hook to resolve image resources returned by a query
+    /// callback in the same cache frame as the surrounding view. Ordinary callers use
+    /// [`UiTree::set_root`], whose preparation hook is a no-op.
+    pub(crate) fn set_root_with_prepare(
+        &mut self,
+        root: Element,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+        mut prepare: impl FnMut(&mut Element),
+    ) -> Result<(), UiError> {
+        let now = Instant::now();
+        // Retain the previous playback registry until query callbacks have declared their current
+        // descendants. This preserves an animation keyed inside a stable query across view
+        // rebuilds instead of restarting it during the intermediate empty-shell layout.
+        self.set_root_unlaid(root, viewport, scale_factor, now, false)?;
+        self.layout_with_prepare_at(viewport, scale_factor, renderer, now, &mut prepare)
+    }
+
+    fn set_root_unlaid(
         &mut self,
         mut root: Element,
         viewport: Size,
         scale_factor: f32,
-        renderer: &mut GpuRenderer,
+        now: Instant,
+        retain_motion_registry: bool,
     ) -> Result<(), UiError> {
+        self.declarative_animation_ids.clear();
+        self.declarative_time_animation_ids.clear();
+        self.declarative_spring_ids.clear();
+        self.declarative_animation_frame_requested = false;
+        self.declarative_animation_deadline = None;
+        let mut resolved_motion_ids = Vec::new();
+        resolve_declarative_animations(
+            &mut root,
+            &mut self.declarative_animations,
+            &mut self.declarative_animation_ids,
+            &mut self.declarative_time_animation_ids,
+            &mut self.declarative_springs,
+            &mut self.declarative_spring_ids,
+            &mut self.declarative_animation_frame_requested,
+            &mut self.declarative_animation_deadline,
+            now,
+            self.animation_epoch,
+            self.animations_enabled,
+            self.reduce_motion,
+            &mut resolved_motion_ids,
+        )?;
+        if retain_motion_registry {
+            self.finalize_declarative_motion_registry();
+        }
+        self.build_resolved_root(root, viewport, scale_factor)?;
+        if retain_motion_registry {
+            self.sync_mounted_root(now)?;
+        }
+        Ok(())
+    }
+
+    fn build_resolved_root(
+        &mut self,
+        mut root: Element,
+        viewport: Size,
+        scale_factor: f32,
+    ) -> Result<(), UiError> {
+        self.viewport = viewport;
+        self.scale_factor = scale_factor;
         self.taffy.clear();
         self.seen_ids.clear();
         self.seen_ids
             .insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
+        let mut style_transition_count = 0;
+        validate_style_transition_count(&root, &mut style_transition_count)?;
+        validate_container_query_limits(&root)?;
         collect_explicit_ids(&root, &mut self.seen_ids)?;
         let inherited = TextStyle::new(14.0, Color::WHITE);
         let root_node = build_layout_node(
@@ -882,17 +2192,40 @@ impl UiTree {
             &inherited,
             true,
         )?;
-        self.animation_ids.clear();
-        sync_animations(
-            &root,
-            &mut self.animations,
-            &mut self.animation_ids,
-            Instant::now(),
-        );
-        self.animations
-            .retain(|id, _| self.animation_ids.contains(id));
         self.root = Some(root);
         self.root_node = Some(root_node);
+        self.mounted_state_dirty = true;
+        Ok(())
+    }
+
+    /// Reconcile retained interaction and playback state exactly once against a fully expanded
+    /// declaration. Intermediate container-query shells deliberately skip this phase so they
+    /// cannot transiently unmount stable text input, scroll, transition, or image state.
+    fn sync_mounted_root(&mut self, now: Instant) -> Result<(), UiError> {
+        let root = self
+            .root
+            .as_ref()
+            .expect("mounted state is synchronized after a resolved root is built");
+        self.displayed_ids.clear();
+        collect_displayed_ids(root, &mut self.displayed_ids);
+        self.visible_ids.clear();
+        collect_visible_ids(root, &mut self.visible_ids);
+        if let Some(drag) = self.scrollbar_drag
+            && !self.visible_ids.contains(&drag.id)
+        {
+            if let Some(binding) = self.virtual_scroll_handles.get(&drag.id) {
+                binding.handle.scrollbar_drag_ended();
+            }
+            self.scrollbar_drag = None;
+        }
+        self.style_transition_ids.clear();
+        collect_style_transition_ids(root, &mut self.style_transition_ids);
+        self.style_transitions
+            .retain(|id, _| self.style_transition_ids.contains(id));
+        self.animation_ids.clear();
+        sync_animations(root, &mut self.animations, &mut self.animation_ids, now);
+        self.animations
+            .retain(|id, _| self.animation_ids.contains(id));
         if let Some(root) = &self.root {
             let mut tooltips = HashMap::with_capacity(self.tooltips.capacity().max(8));
             collect_tooltips(root, &mut tooltips)?;
@@ -913,7 +2246,7 @@ impl UiTree {
                 &mut self.virtual_scroll_handles,
                 &mut self.scroll_offsets,
                 &mut self.scrollbar_states,
-                Instant::now(),
+                now,
             );
             let mut input_ids = HashSet::new();
             sync_text_inputs(root, &mut self.text_inputs, &mut input_ids);
@@ -959,26 +2292,39 @@ impl UiTree {
         self.rebuild_dispatch_index();
         self.rebuild_drop_predicates();
         self.scroll_offsets
-            .retain(|id, _| self.seen_ids.contains(id));
+            .retain(|id, _| self.displayed_ids.contains(id));
         self.scrollbar_states
-            .retain(|id, _| self.seen_ids.contains(id));
+            .retain(|id, _| self.displayed_ids.contains(id));
+        for (id, state) in &mut self.scrollbar_states {
+            if !self.visible_ids.contains(id) {
+                state.hovered = false;
+                state.dragging = false;
+                state.visible_until = None;
+            }
+        }
         if self
             .hovered_scrollbar
-            .is_some_and(|id| !self.seen_ids.contains(&id))
+            .is_some_and(|id| !self.visible_ids.contains(&id))
         {
             self.hovered_scrollbar = None;
         }
-        self.hovered.retain(|id| self.seen_ids.contains(id));
-        if self.pressed.is_some_and(|id| !self.seen_ids.contains(&id)) {
+        self.hovered.retain(|id| self.visible_ids.contains(id));
+        if self
+            .pressed
+            .is_some_and(|id| !self.visible_ids.contains(&id))
+        {
             self.pressed = None;
         }
-        if self.dragging.is_some_and(|id| !self.seen_ids.contains(&id)) {
+        if self
+            .dragging
+            .is_some_and(|id| !self.visible_ids.contains(&id))
+        {
             self.dragging = None;
             self.drag_over = None;
         }
         if self
             .drag_over
-            .is_some_and(|id| !self.seen_ids.contains(&id))
+            .is_some_and(|id| !self.visible_ids.contains(&id))
         {
             self.drag_over = None;
         }
@@ -988,6 +2334,23 @@ impl UiTree {
         {
             self.focused = None;
         }
+        self.initialize_focus_if_needed();
+        if self.pointer_tooltip.is_none() {
+            self.reconcile_tooltip(now);
+        }
+        self.mounted_state_dirty = false;
+        Ok(())
+    }
+
+    fn finalize_declarative_motion_registry(&mut self) {
+        self.declarative_animations
+            .retain(|id, _| self.declarative_time_animation_ids.contains(id));
+        self.declarative_springs
+            .retain(|id, _| self.declarative_spring_ids.contains(id));
+        self.recompute_declarative_motion_schedule();
+    }
+
+    fn initialize_focus_if_needed(&mut self) {
         if self.focused.is_none() && !self.focus_initialized {
             self.focused = self
                 .root
@@ -996,10 +2359,46 @@ impl UiTree {
                 .filter(|id| self.focusable_ids.contains(id));
         }
         self.focus_initialized = true;
-        if self.pointer_tooltip.is_none() {
-            self.reconcile_tooltip(Instant::now());
-        }
-        self.layout(viewport, scale_factor, renderer)
+    }
+
+    fn recompute_declarative_motion_schedule(&mut self) {
+        self.declarative_animation_frame_requested = self
+            .declarative_time_animation_ids
+            .iter()
+            .filter_map(|id| self.declarative_animations.get(id))
+            .any(|playback| playback.active && playback.next_frame_at.is_none())
+            || self
+                .declarative_spring_ids
+                .iter()
+                .filter_map(|id| self.declarative_springs.get(id))
+                .any(|playback| playback.active);
+        self.declarative_animation_deadline = self
+            .declarative_time_animation_ids
+            .iter()
+            .filter_map(|id| self.declarative_animations.get(id))
+            .filter(|playback| playback.active)
+            .filter_map(|playback| playback.next_frame_at)
+            .min();
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn set_root_for_test(
+        &mut self,
+        root: Element,
+        viewport: Size,
+        scale_factor: f32,
+        now: Instant,
+    ) -> Result<(), UiError> {
+        self.set_root_unlaid(root, viewport, scale_factor, now, false)
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn contains_element(&self, id: ElementId) -> bool {
+        self.seen_ids.contains(&id)
+    }
+
+    pub(crate) fn is_clickable(&self, id: ElementId) -> bool {
+        self.clickable_ids.contains(&id)
     }
 
     pub fn set_animations_enabled(&mut self, enabled: bool, now: Instant) {
@@ -1007,24 +2406,96 @@ impl UiTree {
             return;
         }
         if !enabled {
+            for playback in self.declarative_animations.values_mut() {
+                playback.pause(now);
+            }
+            for playback in self.declarative_springs.values_mut() {
+                playback.pause(now);
+            }
+            for playback in self.style_transitions.values_mut() {
+                playback.pause(now);
+            }
             for playback in self.animations.values_mut() {
                 playback.advance(now);
                 playback.active = false;
             }
             if let Some(preview) = &mut self.drag_preview {
-                for playback in preview.animations.values_mut() {
-                    playback.advance(now);
-                    playback.active = false;
-                }
+                preview.tree.pause(now);
             }
             if let Some(tooltip) = &mut self.tooltip_overlay {
-                for playback in tooltip.animations.values_mut() {
-                    playback.advance(now);
-                    playback.active = false;
-                }
+                tooltip.tree.pause(now);
+            }
+        } else {
+            for playback in self.declarative_animations.values_mut() {
+                playback.resume(now);
+            }
+            for playback in self.declarative_springs.values_mut() {
+                playback.resume(now);
+            }
+            for playback in self.style_transitions.values_mut() {
+                playback.resume(now);
+            }
+            if let Some(preview) = &mut self.drag_preview {
+                preview.tree.resume(now);
+            }
+            if let Some(tooltip) = &mut self.tooltip_overlay {
+                tooltip.tree.resume(now);
             }
         }
         self.animations_enabled = enabled;
+    }
+
+    pub(crate) fn set_reduce_motion(&mut self, reduce_motion: bool) {
+        if self.reduce_motion == reduce_motion {
+            return;
+        }
+        self.reduce_motion = reduce_motion;
+        if let Some(preview) = &mut self.drag_preview {
+            preview.tree.motion.mark_needs_resolve();
+        }
+        if let Some(tooltip) = &mut self.tooltip_overlay {
+            tooltip.tree.motion.mark_needs_resolve();
+        }
+    }
+
+    pub(crate) fn declarative_animation_frame_requested(&self) -> bool {
+        self.animations_enabled && !self.reduce_motion && self.declarative_animation_frame_requested
+    }
+
+    pub(crate) fn style_transition_frame_requested(&self) -> bool {
+        self.animations_enabled && !self.reduce_motion && self.style_transition_frame_requested
+    }
+
+    pub(crate) fn detached_animation_frame_requested(&self) -> bool {
+        self.animations_enabled
+            && !self.reduce_motion
+            && (self
+                .drag_preview
+                .as_ref()
+                .is_some_and(|preview| preview.tree.motion.frame_requested)
+                || self
+                    .tooltip_overlay
+                    .as_ref()
+                    .is_some_and(|tooltip| tooltip.tree.motion.frame_requested))
+    }
+
+    pub(crate) fn has_declarative_animations(&self) -> bool {
+        !self.declarative_animations.is_empty() || !self.declarative_springs.is_empty()
+    }
+
+    pub(crate) fn declarative_animation_due(&mut self, now: Instant) -> bool {
+        if !self.animations_enabled || self.reduce_motion {
+            return false;
+        }
+        if self
+            .declarative_animation_deadline
+            .is_some_and(|deadline| deadline <= now)
+        {
+            self.declarative_animation_deadline = None;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn advance_animations(&mut self, now: Instant) -> bool {
@@ -1035,15 +2506,14 @@ impl UiTree {
         for playback in self.animations.values_mut() {
             changed |= playback.advance(now);
         }
+        for playback in self.style_transitions.values_mut() {
+            changed |= playback.deadline_due(now);
+        }
         if let Some(preview) = &mut self.drag_preview {
-            for playback in preview.animations.values_mut() {
-                changed |= playback.advance(now);
-            }
+            changed |= preview.tree.advance_animations(now);
         }
         if let Some(tooltip) = &mut self.tooltip_overlay {
-            for playback in tooltip.animations.values_mut() {
-                changed |= playback.advance(now);
-            }
+            changed |= tooltip.tree.advance_animations(now);
         }
         changed
     }
@@ -1054,17 +2524,23 @@ impl UiTree {
         }
         self.animations
             .values()
+            .filter_map(AnimationPlayback::deadline)
+            .chain(self.declarative_animation_deadline)
+            .chain(
+                self.style_transitions
+                    .values()
+                    .filter_map(StyleTransitionPlayback::deadline),
+            )
             .chain(
                 self.drag_preview
                     .iter()
-                    .flat_map(|preview| preview.animations.values()),
+                    .filter_map(|preview| preview.tree.next_animation_deadline()),
             )
             .chain(
                 self.tooltip_overlay
                     .iter()
-                    .flat_map(|tooltip| tooltip.animations.values()),
+                    .filter_map(|tooltip| tooltip.tree.next_animation_deadline()),
             )
-            .filter_map(AnimationPlayback::deadline)
             .min()
     }
 
@@ -1097,57 +2573,211 @@ impl UiTree {
     pub fn animation_counts(&self) -> (usize, usize) {
         let preview = self
             .drag_preview
-            .iter()
-            .flat_map(|preview| preview.animations.values());
+            .as_ref()
+            .map_or((0, 0), |preview| preview.tree.animation_counts());
         let tooltip = self
             .tooltip_overlay
-            .iter()
-            .flat_map(|tooltip| tooltip.animations.values());
+            .as_ref()
+            .map_or((0, 0), |tooltip| tooltip.tree.animation_counts());
         (
-            self.animations.len() + preview.clone().count() + tooltip.clone().count(),
+            self.animations.len() + preview.0 + tooltip.0,
             self.animations
                 .values()
-                .chain(preview)
-                .chain(tooltip)
                 .filter(|state| state.active)
-                .count(),
+                .count()
+                + self
+                    .declarative_animations
+                    .values()
+                    .filter(|state| state.active)
+                    .count()
+                + self
+                    .declarative_springs
+                    .values()
+                    .filter(|state| state.active)
+                    .count()
+                + self
+                    .style_transitions
+                    .values()
+                    .filter(|state| state.active)
+                    .count()
+                + preview.1
+                + tooltip.1,
         )
     }
 
-    pub fn layout(
+    /// Whether a mounted variable-height list learned geometry after this declaration was built.
+    ///
+    /// The runtime uses this edge-triggered revision comparison to request one correcting rebuild;
+    /// unchanged retained lists create no redraw source.
+    pub(crate) fn variable_list_measurements_changed(&self) -> bool {
+        self.virtual_scroll_handles
+            .values()
+            .any(|binding| binding.handle.measurement_revision() != binding.measurement_revision)
+    }
+
+    #[cfg(test)]
+    fn layout(
         &mut self,
         viewport: Size,
         scale_factor: f32,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
     ) -> Result<(), UiError> {
-        self.viewport = viewport;
-        self.scale_factor = scale_factor;
-        let Some(root) = self.root_node else {
-            return Ok(());
-        };
-        compute_detached_layout(&mut self.taffy, root, viewport, scale_factor, renderer)?;
-        if let Some(preview) = &mut self.drag_preview {
-            compute_detached_layout(
-                &mut preview.taffy,
-                preview.root_node,
-                viewport,
-                scale_factor,
-                renderer,
-            )?;
-        }
-        if let Some(tooltip) = &mut self.tooltip_overlay {
-            compute_detached_layout(
-                &mut tooltip.taffy,
-                tooltip.root_node,
-                viewport,
-                scale_factor,
-                renderer,
-            )?;
+        self.layout_with_prepare_at(
+            viewport,
+            scale_factor,
+            renderer,
+            Instant::now(),
+            &mut |_| {},
+        )
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn layout_for_test(
+        &mut self,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+        now: Instant,
+    ) -> Result<(), UiError> {
+        self.layout_with_prepare_at(viewport, scale_factor, renderer, now, &mut |_| {})
+    }
+
+    /// Discard CPU-only semantic measurement caches before an exact offscreen visual layout.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn invalidate_layout_measurements_for_test(&mut self) -> Result<(), UiError> {
+        if let Some(root) = &self.root {
+            mark_layout_nodes_dirty(root, &mut self.taffy)?;
         }
         Ok(())
     }
 
-    pub fn paint(&mut self, scene: &mut Scene, renderer: &mut GpuRenderer) -> Result<(), UiError> {
+    #[allow(clippy::too_many_arguments)]
+    fn layout_with_prepare_at(
+        &mut self,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+        now: Instant,
+        prepare: &mut impl FnMut(&mut Element),
+    ) -> Result<(), UiError> {
+        self.viewport = viewport;
+        self.scale_factor = scale_factor;
+        let mut converged = self.root_node.is_none();
+        let mut needs_outer_layout = true;
+        for _ in 0..=MAX_CONTAINER_QUERY_DEPTH {
+            let Some(root_node) = self.root_node else {
+                converged = true;
+                break;
+            };
+            if needs_outer_layout {
+                compute_detached_layout(
+                    &mut self.taffy,
+                    root_node,
+                    viewport,
+                    scale_factor,
+                    renderer,
+                )?;
+            }
+            if let Some(root) = &self.root {
+                compute_container_query_child_layouts(
+                    root,
+                    &mut self.taffy,
+                    scale_factor,
+                    renderer,
+                )?;
+            }
+            let resolution = self.resolve_container_queries(now, prepare)?;
+            if !resolution.changed {
+                converged = true;
+                break;
+            }
+            self.mounted_state_dirty = true;
+
+            let requires_full_rebuild = resolution.replaced_existing_subtree
+                || self.build_pending_container_query_subtrees()?;
+            if requires_full_rebuild {
+                let root = self
+                    .root
+                    .take()
+                    .expect("a laid out query declaration retains its element root");
+                self.build_resolved_root(root, viewport, scale_factor)?;
+                needs_outer_layout = true;
+            } else {
+                // The query boxes already have final parent geometry. Newly declared child roots
+                // can be laid out directly inside those boxes without recomputing the outer tree.
+                needs_outer_layout = false;
+            }
+        }
+        if !converged {
+            return Err(UiError::ContainerQueryDidNotConverge);
+        }
+        self.finalize_declarative_motion_registry();
+        if self.mounted_state_dirty {
+            self.sync_mounted_root(now)?;
+        }
+        if let Some(preview) = &mut self.drag_preview {
+            preview.tree.layout(viewport, scale_factor, renderer)?;
+        }
+        if let Some(tooltip) = &mut self.tooltip_overlay {
+            tooltip.tree.layout(viewport, scale_factor, renderer)?;
+        }
+        Ok(())
+    }
+
+    fn resolve_container_queries(
+        &mut self,
+        now: Instant,
+        prepare: &mut impl FnMut(&mut Element),
+    ) -> Result<ContainerQueryResolution, UiError> {
+        let Some(root) = &mut self.root else {
+            return Ok(ContainerQueryResolution::default());
+        };
+        let mut context = ContainerQueryResolveContext {
+            taffy: &self.taffy,
+            prepare,
+            animations: &mut self.declarative_animations,
+            motion_ids: &mut self.declarative_animation_ids,
+            time_animation_ids: &mut self.declarative_time_animation_ids,
+            springs: &mut self.declarative_springs,
+            spring_ids: &mut self.declarative_spring_ids,
+            request_frame: &mut self.declarative_animation_frame_requested,
+            deadline: &mut self.declarative_animation_deadline,
+            now,
+            animation_epoch: self.animation_epoch,
+            enabled: self.animations_enabled,
+            reduce_motion: self.reduce_motion,
+            sanitize_detached: false,
+        };
+        context.resolve(root)
+    }
+
+    /// Build callback roots into the existing Taffy arena when every changed query was previously
+    /// empty. Returns `true` when an explicit ID collides with an already assigned generated ID;
+    /// a full rebuild then preserves the normal explicit-ID-first assignment contract.
+    fn build_pending_container_query_subtrees(&mut self) -> Result<bool, UiError> {
+        let Some(root) = &mut self.root else {
+            return Ok(false);
+        };
+        let mut style_transition_count = 0;
+        validate_style_transition_count(root, &mut style_transition_count)?;
+        validate_container_query_limits(root)?;
+        build_pending_container_query_subtrees(root, &mut self.taffy, &mut self.seen_ids)
+    }
+
+    pub fn paint(
+        &mut self,
+        scene: &mut Scene,
+        renderer: &mut impl TextLayoutEngine,
+    ) -> Result<(), UiError> {
+        self.paint_at(scene, renderer, Instant::now())
+    }
+
+    pub(crate) fn paint_at(
+        &mut self,
+        scene: &mut Scene,
+        renderer: &mut impl TextLayoutEngine,
+        paint_time: Instant,
+    ) -> Result<(), UiError> {
         self.natural_bounds.clear();
         self.element_bounds.clear();
         self.hit_regions.clear();
@@ -1157,13 +2787,13 @@ impl UiTree {
         self.native_views.clear();
         self.text_input_regions.clear();
         self.selectable_text_regions.clear();
+        self.style_transition_frame_requested = false;
         for playback in self.animations.values_mut() {
             playback.seen = false;
         }
         let Some(root) = &self.root else {
             return Ok(());
         };
-        let paint_time = Instant::now();
         let viewport = Rect::from_size(self.viewport);
         collect_layout_bounds(
             root,
@@ -1173,6 +2803,13 @@ impl UiTree {
             Point::ZERO,
         )?;
         let mut source_order = 0;
+        let mut transition_context = StyleTransitionPaintContext {
+            playbacks: Some(&mut self.style_transitions),
+            request_frame: &mut self.style_transition_frame_requested,
+            enabled: self.animations_enabled,
+            reduce_motion: self.reduce_motion,
+            now: paint_time,
+        };
         let result = paint_element(
             root,
             &self.taffy,
@@ -1191,6 +2828,7 @@ impl UiTree {
             &mut self.animations,
             self.animations_enabled,
             paint_time,
+            &mut transition_context,
             &mut self.hit_regions,
             &mut self.scroll_regions,
             &mut self.scrollbar_states,
@@ -1227,6 +2865,10 @@ impl UiTree {
                     self.viewport,
                     self.scale_factor,
                     renderer,
+                    paint_time,
+                    self.animation_epoch,
+                    self.animations_enabled,
+                    self.reduce_motion,
                 )?);
             }
             if let Some(overlay) = &mut self.tooltip_overlay {
@@ -1236,6 +2878,7 @@ impl UiTree {
                     renderer,
                     self.scale_factor,
                     self.animations_enabled,
+                    self.reduce_motion,
                     paint_time,
                     viewport,
                     &mut source_order,
@@ -1248,6 +2891,7 @@ impl UiTree {
                 renderer,
                 self.scale_factor,
                 self.animations_enabled,
+                self.reduce_motion,
                 paint_time,
                 viewport,
                 &mut source_order,
@@ -1280,23 +2924,25 @@ impl UiTree {
     }
 
     /// Returns true when paint-only hover state changed.
-    pub fn pointer_moved(&mut self, point: Point, renderer: &mut GpuRenderer) -> bool {
+    pub fn pointer_moved(&mut self, point: Point, renderer: &mut impl TextLayoutEngine) -> bool {
         let now = Instant::now();
-        let mut next = HashSet::with_capacity(self.hovered.capacity().max(4));
+        self.hover_scratch.clear();
         if self.dragging.is_none() && !self.external_drag_active {
             for region in self.hit_regions.iter().rev() {
                 if region.stateful && region.contains(point) {
-                    next.insert(region.id);
+                    self.hover_scratch.insert(region.id);
                 }
                 if (region.blocks_pointer || region.pointer_listener) && region.contains(point) {
                     break;
                 }
             }
         }
-        let hover_changed = next != self.hovered;
+        let hover_changed = self.hover_scratch != self.hovered;
         if hover_changed {
-            self.hovered = next;
+            std::mem::swap(&mut self.hovered, &mut self.hover_scratch);
         }
+        self.hover_scratch.clear();
+        self.refresh_mouse_hover(Some(point));
 
         let mut selection_changed = false;
         if let Some(id) = self.selecting_input
@@ -1385,7 +3031,90 @@ impl UiTree {
             self.hovered.clear();
             true
         };
+        self.refresh_mouse_hover(None);
         hover_changed | self.update_tooltip_hover(None, Instant::now())
+    }
+
+    /// Recompute listener hover state without changing selection, scrolling, or tooltip timers.
+    ///
+    /// Redraw calls this after layout so moving an element beneath a stationary pointer produces
+    /// the same entry/exit transitions as web hover.
+    pub(crate) fn refresh_mouse_hover(&mut self, point: Option<Point>) {
+        self.mouse_hover_path_scratch.clear();
+        if self.dragging.is_none()
+            && !self.external_drag_active
+            && let Some(point) = point
+            && let Some(mut current) = self
+                .hit_regions
+                .iter()
+                .rev()
+                .find(|region| region.contains(point))
+                .map(|region| region.id)
+        {
+            let mut depth = 0;
+            loop {
+                if depth == MAX_MOUSE_EVENT_PATH {
+                    self.mouse_hover_path_scratch.clear();
+                    break;
+                }
+                depth += 1;
+                if self
+                    .mouse_listener_ranges
+                    .get(&current)
+                    .is_some_and(|range| {
+                        self.mouse_listener_bindings[range.clone()]
+                            .iter()
+                            .any(|binding| binding.kind == MouseListenerKind::Hover)
+                    })
+                {
+                    self.mouse_hover_path_scratch.push(current);
+                }
+                let Some(parent) = self.parents.get(&current).copied() else {
+                    break;
+                };
+                current = parent;
+            }
+        }
+
+        for index in 0..self.mouse_hover_path.len() {
+            let id = self.mouse_hover_path[index];
+            let exited = !self.mouse_hover_path_scratch.contains(&id);
+            if exited {
+                self.push_mouse_hover_changes(id, false);
+            }
+        }
+        for index in (0..self.mouse_hover_path_scratch.len()).rev() {
+            let id = self.mouse_hover_path_scratch[index];
+            let entered = !self.mouse_hover_path.contains(&id);
+            if entered {
+                self.push_mouse_hover_changes(id, true);
+            }
+        }
+        std::mem::swap(
+            &mut self.mouse_hover_path,
+            &mut self.mouse_hover_path_scratch,
+        );
+        self.mouse_hover_path_scratch.clear();
+    }
+
+    fn push_mouse_hover_changes(&mut self, id: ElementId, hovered: bool) {
+        let Some(range) = self.mouse_listener_ranges.get(&id).cloned() else {
+            return;
+        };
+        for binding in self.mouse_listener_bindings[range].iter().copied() {
+            if binding.kind == MouseListenerKind::Hover
+                && self.pending_mouse_hover_changes.len() < crate::MAX_MOUSE_LISTENERS_PER_WINDOW
+            {
+                self.pending_mouse_hover_changes.push(MouseHoverChange {
+                    key: binding.key,
+                    hovered,
+                });
+            }
+        }
+    }
+
+    pub(crate) fn take_mouse_hover_changes(&mut self, output: &mut Vec<MouseHoverChange>) {
+        output.append(&mut self.pending_mouse_hover_changes);
     }
 
     /// Advance exactly one pending tooltip deadline.
@@ -1530,6 +3259,12 @@ impl UiTree {
         self.element_bounds.get(&id).copied()
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn scroll_offset(&self, id: ElementId) -> Option<Vector> {
+        self.scroll_offsets.get(&id).copied()
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn set_drag_preview(
         &mut self,
         preview: Option<Element>,
@@ -1537,12 +3272,12 @@ impl UiTree {
         origin: Point,
         position: Point,
         cursor_offset: Option<Point>,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
+        now: Instant,
     ) -> Result<bool, UiError> {
         let Some(mut root) = preview else {
             return Ok(self.drag_preview.take().is_some());
         };
-        sanitize_drag_preview(&mut root);
         if let Some(source_bounds) = self.element_bounds(source) {
             if absolute_length(root.layout.size.width).is_none() {
                 root.layout.size.width = Dimension::length(source_bounds.width);
@@ -1551,48 +3286,28 @@ impl UiTree {
                 root.layout.size.height = Dimension::length(source_bounds.height);
             }
         }
-
-        let mut taffy = TaffyTree::with_capacity(32);
-        let mut seen_ids = HashSet::with_capacity(32);
-        seen_ids.insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
-        let inherited = TextStyle::new(14.0, Color::WHITE);
-        let root_node = build_layout_node(
-            &mut taffy,
-            &mut seen_ids,
-            &mut root,
+        let mut tree = DetachedTree::new(
+            root,
             ElementId::new(0xd4a6_31f8_6c92_7b05),
-            0,
-            &inherited,
-            false,
-        )?;
-        compute_detached_layout(
-            &mut taffy,
-            root_node,
             self.viewport,
             self.scale_factor,
             renderer,
+            now,
+            self.animation_epoch,
+            self.animations_enabled,
+            self.reduce_motion,
         )?;
-
-        let mut text_inputs = HashMap::new();
-        let mut input_ids = HashSet::new();
-        sync_text_inputs(&root, &mut text_inputs, &mut input_ids);
-        let mut animations = HashMap::new();
-        let mut animation_ids = HashSet::new();
-        sync_animations(&root, &mut animations, &mut animation_ids, Instant::now());
+        // Drag creation happens between frames, unlike tooltip creation during paint. Sample an
+        // unthrottled entrance again at the first actual presentation time.
+        tree.motion.needs_resolve |= tree.motion.frame_requested;
         let default_offset = self
             .element_bounds(source)
             .map(|bounds| Point::new(origin.x - bounds.x, origin.y - bounds.y))
             .unwrap_or(Point::ZERO);
         self.drag_preview = Some(DragPreview {
-            root,
-            taffy,
-            root_node,
+            tree,
             cursor_offset: cursor_offset.unwrap_or(default_offset),
             position,
-            scroll_offsets: HashMap::new(),
-            natural_bounds: HashMap::new(),
-            text_inputs,
-            animations,
         });
         Ok(true)
     }
@@ -1628,8 +3343,11 @@ impl UiTree {
             offset.y = thumb_top / geometry.travel * region.max_offset.y;
         }
         let view_dirty = region.virtual_scroll && *offset != previous;
-        if view_dirty && let Some(handle) = self.virtual_scroll_handles.get(&region.id) {
-            handle.set_offset(offset.y);
+        if view_dirty && let Some(binding) = self.virtual_scroll_handles.get(&region.id) {
+            binding.handle.set_offset_from_input(offset.y);
+        }
+        if let Some(binding) = self.virtual_scroll_handles.get(&region.id) {
+            binding.handle.scrollbar_drag_started();
         }
         self.scrollbar_drag = Some(ScrollbarDrag {
             id: region.id,
@@ -1680,9 +3398,9 @@ impl UiTree {
         } else {
             offset.y = next;
             if region.virtual_scroll
-                && let Some(handle) = self.virtual_scroll_handles.get(&region.id)
+                && let Some(binding) = self.virtual_scroll_handles.get(&region.id)
             {
-                handle.set_offset(next);
+                binding.handle.set_offset_from_input(next);
             }
             ScrollResult {
                 changed: true,
@@ -1691,16 +3409,23 @@ impl UiTree {
         }
     }
 
-    pub(crate) fn end_scrollbar_drag(&mut self, now: Instant) -> bool {
+    pub(crate) fn end_scrollbar_drag(&mut self, now: Instant) -> ScrollResult {
         let Some(drag) = self.scrollbar_drag.take() else {
-            return false;
+            return ScrollResult::default();
         };
         let state = self.scrollbar_states.entry(drag.id).or_default();
         state.dragging = false;
         if !state.hovered {
             state.visible_until = now.checked_add(SCROLLBAR_AUTO_HIDE_DELAY);
         }
-        true
+        let view_dirty = self
+            .virtual_scroll_handles
+            .get(&drag.id)
+            .is_some_and(|binding| binding.handle.scrollbar_drag_ended());
+        ScrollResult {
+            changed: true,
+            view_dirty,
+        }
     }
 
     pub(crate) fn scrollbar_drag_active(&self) -> bool {
@@ -1784,11 +3509,12 @@ impl UiTree {
         pressed: bool,
         extend_selection: bool,
         now: Instant,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
     ) -> PointerResult {
         let tooltip_repaint = pressed && self.clear_tooltip();
         if pressed
             && let Some(dismiss) = self.dismiss_regions.last().copied()
+            && dismiss.policy.on_pointer_outside()
             && point.is_none_or(|point| !dismiss.contains(point))
         {
             self.selecting_input = None;
@@ -1961,9 +3687,9 @@ impl UiTree {
                     state.visible_until = now.checked_add(SCROLLBAR_AUTO_HIDE_DELAY);
                 }
                 if region.virtual_scroll
-                    && let Some(handle) = self.virtual_scroll_handles.get(&region.id)
+                    && let Some(binding) = self.virtual_scroll_handles.get(&region.id)
                 {
-                    handle.set_offset(next.y);
+                    binding.handle.set_offset_from_input(next.y);
                 }
                 return ScrollResult {
                     changed: true,
@@ -1977,19 +3703,60 @@ impl UiTree {
         }
     }
 
-    pub fn wants_pointer_cursor(&self, point: Point) -> bool {
-        self.cursor_at(point, |region| region.cursor_pointer)
-    }
-
-    pub fn wants_text_cursor(&self, point: Point) -> bool {
-        self.cursor_at(point, |region| region.cursor_text)
+    /// Return the topmost declared or inferred cursor at `point`.
+    ///
+    /// An explicit arrow is retained as `Some(Arrow)`, allowing a foreground element to reset a
+    /// cursor inherited from a lower hit region without becoming a pointer blocker.
+    pub(crate) fn cursor_style_at(&self, point: Point) -> Option<CursorStyle> {
+        let inert_background_below = self
+            .dismiss_regions
+            .last()
+            .filter(|region| region.order.layer.plane == crate::ScenePlane::Overlay)
+            .map(|region| region.order);
+        for region in self.hit_regions.iter().rev() {
+            if inert_background_below.is_some_and(|order| region.order < order) {
+                // Outside a dismissible overlay, the first press dismisses instead of activating
+                // anything painted beneath its surface. Keep the platform arrow there instead of
+                // advertising a stale text, link, or resize cursor from inert background content.
+                return Some(CursorStyle::Arrow);
+            }
+            if !region.contains(point) {
+                continue;
+            }
+            let interaction_cursor = if self.drag_over == Some(region.id) {
+                region.cursor_states.drag_over
+            } else if self.dragging == Some(region.id) {
+                region.cursor_states.dragging
+            } else if self.pressed == Some(region.id) {
+                region.cursor_states.active
+            } else if self.dragging.is_none() && !self.external_drag_active {
+                region.cursor_states.hover
+            } else {
+                None
+            };
+            let cursor = interaction_cursor
+                .or(region.cursor_states.invalid)
+                .or_else(|| {
+                    (self.focused == Some(region.id))
+                        .then_some(region.cursor_states.focus)
+                        .flatten()
+                })
+                .or(region.cursor_style);
+            if let Some(cursor) = cursor {
+                return Some(cursor);
+            }
+            if region.blocks_pointer || region.pointer_listener {
+                return None;
+            }
+        }
+        inert_background_below.map(|_| CursorStyle::Arrow)
     }
 
     fn selectable_text_position_at(
         &self,
         point: Point,
         allow_nearest: bool,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
     ) -> Option<StaticTextPosition> {
         let blocker = self
             .hit_regions
@@ -2072,10 +3839,13 @@ impl UiTree {
     }
 
     pub fn dismiss_topmost(&self) -> Option<DismissRequest> {
-        self.dismiss_regions.last().map(|region| DismissRequest {
-            id: region.id,
-            restore_focus: region.restore_focus,
-        })
+        self.dismiss_regions
+            .last()
+            .filter(|region| region.policy.on_escape())
+            .map(|region| DismissRequest {
+                id: region.id,
+                restore_focus: region.restore_focus,
+            })
     }
 
     pub(crate) fn dismiss_request_for_pointer(
@@ -2083,6 +3853,9 @@ impl UiTree {
         point: Option<Point>,
     ) -> Option<DismissRequest> {
         let dismiss = self.dismiss_regions.last().copied()?;
+        if !dismiss.policy.on_pointer_outside() {
+            return None;
+        }
         point
             .is_none_or(|point| !dismiss.contains(point))
             .then_some(DismissRequest {
@@ -2137,6 +3910,83 @@ impl UiTree {
         self.ancestor_at(point, |id| self.context_menu_ids.contains(&id))
     }
 
+    pub(crate) fn scroll_wheel_listener_at(&self, point: Point) -> Option<ElementId> {
+        if self.scroll_wheel_ids.is_empty() {
+            return None;
+        }
+        let target = self
+            .hit_regions
+            .iter()
+            .rev()
+            .find(|region| region.contains(point))
+            .map(|region| region.id)?;
+        self.scroll_wheel_listener_for_target(target)
+    }
+
+    pub(crate) fn scroll_wheel_listener_for_target(&self, mut id: ElementId) -> Option<ElementId> {
+        loop {
+            if self.scroll_wheel_ids.contains(&id) {
+                return Some(id);
+            }
+            id = self.parents.get(&id).copied()?;
+        }
+    }
+
+    pub(crate) fn parent_scroll_wheel_listener(&self, id: ElementId) -> Option<ElementId> {
+        let mut current = self.parents.get(&id).copied();
+        while let Some(id) = current {
+            if self.scroll_wheel_ids.contains(&id) {
+                return Some(id);
+            }
+            current = self.parents.get(&id).copied();
+        }
+        None
+    }
+
+    pub(crate) fn touch_listener_at(&self, point: Point) -> Option<ElementId> {
+        if self.touch_ids.is_empty() {
+            return None;
+        }
+        self.ancestor_at(point, |id| self.touch_ids.contains(&id))
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn touch_listener_for_target(&self, mut id: ElementId) -> Option<ElementId> {
+        loop {
+            if self.touch_ids.contains(&id) {
+                return Some(id);
+            }
+            id = self.parents.get(&id).copied()?;
+        }
+    }
+
+    pub(crate) fn parent_touch_listener(&self, id: ElementId) -> Option<ElementId> {
+        let mut current = self.parents.get(&id).copied();
+        while let Some(id) = current {
+            if self.touch_ids.contains(&id) {
+                return Some(id);
+            }
+            current = self.parents.get(&id).copied();
+        }
+        None
+    }
+
+    pub(crate) fn mouse_pressure_listener_at(&self, point: Point) -> Option<ElementId> {
+        self.ancestor_at(point, |id| self.mouse_pressure_ids.contains(&id))
+    }
+
+    pub(crate) fn pinch_listener_at(&self, point: Point) -> Option<ElementId> {
+        self.ancestor_at(point, |id| self.pinch_ids.contains(&id))
+    }
+
+    pub(crate) fn rotation_listener_at(&self, point: Point) -> Option<ElementId> {
+        self.ancestor_at(point, |id| self.rotation_ids.contains(&id))
+    }
+
+    pub(crate) fn smart_magnify_listener_at(&self, point: Point) -> Option<ElementId> {
+        self.ancestor_at(point, |id| self.smart_magnify_ids.contains(&id))
+    }
+
     fn tooltip_target_at(&self, point: Point) -> Option<ElementId> {
         self.ancestor_at(point, |id| self.tooltips.contains_key(&id))
     }
@@ -2157,6 +4007,130 @@ impl UiTree {
                 return Some(current);
             }
             current = self.parents.get(&current).copied()?;
+        }
+    }
+
+    /// Fill a bounded target-to-root path for the topmost retained hit region at `point`.
+    ///
+    /// A tree deeper than the public dispatch bound fails closed and produces no partial event.
+    pub(crate) fn mouse_event_path_at(&self, point: Point, output: &mut Vec<ElementId>) -> bool {
+        output.clear();
+        let Some(mut current) = self
+            .hit_regions
+            .iter()
+            .rev()
+            .find(|region| region.contains(point))
+            .map(|region| region.id)
+        else {
+            return true;
+        };
+        loop {
+            if output.len() == MAX_MOUSE_EVENT_PATH {
+                output.clear();
+                return false;
+            }
+            output.push(current);
+            let Some(parent) = self.parents.get(&current).copied() else {
+                return true;
+            };
+            current = parent;
+        }
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn mouse_event_path_for_target(
+        &self,
+        mut target: ElementId,
+        output: &mut Vec<ElementId>,
+    ) -> bool {
+        output.clear();
+        loop {
+            if output.len() == MAX_MOUSE_EVENT_PATH {
+                output.clear();
+                return false;
+            }
+            output.push(target);
+            let Some(parent) = self.parents.get(&target).copied() else {
+                return true;
+            };
+            target = parent;
+        }
+    }
+
+    /// Collect outside capture handlers, then root-to-target capture and target-to-root bubble.
+    pub(crate) fn collect_mouse_dispatch(
+        &self,
+        path: &[ElementId],
+        kind: MouseListenerKind,
+        button: Option<MouseButton>,
+        output: &mut Vec<MouseListenerKey>,
+    ) {
+        output.clear();
+
+        // Outside listeners behave like document capture: topmost/deepest declarations get the
+        // first chance to close transient UI before the in-path target sees the press.
+        if matches!(kind, MouseListenerKind::Down | MouseListenerKind::Up) {
+            if self.hit_regions.is_empty() {
+                for id in self.mouse_listener_elements.iter().rev().copied() {
+                    if path.contains(&id) {
+                        continue;
+                    }
+                    self.extend_mouse_dispatch_for(
+                        id,
+                        kind,
+                        DispatchPhase::Capture,
+                        button,
+                        true,
+                        output,
+                    );
+                }
+            } else {
+                for id in self.hit_regions.iter().rev().map(|region| region.id) {
+                    if path.contains(&id) {
+                        continue;
+                    }
+                    self.extend_mouse_dispatch_for(
+                        id,
+                        kind,
+                        DispatchPhase::Capture,
+                        button,
+                        true,
+                        output,
+                    );
+                }
+            }
+        }
+
+        for id in path.iter().rev().copied() {
+            self.extend_mouse_dispatch_for(id, kind, DispatchPhase::Capture, button, false, output);
+        }
+        for id in path.iter().copied() {
+            self.extend_mouse_dispatch_for(id, kind, DispatchPhase::Bubble, button, false, output);
+        }
+    }
+
+    fn extend_mouse_dispatch_for(
+        &self,
+        id: ElementId,
+        kind: MouseListenerKind,
+        phase: DispatchPhase,
+        button: Option<MouseButton>,
+        outside: bool,
+        output: &mut Vec<MouseListenerKey>,
+    ) {
+        let Some(range) = self.mouse_listener_ranges.get(&id).cloned() else {
+            return;
+        };
+        for binding in self.mouse_listener_bindings[range].iter().copied() {
+            if binding.kind == kind
+                && binding.phase == phase
+                && binding.outside == outside
+                && binding
+                    .button
+                    .is_none_or(|expected| button == Some(expected))
+            {
+                output.push(binding.key);
+            }
         }
     }
 
@@ -2269,21 +4243,6 @@ impl UiTree {
         }
     }
 
-    fn cursor_at(&self, point: Point, cursor: impl Fn(HitRegion) -> bool) -> bool {
-        for region in self.hit_regions.iter().rev() {
-            if !region.contains(point) {
-                continue;
-            }
-            if cursor(*region) {
-                return true;
-            }
-            if region.blocks_pointer || region.pointer_listener {
-                return false;
-            }
-        }
-        false
-    }
-
     pub fn focused_text_input(&self) -> Option<ElementId> {
         self.focused
             .filter(|focused| self.text_inputs.contains_key(focused))
@@ -2322,6 +4281,10 @@ impl UiTree {
             .contains(&id)
             .then(|| self.form_for_control(id))
             .flatten()
+    }
+
+    pub(crate) fn activation_target(&self, id: ElementId) -> Option<ElementId> {
+        self.activation_targets.get(&id).copied()
     }
 
     /// Validate one mounted form, retaining only bounded shared values and issue metadata.
@@ -2518,7 +4481,7 @@ impl UiTree {
         &mut self,
         lines: isize,
         extend: bool,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
     ) -> InputResult {
         if lines == 0 {
             return InputResult::default();
@@ -2589,7 +4552,7 @@ impl UiTree {
         &mut self,
         direction: isize,
         extend: bool,
-        renderer: &mut GpuRenderer,
+        renderer: &mut impl TextLayoutEngine,
     ) -> InputResult {
         let Some(id) = self.focused_text_input() else {
             return InputResult::default();
@@ -2773,6 +4736,9 @@ impl UiTree {
         let mut path = Vec::with_capacity(8);
         path.push(current);
         while let Some(parent) = self.parents.get(&current).copied() {
+            if path.len() == MAX_FOCUSED_EVENT_PATH {
+                return vec![root];
+            }
             path.push(parent);
             current = parent;
         }
@@ -2782,6 +4748,84 @@ impl UiTree {
         } else {
             path
         }
+    }
+
+    /// Collect root-to-focus capture and focus-to-root bubble key listeners.
+    pub(crate) fn collect_key_dispatch(
+        &self,
+        path: &[ElementId],
+        kind: KeyListenerKind,
+        output: &mut Vec<KeyListenerBinding>,
+    ) {
+        output.clear();
+        for id in path.iter().copied() {
+            self.extend_key_dispatch_for(id, kind, DispatchPhase::Capture, output);
+        }
+        for id in path.iter().rev().copied() {
+            self.extend_key_dispatch_for(id, kind, DispatchPhase::Bubble, output);
+        }
+    }
+
+    fn extend_key_dispatch_for(
+        &self,
+        id: ElementId,
+        kind: KeyListenerKind,
+        phase: DispatchPhase,
+        output: &mut Vec<KeyListenerBinding>,
+    ) {
+        let Some(range) = self.key_listener_ranges.get(&id).cloned() else {
+            return;
+        };
+        output.extend(
+            self.key_listener_bindings[range]
+                .iter()
+                .copied()
+                .filter(|binding| binding.kind == kind && binding.phase == phase),
+        );
+    }
+
+    /// Collect typed action capture listeners before bubble listeners for the focused path.
+    pub(crate) fn collect_action_dispatch(
+        &self,
+        path: &[ElementId],
+        action_type: TypeId,
+        output: &mut Vec<ActionListenerBinding>,
+    ) {
+        output.clear();
+        for id in path.iter().copied() {
+            self.extend_action_dispatch_for(id, action_type, DispatchPhase::Capture, output);
+        }
+        for id in path.iter().rev().copied() {
+            self.extend_action_dispatch_for(id, action_type, DispatchPhase::Bubble, output);
+        }
+    }
+
+    fn extend_action_dispatch_for(
+        &self,
+        id: ElementId,
+        action_type: TypeId,
+        phase: DispatchPhase,
+        output: &mut Vec<ActionListenerBinding>,
+    ) {
+        let Some(range) = self.action_listener_ranges.get(&id).cloned() else {
+            return;
+        };
+        output.extend(
+            self.action_listener_bindings[range]
+                .iter()
+                .copied()
+                .filter(|binding| binding.action_type == action_type && binding.phase == phase),
+        );
+    }
+
+    pub(crate) fn action_available(&self, path: &[ElementId], action_type: TypeId) -> bool {
+        path.iter().copied().any(|id| {
+            self.action_listener_ranges.get(&id).is_some_and(|range| {
+                self.action_listener_bindings[range.clone()]
+                    .iter()
+                    .any(|binding| binding.action_type == action_type)
+            })
+        })
     }
 
     pub fn key_context_stack(&self) -> Vec<KeyContext> {
@@ -2827,10 +4871,15 @@ impl UiTree {
         if self.focus_order.is_empty() {
             return false;
         }
-        let next_index = match self
+        let current_index = self
             .focused
             .and_then(|focused| self.focus_order.iter().position(|id| *id == focused))
-        {
+            .or_else(|| {
+                let root = self.root.as_ref()?;
+                let tab_stop = tab_stop_for_focused_tab(root, self.focused?)?;
+                self.focus_order.iter().position(|id| *id == tab_stop)
+            });
+        let next_index = match current_index {
             Some(index) if reverse => index.checked_sub(1).unwrap_or(self.focus_order.len() - 1),
             Some(index) => (index + 1) % self.focus_order.len(),
             None if reverse => self.focus_order.len() - 1,
@@ -2841,8 +4890,86 @@ impl UiTree {
     }
 
     pub fn activate_focused(&self) -> Option<ElementId> {
-        self.focused
-            .filter(|focused| self.clickable_ids.contains(focused))
+        self.focused.filter(|focused| {
+            self.clickable_ids.contains(focused) && !self.text_inputs.contains_key(focused)
+        })
+    }
+
+    /// Find the previous or next enabled radio in the focused radio group, wrapping at its ends.
+    ///
+    /// The tree is scanned only for an explicit keyboard arrow action. No group registry,
+    /// observer, allocation, or idle work is retained between events.
+    pub(crate) fn adjacent_radio(&self, reverse: bool) -> Option<ElementId> {
+        let focused = self.focused?;
+        let root = self.root.as_ref()?;
+        let group = radio_group_for_focused(root, focused)?;
+        let mut neighbors = RadioNeighbors::default();
+        collect_radio_neighbors(group, group.runtime_id, focused, &mut neighbors);
+        if !neighbors.found_focus {
+            return None;
+        }
+        if reverse {
+            neighbors.previous.or(neighbors.last)
+        } else {
+            neighbors.next.or(neighbors.first)
+        }
+    }
+
+    /// Find the previous or next enabled tab in the focused tab list.
+    ///
+    /// The mounted tree is scanned only for the explicit arrow-key event. No component registry,
+    /// observer, allocation, or idle source is retained.
+    pub(crate) fn adjacent_tab(
+        &self,
+        vertical_axis: bool,
+        reverse: bool,
+    ) -> Option<TabNavigationTarget> {
+        let focused = self.focused?;
+        let root = self.root.as_ref()?;
+        let list = tab_list_for_focused(root, focused)?;
+        let behavior = list.tab_list_behavior?;
+        if behavior.vertical != vertical_axis {
+            return None;
+        }
+        let mut neighbors = TabNeighbors::default();
+        collect_tab_neighbors(list, list.runtime_id, focused, &mut neighbors);
+        if !neighbors.found_focus {
+            return None;
+        }
+        let id = if reverse {
+            neighbors
+                .previous
+                .or_else(|| behavior.loop_focus.then_some(neighbors.last).flatten())
+        } else {
+            neighbors
+                .next
+                .or_else(|| behavior.loop_focus.then_some(neighbors.first).flatten())
+        }?;
+        Some(TabNavigationTarget {
+            id,
+            activate: behavior.activate_on_focus,
+        })
+    }
+
+    /// Find the first or last enabled tab in the focused tab list for Home/End.
+    pub(crate) fn edge_tab(&self, last: bool) -> Option<TabNavigationTarget> {
+        let focused = self.focused?;
+        let root = self.root.as_ref()?;
+        let list = tab_list_for_focused(root, focused)?;
+        let behavior = list.tab_list_behavior?;
+        let mut neighbors = TabNeighbors::default();
+        collect_tab_neighbors(list, list.runtime_id, focused, &mut neighbors);
+        if !neighbors.found_focus {
+            return None;
+        }
+        Some(TabNavigationTarget {
+            id: if last {
+                neighbors.last?
+            } else {
+                neighbors.first?
+            },
+            activate: behavior.activate_on_focus,
+        })
     }
 
     pub fn accessibility_element(&self, id: AccessibilityNodeId) -> Option<ElementId> {
@@ -2854,22 +4981,35 @@ impl UiTree {
             .iter()
             .find(|(_, text_id)| **text_id == id)
         {
-            return Some(*input);
+            return self
+                .root
+                .as_ref()
+                .is_some_and(|root| accessibility_tree_contains(root, *input))
+                .then_some(*input);
         }
         let id = ElementId::new(id.0);
-        self.seen_ids.contains(&id).then_some(id)
+        self.root
+            .as_ref()
+            .is_some_and(|root| accessibility_tree_contains(root, id))
+            .then_some(id)
     }
 
     pub fn accessibility_update(&self, window_title: &str) -> TreeUpdate {
+        let mut accessible_ids = HashSet::with_capacity(self.visible_ids.len());
+        if let Some(element) = &self.root {
+            collect_accessible_ids(element, &mut accessible_ids);
+        }
         let mut nodes = Vec::with_capacity(
-            self.seen_ids.len() + usize::from(self.validation_announcement.is_some()),
+            accessible_ids.len() + usize::from(self.validation_announcement.is_some()),
         );
         let mut root = AccessibilityNode::new(Role::Window);
         root.set_bounds(accessibility_rect(Rect::from_size(self.viewport)));
         root.set_transform(Affine::scale(self.scale_factor as f64));
         root.set_label(window_title);
         let mut root_children = Vec::with_capacity(2);
-        if let Some(element) = &self.root {
+        if let Some(element) = &self.root
+            && accessible_ids.contains(&element.runtime_id)
+        {
             root_children.push(accessibility_id(element.runtime_id));
             let context = AccessibilityBuildContext {
                 element_bounds: &self.element_bounds,
@@ -2878,6 +5018,7 @@ impl UiTree {
                 selectable_text_indices: &self.selectable_text_indices,
                 static_text_selection: self.static_text_selection,
                 accessibility_text_ids: &self.accessibility_text_ids,
+                accessible_ids: &accessible_ids,
             };
             build_accessibility_nodes(element, &context, &mut nodes);
         }
@@ -2897,6 +5038,7 @@ impl UiTree {
             tree_id: TreeId::ROOT,
             focus: self
                 .focused
+                .filter(|id| accessible_ids.contains(id))
                 .map(accessibility_id)
                 .unwrap_or(ACCESSIBILITY_ROOT_ID),
         }
@@ -2907,15 +5049,19 @@ impl UiTree {
         self.clickable_ids.clear();
         self.focus_order.clear();
         let Some(root) = &self.root else {
+            self.active_focus_trap = None;
             return;
         };
+        let active_focus_trap = topmost_focus_trap(root);
+        self.active_focus_trap = active_focus_trap;
         let mut candidates = Vec::new();
-        collect_focus_candidates(
-            root,
-            &mut self.focusable_ids,
-            &mut self.clickable_ids,
-            &mut candidates,
-        );
+        let mut collection = FocusCollection {
+            focusable_ids: &mut self.focusable_ids,
+            clickable_ids: &mut self.clickable_ids,
+            candidates: &mut candidates,
+            active_trap: active_focus_trap,
+        };
+        collect_focus_candidates(root, &mut collection, false, None, false, None, false);
         candidates.sort_by_key(|candidate| {
             let group = if candidate.tab_index > 0 { 0 } else { 1 };
             let tab_index = if candidate.tab_index > 0 {
@@ -2927,15 +5073,40 @@ impl UiTree {
         });
         self.focus_order
             .extend(candidates.into_iter().map(|candidate| candidate.id));
+        if let Some(trap) = active_focus_trap
+            && self
+                .focused
+                .is_none_or(|focused| !self.focusable_ids.contains(&focused))
+        {
+            self.focused = self
+                .focus_order
+                .first()
+                .copied()
+                .or_else(|| self.focusable_ids.contains(&trap).then_some(trap));
+        }
     }
 
     fn rebuild_dispatch_index(&mut self) {
         self.parents.clear();
         self.key_contexts.clear();
+        self.activation_targets.clear();
         self.invalid_ids.clear();
         self.form_ids.clear();
         self.form_submitter_ids.clear();
         self.context_menu_ids.clear();
+        self.mouse_listener_bindings.clear();
+        self.mouse_listener_ranges.clear();
+        self.mouse_listener_elements.clear();
+        self.key_listener_bindings.clear();
+        self.key_listener_ranges.clear();
+        self.action_listener_bindings.clear();
+        self.action_listener_ranges.clear();
+        self.scroll_wheel_ids.clear();
+        self.touch_ids.clear();
+        self.mouse_pressure_ids.clear();
+        self.pinch_ids.clear();
+        self.rotation_ids.clear();
+        self.smart_magnify_ids.clear();
         let Some(root) = &self.root else {
             return;
         };
@@ -2945,10 +5116,24 @@ impl UiTree {
             &mut DispatchMetadata {
                 parents: &mut self.parents,
                 key_contexts: &mut self.key_contexts,
+                activation_targets: &mut self.activation_targets,
                 invalid_ids: &mut self.invalid_ids,
                 form_ids: &mut self.form_ids,
                 form_submitter_ids: &mut self.form_submitter_ids,
                 context_menu_ids: &mut self.context_menu_ids,
+                mouse_listener_bindings: &mut self.mouse_listener_bindings,
+                mouse_listener_ranges: &mut self.mouse_listener_ranges,
+                mouse_listener_elements: &mut self.mouse_listener_elements,
+                key_listener_bindings: &mut self.key_listener_bindings,
+                key_listener_ranges: &mut self.key_listener_ranges,
+                action_listener_bindings: &mut self.action_listener_bindings,
+                action_listener_ranges: &mut self.action_listener_ranges,
+                scroll_wheel_ids: &mut self.scroll_wheel_ids,
+                touch_ids: &mut self.touch_ids,
+                mouse_pressure_ids: &mut self.mouse_pressure_ids,
+                pinch_ids: &mut self.pinch_ids,
+                rotation_ids: &mut self.rotation_ids,
+                smart_magnify_ids: &mut self.smart_magnify_ids,
             },
         );
         if self
@@ -3011,7 +5196,7 @@ fn compute_detached_layout(
     root: NodeId,
     viewport: Size,
     scale_factor: f32,
-    renderer: &mut GpuRenderer,
+    renderer: &mut impl TextLayoutEngine,
 ) -> Result<(), UiError> {
     taffy.compute_layout_with_measure(
         root,
@@ -3068,33 +5253,305 @@ fn compute_detached_layout(
     Ok(())
 }
 
-fn sanitize_drag_preview(element: &mut Element) {
+/// Lay out every callback subtree as an independent root within its query's assigned box.
+///
+/// Query child nodes intentionally exist in the same Taffy arena but are not connected to the
+/// query leaf. Keeping them in one arena preserves QuickGUI's compact node IDs and lets the normal
+/// paint, hit-test, accessibility, and focus walks keep traversing the ordinary `Element` tree.
+fn compute_container_query_child_layouts(
+    element: &Element,
+    taffy: &mut TaffyTree<MeasureContext>,
+    scale_factor: f32,
+    renderer: &mut impl TextLayoutEngine,
+) -> Result<(), UiError> {
+    if element.is_display_none() {
+        return Ok(());
+    }
+    if matches!(&element.kind, ElementKind::ContainerQuery(_)) {
+        debug_assert!(element.children.len() <= 1);
+        let Some(child) = element.children.first() else {
+            return Ok(());
+        };
+        let node = element
+            .taffy_node
+            .expect("container query nodes are assigned before isolated layout");
+        let layout = taffy.layout(node)?;
+        let available = Size::new(
+            finite_layout_length(layout.size.width),
+            finite_layout_length(layout.size.height),
+        );
+        let child_node = child
+            .taffy_node
+            .expect("container query children are assigned before isolated layout");
+        compute_detached_layout(taffy, child_node, available, scale_factor, renderer)?;
+        compute_container_query_child_layouts(child, taffy, scale_factor, renderer)?;
+        return Ok(());
+    }
+
+    for child in &element.children {
+        compute_container_query_child_layouts(child, taffy, scale_factor, renderer)?;
+    }
+    Ok(())
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn mark_layout_nodes_dirty(
+    element: &Element,
+    taffy: &mut TaffyTree<MeasureContext>,
+) -> Result<(), UiError> {
+    for child in &element.children {
+        mark_layout_nodes_dirty(child, taffy)?;
+    }
+    let node = element
+        .taffy_node
+        .expect("mounted elements have layout nodes before visual measurement invalidation");
+    taffy.mark_dirty(node)?;
+    Ok(())
+}
+
+fn finite_layout_length(value: f32) -> f32 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
+    }
+}
+
+fn validate_container_query_limits(root: &Element) -> Result<(), UiError> {
+    fn visit(
+        element: &Element,
+        query_depth: usize,
+        query_count: &mut usize,
+    ) -> Result<(), UiError> {
+        let query_depth = if matches!(&element.kind, ElementKind::ContainerQuery(_)) {
+            *query_count += 1;
+            if *query_count > MAX_CONTAINER_QUERIES_PER_WINDOW {
+                return Err(UiError::TooManyContainerQueries);
+            }
+            let depth = query_depth + 1;
+            if depth > MAX_CONTAINER_QUERY_DEPTH {
+                return Err(UiError::ContainerQueryDepthExceeded);
+            }
+            depth
+        } else {
+            query_depth
+        };
+
+        for child in &element.children {
+            visit(child, query_depth, query_count)?;
+        }
+        Ok(())
+    }
+
+    visit(root, 0, &mut 0)
+}
+
+fn container_queries_need_resolution(
+    element: &Element,
+    taffy: &TaffyTree<MeasureContext>,
+) -> Result<bool, UiError> {
+    if element.is_display_none() {
+        return Ok(false);
+    }
+    if let ElementKind::ContainerQuery(query) = &element.kind {
+        let node = element
+            .taffy_node
+            .expect("container query nodes are assigned before size reconciliation");
+        let layout = taffy.layout(node)?;
+        let assigned_size = Size::new(
+            finite_layout_length(layout.size.width),
+            finite_layout_length(layout.size.height),
+        );
+        if query.resolved_size != Some(assigned_size) || element.children.len() != 1 {
+            return Ok(true);
+        }
+    }
+    for child in &element.children {
+        if container_queries_need_resolution(child, taffy)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+struct ContainerQueryResolveContext<'a, F>
+where
+    F: FnMut(&mut Element),
+{
+    taffy: &'a TaffyTree<MeasureContext>,
+    prepare: &'a mut F,
+    animations: &'a mut HashMap<ElementId, DeclarativeAnimationPlayback>,
+    motion_ids: &'a mut HashSet<ElementId>,
+    time_animation_ids: &'a mut HashSet<ElementId>,
+    springs: &'a mut HashMap<ElementId, DeclarativeSpringPlayback>,
+    spring_ids: &'a mut HashSet<ElementId>,
+    request_frame: &'a mut bool,
+    deadline: &'a mut Option<Instant>,
+    now: Instant,
+    animation_epoch: Instant,
+    enabled: bool,
+    reduce_motion: bool,
+    sanitize_detached: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ContainerQueryResolution {
+    changed: bool,
+    replaced_existing_subtree: bool,
+}
+
+impl ContainerQueryResolution {
+    fn merge(&mut self, other: Self) {
+        self.changed |= other.changed;
+        self.replaced_existing_subtree |= other.replaced_existing_subtree;
+    }
+}
+
+impl<F> ContainerQueryResolveContext<'_, F>
+where
+    F: FnMut(&mut Element),
+{
+    fn resolve(&mut self, element: &mut Element) -> Result<ContainerQueryResolution, UiError> {
+        if element.is_display_none() {
+            return Ok(ContainerQueryResolution::default());
+        }
+        if matches!(&element.kind, ElementKind::ContainerQuery(_)) {
+            let node = element
+                .taffy_node
+                .expect("container query nodes are assigned before callback resolution");
+            let layout = self.taffy.layout(node)?;
+            let assigned_size = Size::new(
+                finite_layout_length(layout.size.width),
+                finite_layout_length(layout.size.height),
+            );
+            let needs_resolution = match &element.kind {
+                ElementKind::ContainerQuery(query) => {
+                    query.resolved_size != Some(assigned_size) || element.children.len() != 1
+                }
+                _ => unreachable!(),
+            };
+
+            if needs_resolution {
+                let replaced_existing_subtree = !element.children.is_empty();
+                let mut removed_motion_ids = Vec::new();
+                if let ElementKind::ContainerQuery(query) = &mut element.kind {
+                    removed_motion_ids.append(&mut query.resolved_motion_ids);
+                }
+                for child in &mut element.children {
+                    drain_container_query_motion_ids(child, &mut removed_motion_ids);
+                }
+                for id in removed_motion_ids {
+                    self.motion_ids.remove(&id);
+                    self.time_animation_ids.remove(&id);
+                    self.spring_ids.remove(&id);
+                }
+
+                let mut child = match &element.kind {
+                    ElementKind::ContainerQuery(query) => query.render(assigned_size),
+                    _ => unreachable!(),
+                };
+                (self.prepare)(&mut child);
+                if self.sanitize_detached {
+                    sanitize_detached_element(&mut child, true);
+                }
+                let mut resolved_motion_ids = Vec::new();
+                resolve_declarative_animations(
+                    &mut child,
+                    self.animations,
+                    self.motion_ids,
+                    self.time_animation_ids,
+                    self.springs,
+                    self.spring_ids,
+                    self.request_frame,
+                    self.deadline,
+                    self.now,
+                    self.animation_epoch,
+                    self.enabled,
+                    self.reduce_motion,
+                    &mut resolved_motion_ids,
+                )?;
+                if self.sanitize_detached {
+                    sanitize_detached_element(&mut child, false);
+                }
+                element.children.clear();
+                element.children.push(child);
+                if let ElementKind::ContainerQuery(query) = &mut element.kind {
+                    query.resolved_size = Some(assigned_size);
+                    query.resolved_motion_ids = resolved_motion_ids;
+                    query.layout_pending = true;
+                }
+                return Ok(ContainerQueryResolution {
+                    changed: true,
+                    replaced_existing_subtree,
+                });
+            }
+        }
+
+        let mut resolution = ContainerQueryResolution::default();
+        for child in &mut element.children {
+            resolution.merge(self.resolve(child)?);
+        }
+        Ok(resolution)
+    }
+}
+
+fn drain_container_query_motion_ids(element: &mut Element, ids: &mut Vec<ElementId>) {
+    if let ElementKind::ContainerQuery(query) = &mut element.kind {
+        ids.append(&mut query.resolved_motion_ids);
+    }
+    for child in &mut element.children {
+        drain_container_query_motion_ids(child, ids);
+    }
+}
+
+fn sanitize_detached_element(element: &mut Element, preserve_motion: bool) {
     element.explicit_id = None;
     element.runtime_id = ElementId::new(0);
     element.taffy_node = None;
     element.clickable = false;
     element.pointer_listener = false;
+    element.scroll_wheel_listener = false;
+    element.touch_listener = false;
     element.context_menu_listener = false;
+    element.mouse_pressure_listener = false;
+    element.pinch_listener = false;
+    element.rotation_listener = false;
+    element.smart_magnify_listener = false;
     element.drag_source = false;
     element.drop_target = false;
     element.drop_predicates.clear();
-    element.cursor_pointer = false;
-    element.cursor_text = false;
+    element.cursor_style = None;
+    element.cursor_style_explicit = false;
+    element.hover.cursor_style = None;
+    element.active.cursor_style = None;
+    element.focus.cursor_style = None;
+    element.disabled_style.cursor_style = None;
+    element.invalid_style.cursor_style = None;
+    element.dragging.cursor_style = None;
+    element.drag_over.cursor_style = None;
     element.user_select = UserSelect::None;
     element.resolved_user_select = false;
     element.focusable = false;
+    element.focus_trap = false;
     element.key_context = None;
     element.auto_focus = false;
+    element.activation_target = None;
     element.plane = None;
     element.anchor = None;
     element.tooltip = None;
     element.app_region = None;
     element.virtual_scroll = None;
+    element.list_item_measurement = None;
+    if !preserve_motion {
+        element.animation = None;
+        element.spring = None;
+    }
+    element.transition = None;
     element.blocks_pointer = false;
-    element.dismissible = false;
+    element.dismiss_policy = DismissPolicy::default();
     element.restore_focus = None;
     for child in &mut element.children {
-        sanitize_drag_preview(child);
+        sanitize_detached_element(child, preserve_motion);
     }
 }
 
@@ -3144,7 +5601,7 @@ fn text_input_index_at(
     region: &TextInputRegion,
     point: Point,
     scale_factor: f32,
-    renderer: &mut GpuRenderer,
+    renderer: &mut impl TextLayoutEngine,
 ) -> usize {
     if region.content.is_empty() {
         return 0;
@@ -3268,6 +5725,55 @@ fn fit_path(bounds: Rect, path: &Path, fit: ObjectFit) -> Option<([f32; 2], Vect
     Some((scale, translation))
 }
 
+fn build_pending_container_query_subtrees(
+    element: &mut Element,
+    taffy: &mut TaffyTree<MeasureContext>,
+    seen_ids: &mut HashSet<ElementId>,
+) -> Result<bool, UiError> {
+    if element.is_display_none() {
+        return Ok(false);
+    }
+    let layout_pending = matches!(
+        &element.kind,
+        ElementKind::ContainerQuery(query) if query.layout_pending
+    );
+    if layout_pending {
+        debug_assert_eq!(element.children.len(), 1);
+        let parent_id = element.runtime_id;
+        let inherited_typography = element.resolved_typography.clone();
+        let inherited_user_select = element.resolved_user_select;
+        let child = element
+            .children
+            .first_mut()
+            .expect("a pending query layout has callback contents");
+        match collect_explicit_ids(child, seen_ids) {
+            Ok(()) => {}
+            Err(UiError::DuplicateId(_)) => return Ok(true),
+            Err(error) => return Err(error),
+        }
+        build_layout_node(
+            taffy,
+            seen_ids,
+            child,
+            parent_id,
+            0,
+            &inherited_typography,
+            inherited_user_select,
+        )?;
+        if let ElementKind::ContainerQuery(query) = &mut element.kind {
+            query.layout_pending = false;
+        }
+        return Ok(false);
+    }
+
+    for child in &mut element.children {
+        if build_pending_container_query_subtrees(child, taffy, seen_ids)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn build_layout_node(
     taffy: &mut TaffyTree<MeasureContext>,
     seen_ids: &mut HashSet<ElementId>,
@@ -3290,13 +5796,25 @@ fn build_layout_node(
     };
     element.runtime_id = id;
     element.resolved_typography = element.typography.resolve(inherited_typography);
+    // Editable controls must retain a one-to-one mapping between their controlled value and the
+    // shaped buffer. Their own viewport already provides web-style clipping and caret scrolling;
+    // inherited display-only truncation would otherwise hide editable bytes from IME and hit
+    // testing.
+    if matches!(&element.kind, ElementKind::TextInput(_)) {
+        element.resolved_typography.text_overflow = None;
+        element.resolved_typography.line_clamp = None;
+    }
     let automatic_user_select = inherited_user_select
         && !element.clickable
         && !element.pointer_listener
         && !element.drag_source
         && !matches!(
             element.accessibility.role,
-            AccessibilityRole::Button | AccessibilityRole::CheckBox | AccessibilityRole::MenuItem
+            AccessibilityRole::Button
+                | AccessibilityRole::CheckBox
+                | AccessibilityRole::MenuItem
+                | AccessibilityRole::MenuItemCheckBox
+                | AccessibilityRole::MenuItemRadio
         )
         && !matches!(&element.kind, ElementKind::TextInput(_));
     element.resolved_user_select = match element.user_select {
@@ -3320,6 +5838,10 @@ fn build_layout_node(
 
     let node = match &element.kind {
         ElementKind::Container => taffy.new_with_children(element.layout.clone(), &child_nodes)?,
+        // Query contents are deliberately disconnected from this leaf. Their layout is computed
+        // later as a separate root using this node's assigned size, so callback contents cannot
+        // feed intrinsic size back into the query box.
+        ElementKind::ContainerQuery(_) => taffy.new_leaf(element.layout.clone())?,
         ElementKind::Text(content) => taffy.new_leaf_with_context(
             element.layout.clone(),
             MeasureContext::Text {
@@ -3400,6 +5922,9 @@ fn build_layout_node(
         #[cfg(target_os = "macos")]
         ElementKind::NativeView(_) => taffy.new_leaf(element.layout.clone())?,
     };
+    if let ElementKind::ContainerQuery(query) = &mut element.kind {
+        query.layout_pending = false;
+    }
     element.taffy_node = Some(node);
     Ok(node)
 }
@@ -3411,6 +5936,9 @@ fn collect_layout_bounds(
     bounds: &mut HashMap<ElementId, Rect>,
     parent_origin: Point,
 ) -> Result<(), UiError> {
+    if element.is_display_none() {
+        return Ok(());
+    }
     let node = element
         .taffy_node
         .expect("layout nodes are assigned before bounds collection");
@@ -3607,6 +6135,17 @@ fn push_element_shadows(
     }
 }
 
+fn own_text_clip(element: &Element, bounds: Rect, parent_clip: Rect) -> Rect {
+    let clips_own_text = element.resolved_typography.line_clamp.is_some()
+        || element.layout.overflow.x != Overflow::Visible
+        || element.layout.overflow.y != Overflow::Visible;
+    if clips_own_text {
+        parent_clip.intersection(bounds).unwrap_or(Rect::ZERO)
+    } else {
+        parent_clip
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn paint_selectable_text(
     element: &Element,
@@ -3623,7 +6162,7 @@ fn paint_selectable_text(
     indices: &HashMap<ElementId, usize>,
     regions: &mut Vec<SelectableTextRegion>,
     scene: &mut Scene,
-    renderer: &mut GpuRenderer,
+    renderer: &mut impl TextLayoutEngine,
 ) {
     let Some(document_index) = document_index else {
         return;
@@ -3672,6 +6211,94 @@ fn paint_selectable_text(
     }
 }
 
+#[cfg(feature = "inspector")]
+#[allow(clippy::too_many_arguments)]
+fn collect_inspector_nodes(
+    element: &Element,
+    parent: Option<ElementId>,
+    depth: usize,
+    parent_layer: PaintLayerKey,
+    parent_clip: Rect,
+    viewport: Rect,
+    element_bounds: &HashMap<ElementId, Rect>,
+    hit_lookup: &HashMap<ElementId, HitRegion>,
+    focused: Option<ElementId>,
+    source_order: &mut usize,
+    snapshot: &mut crate::inspector::InspectorSnapshot,
+) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
+    let Some(bounds) = element_bounds.get(&element.runtime_id).copied() else {
+        return;
+    };
+    if snapshot.nodes.len() == crate::inspector::MAX_INSPECTOR_NODES {
+        snapshot.nodes_truncated = true;
+        return;
+    }
+
+    let plane = element.plane.unwrap_or(parent_layer.plane);
+    let z_index = if plane == parent_layer.plane {
+        parent_layer
+            .z_index
+            .saturating_add(element.z_index.unwrap_or(0))
+    } else {
+        element.z_index.unwrap_or(0)
+    };
+    let layer = PaintLayerKey { plane, z_index };
+    let source = *source_order;
+    *source_order = source.saturating_add(1);
+    let clip = if element.portal {
+        viewport
+    } else {
+        parent_clip
+    };
+    let accessibility = crate::inspector::inspector_accessibility(element);
+    let on_focus_path = snapshot.focus_path.contains(&element.runtime_id);
+    snapshot.nodes.push(crate::inspector::InspectorNode {
+        id: element.runtime_id,
+        parent,
+        depth,
+        explicit_id: element.explicit_id.is_some(),
+        kind: crate::inspector::InspectorElementKind::from_element(&element.kind),
+        bounds,
+        clip,
+        plane,
+        z_index,
+        source_order: source,
+        portal: element.portal,
+        focused: focused == Some(element.runtime_id),
+        on_focus_path,
+        hit_region: hit_lookup
+            .get(&element.runtime_id)
+            .copied()
+            .map(crate::inspector::InspectorHitRegion::from_region),
+        accessibility,
+    });
+
+    let Some(child_clip) = crate::inspector::child_clip(element, clip, bounds) else {
+        return;
+    };
+    for child in &element.children {
+        collect_inspector_nodes(
+            child,
+            Some(element.runtime_id),
+            depth.saturating_add(1),
+            layer,
+            child_clip,
+            viewport,
+            element_bounds,
+            hit_lookup,
+            focused,
+            source_order,
+            snapshot,
+        );
+        if snapshot.nodes_truncated {
+            return;
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn paint_element(
     element: &Element,
@@ -3686,11 +6313,12 @@ fn paint_element(
     focused: Option<ElementId>,
     scale_factor: f32,
     scene: &mut Scene,
-    renderer: &mut GpuRenderer,
+    renderer: &mut impl TextLayoutEngine,
     text_inputs: &mut HashMap<ElementId, TextInputState>,
     animations: &mut HashMap<ElementId, AnimationPlayback>,
     animations_enabled: bool,
     paint_time: Instant,
+    transition_context: &mut StyleTransitionPaintContext<'_>,
     hit_regions: &mut Vec<HitRegion>,
     scroll_regions: &mut Vec<ScrollRegion>,
     scrollbar_states: &mut HashMap<ElementId, ScrollbarState>,
@@ -3707,6 +6335,9 @@ fn paint_element(
     source_order: &mut usize,
     inherited_state_text_color: Option<Color>,
 ) -> Result<(), UiError> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return Ok(());
+    }
     let node = element
         .taffy_node
         .expect("layout nodes are assigned before paint");
@@ -3742,6 +6373,14 @@ fn paint_element(
         natural
     };
     element_bounds.insert(element.runtime_id, bounds);
+    if let Some(virtual_scroll) = &element.virtual_scroll {
+        virtual_scroll
+            .handle
+            .report_viewport(Size::new(bounds.width, bounds.height));
+    }
+    if let Some(measurement) = &element.list_item_measurement {
+        measurement.report_height(bounds.height);
+    }
 
     let plane = element.plane.unwrap_or(parent_layer.plane);
     let z_index = if plane == parent_layer.plane {
@@ -3780,78 +6419,138 @@ fn paint_element(
     } else {
         &empty_state
     };
+    let disabled_state = if element.accessibility.disabled {
+        &element.disabled_style
+    } else {
+        &empty_state
+    };
     let invalid_state = if element.accessibility.invalid {
         &element.invalid_style
     } else {
         &empty_state
     };
-    let fill = interaction_state
+    let target_fill = disabled_state
         .background
+        .or(interaction_state.background)
         .or(invalid_state.background)
         .or(focus_state.background)
         .or(element.visual.background)
         .unwrap_or(Color::TRANSPARENT);
-    let border = interaction_state
+    let target_border = disabled_state
         .border_color
+        .or(interaction_state.border_color)
         .or(invalid_state.border_color)
         .or(focus_state.border_color)
         .or(element.visual.border_color)
         .unwrap_or(Color::TRANSPARENT);
-    let border_width = interaction_state
+    let target_border_width = disabled_state
         .border_width
+        .or(interaction_state.border_width)
         .or(invalid_state.border_width)
         .or(focus_state.border_width)
         .unwrap_or(element.visual.border_width);
-    let shadows = interaction_state
+    let target_radius = disabled_state
+        .radius
+        .or(interaction_state.radius)
+        .or(invalid_state.radius)
+        .or(focus_state.radius)
+        .unwrap_or(element.visual.radius);
+    let target_shadows = disabled_state
         .shadows
         .as_deref()
+        .or(interaction_state.shadows.as_deref())
         .or(invalid_state.shadows.as_deref())
         .or(focus_state.shadows.as_deref())
         .or(element.visual.shadows.as_deref())
         .unwrap_or_default();
-    push_element_shadows(
-        scene,
-        layer,
-        bounds,
-        element.visual.radius,
-        parent_clip,
-        shadows,
-        false,
-    );
+    let target_opacity = disabled_state
+        .opacity
+        .or(interaction_state.opacity)
+        .or(invalid_state.opacity)
+        .or(focus_state.opacity)
+        .unwrap_or(element.visual.opacity)
+        .clamp(0.0, 1.0);
+    let target_state_text_color = disabled_state
+        .text_color
+        .or(interaction_state.text_color)
+        .or(invalid_state.text_color)
+        .or(focus_state.text_color)
+        .or(inherited_state_text_color);
+    let sampled_transition = element.transition.as_ref().map(|config| {
+        let text_fallback = sane_transition_color(element.resolved_typography.color, Color::WHITE);
+        transition_context.sample(
+            element.runtime_id,
+            TransitionPaintStyle {
+                background: sane_transition_color(target_fill, Color::TRANSPARENT),
+                border_color: sane_transition_color(target_border, Color::TRANSPARENT),
+                border_width: target_border_width.max(0.0),
+                radius: target_radius.max(0.0),
+                opacity: target_opacity,
+                text_color: target_state_text_color
+                    .map(|color| sane_transition_color(color, text_fallback)),
+                text_fallback,
+                shadows: TransitionShadowList::from_slice(target_shadows),
+            },
+            config,
+        )
+    });
+    let fill = sampled_transition
+        .as_ref()
+        .map_or(target_fill, |style| style.background);
+    let border = sampled_transition
+        .as_ref()
+        .map_or(target_border, |style| style.border_color);
+    let border_width = sampled_transition
+        .as_ref()
+        .map_or(target_border_width, |style| style.border_width);
+    let radius = sampled_transition
+        .as_ref()
+        .map_or(target_radius, |style| style.radius);
+    let shadows = sampled_transition
+        .as_ref()
+        .map_or(target_shadows, |style| style.shadows.as_slice());
+    let opacity = sampled_transition
+        .as_ref()
+        .map_or(target_opacity, |style| style.opacity);
+    let state_text_color = sampled_transition
+        .as_ref()
+        .map_or(target_state_text_color, |style| style.text_color);
+    let previous_opacity = scene.multiply_opacity(opacity);
+    push_element_shadows(scene, layer, bounds, radius, parent_clip, shadows, false);
     if fill.a > 0.0 || (border.a > 0.0 && border_width > 0.0) {
         scene.push_quad_in(
             layer,
             Quad::new(bounds, fill)
-                .radius(element.visual.radius)
+                .radius(radius)
                 .border(border_width, border)
                 .clip(parent_clip),
         );
     }
-    push_element_shadows(
-        scene,
-        layer,
-        bounds,
-        element.visual.radius,
-        parent_clip,
-        shadows,
-        true,
-    );
+    push_element_shadows(scene, layer, bounds, radius, parent_clip, shadows, true);
 
     let selectable_document_index = selectable_text_indices.get(&element.runtime_id).copied();
     if element.clickable
         || element.pointer_listener
+        || (element.mouse_listeners.is_some() && !element.accessibility.disabled)
+        || element.scroll_wheel_listener
+        || element.touch_listener
         || element.context_menu_listener
+        || element.mouse_pressure_listener
+        || element.pinch_listener
+        || element.rotation_listener
+        || element.smart_magnify_listener
         || element.tooltip.is_some()
         || element.drag_source
         || element.drop_target
-        || element.cursor_pointer
-        || element.cursor_text
+        || element.cursor_style.is_some()
         || selectable_document_index.is_some()
         || element.focusable
         || element.blocks_pointer
         || element.app_region.is_some()
         || element.has_stateful_paint()
+        || element.has_stateful_cursor()
     {
+        let cursor_style = effective_cursor_style(element, selectable_document_index.is_some());
         hit_regions.push(HitRegion {
             id: element.runtime_id,
             bounds,
@@ -3861,30 +6560,36 @@ fn paint_element(
             drag_source: element.drag_source && !element.accessibility.disabled,
             drop_target: element.drop_target && !element.accessibility.disabled,
             focusable: element.focusable && !element.accessibility.disabled,
-            cursor_pointer: element.cursor_pointer && !element.accessibility.disabled,
-            cursor_text: (element.cursor_text || selectable_document_index.is_some())
-                && !element.accessibility.disabled,
+            cursor_style,
+            cursor_states: CursorStateStyles {
+                hover: element.hover.cursor_style,
+                active: element.active.cursor_style,
+                focus: element.focus.cursor_style,
+                invalid: element
+                    .accessibility
+                    .invalid
+                    .then_some(element.invalid_style.cursor_style)
+                    .flatten(),
+                dragging: element.dragging.cursor_style,
+                drag_over: element.drag_over.cursor_style,
+            },
             stateful: element.has_stateful_paint(),
             blocks_pointer: element.blocks_pointer,
             app_region: element.app_region,
             order,
         });
     }
-    if element.dismissible {
+    if !element.dismiss_policy.is_empty() {
         dismiss_regions.push(DismissRegion {
             id: element.runtime_id,
             bounds,
             clip: parent_clip,
+            policy: element.dismiss_policy,
             restore_focus: element.restore_focus.map(|handle| handle.id()),
             order,
         });
     }
 
-    let state_text_color = interaction_state
-        .text_color
-        .or(invalid_state.text_color)
-        .or(focus_state.text_color)
-        .or(inherited_state_text_color);
     let mut text_input_scroll = None;
     match &element.kind {
         ElementKind::Text(content) => {
@@ -3892,6 +6597,26 @@ fn paint_element(
             if let Some(color) = state_text_color {
                 style.color = color;
             }
+            let text_clip = own_text_clip(element, bounds, parent_clip);
+            let decorations = if style.has_decorations() && !bounds.is_empty() {
+                text_clip.intersection(bounds).map(|clip| {
+                    let visible_y =
+                        (clip.y - bounds.y).max(0.0)..(clip.bottom() - bounds.y).min(bounds.height);
+                    renderer
+                        .text_geometry(
+                            TextId::new(element.runtime_id.value()),
+                            content,
+                            &style,
+                            None,
+                            bounds.width,
+                            scale_factor,
+                            visible_y,
+                        )
+                        .decorations
+                })
+            } else {
+                None
+            };
             paint_selectable_text(
                 element,
                 selectable_document_index,
@@ -3899,7 +6624,7 @@ fn paint_element(
                 &style,
                 None,
                 bounds,
-                parent_clip,
+                text_clip,
                 layer,
                 order,
                 scale_factor,
@@ -3917,8 +6642,19 @@ fn paint_element(
                     bounds,
                     style,
                 )
-                .clip(parent_clip),
+                .clip(text_clip),
             );
+            if let Some(decorations) = decorations {
+                for decoration in decorations {
+                    push_text_paint_rect(
+                        scene,
+                        layer,
+                        decoration,
+                        Point::new(bounds.x, bounds.y),
+                        text_clip,
+                    );
+                }
+            }
         }
         ElementKind::StyledText(styled) => {
             let mut style = element.resolved_typography.clone();
@@ -3927,16 +6663,17 @@ fn paint_element(
             }
             let text_id = TextId::new(element.runtime_id.value());
             let highlights = styled.shared_highlights().clone();
+            let text_clip = own_text_clip(element, bounds, parent_clip);
             if !bounds.is_empty()
-                && let Some(clip) = parent_clip.intersection(bounds)
+                && let Some(clip) = text_clip.intersection(bounds)
             {
                 let visible_y =
                     (clip.y - bounds.y).max(0.0)..(clip.bottom() - bounds.y).min(bounds.height);
-                let geometry = renderer.styled_text_geometry(
+                let geometry = renderer.text_geometry(
                     text_id,
                     styled.content(),
                     &style,
-                    &highlights,
+                    Some(&highlights),
                     bounds.width,
                     scale_factor,
                     visible_y,
@@ -3963,7 +6700,7 @@ fn paint_element(
                     &style,
                     Some(&highlights),
                     bounds,
-                    parent_clip,
+                    text_clip,
                     layer,
                     order,
                     scale_factor,
@@ -3977,21 +6714,15 @@ fn paint_element(
                     layer,
                     TextRun::new(text_id, styled.content().clone(), bounds, style)
                         .with_highlights(highlights)
-                        .clip(parent_clip),
+                        .clip(text_clip),
                 );
                 for decoration in geometry.decorations {
-                    scene.push_quad_in(
+                    push_text_paint_rect(
+                        scene,
                         layer,
-                        Quad::new(
-                            Rect::new(
-                                bounds.x + decoration.rect.x,
-                                bounds.y + decoration.rect.y,
-                                decoration.rect.width,
-                                decoration.rect.height,
-                            ),
-                            decoration.color,
-                        )
-                        .clip(clip),
+                        decoration,
+                        Point::new(bounds.x, bounds.y),
+                        clip,
                     );
                 }
             }
@@ -4192,12 +6923,12 @@ fn paint_element(
                 );
 
                 let mut decorations = Vec::new();
-                if let Some(highlights) = &highlights {
-                    let geometry = renderer.styled_text_geometry(
+                if !content.is_empty() && (highlights.is_some() || style.has_decorations()) {
+                    let geometry = renderer.text_geometry(
                         text_id,
                         &content,
                         &style,
-                        highlights,
+                        highlights.as_ref(),
                         text_viewport.width,
                         scale_factor,
                         scroll.y..scroll.y + text_viewport.height,
@@ -4306,18 +7037,12 @@ fn paint_element(
                 }
                 scene.push_text_in(layer, text_run);
                 for decoration in decorations {
-                    scene.push_quad_in(
+                    push_text_paint_rect(
+                        scene,
                         layer,
-                        Quad::new(
-                            Rect::new(
-                                text_viewport.x + decoration.rect.x - scroll.x,
-                                text_viewport.y + decoration.rect.y - scroll.y,
-                                decoration.rect.width,
-                                decoration.rect.height,
-                            ),
-                            decoration.color,
-                        )
-                        .clip(text_clip),
+                        decoration,
+                        Point::new(text_viewport.x - scroll.x, text_viewport.y - scroll.y),
+                        text_clip,
                     );
                 }
                 text_input_regions.push(TextInputRegion {
@@ -4360,12 +7085,13 @@ fn paint_element(
                     bounds,
                     clip,
                     corner_radius: element.visual.radius,
+                    opacity: scene.current_opacity(),
                     z_index: layer.z_index,
                     source_order: order.source,
                 });
             }
         }
-        ElementKind::Container => {}
+        ElementKind::Container | ElementKind::ContainerQuery(_) => {}
     }
 
     let clips_children = element.layout.overflow.x != Overflow::Visible
@@ -4373,7 +7099,10 @@ fn paint_element(
     let child_clip = if clips_children {
         match parent_clip.intersection(bounds) {
             Some(clip) => clip,
-            None => return Ok(()),
+            None => {
+                scene.restore_opacity(previous_opacity);
+                return Ok(());
+            }
         }
     } else {
         parent_clip
@@ -4416,6 +7145,7 @@ fn paint_element(
             animations,
             animations_enabled,
             paint_time,
+            transition_context,
             hit_regions,
             scroll_regions,
             scrollbar_states,
@@ -4511,7 +7241,67 @@ fn paint_element(
             paint_time,
         );
     }
+    scene.restore_opacity(previous_opacity);
     Ok(())
+}
+
+fn push_text_paint_rect(
+    scene: &mut Scene,
+    layer: PaintLayerKey,
+    paint: TextPaintRect,
+    origin: Point,
+    clip: Rect,
+) {
+    let rect = Rect::new(
+        origin.x + paint.rect.x,
+        origin.y + paint.rect.y,
+        paint.rect.width,
+        paint.rect.height,
+    );
+    match paint.kind {
+        TextPaintKind::Solid => {
+            scene.push_quad_in(layer, Quad::new(rect, paint.color).clip(clip));
+        }
+        TextPaintKind::WavyUnderline {
+            baseline,
+            amplitude,
+            thickness,
+            wavelength,
+        } => {
+            scene.push_wavy_underline_in(
+                layer,
+                WavyUnderline::new(
+                    rect,
+                    origin.y + baseline,
+                    amplitude,
+                    thickness,
+                    wavelength,
+                    paint.color,
+                )
+                .clip(clip),
+            );
+        }
+    }
+}
+
+fn effective_cursor_style(element: &Element, selectable_text: bool) -> Option<CursorStyle> {
+    if element.accessibility.disabled {
+        return element.disabled_style.cursor_style.or_else(|| {
+            element
+                .cursor_style_explicit
+                .then_some(element.cursor_style)
+                .flatten()
+        });
+    }
+    if element.cursor_style_explicit {
+        return element.cursor_style;
+    }
+    if element.drag_source {
+        return Some(CursorStyle::OpenHand);
+    }
+    element
+        .cursor_style
+        .or_else(|| selectable_text.then_some(CursorStyle::IBeam))
 }
 
 fn paint_vertical_scrollbar(
@@ -4587,6 +7377,13 @@ struct FocusCandidate {
     order: usize,
 }
 
+struct FocusCollection<'a> {
+    focusable_ids: &'a mut HashSet<ElementId>,
+    clickable_ids: &'a mut HashSet<ElementId>,
+    candidates: &'a mut Vec<FocusCandidate>,
+    active_trap: Option<ElementId>,
+}
+
 #[derive(Default)]
 struct FormCollection {
     fields: Vec<FormField>,
@@ -4612,6 +7409,9 @@ fn collect_form_controls(
     focusable_ids: &HashSet<ElementId>,
     collection: &mut FormCollection,
 ) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
     // Forms do not inherit controls from nested forms. This also gives malformed declarative
     // nesting deterministic browser-like ownership without retaining a second membership index.
     if element.form {
@@ -4678,37 +7478,337 @@ fn validation_announcement_message(report: &ValidationReport) -> Arc<str> {
     Arc::from(message)
 }
 
+fn topmost_focus_trap(root: &Element) -> Option<ElementId> {
+    fn visit(
+        element: &Element,
+        parent_layer: PaintLayerKey,
+        source: &mut usize,
+        topmost: &mut Option<(PaintOrder, ElementId)>,
+    ) {
+        if element.is_display_none() || element.is_visibility_hidden() {
+            return;
+        }
+        let plane = element.plane.unwrap_or(parent_layer.plane);
+        let z_index = if plane == parent_layer.plane {
+            parent_layer
+                .z_index
+                .saturating_add(element.z_index.unwrap_or(0))
+        } else {
+            element.z_index.unwrap_or(0)
+        };
+        let layer = PaintLayerKey { plane, z_index };
+        let order = PaintOrder {
+            layer,
+            source: *source,
+        };
+        *source = source.saturating_add(1);
+        if element.focus_trap
+            && topmost
+                .as_ref()
+                .is_none_or(|(previous, _)| order > *previous)
+        {
+            *topmost = Some((order, element.runtime_id));
+        }
+        for child in &element.children {
+            visit(child, layer, source, topmost);
+        }
+    }
+
+    let mut source = 0;
+    let mut topmost = None;
+    visit(root, PaintLayerKey::default(), &mut source, &mut topmost);
+    topmost.map(|(_, id)| id)
+}
+
 fn collect_focus_candidates(
     element: &Element,
-    focusable_ids: &mut HashSet<ElementId>,
-    clickable_ids: &mut HashSet<ElementId>,
-    candidates: &mut Vec<FocusCandidate>,
+    collection: &mut FocusCollection<'_>,
+    inside_radio_group: bool,
+    radio_tab_stop: Option<ElementId>,
+    inside_tab_list: bool,
+    tab_stop: Option<ElementId>,
+    inside_active_focus_trap: bool,
 ) {
-    if element.focusable && !element.accessibility.disabled {
-        focusable_ids.insert(element.runtime_id);
-        if element.tab_index >= 0 {
-            candidates.push(FocusCandidate {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
+    let inside_active_focus_trap = inside_active_focus_trap
+        || collection.active_trap.is_none()
+        || collection.active_trap == Some(element.runtime_id);
+    if inside_active_focus_trap && element.focusable && !element.accessibility.disabled {
+        collection.focusable_ids.insert(element.runtime_id);
+        let radio_is_tab_stop = element.accessibility.role != AccessibilityRole::RadioButton
+            || !inside_radio_group
+            || radio_tab_stop == Some(element.runtime_id);
+        let tab_is_tab_stop = element.accessibility.role != AccessibilityRole::Tab
+            || !inside_tab_list
+            || tab_stop == Some(element.runtime_id);
+        if element.tab_index >= 0 && radio_is_tab_stop && tab_is_tab_stop {
+            collection.candidates.push(FocusCandidate {
                 id: element.runtime_id,
                 tab_index: element.tab_index,
-                order: candidates.len(),
+                order: collection.candidates.len(),
             });
         }
     }
     if element.clickable && !element.accessibility.disabled {
-        clickable_ids.insert(element.runtime_id);
+        collection.clickable_ids.insert(element.runtime_id);
+    }
+    let (inside_radio_group, radio_tab_stop) =
+        if element.accessibility.role == AccessibilityRole::RadioGroup {
+            (true, radio_group_tab_stop(element))
+        } else {
+            (inside_radio_group, radio_tab_stop)
+        };
+    let (inside_tab_list, tab_stop) = if element.accessibility.role == AccessibilityRole::TabList {
+        (true, tab_list_tab_stop(element))
+    } else {
+        (inside_tab_list, tab_stop)
+    };
+    for child in &element.children {
+        collect_focus_candidates(
+            child,
+            collection,
+            inside_radio_group,
+            radio_tab_stop,
+            inside_tab_list,
+            tab_stop,
+            inside_active_focus_trap,
+        );
+    }
+}
+
+fn tab_list_tab_stop(list: &Element) -> Option<ElementId> {
+    fn visit(
+        element: &Element,
+        list_id: ElementId,
+        first: &mut Option<ElementId>,
+        selected: &mut Option<ElementId>,
+    ) {
+        if element.is_display_none()
+            || element.is_visibility_hidden()
+            || (element.runtime_id != list_id
+                && element.accessibility.role == AccessibilityRole::TabList)
+        {
+            return;
+        }
+        if element.accessibility.role == AccessibilityRole::Tab
+            && element.focusable
+            && !element.accessibility.disabled
+            && element.tab_index >= 0
+        {
+            first.get_or_insert(element.runtime_id);
+            if selected.is_none() && element.accessibility.selected {
+                *selected = Some(element.runtime_id);
+            }
+        }
+        for child in &element.children {
+            visit(child, list_id, first, selected);
+        }
+    }
+
+    let mut first = None;
+    let mut selected = None;
+    visit(list, list.runtime_id, &mut first, &mut selected);
+    selected.or(first)
+}
+
+fn tab_list_for_focused(element: &Element, focused: ElementId) -> Option<&Element> {
+    fn visit(element: &Element, focused: ElementId) -> (bool, Option<&Element>) {
+        if element.is_display_none() || element.is_visibility_hidden() {
+            return (false, None);
+        }
+        let mut contains = element.runtime_id == focused;
+        for child in &element.children {
+            let (child_contains, child_list) = visit(child, focused);
+            if let Some(list) = child_list {
+                return (true, Some(list));
+            }
+            contains |= child_contains;
+        }
+        if contains && element.accessibility.role == AccessibilityRole::TabList {
+            (true, Some(element))
+        } else {
+            (contains, None)
+        }
+    }
+
+    visit(element, focused).1
+}
+
+fn tab_stop_for_focused_tab(root: &Element, focused: ElementId) -> Option<ElementId> {
+    let focused_element = find_element(root, focused)?;
+    if focused_element.accessibility.role != AccessibilityRole::Tab {
+        return None;
+    }
+    tab_list_tab_stop(tab_list_for_focused(root, focused)?)
+}
+
+#[derive(Default)]
+struct TabNeighbors {
+    first: Option<ElementId>,
+    previous: Option<ElementId>,
+    next: Option<ElementId>,
+    last: Option<ElementId>,
+    found_focus: bool,
+}
+
+fn collect_tab_neighbors(
+    element: &Element,
+    list_id: ElementId,
+    focused: ElementId,
+    neighbors: &mut TabNeighbors,
+) {
+    if element.is_display_none()
+        || element.is_visibility_hidden()
+        || (element.runtime_id != list_id
+            && element.accessibility.role == AccessibilityRole::TabList)
+    {
+        return;
+    }
+    if element.accessibility.role == AccessibilityRole::Tab
+        && element.focusable
+        && element.clickable
+        && !element.accessibility.disabled
+    {
+        let id = element.runtime_id;
+        neighbors.first.get_or_insert(id);
+        if neighbors.found_focus && neighbors.next.is_none() {
+            neighbors.next = Some(id);
+        } else if id == focused {
+            neighbors.found_focus = true;
+        } else if !neighbors.found_focus {
+            neighbors.previous = Some(id);
+        }
+        neighbors.last = Some(id);
     }
     for child in &element.children {
-        collect_focus_candidates(child, focusable_ids, clickable_ids, candidates);
+        collect_tab_neighbors(child, list_id, focused, neighbors);
+    }
+}
+
+fn radio_group_tab_stop(group: &Element) -> Option<ElementId> {
+    fn visit(
+        element: &Element,
+        group_id: ElementId,
+        first: &mut Option<ElementId>,
+        selected: &mut Option<ElementId>,
+    ) {
+        if element.is_display_none()
+            || element.is_visibility_hidden()
+            || (element.runtime_id != group_id
+                && element.accessibility.role == AccessibilityRole::RadioGroup)
+        {
+            return;
+        }
+        if element.accessibility.role == AccessibilityRole::RadioButton
+            && element.focusable
+            && !element.accessibility.disabled
+            && element.tab_index >= 0
+        {
+            first.get_or_insert(element.runtime_id);
+            if selected.is_none() && element.accessibility.toggled == Some(ToggleState::On) {
+                *selected = Some(element.runtime_id);
+            }
+        }
+        for child in &element.children {
+            visit(child, group_id, first, selected);
+        }
+    }
+
+    let mut first = None;
+    let mut selected = None;
+    visit(group, group.runtime_id, &mut first, &mut selected);
+    selected.or(first)
+}
+
+fn radio_group_for_focused(element: &Element, focused: ElementId) -> Option<&Element> {
+    fn visit(element: &Element, focused: ElementId) -> (bool, Option<&Element>) {
+        if element.is_display_none() || element.is_visibility_hidden() {
+            return (false, None);
+        }
+        let mut contains = element.runtime_id == focused;
+        for child in &element.children {
+            let (child_contains, child_group) = visit(child, focused);
+            if let Some(group) = child_group {
+                return (true, Some(group));
+            }
+            contains |= child_contains;
+        }
+        if contains && element.accessibility.role == AccessibilityRole::RadioGroup {
+            (true, Some(element))
+        } else {
+            (contains, None)
+        }
+    }
+
+    visit(element, focused).1
+}
+
+#[derive(Default)]
+struct RadioNeighbors {
+    first: Option<ElementId>,
+    previous: Option<ElementId>,
+    next: Option<ElementId>,
+    last: Option<ElementId>,
+    found_focus: bool,
+}
+
+fn collect_radio_neighbors(
+    element: &Element,
+    group_id: ElementId,
+    focused: ElementId,
+    neighbors: &mut RadioNeighbors,
+) {
+    if element.is_display_none()
+        || element.is_visibility_hidden()
+        || (element.runtime_id != group_id
+            && element.accessibility.role == AccessibilityRole::RadioGroup)
+    {
+        return;
+    }
+    if element.accessibility.role == AccessibilityRole::RadioButton
+        && element.focusable
+        && element.clickable
+        && !element.accessibility.disabled
+    {
+        let id = element.runtime_id;
+        neighbors.first.get_or_insert(id);
+        if neighbors.found_focus && neighbors.next.is_none() {
+            neighbors.next = Some(id);
+        } else if id == focused {
+            neighbors.found_focus = true;
+        } else if !neighbors.found_focus {
+            neighbors.previous = Some(id);
+        }
+        neighbors.last = Some(id);
+    }
+    for child in &element.children {
+        collect_radio_neighbors(child, group_id, focused, neighbors);
     }
 }
 
 struct DispatchMetadata<'a> {
     parents: &'a mut HashMap<ElementId, ElementId>,
     key_contexts: &'a mut HashMap<ElementId, KeyContext>,
+    activation_targets: &'a mut HashMap<ElementId, ElementId>,
     invalid_ids: &'a mut HashSet<ElementId>,
     form_ids: &'a mut HashSet<ElementId>,
     form_submitter_ids: &'a mut HashSet<ElementId>,
     context_menu_ids: &'a mut HashSet<ElementId>,
+    mouse_listener_bindings: &'a mut Vec<MouseListenerBinding>,
+    mouse_listener_ranges: &'a mut HashMap<ElementId, Range<usize>>,
+    mouse_listener_elements: &'a mut Vec<ElementId>,
+    key_listener_bindings: &'a mut Vec<KeyListenerBinding>,
+    key_listener_ranges: &'a mut HashMap<ElementId, Range<usize>>,
+    action_listener_bindings: &'a mut Vec<ActionListenerBinding>,
+    action_listener_ranges: &'a mut HashMap<ElementId, Range<usize>>,
+    scroll_wheel_ids: &'a mut HashSet<ElementId>,
+    touch_ids: &'a mut HashSet<ElementId>,
+    mouse_pressure_ids: &'a mut HashSet<ElementId>,
+    pinch_ids: &'a mut HashSet<ElementId>,
+    rotation_ids: &'a mut HashSet<ElementId>,
+    smart_magnify_ids: &'a mut HashSet<ElementId>,
 }
 
 fn collect_dispatch_metadata(
@@ -4716,6 +7816,9 @@ fn collect_dispatch_metadata(
     parent: Option<ElementId>,
     metadata: &mut DispatchMetadata<'_>,
 ) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
     if let Some(parent) = parent {
         metadata.parents.insert(element.runtime_id, parent);
     }
@@ -4723,6 +7826,14 @@ fn collect_dispatch_metadata(
         metadata
             .key_contexts
             .insert(element.runtime_id, context.clone());
+    }
+    if let Some(target) = element.activation_target
+        && !element.accessibility.disabled
+        && target != element.runtime_id
+    {
+        metadata
+            .activation_targets
+            .insert(element.runtime_id, target);
     }
     if element.accessibility.invalid {
         metadata.invalid_ids.insert(element.runtime_id);
@@ -4736,6 +7847,61 @@ fn collect_dispatch_metadata(
     if element.context_menu_listener && !element.accessibility.disabled {
         metadata.context_menu_ids.insert(element.runtime_id);
     }
+    if let Some(listeners) = &element.mouse_listeners
+        && !element.accessibility.disabled
+    {
+        let start = metadata.mouse_listener_bindings.len();
+        metadata
+            .mouse_listener_bindings
+            .extend(listeners.iter().copied());
+        let end = metadata.mouse_listener_bindings.len();
+        metadata
+            .mouse_listener_ranges
+            .insert(element.runtime_id, start..end);
+        metadata.mouse_listener_elements.push(element.runtime_id);
+    }
+    if let Some(listeners) = &element.key_listeners
+        && !element.accessibility.disabled
+    {
+        let start = metadata.key_listener_bindings.len();
+        metadata
+            .key_listener_bindings
+            .extend(listeners.iter().copied());
+        let end = metadata.key_listener_bindings.len();
+        metadata
+            .key_listener_ranges
+            .insert(element.runtime_id, start..end);
+    }
+    if let Some(listeners) = &element.action_listeners
+        && !element.accessibility.disabled
+    {
+        let start = metadata.action_listener_bindings.len();
+        metadata
+            .action_listener_bindings
+            .extend(listeners.iter().copied());
+        let end = metadata.action_listener_bindings.len();
+        metadata
+            .action_listener_ranges
+            .insert(element.runtime_id, start..end);
+    }
+    if element.scroll_wheel_listener && !element.accessibility.disabled {
+        metadata.scroll_wheel_ids.insert(element.runtime_id);
+    }
+    if element.touch_listener && !element.accessibility.disabled {
+        metadata.touch_ids.insert(element.runtime_id);
+    }
+    if element.mouse_pressure_listener && !element.accessibility.disabled {
+        metadata.mouse_pressure_ids.insert(element.runtime_id);
+    }
+    if element.pinch_listener && !element.accessibility.disabled {
+        metadata.pinch_ids.insert(element.runtime_id);
+    }
+    if element.rotation_listener && !element.accessibility.disabled {
+        metadata.rotation_ids.insert(element.runtime_id);
+    }
+    if element.smart_magnify_listener && !element.accessibility.disabled {
+        metadata.smart_magnify_ids.insert(element.runtime_id);
+    }
     for child in &element.children {
         collect_dispatch_metadata(child, Some(element.runtime_id), metadata);
     }
@@ -4745,6 +7911,9 @@ fn collect_drop_predicates(
     element: &Element,
     predicates: &mut HashMap<(ElementId, TypeId), DropPredicateCallback>,
 ) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
     for predicate in &element.drop_predicates {
         predicates.insert(
             (element.runtime_id, predicate.type_id),
@@ -4772,6 +7941,9 @@ fn collect_tooltips(
     element: &Element,
     tooltips: &mut HashMap<ElementId, Tooltip>,
 ) -> Result<(), UiError> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return Ok(());
+    }
     if let Some(tooltip) = &element.tooltip
         && !element.accessibility.disabled
     {
@@ -4787,6 +7959,9 @@ fn collect_tooltips(
 }
 
 fn find_auto_focus(element: &Element) -> Option<ElementId> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return None;
+    }
     if element.auto_focus && element.focusable && !element.accessibility.disabled {
         return Some(element.runtime_id);
     }
@@ -4800,6 +7975,7 @@ struct AccessibilityBuildContext<'a> {
     selectable_text_indices: &'a HashMap<ElementId, usize>,
     static_text_selection: Option<StaticTextSelection>,
     accessibility_text_ids: &'a HashMap<ElementId, AccessibilityNodeId>,
+    accessible_ids: &'a HashSet<ElementId>,
 }
 
 fn build_accessibility_nodes(
@@ -4807,6 +7983,9 @@ fn build_accessibility_nodes(
     context: &AccessibilityBuildContext<'_>,
     nodes: &mut Vec<(AccessibilityNodeId, AccessibilityNode)>,
 ) {
+    if !context.accessible_ids.contains(&element.runtime_id) {
+        return;
+    }
     let Some(bounds) = context.element_bounds.get(&element.runtime_id).copied() else {
         return;
     };
@@ -4815,6 +7994,7 @@ fn build_accessibility_nodes(
     let mut children = element
         .children
         .iter()
+        .filter(|child| context.accessible_ids.contains(&child.runtime_id))
         .map(|child| accessibility_id(child.runtime_id))
         .collect::<Vec<_>>();
     let text_input = context.text_inputs.get(&element.runtime_id).zip(
@@ -4930,14 +8110,111 @@ fn build_accessibility_nodes(
     if element.accessibility.disabled {
         node.set_disabled();
     }
+    if element.accessibility.required {
+        node.set_required();
+    }
     if element.accessibility.invalid {
         node.set_invalid(AccessibilityInvalid::True);
         if let Some(message) = &element.accessibility.validation_message {
             node.set_description(message.to_string());
         }
     }
-    if element.accessibility.selected {
+    if element.accessibility.role == AccessibilityRole::Tab {
+        node.set_selected(element.accessibility.selected);
+    } else if element.accessibility.selected {
         node.set_selected(true);
+    }
+    if let Some(toggled) = element.accessibility.toggled {
+        node.set_toggled(match toggled {
+            ToggleState::Off => AccessibilityToggled::False,
+            ToggleState::On => AccessibilityToggled::True,
+            ToggleState::Mixed => AccessibilityToggled::Mixed,
+        });
+    }
+    if let Some(expanded) = element.accessibility.expanded {
+        node.set_expanded(expanded);
+    }
+    if let Some(target) = element.accessibility.relations.controls()
+        && context.accessible_ids.contains(&target)
+    {
+        node.push_controlled(accessibility_id(target));
+    }
+    if let Some(target) = element.accessibility.relations.active_descendant()
+        && context.accessible_ids.contains(&target)
+    {
+        node.set_active_descendant(accessibility_id(target));
+    }
+    if let Some(target) = element.accessibility.relations.labelled_by()
+        && target != element.runtime_id
+        && context.accessible_ids.contains(&target)
+    {
+        node.push_labelled_by(accessibility_id(target));
+    }
+    if let Some(target) = element.accessibility.relations.described_by()
+        && target != element.runtime_id
+        && context.accessible_ids.contains(&target)
+    {
+        node.push_described_by(accessibility_id(target));
+    }
+    if let Some(target) = element.accessibility.relations.described_by_secondary()
+        && target != element.runtime_id
+        && context.accessible_ids.contains(&target)
+    {
+        node.push_described_by(accessibility_id(target));
+    }
+    if let Some(popup) = element.accessibility.has_popup {
+        node.set_has_popup(match popup {
+            AccessibilityPopup::Menu => AccessibilityHasPopup::Menu,
+            AccessibilityPopup::ListBox => AccessibilityHasPopup::Listbox,
+            AccessibilityPopup::Tree => AccessibilityHasPopup::Tree,
+            AccessibilityPopup::Grid => AccessibilityHasPopup::Grid,
+            AccessibilityPopup::Dialog => AccessibilityHasPopup::Dialog,
+        });
+    }
+    if let Some(behavior) = element.accessibility.auto_complete {
+        node.set_auto_complete(match behavior {
+            AccessibilityAutoComplete::Inline => NativeAccessibilityAutoComplete::Inline,
+            AccessibilityAutoComplete::List => NativeAccessibilityAutoComplete::List,
+            AccessibilityAutoComplete::Both => NativeAccessibilityAutoComplete::Both,
+        });
+    }
+    if let Some(orientation) = element.accessibility.orientation {
+        node.set_orientation(match orientation {
+            AccessibilityOrientation::Horizontal => NativeAccessibilityOrientation::Horizontal,
+            AccessibilityOrientation::Vertical => NativeAccessibilityOrientation::Vertical,
+        });
+    }
+    if element.accessibility.modal {
+        node.set_modal();
+    }
+    let collection = element.accessibility.collection;
+    if let Some(value) = collection.row_count() {
+        node.set_row_count(value);
+    }
+    if let Some(value) = collection.column_count() {
+        node.set_column_count(value);
+    }
+    if let Some(value) = collection.row_index() {
+        node.set_row_index(value);
+    }
+    if let Some(value) = collection.column_index() {
+        node.set_column_index(value);
+    }
+    if let Some(value) = collection.level() {
+        node.set_level(value);
+    }
+    if let Some(value) = collection.size_of_set() {
+        node.set_size_of_set(value);
+    }
+    if let Some(value) = collection.position_in_set() {
+        node.set_position_in_set(value);
+    }
+    if let Some(direction) = collection.sort_direction {
+        node.set_sort_direction(match direction {
+            AccessibilitySortDirection::Ascending => NativeAccessibilitySortDirection::Ascending,
+            AccessibilitySortDirection::Descending => NativeAccessibilitySortDirection::Descending,
+            AccessibilitySortDirection::Other => NativeAccessibilitySortDirection::Other,
+        });
     }
     if element.focusable && !element.accessibility.disabled {
         node.add_action(Action::Focus);
@@ -4954,6 +8231,9 @@ fn build_accessibility_nodes(
 }
 
 fn accessibility_label(element: &Element) -> Option<String> {
+    if element.is_display_none() || element.is_visibility_hidden() || element.accessibility.hidden {
+        return None;
+    }
     if let Some(label) = &element.accessibility.label {
         return Some(label.to_string());
     }
@@ -4972,6 +8252,9 @@ fn accessibility_label(element: &Element) -> Option<String> {
 }
 
 fn collect_text(element: &Element, output: &mut String) {
+    if element.is_display_none() || element.is_visibility_hidden() || element.accessibility.hidden {
+        return;
+    }
     if let ElementKind::Text(content) = &element.kind {
         if !output.is_empty() {
             output.push(' ');
@@ -5013,14 +8296,79 @@ fn accessibility_role(role: AccessibilityRole) -> Role {
         AccessibilityRole::ListItem => Role::ListItem,
         AccessibilityRole::Heading => Role::Heading,
         AccessibilityRole::CheckBox => Role::CheckBox,
+        AccessibilityRole::RadioButton => Role::RadioButton,
+        AccessibilityRole::RadioGroup => Role::RadioGroup,
+        AccessibilityRole::Switch => Role::Switch,
         AccessibilityRole::TextInput => Role::TextInput,
         AccessibilityRole::MultilineTextInput => Role::MultilineTextInput,
         AccessibilityRole::Dialog => Role::Dialog,
+        AccessibilityRole::AlertDialog => Role::AlertDialog,
         AccessibilityRole::Menu => Role::Menu,
         AccessibilityRole::MenuItem => Role::MenuItem,
+        AccessibilityRole::MenuItemCheckBox => Role::MenuItemCheckBox,
+        AccessibilityRole::MenuItemRadio => Role::MenuItemRadio,
+        AccessibilityRole::Separator => Role::Splitter,
+        AccessibilityRole::Group => Role::Group,
+        AccessibilityRole::Region => Role::Region,
+        AccessibilityRole::ListBox => Role::ListBox,
+        AccessibilityRole::ListBoxOption => Role::ListBoxOption,
+        AccessibilityRole::ComboBox => Role::ComboBox,
+        AccessibilityRole::EditableComboBox => Role::EditableComboBox,
+        AccessibilityRole::Table => Role::Table,
+        AccessibilityRole::Tree => Role::Tree,
+        AccessibilityRole::Grid => Role::Grid,
+        AccessibilityRole::Row => Role::Row,
+        AccessibilityRole::ColumnHeader => Role::ColumnHeader,
+        AccessibilityRole::RowHeader => Role::RowHeader,
+        AccessibilityRole::GridCell => Role::GridCell,
+        AccessibilityRole::TreeItem => Role::TreeItem,
+        AccessibilityRole::Tab => Role::Tab,
+        AccessibilityRole::TabList => Role::TabList,
+        AccessibilityRole::TabPanel => Role::TabPanel,
         AccessibilityRole::Tooltip => Role::Tooltip,
         AccessibilityRole::Form => Role::Form,
     }
+}
+
+fn collect_displayed_ids(element: &Element, ids: &mut HashSet<ElementId>) {
+    if element.is_display_none() {
+        return;
+    }
+    ids.insert(element.runtime_id);
+    for child in &element.children {
+        collect_displayed_ids(child, ids);
+    }
+}
+
+fn collect_visible_ids(element: &Element, ids: &mut HashSet<ElementId>) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
+    ids.insert(element.runtime_id);
+    for child in &element.children {
+        collect_visible_ids(child, ids);
+    }
+}
+
+fn collect_accessible_ids(element: &Element, ids: &mut HashSet<ElementId>) {
+    if element.is_display_none() || element.is_visibility_hidden() || element.accessibility.hidden {
+        return;
+    }
+    ids.insert(element.runtime_id);
+    for child in &element.children {
+        collect_accessible_ids(child, ids);
+    }
+}
+
+fn accessibility_tree_contains(element: &Element, target: ElementId) -> bool {
+    if element.is_display_none() || element.is_visibility_hidden() || element.accessibility.hidden {
+        return false;
+    }
+    element.runtime_id == target
+        || element
+            .children
+            .iter()
+            .any(|child| accessibility_tree_contains(child, target))
 }
 
 fn mix_id(parent: u64, child: u64) -> u64 {
@@ -5045,11 +8393,42 @@ fn collect_explicit_ids(element: &Element, ids: &mut HashSet<ElementId>) -> Resu
     Ok(())
 }
 
+fn validate_style_transition_count(element: &Element, count: &mut usize) -> Result<(), UiError> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return Ok(());
+    }
+    if element.transition.is_some() {
+        if *count == MAX_STYLE_TRANSITIONS_PER_WINDOW {
+            return Err(UiError::TooManyStyleTransitions);
+        }
+        *count += 1;
+    }
+    for child in &element.children {
+        validate_style_transition_count(child, count)?;
+    }
+    Ok(())
+}
+
+fn collect_style_transition_ids(element: &Element, ids: &mut HashSet<ElementId>) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
+    if element.transition.is_some() {
+        ids.insert(element.runtime_id);
+    }
+    for child in &element.children {
+        collect_style_transition_ids(child, ids);
+    }
+}
+
 fn sync_text_inputs(
     element: &Element,
     inputs: &mut HashMap<ElementId, TextInputState>,
     ids: &mut HashSet<ElementId>,
 ) {
+    if element.is_display_none() {
+        return;
+    }
     if let ElementKind::TextInput(input) = &element.kind {
         ids.insert(element.runtime_id);
         inputs
@@ -5092,6 +8471,9 @@ fn collect_selectable_texts(
     entries: &mut Vec<SelectableTextEntry>,
     indices: &mut HashMap<ElementId, usize>,
 ) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
     if let Some(content) = selectable_text_content(element) {
         let document_index = entries.len();
         entries.push(SelectableTextEntry {
@@ -5255,15 +8637,18 @@ fn static_selection_range_for_entry(
 
 fn sync_virtual_scrolls(
     element: &Element,
-    handles: &mut HashMap<ElementId, VirtualScrollHandle>,
+    handles: &mut HashMap<ElementId, RetainedVirtualScroll>,
     offsets: &mut HashMap<ElementId, Vector>,
     scrollbar_states: &mut HashMap<ElementId, ScrollbarState>,
     now: Instant,
 ) {
+    if element.is_display_none() {
+        return;
+    }
     if let Some(virtual_scroll) = &element.virtual_scroll {
         let max_offset = virtual_scroll.max_offset_y.max(0.0);
         let next = virtual_scroll.handle.offset().clamp(0.0, max_offset);
-        virtual_scroll.handle.set_offset(next);
+        virtual_scroll.handle.set_offset_silent(next);
         let previous = offsets.insert(element.runtime_id, Vector::new(0.0, next));
         if previous.is_some_and(|previous| previous.y != next) {
             let state = scrollbar_states.entry(element.runtime_id).or_default();
@@ -5271,7 +8656,13 @@ fn sync_virtual_scrolls(
                 state.visible_until = now.checked_add(SCROLLBAR_AUTO_HIDE_DELAY);
             }
         }
-        handles.insert(element.runtime_id, virtual_scroll.handle.clone());
+        handles.insert(
+            element.runtime_id,
+            RetainedVirtualScroll {
+                handle: virtual_scroll.handle.clone(),
+                measurement_revision: virtual_scroll.measurement_revision,
+            },
+        );
     }
     for child in &element.children {
         sync_virtual_scrolls(child, handles, offsets, scrollbar_states, now);
@@ -5284,6 +8675,9 @@ fn sync_animations(
     ids: &mut HashSet<ElementId>,
     now: Instant,
 ) {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return;
+    }
     if let ElementKind::Image(image) = &element.kind
         && let ImageResolution::Animated(asset) = &image.resolved
     {
@@ -5301,6 +8695,100 @@ fn sync_animations(
     for child in &element.children {
         sync_animations(child, animations, ids, now);
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_declarative_animations(
+    element: &mut Element,
+    playbacks: &mut HashMap<ElementId, DeclarativeAnimationPlayback>,
+    motion_ids: &mut HashSet<ElementId>,
+    time_animation_ids: &mut HashSet<ElementId>,
+    springs: &mut HashMap<ElementId, DeclarativeSpringPlayback>,
+    spring_ids: &mut HashSet<ElementId>,
+    request_frame: &mut bool,
+    deadline: &mut Option<Instant>,
+    now: Instant,
+    animation_epoch: Instant,
+    enabled: bool,
+    reduce_motion: bool,
+    resolved_motion_ids: &mut Vec<ElementId>,
+) -> Result<(), UiError> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return Ok(());
+    }
+    if let Some(ElementAnimation {
+        id,
+        stages,
+        animator,
+    }) = element.animation.take()
+    {
+        if motion_ids.contains(&id) {
+            return Err(UiError::DuplicateAnimationId(id));
+        }
+        if motion_ids.len() == MAX_DECLARATIVE_ANIMATIONS_PER_WINDOW {
+            return Err(UiError::TooManyDeclarativeAnimations);
+        }
+        motion_ids.insert(id);
+        time_animation_ids.insert(id);
+        resolved_motion_ids.push(id);
+        let sample = playbacks
+            .entry(id)
+            .or_insert_with(|| DeclarativeAnimationPlayback::new(now))
+            .sample(&stages, now, animation_epoch, enabled, reduce_motion);
+        *request_frame |= sample.request_frame;
+        if let Some(next) = sample.deadline {
+            *deadline = Some(deadline.map_or(next, |current| current.min(next)));
+        }
+
+        let base = std::mem::replace(element, crate::div());
+        let mut resolved = animator(base, sample.animation_ix, sample.value);
+        // The wrapper is declaration metadata, not part of the retained paint tree. An animator
+        // may still create independently animated descendants, which are resolved below.
+        resolved.animation = None;
+        *element = resolved;
+    }
+
+    if let Some(spring) = element.spring.take() {
+        let id = spring.id;
+        if motion_ids.contains(&id) {
+            return Err(UiError::DuplicateAnimationId(id));
+        }
+        if motion_ids.len() == MAX_DECLARATIVE_ANIMATIONS_PER_WINDOW {
+            return Err(UiError::TooManyDeclarativeAnimations);
+        }
+        motion_ids.insert(id);
+        spring_ids.insert(id);
+        resolved_motion_ids.push(id);
+        let sample = springs
+            .entry(id)
+            .or_insert_with(|| DeclarativeSpringPlayback::new(&spring, now))
+            .sample(&spring, now, enabled, reduce_motion);
+        *request_frame |= sample.request_frame;
+
+        let base = std::mem::replace(element, crate::div());
+        let mut resolved = (spring.animator)(base, sample.value);
+        resolved.spring = None;
+        *element = resolved;
+    }
+
+    for child in &mut element.children {
+        resolve_declarative_animations(
+            child,
+            playbacks,
+            motion_ids,
+            time_animation_ids,
+            springs,
+            spring_ids,
+            request_frame,
+            deadline,
+            now,
+            animation_epoch,
+            enabled,
+            reduce_motion,
+            resolved_motion_ids,
+        )?;
+    }
+    Ok(())
 }
 
 fn sync_accessibility_text_ids(
@@ -5335,9 +8823,98 @@ mod tests {
     use super::*;
     use crate::element::InputConstraints;
     use crate::{
-        AnimatedImageFrame, AnimationRepeat, FocusHandle, Image, PathBuilder, button, div, form,
-        text,
+        AnimatedImageFrame, Animation, AnimationExt, AnimationRepeat, FocusHandle, Image,
+        PathBuilder, SpringAnimation, Transition, button, container_query, div, form, img, text,
+        text_input,
     };
+
+    struct TestTextLayout;
+
+    impl TextLayoutEngine for TestTextLayout {
+        fn measure_text(
+            &mut self,
+            _id: TextId,
+            content: &Arc<str>,
+            style: &TextStyle,
+            max_width: Option<f32>,
+            _scale_factor: f32,
+        ) -> Size {
+            let natural_width = content.chars().count() as f32 * style.font_size * 0.5;
+            Size::new(
+                max_width.map_or(natural_width, |width| natural_width.min(width)),
+                style.line_height,
+            )
+        }
+
+        fn measure_styled_text(
+            &mut self,
+            id: TextId,
+            content: &Arc<str>,
+            style: &TextStyle,
+            _highlights: &Arc<[TextHighlight]>,
+            max_width: Option<f32>,
+            scale_factor: f32,
+        ) -> Size {
+            self.measure_text(id, content, style, max_width, scale_factor)
+        }
+
+        fn text_geometry(
+            &mut self,
+            _id: TextId,
+            _content: &Arc<str>,
+            _style: &TextStyle,
+            _highlights: Option<&Arc<[TextHighlight]>>,
+            _width: f32,
+            _scale_factor: f32,
+            _visible_y: std::ops::Range<f32>,
+        ) -> crate::renderer::StyledTextGeometry {
+            crate::renderer::StyledTextGeometry {
+                backgrounds: Vec::new(),
+                decorations: Vec::new(),
+            }
+        }
+
+        fn text_caret_position_with_highlights(
+            &mut self,
+            _id: TextId,
+            _content: &Arc<str>,
+            _style: &TextStyle,
+            _highlights: Option<&Arc<[TextHighlight]>>,
+            _width: f32,
+            _scale_factor: f32,
+            _index: usize,
+        ) -> Point {
+            Point::ZERO
+        }
+
+        fn text_index_for_point_with_highlights(
+            &mut self,
+            _id: TextId,
+            _content: &Arc<str>,
+            _style: &TextStyle,
+            _highlights: Option<&Arc<[TextHighlight]>>,
+            _width: f32,
+            _scale_factor: f32,
+            _point: Point,
+        ) -> usize {
+            0
+        }
+
+        fn text_selection_rects_with_highlights(
+            &mut self,
+            _id: TextId,
+            _content: &Arc<str>,
+            _style: &TextStyle,
+            _highlights: Option<&Arc<[TextHighlight]>>,
+            _width: f32,
+            _scale_factor: f32,
+            _visible_y: std::ops::Range<f32>,
+            _start: usize,
+            _end: usize,
+        ) -> Vec<Rect> {
+            Vec::new()
+        }
+    }
 
     fn playback_animation(repeat: AnimationRepeat) -> AnimatedImage {
         AnimatedImage::with_repeat(
@@ -5360,6 +8937,631 @@ mod tests {
     fn generated_ids_are_path_stable() {
         assert_eq!(mix_id(42, 3), mix_id(42, 3));
         assert_ne!(mix_id(42, 3), mix_id(42, 4));
+    }
+
+    #[test]
+    fn container_query_receives_its_fixed_box_and_isolates_child_layout() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let callback_observed = observed.clone();
+        let root = div().size(500.0, 300.0).child(
+            container_query(move |size| {
+                callback_observed.borrow_mut().push(size);
+                div().id("oversized-query-child").size(900.0, 700.0)
+            })
+            .size(240.0, 120.0)
+            .flex_none(),
+        );
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+
+        tree.set_root(root, Size::new(500.0, 300.0), 1.0, &mut renderer)
+            .unwrap();
+
+        assert_eq!(observed.borrow().as_slice(), &[Size::new(240.0, 120.0)]);
+        let query = &tree.root.as_ref().unwrap().children[0];
+        let query_layout = tree.taffy.layout(query.taffy_node.unwrap()).unwrap();
+        let child = &query.children[0];
+        let child_layout = tree.taffy.layout(child.taffy_node.unwrap()).unwrap();
+        assert_eq!(query_layout.size.width, 240.0);
+        assert_eq!(query_layout.size.height, 120.0);
+        assert_eq!(child_layout.size.width, 900.0);
+        assert_eq!(child_layout.size.height, 700.0);
+
+        let mut scene = Scene::new();
+        tree.paint_at(&mut scene, &mut renderer, Instant::now())
+            .unwrap();
+        assert_eq!(
+            tree.element_bounds("oversized-query-child".into()),
+            Some(Rect::new(0.0, 0.0, 900.0, 700.0))
+        );
+    }
+
+    #[test]
+    fn container_query_redeclares_only_when_its_assigned_size_changes() {
+        let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let callback_calls = calls.clone();
+        let root = container_query(move |size| {
+            callback_calls.borrow_mut().push(size);
+            if size.width < 300.0 {
+                div().id("narrow-query-result")
+            } else {
+                div().id("wide-query-result")
+            }
+        });
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+
+        tree.set_root(root, Size::new(240.0, 160.0), 1.0, &mut renderer)
+            .unwrap();
+        assert!(tree.contains_element("narrow-query-result".into()));
+        assert!(!tree.contains_element("wide-query-result".into()));
+
+        tree.layout(Size::new(520.0, 160.0), 1.0, &mut renderer)
+            .unwrap();
+        assert!(!tree.contains_element("narrow-query-result".into()));
+        assert!(tree.contains_element("wide-query-result".into()));
+
+        tree.layout(Size::new(520.0, 160.0), 1.0, &mut renderer)
+            .unwrap();
+        assert_eq!(
+            calls.borrow().as_slice(),
+            &[Size::new(240.0, 160.0), Size::new(520.0, 160.0)]
+        );
+    }
+
+    #[test]
+    fn container_query_prepares_callback_subtrees_before_layout() {
+        let prepared = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        let prepared_for_hook = prepared.clone();
+
+        tree.set_root_with_prepare(
+            container_query(|_| div().id("prepared-query-result")),
+            Size::new(320.0, 200.0),
+            1.0,
+            &mut renderer,
+            move |subtree| {
+                assert_eq!(subtree.explicit_id, Some("prepared-query-result".into()));
+                prepared_for_hook.set(prepared_for_hook.get() + 1);
+            },
+        )
+        .unwrap();
+
+        assert_eq!(prepared.get(), 1);
+    }
+
+    #[test]
+    fn container_query_descendants_participate_in_initial_focus_resolution() {
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+
+        tree.set_root(
+            container_query(|_| {
+                crate::text_input("")
+                    .id("query-autofocus-input")
+                    .auto_focus()
+            }),
+            Size::new(320.0, 200.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+
+        assert_eq!(tree.focused(), Some("query-autofocus-input".into()));
+    }
+
+    #[test]
+    fn container_query_shells_do_not_unmount_stable_retained_state() {
+        let started = Instant::now();
+        let animated = playback_animation(AnimationRepeat::Infinite);
+        let declaration = || {
+            let animated = animated.clone();
+            container_query(move |_| {
+                div().children([
+                    div()
+                        .id("query-scroll-state")
+                        .size(100.0, 100.0)
+                        .overflow_y_scroll(),
+                    img(animated.clone()).id("query-animated-image"),
+                    div()
+                        .id("query-transition-state")
+                        .transition(Transition::colors(Duration::from_millis(100))),
+                ])
+            })
+        };
+        let mut tree = UiTree::new_at(started);
+        let mut renderer = TestTextLayout;
+        tree.set_root(declaration(), Size::new(360.0, 240.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let scroll_id: ElementId = "query-scroll-state".into();
+        let image_id: ElementId = "query-animated-image".into();
+        let transition_id: ElementId = "query-transition-state".into();
+        tree.scroll_offsets
+            .insert(scroll_id, Vector::new(0.0, 37.0));
+        tree.animations.get_mut(&image_id).unwrap().elapsed = Duration::from_millis(23);
+        let transition = Transition::colors(Duration::from_millis(100));
+        tree.style_transitions.insert(
+            transition_id,
+            StyleTransitionPlayback::new(
+                transition_test_style(Color::BLACK, 0.0),
+                &transition,
+                started,
+            ),
+        );
+
+        tree.set_root(declaration(), Size::new(360.0, 240.0), 1.0, &mut renderer)
+            .unwrap();
+
+        assert_eq!(tree.scroll_offsets[&scroll_id].y, 37.0);
+        assert_eq!(
+            tree.animations[&image_id].elapsed,
+            Duration::from_millis(23)
+        );
+        assert!(tree.style_transitions.contains_key(&transition_id));
+    }
+
+    #[test]
+    fn keyed_query_motion_survives_a_size_redeclaration_and_unmounts_cleanly() {
+        let start = Instant::now();
+        let root = container_query(|size| {
+            if size.width < 500.0 {
+                div().with_animation(
+                    "query-motion",
+                    Animation::new(Duration::from_millis(100)),
+                    |element, phase| element.w(100.0 * phase),
+                )
+            } else {
+                div()
+            }
+        });
+        let mut tree = UiTree::new_at(start);
+        let mut renderer = TestTextLayout;
+        tree.set_root_unlaid(root, Size::new(240.0, 160.0), 1.0, start, false)
+            .unwrap();
+        tree.layout_with_prepare_at(
+            Size::new(240.0, 160.0),
+            1.0,
+            &mut renderer,
+            start,
+            &mut |_| {},
+        )
+        .unwrap();
+
+        let motion_id: ElementId = "query-motion".into();
+        assert_eq!(tree.declarative_animations[&motion_id].last_value, 0.0);
+        tree.layout_with_prepare_at(
+            Size::new(360.0, 160.0),
+            1.0,
+            &mut renderer,
+            start + Duration::from_millis(50),
+            &mut |_| {},
+        )
+        .unwrap();
+        assert!(
+            (tree.declarative_animations[&motion_id].last_value - 0.5).abs() < 0.001,
+            "the stable animation ID should retain elapsed time across callback replacement"
+        );
+
+        tree.layout_with_prepare_at(
+            Size::new(600.0, 160.0),
+            1.0,
+            &mut renderer,
+            start + Duration::from_millis(75),
+            &mut |_| {},
+        )
+        .unwrap();
+        assert!(!tree.declarative_animations.contains_key(&motion_id));
+        assert!(!tree.declarative_animation_ids.contains(&motion_id));
+    }
+
+    #[test]
+    fn detached_container_queries_are_pointer_passive_and_resize_on_demand() {
+        let start = Instant::now();
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let callback_observed = observed.clone();
+        let template = container_query(move |size| {
+            callback_observed.borrow_mut().push(size);
+            div().clickable().cursor_pointer().with_animation(
+                "detached-query-motion",
+                Animation::new(Duration::from_millis(100)),
+                |element, phase| element.w(10.0 + phase),
+            )
+        });
+        let mut renderer = TestTextLayout;
+        let mut tree = DetachedTree::new(
+            template,
+            ElementId::new(0xfeed),
+            Size::new(240.0, 160.0),
+            1.0,
+            &mut renderer,
+            start,
+            start,
+            true,
+            false,
+        )
+        .unwrap();
+
+        let child = &tree.root.children[0];
+        assert!(!child.clickable);
+        assert_eq!(child.cursor_style, None);
+        assert!(child.animation.is_none());
+        assert!(
+            tree.motion
+                .animations
+                .contains_key(&ElementId::from("detached-query-motion"))
+        );
+
+        tree.layout(Size::new(420.0, 160.0), 1.0, &mut renderer)
+            .unwrap();
+        assert!(tree.motion.needs_resolve);
+        assert!(
+            tree.refresh(
+                Size::new(420.0, 160.0),
+                1.0,
+                &mut renderer,
+                start + Duration::from_millis(10),
+                true,
+                false,
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            observed.borrow().as_slice(),
+            &[Size::new(240.0, 160.0), Size::new(420.0, 160.0)]
+        );
+    }
+
+    #[test]
+    fn container_query_depth_is_hard_bounded_before_nested_layout_allocation() {
+        fn nested_query(depth: usize) -> Element {
+            if depth == 0 {
+                div()
+            } else {
+                container_query(move |_| nested_query(depth - 1))
+            }
+        }
+
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        let result = tree.set_root(
+            nested_query(MAX_CONTAINER_QUERY_DEPTH + 1),
+            Size::new(320.0, 200.0),
+            1.0,
+            &mut renderer,
+        );
+
+        assert!(matches!(result, Err(UiError::ContainerQueryDepthExceeded)));
+    }
+
+    #[test]
+    fn container_query_count_is_hard_bounded_before_layout() {
+        let root = div()
+            .children((0..=MAX_CONTAINER_QUERIES_PER_WINDOW).map(|_| container_query(|_| div())));
+        let mut tree = UiTree::new();
+        let result = tree.set_root_for_test(root, Size::new(640.0, 480.0), 1.0, Instant::now());
+
+        assert!(matches!(result, Err(UiError::TooManyContainerQueries)));
+        assert!(tree.root_node.is_none());
+    }
+
+    #[test]
+    fn declarative_animation_chains_carry_elapsed_time_across_stages() {
+        let start = Instant::now();
+        let stages = [
+            Animation::new(Duration::from_millis(100)),
+            Animation::new(Duration::from_millis(200)),
+        ];
+        let mut playback = DeclarativeAnimationPlayback::new(start);
+
+        let first = playback.sample(&stages, start, start, true, false);
+        assert_eq!(first.animation_ix, 0);
+        assert_eq!(first.value, 0.0);
+
+        let second = playback.sample(
+            &stages,
+            start + Duration::from_millis(150),
+            start,
+            true,
+            false,
+        );
+        assert_eq!(second.animation_ix, 1);
+        assert!((second.value - 0.25).abs() < 0.001);
+
+        let final_sample = playback.sample(
+            &stages,
+            start + Duration::from_millis(300),
+            start,
+            true,
+            false,
+        );
+        assert_eq!(final_sample.animation_ix, 1);
+        assert_eq!(final_sample.value, 1.0);
+        assert!(!final_sample.request_frame);
+        assert_eq!(final_sample.deadline, None);
+    }
+
+    #[test]
+    fn duplicate_declarative_motion_ids_fail_before_layout() {
+        let animation = || Animation::new(Duration::from_millis(100));
+        let root = div().children([
+            div().with_animation("shared-motion", animation(), |element, _| element),
+            div().with_animation("shared-motion", animation(), |element, _| element),
+        ]);
+        let mut tree = UiTree::new();
+        let result = tree.set_root_for_test(root, Size::new(640.0, 480.0), 1.0, Instant::now());
+
+        assert!(matches!(result, Err(UiError::DuplicateAnimationId(_))));
+    }
+
+    #[test]
+    fn style_transition_registry_is_hard_bounded_before_layout() {
+        let root = div().children(
+            (0..=MAX_STYLE_TRANSITIONS_PER_WINDOW)
+                .map(|_| div().transition(Transition::colors(Duration::from_millis(100)))),
+        );
+        let mut tree = UiTree::new();
+        let result = tree.set_root_for_test(root, Size::new(640.0, 480.0), 1.0, Instant::now());
+
+        assert!(matches!(result, Err(UiError::TooManyStyleTransitions)));
+        assert!(tree.root_node.is_none());
+        assert!(tree.style_transitions.is_empty());
+    }
+
+    fn transition_test_style(background: Color, radius: f32) -> TransitionPaintStyle {
+        TransitionPaintStyle {
+            background,
+            border_color: Color::TRANSPARENT,
+            border_width: 0.0,
+            radius,
+            opacity: 1.0,
+            text_color: None,
+            text_fallback: Color::WHITE,
+            shadows: TransitionShadowList::empty(),
+        }
+    }
+
+    #[test]
+    fn style_transitions_retarget_continuously_and_apply_unselected_properties_immediately() {
+        let start = Instant::now();
+        let from = transition_test_style(Color::BLACK, 0.0);
+        let to = transition_test_style(Color::WHITE, 20.0);
+        let config = Transition::colors(Duration::from_millis(100));
+        let mut playback = StyleTransitionPlayback::new(from, &config, start);
+
+        let initial = playback.sample(to, &config, start, true, false);
+        assert_eq!(initial.background, Color::BLACK);
+        assert_eq!(initial.radius, 20.0);
+        assert!(playback.requests_frame());
+
+        let midpoint = playback.sample(to, &config, start + Duration::from_millis(50), true, false);
+        assert!((midpoint.background.r - 0.5).abs() < 0.001);
+        assert_eq!(midpoint.radius, 20.0);
+
+        let reversed = playback.sample(
+            from,
+            &config,
+            start + Duration::from_millis(50),
+            true,
+            false,
+        );
+        assert_eq!(reversed.background, midpoint.background);
+        assert_eq!(reversed.radius, 0.0);
+
+        let reduced = playback.sample(to, &config, start + Duration::from_millis(60), true, true);
+        assert_eq!(reduced, to);
+        assert!(!playback.active);
+        assert_eq!(playback.deadline(), None);
+    }
+
+    #[test]
+    fn style_transitions_interpolate_opacity_without_including_it_in_colors() {
+        let start = Instant::now();
+        let mut from = transition_test_style(Color::BLACK, 0.0);
+        from.opacity = 0.0;
+        let mut to = transition_test_style(Color::BLACK, 0.0);
+        to.opacity = 1.0;
+
+        let all = Transition::new(Duration::from_millis(100));
+        let mut playback = StyleTransitionPlayback::new(from, &all, start);
+        playback.sample(to, &all, start, true, false);
+        let midpoint = playback.sample(to, &all, start + Duration::from_millis(50), true, false);
+        assert!((midpoint.opacity - 0.5).abs() < 0.001);
+
+        let colors = Transition::colors(Duration::from_millis(100));
+        let mut playback = StyleTransitionPlayback::new(from, &colors, start);
+        assert_eq!(
+            playback.sample(to, &colors, start, true, false).opacity,
+            1.0
+        );
+        assert!(!playback.requests_frame());
+    }
+
+    #[test]
+    fn throttled_style_transitions_wake_at_completion_even_below_one_fps() {
+        let start = Instant::now();
+        let from = transition_test_style(Color::BLACK, 0.0);
+        let to = transition_test_style(Color::WHITE, 0.0);
+        let config = Transition::colors(Duration::from_millis(100)).with_max_fps(0.5);
+        let mut playback = StyleTransitionPlayback::new(from, &config, start);
+
+        playback.sample(to, &config, start, true, false);
+        assert_eq!(
+            playback.deadline(),
+            Some(start + Duration::from_millis(100))
+        );
+        assert!(!playback.requests_frame());
+        assert!(!playback.deadline_due(start + Duration::from_millis(99)));
+        assert!(playback.deadline_due(start + Duration::from_millis(100)));
+
+        let final_style =
+            playback.sample(to, &config, start + Duration::from_millis(100), true, false);
+        assert_eq!(final_style, to);
+        assert!(!playback.active);
+        assert_eq!(playback.deadline(), None);
+    }
+
+    #[test]
+    fn paused_style_transitions_preserve_time_and_shadow_interpolation_is_bounded() {
+        let start = Instant::now();
+        let mut from = transition_test_style(Color::BLACK, 0.0);
+        let mut to = transition_test_style(Color::WHITE, 0.0);
+        to.shadows = TransitionShadowList::from_slice(&[BoxShadow::new(10.0, 20.0, Color::WHITE)
+            .blur_radius(30.0)
+            .spread_radius(4.0)]);
+        from.shadows = TransitionShadowList::empty();
+        let config = Transition::new(Duration::from_millis(100));
+        let mut playback = StyleTransitionPlayback::new(from, &config, start);
+        playback.sample(to, &config, start, true, false);
+
+        playback.pause(start + Duration::from_millis(25));
+        let paused = playback.current;
+        assert_eq!(paused.shadows.as_slice().len(), 1);
+        assert!((paused.shadows.as_slice()[0].offset().x - 1.25).abs() < 0.001);
+        playback.resume(start + Duration::from_secs(10));
+        let resumed = playback.sample(to, &config, start + Duration::from_secs(10), true, false);
+        assert_eq!(resumed, paused);
+
+        let later = playback.sample(
+            to,
+            &config,
+            start + Duration::from_secs(10) + Duration::from_millis(25),
+            true,
+            false,
+        );
+        assert!((later.background.r - 0.5).abs() < 0.001);
+        assert!((later.shadows.as_slice()[0].offset().x - 5.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn capped_declarative_oneshots_always_schedule_their_terminal_frame() {
+        let start = Instant::now();
+        let stages = [Animation::new(Duration::from_millis(100)).with_max_fps(0.5)];
+        let mut playback = DeclarativeAnimationPlayback::new(start);
+        let sample = playback.sample(&stages, start, start, true, false);
+
+        assert_eq!(sample.deadline, Some(start + Duration::from_millis(100)));
+    }
+
+    #[test]
+    fn detached_motion_retains_exact_time_and_sanitizes_every_resolved_frame() {
+        let start = Instant::now();
+        let template = div()
+            .clickable()
+            .cursor_pointer()
+            .hover(|style| style.cursor_crosshair())
+            .with_animation(
+                "detached-motion",
+                Animation::new(Duration::from_millis(100)).with_max_fps(20.0),
+                |element, phase| {
+                    element
+                        .w(10.0 + 90.0 * phase)
+                        .clickable()
+                        .cursor_copy()
+                        .active(|style| style.cursor_grabbing())
+                        .tooltip("animator-added interaction")
+                },
+            );
+        let mut motion = DetachedMotionState::new(template, start);
+
+        let initial = motion.resolve(start, true, false).unwrap();
+        assert_eq!(absolute_length(initial.layout.size.width), Some(10.0));
+        assert!(!initial.clickable);
+        assert_eq!(initial.cursor_style, None);
+        assert_eq!(initial.hover.cursor_style, None);
+        assert_eq!(initial.active.cursor_style, None);
+        assert!(initial.tooltip.is_none());
+        assert!(initial.animation.is_none());
+        assert!(!motion.frame_requested);
+        assert_eq!(motion.deadline, Some(start + Duration::from_millis(50)));
+
+        let midpoint = start + Duration::from_millis(50);
+        assert!(!motion.deadline_due(midpoint - Duration::from_millis(1)));
+        assert!(motion.deadline_due(midpoint));
+        let midpoint_root = motion.resolve(midpoint, true, false).unwrap();
+        assert_eq!(absolute_length(midpoint_root.layout.size.width), Some(55.0));
+        assert!(!midpoint_root.clickable);
+        assert_eq!(midpoint_root.cursor_style, None);
+        assert_eq!(midpoint_root.hover.cursor_style, None);
+        assert_eq!(midpoint_root.active.cursor_style, None);
+        assert!(midpoint_root.tooltip.is_none());
+
+        motion.pause(midpoint);
+        let resumed_at = start + Duration::from_secs(10);
+        motion.resume(resumed_at);
+        let resumed = motion.resolve(resumed_at, true, false).unwrap();
+        assert_eq!(absolute_length(resumed.layout.size.width), Some(55.0));
+        assert_eq!(
+            motion.deadline,
+            Some(resumed_at + Duration::from_millis(50))
+        );
+
+        let completed_at = resumed_at + Duration::from_millis(50);
+        assert!(motion.deadline_due(completed_at));
+        let completed = motion.resolve(completed_at, true, false).unwrap();
+        assert_eq!(absolute_length(completed.layout.size.width), Some(100.0));
+        assert!(!motion.frame_requested);
+        assert_eq!(motion.deadline, None);
+        assert_eq!(motion.active_count(), 0);
+    }
+
+    #[test]
+    fn detached_motion_uses_a_local_duplicate_id_namespace() {
+        let start = Instant::now();
+        let animation = || Animation::new(Duration::from_millis(100));
+        let template = div().children([
+            div().with_animation("duplicate-detached", animation(), |element, _| element),
+            div().with_animation("duplicate-detached", animation(), |element, _| element),
+        ]);
+        let mut motion = DetachedMotionState::new(template, start);
+
+        assert!(matches!(
+            motion.resolve(start, true, false),
+            Err(UiError::DuplicateAnimationId(_))
+        ));
+    }
+
+    #[test]
+    fn detached_springs_keep_velocity_and_snap_under_reduce_motion() {
+        let start = Instant::now();
+        let template = div().with_spring(
+            "detached-spring",
+            SpringAnimation::new(SpringConfig::new(170.0, 14.0, 1.0))
+                .to(100.0)
+                .from(0.0),
+            |element, value| element.w(value),
+        );
+        let mut motion = DetachedMotionState::new(template, start);
+
+        let initial = motion.resolve(start, true, false).unwrap();
+        assert_eq!(absolute_length(initial.layout.size.width), Some(0.0));
+        assert!(motion.frame_requested);
+        assert_eq!(motion.active_count(), 1);
+
+        let advanced = motion
+            .resolve(start + Duration::from_millis(50), true, false)
+            .unwrap();
+        let width = absolute_length(advanced.layout.size.width).unwrap();
+        assert!(width > 0.0 && width < 100.0);
+        let velocity = motion
+            .springs
+            .values()
+            .next()
+            .expect("detached spring playback")
+            .state
+            .velocity;
+        assert!(velocity > 0.0);
+
+        motion.mark_needs_resolve();
+        motion.pause(start + Duration::from_millis(50));
+        assert!(motion.needs_resolve);
+        let reduced = motion
+            .resolve(start + Duration::from_millis(50), false, true)
+            .unwrap();
+        assert_eq!(absolute_length(reduced.layout.size.width), Some(100.0));
+        assert!(!motion.frame_requested);
+        assert_eq!(motion.active_count(), 0);
     }
 
     #[test]
@@ -5459,6 +9661,54 @@ mod tests {
     }
 
     #[test]
+    fn nested_opacity_multiplies_subtrees_and_restores_for_following_siblings() {
+        let root = div().size(40.0, 20.0).flex_row().children([
+            div()
+                .size(20.0, 20.0)
+                .opacity(0.5)
+                .child(div().size_full().opacity(0.5).bg(Color::WHITE)),
+            div().size(20.0, 20.0).bg(Color::WHITE),
+        ]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(40.0, 20.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert_eq!(scene.quads().len(), 2);
+        assert_eq!(scene.quads()[0].fill.a, 0.25);
+        assert_eq!(scene.quads()[1].fill.a, 1.0);
+        assert_eq!(scene.current_opacity(), 1.0);
+    }
+
+    #[test]
+    fn zero_opacity_keeps_pointer_and_accessibility_semantics() {
+        let control = ElementId::named("transparent-control");
+        let root = button()
+            .id(control)
+            .size(80.0, 24.0)
+            .opacity(0.0)
+            .clickable()
+            .child("Still interactive");
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(100.0, 40.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert!(scene.text_runs().is_empty());
+        assert!(tree.hit_regions.iter().any(|region| region.id == control));
+        assert!(
+            tree.accessibility_update("Opacity test")
+                .nodes
+                .iter()
+                .any(|(id, _)| *id == accessibility_id(control))
+        );
+    }
+
+    #[test]
     fn animation_playback_uses_exact_deadlines_and_pauses_without_catching_up() {
         let started = Instant::now();
         let mut playback =
@@ -5528,6 +9778,238 @@ mod tests {
     }
 
     #[test]
+    fn display_none_deactivates_the_complete_mounted_subtree() {
+        let animated = playback_animation(AnimationRepeat::Infinite);
+        let declaration = |hidden: bool| {
+            let subtree = div()
+                .id("hidden-subtree")
+                .w(120.0)
+                .children([
+                    button()
+                        .id("hidden-button")
+                        .clickable()
+                        .tooltip("Hidden tooltip")
+                        .auto_focus(),
+                    text_input("").id("hidden-input"),
+                    text("hidden selectable")
+                        .id("hidden-text")
+                        .user_select_text(),
+                    crate::img(animated.clone()).id("hidden-image"),
+                    div().id("hidden-motion").with_animation(
+                        "hidden-motion-clock",
+                        Animation::new(Duration::from_millis(100)).repeat(),
+                        |element, value| element.w(value * 10.0),
+                    ),
+                    div()
+                        .id("hidden-transition")
+                        .transition(Transition::colors(Duration::from_millis(100))),
+                ])
+                .when(hidden, Element::hidden);
+            div()
+                .size(300.0, 100.0)
+                .flex_row()
+                .children([subtree, div().id("visible-sibling").size(24.0, 24.0)])
+        };
+
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(
+            declaration(false),
+            Size::new(300.0, 100.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+
+        let button = ElementId::named("hidden-button");
+        let subtree = ElementId::named("hidden-subtree");
+        assert_eq!(tree.focused(), Some(button));
+        assert!(tree.clickable_ids.contains(&button));
+        assert!(tree.text_inputs.contains_key(&"hidden-input".into()));
+        assert!(
+            tree.selectable_text_indices
+                .contains_key(&"hidden-text".into())
+        );
+        assert!(tree.animations.contains_key(&"hidden-image".into()));
+        assert!(
+            tree.declarative_animation_ids
+                .contains(&"hidden-motion-clock".into())
+        );
+        assert!(
+            tree.style_transition_ids
+                .contains(&"hidden-transition".into())
+        );
+        assert!(tree.tooltips.contains_key(&button));
+
+        tree.hovered.insert(button);
+        tree.pressed = Some(button);
+        tree.dragging = Some(button);
+        tree.drag_over = Some(button);
+        tree.scroll_offsets.insert(subtree, Vector::new(0.0, 12.0));
+        tree.scrollbar_states
+            .insert(subtree, ScrollbarState::default());
+        tree.hovered_scrollbar = Some(subtree);
+        tree.scrollbar_drag = Some(ScrollbarDrag {
+            id: subtree,
+            pointer_origin_y: 0.0,
+            scroll_origin_y: 0.0,
+        });
+
+        tree.set_root(
+            declaration(true),
+            Size::new(300.0, 100.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+
+        // The declarations and their stable IDs still exist, but no hidden descendant remains
+        // mounted in an interactive, semantic, resource, or animation registry.
+        assert!(tree.contains_element(button));
+        assert!(!tree.displayed_ids.contains(&subtree));
+        assert!(!tree.displayed_ids.contains(&button));
+        assert!(!tree.focusable_ids.contains(&button));
+        assert!(!tree.clickable_ids.contains(&button));
+        assert_eq!(tree.focused(), None);
+        assert!(!tree.text_inputs.contains_key(&"hidden-input".into()));
+        assert!(
+            !tree
+                .selectable_text_indices
+                .contains_key(&"hidden-text".into())
+        );
+        assert!(!tree.animations.contains_key(&"hidden-image".into()));
+        assert!(tree.declarative_animation_ids.is_empty());
+        assert!(tree.declarative_animations.is_empty());
+        assert!(tree.style_transition_ids.is_empty());
+        assert!(tree.style_transitions.is_empty());
+        assert!(!tree.tooltips.contains_key(&button));
+        assert!(!tree.hovered.contains(&button));
+        assert_eq!(tree.pressed, None);
+        assert_eq!(tree.dragging, None);
+        assert_eq!(tree.drag_over, None);
+        assert!(!tree.scroll_offsets.contains_key(&subtree));
+        assert!(!tree.scrollbar_states.contains_key(&subtree));
+        assert_eq!(tree.hovered_scrollbar, None);
+        assert!(tree.scrollbar_drag.is_none());
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert_eq!(tree.element_bounds(subtree), None);
+        assert_eq!(
+            tree.element_bounds("visible-sibling".into()),
+            Some(Rect::new(0.0, 0.0, 24.0, 24.0))
+        );
+        let update = tree.accessibility_update("Display none test");
+        assert!(
+            !update
+                .nodes
+                .iter()
+                .any(|(id, _)| *id == accessibility_id(subtree))
+        );
+        assert!(
+            !update
+                .nodes
+                .iter()
+                .any(|(id, _)| *id == accessibility_id(button))
+        );
+        assert_eq!(tree.accessibility_element(accessibility_id(button)), None);
+    }
+
+    #[test]
+    fn display_none_does_not_resolve_descendant_container_queries() {
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let callback_calls = calls.clone();
+        let root = div().hidden().child(container_query(move |_| {
+            callback_calls.set(callback_calls.get() + 1);
+            div().id("hidden-query-result")
+        }));
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+
+        tree.set_root(root, Size::new(320.0, 200.0), 1.0, &mut renderer)
+            .unwrap();
+
+        assert_eq!(calls.get(), 0);
+        assert!(!tree.contains_element("hidden-query-result".into()));
+        assert!(!tree.declarative_animation_frame_requested());
+    }
+
+    #[test]
+    fn visibility_hidden_retains_layout_and_controlled_state_but_not_runtime_activity() {
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let callback_calls = calls.clone();
+        let invisible = div()
+            .id("invisible-subtree")
+            .w(120.0)
+            .invisible()
+            .children([
+                button()
+                    .id("invisible-button")
+                    .clickable()
+                    .auto_focus()
+                    .tooltip("Invisible tooltip"),
+                text_input("controlled value").id("invisible-input"),
+                container_query(move |_| {
+                    callback_calls.set(callback_calls.get() + 1);
+                    div().id("invisible-query-result")
+                }),
+                div().id("invisible-motion").with_animation(
+                    "invisible-motion-clock",
+                    Animation::new(Duration::from_millis(100)).repeat(),
+                    |element, value| element.w(value * 10.0),
+                ),
+            ]);
+        let root = div()
+            .size(300.0, 100.0)
+            .flex_row()
+            .children([invisible, div().id("visibility-sibling").size(24.0, 24.0)]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+
+        tree.set_root(root, Size::new(300.0, 100.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let subtree = ElementId::named("invisible-subtree");
+        let button = ElementId::named("invisible-button");
+        assert_eq!(
+            calls.get(),
+            1,
+            "visibility must not suppress layout callbacks"
+        );
+        assert!(tree.contains_element("invisible-query-result".into()));
+        assert!(tree.displayed_ids.contains(&subtree));
+        assert!(!tree.visible_ids.contains(&subtree));
+        assert!(!tree.visible_ids.contains(&button));
+        assert!(!tree.focusable_ids.contains(&button));
+        assert!(!tree.clickable_ids.contains(&button));
+        assert_eq!(tree.focused(), None);
+        assert!(
+            tree.text_inputs.contains_key(&"invisible-input".into()),
+            "layout-preserving visibility keeps controlled input state warm"
+        );
+        assert!(tree.tooltips.is_empty());
+        assert!(tree.declarative_animation_ids.is_empty());
+        assert!(tree.declarative_animations.is_empty());
+        assert!(!tree.declarative_animation_frame_requested());
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert_eq!(tree.element_bounds(subtree), None);
+        assert_eq!(
+            tree.element_bounds("visibility-sibling".into()),
+            Some(Rect::new(120.0, 0.0, 24.0, 24.0))
+        );
+        let update = tree.accessibility_update("Visibility test");
+        assert!(
+            !update
+                .nodes
+                .iter()
+                .any(|(id, _)| *id == accessibility_id(subtree))
+        );
+        assert_eq!(tree.accessibility_element(accessibility_id(button)), None);
+    }
+
+    #[test]
     fn tab_order_prioritizes_positive_indices_and_skips_disabled_controls() {
         let mut root = div()
             .child(button().id(10_u64).clickable().tab_index(2))
@@ -5548,6 +10030,60 @@ mod tests {
         assert!(tree.focus_next(true));
         assert_eq!(tree.focused(), Some(ElementId::new(20)));
         assert!(!tree.focusable_ids.contains(&ElementId::new(40)));
+    }
+
+    #[test]
+    fn topmost_focus_trap_contains_focus_and_falls_back_to_the_remaining_layer() {
+        let mut root = div()
+            .child(button().id(1_u64))
+            .child(
+                div()
+                    .id(10_u64)
+                    .overlay()
+                    .z_index(1)
+                    .focus_trap()
+                    .child(button().id(11_u64)),
+            )
+            .child(
+                div()
+                    .id(20_u64)
+                    .overlay()
+                    .z_index(2)
+                    .focus_trap()
+                    .children([button().id(21_u64), button().id(22_u64)]),
+            );
+        assign_runtime_ids(&mut root);
+
+        let mut tree = UiTree::new();
+        tree.root = Some(root);
+        tree.rebuild_focus_index();
+        assert_eq!(tree.active_focus_trap, Some(ElementId::new(20)));
+        assert_eq!(
+            tree.focus_order,
+            vec![ElementId::new(21), ElementId::new(22)]
+        );
+        assert_eq!(tree.focused(), Some(ElementId::new(21)));
+        assert!(!tree.focus(ElementId::new(1)));
+        assert!(!tree.focus(ElementId::new(11)));
+        assert!(tree.focus_next(false));
+        assert_eq!(tree.focused(), Some(ElementId::new(22)));
+        assert!(tree.focus_next(false));
+        assert_eq!(tree.focused(), Some(ElementId::new(21)));
+
+        let mut root = div().child(button().id(1_u64)).child(
+            div()
+                .id(10_u64)
+                .overlay()
+                .z_index(1)
+                .focus_trap()
+                .child(button().id(11_u64)),
+        );
+        assign_runtime_ids(&mut root);
+        tree.root = Some(root);
+        tree.rebuild_focus_index();
+        assert_eq!(tree.active_focus_trap, Some(ElementId::new(10)));
+        assert_eq!(tree.focus_order, vec![ElementId::new(11)]);
+        assert_eq!(tree.focused(), Some(ElementId::new(11)));
     }
 
     #[test]
@@ -5606,6 +10142,485 @@ mod tests {
     }
 
     #[test]
+    fn accessibility_hidden_suppresses_only_the_native_semantic_subtree() {
+        let input_id = ElementId::new(31);
+        let visual_list_id = ElementId::new(32);
+        let visual_option_id = ElementId::new(33);
+        let proxy_list_id = ElementId::new(34);
+        let proxy_option_id = ElementId::new(35);
+        let dangling_control_id = ElementId::new(36);
+        let root = div().children([
+            text_input("ap")
+                .id(input_id)
+                .accessibility_role(AccessibilityRole::EditableComboBox)
+                .accessibility_controls(proxy_list_id)
+                .accessibility_active_descendant(proxy_option_id),
+            div()
+                .id(visual_list_id)
+                .size(120.0, 48.0)
+                .accessibility_hidden(true)
+                .child(
+                    button()
+                        .id(visual_option_id)
+                        .size(120.0, 24.0)
+                        .clickable()
+                        .child("Visual Apple"),
+                ),
+            div()
+                .id(proxy_list_id)
+                .size(0.0, 0.0)
+                .accessibility_role(AccessibilityRole::ListBox)
+                .child(
+                    div()
+                        .id(proxy_option_id)
+                        .accessibility_role(AccessibilityRole::ListBoxOption)
+                        .child("Apple"),
+                ),
+            button()
+                .id(dangling_control_id)
+                .accessibility_controls(visual_option_id)
+                .child("Hidden relation target"),
+        ]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(320.0, 200.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+
+        assert!(tree.clickable_ids.contains(&visual_option_id));
+        assert!(tree.element_bounds(visual_option_id).is_some());
+
+        let update = tree.accessibility_update("Accessibility portal");
+        let node = |id| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+        };
+        assert!(node(visual_list_id).is_none());
+        assert!(node(visual_option_id).is_none());
+        assert_eq!(
+            tree.accessibility_element(accessibility_id(visual_option_id)),
+            None
+        );
+        assert_eq!(
+            node(input_id).expect("owner input").controls(),
+            &[accessibility_id(proxy_list_id)]
+        );
+        assert_eq!(
+            node(input_id).expect("owner input").active_descendant(),
+            Some(accessibility_id(proxy_option_id))
+        );
+        assert!(node(proxy_list_id).is_some());
+        assert!(node(proxy_option_id).is_some());
+        assert!(
+            node(dangling_control_id)
+                .expect("visible control")
+                .controls()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn accessibility_hidden_text_does_not_leak_into_a_parent_name() {
+        let control = button()
+            .child("Visible label")
+            .child(div().accessibility_hidden(true).child("Private duplicate"));
+        assert_eq!(
+            accessibility_label(&control).as_deref(),
+            Some("Visible label")
+        );
+    }
+
+    #[test]
+    fn selection_controls_project_exact_roles_toggle_states_and_actions() {
+        let checkbox_id = ElementId::new(41);
+        let radio_id = ElementId::new(42);
+        let switch_id = ElementId::new(43);
+        let disabled_id = ElementId::new(44);
+        let checkbox = crate::Checkbox::new(ToggleState::Mixed);
+        let radio = crate::Radio::new(true);
+        let switch = crate::Switch::new(false);
+        let root = div().children([
+            checkbox
+                .root_part(
+                    div()
+                        .child(checkbox.indicator_part(div().child("decorative mixed mark")))
+                        .child("Partial selection"),
+                )
+                .id(checkbox_id)
+                .accessibility_description("Some files are selected"),
+            radio
+                .root_part(
+                    div()
+                        .child(radio.indicator_part(div().child("decorative radio dot")))
+                        .child("Selected radio"),
+                )
+                .id(radio_id),
+            switch
+                .root_part(
+                    div()
+                        .child(switch.thumb_part(div().child("decorative switch thumb")))
+                        .child("Inactive switch"),
+                )
+                .id(switch_id),
+            crate::checkbox(false)
+                .id(disabled_id)
+                .disabled(true)
+                .child("Unavailable"),
+        ]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(320.0, 200.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let update = tree.accessibility_update("Selection controls");
+        let node = |id| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+                .expect("selection accessibility node")
+        };
+
+        assert_eq!(node(checkbox_id).role(), Role::CheckBox);
+        assert_eq!(
+            node(checkbox_id).toggled(),
+            Some(AccessibilityToggled::Mixed)
+        );
+        assert_eq!(node(checkbox_id).label(), Some("Partial selection"));
+        assert_eq!(
+            node(checkbox_id).description(),
+            Some("Some files are selected")
+        );
+        assert!(node(checkbox_id).supports_action(Action::Click));
+        assert_eq!(node(radio_id).role(), Role::RadioButton);
+        assert_eq!(node(radio_id).toggled(), Some(AccessibilityToggled::True));
+        assert_eq!(node(radio_id).label(), Some("Selected radio"));
+        assert_eq!(node(switch_id).role(), Role::Switch);
+        assert_eq!(node(switch_id).toggled(), Some(AccessibilityToggled::False));
+        assert_eq!(node(switch_id).label(), Some("Inactive switch"));
+        assert!(node(disabled_id).is_disabled());
+        assert!(!node(disabled_id).supports_action(Action::Click));
+        assert!(!node(disabled_id).supports_action(Action::Focus));
+    }
+
+    #[test]
+    fn separators_and_mounted_group_labels_project_exact_native_semantics() {
+        let group_id = ElementId::new(45);
+        let label_id = ElementId::new(46);
+        let separator_id = ElementId::new(47);
+        let self_label_id = ElementId::new(48);
+        let root = div().children([
+            div()
+                .id(group_id)
+                .accessibility_role(AccessibilityRole::Group)
+                .accessibility_labelled_by(label_id)
+                .children([
+                    div()
+                        .id(label_id)
+                        .accessibility_role(AccessibilityRole::Label)
+                        .accessibility_label("File"),
+                    div().child("Open"),
+                ]),
+            div()
+                .id(separator_id)
+                .accessibility_role(AccessibilityRole::Separator),
+            div()
+                .id(self_label_id)
+                .accessibility_role(AccessibilityRole::Group)
+                .accessibility_labelled_by(self_label_id),
+        ]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(320.0, 200.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let update = tree.accessibility_update("Menu structure");
+        let node = |id| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+                .expect("menu structure accessibility node")
+        };
+
+        assert_eq!(node(label_id).role(), Role::Label);
+        assert_eq!(node(group_id).labelled_by(), &[accessibility_id(label_id)]);
+        assert_eq!(node(separator_id).role(), Role::Splitter);
+        assert!(!node(separator_id).supports_action(Action::Click));
+        assert!(!node(separator_id).supports_action(Action::Focus));
+        assert!(node(self_label_id).labelled_by().is_empty());
+    }
+
+    #[test]
+    fn popover_trigger_projects_expansion_popup_kind_and_mounted_control_relation() {
+        let trigger_id = ElementId::new(51);
+        let surface_id = ElementId::new(52);
+        let popover =
+            crate::Popover::new(trigger_id, surface_id, true).kind(crate::PopoverKind::Dialog);
+        let root =
+            div()
+                .child(popover.trigger().child("Open details"))
+                .child(
+                    popover.positioner_part(div().child(popover.popup_part(div()).children([
+                        popover.title_part(text("Details")),
+                        popover.description_part(text("More information about this item.")),
+                    ]))),
+                );
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(420.0, 260.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let update = tree.accessibility_update("Popover");
+        let node = |id| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+                .expect("popover accessibility node")
+        };
+
+        let trigger = node(trigger_id);
+        assert_eq!(trigger.role(), Role::Button);
+        assert_eq!(trigger.is_expanded(), Some(true));
+        assert_eq!(trigger.has_popup(), Some(AccessibilityHasPopup::Dialog));
+        assert_eq!(trigger.controls(), &[accessibility_id(surface_id)]);
+        let popup = node(surface_id);
+        assert_eq!(popup.role(), Role::Dialog);
+        assert!(popup.supports_action(Action::Focus));
+        assert_eq!(popup.labelled_by(), &[accessibility_id(popover.title_id())]);
+        assert_eq!(
+            popup.described_by(),
+            &[accessibility_id(popover.description_id())]
+        );
+    }
+
+    #[test]
+    fn alert_dialog_projects_modal_role_and_mounted_title_description_relations() {
+        let dialog = crate::Dialog::alert("delete-dialog", true);
+        let root = dialog.root_part(div()).children([
+            dialog.backdrop_part(div()),
+            dialog.popup_part(div()).children([
+                dialog.title_part(text("Delete file?")),
+                dialog.description_part(text("This cannot be undone.")),
+            ]),
+        ]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(420.0, 260.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let update = tree.accessibility_update("Alert dialog");
+        let node = |id| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+                .expect("dialog accessibility node")
+        };
+
+        let popup = node(dialog.popup_id());
+        assert_eq!(popup.role(), Role::AlertDialog);
+        assert!(popup.is_modal());
+        assert_eq!(popup.labelled_by(), &[accessibility_id(dialog.title_id())]);
+        assert_eq!(
+            popup.described_by(),
+            &[accessibility_id(dialog.description_id())]
+        );
+        assert_eq!(node(dialog.title_id()).label(), Some("Delete file?"));
+        assert_eq!(
+            node(dialog.description_id()).label(),
+            Some("This cannot be undone.")
+        );
+    }
+
+    #[test]
+    fn comboboxes_project_editability_completion_options_and_active_descendants() {
+        let editable_id = ElementId::new(81);
+        let listbox_id = ElementId::new(82);
+        let option_id = ElementId::new(83);
+        let select_id = ElementId::new(84);
+        let root = div().children([
+            text_input("ap")
+                .track_focus(FocusHandle::new(editable_id))
+                .accessibility_role(AccessibilityRole::EditableComboBox)
+                .accessibility_label("Fruit")
+                .accessibility_expanded(true)
+                .accessibility_has_popup(AccessibilityPopup::ListBox)
+                .accessibility_auto_complete(AccessibilityAutoComplete::List)
+                .accessibility_controls(listbox_id)
+                .accessibility_active_descendant(option_id),
+            div()
+                .id(listbox_id)
+                .accessibility_role(AccessibilityRole::ListBox)
+                .accessibility_size_of_set(2)
+                .child(
+                    button()
+                        .id(option_id)
+                        .tab_index(-1)
+                        .accessibility_role(AccessibilityRole::ListBoxOption)
+                        .accessibility_position_in_set(0)
+                        .selected(true)
+                        .child("Apple"),
+                ),
+            button()
+                .id(select_id)
+                .accessibility_role(AccessibilityRole::ComboBox)
+                .accessibility_label("Letter")
+                .accessibility_value("Gamma")
+                .accessibility_expanded(false)
+                .accessibility_has_popup(AccessibilityPopup::ListBox)
+                .child("Gamma"),
+        ]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(640.0, 320.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let update = tree.accessibility_update("Comboboxes");
+        let node = |id| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+                .expect("combobox accessibility node")
+        };
+
+        let editable = node(editable_id);
+        assert_eq!(editable.role(), Role::EditableComboBox);
+        assert_eq!(
+            editable.auto_complete(),
+            Some(NativeAccessibilityAutoComplete::List)
+        );
+        assert_eq!(editable.is_expanded(), Some(true));
+        assert_eq!(editable.has_popup(), Some(AccessibilityHasPopup::Listbox));
+        assert_eq!(editable.controls(), &[accessibility_id(listbox_id)]);
+        assert_eq!(
+            editable.active_descendant(),
+            Some(accessibility_id(option_id))
+        );
+        assert_eq!(node(listbox_id).role(), Role::ListBox);
+        assert_eq!(node(listbox_id).size_of_set(), Some(2));
+        assert_eq!(node(option_id).role(), Role::ListBoxOption);
+        assert_eq!(node(option_id).position_in_set(), Some(0));
+        assert_eq!(node(option_id).is_selected(), Some(true));
+        assert_eq!(node(select_id).role(), Role::ComboBox);
+        assert_eq!(node(select_id).value(), Some("Gamma"));
+        assert_eq!(node(select_id).is_expanded(), Some(false));
+    }
+
+    #[test]
+    fn virtual_collections_project_active_items_counts_indices_levels_and_sorting() {
+        let grid_id = ElementId::new(61);
+        let header_id = ElementId::new(62);
+        let row_id = ElementId::new(63);
+        let cell_id = ElementId::new(64);
+        let tree_id = ElementId::new(71);
+        let tree_item_id = ElementId::new(72);
+        let root = div().children([
+            div()
+                .id(grid_id)
+                .track_focus(FocusHandle::new(grid_id))
+                .accessibility_role(AccessibilityRole::Grid)
+                .accessibility_row_count(100_001)
+                .accessibility_column_count(3)
+                .accessibility_active_descendant(cell_id)
+                .child(
+                    div()
+                        .id(header_id)
+                        .accessibility_role(AccessibilityRole::ColumnHeader)
+                        .accessibility_column_index(1)
+                        .accessibility_sort_direction(AccessibilitySortDirection::Ascending)
+                        .child("Status"),
+                )
+                .child(
+                    div()
+                        .id(row_id)
+                        .accessibility_role(AccessibilityRole::Row)
+                        .accessibility_row_index(50_001)
+                        .selected(true)
+                        .child(
+                            div()
+                                .id(cell_id)
+                                .accessibility_role(AccessibilityRole::GridCell)
+                                .accessibility_row_index(50_001)
+                                .accessibility_column_index(1)
+                                .selected(true)
+                                .child("Running"),
+                        ),
+                ),
+            div()
+                .id(tree_id)
+                .track_focus(FocusHandle::new(tree_id))
+                .accessibility_role(AccessibilityRole::Tree)
+                .accessibility_size_of_set(2)
+                .accessibility_active_descendant(tree_item_id)
+                .child(
+                    div()
+                        .id(tree_item_id)
+                        .accessibility_role(AccessibilityRole::TreeItem)
+                        .accessibility_level(2)
+                        .accessibility_position_in_set(3)
+                        .accessibility_size_of_set(5)
+                        .accessibility_expanded(true)
+                        .selected(true)
+                        .child("Sources"),
+                ),
+        ]);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(640.0, 320.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let update = tree.accessibility_update("Collections");
+        let node = |id| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+                .expect("collection accessibility node")
+        };
+
+        assert_eq!(node(grid_id).role(), Role::Grid);
+        assert_eq!(node(grid_id).row_count(), Some(100_001));
+        assert_eq!(node(grid_id).column_count(), Some(3));
+        assert_eq!(
+            node(grid_id).active_descendant(),
+            Some(accessibility_id(cell_id))
+        );
+        assert_eq!(node(header_id).role(), Role::ColumnHeader);
+        assert_eq!(node(header_id).column_index(), Some(1));
+        assert_eq!(
+            node(header_id).sort_direction(),
+            Some(NativeAccessibilitySortDirection::Ascending)
+        );
+        assert_eq!(node(row_id).role(), Role::Row);
+        assert_eq!(node(row_id).row_index(), Some(50_001));
+        assert_eq!(node(cell_id).role(), Role::GridCell);
+        assert_eq!(node(cell_id).column_index(), Some(1));
+        assert_eq!(node(tree_id).role(), Role::Tree);
+        assert_eq!(node(tree_id).size_of_set(), Some(2));
+        assert_eq!(
+            node(tree_id).active_descendant(),
+            Some(accessibility_id(tree_item_id))
+        );
+        assert_eq!(node(tree_item_id).role(), Role::TreeItem);
+        assert_eq!(node(tree_item_id).level(), Some(2));
+        assert_eq!(node(tree_item_id).position_in_set(), Some(3));
+        assert_eq!(node(tree_item_id).size_of_set(), Some(5));
+        assert_eq!(node(tree_item_id).is_expanded(), Some(true));
+    }
+
+    #[test]
     fn ime_notifications_compare_commits_against_the_preedit_backup() {
         let id = ElementId::new(44);
         let mut tree = UiTree::new();
@@ -5636,6 +10651,7 @@ mod tests {
         let id = ElementId::new(45);
         let mut root = crate::text_input("")
             .id(id)
+            .required(true)
             .invalid(true)
             .validation_message("A value is required");
         assign_runtime_ids(&mut root);
@@ -5665,6 +10681,7 @@ mod tests {
             .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
             .expect("input accessibility node");
         assert_eq!(node.invalid(), Some(AccessibilityInvalid::True));
+        assert!(node.is_required());
         assert_eq!(node.description(), Some("A value is required"));
     }
 
@@ -5873,6 +10890,23 @@ mod tests {
     }
 
     #[test]
+    fn editable_text_ignores_inherited_display_only_overflow() {
+        let root = div()
+            .line_clamp(2)
+            .text_ellipsis_middle()
+            .child(text_input("complete editable value"));
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(320.0, 180.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let input = &tree.root.as_ref().unwrap().children[0];
+        assert_eq!(input.resolved_typography.wrap, TextWrap::None);
+        assert!(input.resolved_typography.text_overflow.is_none());
+        assert!(input.resolved_typography.line_clamp.is_none());
+    }
+
+    #[test]
     fn anchored_placement_keeps_the_preferred_side_when_it_fits() {
         let placed = place_anchored(
             Rect::new(50.0, 50.0, 30.0, 20.0),
@@ -5980,8 +11014,8 @@ mod tests {
             drag_source: false,
             drop_target: false,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: false,
             blocks_pointer: false,
             app_region: None,
@@ -6022,7 +11056,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_context_menu_targets_bubble_but_overlays_do_not_click_through() {
+    fn nested_targeted_listeners_bubble_but_overlays_do_not_click_through() {
         let mut tree = UiTree::new();
         let parent = ElementId::new(90);
         let child = ElementId::new(91);
@@ -6037,8 +11071,8 @@ mod tests {
             drag_source: false,
             drop_target: false,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: false,
             blocks_pointer,
             app_region: None,
@@ -6048,15 +11082,208 @@ mod tests {
             },
         };
         tree.context_menu_ids.insert(parent);
+        tree.scroll_wheel_ids.insert(parent);
+        tree.touch_ids.insert(parent);
+        tree.mouse_pressure_ids.insert(parent);
+        tree.pinch_ids.insert(parent);
+        tree.rotation_ids.insert(parent);
+        tree.smart_magnify_ids.insert(parent);
         tree.parents.insert(child, parent);
         tree.hit_regions.push(region(parent, 0, false));
         tree.hit_regions.push(region(child, 1, false));
 
         let point = Point::new(10.0, 10.0);
         assert_eq!(tree.context_menu_listener_at(point), Some(parent));
+        assert_eq!(tree.scroll_wheel_listener_at(point), Some(parent));
+        assert_eq!(tree.touch_listener_at(point), Some(parent));
+        assert_eq!(tree.mouse_pressure_listener_at(point), Some(parent));
+        assert_eq!(tree.pinch_listener_at(point), Some(parent));
+        assert_eq!(tree.rotation_listener_at(point), Some(parent));
+        assert_eq!(tree.smart_magnify_listener_at(point), Some(parent));
+
+        tree.scroll_wheel_ids.insert(child);
+        tree.touch_ids.insert(child);
+        assert_eq!(tree.scroll_wheel_listener_at(point), Some(child));
+        assert_eq!(tree.parent_scroll_wheel_listener(child), Some(parent));
+        assert_eq!(tree.parent_scroll_wheel_listener(parent), None);
+        assert_eq!(tree.touch_listener_at(point), Some(child));
+        assert_eq!(tree.parent_touch_listener(child), Some(parent));
+        assert_eq!(tree.parent_touch_listener(parent), None);
 
         tree.hit_regions.push(region(blocker, 2, true));
         assert_eq!(tree.context_menu_listener_at(point), None);
+        assert_eq!(tree.scroll_wheel_listener_at(point), None);
+        assert_eq!(tree.touch_listener_at(point), None);
+        assert_eq!(tree.mouse_pressure_listener_at(point), None);
+        assert_eq!(tree.pinch_listener_at(point), None);
+        assert_eq!(tree.rotation_listener_at(point), None);
+        assert_eq!(tree.smart_magnify_listener_at(point), None);
+    }
+
+    #[test]
+    fn desktop_mouse_dispatch_is_bounded_ordered_and_hover_tracks_layout() {
+        let mut tree = UiTree::new();
+        let parent = ElementId::new(100);
+        let child = ElementId::new(101);
+        let outside = ElementId::new(102);
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let region = |id, source| HitRegion {
+            id,
+            bounds,
+            clip: bounds,
+            clickable: false,
+            pointer_listener: false,
+            drag_source: false,
+            drop_target: false,
+            focusable: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
+            stateful: false,
+            blocks_pointer: false,
+            app_region: None,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source,
+            },
+        };
+        let binding = |key, kind, phase, button, outside| MouseListenerBinding {
+            key: MouseListenerKey(key),
+            kind,
+            phase,
+            button,
+            outside,
+        };
+        tree.mouse_listener_bindings.extend([
+            binding(
+                0,
+                MouseListenerKind::Down,
+                DispatchPhase::Capture,
+                None,
+                false,
+            ),
+            binding(
+                1,
+                MouseListenerKind::Down,
+                DispatchPhase::Bubble,
+                Some(MouseButton::Left),
+                false,
+            ),
+            binding(
+                2,
+                MouseListenerKind::Hover,
+                DispatchPhase::Bubble,
+                None,
+                false,
+            ),
+            binding(
+                3,
+                MouseListenerKind::Down,
+                DispatchPhase::Bubble,
+                None,
+                false,
+            ),
+            binding(
+                4,
+                MouseListenerKind::Hover,
+                DispatchPhase::Bubble,
+                None,
+                false,
+            ),
+            binding(
+                5,
+                MouseListenerKind::Down,
+                DispatchPhase::Capture,
+                None,
+                true,
+            ),
+        ]);
+        tree.mouse_listener_ranges.insert(parent, 0..3);
+        tree.mouse_listener_ranges.insert(child, 3..5);
+        tree.mouse_listener_ranges.insert(outside, 5..6);
+        tree.parents.insert(child, parent);
+        tree.hit_regions.push(region(parent, 0));
+        tree.hit_regions.push(region(child, 1));
+        let outside_bounds = Rect::new(200.0, 200.0, 40.0, 40.0);
+        tree.hit_regions.push(HitRegion {
+            bounds: outside_bounds,
+            clip: outside_bounds,
+            ..region(outside, 2)
+        });
+
+        let point = Point::new(10.0, 10.0);
+        let mut path = Vec::new();
+        assert!(tree.mouse_event_path_at(point, &mut path));
+        assert_eq!(path, vec![child, parent]);
+        let mut dispatch = Vec::new();
+        tree.collect_mouse_dispatch(
+            &path,
+            MouseListenerKind::Down,
+            Some(MouseButton::Left),
+            &mut dispatch,
+        );
+        assert_eq!(
+            dispatch,
+            vec![
+                MouseListenerKey(5),
+                MouseListenerKey(0),
+                MouseListenerKey(3),
+                MouseListenerKey(1),
+            ]
+        );
+
+        tree.refresh_mouse_hover(Some(point));
+        let mut changes = Vec::new();
+        tree.take_mouse_hover_changes(&mut changes);
+        assert_eq!(
+            changes,
+            vec![
+                MouseHoverChange {
+                    key: MouseListenerKey(2),
+                    hovered: true,
+                },
+                MouseHoverChange {
+                    key: MouseListenerKey(4),
+                    hovered: true,
+                },
+            ]
+        );
+        changes.clear();
+        tree.hit_regions.clear();
+        tree.refresh_mouse_hover(Some(point));
+        tree.take_mouse_hover_changes(&mut changes);
+        assert_eq!(
+            changes,
+            vec![
+                MouseHoverChange {
+                    key: MouseListenerKey(4),
+                    hovered: false,
+                },
+                MouseHoverChange {
+                    key: MouseListenerKey(2),
+                    hovered: false,
+                },
+            ]
+        );
+
+        let blocker = ElementId::new(103);
+        tree.hit_regions.push(HitRegion {
+            bounds: outside_bounds,
+            clip: outside_bounds,
+            ..region(outside, 2)
+        });
+        tree.hit_regions.push(HitRegion {
+            blocks_pointer: true,
+            ..region(blocker, 3)
+        });
+        assert!(tree.mouse_event_path_at(point, &mut path));
+        assert_eq!(path, vec![blocker]);
+        tree.collect_mouse_dispatch(
+            &path,
+            MouseListenerKind::Down,
+            Some(MouseButton::Left),
+            &mut dispatch,
+        );
+        assert_eq!(dispatch, vec![MouseListenerKey(5)]);
     }
 
     #[test]
@@ -6066,7 +11293,14 @@ mod tests {
         list.set_viewport_height(100.0);
         let id = ElementId::new(71);
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
-        tree.virtual_scroll_handles.insert(id, list.scroll_handle());
+        let handle = list.scroll_handle();
+        tree.virtual_scroll_handles.insert(
+            id,
+            RetainedVirtualScroll {
+                measurement_revision: handle.measurement_revision(),
+                handle,
+            },
+        );
         tree.scroll_regions.push(ScrollRegion {
             id,
             bounds,
@@ -6116,7 +11350,7 @@ mod tests {
             }
         );
         assert_eq!(list.scroll_offset(), list.max_scroll_offset());
-        assert!(tree.end_scrollbar_drag(now));
+        assert!(tree.end_scrollbar_drag(now).changed);
         assert!(tree.update_scrollbar_hover(None, now));
         assert_eq!(
             tree.next_scrollbar_deadline()
@@ -6134,8 +11368,14 @@ mod tests {
         let right = Rect::new(100.0, 0.0, 100.0, 100.0);
         let mut list = crate::VirtualList::new(100, 10.0);
         list.set_viewport_height(100.0);
-        tree.virtual_scroll_handles
-            .insert(virtual_id, list.scroll_handle());
+        let handle = list.scroll_handle();
+        tree.virtual_scroll_handles.insert(
+            virtual_id,
+            RetainedVirtualScroll {
+                measurement_revision: handle.measurement_revision(),
+                handle,
+            },
+        );
         let region = |id, bounds, virtual_scroll, source| ScrollRegion {
             id,
             bounds,
@@ -6274,7 +11514,7 @@ mod tests {
         assert_eq!(tree.scroll_offsets[&id].y, 450.0);
         assert!(tree.drag_scrollbar(Point::new(95.0, 88.0)).changed);
         assert_eq!(tree.scroll_offsets[&id].y, 900.0);
-        assert!(tree.end_scrollbar_drag(now));
+        assert!(tree.end_scrollbar_drag(now).changed);
         assert!(tree.update_scrollbar_hover(None, now));
         assert_eq!(
             tree.next_scrollbar_deadline()
@@ -6300,8 +11540,8 @@ mod tests {
             drag_source: false,
             drop_target: false,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: false,
             blocks_pointer: false,
             app_region: Some(app_region),
@@ -6340,8 +11580,8 @@ mod tests {
             drag_source: false,
             drop_target: false,
             focusable: true,
-            cursor_pointer: true,
-            cursor_text: false,
+            cursor_style: Some(CursorStyle::PointingHand),
+            cursor_states: CursorStateStyles::default(),
             stateful: false,
             blocks_pointer: false,
             app_region: None,
@@ -6359,8 +11599,8 @@ mod tests {
             drag_source: false,
             drop_target: false,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: false,
             blocks_pointer: true,
             app_region: None,
@@ -6373,10 +11613,242 @@ mod tests {
             },
         });
 
-        assert!(!tree.wants_pointer_cursor(Point::new(10.0, 10.0)));
+        assert_eq!(tree.cursor_style_at(Point::new(10.0, 10.0)), None);
         assert!(tree.interactive_region_at(Point::new(10.0, 10.0)).is_none());
         #[cfg(target_os = "macos")]
         assert!(tree.overlay_input_active());
+    }
+
+    #[test]
+    fn dismissible_overlay_resets_the_cursor_over_inert_background_content() {
+        let mut tree = UiTree::new();
+        let viewport = Rect::new(0.0, 0.0, 100.0, 100.0);
+        tree.hit_regions.push(HitRegion {
+            id: ElementId::new(1),
+            bounds: viewport,
+            clip: viewport,
+            clickable: true,
+            pointer_listener: false,
+            drag_source: false,
+            drop_target: false,
+            focusable: true,
+            cursor_style: Some(CursorStyle::IBeam),
+            cursor_states: CursorStateStyles::default(),
+            stateful: false,
+            blocks_pointer: false,
+            app_region: None,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source: 0,
+            },
+        });
+        tree.hit_regions.push(HitRegion {
+            id: ElementId::new(2),
+            bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
+            clip: viewport,
+            clickable: false,
+            pointer_listener: false,
+            drag_source: false,
+            drop_target: false,
+            focusable: false,
+            cursor_style: Some(CursorStyle::Arrow),
+            cursor_states: CursorStateStyles::default(),
+            stateful: false,
+            blocks_pointer: true,
+            app_region: None,
+            order: PaintOrder {
+                layer: PaintLayerKey {
+                    plane: crate::ScenePlane::Overlay,
+                    z_index: 0,
+                },
+                source: 1,
+            },
+        });
+        tree.dismiss_regions.push(DismissRegion {
+            id: ElementId::new(2),
+            bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
+            clip: viewport,
+            policy: DismissPolicy::BOTH,
+            restore_focus: None,
+            order: PaintOrder {
+                layer: PaintLayerKey {
+                    plane: crate::ScenePlane::Overlay,
+                    z_index: 0,
+                },
+                source: 1,
+            },
+        });
+
+        let exposed_background = Point::new(50.0, 50.0);
+        assert_eq!(
+            tree.cursor_style_at(exposed_background),
+            Some(CursorStyle::Arrow)
+        );
+        tree.dismiss_regions.pop();
+        assert_eq!(
+            tree.cursor_style_at(exposed_background),
+            Some(CursorStyle::IBeam)
+        );
+        tree.hit_regions.pop();
+        assert_eq!(
+            tree.cursor_style_at(exposed_background),
+            Some(CursorStyle::IBeam)
+        );
+    }
+
+    #[test]
+    fn topmost_dismiss_policy_keeps_escape_and_outside_pointer_independent() {
+        let mut tree = UiTree::new();
+        let bounds = Rect::new(20.0, 20.0, 40.0, 40.0);
+        let region = |policy| DismissRegion {
+            id: ElementId::new(9),
+            bounds,
+            clip: Rect::new(0.0, 0.0, 100.0, 100.0),
+            policy,
+            restore_focus: Some(ElementId::new(1)),
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source: 0,
+            },
+        };
+
+        tree.dismiss_regions
+            .push(region(DismissPolicy::default().with_escape()));
+        assert_eq!(tree.dismiss_topmost().unwrap().id, ElementId::new(9));
+        assert!(
+            tree.dismiss_request_for_pointer(Some(Point::new(5.0, 5.0)))
+                .is_none()
+        );
+
+        tree.dismiss_regions.clear();
+        tree.dismiss_regions
+            .push(region(DismissPolicy::default().with_pointer_outside()));
+        assert!(tree.dismiss_topmost().is_none());
+        assert_eq!(
+            tree.dismiss_request_for_pointer(Some(Point::new(5.0, 5.0)))
+                .unwrap()
+                .id,
+            ElementId::new(9)
+        );
+        assert!(
+            tree.dismiss_request_for_pointer(Some(Point::new(30.0, 30.0)))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn explicit_arrow_resets_a_lower_cursor_without_blocking_pointer_hits() {
+        let mut tree = UiTree::new();
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let region = |id, cursor_style, source| HitRegion {
+            id: ElementId::new(id),
+            bounds,
+            clip: bounds,
+            clickable: false,
+            pointer_listener: false,
+            drag_source: false,
+            drop_target: false,
+            focusable: false,
+            cursor_style,
+            cursor_states: CursorStateStyles::default(),
+            stateful: false,
+            blocks_pointer: false,
+            app_region: None,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source,
+            },
+        };
+        tree.hit_regions
+            .push(region(1, Some(CursorStyle::PointingHand), 0));
+        tree.hit_regions
+            .push(region(2, Some(CursorStyle::Arrow), 1));
+
+        let point = Point::new(10.0, 10.0);
+        assert_eq!(tree.cursor_style_at(point), Some(CursorStyle::Arrow));
+
+        tree.hit_regions[1].cursor_style = None;
+        assert_eq!(tree.cursor_style_at(point), Some(CursorStyle::PointingHand));
+    }
+
+    #[test]
+    fn cursor_state_overrides_resolve_live_without_repainting_the_hit_region() {
+        let mut tree = UiTree::new();
+        let id = ElementId::new(1);
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        tree.hit_regions.push(HitRegion {
+            id,
+            bounds,
+            clip: bounds,
+            clickable: true,
+            pointer_listener: false,
+            drag_source: false,
+            drop_target: false,
+            focusable: true,
+            cursor_style: Some(CursorStyle::Arrow),
+            cursor_states: CursorStateStyles {
+                hover: Some(CursorStyle::Crosshair),
+                active: Some(CursorStyle::ClosedHand),
+                focus: Some(CursorStyle::IBeam),
+                invalid: None,
+                dragging: Some(CursorStyle::DragCopy),
+                drag_over: Some(CursorStyle::DragLink),
+            },
+            stateful: false,
+            blocks_pointer: false,
+            app_region: None,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source: 0,
+            },
+        });
+        let point = Point::new(10.0, 10.0);
+
+        assert_eq!(tree.cursor_style_at(point), Some(CursorStyle::Crosshair));
+        tree.pressed = Some(id);
+        assert_eq!(tree.cursor_style_at(point), Some(CursorStyle::ClosedHand));
+        tree.pressed = None;
+        tree.dragging = Some(id);
+        assert_eq!(tree.cursor_style_at(point), Some(CursorStyle::DragCopy));
+        tree.drag_over = Some(id);
+        assert_eq!(tree.cursor_style_at(point), Some(CursorStyle::DragLink));
+        tree.drag_over = None;
+        tree.dragging = None;
+        tree.external_drag_active = true;
+        tree.focused = Some(id);
+        assert_eq!(tree.cursor_style_at(point), Some(CursorStyle::IBeam));
+        tree.hit_regions[0].cursor_states.invalid = Some(CursorStyle::OperationNotAllowed);
+        assert_eq!(
+            tree.cursor_style_at(point),
+            Some(CursorStyle::OperationNotAllowed)
+        );
+    }
+
+    #[test]
+    fn inferred_cursors_disable_cleanly_while_explicit_not_allowed_survives() {
+        let disabled_button = div().clickable().disabled(true);
+        let explicit_disabled = div().clickable().disabled(true).cursor_not_allowed();
+        let mut drag_source = div().clickable();
+        drag_source.drag_source = true;
+        let explicit_drag_source = drag_source.clone().cursor_copy();
+
+        assert_eq!(effective_cursor_style(&disabled_button, false), None);
+        assert_eq!(
+            effective_cursor_style(&explicit_disabled, false),
+            Some(CursorStyle::OperationNotAllowed)
+        );
+        assert_eq!(
+            effective_cursor_style(&drag_source, false),
+            Some(CursorStyle::OpenHand)
+        );
+        assert_eq!(
+            effective_cursor_style(&explicit_drag_source, false),
+            Some(CursorStyle::DragCopy)
+        );
+        assert_eq!(
+            effective_cursor_style(&div(), true),
+            Some(CursorStyle::IBeam)
+        );
     }
 
     #[test]
@@ -6392,8 +11864,8 @@ mod tests {
             drag_source: false,
             drop_target: false,
             focusable: true,
-            cursor_pointer: true,
-            cursor_text: false,
+            cursor_style: Some(CursorStyle::PointingHand),
+            cursor_states: CursorStateStyles::default(),
             stateful: false,
             blocks_pointer: false,
             app_region: None,
@@ -6411,8 +11883,8 @@ mod tests {
             drag_source: false,
             drop_target: false,
             focusable: false,
-            cursor_pointer: true,
-            cursor_text: false,
+            cursor_style: Some(CursorStyle::PointingHand),
+            cursor_states: CursorStateStyles::default(),
             stateful: false,
             blocks_pointer: false,
             app_region: None,
@@ -6427,7 +11899,10 @@ mod tests {
             Some(ElementId::new(2))
         );
         assert!(tree.interactive_region_at(Point::new(10.0, 10.0)).is_none());
-        assert!(tree.wants_pointer_cursor(Point::new(10.0, 10.0)));
+        assert_eq!(
+            tree.cursor_style_at(Point::new(10.0, 10.0)),
+            Some(CursorStyle::PointingHand)
+        );
     }
 
     #[test]
@@ -6443,8 +11918,8 @@ mod tests {
             drag_source: source,
             drop_target: target,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: source || target,
             blocks_pointer: blocks,
             app_region: None,
@@ -6503,8 +11978,8 @@ mod tests {
             drag_source: false,
             drop_target: true,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: true,
             blocks_pointer,
             app_region: None,
@@ -6576,8 +12051,8 @@ mod tests {
             drag_source: false,
             drop_target: true,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: true,
             blocks_pointer: false,
             app_region: None,
@@ -6638,8 +12113,8 @@ mod tests {
             drag_source: false,
             drop_target: true,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: true,
             blocks_pointer: false,
             app_region: None,
@@ -6698,8 +12173,8 @@ mod tests {
             drag_source: false,
             drop_target: true,
             focusable: false,
-            cursor_pointer: false,
-            cursor_text: false,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
             stateful: true,
             blocks_pointer: false,
             app_region: None,
@@ -6743,8 +12218,8 @@ mod tests {
                 drag_source: false,
                 drop_target: true,
                 focusable: false,
-                cursor_pointer: false,
-                cursor_text: false,
+                cursor_style: None,
+                cursor_states: CursorStateStyles::default(),
                 stateful: true,
                 blocks_pointer: false,
                 app_region: None,

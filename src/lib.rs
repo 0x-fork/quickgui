@@ -6,25 +6,47 @@
 
 mod action;
 mod animated_image;
+mod animation;
+mod assets;
+mod autocomplete;
 mod background;
 mod canvas;
+mod clipboard;
 mod color;
+mod combobox;
+mod constrained_combobox;
+mod context_menu;
+mod cursor;
 mod custom_shader;
 mod custom_shader_renderer;
+mod dialog;
+mod disclosure;
+mod display;
 mod element;
 mod entity;
 mod event;
+mod field;
+mod font;
 mod foreground;
 mod geometry;
 mod global;
 mod image;
 mod image_renderer;
 mod image_resource;
+#[cfg(feature = "inspector")]
+mod inspector;
+mod keyboard;
 mod keymap;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
 mod macos_application;
+#[cfg(target_os = "macos")]
+mod macos_clipboard;
+#[cfg(target_os = "macos")]
+mod macos_key_equivalents;
+#[cfg(target_os = "macos")]
+mod macos_keyboard;
 #[cfg(target_os = "macos")]
 mod macos_menu;
 mod menu;
@@ -36,26 +58,73 @@ mod path;
 mod path_renderer;
 mod picker;
 mod platform;
+mod popover_component;
+mod popup;
+mod popup_menu;
 mod renderer;
 mod runtime;
 mod scene;
 mod scheduler;
+mod select;
+mod selection_control;
+mod spring;
 mod styled_text;
 mod svg;
 mod svg_renderer;
+mod table;
+mod tabs;
 mod text_input;
 mod tooltip;
+mod transition;
+mod tree;
 mod ui_tree;
 mod virtual_list;
+#[cfg(any(test, feature = "test-support"))]
+mod visual_test;
 
-pub use action::{Action, ActionListener, AnyAction};
+pub use action::{Action, ActionListener, AnyAction, MAX_ACTION_LISTENERS_PER_ELEMENT};
 pub use animated_image::{
     AnimatedImage, AnimatedImageFrame, AnimationRepeat, MAX_ANIMATED_IMAGE_BYTES,
     MAX_ANIMATION_FRAMES, MIN_ANIMATION_FRAME_DURATION,
 };
+pub use animation::{
+    Animation, AnimationExt, AnimationPhase, Interpolate, MAX_ANIMATION_FPS, MAX_ANIMATION_STAGES,
+    MAX_DECLARATIVE_ANIMATIONS_PER_WINDOW, bounce, ease_in_out, ease_out_quint, linear,
+    pulsating_between, quadratic,
+};
+pub use assets::{
+    AssetBytes, AssetError, AssetSource, Assets, BundledAssets, FontSource, MAX_ASSET_BYTES,
+    MAX_ASSET_LIST_ENTRIES, MAX_ASSET_LIST_PATH_BYTES, MAX_ASSET_PATH_BYTES,
+    MAX_BUNDLED_ASSET_BYTES, MAX_BUNDLED_ASSETS, MAX_CUSTOM_FONT_BYTES, MAX_CUSTOM_FONT_FACES,
+    MAX_CUSTOM_FONT_FACES_PER_FILE, MAX_CUSTOM_FONT_TOTAL_BYTES, MAX_CUSTOM_FONTS,
+};
+pub use autocomplete::{
+    AutocompleteListState, AutocompleteOptionState, AutocompletePopupLayout,
+    AutocompleteSelectionBehavior, AutocompleteState, MAX_AUTOCOMPLETE_VALUE_BYTES,
+    MAX_AUTOCOMPLETE_VISIBLE_ROWS,
+};
 pub use background::{BackgroundTaskError, MAX_PENDING_BACKGROUND_TASKS, TaskSpawnError};
 pub use canvas::Canvas;
+pub use clipboard::{
+    ClipboardEntry, ClipboardError, ClipboardImage, ClipboardImageFormat, ClipboardItem,
+    ClipboardString, ExternalPaths, MAX_CLIPBOARD_DECODED_IMAGE_BYTES, MAX_CLIPBOARD_ENTRIES,
+    MAX_CLIPBOARD_IMAGE_BYTES, MAX_CLIPBOARD_METADATA_BYTES, MAX_CLIPBOARD_PATH_BYTES,
+    MAX_CLIPBOARD_PATHS, MAX_CLIPBOARD_TEXT_BYTES, MAX_CLIPBOARD_TOTAL_PATH_BYTES,
+};
 pub use color::Color;
+pub use combobox::{
+    ComboboxConfirm, ComboboxFirst, ComboboxLast, ComboboxNext, ComboboxPageDown, ComboboxPageUp,
+    ComboboxPrevious, combobox_key_bindings, select_key_bindings,
+};
+pub use constrained_combobox::{
+    ComboboxListState, ComboboxOptionState, ComboboxPopupLayout, ComboboxState,
+    MAX_COMBOBOX_VISIBLE_ROWS,
+};
+pub use context_menu::{
+    CONTEXT_MENU_SUBMENU_AIM_DELAY, CONTEXT_MENU_SUBMENU_HOVER_DELAY, ContextMenuLayout,
+    ContextMenuState,
+};
+pub use cursor::CursorStyle;
 pub use custom_shader::{
     CUSTOM_SHADER_PARAMETER_VECTORS, CustomShader, CustomShaderError,
     MAX_CUSTOM_SHADER_SOURCE_BYTES, ShaderParameters,
@@ -63,13 +132,24 @@ pub use custom_shader::{
 pub use custom_shader_renderer::{
     MAX_CUSTOM_SHADER_INSTANCES_PER_FRAME, MAX_CUSTOM_SHADER_PIPELINES_PER_WINDOW,
 };
+pub use dialog::{Dialog, DialogKind};
+pub use disclosure::{
+    Accordion, AccordionItem, AccordionItemState, AccordionState, AccordionStateError, Collapsible,
+    CollapsibleState, MAX_ACCORDION_OPEN_ITEMS,
+};
+pub use display::{
+    Display, DisplayError, DisplayId, DisplayUuid, Displays, MAX_DISPLAY_NAME_BYTES, MAX_DISPLAYS,
+};
 #[cfg(target_os = "macos")]
 pub use element::native_view;
 pub use element::{
-    AccessibilityRole, AnchorPlacement, AppRegion, Element, ElementId, ElementStateStyle,
-    FocusHandle, GridTrack, IntoElement, MAX_GRID_TRACKS, UserSelect, button, canvas,
-    custom_shader, div, form, img, overlay, path, styled_text_area, styled_text_input,
-    submit_button, svg, text, text_area, text_input,
+    AccessibilityAutoComplete, AccessibilityPopup, AccessibilityRole, AccessibilitySortDirection,
+    AnchorPlacement, AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack,
+    IntoElement, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
+    MAX_CONTAINER_QUERY_DEPTH, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
+    MAX_MOUSE_LISTENERS_PER_ELEMENT, ToggleState, UserSelect, Visibility, button, canvas,
+    container_query, custom_shader, div, form, img, overlay, path, styled_text_area,
+    styled_text_input, submit_button, svg, text, text_area, text_input,
 };
 pub use entity::{
     Entity, EntityId, EventEmitter, MAX_ENTITY_EVENT_DELIVERIES_PER_TURN,
@@ -78,14 +158,25 @@ pub use entity::{
     MAX_PENDING_ENTITY_EVENTS, Subscription, WeakEntity,
 };
 pub use event::{
-    ContextMenuEvent, DragOrigin, DragStartEvent, DropEvent, DroppedFiles, DroppedText, DroppedUrl,
-    Event, EventContext, ExternalDragEndEvent, ExternalDragOperation, ExternalDragPayload,
-    ExternalDragText, ExternalDragUrl, ExternalDragUrlError, FileDragPaths, FormField,
-    FormSubmitEvent, Key, MAX_DROPPED_FILES, MAX_EXTERNAL_DRAG_FILES, MAX_EXTERNAL_DRAG_PATH_BYTES,
-    MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_TOTAL_PATH_BYTES, MAX_EXTERNAL_DRAG_URL_BYTES,
-    MAX_FORM_FIELDS, MAX_FORM_SUBMISSIONS_PER_EVENT, MAX_VALIDATION_ISSUES,
-    MAX_VALIDATION_MESSAGE_BYTES, Modifiers, MouseButton, PointerEvent, PointerPhase,
-    ValidationIssue, ValidationReport,
+    ContextMenuEvent, DispatchPhase, DragOrigin, DragStartEvent, DropEvent, DroppedFiles,
+    DroppedText, DroppedUrl, Event, EventContext, ExternalDragEndEvent, ExternalDragOperation,
+    ExternalDragPayload, ExternalDragText, ExternalDragUrl, ExternalDragUrlError, FileDragPaths,
+    FormField, FormSubmitEvent, GesturePhase, Key, KeyDownEvent, KeyUpEvent,
+    MAX_ACTIVE_TOUCHES_PER_WINDOW, MAX_DROPPED_FILES, MAX_EXTERNAL_DRAG_FILES,
+    MAX_EXTERNAL_DRAG_PATH_BYTES, MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_TOTAL_PATH_BYTES,
+    MAX_EXTERNAL_DRAG_URL_BYTES, MAX_FORM_FIELDS, MAX_FORM_SUBMISSIONS_PER_EVENT,
+    MAX_PENDING_TARGETED_ACTIONS, MAX_PINCH_DELTA_PER_EVENT, MAX_ROTATION_DEGREES_PER_EVENT,
+    MAX_SCROLL_LINES_PER_EVENT, MAX_SCROLL_PIXELS_PER_EVENT, MAX_TARGETED_ACTIONS_PER_EVENT,
+    MAX_TOUCH_COORDINATE, MAX_VALIDATION_ISSUES, MAX_VALIDATION_MESSAGE_BYTES, Modifiers,
+    MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MousePressureEvent, MouseUpEvent,
+    PinchEvent, PointerEvent, PointerPhase, PressureStage, RotationEvent, ScrollDelta,
+    ScrollWheelEvent, SmartMagnifyEvent, TouchEvent, TouchId, TouchPhase, ValidationIssue,
+    ValidationReport,
+};
+pub use field::{Field, FieldState, Fieldset};
+pub use font::{
+    Font, FontFallbacks, FontFamily, FontFeature, FontFeatureTag, FontFeatureTagError,
+    FontFeatures, MAX_FONT_FALLBACKS, MAX_FONT_FAMILY_BYTES, MAX_FONT_FEATURES, font,
 };
 pub use foreground::{
     AsyncContextError, AsyncViewContext, AsyncViewUpdate, ForegroundTaskSpawnError,
@@ -99,7 +190,7 @@ pub use global::{
     MAX_GLOBAL_OBSERVER_DELIVERIES_PER_TURN, MAX_GLOBAL_SUBSCRIPTIONS_PER_WINDOW,
     MAX_OBSERVED_GLOBALS_PER_WINDOW, MAX_PENDING_GLOBAL_NOTIFICATIONS,
 };
-pub use glyphon::Weight as FontWeight;
+pub use glyphon::{Style as FontStyle, Weight as FontWeight};
 pub use image::{
     Image, ImageError, ImageResource, ImageSource, MAX_DECODED_IMAGE_BYTES,
     MAX_ENCODED_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ObjectFit,
@@ -108,6 +199,16 @@ pub use image_renderer::{MAX_GPU_IMAGE_CACHE_BYTES, MAX_GPU_IMAGE_CACHE_ENTRIES}
 pub use image_resource::{
     IMAGE_LOADING_DELAY, ImageResourceStats, MAX_CPU_IMAGE_CACHE_BYTES,
     MAX_IMAGE_RESOURCE_CACHE_ENTRIES, MAX_PENDING_IMAGE_LOADS,
+};
+#[cfg(feature = "inspector")]
+pub use inspector::{
+    INSPECTOR_PANEL_WIDTH, InspectorAccessibility, InspectorElementKind, InspectorFrameDamage,
+    InspectorHitRegion, InspectorMode, InspectorNode, InspectorSnapshot, MAX_INSPECTOR_NODES,
+    MAX_INSPECTOR_TEXT_BYTES,
+};
+pub use keyboard::{
+    KeyboardLayout, KeyboardLayoutError, MAX_KEYBOARD_LAYOUT_ID_BYTES,
+    MAX_KEYBOARD_LAYOUT_NAME_BYTES,
 };
 pub use keymap::{
     ContextPredicate, KeyBinding, KeyContext, Keymap, KeymapError, KeymapMatch, Keystroke,
@@ -126,8 +227,8 @@ pub use path_renderer::{MAX_GPU_PATH_VERTICES, MAX_GPU_PATHS_PER_FRAME};
 pub use picker::{
     MAX_PICKER_ITEM_TEXT_BYTES, MAX_PICKER_ITEMS, MAX_PICKER_QUERY_BYTES,
     MAX_PICKER_QUERY_GRAPHEMES, MAX_PICKER_RESULTS, MAX_PICKER_TEXT_BYTES, PickerConfirm,
-    PickerError, PickerFirst, PickerItem, PickerLast, PickerMatch, PickerNext, PickerPageDown,
-    PickerPageUp, PickerPrevious, PickerState, PickerStyle, picker_key_bindings,
+    PickerError, PickerFilterMode, PickerFirst, PickerItem, PickerLast, PickerLayout, PickerMatch,
+    PickerNext, PickerPageDown, PickerPageUp, PickerPrevious, PickerState, picker_key_bindings,
 };
 pub use platform::{
     MAX_ACTIVE_PLATFORM_DIALOGS, MAX_OPEN_URLS, MAX_OPEN_URLS_TOTAL_BYTES,
@@ -141,19 +242,49 @@ pub use platform::{
     PlatformError, PlatformResponse, PromptButton, PromptLevel, SavePathOptions, SavePathResponse,
     SystemNotification, SystemNotificationAction, SystemNotificationResponse,
 };
+pub use popover_component::{AnchoredPopover, Popover, PopoverKind};
+pub use popup::{
+    MAX_GRABBING_POPUPS, PopupAnchor, PopupConstraintAdjustment, PopupGravity, PopupOptions,
+};
+pub use popup_menu::{
+    MAX_POPUP_MENU_DEPTH, MAX_POPUP_MENU_ITEM_TEXT_BYTES, MAX_POPUP_MENU_ITEMS,
+    MAX_POPUP_MENU_TEXT_BYTES, MAX_POPUP_MENU_TYPEAHEAD_BYTES, POPUP_MENU_KEY_CONTEXT,
+    POPUP_MENU_TYPEAHEAD_TIMEOUT, PopupMenu, PopupMenuActivate, PopupMenuActivation,
+    PopupMenuClose, PopupMenuError, PopupMenuFirst, PopupMenuItem, PopupMenuItemKind,
+    PopupMenuItemState, PopupMenuLast, PopupMenuNext, PopupMenuOpenSubmenu, PopupMenuPrevious,
+    popup_menu_key_bindings,
+};
 pub use runtime::{
     App, AppConfig, AppError, ClickListener, ContextMenuListener, DismissListener, Drag,
-    DragListener, DropListener, FormInvalidListener, FormSubmitListener, InputListener,
-    MAX_PENDING_WINDOW_COMMANDS, MAX_WINDOW_COMMANDS_PER_EVENT, MAX_WINDOW_LOGICAL_COORDINATE,
-    MAX_WINDOW_LOGICAL_DIMENSION, MAX_WINDOW_TITLE_BYTES, PerformanceProfile, PointerListener,
-    SubmitListener, TitleBarStyle, View, ViewContext, WindowBounds, WindowCommandError,
-    WindowHandle, WindowKind, WindowOptions, WindowState,
+    DragListener, DropListener, FormInvalidListener, FormSubmitListener, HoverListener,
+    InputListener, KeyDownListener, KeyUpListener, MAX_ACTION_LISTENERS_PER_WINDOW,
+    MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW, MAX_KEY_LISTENERS_PER_WINDOW,
+    MAX_MOUSE_LISTENERS_PER_WINDOW, MAX_PENDING_WINDOW_COMMANDS, MAX_SYSTEM_WINDOW_TABS,
+    MAX_WINDOW_COMMANDS_PER_EVENT, MAX_WINDOW_DOCUMENT_PATH_BYTES, MAX_WINDOW_LOGICAL_COORDINATE,
+    MAX_WINDOW_LOGICAL_DIMENSION, MAX_WINDOW_TABBING_IDENTIFIER_BYTES, MAX_WINDOW_TITLE_BYTES,
+    MouseDownListener, MouseExitListener, MouseMoveListener, MousePressureListener,
+    MouseUpListener, PerformanceProfile, PinchListener, PointerListener, QuitMode,
+    RotationListener, ScrollWheelListener, SmartMagnifyListener, SubmitListener, TitleBarStyle,
+    TouchListener, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
+    WindowCommandError, WindowHandle, WindowKind, WindowOptions, WindowState, WindowTabState,
+};
+#[cfg(any(test, feature = "test-support"))]
+pub use runtime::{
+    MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,
 };
 pub use scene::{
-    BoxShadow, CustomShaderPrimitive, FontFamily, ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS,
-    MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextId,
-    TextRun, TextShaping, TextStyle, TextWrap,
+    BoxShadow, CustomShaderPrimitive, ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS,
+    MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign,
+    TextId, TextOverflow, TextRun, TextShaping, TextStyle, TextWrap, WhiteSpace,
 };
+pub use select::{
+    MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VISIBLE_ROWS, SELECT_TYPEAHEAD_TIMEOUT, SelectListState,
+    SelectOptionState, SelectPopupLayout, SelectState,
+};
+pub use selection_control::{
+    Checkbox, Radio, RadioGroup, Switch, checkbox, radio, radio_group, switch,
+};
+pub use spring::{SpringAnimation, SpringConfig, SpringPlayback, SpringState, SpringTarget};
 pub use styled_text::{
     HighlightStyle, MAX_HIGHLIGHT_FONT_FAMILY_BYTES, MAX_TEXT_HIGHLIGHTS, StyledText,
     TextHighlight, TextUnderline, styled_text,
@@ -163,12 +294,34 @@ pub use svg::{
     SvgTransform,
 };
 pub use svg_renderer::{MAX_GPU_SVG_CACHE_BYTES, MAX_GPU_SVG_CACHE_ENTRIES};
+pub use table::{
+    MAX_TABLE_COLUMNS, MAX_TABLE_ROWS, TableActivate, TableCellPosition, TableCellState,
+    TableColumn, TableColumnAlign, TableFirstRow, TableHeaderState, TableLastRow, TableLayout,
+    TableNextColumn, TableNextRow, TablePageDown, TablePageUp, TablePreviousColumn,
+    TablePreviousRow, TableSort, TableSortDirection, TableState, table_key_bindings,
+};
+pub use tabs::{Tab, TabState, Tabs, TabsOrientation, TabsState};
 pub use tooltip::{
     DEFAULT_TOOLTIP_DELAY, MAX_TOOLTIP_CONTENT_NODES, MAX_TOOLTIP_DELAY, MAX_TOOLTIPS_PER_WINDOW,
     Tooltip,
 };
-pub use ui_tree::MAX_STATIC_TEXT_COPY_BYTES;
-pub use virtual_list::{VirtualList, VisibleRows};
+pub use transition::{MAX_STYLE_TRANSITIONS_PER_WINDOW, Transition, TransitionProperties};
+pub use tree::{
+    MAX_TREE_DEPTH, MAX_TREE_LABEL_BYTES, MAX_TREE_NODES, MAX_TREE_TEXT_BYTES, TreeActivate,
+    TreeCollapseOrParent, TreeError, TreeExpandOrChild, TreeFirst, TreeLast, TreeLayout, TreeNext,
+    TreeNode, TreePageDown, TreePageUp, TreePrevious, TreeRow, TreeState, TreeToggle,
+    tree_key_bindings,
+};
+pub use ui_tree::{MAX_FOCUSED_EVENT_PATH, MAX_MOUSE_EVENT_PATH, MAX_STATIC_TEXT_COPY_BYTES};
+pub use virtual_list::{
+    FollowMode, ListAlignment, ListOffset, ListState, ListStateStats, MAX_LIST_ITEMS,
+    MAX_LIST_OVERSCAN_ITEMS, MAX_MOUNTED_LIST_ITEMS, VirtualList, VisibleRows,
+};
+#[cfg(any(test, feature = "test-support"))]
+pub use visual_test::{
+    MAX_VISUAL_TEST_BYTES, MAX_VISUAL_TEST_DIMENSION, VisualDifference, VisualSnapshot,
+    VisualTestError, VisualTolerance,
+};
 
 /// Run a view with the default application configuration.
 pub fn run<V: View>(view: V) -> Result<(), AppError> {

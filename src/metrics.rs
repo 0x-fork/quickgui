@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Renderer work submitted for the most recently completed frame.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -40,6 +40,12 @@ pub struct RenderStats {
     pub draw_calls: usize,
     /// Text buffers whose content, metrics, or wrapping changed this frame.
     pub reshaped_text_areas: usize,
+    /// Stable element-addressed text buffers retained by this window after eviction.
+    pub retained_text_areas: usize,
+    /// Content/style-addressed text layouts retained by this window after eviction.
+    pub retained_text_layouts: usize,
+    /// Glyphon renderers retained for painter-order-separated text batches.
+    pub retained_text_renderers: usize,
     pub cached_text_areas: usize,
 }
 
@@ -47,8 +53,14 @@ pub struct RenderStats {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FrameMetrics {
     pub frame_number: u64,
+    /// CPU time consumed by the application thread while preparing and submitting this frame.
+    /// Unix targets use the monotonic per-thread CPU clock, so FIFO presentation waits are not
+    /// counted as work. Other targets currently fall back to elapsed wall time.
     pub cpu_time: Duration,
     pub smoothed_cpu_time: Duration,
+    /// Elapsed wall time spent preparing and submitting this frame, including any surface wait.
+    pub frame_time: Duration,
+    pub smoothed_frame_time: Duration,
     pub render: RenderStats,
 }
 
@@ -59,6 +71,14 @@ impl FrameMetrics {
 
     pub fn smoothed_cpu_milliseconds(self) -> f64 {
         self.smoothed_cpu_time.as_secs_f64() * 1_000.0
+    }
+
+    pub fn frame_milliseconds(self) -> f64 {
+        self.frame_time.as_secs_f64() * 1_000.0
+    }
+
+    pub fn smoothed_frame_milliseconds(self) -> f64 {
+        self.smoothed_frame_time.as_secs_f64() * 1_000.0
     }
 }
 
@@ -72,18 +92,75 @@ impl MetricsTracker {
         self.metrics
     }
 
-    pub fn record(&mut self, cpu_time: Duration, render: RenderStats) {
-        let smoothed = if self.metrics.frame_number == 0 {
-            cpu_time
+    pub fn record(&mut self, elapsed: FrameElapsed, render: RenderStats) {
+        let (smoothed_cpu_time, smoothed_frame_time) = if self.metrics.frame_number == 0 {
+            (elapsed.cpu_time, elapsed.frame_time)
         } else {
             // An exponential moving average settles quickly without storing a sample ring.
-            self.metrics.smoothed_cpu_time.mul_f64(0.9) + cpu_time.mul_f64(0.1)
+            (
+                self.metrics.smoothed_cpu_time.mul_f64(0.9) + elapsed.cpu_time.mul_f64(0.1),
+                self.metrics.smoothed_frame_time.mul_f64(0.9) + elapsed.frame_time.mul_f64(0.1),
+            )
         };
         self.metrics = FrameMetrics {
             frame_number: self.metrics.frame_number + 1,
-            cpu_time,
-            smoothed_cpu_time: smoothed,
+            cpu_time: elapsed.cpu_time,
+            smoothed_cpu_time,
+            frame_time: elapsed.frame_time,
+            smoothed_frame_time,
             render,
         };
     }
+}
+
+pub(crate) struct FrameTimer {
+    wall_time: Instant,
+    thread_cpu_time: Option<Duration>,
+}
+
+pub(crate) struct FrameElapsed {
+    cpu_time: Duration,
+    frame_time: Duration,
+}
+
+impl FrameTimer {
+    pub(crate) fn start() -> Self {
+        Self {
+            wall_time: Instant::now(),
+            thread_cpu_time: thread_cpu_time(),
+        }
+    }
+
+    pub(crate) fn elapsed(self) -> FrameElapsed {
+        let frame_time = self.wall_time.elapsed();
+        let cpu_time = self
+            .thread_cpu_time
+            .zip(thread_cpu_time())
+            .and_then(|(started, finished)| finished.checked_sub(started))
+            .unwrap_or(frame_time);
+        FrameElapsed {
+            cpu_time,
+            frame_time,
+        }
+    }
+}
+
+#[cfg(unix)]
+fn thread_cpu_time() -> Option<Duration> {
+    let mut timestamp = std::mem::MaybeUninit::<libc::timespec>::uninit();
+    // SAFETY: `timestamp` points to writable storage for one `timespec`; clock_gettime initializes
+    // it on success and does not retain the pointer.
+    if unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, timestamp.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: a zero return from clock_gettime guarantees that it initialized the timespec.
+    let timestamp = unsafe { timestamp.assume_init() };
+    let seconds = u64::try_from(timestamp.tv_sec).ok()?;
+    let nanoseconds = u32::try_from(timestamp.tv_nsec).ok()?;
+    (nanoseconds < 1_000_000_000).then(|| Duration::new(seconds, nanoseconds))
+}
+
+#[cfg(not(unix))]
+fn thread_cpu_time() -> Option<Duration> {
+    None
 }

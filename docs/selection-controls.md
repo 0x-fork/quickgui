@@ -1,0 +1,152 @@
+# Selection controls
+
+[Documentation index](README.md) · [Unstyled component roadmap](component-roadmap.md)
+
+QuickGUI's checkbox, radio, radio-group, and switch contracts are unstyled. The framework owns
+semantics and interaction; the application owns every visible pixel, including layout, indicators,
+thumbs, labels, hover/focus/disabled paint, and motion.
+
+Every value is controlled by the owning view. A component declaration never retains a second copy
+of application state:
+
+```rust
+use quickgui::{Checkbox, div, text};
+
+let toggle = cx.listener("auto-save", |view, cx| {
+    view.auto_save = !view.auto_save;
+    cx.invalidate();
+});
+let checkbox = Checkbox::new(self.auto_save);
+
+checkbox
+    .root_part(
+        div()
+            .flex_row()
+            .items_center()
+            .gap_2()
+            .child(checkbox.indicator_part(
+                div().size(16.0, 16.0).children(
+                    self.auto_save.then(|| text("✓")),
+                ),
+            ))
+            .child("Save automatically"),
+    )
+    .id("auto-save")
+    .on_click(toggle)
+```
+
+`root_part` decorates the caller's `Element` in place. It does not add children, dimensions,
+spacing, colors, borders, radii, state paint, transitions, or other appearance. The separate
+indicator/thumb parts only hide decorative content from the accessible name.
+
+## Checkbox and mixed state
+
+`Checkbox::new(bool)` covers an ordinary controlled checkbox. Pass `ToggleState::Mixed` for a
+collection summary equivalent to a web checkbox's `indeterminate` state:
+
+```rust
+use quickgui::{Checkbox, ToggleState, div};
+
+let checkbox = Checkbox::new(ToggleState::Mixed);
+checkbox
+    .root_part(
+        div()
+            .child(checkbox.indicator_part(div().child("−")))
+            .child("Select visible files"),
+    )
+    .id("select-visible")
+    .on_click(cycle_selection)
+```
+
+The root projects the exact AccessKit checkbox role and `off`, `on`, or `mixed` toggle state.
+Custom checkbox-like roots can also use `.checked(bool)`, `.toggle_state(...)`, or
+`.indeterminate(bool)` directly.
+
+For a root without a distinct indicator part, `checkbox(state)` is shorthand for
+`Checkbox::new(state).root_part(div())`.
+
+## Radio groups
+
+Decorate an application-owned group with `RadioGroup::root_part`, then place controlled `Radio`
+roots inside it:
+
+```rust
+let group = RadioGroup::new();
+let compact = Radio::new(self.density == Density::Compact);
+let comfortable = Radio::new(self.density == Density::Comfortable);
+
+group.root_part(
+    div()
+        .accessibility_label("Editor density")
+        .flex_col()
+        .children([
+            compact
+                .root_part(
+                    div()
+                        .child(compact.indicator_part(div()))
+                        .child("Compact"),
+                )
+                .id("compact")
+                .on_click(select_compact),
+            comfortable
+                .root_part(
+                    div()
+                        .child(comfortable.indicator_part(div()))
+                        .child("Comfortable"),
+                )
+                .id("comfortable")
+                .on_click(select_comfortable),
+        ]),
+)
+```
+
+Tab enters at the checked option, or the first enabled option when none is checked. Left/Up and
+Right/Down move, focus, and activate the previous or next enabled option with wraparound. Disabled
+options are skipped and nested groups remain independent. The mounted tree is scanned only for a
+Tab-index rebuild or an actual arrow key; no separate item registry is retained.
+
+`radio(selected)` and `radio_group()` are unstyled semantic-root shorthands.
+
+## Switch
+
+The switch root doubles as the application-owned track or can contain a separate track element.
+Only the decorative thumb has a dedicated part:
+
+```rust
+let control = Switch::new(self.sync_settings);
+
+control
+    .root_part(
+        div()
+            .flex_row()
+            .child(
+                div()
+                    .size(30.0, 18.0)
+                    .child(control.thumb_part(div().size(14.0, 14.0))),
+            )
+            .child("Sync settings"),
+    )
+    .id("sync-settings")
+    .on_click(toggle_sync)
+```
+
+The root projects the native switch role and exact boolean toggle state. `switch(checked)` is the
+unstyled root shorthand.
+
+## Shared interaction and resource contract
+
+All selection roots are clickable, keyboard-focusable, excluded from hidden-inset window drag
+regions, non-text-selectable, and use the desktop arrow cursor. Add a stable `.id(...)` and
+`.on_click(...)` listener to change controlled state. Space activates the focused root through the
+ordinary button path. `.disabled(true)` removes pointer, keyboard, focus, and native accessibility
+actions; the application decides whether and how disabled state looks via `.disabled_style(...)`.
+
+Descriptors are copy-only values. They allocate no state, create no GPU asset, and retain no task,
+timer, observer, registry entry, transition, or idle scheduler source. Application-authored paint
+transitions remain event-driven and terminate normally.
+
+Run the caller-styled light/dark, mixed-state, disabled-state, mouse, Tab, and arrow-key gallery:
+
+```console
+cargo run --release --example selection_controls
+```

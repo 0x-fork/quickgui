@@ -1,0 +1,1248 @@
+use std::{fmt, sync::Arc};
+
+use thiserror::Error;
+
+use crate::{
+    AccessibilityRole, Element, ElementId, EventContext, FocusHandle, IntoElement, KeyBinding,
+    ListOffset, ListState, ViewContext, div,
+};
+
+/// Maximum nodes retained by one tree state.
+pub const MAX_TREE_NODES: usize = 1_000_000;
+/// Maximum hierarchical depth accepted by one tree.
+pub const MAX_TREE_DEPTH: usize = 256;
+/// Maximum UTF-8 bytes retained for one tree node label.
+pub const MAX_TREE_LABEL_BYTES: usize = 64 * 1024;
+/// Maximum UTF-8 label bytes retained by one complete tree.
+pub const MAX_TREE_TEXT_BYTES: usize = 16 * 1024 * 1024;
+
+const TREE_KEY_CONTEXT: &str = "Tree";
+const TREE_ROW_ID_TAG: u64 = 0x7d5d_5f29_58ab_f1f7;
+const TREE_DISCLOSURE_ID_TAG: u64 = 0xb55a_8c0a_f31f_00e9;
+const TREE_VISIBLE_UNSET: u32 = u32::MAX;
+
+/// Move to the previous visible enabled tree item.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreePrevious;
+/// Move to the next visible enabled tree item.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreeNext;
+/// Collapse an expanded branch, otherwise move to its parent.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreeCollapseOrParent;
+/// Expand a collapsed branch, otherwise move to its first visible child.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreeExpandOrChild;
+/// Move to the first visible enabled tree item.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreeFirst;
+/// Move to the final visible enabled tree item.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreeLast;
+/// Move one visible page upward.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreePageUp;
+/// Move one visible page downward.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreePageDown;
+/// Toggle the expansion state of the selected branch.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreeToggle;
+/// Activate the selected item.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TreeActivate;
+
+/// Contextual bindings used by [`TreeState::element`].
+pub fn tree_key_bindings() -> [KeyBinding; 10] {
+    [
+        KeyBinding::new("up", TreePrevious, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("down", TreeNext, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("left", TreeCollapseOrParent, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("right", TreeExpandOrChild, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("platform-up", TreeFirst, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("platform-down", TreeLast, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("pageup", TreePageUp, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("pagedown", TreePageDown, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("space", TreeToggle, Some(TREE_KEY_CONTEXT)),
+        KeyBinding::new("enter", TreeActivate, Some(TREE_KEY_CONTEXT)),
+    ]
+}
+
+/// Application value and hierarchy retained by a [`TreeState`].
+#[derive(Clone, Debug)]
+pub struct TreeNode<T> {
+    id: ElementId,
+    label: Arc<str>,
+    value: T,
+    children: Vec<TreeNode<T>>,
+    disabled: bool,
+}
+
+impl<T> TreeNode<T> {
+    pub fn new(id: impl Into<ElementId>, label: impl Into<Arc<str>>, value: T) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            value,
+            children: Vec::new(),
+            disabled: false,
+        }
+    }
+
+    pub fn child(mut self, child: TreeNode<T>) -> Self {
+        self.children.push(child);
+        self
+    }
+
+    pub fn children(mut self, children: impl IntoIterator<Item = TreeNode<T>>) -> Self {
+        self.children.extend(children);
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub const fn id(&self) -> ElementId {
+        self.id
+    }
+
+    pub fn label(&self) -> &Arc<str> {
+        &self.label
+    }
+
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+
+    pub fn child_nodes(&self) -> &[TreeNode<T>] {
+        &self.children
+    }
+
+    pub const fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+}
+
+/// A tree source exceeded a hard identity, depth, or retained-text boundary.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum TreeError {
+    #[error("a tree supports at most {limit} nodes")]
+    TooManyNodes { limit: usize },
+    #[error("tree depth {depth} exceeds the limit of {limit}")]
+    TooDeep { depth: usize, limit: usize },
+    #[error("tree node {id:?} has a duplicate stable ID")]
+    DuplicateId { id: ElementId },
+    #[error("tree node {id:?} has {bytes} label bytes; the limit is {limit}")]
+    LabelTooLong {
+        id: ElementId,
+        bytes: usize,
+        limit: usize,
+    },
+    #[error("tree labels retain {bytes} bytes; the total limit is {limit}")]
+    TextBudgetExceeded { bytes: usize, limit: usize },
+}
+
+/// Structural geometry retained by one virtualized tree.
+///
+/// Indentation, disclosure size, padding, colors, typography, borders, radii, opacity, and motion
+/// all belong to the caller-owned row returned from [`TreeState::element`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TreeLayout {
+    pub row_height: f32,
+}
+
+impl TreeLayout {
+    pub fn new(row_height: f32) -> Self {
+        Self {
+            row_height: finite_clamped(row_height, 20.0, 256.0, 30.0),
+        }
+    }
+
+    pub fn row_height(mut self, height: f32) -> Self {
+        self.row_height = finite_clamped(height, 20.0, 256.0, 30.0);
+        self
+    }
+
+    fn sanitized(mut self) -> Self {
+        self.row_height = finite_clamped(self.row_height, 20.0, 256.0, 30.0);
+        self
+    }
+}
+
+impl Default for TreeLayout {
+    fn default() -> Self {
+        Self::new(30.0)
+    }
+}
+
+struct TreeEntry<T> {
+    id: ElementId,
+    label: Arc<str>,
+    value: T,
+    parent: Option<u32>,
+    level: u32,
+    position_in_set: u32,
+    size_of_set: u32,
+    subtree_end: u32,
+    child_count: u32,
+    disabled: bool,
+}
+
+struct TreeArena<T> {
+    entries: Vec<TreeEntry<T>>,
+    id_index: Vec<(u64, u32)>,
+    root_count: usize,
+}
+
+/// A borrowed visible tree row passed to application rendering.
+#[derive(Clone, Copy)]
+pub struct TreeRow<'a, T> {
+    entry: &'a TreeEntry<T>,
+    expanded: bool,
+    selected: bool,
+}
+
+impl<T> fmt::Debug for TreeRow<'_, T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TreeRow")
+            .field("id", &self.entry.id)
+            .field("label", &self.entry.label)
+            .field("level", &self.entry.level)
+            .field("expanded", &self.expanded)
+            .field("selected", &self.selected)
+            .field("disabled", &self.entry.disabled)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a, T> TreeRow<'a, T> {
+    pub const fn id(self) -> ElementId {
+        self.entry.id
+    }
+
+    pub fn label(self) -> &'a Arc<str> {
+        &self.entry.label
+    }
+
+    pub fn value(self) -> &'a T {
+        &self.entry.value
+    }
+
+    pub const fn level(self) -> usize {
+        self.entry.level as usize
+    }
+
+    pub const fn position_in_set(self) -> usize {
+        self.entry.position_in_set as usize
+    }
+
+    pub const fn size_of_set(self) -> usize {
+        self.entry.size_of_set as usize
+    }
+
+    pub const fn has_children(self) -> bool {
+        self.entry.child_count != 0
+    }
+
+    pub const fn is_expanded(self) -> bool {
+        self.expanded
+    }
+
+    pub const fn is_selected(self) -> bool {
+        self.selected
+    }
+
+    pub const fn is_disabled(self) -> bool {
+        self.entry.disabled
+    }
+}
+
+/// Retained hierarchy, expansion, selection, and virtual-scroll state for a tree view.
+///
+/// Source nodes are flattened once into a bounded preorder arena. Expansion rebuilds only a lean
+/// visible-index vector; ordinary frames and clean idle periods perform no hierarchy walk, timer,
+/// or polling. Rows are mounted through the existing sparse [`ListState`] path.
+pub struct TreeState<T> {
+    entries: Vec<TreeEntry<T>>,
+    id_index: Vec<(u64, u32)>,
+    expanded: Vec<bool>,
+    visible: Vec<u32>,
+    visible_position: Vec<u32>,
+    selected: Option<u32>,
+    root_count: usize,
+    list: ListState,
+    layout: TreeLayout,
+}
+
+impl<T> fmt::Debug for TreeState<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TreeState")
+            .field("nodes", &self.entries.len())
+            .field("visible", &self.visible.len())
+            .field(
+                "expanded",
+                &self.expanded.iter().filter(|value| **value).count(),
+            )
+            .field("selected", &self.selected_id())
+            .field("root_count", &self.root_count)
+            .field("list", &self.list)
+            .field("layout", &self.layout)
+            .finish()
+    }
+}
+
+impl<T> TreeState<T> {
+    pub fn new(nodes: impl IntoIterator<Item = TreeNode<T>>) -> Result<Self, TreeError> {
+        let arena = build_tree_arena(nodes)?;
+        let layout = TreeLayout::default();
+        let mut state = Self {
+            expanded: vec![false; arena.entries.len()],
+            visible: Vec::with_capacity(arena.root_count.min(256)),
+            visible_position: vec![TREE_VISIBLE_UNSET; arena.entries.len()],
+            selected: None,
+            root_count: arena.root_count,
+            list: ListState::new(0, layout.row_height).with_overscan(2),
+            layout,
+            entries: arena.entries,
+            id_index: arena.id_index,
+        };
+        state.rebuild_visible();
+        Ok(state)
+    }
+
+    pub fn with_layout(mut self, layout: TreeLayout) -> Self {
+        self.layout = layout.sanitized();
+        self.list = ListState::new(self.visible.len(), self.layout.row_height).with_overscan(2);
+        self
+    }
+
+    pub const fn layout(&self) -> TreeLayout {
+        self.layout
+    }
+
+    pub fn set_layout(&mut self, layout: TreeLayout) -> bool {
+        let layout = layout.sanitized();
+        if self.layout == layout {
+            return false;
+        }
+        if self.layout.row_height != layout.row_height {
+            let viewport = self.list.viewport_size();
+            let offset = self.list.logical_scroll_top();
+            self.list = ListState::new(self.visible.len(), layout.row_height).with_overscan(2);
+            self.list.set_viewport_size(viewport.width, viewport.height);
+            self.list.scroll_to(offset);
+        }
+        self.layout = layout;
+        true
+    }
+
+    pub fn set_nodes(
+        &mut self,
+        nodes: impl IntoIterator<Item = TreeNode<T>>,
+    ) -> Result<(), TreeError> {
+        let arena = build_tree_arena(nodes)?;
+        let selected_id = self.selected_id();
+        let previous_offset = self.list.logical_scroll_top();
+        let previous_top = self
+            .visible
+            .get(previous_offset.item_ix)
+            .copied()
+            .map(|index| self.entries[index as usize].id);
+        let expanded_ids = self
+            .entries
+            .iter()
+            .zip(&self.expanded)
+            .filter_map(|(entry, expanded)| (*expanded).then_some(entry.id))
+            .collect::<Vec<_>>();
+
+        self.entries = arena.entries;
+        self.id_index = arena.id_index;
+        self.root_count = arena.root_count;
+        self.expanded.clear();
+        self.expanded.resize(self.entries.len(), false);
+        self.visible_position.clear();
+        self.visible_position
+            .resize(self.entries.len(), TREE_VISIBLE_UNSET);
+        for id in expanded_ids {
+            if let Some(index) = self.index_for_id(id)
+                && self.entries[index].child_count != 0
+            {
+                self.expanded[index] = true;
+            }
+        }
+        self.selected = selected_id.and_then(|id| self.index_for_id(id).map(|index| index as u32));
+        self.rebuild_visible_from_anchor(previous_offset, previous_top);
+        Ok(())
+    }
+
+    pub fn node_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn visible_count(&self) -> usize {
+        self.visible.len()
+    }
+
+    pub const fn root_count(&self) -> usize {
+        self.root_count
+    }
+
+    pub fn selected_id(&self) -> Option<ElementId> {
+        self.selected.map(|index| self.entries[index as usize].id)
+    }
+
+    pub fn selected_value(&self) -> Option<&T> {
+        self.selected
+            .map(|index| &self.entries[index as usize].value)
+    }
+
+    pub fn row(&self, visible_index: usize) -> Option<TreeRow<'_, T>> {
+        let index = *self.visible.get(visible_index)? as usize;
+        Some(TreeRow {
+            entry: &self.entries[index],
+            expanded: self.expanded[index],
+            selected: self.selected == Some(index as u32),
+        })
+    }
+
+    pub fn visible_rows(&self) -> std::ops::Range<usize> {
+        self.list.visible_rows().range
+    }
+
+    pub fn list_state(&self) -> &ListState {
+        &self.list
+    }
+
+    pub fn is_expanded(&self, id: impl Into<ElementId>) -> bool {
+        self.index_for_id(id.into())
+            .is_some_and(|index| self.expanded[index])
+    }
+
+    pub fn set_expanded(&mut self, id: impl Into<ElementId>, expanded: bool) -> bool {
+        let Some(index) = self.index_for_id(id.into()) else {
+            return false;
+        };
+        if self.entries[index].child_count == 0 || self.expanded[index] == expanded {
+            return false;
+        }
+        self.expanded[index] = expanded;
+        self.rebuild_visible();
+        true
+    }
+
+    pub fn toggle_expanded(&mut self, id: impl Into<ElementId>) -> bool {
+        let id = id.into();
+        let Some(index) = self.index_for_id(id) else {
+            return false;
+        };
+        self.set_expanded(id, !self.expanded[index])
+    }
+
+    pub fn select(&mut self, id: impl Into<ElementId>) -> bool {
+        let Some(index) = self.index_for_id(id.into()) else {
+            return false;
+        };
+        let visible = self.visible_position[index];
+        if visible == TREE_VISIBLE_UNSET || self.entries[index].disabled {
+            return false;
+        }
+        self.select_visible(visible as usize)
+    }
+
+    pub fn focus_handle(id: impl Into<ElementId>) -> FocusHandle {
+        FocusHandle::new(id)
+    }
+
+    pub fn row_id(id: impl Into<ElementId>, node: ElementId) -> ElementId {
+        derived_tree_id(id.into(), TREE_ROW_ID_TAG, node.as_u64())
+    }
+
+    pub fn disclosure_id(id: impl Into<ElementId>, node: ElementId) -> ElementId {
+        derived_tree_id(id.into(), TREE_DISCLOSURE_ID_TAG, node.as_u64())
+    }
+
+    /// Build a complete unstyled virtualized, expandable, keyboard-navigable tree.
+    ///
+    /// `render_row` runs only for mounted rows and receives an optional behavior-decorated,
+    /// appearance-free disclosure element. The caller decides where to place that control and owns
+    /// the complete row layout and paint. QuickGUI decorates the returned row with fixed virtual
+    /// geometry, tree semantics, selection, and pointer behavior. `activate` receives the selected
+    /// application value by stable node ID; the tree retains no closure or scheduler afterward.
+    pub fn element<V, E, RenderRow, Activate>(
+        &mut self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        access: fn(&mut V) -> &mut TreeState<T>,
+        mut render_row: RenderRow,
+        activate: Activate,
+    ) -> Element
+    where
+        V: 'static,
+        T: 'static,
+        E: IntoElement,
+        RenderRow: FnMut(TreeRow<'_, T>, Option<Element>) -> E,
+        Activate: Fn(&mut V, ElementId, &mut EventContext) + Clone + 'static,
+    {
+        let id = id.into();
+        let root_focus = Self::focus_handle(id);
+        let layout = self.layout;
+
+        let previous = cx.action_listener(id, move |view, _: &TreePrevious, cx| {
+            if access(view).move_selection(false) {
+                cx.invalidate();
+            }
+        });
+        let next = cx.action_listener(id, move |view, _: &TreeNext, cx| {
+            if access(view).move_selection(true) {
+                cx.invalidate();
+            }
+        });
+        let collapse = cx.action_listener(id, move |view, _: &TreeCollapseOrParent, cx| {
+            if access(view).collapse_or_parent() {
+                cx.invalidate();
+            }
+        });
+        let expand = cx.action_listener(id, move |view, _: &TreeExpandOrChild, cx| {
+            if access(view).expand_or_child() {
+                cx.invalidate();
+            }
+        });
+        let first = cx.action_listener(id, move |view, _: &TreeFirst, cx| {
+            if access(view).select_edge(false) {
+                cx.invalidate();
+            }
+        });
+        let last = cx.action_listener(id, move |view, _: &TreeLast, cx| {
+            if access(view).select_edge(true) {
+                cx.invalidate();
+            }
+        });
+        let page_up = cx.action_listener(id, move |view, _: &TreePageUp, cx| {
+            if access(view).move_page(false) {
+                cx.invalidate();
+            }
+        });
+        let page_down = cx.action_listener(id, move |view, _: &TreePageDown, cx| {
+            if access(view).move_page(true) {
+                cx.invalidate();
+            }
+        });
+        let toggle = cx.action_listener(id, move |view, _: &TreeToggle, cx| {
+            let selected = access(view).selected_id();
+            if selected.is_some_and(|selected| access(view).toggle_expanded(selected)) {
+                cx.invalidate();
+            }
+        });
+        let confirm_activate = activate.clone();
+        let confirm = cx.action_listener(id, move |view, _: &TreeActivate, cx| {
+            if let Some(selected) = access(view).selected_id() {
+                confirm_activate(view, selected, cx);
+            }
+        });
+
+        let selected = self.selected;
+        let list = self.list.clone();
+        let visible = list.visible_rows().range;
+        let rows = list.render_rows(visible, |visible_index| {
+            let node_index = self.visible[visible_index] as usize;
+            let entry = &self.entries[node_index];
+            let node_id = entry.id;
+            let row_id = Self::row_id(id, node_id);
+            let expanded = self.expanded[node_index];
+            let row_selected = selected == Some(node_index as u32);
+            let row = TreeRow {
+                entry,
+                expanded,
+                selected: row_selected,
+            };
+            let disclosure = if entry.child_count != 0 {
+                let disclosure_id = Self::disclosure_id(id, node_id);
+                let disclosure_click = cx.listener(disclosure_id, move |view, cx| {
+                    cx.stop_propagation();
+                    if access(view).toggle_expanded(node_id) {
+                        cx.focus(root_focus);
+                        cx.invalidate();
+                    }
+                });
+                Some(
+                    div()
+                        .id(disclosure_id)
+                        .on_click(disclosure_click)
+                        .tab_index(-1)
+                        .accessibility_role(AccessibilityRole::Button)
+                        .accessibility_label(if expanded { "Collapse" } else { "Expand" })
+                        .app_region_no_drag()
+                        .cursor_default()
+                        .user_select_none(),
+                )
+            } else {
+                None
+            };
+
+            let mut row_element = render_row(row, disclosure)
+                .into_element()
+                .id(row_id)
+                .tab_index(-1)
+                .accessibility_role(AccessibilityRole::TreeItem)
+                .accessibility_label(entry.label.clone())
+                .accessibility_level(entry.level as usize)
+                .accessibility_position_in_set(entry.position_in_set as usize)
+                .accessibility_size_of_set(entry.size_of_set as usize)
+                .selected(row_selected)
+                .disabled(entry.disabled)
+                .h(layout.row_height)
+                .w_full()
+                .min_w(0.0)
+                .overflow_hidden()
+                .cursor_default()
+                .app_region_no_drag();
+            if entry.child_count != 0 {
+                row_element = row_element.accessibility_expanded(expanded);
+            }
+            if !entry.disabled {
+                let clicked = cx.listener(row_id, move |view, cx| {
+                    if access(view).select(node_id) {
+                        cx.invalidate();
+                    }
+                    cx.focus(root_focus);
+                });
+                row_element = row_element.on_click(clicked);
+            }
+            row_element
+        });
+
+        let body = div()
+            .relative()
+            .size_full()
+            .min_w(0.0)
+            .min_h(0.0)
+            .overflow_hidden()
+            .variable_virtual_scroll(&list)
+            .app_region_no_drag()
+            .child(rows);
+
+        let mut root = div()
+            .id(id)
+            .track_focus(root_focus)
+            .key_context(TREE_KEY_CONTEXT)
+            .on_action(previous)
+            .on_action(next)
+            .on_action(collapse)
+            .on_action(expand)
+            .on_action(first)
+            .on_action(last)
+            .on_action(page_up)
+            .on_action(page_down)
+            .on_action(toggle)
+            .on_action(confirm)
+            .accessibility_role(AccessibilityRole::Tree)
+            .accessibility_size_of_set(self.root_count)
+            .size_full()
+            .min_w(0.0)
+            .min_h(0.0)
+            .overflow_hidden()
+            .app_region_no_drag()
+            .child(body);
+        if let Some(selected) = self.selected {
+            root = root.accessibility_active_descendant(Self::row_id(
+                id,
+                self.entries[selected as usize].id,
+            ));
+        }
+        root
+    }
+
+    fn index_for_id(&self, id: ElementId) -> Option<usize> {
+        self.id_index
+            .binary_search_by_key(&id.as_u64(), |(id, _)| *id)
+            .ok()
+            .map(|position| self.id_index[position].1 as usize)
+    }
+
+    fn rebuild_visible(&mut self) {
+        let previous_offset = self.list.logical_scroll_top();
+        let previous_top = self
+            .visible
+            .get(previous_offset.item_ix)
+            .copied()
+            .map(|index| self.entries[index as usize].id);
+
+        self.rebuild_visible_from_anchor(previous_offset, previous_top);
+    }
+
+    fn rebuild_visible_from_anchor(
+        &mut self,
+        previous_offset: ListOffset,
+        previous_top: Option<ElementId>,
+    ) {
+        self.visible.clear();
+        self.visible_position.fill(TREE_VISIBLE_UNSET);
+        let mut index = 0usize;
+        while index < self.entries.len() {
+            let visible_index = self.visible.len();
+            self.visible.push(index as u32);
+            self.visible_position[index] = visible_index as u32;
+            let entry = &self.entries[index];
+            if entry.child_count != 0 && !self.expanded[index] {
+                index = entry.subtree_end as usize;
+            } else {
+                index += 1;
+            }
+        }
+        self.list.set_item_count(self.visible.len());
+
+        if let Some(previous_top) = previous_top
+            && let Some(index) = self.index_for_id(previous_top)
+            && self.visible_position[index] != TREE_VISIBLE_UNSET
+        {
+            self.list.scroll_to(ListOffset {
+                item_ix: self.visible_position[index] as usize,
+                offset_in_item: previous_offset.offset_in_item,
+            });
+        }
+
+        self.normalize_selection();
+    }
+
+    fn normalize_selection(&mut self) {
+        if let Some(mut selected) = self.selected {
+            while self.visible_position[selected as usize] == TREE_VISIBLE_UNSET {
+                let Some(parent) = self.entries[selected as usize].parent else {
+                    self.selected = None;
+                    break;
+                };
+                selected = parent;
+                self.selected = Some(parent);
+            }
+        }
+        if self
+            .selected
+            .is_some_and(|index| self.entries[index as usize].disabled)
+        {
+            self.selected = None;
+        }
+        if self.selected.is_none() {
+            self.selected = self
+                .visible
+                .iter()
+                .copied()
+                .find(|index| !self.entries[*index as usize].disabled);
+        }
+        if let Some(selected) = self.selected {
+            let visible = self.visible_position[selected as usize];
+            if visible != TREE_VISIBLE_UNSET {
+                self.list.scroll_to_reveal_item(visible as usize);
+            }
+        }
+    }
+
+    fn select_visible(&mut self, visible_index: usize) -> bool {
+        let Some(index) = self.visible.get(visible_index).copied() else {
+            return false;
+        };
+        if self.entries[index as usize].disabled {
+            return false;
+        }
+        let changed = self.selected != Some(index);
+        self.selected = Some(index);
+        self.list.scroll_to_reveal_item(visible_index) || changed
+    }
+
+    fn move_selection(&mut self, forward: bool) -> bool {
+        self.normalize_selection();
+        let Some(selected) = self.selected else {
+            return false;
+        };
+        let current = self.visible_position[selected as usize] as usize;
+        let candidate = if forward {
+            (current + 1..self.visible.len())
+                .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+        } else {
+            (0..current)
+                .rev()
+                .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+        };
+        candidate.is_some_and(|candidate| self.select_visible(candidate))
+    }
+
+    fn select_edge(&mut self, end: bool) -> bool {
+        let candidate = if end {
+            (0..self.visible.len())
+                .rev()
+                .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+        } else {
+            (0..self.visible.len())
+                .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+        };
+        candidate.is_some_and(|candidate| self.select_visible(candidate))
+    }
+
+    fn move_page(&mut self, forward: bool) -> bool {
+        self.normalize_selection();
+        let Some(selected) = self.selected else {
+            return false;
+        };
+        let current = self.visible_position[selected as usize] as usize;
+        let page = (self.list.viewport_size().height / self.layout.row_height)
+            .floor()
+            .max(1.0) as usize;
+        let target = if forward {
+            current.saturating_add(page).min(self.visible.len() - 1)
+        } else {
+            current.saturating_sub(page)
+        };
+        let candidate = if forward {
+            (target..self.visible.len())
+                .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+                .or_else(|| {
+                    (0..target)
+                        .rev()
+                        .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+                })
+        } else {
+            (0..=target)
+                .rev()
+                .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+                .or_else(|| {
+                    (target + 1..self.visible.len())
+                        .find(|index| !self.entries[self.visible[*index] as usize].disabled)
+                })
+        };
+        candidate.is_some_and(|candidate| self.select_visible(candidate))
+    }
+
+    fn collapse_or_parent(&mut self) -> bool {
+        self.normalize_selection();
+        let Some(selected) = self.selected else {
+            return false;
+        };
+        let index = selected as usize;
+        if self.entries[index].child_count != 0 && self.expanded[index] {
+            self.expanded[index] = false;
+            self.rebuild_visible();
+            return true;
+        }
+        let Some(parent) = self.entries[index].parent else {
+            return false;
+        };
+        let parent = parent as usize;
+        if self.entries[parent].disabled {
+            return false;
+        }
+        self.select_visible(self.visible_position[parent] as usize)
+    }
+
+    fn expand_or_child(&mut self) -> bool {
+        self.normalize_selection();
+        let Some(selected) = self.selected else {
+            return false;
+        };
+        let index = selected as usize;
+        if self.entries[index].child_count == 0 {
+            return false;
+        }
+        if !self.expanded[index] {
+            self.expanded[index] = true;
+            self.rebuild_visible();
+            return true;
+        }
+        let current = self.visible_position[index] as usize;
+        let end = self.entries[index].subtree_end as usize;
+        (current + 1..self.visible.len())
+            .take_while(|visible| (self.visible[*visible] as usize) < end)
+            .find(|visible| !self.entries[self.visible[*visible] as usize].disabled)
+            .is_some_and(|visible| self.select_visible(visible))
+    }
+}
+
+fn build_tree_arena<T>(
+    nodes: impl IntoIterator<Item = TreeNode<T>>,
+) -> Result<TreeArena<T>, TreeError> {
+    let roots = nodes.into_iter().collect::<Vec<_>>();
+    let root_count = roots.len();
+    let mut entries = Vec::with_capacity(root_count.min(256));
+    let mut total_text_bytes = 0usize;
+    for (position, node) in roots.into_iter().enumerate() {
+        push_tree_node(
+            node,
+            None,
+            0,
+            position,
+            root_count,
+            &mut entries,
+            &mut total_text_bytes,
+        )?;
+    }
+
+    let mut id_index = entries
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| (entry.id.as_u64(), index as u32))
+        .collect::<Vec<_>>();
+    id_index.sort_unstable_by_key(|(id, _)| *id);
+    if let Some(duplicate) = id_index.windows(2).find(|pair| pair[0].0 == pair[1].0) {
+        return Err(TreeError::DuplicateId {
+            id: ElementId::new(duplicate[0].0),
+        });
+    }
+
+    Ok(TreeArena {
+        entries,
+        id_index,
+        root_count,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_tree_node<T>(
+    node: TreeNode<T>,
+    parent: Option<u32>,
+    level: usize,
+    position_in_set: usize,
+    size_of_set: usize,
+    entries: &mut Vec<TreeEntry<T>>,
+    total_text_bytes: &mut usize,
+) -> Result<(), TreeError> {
+    if entries.len() == MAX_TREE_NODES {
+        return Err(TreeError::TooManyNodes {
+            limit: MAX_TREE_NODES,
+        });
+    }
+    if level >= MAX_TREE_DEPTH {
+        return Err(TreeError::TooDeep {
+            depth: level + 1,
+            limit: MAX_TREE_DEPTH,
+        });
+    }
+    if node.label.len() > MAX_TREE_LABEL_BYTES {
+        return Err(TreeError::LabelTooLong {
+            id: node.id,
+            bytes: node.label.len(),
+            limit: MAX_TREE_LABEL_BYTES,
+        });
+    }
+    *total_text_bytes = total_text_bytes.saturating_add(node.label.len());
+    if *total_text_bytes > MAX_TREE_TEXT_BYTES {
+        return Err(TreeError::TextBudgetExceeded {
+            bytes: *total_text_bytes,
+            limit: MAX_TREE_TEXT_BYTES,
+        });
+    }
+
+    let index = entries.len() as u32;
+    let child_count = node.children.len();
+    entries.push(TreeEntry {
+        id: node.id,
+        label: node.label,
+        value: node.value,
+        parent,
+        level: level as u32,
+        position_in_set: position_in_set as u32,
+        size_of_set: size_of_set as u32,
+        subtree_end: index + 1,
+        child_count: child_count as u32,
+        disabled: node.disabled,
+    });
+    for (position, child) in node.children.into_iter().enumerate() {
+        push_tree_node(
+            child,
+            Some(index),
+            level + 1,
+            position,
+            child_count,
+            entries,
+            total_text_bytes,
+        )?;
+    }
+    entries[index as usize].subtree_end = entries.len() as u32;
+    Ok(())
+}
+
+fn derived_tree_id(parent: ElementId, tag: u64, node: u64) -> ElementId {
+    let mut hash = parent.as_u64() ^ tag ^ node.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    hash ^= hash >> 30;
+    hash = hash.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    hash ^= hash >> 27;
+    hash = hash.wrapping_mul(0x94d0_49bb_1331_11eb);
+    hash ^= hash >> 31;
+    if hash == parent.as_u64() || hash == u64::MAX {
+        hash ^= tag.rotate_left(17);
+    }
+    ElementId::new(hash)
+}
+
+fn finite_clamped(value: f32, minimum: f32, maximum: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(minimum, maximum)
+    } else {
+        fallback.clamp(minimum, maximum)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{App, View, text};
+
+    fn sample_nodes() -> Vec<TreeNode<usize>> {
+        vec![
+            TreeNode::new("src", "src", 0)
+                .child(TreeNode::new("lib", "lib.rs", 1))
+                .child(
+                    TreeNode::new("runtime", "runtime", 2)
+                        .child(TreeNode::new("macos", "macos.rs", 3))
+                        .child(TreeNode::new("test", "test_context.rs", 4).disabled(true)),
+                ),
+            TreeNode::new("cargo", "Cargo.toml", 5),
+        ]
+    }
+
+    #[test]
+    fn preorder_arena_expansion_navigation_and_top_anchor_are_bounded() {
+        let mut tree = TreeState::new(sample_nodes()).unwrap();
+        tree.list.set_viewport_size(300.0, 60.0);
+        assert_eq!(tree.node_count(), 6);
+        assert_eq!(tree.visible_count(), 2);
+        assert_eq!(tree.selected_id(), Some("src".into()));
+
+        assert!(tree.set_expanded("src", true));
+        assert_eq!(tree.visible_count(), 4);
+        assert!(tree.select("runtime"));
+        assert!(tree.expand_or_child());
+        assert_eq!(tree.visible_count(), 6);
+        assert!(tree.expand_or_child());
+        assert_eq!(tree.selected_id(), Some("macos".into()));
+        assert!(tree.collapse_or_parent());
+        assert_eq!(tree.selected_id(), Some("runtime".into()));
+        assert!(tree.collapse_or_parent());
+        assert!(!tree.is_expanded("runtime"));
+        assert!(tree.move_selection(true));
+        assert_eq!(tree.selected_id(), Some("cargo".into()));
+        assert!(!tree.collapse_or_parent());
+        assert!(tree.visible_rows().len() <= tree.visible_count());
+    }
+
+    #[test]
+    fn large_flat_trees_mount_only_the_viewport_and_overscan() {
+        let nodes = (0..100_000)
+            .map(|index| TreeNode::new(index as u64 + 1, format!("Node {index}"), index));
+        let tree = TreeState::new(nodes).unwrap();
+        tree.list.set_viewport_size(320.0, 90.0);
+        assert_eq!(tree.node_count(), 100_000);
+        assert_eq!(tree.visible_count(), 100_000);
+        assert!(tree.visible_rows().len() <= 7);
+        assert_eq!(tree.list.stats().measured_items, 0);
+    }
+
+    #[test]
+    fn layout_is_bounded_and_row_height_changes_preserve_the_logical_anchor() {
+        let mut tree = TreeState::new(sample_nodes()).unwrap();
+        tree.set_expanded("src", true);
+        tree.list.set_viewport_size(300.0, 60.0);
+        tree.list.scroll_to(ListOffset {
+            item_ix: 2,
+            offset_in_item: 4.0,
+        });
+        let before = tree.list.logical_scroll_top();
+
+        assert!(tree.set_layout(TreeLayout::new(44.0)));
+        assert_eq!(tree.layout().row_height, 44.0);
+        assert_eq!(tree.list.logical_scroll_top().item_ix, before.item_ix);
+
+        let invalid = TreeLayout {
+            row_height: f32::NAN,
+        };
+        assert!(tree.set_layout(invalid));
+        assert_eq!(tree.layout().row_height, 30.0);
+        assert_eq!(tree.list.logical_scroll_top().item_ix, before.item_ix);
+    }
+
+    #[test]
+    fn source_replacement_is_atomic_and_preserves_stable_state() {
+        let mut tree = TreeState::new(sample_nodes()).unwrap();
+        tree.list.set_viewport_size(300.0, 30.0);
+        assert!(tree.set_expanded("src", true));
+        assert!(tree.set_expanded("runtime", true));
+        assert!(tree.select("macos"));
+        tree.list.scroll_to(ListOffset {
+            item_ix: 3,
+            offset_in_item: 4.0,
+        });
+
+        tree.set_nodes([
+            TreeNode::new("cargo", "Cargo.toml", 50),
+            TreeNode::new("src", "source", 10)
+                .child(
+                    TreeNode::new("runtime", "platform", 20)
+                        .child(TreeNode::new("macos", "macos.rs", 30))
+                        .child(TreeNode::new("linux", "linux.rs", 40)),
+                )
+                .child(TreeNode::new("lib", "lib.rs", 11)),
+        ])
+        .unwrap();
+
+        assert_eq!(tree.selected_id(), Some("macos".into()));
+        assert_eq!(tree.selected_value(), Some(&30));
+        assert!(tree.is_expanded("src"));
+        assert!(tree.is_expanded("runtime"));
+        let top = tree.list.logical_scroll_top();
+        assert_eq!(tree.row(top.item_ix).map(TreeRow::id), Some("macos".into()));
+
+        let error = tree
+            .set_nodes([
+                TreeNode::new("duplicate", "A", 1),
+                TreeNode::new("duplicate", "B", 2),
+            ])
+            .unwrap_err();
+        assert_eq!(
+            error,
+            TreeError::DuplicateId {
+                id: "duplicate".into()
+            }
+        );
+        assert_eq!(tree.node_count(), 6);
+        assert_eq!(tree.selected_id(), Some("macos".into()));
+        assert_eq!(tree.selected_value(), Some(&30));
+        assert!(tree.is_expanded("src"));
+        assert!(tree.is_expanded("runtime"));
+
+        tree.set_nodes([TreeNode::new("cargo", "Cargo.toml", 60)])
+            .unwrap();
+        assert_eq!(tree.node_count(), 1);
+        assert_eq!(tree.selected_id(), Some("cargo".into()));
+    }
+
+    #[test]
+    fn duplicate_depth_and_text_limits_fail_deterministically() {
+        assert_eq!(
+            TreeState::new([
+                TreeNode::new("same", "A", ()),
+                TreeNode::new("same", "B", ()),
+            ])
+            .unwrap_err(),
+            TreeError::DuplicateId { id: "same".into() }
+        );
+
+        let oversized = "x".repeat(MAX_TREE_LABEL_BYTES + 1);
+        assert_eq!(
+            TreeState::new([TreeNode::new("large", oversized, ())]).unwrap_err(),
+            TreeError::LabelTooLong {
+                id: "large".into(),
+                bytes: MAX_TREE_LABEL_BYTES + 1,
+                limit: MAX_TREE_LABEL_BYTES,
+            }
+        );
+
+        let mut node = TreeNode::new(0_u64, "0", ());
+        for level in 1..=MAX_TREE_DEPTH {
+            node = TreeNode::new(level, level.to_string(), ()).child(node);
+        }
+        assert!(matches!(
+            TreeState::new([node]),
+            Err(TreeError::TooDeep {
+                limit: MAX_TREE_DEPTH,
+                ..
+            })
+        ));
+    }
+
+    #[derive(Debug)]
+    struct TreeView {
+        tree: TreeState<usize>,
+        activated: Option<ElementId>,
+    }
+
+    impl Default for TreeView {
+        fn default() -> Self {
+            Self {
+                tree: TreeState::new(sample_nodes()).unwrap(),
+                activated: None,
+            }
+        }
+    }
+
+    impl TreeView {
+        fn tree(view: &mut Self) -> &mut TreeState<usize> {
+            &mut view.tree
+        }
+    }
+
+    impl View for TreeView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            self.tree.element(
+                cx,
+                "tree",
+                Self::tree,
+                |row, disclosure| {
+                    let disclosure = disclosure.map_or_else(
+                        || div().w(20.0).h(30.0).flex_none(),
+                        |disclosure| {
+                            disclosure.w(20.0).h(30.0).child(if row.is_expanded() {
+                                "⌄"
+                            } else {
+                                "›"
+                            })
+                        },
+                    );
+                    div()
+                        .flex_row()
+                        .items_center()
+                        .child(disclosure)
+                        .child(text(row.label().clone()).no_wrap().text_ellipsis())
+                },
+                |view, id, cx| {
+                    view.activated = Some(id);
+                    cx.invalidate();
+                },
+            )
+        }
+    }
+
+    #[test]
+    fn tree_uses_composite_focus_click_keyboard_activation_and_idle_paths() {
+        let app = App::new(TreeView::default()).bind_keys(tree_key_bindings());
+        let (mut cx, view) = app.into_test_context().unwrap();
+        let window = view.window_handle();
+
+        cx.simulate_keystrokes(window, "tab right down down right right enter")
+            .unwrap();
+        assert_eq!(cx.focused(window).unwrap(), Some("tree".into()));
+        assert_eq!(
+            cx.read(view, |view| view.tree.selected_id()).unwrap(),
+            Some("macos".into())
+        );
+        assert_eq!(
+            cx.read(view, |view| view.activated).unwrap(),
+            Some("macos".into())
+        );
+
+        let cargo_row = TreeState::<usize>::row_id("tree", "cargo".into());
+        cx.click(window, cargo_row).unwrap();
+        assert_eq!(
+            cx.read(view, |view| view.tree.selected_id()).unwrap(),
+            Some("cargo".into())
+        );
+        assert_eq!(cx.focused(window).unwrap(), Some("tree".into()));
+
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    #[test]
+    fn tree_bindings_are_contextual_and_complete() {
+        let bindings = tree_key_bindings();
+        assert_eq!(bindings.len(), 10);
+        assert!(
+            bindings.iter().all(
+                |binding| binding.context_predicate().is_some_and(|context| context
+                    .depth_of(&[crate::KeyContext::parse(TREE_KEY_CONTEXT).unwrap()])
+                    .is_some())
+            )
+        );
+    }
+}

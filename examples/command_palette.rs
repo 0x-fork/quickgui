@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use quickgui::{
-    AnyAction, App, Color, Element, EventContext, FocusHandle, KeyBinding, PickerItem, PickerState,
-    PickerStyle, TitleBarStyle, View, ViewContext, button, div, picker_key_bindings, text,
+    AnyAction, App, Color, Element, EventContext, FocusHandle, HighlightStyle, IntoElement,
+    KeyBinding, PickerItem, PickerLayout, PickerState, StyledText, TitleBarStyle, View,
+    ViewContext, button, div, picker_key_bindings, text, text_input,
 };
 
 quickgui::actions!(
@@ -154,11 +155,7 @@ impl CommandPaletteDemo {
     fn new() -> Self {
         let palette = PickerState::new(command_items())
             .expect("the static command registry is within picker limits")
-            .with_style(
-                PickerStyle::default()
-                    .placeholder("Search commands by name or alias…")
-                    .max_visible_rows(8),
-            );
+            .with_layout(PickerLayout::new(48.0).max_visible_rows(8));
         Self {
             palette,
             palette_open: false,
@@ -267,6 +264,36 @@ impl View for CommandPaletteDemo {
         } else {
             Color::rgb8(148, 163, 184)
         };
+        let palette_input_background = if self.light_theme {
+            Color::rgb8(241, 245, 249)
+        } else {
+            Color::rgb8(20, 23, 29)
+        };
+        let palette_border = if self.light_theme {
+            Color::rgb8(203, 213, 225)
+        } else {
+            Color::rgb8(74, 81, 96)
+        };
+        let palette_selection = if self.light_theme {
+            Color::rgb8(220, 235, 252)
+        } else {
+            Color::rgb8(39, 76, 119)
+        };
+        let palette_selection_hover = if self.light_theme {
+            Color::rgb8(207, 228, 251)
+        } else {
+            Color::rgb8(45, 88, 137)
+        };
+        let palette_row_hover = if self.light_theme {
+            Color::rgba8(0, 0, 0, 6)
+        } else {
+            Color::rgb8(43, 48, 59)
+        };
+        let matched = if self.light_theme {
+            Color::rgb8(0, 122, 110)
+        } else {
+            Color::rgb8(126, 231, 212)
+        };
 
         let mut root = div()
             .focus_scope(workspace)
@@ -312,7 +339,7 @@ impl View for CommandPaletteDemo {
                                     .bg(surface)
                                     .child(text("Workspace").font_semibold())
                                     .child(
-                                        text("src\nexamples\nREADME.md\nARCHITECTURE.md")
+                                        text("src\nexamples\ndocs\nREADME.md")
                                             .text_sm()
                                             .line_height(26.0)
                                             .text_color(muted),
@@ -363,19 +390,122 @@ impl View for CommandPaletteDemo {
                 this.palette_open = false;
                 event_cx.invalidate();
             });
-            let palette_width = self
-                .palette
-                .style()
-                .width
-                .min((cx.size().width - 24.0).max(1.0));
+            let palette_width = 560.0_f32.min((cx.size().width - 24.0).max(1.0));
             let left = ((cx.size().width - palette_width) * 0.5).max(12.0);
+            let input = text_input(self.palette.query().clone())
+                .placeholder("Search commands by name or alias…")
+                .h(48.0)
+                .w_full()
+                .px_3()
+                .border(1.0, palette_border)
+                .focus(move |focus| focus.border(2.0, matched))
+                .bg(palette_input_background);
+            let empty = div()
+                .size_full()
+                .flex_row()
+                .items_center()
+                .px_3()
+                .child(text("No matching commands").text_sm().text_color(muted));
+            let status = if self.palette.results_truncated() {
+                format!(
+                    "Showing {} of {} matches",
+                    self.palette.result_count(),
+                    self.palette.total_match_count()
+                )
+            } else {
+                format!(
+                    "{} match{}",
+                    self.palette.total_match_count(),
+                    if self.palette.total_match_count() == 1 {
+                        ""
+                    } else {
+                        "es"
+                    }
+                )
+            };
             let palette = self
                 .palette
                 .element(
                     cx,
                     "command-palette",
+                    "Command palette",
                     |this| &mut this.palette,
+                    input,
+                    empty,
+                    move |matched_item| {
+                        let item = matched_item.item();
+                        let disabled = item.is_disabled();
+                        let selected = matched_item.is_selected();
+                        let label = if matched_item.label_ranges().is_empty() {
+                            text(item.label().clone())
+                        } else {
+                            StyledText::new(item.label().clone())
+                                .with_highlights(matched_item.label_ranges().iter().cloned().map(
+                                    |range| {
+                                        (
+                                            range,
+                                            HighlightStyle::default()
+                                                .color(matched)
+                                                .font_semibold(),
+                                        )
+                                    },
+                                ))
+                                .into_element()
+                        }
+                        .text_sm()
+                        .font_medium()
+                        .no_wrap()
+                        .text_color(if disabled {
+                            muted
+                        } else {
+                            foreground
+                        });
+                        let mut label_stack = div().min_w(0.0).flex_1().flex_col().child(label);
+                        if let Some(detail) = item.detail_text() {
+                            label_stack = label_stack
+                                .child(text(detail.clone()).text_xs().no_wrap().text_color(muted));
+                        }
+                        let mut row = div()
+                            .flex_row()
+                            .items_center()
+                            .gap_3()
+                            .px_3()
+                            .bg(if selected {
+                                palette_selection
+                            } else {
+                                Color::TRANSPARENT
+                            })
+                            .hover(move |hover| {
+                                hover.bg(if selected {
+                                    palette_selection_hover
+                                } else {
+                                    palette_row_hover
+                                })
+                            })
+                            .child(label_stack);
+                        if let Some(shortcut) = item.shortcut_text() {
+                            row = row.child(
+                                text(shortcut.clone()).text_xs().no_wrap().text_color(muted),
+                            );
+                        }
+                        row
+                    },
                     Self::activate_palette_command,
+                )
+                .w(palette_width)
+                .rounded_xl()
+                .border(1.0, palette_border)
+                .shadow_xl()
+                .bg(surface)
+                .text_color(foreground)
+                .child(
+                    div()
+                        .h(24.0)
+                        .w_full()
+                        .flex_row()
+                        .items_center()
+                        .px_3()
+                        .child(text(status).text_xs().no_wrap().text_color(muted)),
                 )
                 .overlay()
                 .top(72.0)

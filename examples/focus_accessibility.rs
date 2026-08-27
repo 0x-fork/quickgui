@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, Element, ElementId, Event, EventContext, View, ViewContext, button, div, form,
-    text, text_area, text_input,
+    App, Color, Element, ElementId, Event, EventContext, Fieldset, View, ViewContext, button, div,
+    form, text, text_area, text_input,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
@@ -121,6 +121,21 @@ impl View for FocusDemo {
             update_editor_status(this, value);
             cx.invalidate();
         });
+        let profile_fields = Fieldset::new("profile-fields");
+        let name_field = profile_fields
+            .field("name")
+            .required(true)
+            .invalid(self.name.trim().is_empty())
+            .dirty(!self.name.is_empty())
+            .filled(!self.name.is_empty())
+            .validation_message("Name is required");
+        let email_field = profile_fields
+            .field("email")
+            .required(true)
+            .invalid(!valid_email(&self.email))
+            .dirty(!self.email.is_empty())
+            .filled(!self.email.is_empty())
+            .validation_message("Enter a complete email address");
 
         div()
             .size_full()
@@ -151,52 +166,93 @@ impl View for FocusDemo {
                     .flex_none()
                     .gap_3()
                     .child(
-                        div()
-                            .flex_col()
-                            .gap_1()
-                            .child(text("Name").text_sm().font_medium())
-                            .child(
-                                text_input(self.name.clone())
-                                    .on_input(edit_name)
-                                    .max_length(32)
-                                    .input_filter(|value| {
-                                        !value.chars().any(|character| character == '\t')
-                                    })
-                                    .invalid(self.name.trim().is_empty())
-                                    .validation_message("Name is required")
-                                    .placeholder("Type a name, emoji, or CJK text…")
-                                    .accessibility_label("Name")
-                                    .w_full()
-                                    .max_w(480.0)
-                                    .auto_focus(),
-                            )
-                            .children(self.name.trim().is_empty().then(|| {
-                                text("Name is required")
-                                    .text_xs()
-                                    .text_color(Color::rgb8(248, 113, 113))
-                            })),
+                        profile_fields.root_part(
+                            div()
+                                .flex_col()
+                                .gap_3()
+                                .child(
+                                    profile_fields.legend_part(
+                                        text("Profile details").text_lg().font_semibold(),
+                                    ),
+                                )
+                                .child(profile_fields.description_part(
+                                    text("These labels focus their controls just like web labels.")
+                                        .text_xs()
+                                        .text_color(Color::rgb8(165, 170, 181)),
+                                ))
+                                .child(name_field.root_part(
+                                    div()
+                                        .flex_col()
+                                        .gap_1()
+                                        .child(
+                                            name_field.label_part(
+                                                text("Name").text_sm().font_medium(),
+                                            ),
+                                        )
+                                        .child(name_field.control_part(
+                                            text_input(self.name.clone())
+                                                .on_input(edit_name)
+                                                .max_length(32)
+                                                .input_filter(|value| {
+                                                    !value
+                                                        .chars()
+                                                        .any(|character| character == '\t')
+                                                })
+                                                .placeholder("Type a name, emoji, or CJK text…")
+                                                .w_full()
+                                                .max_w(480.0)
+                                                .auto_focus(),
+                                        ))
+                                        .child(name_field.description_part(
+                                            text("Shown on your public profile.")
+                                                .text_xs()
+                                                .text_color(Color::rgb8(165, 170, 181)),
+                                        ))
+                                        .child(name_field.error_part(
+                                            text("Name is required")
+                                                .text_xs()
+                                                .text_color(Color::rgb8(248, 113, 113)),
+                                        )),
+                                ))
+                                .child(email_field.root_part(
+                                    div()
+                                        .flex_col()
+                                        .gap_1()
+                                        .child(
+                                            email_field.label_part(
+                                                text("Email").text_sm().font_medium(),
+                                            ),
+                                        )
+                                        .child(email_field.control_part(
+                                            text_input(self.email.clone())
+                                                .on_input(edit_email)
+                                                .max_length(254)
+                                                .placeholder("you@example.com")
+                                                .w_full()
+                                                .max_w(480.0),
+                                        ))
+                                        .child(email_field.description_part(
+                                            text("Used only for account notifications.")
+                                                .text_xs()
+                                                .text_color(Color::rgb8(165, 170, 181)),
+                                        ))
+                                        .child(email_field.error_part(
+                                            text("Enter a complete email address")
+                                                .text_xs()
+                                                .text_color(Color::rgb8(248, 113, 113)),
+                                        )),
+                                )),
+                        ),
                     )
                     .child(
                         div()
                             .flex_col()
-                            .gap_1()
-                            .child(text("Email").text_sm().font_medium())
+                            .gap_2()
                             .child(
-                                text_input(self.email.clone())
-                                    .on_input(edit_email)
-                                    .max_length(254)
-                                    .invalid(!valid_email(&self.email))
-                                    .validation_message("Enter a complete email address")
-                                    .placeholder("you@example.com")
-                                    .accessibility_label("Email")
-                                    .w_full()
-                                    .max_w(480.0),
-                            )
-                            .children((!valid_email(&self.email)).then(|| {
-                                text("Enter a complete email address")
+                                text("Field and Fieldset contribute no colors, spacing, borders, or typography.")
                                     .text_xs()
-                                    .text_color(Color::rgb8(248, 113, 113))
-                            })),
+                                    .text_color(Color::rgb8(165, 170, 181)),
+                            ),
                     )
                     .child(
                         Self::control("Submit profile")

@@ -15,6 +15,7 @@ struct VertexInput {
     @location(3) params_1: vec4<f32>,
     @location(4) params_2: vec4<f32>,
     @location(5) params_3: vec4<f32>,
+    @location(6) opacity_and_padding: vec4<f32>,
 }
 
 struct VertexOutput {
@@ -27,6 +28,7 @@ struct VertexOutput {
     @location(5) @interpolate(flat) params_1: vec4<f32>,
     @location(6) @interpolate(flat) params_2: vec4<f32>,
     @location(7) @interpolate(flat) params_3: vec4<f32>,
+    @location(8) @interpolate(flat) opacity: f32,
 }
 
 @vertex
@@ -58,5 +60,6 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.params_1 = input.params_1;
     output.params_2 = input.params_2;
     output.params_3 = input.params_3;
+    output.opacity = input.opacity_and_padding.x;
     return output;
 }

@@ -5,16 +5,20 @@ use quickgui::{
     button, div, text,
 };
 
-quickgui::actions!(commands, [Save, ToggleSidebar, SplitLeft, InspectPath]);
+quickgui::actions!(
+    commands,
+    [Save, ToggleSidebar, SplitLeft, NavigateBack, InspectPath]
+);
 
 fn app_menus(sidebar_visible: bool) -> Vec<Menu> {
     vec![
         Menu::new("File").items([
             MenuItem::action("Save", Save),
             MenuItem::separator(),
-            MenuItem::submenu(
-                Menu::new("Layout").items([MenuItem::action("Split Left", SplitLeft)]),
-            ),
+            MenuItem::submenu(Menu::new("Layout").items([
+                MenuItem::action("Split Left", SplitLeft),
+                MenuItem::action("Navigate Back", NavigateBack),
+            ])),
         ]),
         Menu::new("View").items([
             MenuItem::action("Show Sidebar", ToggleSidebar).checked(sidebar_visible),
@@ -31,6 +35,7 @@ fn main() -> Result<(), quickgui::AppError> {
             KeyBinding::new("platform-s", Save, Some("Editor")),
             KeyBinding::new("platform-b", ToggleSidebar, Some("Workspace")),
             KeyBinding::new("platform-k left", SplitLeft, Some("Workspace > Editor")),
+            KeyBinding::new("platform-[", NavigateBack, Some("Editor")).use_key_equivalents(),
             KeyBinding::new("platform-i", InspectPath, Some("Editor")),
         ])
         .menus(app_menus(true))
@@ -41,6 +46,8 @@ struct ActionDemo {
     sidebar_visible: bool,
     save_count: usize,
     raw_key_count: usize,
+    action_capture_count: usize,
+    focused_key_count: usize,
     status: Arc<str>,
 }
 
@@ -50,8 +57,10 @@ impl ActionDemo {
             sidebar_visible: true,
             save_count: 0,
             raw_key_count: 0,
+            action_capture_count: 0,
+            focused_key_count: 0,
             status: Arc::from(
-                "The editor is focused. Try Cmd-S, Cmd-B, Cmd-I, or Cmd-K then Left.",
+                "Try Cmd-S, Cmd-B, Cmd-I, Cmd-K then Left, or the localized Cmd-[ binding.",
             ),
         }
     }
@@ -74,14 +83,20 @@ impl ActionDemo {
 
 impl View for ActionDemo {
     fn event(&mut self, event: &Event, cx: &mut EventContext) {
-        if let Event::KeyDown { key, modifiers, .. } = event {
+        if let Event::KeyDown {
+            key,
+            key_char,
+            modifiers,
+            ..
+        } = event
+        {
             if *key == quickgui::Key::Escape {
                 cx.exit();
             } else {
                 self.raw_key_count += 1;
                 self.status = Arc::from(format!(
-                    "Raw key event #{}: {modifiers:?} {key:?}",
-                    self.raw_key_count
+                    "Raw key event #{}: {modifiers:?} command={key:?} printable={key_char:?}",
+                    self.raw_key_count,
                 ));
                 cx.invalidate();
             }
@@ -91,6 +106,7 @@ impl View for ActionDemo {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl quickgui::IntoElement {
         let workspace = cx.focus_handle("workspace");
         let editor = cx.focus_handle("editor");
+        let keyboard_layout = cx.keyboard_layout().name().to_owned();
 
         let toggle_sidebar = cx.action_listener("workspace", |this, _: &ToggleSidebar, cx| {
             this.sidebar_visible = !this.sidebar_visible;
@@ -101,6 +117,9 @@ impl View for ActionDemo {
             });
             cx.set_menus(app_menus(this.sidebar_visible));
             cx.invalidate();
+        });
+        let capture_save = cx.action_listener("workspace", |this, _: &Save, _cx| {
+            this.action_capture_count += 1;
         });
         let workspace_save = cx.action_listener("workspace", |this, _: &Save, cx| {
             this.status = Arc::from("Workspace Save fallback ran unexpectedly.");
@@ -123,10 +142,22 @@ impl View for ActionDemo {
             this.status = Arc::from("Editor handled the multi-stroke SplitLeft action.");
             cx.invalidate();
         });
+        let navigate_back = cx.action_listener("editor", |this, _: &NavigateBack, cx| {
+            this.status = Arc::from(
+                "Editor handled NavigateBack through the layout-localized Cmd-[ binding.",
+            );
+            cx.invalidate();
+        });
         let editor_inspect = cx.action_listener("editor", |this, _: &InspectPath, cx| {
             this.status = Arc::from("Editor observed InspectPath and propagated it.");
             cx.invalidate();
             cx.propagate();
+        });
+        let capture_key = cx.key_down_listener("workspace", |this, _event, _cx| {
+            this.focused_key_count += 1;
+        });
+        let editor_key = cx.key_down_listener("editor", |this, _event, _cx| {
+            this.focused_key_count += 1;
         });
         let save_button = cx.listener("save-button", |_this, cx| {
             cx.dispatch_action(Save);
@@ -136,9 +167,11 @@ impl View for ActionDemo {
         div()
             .focus_scope(workspace)
             .key_context("Workspace")
+            .capture_action(capture_save)
             .on_action(toggle_sidebar)
             .on_action(workspace_save)
             .on_action(workspace_inspect)
+            .capture_key_down(capture_key)
             .size_full()
             .flex_col()
             .bg(Color::rgb8(18, 19, 22))
@@ -158,9 +191,9 @@ impl View for ActionDemo {
                     )
                     .child(
                         text(if editor_contains_focus {
-                            "Editor scope contains focus"
+                            format!("Editor focused · {keyboard_layout}")
                         } else {
-                            "Editor scope does not contain focus"
+                            format!("Editor unfocused · {keyboard_layout}")
                         })
                         .text_xs()
                         .text_color(Color::rgb8(126, 231, 212)),
@@ -189,7 +222,9 @@ impl View for ActionDemo {
                             .key_context("Editor mode=insert")
                             .on_action(save)
                             .on_action(split_left)
+                            .on_action(navigate_back)
                             .on_action(editor_inspect)
+                            .on_key_down(editor_key)
                             .flex_1()
                             .min_w(0.0)
                             .p_4()
@@ -215,7 +250,7 @@ impl View for ActionDemo {
                                     .rounded_lg()
                                     .bg(Color::rgb8(27, 29, 35))
                                     .child(
-                                        text("Focused editor surface\n\nActions bubble from the focused child to this editor, then the workspace. Context predicates choose the deepest applicable binding. Incomplete key sequences sleep until the next stroke or one timeout wake-up.")
+                                        text("Focused editor surface\n\nActions capture from the workspace toward focus, then bubble back to the workspace. Raw key listeners use the same two phases only after keymap actions propagate. Context predicates choose the deepest applicable binding. Cmd-[ opts into Apple's localized equivalent (for example Cmd-Ö on German). Incomplete key sequences sleep until the next stroke or one timeout wake-up.")
                                             .text_base()
                                             .line_height(24.0)
                                             .wrap(),
@@ -229,7 +264,10 @@ impl View for ActionDemo {
                     ),
             )
             .child(
-                text("Escape quits. Cmd-K prefixes are replayed on mismatch or timeout, so ordinary input is not lost.")
+                text(format!(
+                    "Escape quits. Save captures: {} · focused key phase callbacks: {} · Cmd-K prefixes replay on mismatch or timeout.",
+                    self.action_capture_count, self.focused_key_count
+                ))
                     .px_4()
                     .py_2()
                     .text_xs()

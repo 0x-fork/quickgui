@@ -36,6 +36,7 @@ struct QuickGuiFragmentInput {
     @location(5) @interpolate(flat) params_1: vec4<f32>,
     @location(6) @interpolate(flat) params_2: vec4<f32>,
     @location(7) @interpolate(flat) params_3: vec4<f32>,
+    @location(8) @interpolate(flat) opacity: f32,
 }
 "#;
 
@@ -61,7 +62,7 @@ fn fs_main(input: QuickGuiFragmentInput) -> @location(0) vec4<f32> {
             input.params_3,
         ),
     ));
-    let alpha = clamp(straight.a, 0.0, 1.0);
+    let alpha = clamp(straight.a * input.opacity, 0.0, 1.0);
     return vec4<f32>(straight.rgb * alpha, alpha);
 }
 "#;

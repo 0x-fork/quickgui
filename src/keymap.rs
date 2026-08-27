@@ -34,11 +34,17 @@ impl fmt::Display for KeymapError {
 
 impl std::error::Error for KeymapError {}
 
-/// A normalized logical key plus modifiers.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+/// A normalized command key plus modifiers and optional text-producing key metadata.
+///
+/// `key` is suitable for command matching and is intentionally independent from Caps Lock and
+/// text composition. `key_char` records the printable character that the same native press could
+/// produce. QuickGUI checks both identities without ever synthesizing committed text from a
+/// command match.
+#[derive(Clone, Debug)]
 pub struct Keystroke {
     pub key: Key,
     pub modifiers: Modifiers,
+    pub key_char: Option<Key>,
 }
 
 impl Keystroke {
@@ -46,6 +52,7 @@ impl Keystroke {
         Self {
             key: normalize_key(key),
             modifiers,
+            key_char: None,
         }
     }
 
@@ -55,6 +62,68 @@ impl Keystroke {
 
     pub fn from_key_event(key: &Key, modifiers: Modifiers) -> Self {
         Self::new(key.clone(), modifiers)
+    }
+
+    /// Attach the printable character produced by this keypress.
+    ///
+    /// This is primarily useful for deterministic platform tests. Native applications receive it
+    /// from the keyboard backend. It affects keymap matching but not equality, display, or text
+    /// insertion.
+    pub fn with_key_char(mut self, key_char: Key) -> Self {
+        self.key_char = Some(normalize_key(key_char));
+        self
+    }
+
+    pub(crate) fn from_platform_event(
+        key: Key,
+        modifiers: Modifiers,
+        key_char: Option<Key>,
+    ) -> Self {
+        let mut stroke = Self::new(key, modifiers);
+        stroke.key_char = key_char.map(normalize_key);
+        stroke
+    }
+
+    fn should_match(&self, target: &Self) -> bool {
+        if let Some(key_char) = self
+            .key_char
+            .as_ref()
+            .filter(|key_char| *key_char != &self.key)
+        {
+            let text_modifiers = self.modifiers & (Modifiers::CONTROL | Modifiers::SUPER);
+            if target.key == *key_char && target.modifiers == text_modifiers {
+                return true;
+            }
+        }
+        target.key == self.key && target.modifiers == self.modifiers
+    }
+
+    fn key_char_identity(&self) -> Option<Self> {
+        let key_char = self
+            .key_char
+            .as_ref()
+            .filter(|key_char| *key_char != &self.key)?;
+        Some(Self::new(
+            key_char.clone(),
+            self.modifiers & (Modifiers::CONTROL | Modifiers::SUPER),
+        ))
+    }
+}
+
+// Platform text metadata does not change the command identity. Keymap matching explicitly checks
+// it as a second candidate through `should_match`.
+impl PartialEq for Keystroke {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key && self.modifiers == other.modifiers
+    }
+}
+
+impl Eq for Keystroke {}
+
+impl std::hash::Hash for Keystroke {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key.hash(state);
+        self.modifiers.hash(state);
     }
 }
 
@@ -680,6 +749,7 @@ impl PredicateParser<'_> {
 #[derive(Clone, Debug)]
 pub struct KeyBinding {
     keystrokes: Vec<Keystroke>,
+    declared_keystrokes: Option<Arc<[Keystroke]>>,
     action: AnyAction,
     context_predicate: Option<ContextPredicate>,
 }
@@ -698,9 +768,35 @@ impl KeyBinding {
     ) -> Result<Self, KeymapError> {
         Ok(Self {
             keystrokes: parse_keystroke_sequence(keystrokes)?,
+            declared_keystrokes: None,
             action: AnyAction::new(action),
             context_predicate: context.map(ContextPredicate::parse).transpose()?,
         })
+    }
+
+    /// Opt this binding into the operating system's localized key-equivalent policy.
+    ///
+    /// On macOS, characters that are difficult to reach on the active layout are remapped to
+    /// Apple's localized equivalent. For example, `cmd-[` becomes `cmd-ö` on a German layout.
+    /// QuickGUI retains the original declaration and remaps it only when the native keyboard
+    /// layout changes. Other platforms currently leave the declaration unchanged.
+    pub fn use_key_equivalents(mut self) -> Self {
+        if self.declared_keystrokes.is_none() {
+            self.declared_keystrokes = Some(Arc::from(self.keystrokes.clone()));
+        }
+        self
+    }
+
+    /// Disable localized key equivalents and restore the original declaration.
+    pub fn without_key_equivalents(mut self) -> Self {
+        if let Some(declared) = self.declared_keystrokes.take() {
+            self.keystrokes = declared.as_ref().to_vec();
+        }
+        self
+    }
+
+    pub fn uses_key_equivalents(&self) -> bool {
+        self.declared_keystrokes.is_some()
     }
 
     pub fn keystrokes(&self) -> &[Keystroke] {
@@ -715,8 +811,32 @@ impl KeyBinding {
         self.context_predicate.as_ref()
     }
 
+    fn apply_key_equivalents(&mut self, equivalents: &'static [(char, char)]) {
+        let Some(declared) = self.declared_keystrokes.as_ref() else {
+            return;
+        };
+        self.keystrokes.clear();
+        self.keystrokes
+            .extend(declared.iter().cloned().map(|mut stroke| {
+                if let Key::Character(value) = &stroke.key
+                    && let Some(character) = single_character(value)
+                    && let Some((_, equivalent)) = equivalents
+                        .iter()
+                        .find(|(declared, _)| *declared == character)
+                {
+                    stroke.key = normalize_key(Key::Character(equivalent.to_string()));
+                }
+                stroke
+            }));
+    }
+
     fn match_keystrokes(&self, input: &[Keystroke]) -> Option<bool> {
-        if input.len() > self.keystrokes.len() || self.keystrokes[..input.len()] != *input {
+        if input.len() > self.keystrokes.len()
+            || !input
+                .iter()
+                .zip(&self.keystrokes)
+                .all(|(typed, target)| typed.should_match(target))
+        {
             return None;
         }
         Some(input.len() < self.keystrokes.len())
@@ -735,6 +855,7 @@ pub struct KeymapMatch {
 pub struct Keymap {
     bindings: Vec<KeyBinding>,
     binding_indices_by_first_stroke: HashMap<Keystroke, Vec<usize>>,
+    key_equivalents: &'static [(char, char)],
 }
 
 impl Keymap {
@@ -745,7 +866,8 @@ impl Keymap {
     }
 
     pub fn add_bindings(&mut self, bindings: impl IntoIterator<Item = KeyBinding>) {
-        for binding in bindings {
+        for mut binding in bindings {
+            binding.apply_key_equivalents(self.key_equivalents);
             let index = self.bindings.len();
             let first = binding
                 .keystrokes
@@ -763,6 +885,17 @@ impl Keymap {
     pub fn clear(&mut self) {
         self.bindings.clear();
         self.binding_indices_by_first_stroke.clear();
+    }
+
+    pub(crate) fn set_key_equivalents(&mut self, equivalents: &'static [(char, char)]) {
+        if self.key_equivalents == equivalents {
+            return;
+        }
+        self.key_equivalents = equivalents;
+        for binding in &mut self.bindings {
+            binding.apply_key_equivalents(equivalents);
+        }
+        self.rebuild_first_stroke_index();
     }
 
     pub fn bindings(&self) -> &[KeyBinding] {
@@ -825,23 +958,17 @@ impl Keymap {
         };
         let mut exact = Vec::new();
         let mut pending = Vec::new();
-        for index in self
-            .binding_indices_by_first_stroke
-            .get(first)
-            .into_iter()
-            .flatten()
-            .copied()
-        {
+        self.for_each_binding_index_for_first(first, |index| {
             let binding = &self.bindings[index];
             let Some(depth) = binding_enabled(binding, contexts) else {
-                continue;
+                return;
             };
             match binding.match_keystrokes(input) {
                 Some(false) => exact.push((depth, index, binding)),
                 Some(true) => pending.push(index),
                 None => {}
             }
-        }
+        });
         exact.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
         let strongest_exact = exact.first().map(|(_, index, _)| *index);
         let pending = pending
@@ -864,27 +991,58 @@ impl Keymap {
         let Some(first) = input.first() else {
             return Vec::new();
         };
-        let mut matches = self
-            .binding_indices_by_first_stroke
-            .get(first)
-            .into_iter()
-            .flatten()
-            .copied()
-            .filter_map(|index| {
-                let binding = &self.bindings[index];
-                let depth = binding_enabled(binding, contexts)?;
-                binding
-                    .match_keystrokes(input)
-                    .filter(|pending| *pending)
-                    .map(|_| (depth, index, binding))
-            })
-            .collect::<Vec<_>>();
+        let mut matches = Vec::new();
+        self.for_each_binding_index_for_first(first, |index| {
+            let binding = &self.bindings[index];
+            let Some(depth) = binding_enabled(binding, contexts) else {
+                return;
+            };
+            if binding.match_keystrokes(input) == Some(true) {
+                matches.push((depth, index, binding));
+            }
+        });
         matches.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
         matches
             .into_iter()
             .map(|(_, _, binding)| binding.clone())
             .collect()
     }
+
+    fn for_each_binding_index_for_first(&self, first: &Keystroke, mut visit: impl FnMut(usize)) {
+        if let Some(indices) = self.binding_indices_by_first_stroke.get(first) {
+            for &index in indices {
+                visit(index);
+            }
+        }
+        if let Some(key_char) = first.key_char_identity()
+            && let Some(indices) = self.binding_indices_by_first_stroke.get(&key_char)
+        {
+            for &index in indices {
+                visit(index);
+            }
+        }
+    }
+
+    fn rebuild_first_stroke_index(&mut self) {
+        self.binding_indices_by_first_stroke.clear();
+        for (index, binding) in self.bindings.iter().enumerate() {
+            let first = binding
+                .keystrokes
+                .first()
+                .expect("key bindings always contain at least one stroke")
+                .clone();
+            self.binding_indices_by_first_stroke
+                .entry(first)
+                .or_default()
+                .push(index);
+        }
+    }
+}
+
+fn single_character(value: &str) -> Option<char> {
+    let mut characters = value.chars();
+    let character = characters.next()?;
+    characters.next().is_none().then_some(character)
 }
 
 fn binding_enabled(binding: &KeyBinding, contexts: &[KeyContext]) -> Option<usize> {
@@ -922,6 +1080,109 @@ mod tests {
         assert_eq!(Keystroke::parse("f12").unwrap().key, Key::Function(12));
         assert!(Keystroke::parse("cmd-shift").is_err());
         assert!(Keystroke::parse("cmd-not-a-key").is_err());
+    }
+
+    #[test]
+    fn printable_key_char_matches_without_option_or_shift_modifiers() {
+        let keymap = Keymap::new(vec![KeyBinding::new("å", WorkspaceAction, None)]);
+        let typed = Keystroke::new(Key::Character("a".to_owned()), Modifiers::ALT)
+            .with_key_char(Key::Character("Å".to_owned()));
+        let matched = keymap.bindings_for_input(&[typed], &[]);
+        assert_eq!(matched.bindings.len(), 1);
+
+        let command = Keystroke::new(
+            Key::Character("a".to_owned()),
+            Modifiers::SUPER | Modifiers::ALT,
+        )
+        .with_key_char(Key::Character("å".to_owned()));
+        assert!(
+            keymap
+                .bindings_for_input(&[command], &[])
+                .bindings
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn alternate_first_strokes_keep_the_keymap_index_narrow() {
+        let keymap = Keymap::new(vec![
+            KeyBinding::new("{ left", WorkspaceAction, None),
+            KeyBinding::new("a", EditorAction, None),
+        ]);
+        let first = Keystroke::new(Key::Character("8".to_owned()), Modifiers::ALT)
+            .with_key_char(Key::Character("{".to_owned()));
+        let matched = keymap.bindings_for_input(&[first], &[]);
+        assert!(matched.pending);
+        assert!(matched.bindings.is_empty());
+        assert_eq!(keymap.possible_next_bindings_for_input(&[], &[]).len(), 0);
+    }
+
+    #[test]
+    fn localized_key_equivalents_are_opt_in_and_rebuilt_from_the_declaration() {
+        static GERMAN: &[(char, char)] = &[('[', 'ö'), (']', 'ä')];
+        static FRENCH: &[(char, char)] = &[('[', '^'), (']', '$')];
+
+        let mut keymap = Keymap::new(vec![
+            KeyBinding::new("cmd-[", WorkspaceAction, None),
+            KeyBinding::new("cmd-[ left", EditorAction, None).use_key_equivalents(),
+            KeyBinding::new("cmd-]", OpenLine(7), None).use_key_equivalents(),
+        ]);
+        assert!(!keymap.bindings()[0].uses_key_equivalents());
+        assert!(keymap.bindings()[1].uses_key_equivalents());
+
+        keymap.set_key_equivalents(GERMAN);
+        assert_eq!(
+            keymap.bindings()[1].keystrokes()[0],
+            Keystroke::parse("cmd-ö").unwrap()
+        );
+        assert_eq!(
+            keymap.shortcut_for_action(&OpenLine(7), &[]),
+            Some(Keystroke::parse("cmd-ä").unwrap())
+        );
+        let german = keymap.bindings_for_input(&[Keystroke::parse("cmd-ö").unwrap()], &[]);
+        assert!(german.pending);
+        assert!(german.bindings.is_empty());
+        assert_eq!(
+            keymap.possible_next_bindings_for_input(&[Keystroke::parse("cmd-ö").unwrap()], &[])[0]
+                .action()
+                .downcast_ref::<EditorAction>(),
+            Some(&EditorAction)
+        );
+        assert_eq!(
+            keymap
+                .bindings_for_input(&[Keystroke::parse("cmd-[").unwrap()], &[])
+                .bindings[0]
+                .action()
+                .downcast_ref::<WorkspaceAction>(),
+            Some(&WorkspaceAction)
+        );
+
+        keymap.set_key_equivalents(FRENCH);
+        assert_eq!(
+            keymap.bindings()[1].keystrokes()[0],
+            Keystroke::parse("cmd-^").unwrap()
+        );
+        assert!(
+            keymap
+                .bindings_for_input(&[Keystroke::parse("cmd-ö").unwrap()], &[])
+                .bindings
+                .is_empty()
+        );
+
+        keymap.set_key_equivalents(&[]);
+        assert_eq!(
+            keymap.bindings()[1].keystrokes()[0],
+            Keystroke::parse("cmd-[").unwrap()
+        );
+    }
+
+    #[test]
+    fn disabling_key_equivalents_restores_the_original_binding() {
+        let binding = KeyBinding::new("cmd-[", WorkspaceAction, None)
+            .use_key_equivalents()
+            .without_key_equivalents();
+        assert!(!binding.uses_key_equivalents());
+        assert_eq!(binding.keystrokes(), &[Keystroke::parse("cmd-[").unwrap()]);
     }
 
     #[test]

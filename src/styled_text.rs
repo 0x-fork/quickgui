@@ -2,7 +2,10 @@ use std::{ops::Range, sync::Arc};
 
 use glyphon::{Style as GlyphStyle, Weight};
 
-use crate::{Color, FontFamily};
+use crate::{
+    Color, Font, FontFallbacks, FontFamily, FontFeatures,
+    font::{assert_valid_font_family, normalize_fallbacks},
+};
 
 /// Hard limit for the number of styled byte ranges retained by one text element.
 ///
@@ -32,10 +35,14 @@ pub struct HighlightStyle {
     pub(crate) color: Option<Color>,
     pub(crate) background: Option<Color>,
     pub(crate) family: Option<FontFamily>,
+    pub(crate) features: Option<FontFeatures>,
+    pub(crate) fallbacks: Option<Option<FontFallbacks>>,
     pub(crate) weight: Option<Weight>,
     pub(crate) glyph_style: Option<GlyphStyle>,
     pub(crate) underline: TextUnderline,
     pub(crate) underline_color: Option<Color>,
+    pub(crate) underline_wavy: Option<bool>,
+    pub(crate) underline_thickness: Option<f32>,
     pub(crate) strikethrough: bool,
     pub(crate) strikethrough_color: Option<Color>,
 }
@@ -51,8 +58,35 @@ impl HighlightStyle {
         self
     }
 
-    pub fn font_family(mut self, family: FontFamily) -> Self {
+    pub fn font_family(mut self, family: impl Into<FontFamily>) -> Self {
+        let family = family.into();
+        assert_valid_font_family(&family);
         self.family = Some(family);
+        self
+    }
+
+    /// Override OpenType features for this range while inheriting all other font properties.
+    pub fn font_features(mut self, features: FontFeatures) -> Self {
+        self.features = Some(features);
+        self
+    }
+
+    /// Override the ordered custom fallback stack for this range.
+    ///
+    /// Passing an empty stack intentionally clears the surrounding custom fallbacks.
+    pub fn font_fallbacks(mut self, fallbacks: FontFallbacks) -> Self {
+        self.fallbacks = Some((!fallbacks.is_empty()).then_some(fallbacks));
+        self
+    }
+
+    /// Replace the complete font configuration for this range.
+    pub fn font(mut self, font: Font) -> Self {
+        assert_valid_font_family(&font.family);
+        self.family = Some(font.family);
+        self.features = Some(font.features);
+        self.fallbacks = Some(normalize_fallbacks(font.fallbacks));
+        self.weight = Some(font.weight);
+        self.glyph_style = Some(font.style);
         self
     }
 
@@ -93,11 +127,15 @@ impl HighlightStyle {
 
     pub fn underline(mut self) -> Self {
         self.underline = TextUnderline::Single;
+        self.underline_wavy = Some(false);
+        self.underline_thickness = Some(1.0);
         self
     }
 
     pub fn double_underline(mut self) -> Self {
         self.underline = TextUnderline::Double;
+        self.underline_wavy = Some(false);
+        self.underline_thickness = Some(1.0);
         self
     }
 
@@ -105,8 +143,56 @@ impl HighlightStyle {
         self.underline_color = Some(color);
         if self.underline == TextUnderline::None {
             self.underline = TextUnderline::Single;
+            self.underline_wavy = Some(false);
+            self.underline_thickness = Some(1.0);
         }
         self
+    }
+
+    pub fn text_decoration_solid(mut self) -> Self {
+        if self.underline == TextUnderline::None {
+            self.underline = TextUnderline::Single;
+            self.underline_thickness = Some(1.0);
+        }
+        self.underline_wavy = Some(false);
+        self
+    }
+
+    pub fn text_decoration_wavy(mut self) -> Self {
+        if self.underline == TextUnderline::None {
+            self.underline = TextUnderline::Single;
+            self.underline_thickness = Some(1.0);
+        }
+        self.underline_wavy = Some(true);
+        self
+    }
+
+    fn text_decoration_thickness(mut self, thickness: f32) -> Self {
+        if self.underline == TextUnderline::None {
+            self.underline = TextUnderline::Single;
+        }
+        self.underline_thickness = Some(thickness);
+        self
+    }
+
+    pub fn text_decoration_0(self) -> Self {
+        self.text_decoration_thickness(0.0)
+    }
+
+    pub fn text_decoration_1(self) -> Self {
+        self.text_decoration_thickness(1.0)
+    }
+
+    pub fn text_decoration_2(self) -> Self {
+        self.text_decoration_thickness(2.0)
+    }
+
+    pub fn text_decoration_4(self) -> Self {
+        self.text_decoration_thickness(4.0)
+    }
+
+    pub fn text_decoration_8(self) -> Self {
+        self.text_decoration_thickness(8.0)
     }
 
     pub fn strikethrough(mut self) -> Self {
@@ -124,10 +210,14 @@ impl HighlightStyle {
         self.color.is_none()
             && self.background.is_none()
             && self.family.is_none()
+            && self.features.is_none()
+            && self.fallbacks.is_none()
             && self.weight.is_none()
             && self.glyph_style.is_none()
             && self.underline == TextUnderline::None
             && self.underline_color.is_none()
+            && self.underline_wavy.is_none()
+            && self.underline_thickness.is_none()
             && !self.strikethrough
             && self.strikethrough_color.is_none()
     }
@@ -200,6 +290,9 @@ impl StyledText {
                 ),
                 "styled-text font family names support at most {MAX_HIGHLIGHT_FONT_FAMILY_BYTES} UTF-8 bytes"
             );
+            if let Some(family) = style.family.as_ref() {
+                assert_valid_font_family(family);
+            }
             assert!(
                 range.start >= previous_end,
                 "styled-text ranges must be sorted and non-overlapping"
@@ -294,6 +387,43 @@ mod tests {
             (0..3, HighlightStyle::default()),
         ]);
         assert!(text.highlights().is_empty());
+    }
+
+    #[test]
+    fn highlighted_ranges_support_wavy_and_fixed_thickness_underlines() {
+        let wavy = HighlightStyle::default()
+            .text_decoration_wavy()
+            .text_decoration_4();
+        assert_eq!(wavy.underline, TextUnderline::Single);
+        assert_eq!(wavy.underline_wavy, Some(true));
+        assert_eq!(wavy.underline_thickness, Some(4.0));
+
+        let solid = wavy.text_decoration_solid().text_decoration_0();
+        assert_eq!(solid.underline_wavy, Some(false));
+        assert_eq!(solid.underline_thickness, Some(0.0));
+        assert!(!solid.is_empty());
+    }
+
+    #[test]
+    fn highlighted_ranges_support_partial_and_complete_font_configuration() {
+        let features = FontFeatures::new().disable(crate::FontFeatureTag::STANDARD_LIGATURES);
+        let fallbacks = FontFallbacks::from_fonts(["Noto Sans Hebrew"]);
+        let partial = HighlightStyle::default()
+            .font_features(features.clone())
+            .font_fallbacks(fallbacks.clone());
+        assert_eq!(partial.features, Some(features));
+        assert_eq!(partial.fallbacks, Some(Some(fallbacks)));
+        assert!(partial.family.is_none());
+
+        let complete = HighlightStyle::default().font(
+            Font::new("Inter")
+                .features(FontFeatures::new().enable(crate::FontFeatureTag::TABULAR_NUMBERS))
+                .bold(),
+        );
+        assert_eq!(complete.family, Some(FontFamily::named("Inter")));
+        assert_eq!(complete.fallbacks, Some(None));
+        assert_eq!(complete.weight, Some(Weight::BOLD));
+        assert_eq!(complete.glyph_style, Some(GlyphStyle::Normal));
     }
 
     #[test]

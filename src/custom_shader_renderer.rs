@@ -50,6 +50,7 @@ struct CustomShaderInstance {
     rect: [f32; 4],
     clip: [f32; 4],
     params: [[f32; 4]; 4],
+    opacity_and_padding: [f32; 4],
 }
 
 #[derive(Clone)]
@@ -402,6 +403,11 @@ fn create_pipeline(
             offset: 80,
             shader_location: 5,
         },
+        VertexAttribute {
+            format: VertexFormat::Float32x4,
+            offset: 96,
+            shader_location: 6,
+        },
     ];
     let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("quickgui application shader pipeline"),
@@ -459,6 +465,7 @@ fn shader_instance(primitive: &CustomShaderPrimitive, clip: Rect) -> CustomShade
         ],
         clip: [clip.x, clip.y, clip.right(), clip.bottom()],
         params: primitive.parameters.vectors(),
+        opacity_and_padding: [primitive.opacity, 0.0, 0.0, 0.0],
     }
 }
 
@@ -491,13 +498,15 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
     fn instance_layout_matches_the_fixed_vertex_contract() {
         let primitive =
             CustomShaderPrimitive::new(test_shader(), Rect::new(10.0, 20.0, 30.0, 40.0))
-                .parameters(ShaderParameters::new().float(0, 0.5));
+                .parameters(ShaderParameters::new().float(0, 0.5))
+                .opacity(0.25);
         let instance = shader_instance(&primitive, Rect::new(12.0, 22.0, 20.0, 30.0));
 
-        assert_eq!(mem::size_of::<CustomShaderInstance>(), 96);
+        assert_eq!(mem::size_of::<CustomShaderInstance>(), 112);
         assert_eq!(instance.rect, [10.0, 20.0, 30.0, 40.0]);
         assert_eq!(instance.clip, [12.0, 22.0, 32.0, 52.0]);
         assert_eq!(instance.params[0][0], 0.5);
+        assert_eq!(instance.opacity_and_padding, [0.25, 0.0, 0.0, 0.0]);
     }
 
     #[test]

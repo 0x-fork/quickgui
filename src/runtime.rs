@@ -7,7 +7,7 @@ use std::{
     fmt,
     future::Future,
     marker::PhantomData,
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::{
         Arc,
@@ -21,39 +21,51 @@ use accesskit_winit::{
     Adapter as AccessibilityAdapter, Event as AccessibilityEvent,
     WindowEvent as AccessibilityWindowEvent,
 };
-use arboard::Clipboard;
 use thiserror::Error;
 #[cfg(target_os = "macos")]
-use winit::platform::macos::WindowAttributesExtMacOS;
+use winit::platform::macos::{ActiveEventLoopExtMacOS, WindowAttributesExtMacOS};
 use winit::{
     application::ApplicationHandler,
     dpi::{LogicalPosition, LogicalSize, PhysicalSize},
-    event::{ElementState, Ime, MouseScrollDelta, WindowEvent},
+    event::{ElementState, Force, Ime, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
-    keyboard::{Key as WinitKey, ModifiersState, NamedKey},
+    keyboard::ModifiersState,
     window::{
-        CursorIcon, Fullscreen, UserAttentionType, Window, WindowButtons, WindowId, WindowLevel,
+        CursorIcon, Fullscreen, Theme, UserAttentionType, Window, WindowButtons, WindowId,
+        WindowLevel,
     },
 };
+#[cfg(not(target_os = "macos"))]
+use winit::{dpi::PhysicalPosition, raw_window_handle::HasWindowHandle};
 
 #[cfg(target_os = "macos")]
 use crate::platform::PlatformDialogId;
 use crate::{
-    Action, ActionListener, AnyAction, Color, Element, ElementId, Entity, EntityId, EventEmitter,
-    FocusHandle, Global, IntoElement, KeyBinding, Keymap, Keystroke,
+    Action, ActionListener, AnyAction, AssetError, Assets, Color, CursorStyle, Display, DisplayId,
+    Displays, Element, ElementId, Entity, EntityId, EventEmitter, FocusHandle, FontSource, Global,
+    IntoElement, KeyBinding, KeyboardLayout, Keymap, Keystroke,
     MAX_ENTITY_EVENT_DELIVERIES_PER_TURN, MAX_ENTITY_SUBSCRIPTIONS_PER_WINDOW,
     MAX_GLOBAL_OBSERVER_DELIVERIES_PER_TURN, MAX_GLOBAL_SUBSCRIPTIONS_PER_WINDOW,
     MAX_OBSERVED_ENTITIES_PER_WINDOW, MAX_OBSERVED_GLOBALS_PER_WINDOW, MAX_PENDING_ENTITY_EVENTS,
     MAX_PENDING_GLOBAL_NOTIFICATIONS, Menu, OpenUrls, OsAction, Point, Rect, Scene, Size,
     SystemNotificationResponse, Vector,
+    action::{ActionListenerBinding, ActionListenerKey},
     background::{
         BackgroundCompletion, BackgroundTaskError, BackgroundTaskPoolHandle, TaskSpawnError,
+    },
+    clipboard::{ClipboardItem, ClipboardService, ClipboardTarget},
+    element::{
+        KeyListenerBinding, KeyListenerKey, KeyListenerKind, MouseListenerKey, MouseListenerKind,
     },
     entity::{EntityEvent, Subscription, SubscriptionState},
     event::{
         ContextMenuEvent, DragOrigin, DragStartEvent, DropEvent, DroppedFiles, Event, EventContext,
         ExternalDragPayload, ExternalDragText, ExternalDragUrl, FileDragPaths, FormSubmitEvent,
-        Key, MAX_DROPPED_FILES, Modifiers, MouseButton, PointerEvent, PointerPhase,
+        GesturePhase, Key, KeyDownEvent, KeyUpEvent, MAX_ACTIVE_TOUCHES_PER_WINDOW,
+        MAX_DROPPED_FILES, MAX_PINCH_DELTA_PER_EVENT, MAX_ROTATION_DEGREES_PER_EVENT, Modifiers,
+        MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MousePressureEvent,
+        MouseUpEvent, PinchEvent, PointerEvent, PointerPhase, PressureStage, RotationEvent,
+        ScrollDelta, ScrollWheelEvent, SmartMagnifyEvent, TouchEvent, TouchId, TouchPhase,
         ValidationReport,
     },
     foreground::{
@@ -62,15 +74,35 @@ use crate::{
     },
     global::GlobalStore,
     image_resource::{ImageAssetCache, ImageLoadCompletion, ImageWorkerPoolHandle},
+    keyboard::KeyboardState,
     menu::{MenuAction, collect_menu_actions},
-    metrics::{FrameMetrics, MetricsTracker},
+    metrics::{FrameMetrics, FrameTimer, MetricsTracker},
     platform::{PlatformError, PlatformRequest},
-    renderer::{GpuContext, GpuRenderer, RenderOutcome},
+    renderer::{
+        GpuContext, GpuRenderer, RenderOutcome, SharedFontSystem, create_shared_font_system,
+    },
     scheduler::FrameScheduler,
-    ui_tree::{DismissRequest, FormAttempt, InputResult, UiTree},
+    ui_tree::{
+        DismissRequest, FormAttempt, InputResult, MouseHoverChange, TabNavigationTarget, UiTree,
+    },
+};
+
+#[cfg(feature = "inspector")]
+use crate::inspector::{
+    InspectorFrameDamage, InspectorMode, InspectorPointerAction, InspectorState,
 };
 
 const MAX_NESTED_FORM_SUBMISSIONS: u8 = 8;
+const MAX_WINDOW_LIFECYCLE_TURNS: usize = 1_024;
+
+/// Maximum targeted desktop mouse callbacks declared by one window render.
+pub const MAX_MOUSE_LISTENERS_PER_WINDOW: usize = 8_192;
+
+/// Maximum focused key callbacks declared by one window render.
+pub const MAX_KEY_LISTENERS_PER_WINDOW: usize = 4_096;
+
+/// Maximum typed action callbacks declared by one window render.
+pub const MAX_ACTION_LISTENERS_PER_WINDOW: usize = 4_096;
 
 #[cfg(target_os = "macos")]
 use crate::event::{ExternalDragEndEvent, ExternalDragOperation};
@@ -78,13 +110,16 @@ use crate::event::{ExternalDragEndEvent, ExternalDragOperation};
 use crate::macos::{
     MacExternalDragMonitor, MacExternalDragSession, MacFirstFrameGuard, MacMouseDownEvent,
     MacNativeDropHost, MacNativeDropOffer, MacNativeDropPayload, MacNativeDropPending,
-    MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacTypedDragPayload,
-    MacTypedDragRegistry, capture_left_mouse_down, configure_gpu_window_resize,
-    configure_window_kind, current_pointer_position, dismiss_window_relation, is_window_fullscreen,
-    is_window_maximized, perform_window_close, perform_window_drag, position_traffic_lights,
-    present_native_open_panel, present_native_prompt, present_native_save_panel,
-    present_window_relation, set_window_movable, shell_open_path, shell_open_url,
-    shell_reveal_path, start_external_drag,
+    MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPopupMonitor,
+    MacTypedDragPayload, MacTypedDragRegistry, MacWindowTabAction, capture_left_mouse_down,
+    configure_document_window, configure_gpu_window_resize, configure_window_kind,
+    current_pointer_position, dismiss_window_relation, is_window_fullscreen, is_window_maximized,
+    perform_window_close, perform_window_drag, perform_window_tab_action, position_anchored_popup,
+    position_traffic_lights, present_native_open_panel, present_native_prompt,
+    present_native_save_panel, present_window_relation, set_window_document_edited,
+    set_window_movable, set_window_represented_file, set_window_tabbing_identifier,
+    set_window_visibility, shell_open_path, shell_open_url, shell_reveal_path,
+    show_character_palette, start_external_drag, window_contains_key_window, window_tab_state,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_application::MacApplicationHost;
@@ -105,6 +140,8 @@ pub(crate) enum RuntimeEvent {
     #[cfg(target_os = "macos")]
     NativeDropChanged(WindowHandle),
     #[cfg(target_os = "macos")]
+    PopupDismissRequested(WindowHandle),
+    #[cfg(target_os = "macos")]
     PlatformDialogClosed(WindowHandle, PlatformDialogId),
     #[cfg(target_os = "macos")]
     PlatformDialogCancelled(WindowHandle, PlatformDialogId),
@@ -116,6 +153,10 @@ pub(crate) enum RuntimeEvent {
     },
     #[cfg(target_os = "macos")]
     SystemWake,
+    #[cfg(target_os = "macos")]
+    DisplaysChanged,
+    #[cfg(target_os = "macos")]
+    KeyboardLayoutChanged,
     #[cfg(target_os = "macos")]
     SystemNotificationAuthorization {
         granted: bool,
@@ -131,6 +172,31 @@ impl From<AccessibilityEvent> for RuntimeEvent {
     }
 }
 
+/// Defines when closing the final native window should terminate the application.
+///
+/// The default follows native desktop convention: macOS applications stay resident for Dock
+/// reopen and menu commands, while other desktop targets quit with their last window.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum QuitMode {
+    /// Use [`Self::Explicit`] on macOS and [`Self::LastWindowClosed`] elsewhere.
+    #[default]
+    Default,
+    /// Quit automatically after the final window and all of its owned children close.
+    LastWindowClosed,
+    /// Stay in the event loop until [`EventContext::exit`] or the operating system quits the app.
+    Explicit,
+}
+
+impl QuitMode {
+    const fn quits_when_empty(self) -> bool {
+        match self {
+            Self::Default => cfg!(not(target_os = "macos")),
+            Self::LastWindowClosed => true,
+            Self::Explicit => false,
+        }
+    }
+}
+
 /// GPU selection policy. `Balanced` lets WGPU choose the most appropriate adapter.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum PerformanceProfile {
@@ -138,6 +204,60 @@ pub enum PerformanceProfile {
     Balanced,
     LowPower,
     HighPerformance,
+}
+
+/// Effective light or dark appearance of a native window.
+///
+/// QuickGUI intentionally exposes the semantic palette instead of platform appearance names.
+/// Application content can observe this value through [`ViewContext::appearance`], while native
+/// chrome follows the system unless an explicit per-window preference is configured.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum WindowAppearance {
+    #[default]
+    Light,
+    Dark,
+}
+
+impl WindowAppearance {
+    pub const fn is_dark(self) -> bool {
+        matches!(self, Self::Dark)
+    }
+}
+
+/// Compositor treatment for pixels not covered by fully opaque application content.
+///
+/// `Transparent` exposes the desktop directly. `Blurred` uses the platform's native background
+/// blur behind the same alpha-capable WGPU surface. Both remain damage-driven; they do not add an
+/// application animation or polling loop.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum WindowBackgroundAppearance {
+    #[default]
+    Opaque,
+    Transparent,
+    Blurred,
+}
+
+impl WindowBackgroundAppearance {
+    pub const fn is_transparent(self) -> bool {
+        !matches!(self, Self::Opaque)
+    }
+
+    pub const fn is_blurred(self) -> bool {
+        matches!(self, Self::Blurred)
+    }
+
+    const fn changes_from(self, previous: Self) -> WindowBackgroundChanges {
+        WindowBackgroundChanges {
+            transparency: self.is_transparent() != previous.is_transparent(),
+            blur: self.is_blurred() != previous.is_blurred(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct WindowBackgroundChanges {
+    transparency: bool,
+    blur: bool,
 }
 
 /// Native window titlebar presentation.
@@ -160,6 +280,8 @@ pub enum WindowKind {
     Normal,
     /// A high-level utility or notification window.
     PopUp,
+    /// A transient native popup positioned relative to its parent window's content.
+    AnchoredPopup,
     /// A utility window that stays above ordinary application windows.
     Floating,
     /// A parent-owned modal sheet on macOS.
@@ -196,10 +318,16 @@ impl Default for WindowBounds {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WindowState {
     pub handle: WindowHandle,
+    /// Display currently containing the native window, when known.
+    pub display_id: Option<DisplayId>,
     pub kind: WindowKind,
     pub bounds: WindowBounds,
     pub viewport_size: Size,
+    /// Effective native minimum inner size, or `None` when unconstrained.
+    pub minimum_size: Option<Size>,
     pub scale_factor: f32,
+    pub appearance: WindowAppearance,
+    pub background_appearance: WindowBackgroundAppearance,
     pub focused: bool,
     pub visible: bool,
     pub minimized: bool,
@@ -209,10 +337,27 @@ pub struct WindowState {
     pub movable: bool,
     pub resizable: bool,
     pub minimizable: bool,
+    /// Whether the native titlebar currently represents a document file.
+    pub represented_file: bool,
+    /// Whether native chrome indicates that the represented document has unsaved changes.
+    pub document_edited: bool,
+    /// Whether this window opted into native system tabbing.
+    pub native_tabbing: bool,
+    /// Bounded cached state for the native AppKit tab group.
+    pub native_tabs: WindowTabState,
+    /// Whether the feature-gated retained-tree inspector is open for this window.
+    #[cfg(feature = "inspector")]
+    pub inspector_active: bool,
 }
 
 /// Maximum UTF-8 bytes accepted for a native window title.
 pub const MAX_WINDOW_TITLE_BYTES: usize = 16 * 1024;
+/// Maximum encoded bytes accepted for a represented document path.
+pub const MAX_WINDOW_DOCUMENT_PATH_BYTES: usize = 16 * 1024;
+/// Maximum UTF-8 bytes accepted for a native window tabbing identifier.
+pub const MAX_WINDOW_TABBING_IDENTIFIER_BYTES: usize = 4 * 1024;
+/// Maximum native tabs inspected or exposed through one retained [`WindowState`].
+pub const MAX_SYSTEM_WINDOW_TABS: usize = 256;
 /// Maximum logical width or height accepted by a programmatic window-bounds request.
 pub const MAX_WINDOW_LOGICAL_DIMENSION: f32 = 32_768.0;
 /// Maximum absolute desktop coordinate accepted by a programmatic window-bounds request.
@@ -221,6 +366,8 @@ pub const MAX_WINDOW_LOGICAL_COORDINATE: f32 = 16_777_216.0;
 pub const MAX_WINDOW_COMMANDS_PER_EVENT: usize = 256;
 /// Maximum deferred native window mutations retained by one application effect cycle.
 pub const MAX_PENDING_WINDOW_COMMANDS: usize = 1_024;
+/// Maximum declarative child-window close callbacks retained by one parent window.
+pub const MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum WindowCommandError {
@@ -232,8 +379,59 @@ pub enum WindowCommandError {
     InvalidBounds,
     #[error("a window title cannot exceed {MAX_WINDOW_TITLE_BYTES} UTF-8 bytes")]
     TitleTooLong,
+    #[error(
+        "a represented document path must be non-empty, NUL-free, and at most {MAX_WINDOW_DOCUMENT_PATH_BYTES} encoded bytes"
+    )]
+    InvalidDocumentPath,
+    #[error(
+        "a native tabbing identifier must be non-empty, NUL-free, and at most {MAX_WINDOW_TABBING_IDENTIFIER_BYTES} UTF-8 bytes"
+    )]
+    InvalidTabbingIdentifier,
+    #[error("a native tab index must be smaller than {MAX_SYSTEM_WINDOW_TABS}")]
+    InvalidTabIndex,
     #[error("a hidden titlebar cannot expose or reposition native traffic-light buttons")]
     HiddenTitleBarTrafficLights,
+    #[error("anchored popups require one finite parent-relative popup configuration")]
+    InvalidPopupConfiguration,
+    #[error("an anchored popup must be opened from an existing parent window")]
+    PopupParentRequired,
+}
+
+/// Constant-size snapshot of one native system window-tab group.
+///
+/// AppKit can technically retain an arbitrary number of windows. QuickGUI inspects at most
+/// [`MAX_SYSTEM_WINDOW_TABS`] at an event boundary and reports `truncated` rather than allocating
+/// a per-frame list.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct WindowTabState {
+    pub count: usize,
+    pub selected_index: Option<usize>,
+    pub tab_bar_visible: bool,
+    pub overview_visible: bool,
+    pub truncated: bool,
+}
+
+impl Default for WindowTabState {
+    fn default() -> Self {
+        Self {
+            count: 1,
+            selected_index: Some(0),
+            tab_bar_visible: false,
+            overview_visible: false,
+            truncated: false,
+        }
+    }
+}
+
+impl WindowTabState {
+    pub const fn is_valid(self) -> bool {
+        self.count > 0
+            && self.count <= MAX_SYSTEM_WINDOW_TABS
+            && match self.selected_index {
+                Some(index) => index < self.count,
+                None => true,
+            }
+    }
 }
 
 static NEXT_WINDOW_HANDLE: AtomicU64 = AtomicU64::new(1);
@@ -257,11 +455,27 @@ pub struct AppConfig {
     pub title: String,
     pub size: Size,
     pub window_bounds: Option<WindowBounds>,
+    /// Preferred display for default placement and borderless fullscreen.
+    ///
+    /// A disconnected or unknown display falls back to the current primary display.
+    pub display_id: Option<DisplayId>,
     pub minimum_size: Option<Size>,
+    /// File represented by native document chrome, if any.
+    pub represented_file: Option<PathBuf>,
+    /// Initial unsaved-document indication in native chrome.
+    pub document_edited: bool,
+    /// Non-empty identifier opting this window into native system tabbing.
+    pub tabbing_identifier: Option<String>,
     pub background: Color,
+    /// Native compositor treatment behind transparent application pixels.
+    pub window_background: WindowBackgroundAppearance,
     pub performance_profile: PerformanceProfile,
+    /// Explicit native light/dark preference. `None` follows the current system appearance.
+    pub preferred_appearance: Option<WindowAppearance>,
     pub title_bar_style: TitleBarStyle,
     pub kind: WindowKind,
+    /// Parent-relative native placement when `kind` is [`WindowKind::AnchoredPopup`].
+    pub popup: Option<crate::PopupOptions>,
     pub focus: bool,
     pub show: bool,
     pub is_movable: bool,
@@ -275,6 +489,9 @@ pub struct AppConfig {
     pub key_sequence_timeout: Duration,
     /// Disable non-essential image animation. macOS Reduce Motion is always respected as well.
     pub reduce_motion: bool,
+    /// Open the retained-tree inspector with this window.
+    #[cfg(feature = "inspector")]
+    pub inspector: bool,
 }
 
 impl Default for AppConfig {
@@ -283,11 +500,18 @@ impl Default for AppConfig {
             title: "QuickGUI".to_owned(),
             size: Size::new(960.0, 640.0),
             window_bounds: None,
+            display_id: None,
             minimum_size: Some(Size::new(320.0, 240.0)),
+            represented_file: None,
+            document_edited: false,
+            tabbing_identifier: None,
             background: Color::rgb8(18, 18, 20),
+            window_background: WindowBackgroundAppearance::Opaque,
             performance_profile: PerformanceProfile::Balanced,
+            preferred_appearance: None,
             title_bar_style: TitleBarStyle::Default,
             kind: WindowKind::Normal,
+            popup: None,
             focus: true,
             show: true,
             is_movable: true,
@@ -297,6 +521,8 @@ impl Default for AppConfig {
             line_scroll_pixels: 40.0,
             key_sequence_timeout: Duration::from_secs(1),
             reduce_motion: false,
+            #[cfg(feature = "inspector")]
+            inspector: false,
         }
     }
 }
@@ -351,6 +577,17 @@ impl AppConfig {
         self
     }
 
+    /// Select the display used for automatic placement and fullscreen creation.
+    pub fn display(mut self, display: DisplayId) -> Self {
+        self.display_id = Some(display);
+        self
+    }
+
+    pub fn without_display(mut self) -> Self {
+        self.display_id = None;
+        self
+    }
+
     pub fn maximized(mut self, maximized: bool) -> Self {
         let rect = self
             .window_bounds
@@ -387,13 +624,62 @@ impl AppConfig {
         self
     }
 
+    /// Represent a file in native document chrome.
+    pub fn represented_file(mut self, path: impl Into<PathBuf>) -> Self {
+        self.represented_file = Some(path.into());
+        self
+    }
+
+    /// GPUI-compatible alias for [`Self::represented_file`].
+    pub fn document_path(self, path: impl Into<PathBuf>) -> Self {
+        self.represented_file(path)
+    }
+
+    pub fn without_represented_file(mut self) -> Self {
+        self.represented_file = None;
+        self
+    }
+
+    pub fn document_edited(mut self, edited: bool) -> Self {
+        self.document_edited = edited;
+        self
+    }
+
+    /// Opt this window into AppKit system tabbing with an application-defined group identifier.
+    pub fn tabbing_identifier(mut self, identifier: impl Into<String>) -> Self {
+        self.tabbing_identifier = Some(identifier.into());
+        self
+    }
+
+    pub fn without_tabbing_identifier(mut self) -> Self {
+        self.tabbing_identifier = None;
+        self
+    }
+
     pub fn background(mut self, background: Color) -> Self {
         self.background = background;
         self
     }
 
+    pub fn window_background(mut self, appearance: WindowBackgroundAppearance) -> Self {
+        self.window_background = appearance;
+        self
+    }
+
     pub fn performance_profile(mut self, profile: PerformanceProfile) -> Self {
         self.performance_profile = profile;
+        self
+    }
+
+    /// Force this window's native chrome to use one appearance.
+    pub fn window_appearance(mut self, appearance: WindowAppearance) -> Self {
+        self.preferred_appearance = Some(appearance);
+        self
+    }
+
+    /// Follow the operating system's effective light/dark appearance.
+    pub fn follow_system_appearance(mut self) -> Self {
+        self.preferred_appearance = None;
         self
     }
 
@@ -404,6 +690,27 @@ impl AppConfig {
 
     pub fn window_kind(mut self, kind: WindowKind) -> Self {
         self.kind = kind;
+        if kind != WindowKind::AnchoredPopup {
+            self.popup = None;
+        }
+        self
+    }
+
+    /// Configure a borderless parent-anchored native popup.
+    ///
+    /// Menu-style grabs focus the panel and dismiss on Escape or an outside mouse press.
+    /// Non-grabbing popups install no event monitor; `PopupOptions::accepts_key_focus` independently
+    /// decides whether pointer interaction may make the panel key.
+    pub fn anchored_popup(mut self, popup: crate::PopupOptions) -> Self {
+        self.kind = WindowKind::AnchoredPopup;
+        self.focus = popup.grab;
+        self.popup = Some(popup);
+        self.minimum_size = None;
+        self.title_bar_style = TitleBarStyle::Hidden;
+        self.traffic_light_position = None;
+        self.is_movable = false;
+        self.is_resizable = false;
+        self.is_minimizable = false;
         self
     }
 
@@ -449,6 +756,13 @@ impl AppConfig {
         self.reduce_motion = reduce_motion;
         self
     }
+
+    /// Open or suppress the retained-tree inspector when this window is created.
+    #[cfg(feature = "inspector")]
+    pub fn inspector(mut self, inspector: bool) -> Self {
+        self.inspector = inspector;
+        self
+    }
 }
 
 /// Window-local configuration accepted by [`EventContext::open_window`](crate::EventContext::open_window).
@@ -491,6 +805,28 @@ pub(crate) fn validate_window_title(title: &str) -> Result<(), WindowCommandErro
     }
 }
 
+pub(crate) fn validate_window_document_path(path: &Path) -> Result<(), WindowCommandError> {
+    let bytes = path.as_os_str().as_encoded_bytes();
+    if !bytes.is_empty() && bytes.len() <= MAX_WINDOW_DOCUMENT_PATH_BYTES && !bytes.contains(&0) {
+        Ok(())
+    } else {
+        Err(WindowCommandError::InvalidDocumentPath)
+    }
+}
+
+pub(crate) fn validate_window_tabbing_identifier(
+    identifier: &str,
+) -> Result<(), WindowCommandError> {
+    if !identifier.is_empty()
+        && identifier.len() <= MAX_WINDOW_TABBING_IDENTIFIER_BYTES
+        && !identifier.as_bytes().contains(&0)
+    {
+        Ok(())
+    } else {
+        Err(WindowCommandError::InvalidTabbingIdentifier)
+    }
+}
+
 fn validate_window_options(options: &WindowOptions) -> Result<(), WindowCommandError> {
     validate_window_title(&options.title)?;
     validate_window_size(options.size)?;
@@ -500,9 +836,27 @@ fn validate_window_options(options: &WindowOptions) -> Result<(), WindowCommandE
     if let Some(minimum) = options.minimum_size {
         validate_window_size(minimum)?;
     }
+    if let Some(path) = options.represented_file.as_deref() {
+        validate_window_document_path(path)?;
+    }
+    if let Some(identifier) = options.tabbing_identifier.as_deref() {
+        validate_window_tabbing_identifier(identifier)?;
+    }
     if options.title_bar_style == TitleBarStyle::Hidden && options.traffic_light_position.is_some()
     {
         return Err(WindowCommandError::HiddenTitleBarTrafficLights);
+    }
+    match (options.kind, options.popup.as_ref()) {
+        (WindowKind::AnchoredPopup, Some(popup))
+            if popup.is_valid(MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION)
+                && !matches!(
+                    options.window_bounds,
+                    Some(WindowBounds::Maximized(_) | WindowBounds::Fullscreen(_))
+                ) => {}
+        (WindowKind::AnchoredPopup, _) | (_, Some(_)) => {
+            return Err(WindowCommandError::InvalidPopupConfiguration);
+        }
+        (_, None) => {}
     }
     Ok(())
 }
@@ -527,12 +881,18 @@ trait AnyView {
         listeners: &mut ListenerRegistry,
         window: WindowHandle,
         window_state: WindowState,
-        background_tasks: &BackgroundTaskPoolHandle,
+        displays: &Displays,
+        keyboard_layout: &KeyboardLayout,
+        assets: &Assets,
+        background_tasks: Option<&BackgroundTaskPoolHandle>,
         foreground_tasks: &ForegroundTaskSpawner,
         globals: &GlobalStore,
     ) -> (Element, bool, Option<Instant>);
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    #[cfg(any(test, feature = "test-support"))]
+    fn as_any(&self) -> &dyn Any;
 }
 
 struct ViewAdapter<V>(V);
@@ -552,7 +912,10 @@ impl<V: View> AnyView for ViewAdapter<V> {
         listeners: &mut ListenerRegistry,
         window: WindowHandle,
         window_state: WindowState,
-        background_tasks: &BackgroundTaskPoolHandle,
+        displays: &Displays,
+        keyboard_layout: &KeyboardLayout,
+        assets: &Assets,
+        background_tasks: Option<&BackgroundTaskPoolHandle>,
         foreground_tasks: &ForegroundTaskSpawner,
         globals: &GlobalStore,
     ) -> (Element, bool, Option<Instant>) {
@@ -567,6 +930,9 @@ impl<V: View> AnyView for ViewAdapter<V> {
             listeners,
             window,
             window_state,
+            displays,
+            keyboard_layout,
+            assets,
             background_tasks,
             foreground_tasks,
             globals,
@@ -580,6 +946,11 @@ impl<V: View> AnyView for ViewAdapter<V> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         &mut self.0
     }
+
+    #[cfg(any(test, feature = "test-support"))]
+    fn as_any(&self) -> &dyn Any {
+        &self.0
+    }
 }
 
 pub(crate) struct WindowRequest {
@@ -587,6 +958,8 @@ pub(crate) struct WindowRequest {
     view: Box<dyn AnyView>,
     pub(crate) options: WindowOptions,
     pub(crate) parent: Option<WindowHandle>,
+    /// Resolve this anchor from the parent window's retained layout at the event boundary.
+    pub(crate) popup_anchor_element: Option<ElementId>,
 }
 
 impl WindowRequest {
@@ -604,6 +977,7 @@ impl WindowRequest {
             view: Box::new(ViewAdapter(view)),
             options,
             parent,
+            popup_anchor_element: None,
         }
     }
 }
@@ -614,6 +988,7 @@ impl fmt::Debug for WindowRequest {
             .debug_struct("WindowRequest")
             .field("handle", &self.handle)
             .field("parent", &self.parent)
+            .field("popup_anchor_element", &self.popup_anchor_element)
             .field("options", &self.options)
             .finish_non_exhaustive()
     }
@@ -622,6 +997,17 @@ impl fmt::Debug for WindowRequest {
 #[derive(Debug)]
 pub(crate) enum WindowCommand {
     SetTitle(WindowHandle, String),
+    SetRepresentedFile(WindowHandle, Option<PathBuf>),
+    SetDocumentEdited(WindowHandle, bool),
+    ShowCharacterPalette(WindowHandle),
+    SetTabbingIdentifier(WindowHandle, Option<String>),
+    SelectNextTab(WindowHandle),
+    SelectPreviousTab(WindowHandle),
+    SelectTab(WindowHandle, usize),
+    MergeAllWindows(WindowHandle),
+    MoveTabToNewWindow(WindowHandle),
+    ToggleTabBar(WindowHandle),
+    ToggleTabOverview(WindowHandle),
     SetBounds(WindowHandle, WindowBounds),
     Move(WindowHandle, Point),
     Resize(WindowHandle, Size),
@@ -633,7 +1019,14 @@ pub(crate) enum WindowCommand {
     SetVisible(WindowHandle, bool),
     SetMovable(WindowHandle, bool),
     SetResizable(WindowHandle, bool),
+    SetMinimumSize(WindowHandle, Option<Size>),
     SetMinimizable(WindowHandle, bool),
+    SetAppearance(WindowHandle, Option<WindowAppearance>),
+    SetBackgroundAppearance(WindowHandle, WindowBackgroundAppearance),
+    #[cfg(feature = "inspector")]
+    SetInspector(WindowHandle, bool),
+    #[cfg(feature = "inspector")]
+    ToggleInspector(WindowHandle),
     RequestAttention(WindowHandle),
 }
 
@@ -641,6 +1034,17 @@ impl WindowCommand {
     pub(crate) fn handle(&self) -> WindowHandle {
         match self {
             Self::SetTitle(handle, _)
+            | Self::SetRepresentedFile(handle, _)
+            | Self::SetDocumentEdited(handle, _)
+            | Self::ShowCharacterPalette(handle)
+            | Self::SetTabbingIdentifier(handle, _)
+            | Self::SelectNextTab(handle)
+            | Self::SelectPreviousTab(handle)
+            | Self::SelectTab(handle, _)
+            | Self::MergeAllWindows(handle)
+            | Self::MoveTabToNewWindow(handle)
+            | Self::ToggleTabBar(handle)
+            | Self::ToggleTabOverview(handle)
             | Self::SetBounds(handle, _)
             | Self::Move(handle, _)
             | Self::Resize(handle, _)
@@ -652,8 +1056,13 @@ impl WindowCommand {
             | Self::SetVisible(handle, _)
             | Self::SetMovable(handle, _)
             | Self::SetResizable(handle, _)
+            | Self::SetMinimumSize(handle, _)
             | Self::SetMinimizable(handle, _)
+            | Self::SetAppearance(handle, _)
+            | Self::SetBackgroundAppearance(handle, _)
             | Self::RequestAttention(handle) => *handle,
+            #[cfg(feature = "inspector")]
+            Self::SetInspector(handle, _) | Self::ToggleInspector(handle) => *handle,
         }
     }
 }
@@ -670,7 +1079,10 @@ pub struct ViewContext<'a, V> {
     listeners: &'a mut ListenerRegistry,
     window: WindowHandle,
     window_state: WindowState,
-    background_tasks: &'a BackgroundTaskPoolHandle,
+    displays: &'a Displays,
+    keyboard_layout: &'a KeyboardLayout,
+    assets: &'a Assets,
+    background_tasks: Option<&'a BackgroundTaskPoolHandle>,
     foreground_tasks: &'a ForegroundTaskSpawner,
     globals: &'a GlobalStore,
     marker: PhantomData<fn(&mut V)>,
@@ -700,6 +1112,60 @@ impl<V: 'static> ViewContext<'_, V> {
 
     pub fn window_bounds(&mut self) -> WindowBounds {
         self.window_state().bounds
+    }
+
+    /// Read and observe the bounded active-display snapshot.
+    ///
+    /// AppKit screen-parameter notifications replace this immutable snapshot only when its value
+    /// changes. Views which never call a display method do not rebuild for display changes.
+    pub fn displays(&mut self) -> &[Display] {
+        self.listeners.observes_displays = true;
+        self.displays.all()
+    }
+
+    pub fn primary_display(&mut self) -> Option<&Display> {
+        self.listeners.observes_displays = true;
+        self.displays.primary()
+    }
+
+    pub fn find_display(&mut self, id: DisplayId) -> Option<&Display> {
+        self.listeners.observes_displays = true;
+        self.displays.find(id)
+    }
+
+    /// Display currently containing this window, when both native placement and the latest
+    /// snapshot are known.
+    pub fn current_display(&mut self) -> Option<&Display> {
+        self.listeners.observes_displays = true;
+        self.listeners.observes_window_state = true;
+        self.window_state
+            .display_id
+            .and_then(|id| self.displays.find(id))
+    }
+
+    /// Read and observe the active native keyboard-layout snapshot.
+    ///
+    /// macOS input-source notifications replace this immutable value only when the layout or its
+    /// command translation changes. Views which never call this method do not rebuild for keyboard
+    /// layout changes.
+    pub fn keyboard_layout(&mut self) -> &KeyboardLayout {
+        self.listeners.observes_keyboard_layout = true;
+        self.keyboard_layout
+    }
+
+    /// Access the application's immutable asset source without subscribing the view to changes.
+    pub fn assets(&self) -> &Assets {
+        self.assets
+    }
+
+    /// GPUI-shaped alias for [`Self::assets`].
+    pub fn asset_source(&self) -> &Assets {
+        self.assets()
+    }
+
+    /// Read and observe the effective native light/dark appearance for this window.
+    pub fn appearance(&mut self) -> WindowAppearance {
+        self.window_state().appearance
     }
 
     /// Metrics from the previously completed frame.
@@ -872,6 +1338,7 @@ impl<V: 'static> ViewContext<'_, V> {
             FnOnce(&mut V, Result<T, BackgroundTaskError>, &mut EventContext) + Send + 'static,
     {
         self.background_tasks
+            .ok_or(TaskSpawnError::Unavailable)?
             .spawn::<V, T, Work, Complete>(self.window, work, complete)
     }
 
@@ -888,6 +1355,66 @@ impl<V: 'static> ViewContext<'_, V> {
             FnOnce(&mut V, Result<T, BackgroundTaskError>, &mut EventContext) + Send + 'static,
     {
         self.spawn_background(work, complete)
+    }
+
+    /// Observe the exact teardown of one child window owned by this view.
+    ///
+    /// Registration is declarative and refreshed on every rebuild. The callback runs after the
+    /// child and all of its descendants have been removed, but only while this parent remains
+    /// open. It owns no native observer, polling task, timer, or idle scheduler source.
+    pub fn on_child_window_closed(
+        &mut self,
+        child: WindowHandle,
+        callback: impl Fn(&mut V, WindowHandle, &mut EventContext) + 'static,
+    ) {
+        assert_ne!(
+            child, self.window,
+            "a window cannot observe itself as a child"
+        );
+        assert!(
+            self.listeners.child_window_closed.len() + self.listeners.any_child_window_closed.len()
+                < MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW,
+            "a window cannot declare more than {MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW} child-window close listeners"
+        );
+        let callback: ChildWindowClosedCallback = Arc::new(move |view, child, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("child-window close listener received the wrong view type"),
+                child,
+                context,
+            );
+        });
+        let previous = self.listeners.child_window_closed.insert(child, callback);
+        assert!(
+            previous.is_none(),
+            "child window {child:?} was observed more than once by the same view"
+        );
+    }
+
+    /// Observe teardown of any direct child owned by this view.
+    ///
+    /// Unlike [`Self::on_child_window_closed`], this can be declared before a child handle exists,
+    /// so a child opened and closed within the same event turn is still reported exactly once.
+    /// Components should compare the delivered handle with their controlled child state.
+    pub fn on_any_child_window_closed(
+        &mut self,
+        callback: impl Fn(&mut V, WindowHandle, &mut EventContext) + 'static,
+    ) {
+        assert!(
+            self.listeners.child_window_closed.len() + self.listeners.any_child_window_closed.len()
+                < MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW,
+            "a window cannot declare more than {MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW} child-window close listeners"
+        );
+        self.listeners
+            .any_child_window_closed
+            .push(Arc::new(move |view, child, context| {
+                callback(
+                    view.downcast_mut::<V>()
+                        .expect("child-window close listener received the wrong view type"),
+                    child,
+                    context,
+                );
+            }));
     }
 
     /// Register a stable, view-local click callback for use with [`crate::Element::on_click`].
@@ -973,6 +1500,348 @@ impl<V: 'static> ViewContext<'_, V> {
             "pointer listener id {id:?} was registered more than once"
         );
         PointerListener {
+            id,
+            marker: PhantomData,
+        }
+    }
+
+    /// Register a desktop mouse-down callback for attachment to one retained element.
+    pub fn mouse_down_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &MouseDownEvent, &mut EventContext) + 'static,
+    ) -> MouseDownListener<V> {
+        let id = id.into();
+        let callback: MouseListenerCallback = Arc::new(move |view, event, context| {
+            let MouseListenerEvent::Down(event) = event else {
+                unreachable!("mouse-down callback received the wrong event kind")
+            };
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("mouse-down listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        MouseDownListener {
+            id,
+            key: self.listeners.push_mouse_listener(callback),
+            marker: PhantomData,
+        }
+    }
+
+    /// Register a desktop mouse-up callback for attachment to one retained element.
+    pub fn mouse_up_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &MouseUpEvent, &mut EventContext) + 'static,
+    ) -> MouseUpListener<V> {
+        let id = id.into();
+        let callback: MouseListenerCallback = Arc::new(move |view, event, context| {
+            let MouseListenerEvent::Up(event) = event else {
+                unreachable!("mouse-up callback received the wrong event kind")
+            };
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("mouse-up listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        MouseUpListener {
+            id,
+            key: self.listeners.push_mouse_listener(callback),
+            marker: PhantomData,
+        }
+    }
+
+    /// Register a desktop mouse-motion callback for attachment to one retained element.
+    pub fn mouse_move_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &MouseMoveEvent, &mut EventContext) + 'static,
+    ) -> MouseMoveListener<V> {
+        let id = id.into();
+        let callback: MouseListenerCallback = Arc::new(move |view, event, context| {
+            let MouseListenerEvent::Move(event) = event else {
+                unreachable!("mouse-move callback received the wrong event kind")
+            };
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("mouse-move listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        MouseMoveListener {
+            id,
+            key: self.listeners.push_mouse_listener(callback),
+            marker: PhantomData,
+        }
+    }
+
+    /// Register a native-window mouse-exit callback for attachment to one retained element.
+    pub fn mouse_exit_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &MouseExitEvent, &mut EventContext) + 'static,
+    ) -> MouseExitListener<V> {
+        let id = id.into();
+        let callback: MouseListenerCallback = Arc::new(move |view, event, context| {
+            let MouseListenerEvent::Exit(event) = event else {
+                unreachable!("mouse-exit callback received the wrong event kind")
+            };
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("mouse-exit listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        MouseExitListener {
+            id,
+            key: self.listeners.push_mouse_listener(callback),
+            marker: PhantomData,
+        }
+    }
+
+    /// Register a web-style hover transition callback.
+    pub fn hover_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &bool, &mut EventContext) + 'static,
+    ) -> HoverListener<V> {
+        let id = id.into();
+        let callback: MouseListenerCallback = Arc::new(move |view, event, context| {
+            let MouseListenerEvent::Hover(hovered) = event else {
+                unreachable!("hover callback received the wrong event kind")
+            };
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("hover listener received the wrong view type"),
+                hovered,
+                context,
+            );
+        });
+        HoverListener {
+            id,
+            key: self.listeners.push_mouse_listener(callback),
+            marker: PhantomData,
+        }
+    }
+
+    /// Register focused key-down input for capture or bubble attachment on an element.
+    ///
+    /// Keymap actions run first. If they propagate, the raw key press traverses the retained
+    /// focus path. Call [`EventContext::prevent_default`] to replace QuickGUI's editing, focus,
+    /// activation, dismissal, or default close behavior without stopping another listener.
+    pub fn key_down_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &KeyDownEvent, &mut EventContext) + 'static,
+    ) -> KeyDownListener<V> {
+        let id = id.into();
+        let callback: KeyListenerCallback = Arc::new(move |view, event, context| {
+            let KeyListenerEvent::Down(event) = event else {
+                unreachable!("key-down callback received the wrong event kind")
+            };
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("key-down listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        KeyDownListener {
+            id,
+            key: self.listeners.push_key_listener(callback),
+            marker: PhantomData,
+        }
+    }
+
+    /// Register focused key-up input for capture or bubble attachment on an element.
+    pub fn key_up_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &KeyUpEvent, &mut EventContext) + 'static,
+    ) -> KeyUpListener<V> {
+        let id = id.into();
+        let callback: KeyListenerCallback = Arc::new(move |view, event, context| {
+            let KeyListenerEvent::Up(event) = event else {
+                unreachable!("key-up callback received the wrong event kind")
+            };
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("key-up listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        KeyUpListener {
+            id,
+            key: self.listeners.push_key_listener(callback),
+            marker: PhantomData,
+        }
+    }
+
+    /// Register scroll-wheel input for attachment with [`crate::Element::on_scroll_wheel`].
+    ///
+    /// Scroll events bubble through listening ancestors. Call
+    /// [`EventContext::stop_propagation`] to stop that path or [`EventContext::prevent_default`]
+    /// when the gesture should not move the retained scroll container underneath it.
+    pub fn scroll_wheel_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &ScrollWheelEvent, &mut EventContext) + 'static,
+    ) -> ScrollWheelListener<V> {
+        let id = id.into();
+        let callback: ScrollWheelCallback = Arc::new(move |view, event, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("scroll-wheel listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        let previous = self.listeners.scroll_wheels.insert(id, callback);
+        assert!(
+            previous.is_none(),
+            "scroll-wheel listener id {id:?} was registered more than once"
+        );
+        ScrollWheelListener {
+            id,
+            marker: PhantomData,
+        }
+    }
+
+    /// Register raw multi-contact touch input for attachment with [`crate::Element::on_touch`].
+    ///
+    /// The contact is hit-tested once at start and remains captured until its terminal end or
+    /// cancellation event. Touch callbacks bubble through listening ancestors by default.
+    pub fn touch_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &TouchEvent, &mut EventContext) + 'static,
+    ) -> TouchListener<V> {
+        let id = id.into();
+        let callback: TouchCallback = Arc::new(move |view, event, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("touch listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        let previous = self.listeners.touches.insert(id, callback);
+        assert!(
+            previous.is_none(),
+            "touch listener id {id:?} was registered more than once"
+        );
+        TouchListener {
+            id,
+            marker: PhantomData,
+        }
+    }
+
+    /// Register Force Touch input for attachment with [`crate::Element::on_mouse_pressure`].
+    pub fn mouse_pressure_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &MousePressureEvent, &mut EventContext) + 'static,
+    ) -> MousePressureListener<V> {
+        let id = id.into();
+        let callback: MousePressureCallback = Arc::new(move |view, event, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("mouse-pressure listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        let previous = self.listeners.mouse_pressures.insert(id, callback);
+        assert!(
+            previous.is_none(),
+            "mouse-pressure listener id {id:?} was registered more than once"
+        );
+        MousePressureListener {
+            id,
+            marker: PhantomData,
+        }
+    }
+
+    /// Register pinch-to-zoom input for attachment with [`crate::Element::on_pinch`].
+    pub fn pinch_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &PinchEvent, &mut EventContext) + 'static,
+    ) -> PinchListener<V> {
+        let id = id.into();
+        let callback: PinchCallback = Arc::new(move |view, event, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("pinch listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        let previous = self.listeners.pinches.insert(id, callback);
+        assert!(
+            previous.is_none(),
+            "pinch listener id {id:?} was registered more than once"
+        );
+        PinchListener {
+            id,
+            marker: PhantomData,
+        }
+    }
+
+    /// Register two-finger rotation input for attachment with [`crate::Element::on_rotation`].
+    pub fn rotation_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &RotationEvent, &mut EventContext) + 'static,
+    ) -> RotationListener<V> {
+        let id = id.into();
+        let callback: RotationCallback = Arc::new(move |view, event, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("rotation listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        let previous = self.listeners.rotations.insert(id, callback);
+        assert!(
+            previous.is_none(),
+            "rotation listener id {id:?} was registered more than once"
+        );
+        RotationListener {
+            id,
+            marker: PhantomData,
+        }
+    }
+
+    /// Register smart-magnify input for attachment with [`crate::Element::on_smart_magnify`].
+    pub fn smart_magnify_listener(
+        &mut self,
+        id: impl Into<ElementId>,
+        callback: impl Fn(&mut V, &SmartMagnifyEvent, &mut EventContext) + 'static,
+    ) -> SmartMagnifyListener<V> {
+        let id = id.into();
+        let callback: SmartMagnifyCallback = Arc::new(move |view, event, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("smart-magnify listener received the wrong view type"),
+                event,
+                context,
+            );
+        });
+        let previous = self.listeners.smart_magnifies.insert(id, callback);
+        assert!(
+            previous.is_none(),
+            "smart-magnify listener id {id:?} was registered more than once"
+        );
+        SmartMagnifyListener {
             id,
             marker: PhantomData,
         }
@@ -1212,13 +2081,11 @@ impl<V: 'static> ViewContext<'_, V> {
                 context,
             );
         });
-        self.listeners
-            .actions
-            .entry((id, TypeId::of::<A>()))
-            .or_default()
-            .push(erased);
+        let action_type = TypeId::of::<A>();
         ActionListener {
             id,
+            key: self.listeners.push_action_listener(erased),
+            action_type,
             marker: PhantomData,
         }
     }
@@ -1226,7 +2093,15 @@ impl<V: 'static> ViewContext<'_, V> {
 
 type ClickCallback = Arc<dyn Fn(&mut dyn Any, &mut EventContext)>;
 type PointerCallback = Arc<dyn Fn(&mut dyn Any, &PointerEvent, &mut EventContext)>;
+type MouseListenerCallback = Arc<dyn Fn(&mut dyn Any, &MouseListenerEvent, &mut EventContext)>;
+type KeyListenerCallback = Arc<dyn Fn(&mut dyn Any, &KeyListenerEvent, &mut EventContext)>;
+type ScrollWheelCallback = Arc<dyn Fn(&mut dyn Any, &ScrollWheelEvent, &mut EventContext)>;
+type TouchCallback = Arc<dyn Fn(&mut dyn Any, &TouchEvent, &mut EventContext)>;
 type ContextMenuCallback = Arc<dyn Fn(&mut dyn Any, &ContextMenuEvent, &mut EventContext)>;
+type MousePressureCallback = Arc<dyn Fn(&mut dyn Any, &MousePressureEvent, &mut EventContext)>;
+type PinchCallback = Arc<dyn Fn(&mut dyn Any, &PinchEvent, &mut EventContext)>;
+type RotationCallback = Arc<dyn Fn(&mut dyn Any, &RotationEvent, &mut EventContext)>;
+type SmartMagnifyCallback = Arc<dyn Fn(&mut dyn Any, &SmartMagnifyEvent, &mut EventContext)>;
 type InputCallback = Arc<dyn Fn(&mut dyn Any, &str, &mut EventContext)>;
 type FormSubmitCallback = Arc<dyn Fn(&mut dyn Any, &FormSubmitEvent, &mut EventContext)>;
 type FormInvalidCallback = Arc<dyn Fn(&mut dyn Any, &ValidationReport, &mut EventContext)>;
@@ -1235,6 +2110,31 @@ type DragStartCallback = Arc<dyn Fn(&mut dyn Any, &DragStartEvent, &mut EventCon
 type DropCallback = Arc<dyn Fn(&mut dyn Any, &dyn Any, &DropEvent, &mut EventContext)>;
 type EntityEventCallback = Rc<RefCell<dyn FnMut(&mut dyn Any, &dyn Any, &mut EventContext)>>;
 type GlobalObserverCallback = Rc<RefCell<dyn FnMut(&mut dyn Any, &mut EventContext)>>;
+type ChildWindowClosedCallback = Arc<dyn Fn(&mut dyn Any, WindowHandle, &mut EventContext)>;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum MouseListenerEvent {
+    Down(MouseDownEvent),
+    Up(MouseUpEvent),
+    Move(MouseMoveEvent),
+    Exit(MouseExitEvent),
+    Hover(bool),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum KeyListenerEvent {
+    Down(KeyDownEvent),
+    Up(KeyUpEvent),
+}
+
+impl KeyListenerEvent {
+    fn kind(&self) -> KeyListenerKind {
+        match self {
+            Self::Down(_) => KeyListenerKind::Down,
+            Self::Up(_) => KeyListenerKind::Up,
+        }
+    }
+}
 
 #[derive(Clone)]
 struct EntityEventSubscription {
@@ -1265,7 +2165,15 @@ impl GlobalObserverSubscription {
 struct ListenerRegistry {
     clicks: HashMap<ElementId, ClickCallback>,
     pointers: HashMap<ElementId, PointerCallback>,
+    mouse_listeners: Vec<MouseListenerCallback>,
+    key_listeners: Vec<KeyListenerCallback>,
+    scroll_wheels: HashMap<ElementId, ScrollWheelCallback>,
+    touches: HashMap<ElementId, TouchCallback>,
     context_menus: HashMap<ElementId, ContextMenuCallback>,
+    mouse_pressures: HashMap<ElementId, MousePressureCallback>,
+    pinches: HashMap<ElementId, PinchCallback>,
+    rotations: HashMap<ElementId, RotationCallback>,
+    smart_magnifies: HashMap<ElementId, SmartMagnifyCallback>,
     drag_sources: HashMap<ElementId, (TypeId, DragStartCallback)>,
     drops: HashMap<(ElementId, TypeId), DropCallback>,
     drop_order: Vec<(ElementId, TypeId)>,
@@ -1274,16 +2182,62 @@ struct ListenerRegistry {
     form_submits: HashMap<ElementId, FormSubmitCallback>,
     form_invalids: HashMap<ElementId, FormInvalidCallback>,
     dismisses: HashMap<ElementId, ClickCallback>,
-    actions: HashMap<(ElementId, TypeId), Vec<ActionCallback>>,
+    actions: Vec<ActionCallback>,
     observed_entities: HashSet<EntityId>,
     observed_globals: HashSet<TypeId>,
     observes_window_state: bool,
+    observes_displays: bool,
+    observes_keyboard_layout: bool,
     entity_events: HashMap<(EntityId, TypeId), Vec<EntityEventSubscription>>,
     entity_subscription_count: usize,
     global_observers: Vec<GlobalObserverSubscription>,
+    child_window_closed: HashMap<WindowHandle, ChildWindowClosedCallback>,
+    any_child_window_closed: Vec<ChildWindowClosedCallback>,
 }
 
 impl ListenerRegistry {
+    fn push_mouse_listener(&mut self, callback: MouseListenerCallback) -> MouseListenerKey {
+        assert!(
+            self.mouse_listeners.len() < MAX_MOUSE_LISTENERS_PER_WINDOW,
+            "a window cannot declare more than {MAX_MOUSE_LISTENERS_PER_WINDOW} targeted desktop mouse listeners"
+        );
+        let key = MouseListenerKey(self.mouse_listeners.len() as u32);
+        self.mouse_listeners.push(callback);
+        key
+    }
+
+    fn mouse_listener(&self, key: MouseListenerKey) -> Option<MouseListenerCallback> {
+        self.mouse_listeners.get(key.0 as usize).cloned()
+    }
+
+    fn push_key_listener(&mut self, callback: KeyListenerCallback) -> KeyListenerKey {
+        assert!(
+            self.key_listeners.len() < MAX_KEY_LISTENERS_PER_WINDOW,
+            "a window cannot declare more than {MAX_KEY_LISTENERS_PER_WINDOW} focused key listeners"
+        );
+        let key = KeyListenerKey(self.key_listeners.len() as u32);
+        self.key_listeners.push(callback);
+        key
+    }
+
+    fn key_listener(&self, key: KeyListenerKey) -> Option<KeyListenerCallback> {
+        self.key_listeners.get(key.0 as usize).cloned()
+    }
+
+    fn push_action_listener(&mut self, callback: ActionCallback) -> ActionListenerKey {
+        assert!(
+            self.actions.len() < MAX_ACTION_LISTENERS_PER_WINDOW,
+            "a window cannot declare more than {MAX_ACTION_LISTENERS_PER_WINDOW} typed action listeners"
+        );
+        let key = ActionListenerKey(self.actions.len() as u32);
+        self.actions.push(callback);
+        key
+    }
+
+    fn action_listener(&self, key: ActionListenerKey) -> Option<ActionCallback> {
+        self.actions.get(key.0 as usize).cloned()
+    }
+
     fn observe_global(&mut self, global_type: TypeId) {
         if self.observed_globals.contains(&global_type) {
             return;
@@ -1417,7 +2371,15 @@ impl ListenerRegistry {
     fn clear(&mut self) {
         self.clicks.clear();
         self.pointers.clear();
+        self.mouse_listeners.clear();
+        self.key_listeners.clear();
+        self.scroll_wheels.clear();
+        self.touches.clear();
         self.context_menus.clear();
+        self.mouse_pressures.clear();
+        self.pinches.clear();
+        self.rotations.clear();
+        self.smart_magnifies.clear();
         self.drag_sources.clear();
         self.drops.clear();
         self.drop_order.clear();
@@ -1430,6 +2392,10 @@ impl ListenerRegistry {
         self.observed_entities.clear();
         self.observed_globals.clear();
         self.observes_window_state = false;
+        self.observes_displays = false;
+        self.observes_keyboard_layout = false;
+        self.child_window_closed.clear();
+        self.any_child_window_closed.clear();
         self.prune_entity_event_subscriptions();
         self.prune_global_subscriptions();
     }
@@ -1447,8 +2413,93 @@ pub struct PointerListener<V> {
     marker: PhantomData<fn(&mut V)>,
 }
 
+/// An opaque targeted mouse-down binding returned by [`ViewContext::mouse_down_listener`].
+pub struct MouseDownListener<V> {
+    id: ElementId,
+    key: MouseListenerKey,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque targeted mouse-up binding returned by [`ViewContext::mouse_up_listener`].
+pub struct MouseUpListener<V> {
+    id: ElementId,
+    key: MouseListenerKey,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque targeted mouse-motion binding returned by [`ViewContext::mouse_move_listener`].
+pub struct MouseMoveListener<V> {
+    id: ElementId,
+    key: MouseListenerKey,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque targeted native-window mouse-exit binding.
+pub struct MouseExitListener<V> {
+    id: ElementId,
+    key: MouseListenerKey,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque web-style hover transition binding returned by [`ViewContext::hover_listener`].
+pub struct HoverListener<V> {
+    id: ElementId,
+    key: MouseListenerKey,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque focused key-down binding returned by [`ViewContext::key_down_listener`].
+pub struct KeyDownListener<V> {
+    id: ElementId,
+    key: KeyListenerKey,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque focused key-up binding returned by [`ViewContext::key_up_listener`].
+pub struct KeyUpListener<V> {
+    id: ElementId,
+    key: KeyListenerKey,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque scroll-wheel binding returned by [`ViewContext::scroll_wheel_listener`].
+pub struct ScrollWheelListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque raw-touch binding returned by [`ViewContext::touch_listener`].
+pub struct TouchListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
 /// An opaque secondary-click binding returned by [`ViewContext::context_menu_listener`].
 pub struct ContextMenuListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque Force Touch binding returned by [`ViewContext::mouse_pressure_listener`].
+pub struct MousePressureListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque pinch binding returned by [`ViewContext::pinch_listener`].
+pub struct PinchListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque rotation binding returned by [`ViewContext::rotation_listener`].
+pub struct RotationListener<V> {
+    id: ElementId,
+    marker: PhantomData<fn(&mut V)>,
+}
+
+/// An opaque smart-magnify binding returned by [`ViewContext::smart_magnify_listener`].
+pub struct SmartMagnifyListener<V> {
     id: ElementId,
     marker: PhantomData<fn(&mut V)>,
 }
@@ -1563,7 +2614,80 @@ impl<V> PointerListener<V> {
     }
 }
 
+macro_rules! impl_mouse_listener_handle {
+    ($name:ident) => {
+        impl<V> $name<V> {
+            pub(crate) fn id(&self) -> ElementId {
+                self.id
+            }
+
+            pub(crate) fn key(&self) -> MouseListenerKey {
+                self.key
+            }
+        }
+    };
+}
+
+impl_mouse_listener_handle!(MouseDownListener);
+impl_mouse_listener_handle!(MouseUpListener);
+impl_mouse_listener_handle!(MouseMoveListener);
+impl_mouse_listener_handle!(MouseExitListener);
+impl_mouse_listener_handle!(HoverListener);
+
+macro_rules! impl_key_listener_handle {
+    ($name:ident) => {
+        impl<V> $name<V> {
+            pub(crate) fn id(&self) -> ElementId {
+                self.id
+            }
+
+            pub(crate) fn key(&self) -> KeyListenerKey {
+                self.key
+            }
+        }
+    };
+}
+
+impl_key_listener_handle!(KeyDownListener);
+impl_key_listener_handle!(KeyUpListener);
+
+impl<V> ScrollWheelListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
+impl<V> TouchListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
 impl<V> ContextMenuListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
+impl<V> MousePressureListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
+impl<V> PinchListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
+impl<V> RotationListener<V> {
+    pub(crate) fn id(&self) -> ElementId {
+        self.id
+    }
+}
+
+impl<V> SmartMagnifyListener<V> {
     pub(crate) fn id(&self) -> ElementId {
         self.id
     }
@@ -1635,6 +2759,40 @@ impl<V> DismissListener<V> {
     }
 }
 
+macro_rules! impl_copy_listener_handle {
+    ($name:ident<$($parameter:ident),+>) => {
+        impl<$($parameter),+> Copy for $name<$($parameter),+> {}
+
+        impl<$($parameter),+> Clone for $name<$($parameter),+> {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+    };
+}
+
+impl_copy_listener_handle!(ClickListener<V>);
+impl_copy_listener_handle!(PointerListener<V>);
+impl_copy_listener_handle!(MouseDownListener<V>);
+impl_copy_listener_handle!(MouseUpListener<V>);
+impl_copy_listener_handle!(MouseMoveListener<V>);
+impl_copy_listener_handle!(MouseExitListener<V>);
+impl_copy_listener_handle!(HoverListener<V>);
+impl_copy_listener_handle!(ScrollWheelListener<V>);
+impl_copy_listener_handle!(TouchListener<V>);
+impl_copy_listener_handle!(ContextMenuListener<V>);
+impl_copy_listener_handle!(MousePressureListener<V>);
+impl_copy_listener_handle!(PinchListener<V>);
+impl_copy_listener_handle!(RotationListener<V>);
+impl_copy_listener_handle!(SmartMagnifyListener<V>);
+impl_copy_listener_handle!(DragListener<V, T>);
+impl_copy_listener_handle!(DropListener<V, T>);
+impl_copy_listener_handle!(InputListener<V>);
+impl_copy_listener_handle!(SubmitListener<V>);
+impl_copy_listener_handle!(FormSubmitListener<V>);
+impl_copy_listener_handle!(FormInvalidListener<V>);
+impl_copy_listener_handle!(DismissListener<V>);
+
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("could not create the application event loop: {0}")]
@@ -1649,20 +2807,26 @@ pub enum AppError {
     View(String),
     #[error("platform integration failed: {0}")]
     Platform(String),
+    #[error(transparent)]
+    Asset(#[from] AssetError),
 }
 
 type OpenUrlsCallback = Box<dyn FnMut(OpenUrls, &mut EventContext)>;
 type ReopenCallback = Box<dyn FnMut(bool, &mut EventContext)>;
 type SystemWakeCallback = Box<dyn FnMut(&mut EventContext)>;
+type KeyboardLayoutCallback = Box<dyn FnMut(&KeyboardLayout, &mut EventContext)>;
 type SystemNotificationResponseCallback =
     Box<dyn FnMut(SystemNotificationResponse, &mut EventContext)>;
+type WindowClosedCallback = Box<dyn FnMut(WindowHandle, &mut EventContext)>;
 
 #[derive(Default)]
 struct ApplicationCallbacks {
     open_urls: Option<OpenUrlsCallback>,
     reopen: Option<ReopenCallback>,
     system_wake: Option<SystemWakeCallback>,
+    keyboard_layout: Option<KeyboardLayoutCallback>,
     system_notification_response: Option<SystemNotificationResponseCallback>,
+    window_closed: Option<WindowClosedCallback>,
 }
 
 /// Configures and runs one retained QuickGUI view.
@@ -1672,7 +2836,10 @@ pub struct App<V> {
     keymap: Keymap,
     menus: Vec<Menu>,
     globals: GlobalStore,
+    assets: Assets,
+    fonts: Vec<FontSource>,
     application_callbacks: ApplicationCallbacks,
+    quit_mode: QuitMode,
 }
 
 impl<V: View> App<V> {
@@ -1683,12 +2850,55 @@ impl<V: View> App<V> {
             keymap: Keymap::default(),
             menus: Vec::new(),
             globals: GlobalStore::default(),
+            assets: Assets::default(),
+            fonts: Vec::new(),
             application_callbacks: ApplicationCallbacks::default(),
+            quit_mode: QuitMode::Default,
         }
+    }
+
+    /// Configure when closing the final window terminates the application.
+    pub fn quit_mode(mut self, mode: QuitMode) -> Self {
+        self.quit_mode = mode;
+        self
+    }
+
+    /// GPUI-compatible alias for [`Self::quit_mode`].
+    pub fn with_quit_mode(self, mode: QuitMode) -> Self {
+        self.quit_mode(mode)
     }
 
     pub fn config(mut self, config: AppConfig) -> Self {
         self.config = config;
+        self
+    }
+
+    /// Install the immutable application asset source used by every window and background image
+    /// resource. Later registration replaces the previous source.
+    pub fn with_assets(mut self, source: impl crate::AssetSource) -> Self {
+        self.assets = Assets::new(source);
+        self
+    }
+
+    /// Install an already shared application asset handle.
+    pub fn assets(mut self, assets: Assets) -> Self {
+        self.assets = assets;
+        self
+    }
+
+    /// Register one custom OpenType font file or one path in the application asset source.
+    ///
+    /// `include_bytes!("Inter.ttf")` remains zero-copy. String values resolve through
+    /// [`Self::with_assets`] once during startup. Counts, individual bytes, aggregate bytes, and
+    /// collection faces are validated before any native window or renderer is created.
+    pub fn font(mut self, font: impl Into<FontSource>) -> Self {
+        self.fonts.push(font.into());
+        self
+    }
+
+    /// Register custom fonts in declaration order.
+    pub fn fonts(mut self, fonts: impl IntoIterator<Item = impl Into<FontSource>>) -> Self {
+        self.fonts.extend(fonts.into_iter().map(Into::into));
         self
     }
 
@@ -1712,6 +2922,17 @@ impl<V: View> App<V> {
         self
     }
 
+    /// Select the display used for automatic root-window placement and fullscreen creation.
+    pub fn display(mut self, display: DisplayId) -> Self {
+        self.config.display_id = Some(display);
+        self
+    }
+
+    pub fn without_display(mut self) -> Self {
+        self.config.display_id = None;
+        self
+    }
+
     pub fn maximized(mut self, maximized: bool) -> Self {
         self.config = self.config.maximized(maximized);
         self
@@ -1722,8 +2943,69 @@ impl<V: View> App<V> {
         self
     }
 
+    pub fn minimum_size(mut self, width: f32, height: f32) -> Self {
+        self.config = self.config.minimum_size(width, height);
+        self
+    }
+
+    pub fn without_minimum_size(mut self) -> Self {
+        self.config = self.config.without_minimum_size();
+        self
+    }
+
+    /// Represent a file in the root window's native document chrome.
+    pub fn represented_file(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config.represented_file = Some(path.into());
+        self
+    }
+
+    /// GPUI-compatible alias for [`Self::represented_file`].
+    pub fn document_path(self, path: impl Into<PathBuf>) -> Self {
+        self.represented_file(path)
+    }
+
+    pub fn without_represented_file(mut self) -> Self {
+        self.config.represented_file = None;
+        self
+    }
+
+    /// Set the root window's initial native unsaved-document indication.
+    pub fn document_edited(mut self, edited: bool) -> Self {
+        self.config.document_edited = edited;
+        self
+    }
+
+    /// Opt the root window into native system tabbing.
+    pub fn tabbing_identifier(mut self, identifier: impl Into<String>) -> Self {
+        self.config.tabbing_identifier = Some(identifier.into());
+        self
+    }
+
+    pub fn without_tabbing_identifier(mut self) -> Self {
+        self.config.tabbing_identifier = None;
+        self
+    }
+
     pub fn performance_profile(mut self, profile: PerformanceProfile) -> Self {
         self.config.performance_profile = profile;
+        self
+    }
+
+    /// Force the initial native light/dark appearance for the root window.
+    pub fn window_appearance(mut self, appearance: WindowAppearance) -> Self {
+        self.config.preferred_appearance = Some(appearance);
+        self
+    }
+
+    /// Let the root window follow the operating system appearance.
+    pub fn follow_system_appearance(mut self) -> Self {
+        self.config.preferred_appearance = None;
+        self
+    }
+
+    /// Configure how the native compositor treats transparent root-window pixels.
+    pub fn window_background(mut self, appearance: WindowBackgroundAppearance) -> Self {
+        self.config.window_background = appearance;
         self
     }
 
@@ -1733,7 +3015,12 @@ impl<V: View> App<V> {
     }
 
     pub fn window_kind(mut self, kind: WindowKind) -> Self {
-        self.config.kind = kind;
+        self.config = self.config.window_kind(kind);
+        self
+    }
+
+    pub fn anchored_popup(mut self, popup: crate::PopupOptions) -> Self {
+        self.config = self.config.anchored_popup(popup);
         self
     }
 
@@ -1775,6 +3062,13 @@ impl<V: View> App<V> {
 
     pub fn reduce_motion(mut self, reduce_motion: bool) -> Self {
         self.config.reduce_motion = reduce_motion;
+        self
+    }
+
+    /// Open or suppress the retained-tree inspector for the root window.
+    #[cfg(feature = "inspector")]
+    pub fn inspector(mut self, inspector: bool) -> Self {
+        self.config.inspector = inspector;
         self
     }
 
@@ -1836,6 +3130,19 @@ impl<V: View> App<V> {
         self
     }
 
+    /// Handle a native keyboard-layout change after QuickGUI installs the new command map.
+    ///
+    /// The callback is notification-driven and application-wide. Views that only need to render
+    /// the layout name should prefer [`ViewContext::keyboard_layout`], which invalidates only the
+    /// views that read it.
+    pub fn on_keyboard_layout_change(
+        mut self,
+        callback: impl FnMut(&KeyboardLayout, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.keyboard_layout = Some(Box::new(callback));
+        self
+    }
+
     /// Handle activation of a delivered system notification or one of its action buttons.
     pub fn on_system_notification_response(
         mut self,
@@ -1845,15 +3152,32 @@ impl<V: View> App<V> {
         self
     }
 
+    /// Run after a native window and its owned resources have been removed from the application.
+    ///
+    /// Owned child windows close first. The callback has no current window, so opening a window
+    /// creates a new top-level window. Subsequent registration replaces the previous callback.
+    pub fn on_window_closed(
+        mut self,
+        callback: impl FnMut(WindowHandle, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.window_closed = Some(Box::new(callback));
+        self
+    }
+
     pub fn run(self) -> Result<(), AppError> {
         let event_loop = EventLoop::with_user_event().build()?;
         event_loop.set_control_flow(ControlFlow::Wait);
         let mut runtime = Runtime::new(
-            WindowRequest::new(self.view, self.config),
-            self.globals,
-            self.keymap,
-            self.menus,
-            self.application_callbacks,
+            RuntimeStartup {
+                initial_window: WindowRequest::new(self.view, self.config),
+                globals: self.globals,
+                keymap: self.keymap,
+                menus: self.menus,
+                assets: self.assets,
+                fonts: self.fonts,
+                application_callbacks: self.application_callbacks,
+                quit_mode: self.quit_mode,
+            },
             event_loop.create_proxy(),
         )?;
         event_loop.run_app(&mut runtime)?;
@@ -1862,6 +3186,25 @@ impl<V: View> App<V> {
             None => Ok(()),
         }
     }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+mod test_context;
+#[cfg(any(test, feature = "test-support"))]
+pub use test_context::{
+    MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,
+};
+
+#[derive(Clone, Copy)]
+struct PopupWindowContext {
+    owner: WindowHandle,
+    root: WindowHandle,
+}
+
+#[derive(Clone, Copy)]
+struct ClosedWindow {
+    handle: WindowHandle,
+    parent: Option<WindowHandle>,
 }
 
 struct RuntimeWindow {
@@ -1876,16 +3219,29 @@ struct RuntimeWindow {
     #[cfg(target_os = "macos")]
     first_frame_guard: Option<MacFirstFrameGuard>,
     ui: UiTree,
+    #[cfg(feature = "inspector")]
+    inspector: Option<InspectorState>,
     scheduler: FrameScheduler,
     scene: Scene,
     metrics: MetricsTracker,
     scale_factor: f32,
     logical_size: Size,
     logical_position: Point,
+    display_id: Option<DisplayId>,
+    appearance: WindowAppearance,
+    native_tabs: WindowTabState,
     restore_bounds: Rect,
     maximized: bool,
     pointer: Option<Point>,
     pointer_capture: Option<PointerCapture>,
+    pressed_mouse_buttons: PressedMouseButtons,
+    mouse_clicks: MouseClickTracker,
+    mouse_event_path_scratch: Vec<ElementId>,
+    mouse_dispatch_scratch: Vec<MouseListenerKey>,
+    mouse_hover_changes_scratch: Vec<MouseHoverChange>,
+    key_dispatch_scratch: Vec<KeyListenerBinding>,
+    action_dispatch_scratch: Vec<ActionListenerBinding>,
+    touch_captures: HashMap<TouchId, TouchCapture>,
     drag_candidate: Option<DragCandidate>,
     drag_session: Option<DragSession>,
     native_file_drag: Option<NativeFileDrag>,
@@ -1943,6 +3299,156 @@ struct PointerCapture {
     button: MouseButton,
     origin: Point,
     position: Point,
+}
+
+const MAX_SIMULTANEOUS_MOUSE_BUTTONS: usize = 8;
+const MOUSE_MULTI_CLICK_INTERVAL: Duration = Duration::from_millis(500);
+const MOUSE_MULTI_CLICK_DISTANCE: f32 = 4.0;
+
+#[derive(Clone, Copy, Debug)]
+struct PressedMouseButtons {
+    buttons: [MouseButton; MAX_SIMULTANEOUS_MOUSE_BUTTONS],
+    len: u8,
+}
+
+impl Default for PressedMouseButtons {
+    fn default() -> Self {
+        Self {
+            buttons: [MouseButton::Left; MAX_SIMULTANEOUS_MOUSE_BUTTONS],
+            len: 0,
+        }
+    }
+}
+
+impl PressedMouseButtons {
+    fn press(&mut self, button: MouseButton) {
+        self.release(button);
+        let len = usize::from(self.len);
+        if len < self.buttons.len() {
+            self.buttons[len] = button;
+            self.len += 1;
+        } else {
+            self.buttons.rotate_left(1);
+            self.buttons[MAX_SIMULTANEOUS_MOUSE_BUTTONS - 1] = button;
+        }
+    }
+
+    fn release(&mut self, button: MouseButton) {
+        let len = usize::from(self.len);
+        let Some(index) = self.buttons[..len]
+            .iter()
+            .position(|pressed| *pressed == button)
+        else {
+            return;
+        };
+        self.buttons.copy_within(index + 1..len, index);
+        self.len -= 1;
+    }
+
+    fn current(self) -> Option<MouseButton> {
+        self.len
+            .checked_sub(1)
+            .map(|index| self.buttons[usize::from(index)])
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct MouseClick {
+    button: MouseButton,
+    position: Point,
+    at: Instant,
+    count: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ActiveMouseClick {
+    button: MouseButton,
+    count: usize,
+}
+
+#[derive(Debug)]
+struct MouseClickTracker {
+    last_press: Option<MouseClick>,
+    active: [ActiveMouseClick; MAX_SIMULTANEOUS_MOUSE_BUTTONS],
+    active_len: u8,
+}
+
+impl Default for MouseClickTracker {
+    fn default() -> Self {
+        Self {
+            last_press: None,
+            active: [ActiveMouseClick::default(); MAX_SIMULTANEOUS_MOUSE_BUTTONS],
+            active_len: 0,
+        }
+    }
+}
+
+impl MouseClickTracker {
+    fn press(
+        &mut self,
+        button: MouseButton,
+        position: Point,
+        now: Instant,
+        native_count: Option<usize>,
+    ) -> usize {
+        let count = native_count.unwrap_or_else(|| {
+            self.last_press
+                .filter(|last| {
+                    let delta = position - last.position;
+                    last.button == button
+                        && now.saturating_duration_since(last.at) <= MOUSE_MULTI_CLICK_INTERVAL
+                        && delta.x * delta.x + delta.y * delta.y
+                            <= MOUSE_MULTI_CLICK_DISTANCE * MOUSE_MULTI_CLICK_DISTANCE
+                })
+                .map_or(1, |last| last.count.saturating_add(1))
+        });
+        let count = count.max(1);
+        self.last_press = Some(MouseClick {
+            button,
+            position,
+            at: now,
+            count,
+        });
+        self.remove_active(button);
+        let len = usize::from(self.active_len);
+        if len < self.active.len() {
+            self.active[len] = ActiveMouseClick { button, count };
+            self.active_len += 1;
+        }
+        count
+    }
+
+    fn release(&mut self, button: MouseButton, native_count: Option<usize>) -> usize {
+        let retained = self.active[..usize::from(self.active_len)]
+            .iter()
+            .find(|active| active.button == button)
+            .map(|active| active.count);
+        self.remove_active(button);
+        native_count.or(retained).unwrap_or(1).max(1)
+    }
+
+    fn remove_active(&mut self, button: MouseButton) {
+        let len = usize::from(self.active_len);
+        let Some(index) = self.active[..len]
+            .iter()
+            .position(|active| active.button == button)
+        else {
+            return;
+        };
+        self.active.copy_within(index + 1..len, index);
+        self.active_len -= 1;
+    }
+
+    fn cancel(&mut self) {
+        self.last_press = None;
+        self.active_len = 0;
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TouchCapture {
+    target: ElementId,
+    last_event: TouchEvent,
 }
 
 const DRAG_THRESHOLD: f32 = 2.0;
@@ -2101,6 +3607,7 @@ struct Runtime {
     pending_global_notifications: VecDeque<TypeId>,
     pending_global_notification_types: HashSet<TypeId>,
     pending_all_globals: bool,
+    targeted_actions: VecDeque<(WindowHandle, AnyAction)>,
     windows: HashMap<WindowId, WindowEntry>,
     window_handles: HashMap<WindowHandle, WindowId>,
     current_window: Option<(WindowId, WindowHandle)>,
@@ -2115,14 +3622,26 @@ struct Runtime {
     background_tasks: BackgroundTaskPoolHandle,
     foreground_tasks: ForegroundTaskSpawner,
     globals: GlobalStore,
+    assets: Assets,
+    font_system: SharedFontSystem,
     gpu_contexts: HashMap<PerformanceProfile, GpuContext>,
+    displays: Displays,
+    keyboard: KeyboardState,
     #[cfg(target_os = "macos")]
     native_drag_registry: MacTypedDragRegistry,
     #[cfg(target_os = "macos")]
+    popup_monitor: MacPopupMonitor,
+    #[cfg(target_os = "macos")]
     active_platform_dialogs: HashMap<WindowHandle, ActivePlatformDialog>,
+    #[cfg(target_os = "macos")]
+    automatic_tabbing_baseline: Option<bool>,
+    #[cfg(target_os = "macos")]
+    tabbing_window_count: usize,
     #[cfg(target_os = "macos")]
     mac_application_host: MacApplicationHost,
     application_callbacks: ApplicationCallbacks,
+    quit_mode: QuitMode,
+    exit_requested: bool,
     // The following four fields are the currently activated window. Event delivery is serialized
     // by Winit, so moving one entry into this slot keeps the mature single-window hot path narrow
     // while every inactive window remains independently retained in `windows`.
@@ -2138,8 +3657,20 @@ struct Runtime {
     modifiers: Modifiers,
     fatal_error: Option<AppError>,
     event_proxy: EventLoopProxy<RuntimeEvent>,
-    clipboard: Option<Clipboard>,
+    clipboard: ClipboardService,
     form_submission_depth: u8,
+    animation_epoch: Instant,
+}
+
+struct RuntimeStartup {
+    initial_window: WindowRequest,
+    globals: GlobalStore,
+    keymap: Keymap,
+    menus: Vec<Menu>,
+    assets: Assets,
+    fonts: Vec<FontSource>,
+    application_callbacks: ApplicationCallbacks,
+    quit_mode: QuitMode,
 }
 
 #[cfg(target_os = "macos")]
@@ -2151,15 +3682,14 @@ struct ActivePlatformDialog {
 
 #[derive(Clone, Debug)]
 struct PendingKey {
-    key: Key,
-    modifiers: Modifiers,
+    stroke: Keystroke,
     repeat: bool,
     text: Option<String>,
 }
 
 impl PendingKey {
     fn keystroke(&self) -> Keystroke {
-        Keystroke::from_key_event(&self.key, self.modifiers)
+        self.stroke.clone()
     }
 }
 
@@ -2172,19 +3702,29 @@ struct PendingInput {
 
 impl Runtime {
     fn new(
-        initial_window: WindowRequest,
-        globals: GlobalStore,
-        keymap: Keymap,
-        menus: Vec<Menu>,
-        application_callbacks: ApplicationCallbacks,
+        startup: RuntimeStartup,
         event_proxy: EventLoopProxy<RuntimeEvent>,
     ) -> Result<Self, AppError> {
+        let RuntimeStartup {
+            initial_window,
+            globals,
+            mut keymap,
+            menus,
+            assets,
+            fonts,
+            application_callbacks,
+            quit_mode,
+        } = startup;
+        let font_system = create_shared_font_system(&assets, &fonts)?;
+        let keyboard = KeyboardState::native();
+        keymap.set_key_equivalents(keyboard.key_equivalents());
         let menu_actions = collect_menu_actions(&menus);
         let mut pending_windows = VecDeque::with_capacity(2);
         pending_windows.push_back(initial_window);
         let image_workers = ImageWorkerPoolHandle::new(event_proxy.clone());
         let background_tasks = BackgroundTaskPoolHandle::new(event_proxy.clone());
         let foreground_tasks = ForegroundTaskSpawner::new(event_proxy.clone());
+        let animation_epoch = Instant::now();
         #[cfg(target_os = "macos")]
         let mac_application_host = MacApplicationHost::new(
             event_proxy.clone(),
@@ -2200,6 +3740,7 @@ impl Runtime {
             pending_global_notifications: VecDeque::with_capacity(8),
             pending_global_notification_types: HashSet::with_capacity(8),
             pending_all_globals: false,
+            targeted_actions: VecDeque::with_capacity(8),
             windows: HashMap::new(),
             window_handles: HashMap::new(),
             current_window: None,
@@ -2214,14 +3755,26 @@ impl Runtime {
             background_tasks,
             foreground_tasks,
             globals,
+            assets,
+            font_system,
             gpu_contexts: HashMap::new(),
+            displays: Displays::default(),
+            keyboard,
             #[cfg(target_os = "macos")]
             native_drag_registry: MacTypedDragRegistry::new(),
             #[cfg(target_os = "macos")]
+            popup_monitor: MacPopupMonitor::new(event_proxy.clone()),
+            #[cfg(target_os = "macos")]
             active_platform_dialogs: HashMap::new(),
+            #[cfg(target_os = "macos")]
+            automatic_tabbing_baseline: None,
+            #[cfg(target_os = "macos")]
+            tabbing_window_count: 0,
             #[cfg(target_os = "macos")]
             mac_application_host,
             application_callbacks,
+            quit_mode,
+            exit_requested: false,
             config: AppConfig::default(),
             keymap,
             #[cfg(target_os = "macos")]
@@ -2234,17 +3787,79 @@ impl Runtime {
             modifiers: Modifiers::default(),
             fatal_error: None,
             event_proxy,
-            clipboard: None,
+            clipboard: ClipboardService::system(),
             form_submission_depth: 0,
+            animation_epoch,
         })
     }
 
     fn event_context(&self) -> EventContext {
+        let parent = self.window.as_ref().and_then(|window| window.parent);
+        let popup_context = self.current_popup_context();
         EventContext::with_runtime(
             self.globals.clone(),
             self.foreground_tasks.clone(),
-            self.current_handle(),
+            self.clipboard.clone(),
+            self.displays.clone(),
+            self.keyboard.layout().clone(),
+            self.assets.clone(),
+            crate::event::EventWindowContext {
+                window: self.current_handle(),
+                parent,
+                popup_owner: popup_context.map(|context| context.owner),
+                popup_root: popup_context.map(|context| context.root),
+                pointer_position: self.window.as_ref().and_then(|window| window.pointer),
+            },
         )
+    }
+
+    fn current_popup_context(&self) -> Option<PopupWindowContext> {
+        if self.config.kind != WindowKind::AnchoredPopup {
+            return None;
+        }
+        let mut root = self.current_handle()?;
+        let mut ancestor = self.window.as_ref()?.parent?;
+        loop {
+            let window_id = *self.window_handles.get(&ancestor)?;
+            let entry = self.windows.get(&window_id)?;
+            if entry.config.kind != WindowKind::AnchoredPopup {
+                return Some(PopupWindowContext {
+                    owner: ancestor,
+                    root,
+                });
+            }
+            root = ancestor;
+            ancestor = entry.state.parent?;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn current_grabbing_popup_root(&self) -> Option<(WindowHandle, Arc<Window>)> {
+        let context = self.current_popup_context()?;
+        if context.root == self.current_handle()? {
+            if !window_is_grabbing_popup(&self.config) {
+                return None;
+            }
+            return Some((context.root, self.window.as_ref()?.window.clone()));
+        }
+        let window_id = *self.window_handles.get(&context.root)?;
+        let entry = self.windows.get(&window_id)?;
+        window_is_grabbing_popup(&entry.config).then(|| (context.root, entry.state.window.clone()))
+    }
+
+    fn current_never_key_popup_children(&self) -> Vec<WindowHandle> {
+        let Some(owner) = self.current_handle() else {
+            return Vec::new();
+        };
+        self.windows
+            .values()
+            .filter_map(|entry| {
+                (entry.state.visible
+                    && entry.state.parent == Some(owner)
+                    && window_is_never_key_popup(&entry.config))
+                .then_some(entry.handle)
+            })
+            .collect()
     }
 
     fn fail(&mut self, event_loop: &ActiveEventLoop, error: AppError) {
@@ -2312,10 +3927,14 @@ impl Runtime {
         };
         Some(WindowState {
             handle,
+            display_id: state.display_id,
             kind: self.config.kind,
             bounds,
             viewport_size: state.logical_size,
+            minimum_size: self.config.minimum_size,
             scale_factor: state.scale_factor,
+            appearance: state.appearance,
+            background_appearance: self.config.window_background,
             focused: state.focused,
             visible: state.visible,
             minimized,
@@ -2325,7 +3944,158 @@ impl Runtime {
             movable: self.config.is_movable,
             resizable: self.config.is_resizable,
             minimizable: self.config.is_minimizable,
+            represented_file: self.config.represented_file.is_some(),
+            document_edited: self.config.document_edited,
+            native_tabbing: self.config.tabbing_identifier.is_some(),
+            native_tabs: state.native_tabs,
+            #[cfg(feature = "inspector")]
+            inspector_active: state.inspector.is_some(),
         })
+    }
+
+    #[cfg(target_os = "macos")]
+    fn register_native_tabbing(&mut self, event_loop: &ActiveEventLoop) {
+        if self.tabbing_window_count == 0 {
+            let baseline = event_loop.allows_automatic_window_tabbing();
+            self.automatic_tabbing_baseline = Some(baseline);
+            if !baseline {
+                event_loop.set_allows_automatic_window_tabbing(true);
+            }
+        }
+        self.tabbing_window_count = self.tabbing_window_count.saturating_add(1);
+    }
+
+    #[cfg(target_os = "macos")]
+    fn unregister_native_tabbing(&mut self, event_loop: &ActiveEventLoop) {
+        self.tabbing_window_count = self.tabbing_window_count.saturating_sub(1);
+        if self.tabbing_window_count == 0
+            && let Some(baseline) = self.automatic_tabbing_baseline.take()
+        {
+            event_loop.set_allows_automatic_window_tabbing(baseline);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn restore_native_tabbing_baseline(&mut self, event_loop: &ActiveEventLoop) {
+        self.tabbing_window_count = 0;
+        if let Some(baseline) = self.automatic_tabbing_baseline.take() {
+            event_loop.set_allows_automatic_window_tabbing(baseline);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn refresh_native_tab_states(&mut self) {
+        for entry in self.windows.values_mut() {
+            if entry.config.tabbing_identifier.is_none()
+                && entry.state.native_tabs == WindowTabState::default()
+            {
+                continue;
+            }
+            let Ok(tabs) = window_tab_state(&entry.state.window) else {
+                continue;
+            };
+            if entry.state.native_tabs != tabs {
+                entry.state.native_tabs = tabs;
+                if entry.state.listeners.observes_window_state {
+                    entry.state.view_dirty = true;
+                    if entry.state.visible && entry.state.scheduler.invalidate() {
+                        entry.state.window.request_redraw();
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn refresh_current_native_tab_state(&mut self) {
+        if self.config.tabbing_identifier.is_none()
+            && self
+                .window
+                .as_ref()
+                .is_none_or(|state| state.native_tabs == WindowTabState::default())
+        {
+            return;
+        }
+        let Some(state) = self.window.as_mut() else {
+            return;
+        };
+        let Ok(tabs) = window_tab_state(&state.window) else {
+            return;
+        };
+        if state.native_tabs != tabs {
+            state.native_tabs = tabs;
+            if state.listeners.observes_window_state {
+                state.view_dirty = true;
+                if state.visible && state.scheduler.invalidate() {
+                    state.window.request_redraw();
+                }
+            }
+        }
+    }
+
+    /// Refresh the bounded monitor snapshot only at a native lifecycle boundary.
+    ///
+    /// This is intentionally absent from `about_to_wait`: unchanged applications retain no
+    /// monitor polling cost and no display-owned native handles in public state.
+    fn refresh_displays(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        let displays = crate::display::native_displays(event_loop);
+        let snapshot_changed = self.displays != displays;
+        self.displays = displays;
+
+        let refresh_window = |state: &mut RuntimeWindow| {
+            let previous = state.display_id;
+            state.display_id = runtime_window_display_id(state, &self.displays);
+            let display_changed = previous != state.display_id;
+            if snapshot_changed && state.listeners.observes_displays
+                || display_changed && state.listeners.observes_window_state
+            {
+                state.view_dirty = true;
+                if state.visible && state.scheduler.invalidate() {
+                    state.window.request_redraw();
+                }
+            }
+        };
+
+        for entry in self.windows.values_mut() {
+            refresh_window(&mut entry.state);
+        }
+        if let Some(state) = &mut self.window {
+            refresh_window(state);
+        }
+        snapshot_changed
+    }
+
+    #[cfg(target_os = "macos")]
+    fn refresh_keyboard_layout(&mut self) -> bool {
+        let keyboard = KeyboardState::native();
+        if self.keyboard == keyboard {
+            return false;
+        }
+        self.keyboard = keyboard;
+        self.keymap
+            .set_key_equivalents(self.keyboard.key_equivalents());
+
+        // A prefix cannot safely span two command layouts. Key releases remain independently
+        // translated by their native event, while future presses use the new immutable table.
+        self.pending_input = None;
+        for entry in self.windows.values_mut() {
+            entry.pending_input = None;
+            if entry.state.listeners.observes_keyboard_layout {
+                entry.state.view_dirty = true;
+                if entry.state.visible && entry.state.scheduler.invalidate() {
+                    entry.state.window.request_redraw();
+                }
+            }
+        }
+        if let Some(state) = &mut self.window
+            && state.listeners.observes_keyboard_layout
+        {
+            state.view_dirty = true;
+            if state.visible && state.scheduler.invalidate() {
+                state.window.request_redraw();
+            }
+        }
+        true
     }
 
     fn note_window_focused(&mut self, window_id: WindowId) {
@@ -2492,12 +4262,15 @@ impl Runtime {
         }
     }
 
-    fn process_queued_window_commands(&mut self) {
+    fn process_queued_window_commands(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(target_os = "macos")]
+        let mut refresh_native_tabs = false;
         for command in std::mem::take(&mut self.window_commands) {
             let handle = command.handle();
             let Some(window_id) = self.window_handles.get(&handle).copied() else {
                 continue;
             };
+            #[cfg(target_os = "macos")]
             let parent_window = self.windows.get(&window_id).and_then(|entry| {
                 entry
                     .state
@@ -2512,6 +4285,10 @@ impl Runtime {
             let state = &mut entry.state;
             let mut state_changed = false;
             let mut force_redraw = false;
+            #[cfg(target_os = "macos")]
+            let mut tabbing_ownership_delta = 0_i8;
+            #[cfg(feature = "inspector")]
+            let mut inspector_redraw = false;
 
             match command {
                 WindowCommand::SetTitle(_, title) => {
@@ -2519,6 +4296,173 @@ impl Runtime {
                         entry.config.title = title;
                         state.window.set_title(&entry.config.title);
                         force_redraw = true;
+                    }
+                }
+                WindowCommand::SetRepresentedFile(_, represented_file) => {
+                    if entry.config.represented_file != represented_file {
+                        #[cfg(target_os = "macos")]
+                        let applied = set_window_represented_file(
+                            &state.window,
+                            represented_file.as_deref(),
+                        )
+                        .map_err(|error| {
+                            tracing::warn!(%error, "could not change represented document file");
+                        })
+                        .is_ok();
+                        #[cfg(not(target_os = "macos"))]
+                        let applied = true;
+                        if applied {
+                            entry.config.represented_file = represented_file;
+                            #[cfg(target_os = "macos")]
+                            if let Some(position) = entry.config.traffic_light_position
+                                && let Err(error) = position_traffic_lights(&state.window, position)
+                            {
+                                tracing::warn!(%error, "could not restore traffic lights after changing represented document file");
+                            }
+                            state_changed = true;
+                        }
+                    }
+                }
+                WindowCommand::SetDocumentEdited(_, edited) => {
+                    if entry.config.document_edited != edited {
+                        #[cfg(target_os = "macos")]
+                        let applied = set_window_document_edited(&state.window, edited)
+                            .map_err(|error| {
+                                tracing::warn!(%error, "could not change native document edited state");
+                            })
+                            .is_ok();
+                        #[cfg(not(target_os = "macos"))]
+                        let applied = true;
+                        if applied {
+                            entry.config.document_edited = edited;
+                            #[cfg(target_os = "macos")]
+                            if let Some(position) = entry.config.traffic_light_position
+                                && let Err(error) = position_traffic_lights(&state.window, position)
+                            {
+                                tracing::warn!(%error, "could not restore traffic lights after changing document edited state");
+                            }
+                            state_changed = true;
+                        }
+                    }
+                }
+                WindowCommand::ShowCharacterPalette(_) => {
+                    #[cfg(target_os = "macos")]
+                    if let Err(error) = show_character_palette(&state.window) {
+                        tracing::warn!(%error, "could not present the native character palette");
+                    }
+                }
+                WindowCommand::SetTabbingIdentifier(_, identifier) => {
+                    if entry.config.tabbing_identifier != identifier {
+                        #[cfg(target_os = "macos")]
+                        let applied = set_window_tabbing_identifier(
+                            &state.window,
+                            identifier.as_deref(),
+                        )
+                        .map_err(|error| {
+                            tracing::warn!(%error, "could not change native tabbing identifier");
+                        })
+                        .is_ok();
+                        #[cfg(not(target_os = "macos"))]
+                        let applied = true;
+                        if applied {
+                            #[cfg(target_os = "macos")]
+                            {
+                                tabbing_ownership_delta = match (
+                                    entry.config.tabbing_identifier.is_some(),
+                                    identifier.is_some(),
+                                ) {
+                                    (false, true) => 1,
+                                    (true, false) => -1,
+                                    _ => 0,
+                                };
+                                refresh_native_tabs = true;
+                            }
+                            entry.config.tabbing_identifier = identifier;
+                            state_changed = true;
+                        }
+                    }
+                }
+                WindowCommand::SelectNextTab(_) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(error) =
+                            perform_window_tab_action(&state.window, MacWindowTabAction::SelectNext)
+                        {
+                            tracing::warn!(%error, "could not select the next native window tab");
+                        }
+                        refresh_native_tabs = true;
+                    }
+                }
+                WindowCommand::SelectPreviousTab(_) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(error) = perform_window_tab_action(
+                            &state.window,
+                            MacWindowTabAction::SelectPrevious,
+                        ) {
+                            tracing::warn!(%error, "could not select the previous native window tab");
+                        }
+                        refresh_native_tabs = true;
+                    }
+                }
+                WindowCommand::SelectTab(_, index) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(error) = perform_window_tab_action(
+                            &state.window,
+                            MacWindowTabAction::Select(index),
+                        ) {
+                            tracing::warn!(%error, "could not select a native window tab");
+                        }
+                        refresh_native_tabs = true;
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    let _ = index;
+                }
+                WindowCommand::MergeAllWindows(_) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(error) =
+                            perform_window_tab_action(&state.window, MacWindowTabAction::MergeAll)
+                        {
+                            tracing::warn!(%error, "could not merge native windows into tabs");
+                        }
+                        refresh_native_tabs = true;
+                    }
+                }
+                WindowCommand::MoveTabToNewWindow(_) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(error) = perform_window_tab_action(
+                            &state.window,
+                            MacWindowTabAction::MoveToNewWindow,
+                        ) {
+                            tracing::warn!(%error, "could not move native tab to a new window");
+                        }
+                        refresh_native_tabs = true;
+                    }
+                }
+                WindowCommand::ToggleTabBar(_) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(error) =
+                            perform_window_tab_action(&state.window, MacWindowTabAction::ToggleBar)
+                        {
+                            tracing::warn!(%error, "could not toggle the native window tab bar");
+                        }
+                        refresh_native_tabs = true;
+                    }
+                }
+                WindowCommand::ToggleTabOverview(_) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(error) = perform_window_tab_action(
+                            &state.window,
+                            MacWindowTabAction::ToggleOverview,
+                        ) {
+                            tracing::warn!(%error, "could not toggle the native window tab overview");
+                        }
+                        refresh_native_tabs = true;
                     }
                 }
                 WindowCommand::SetBounds(_, bounds) => {
@@ -2537,13 +4481,7 @@ impl Runtime {
                     state_changed = true;
                 }
                 WindowCommand::Resize(_, size) => {
-                    let bounds = Rect::new(
-                        state.restore_bounds.x,
-                        state.restore_bounds.y,
-                        size.width,
-                        size.height,
-                    );
-                    apply_window_bounds(state, WindowBounds::Windowed(bounds));
+                    apply_window_size(state, size);
                     state_changed = true;
                     force_redraw = true;
                 }
@@ -2592,6 +4530,10 @@ impl Runtime {
                 WindowCommand::SetVisible(_, visible) => {
                     if state.visible != visible {
                         #[cfg(target_os = "macos")]
+                        if !visible && window_is_grabbing_popup(&entry.config) {
+                            self.popup_monitor.unwatch(handle);
+                        }
+                        #[cfg(target_os = "macos")]
                         if state.relation_presented && !visible {
                             if let Err(error) =
                                 dismiss_window_relation(&state.window, entry.config.kind)
@@ -2602,6 +4544,13 @@ impl Runtime {
                         }
                         #[cfg(target_os = "macos")]
                         if visible && !state.relation_presented {
+                            if let Some(popup) = entry.config.popup.as_ref()
+                                && let Some(parent) = parent_window.as_ref()
+                                && let Err(error) =
+                                    position_anchored_popup(&state.window, parent, popup)
+                            {
+                                tracing::warn!(%error, "could not restore anchored popup placement");
+                            }
                             match present_window_relation(
                                 &state.window,
                                 parent_window.as_ref(),
@@ -2613,9 +4562,24 @@ impl Runtime {
                                 }
                             }
                         }
+                        #[cfg(target_os = "macos")]
+                        if visible
+                            && window_is_grabbing_popup(&entry.config)
+                            && let Err(error) = self.popup_monitor.watch(handle, &state.window)
+                        {
+                            tracing::warn!(%error, "could not restore native popup grab");
+                        }
+                        #[cfg(target_os = "macos")]
+                        if let Err(error) =
+                            set_window_visibility(&state.window, visible, entry.config.focus)
+                        {
+                            tracing::warn!(%error, "could not change native window visibility");
+                        }
+                        #[cfg(not(target_os = "macos"))]
                         state.window.set_visible(visible);
                         state.visible = visible;
                         if visible {
+                            #[cfg(not(target_os = "macos"))]
                             if entry.config.focus {
                                 state.window.focus_window();
                             }
@@ -2647,6 +4611,40 @@ impl Runtime {
                         state_changed = true;
                     }
                 }
+                WindowCommand::SetMinimumSize(_, minimum) => {
+                    if entry.config.minimum_size != minimum {
+                        entry.config.minimum_size = minimum;
+                        state.window.set_min_inner_size(minimum.map(|minimum| {
+                            LogicalSize::new(minimum.width as f64, minimum.height as f64)
+                        }));
+                        if let Some(minimum) = minimum {
+                            state.restore_bounds.width =
+                                state.restore_bounds.width.max(minimum.width);
+                            state.restore_bounds.height =
+                                state.restore_bounds.height.max(minimum.height);
+                            let constrained =
+                                constrained_window_size(state.logical_size, Some(minimum));
+                            if constrained != state.logical_size
+                                && !runtime_window_is_fullscreen(state)
+                                && !runtime_window_is_maximized(state, &entry.config)
+                            {
+                                if let Some(physical) =
+                                    state.window.request_inner_size(LogicalSize::new(
+                                        constrained.width as f64,
+                                        constrained.height as f64,
+                                    ))
+                                {
+                                    state.renderer.resize(physical.width, physical.height);
+                                    state.logical_size =
+                                        logical_window_size(physical, state.scale_factor);
+                                }
+                                state.view_dirty = true;
+                                force_redraw = true;
+                            }
+                        }
+                        state_changed = true;
+                    }
+                }
                 WindowCommand::SetMinimizable(_, minimizable) => {
                     if entry.config.is_minimizable != minimizable {
                         entry.config.is_minimizable = minimizable;
@@ -2656,17 +4654,93 @@ impl Runtime {
                         state_changed = true;
                     }
                 }
+                WindowCommand::SetAppearance(_, preference) => {
+                    if entry.config.preferred_appearance != preference {
+                        entry.config.preferred_appearance = preference;
+                        state.window.set_theme(preference.map(to_winit_theme));
+                        let appearance = preference
+                            .or_else(|| state.window.theme().map(map_window_appearance))
+                            .unwrap_or(state.appearance);
+                        if state.appearance != appearance {
+                            state.appearance = appearance;
+                            state_changed = true;
+                        }
+                    }
+                }
+                WindowCommand::SetBackgroundAppearance(_, appearance) => {
+                    if entry.config.window_background != appearance {
+                        let previous = entry.config.window_background;
+                        let changes = appearance.changes_from(previous);
+                        let surface_change = if changes.transparency {
+                            state.renderer.set_transparent(appearance.is_transparent())
+                        } else {
+                            Ok(false)
+                        };
+                        match surface_change {
+                            Ok(_) => {
+                                if changes.transparency {
+                                    state.window.set_transparent(appearance.is_transparent());
+                                }
+                                if changes.blur {
+                                    state.window.set_blur(appearance.is_blurred());
+                                }
+                                entry.config.window_background = appearance;
+                                state_changed = true;
+                                force_redraw = true;
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "could not change window background appearance");
+                            }
+                        }
+                    }
+                }
+                #[cfg(feature = "inspector")]
+                WindowCommand::SetInspector(_, open) => {
+                    if state.inspector.is_some() != open {
+                        entry.config.inspector = open;
+                        state.inspector = open.then(|| InspectorState::new(self.animation_epoch));
+                        reconcile_inspector_pointer_state(state);
+                        state_changed = true;
+                        inspector_redraw = true;
+                    }
+                }
+                #[cfg(feature = "inspector")]
+                WindowCommand::ToggleInspector(_) => {
+                    let open = state.inspector.is_none();
+                    entry.config.inspector = open;
+                    state.inspector = open.then(|| InspectorState::new(self.animation_epoch));
+                    reconcile_inspector_pointer_state(state);
+                    state_changed = true;
+                    inspector_redraw = true;
+                }
                 WindowCommand::RequestAttention(_) => state
                     .window
                     .request_user_attention(Some(UserAttentionType::Informational)),
             }
 
-            if force_redraw || state_changed && state.listeners.observes_window_state {
+            #[cfg(feature = "inspector")]
+            let redraw = force_redraw
+                || inspector_redraw
+                || state_changed && state.listeners.observes_window_state;
+            #[cfg(not(feature = "inspector"))]
+            let redraw = force_redraw || state_changed && state.listeners.observes_window_state;
+            if redraw {
                 state.view_dirty |= force_redraw || state.listeners.observes_window_state;
                 if state.visible && state.scheduler.invalidate() {
                     state.window.request_redraw();
                 }
             }
+
+            #[cfg(target_os = "macos")]
+            match tabbing_ownership_delta {
+                1 => self.register_native_tabbing(event_loop),
+                -1 => self.unregister_native_tabbing(event_loop),
+                _ => {}
+            }
+        }
+        #[cfg(target_os = "macos")]
+        if refresh_native_tabs {
+            self.refresh_native_tab_states();
         }
     }
 
@@ -2860,6 +4934,18 @@ impl Runtime {
     }
 
     #[cfg(target_os = "macos")]
+    fn invoke_keyboard_layout_change(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(mut callback) = self.application_callbacks.keyboard_layout.take() else {
+            return;
+        };
+        let layout = self.keyboard.layout().clone();
+        let mut context = self.event_context();
+        callback(&layout, &mut context);
+        self.application_callbacks.keyboard_layout = Some(callback);
+        self.apply_application_context(event_loop, context);
+    }
+
+    #[cfg(target_os = "macos")]
     fn invoke_system_notification_response(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -2878,11 +4964,10 @@ impl Runtime {
         self.apply_application_context(event_loop, context);
     }
 
-    #[cfg(target_os = "macos")]
     fn apply_application_context(&mut self, event_loop: &ActiveEventLoop, context: EventContext) {
         debug_assert!(self.current_window.is_none());
         debug_assert!(self.window.is_none());
-        if self.apply_event_context(event_loop, context, false, false) {
+        if self.apply_event_context(event_loop, context, false, false) || self.exit_requested {
             self.process_window_commands(event_loop);
         }
     }
@@ -2913,7 +4998,7 @@ impl Runtime {
         false
     }
 
-    fn close_requested_window_trees(&mut self) {
+    fn close_requested_window_trees(&mut self, event_loop: &ActiveEventLoop) -> Vec<ClosedWindow> {
         let mut stack = std::mem::take(&mut self.close_requests)
             .into_iter()
             .map(|handle| (handle, false))
@@ -2940,16 +5025,25 @@ impl Runtime {
             }
         }
 
+        let mut closed = Vec::with_capacity(order.len());
         for handle in order {
             let Some(window_id) = self.window_handles.remove(&handle) else {
                 continue;
             };
+            let parent = self
+                .windows
+                .get(&window_id)
+                .and_then(|entry| entry.state.parent);
             self.foreground_tasks.cancel_window(handle);
             #[cfg(target_os = "macos")]
             if let Some(dialog) = self.active_platform_dialogs.remove(&handle) {
                 dialog.native.cancel();
             }
+            #[cfg(target_os = "macos")]
+            self.popup_monitor.unwatch(handle);
             if let Some(entry) = self.windows.remove(&window_id) {
+                #[cfg(target_os = "macos")]
+                let native_tabbing = entry.config.tabbing_identifier.is_some();
                 #[cfg(target_os = "macos")]
                 if entry.state.relation_presented
                     && let Err(error) =
@@ -2957,12 +5051,82 @@ impl Runtime {
                 {
                     tracing::warn!(%error, "could not dismiss closing native window relation");
                 }
+                #[cfg(target_os = "macos")]
+                if let Err(error) = set_window_visibility(&entry.state.window, false, false) {
+                    tracing::warn!(%error, "could not hide closing native window");
+                }
+                #[cfg(not(target_os = "macos"))]
                 entry.state.window.set_visible(false);
+                #[cfg(target_os = "macos")]
+                if native_tabbing {
+                    self.unregister_native_tabbing(event_loop);
+                }
             }
             self.focus_history
                 .retain(|candidate| *candidate != window_id);
             if self.active_window == Some(window_id) {
                 self.active_window = self.focus_history.last().copied();
+            }
+            closed.push(ClosedWindow { handle, parent });
+        }
+        #[cfg(target_os = "macos")]
+        if !closed.is_empty() {
+            self.refresh_native_tab_states();
+        }
+        closed
+    }
+
+    fn invoke_window_closed_callbacks(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        closed: Vec<ClosedWindow>,
+    ) {
+        for closed in closed {
+            if let Some(parent) = closed.parent
+                && let Some(window_id) = self.window_handles.get(&parent).copied()
+                && self.activate_window(window_id)
+            {
+                let callbacks = self
+                    .window
+                    .as_ref()
+                    .map(|window| {
+                        let mut callbacks =
+                            Vec::with_capacity(window.listeners.any_child_window_closed.len() + 1);
+                        if let Some(callback) = window
+                            .listeners
+                            .child_window_closed
+                            .get(&closed.handle)
+                            .cloned()
+                        {
+                            callbacks.push(callback);
+                        }
+                        callbacks.extend(window.listeners.any_child_window_closed.iter().cloned());
+                        callbacks
+                    })
+                    .unwrap_or_default();
+                if !callbacks.is_empty() {
+                    let mut context = self.event_context();
+                    if let Some(window) = &mut self.window {
+                        for callback in callbacks {
+                            callback(window.view.as_any_mut(), closed.handle, &mut context);
+                        }
+                    }
+                    let _ = self.apply_event_context(event_loop, context, false, true);
+                }
+                self.deactivate_window();
+                if self.fatal_error.is_some() {
+                    return;
+                }
+            }
+
+            if let Some(mut callback) = self.application_callbacks.window_closed.take() {
+                let mut context = self.event_context();
+                callback(closed.handle, &mut context);
+                self.application_callbacks.window_closed = Some(callback);
+                let _ = self.apply_event_context(event_loop, context, false, false);
+                if self.fatal_error.is_some() {
+                    return;
+                }
             }
         }
     }
@@ -2971,54 +5135,158 @@ impl Runtime {
         debug_assert!(self.current_window.is_none());
         debug_assert!(self.window.is_none());
 
-        if !self.process_deferred_effects(event_loop) {
-            return;
-        }
-
-        while let Some(request) = self.pending_windows.pop_front() {
-            self.create_window(event_loop, request);
-            if self.fatal_error.is_some() {
-                return;
-            }
+        for _ in 0..MAX_WINDOW_LIFECYCLE_TURNS {
             if !self.process_deferred_effects(event_loop) {
                 return;
             }
+
+            if self.exit_requested {
+                self.pending_windows.clear();
+                self.close_requests
+                    .extend(self.window_handles.keys().copied());
+            } else {
+                // Window targeting must use the work area that exists at the placement boundary.
+                // On macOS, adding a command-line application's Dock presence can resize a
+                // left/right Dock after `resumed` without a screen-parameters notification. One
+                // bounded refresh per non-popup creation batch keeps default centering current;
+                // anchored-popup churn, the idle path, and ordinary frames perform no monitor
+                // query.
+                if self
+                    .pending_windows
+                    .iter()
+                    .any(|request| request.options.kind != WindowKind::AnchoredPopup)
+                {
+                    self.refresh_displays(event_loop);
+                }
+                while let Some(request) = self.pending_windows.pop_front() {
+                    self.create_window(event_loop, request);
+                    if self.fatal_error.is_some() {
+                        return;
+                    }
+                    if !self.process_deferred_effects(event_loop) {
+                        return;
+                    }
+                    if self.exit_requested {
+                        self.pending_windows.clear();
+                        self.close_requests
+                            .extend(self.window_handles.keys().copied());
+                        break;
+                    }
+                }
+            }
+
+            if !self.process_targeted_actions(event_loop) {
+                return;
+            }
+
+            self.process_queued_window_commands(event_loop);
+
+            for handle in std::mem::take(&mut self.invalidate_requests) {
+                let Some(window_id) = self.window_handles.get(&handle).copied() else {
+                    continue;
+                };
+                let Some(entry) = self.windows.get_mut(&window_id) else {
+                    continue;
+                };
+                entry.state.view_dirty = true;
+                if entry.state.scheduler.invalidate() {
+                    entry.state.window.request_redraw();
+                }
+            }
+
+            for handle in std::mem::take(&mut self.focus_requests) {
+                let Some(window_id) = self.window_handles.get(&handle).copied() else {
+                    continue;
+                };
+                if let Some(entry) = self.windows.get(&window_id) {
+                    #[cfg(target_os = "macos")]
+                    if matches!(
+                        entry.config.kind,
+                        WindowKind::PopUp | WindowKind::AnchoredPopup
+                    ) {
+                        if let Err(error) = set_window_visibility(&entry.state.window, true, true) {
+                            tracing::warn!(%error, "could not focus native popup without activation");
+                        }
+                    } else {
+                        entry.state.window.focus_window();
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    entry.state.window.focus_window();
+                    self.note_window_focused(window_id);
+                }
+            }
+
+            let closed = self.close_requested_window_trees(event_loop);
+            self.invoke_window_closed_callbacks(event_loop, closed);
+            if self.fatal_error.is_some() {
+                return;
+            }
+
+            self.process_platform_requests();
+
+            #[cfg(target_os = "macos")]
+            self.sync_active_native_menu_state();
+
+            if self.exit_requested {
+                self.pending_windows.clear();
+                if self.windows.is_empty() {
+                    event_loop.exit();
+                    return;
+                }
+                continue;
+            }
+
+            let lifecycle_pending = !self.pending_windows.is_empty()
+                || !self.targeted_actions.is_empty()
+                || !self.close_requests.is_empty()
+                || !self.window_commands.is_empty()
+                || !self.focus_requests.is_empty()
+                || !self.invalidate_requests.is_empty();
+            if lifecycle_pending {
+                continue;
+            }
+
+            if self.windows.is_empty() && self.quit_mode.quits_when_empty() {
+                event_loop.exit();
+            }
+            return;
         }
 
-        self.process_queued_window_commands();
+        self.fail(
+            event_loop,
+            AppError::View(format!(
+                "window lifecycle exceeded {MAX_WINDOW_LIFECYCLE_TURNS} effect turns"
+            )),
+        );
+    }
 
-        for handle in std::mem::take(&mut self.invalidate_requests) {
+    fn process_targeted_actions(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        let mut deliveries = 0_usize;
+        while let Some((handle, action)) = self.targeted_actions.pop_front() {
+            if deliveries == crate::MAX_PENDING_TARGETED_ACTIONS {
+                self.fail(
+                    event_loop,
+                    AppError::View(format!(
+                        "one effect cycle exceeded {} cross-window action deliveries",
+                        crate::MAX_PENDING_TARGETED_ACTIONS
+                    )),
+                );
+                return false;
+            }
+            deliveries += 1;
             let Some(window_id) = self.window_handles.get(&handle).copied() else {
                 continue;
             };
-            let Some(entry) = self.windows.get_mut(&window_id) else {
+            if !self.activate_window(window_id) {
                 continue;
-            };
-            entry.state.view_dirty = true;
-            if entry.state.scheduler.invalidate() {
-                entry.state.window.request_redraw();
+            }
+            let delivered = self.invoke_action(event_loop, &action).is_some();
+            self.deactivate_window();
+            if !delivered {
+                return false;
             }
         }
-
-        for handle in std::mem::take(&mut self.focus_requests) {
-            let Some(window_id) = self.window_handles.get(&handle).copied() else {
-                continue;
-            };
-            if let Some(entry) = self.windows.get(&window_id) {
-                entry.state.window.focus_window();
-                self.note_window_focused(window_id);
-            }
-        }
-
-        self.close_requested_window_trees();
-        self.process_platform_requests();
-
-        #[cfg(target_os = "macos")]
-        self.sync_active_native_menu_state();
-
-        if self.windows.is_empty() && self.pending_windows.is_empty() {
-            event_loop.exit();
-        }
+        true
     }
 
     fn resume_deferred_image_loads(&mut self) {
@@ -3111,7 +5379,11 @@ impl Runtime {
         announce_focus: bool,
     ) -> bool {
         if cx.exit {
-            event_loop.exit();
+            self.exit_requested = true;
+            self.pending_windows.clear();
+            self.targeted_actions.clear();
+            self.close_requests
+                .extend(self.window_handles.keys().copied());
             return false;
         }
         let entity_notifications = std::mem::take(&mut cx.entity_notifications);
@@ -3141,6 +5413,45 @@ impl Runtime {
                 )),
             );
             return false;
+        }
+        if self.targeted_actions.len() + cx.targeted_actions.len()
+            > crate::MAX_PENDING_TARGETED_ACTIONS
+        {
+            self.fail(
+                event_loop,
+                AppError::View(format!(
+                    "one effect cycle cannot retain more than {} cross-window actions",
+                    crate::MAX_PENDING_TARGETED_ACTIONS
+                )),
+            );
+            return false;
+        }
+        self.targeted_actions.extend(cx.targeted_actions.drain(..));
+        for request in &mut cx.open_windows {
+            let Some(anchor) = request.popup_anchor_element.take() else {
+                continue;
+            };
+            let Some(bounds) = self
+                .window
+                .as_ref()
+                .and_then(|state| state.ui.element_bounds(anchor))
+            else {
+                self.fail(
+                    event_loop,
+                    AppError::View(format!(
+                        "anchored popup trigger {anchor:?} is not mounted in its parent window"
+                    )),
+                );
+                return false;
+            };
+            let Some(popup) = request.options.popup.as_mut() else {
+                self.fail(
+                    event_loop,
+                    AppError::Window(WindowCommandError::InvalidPopupConfiguration.to_string()),
+                );
+                return false;
+            };
+            popup.anchor_rect = bounds;
         }
         self.pending_windows.extend(cx.open_windows.drain(..));
         if cx.close_current_window
@@ -3248,36 +5559,48 @@ impl Runtime {
 
     /// Returns `None` after exit, otherwise whether a handler consumed the action.
     fn invoke_action(&mut self, event_loop: &ActiveEventLoop, action: &AnyAction) -> Option<bool> {
-        let path = self
-            .window
-            .as_ref()
-            .map(|window| window.ui.focus_path())
-            .unwrap_or_default();
-        for id in path.into_iter().rev() {
-            let listeners = self
+        let Some(window) = &mut self.window else {
+            return Some(false);
+        };
+        let path = window.ui.focus_path();
+        let mut dispatch = std::mem::take(&mut window.action_dispatch_scratch);
+        window
+            .ui
+            .collect_action_dispatch(&path, action.type_id(), &mut dispatch);
+
+        for binding in dispatch.iter().copied() {
+            let listener = self
                 .window
                 .as_ref()
-                .and_then(|window| {
-                    window
-                        .listeners
-                        .actions
-                        .get(&(id, action.type_id()))
-                        .cloned()
-                })
-                .unwrap_or_default();
-            for listener in listeners {
-                let mut cx = self.event_context();
-                if let Some(window) = &mut self.window {
-                    listener(window.view.as_any_mut(), action.as_any(), &mut cx);
-                }
-                let propagate = cx.propagate_action;
-                if !self.apply_event_context(event_loop, cx, false, true) {
-                    return None;
-                }
-                if !propagate {
-                    return Some(true);
-                }
+                .and_then(|window| window.listeners.action_listener(binding.key));
+            let Some(listener) = listener else {
+                continue;
+            };
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(window.view.as_any_mut(), action.as_any(), &mut cx);
             }
+            let propagate = cx.propagate_action;
+            let stopped = cx.stop_event_propagation;
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return None;
+            }
+            let consumed = match binding.phase {
+                crate::DispatchPhase::Capture => stopped,
+                crate::DispatchPhase::Bubble => !propagate,
+            };
+            if consumed {
+                dispatch.clear();
+                if let Some(window) = &mut self.window {
+                    window.action_dispatch_scratch = dispatch;
+                }
+                return Some(true);
+            }
+        }
+
+        dispatch.clear();
+        if let Some(window) = &mut self.window {
+            window.action_dispatch_scratch = dispatch;
         }
         Some(false)
     }
@@ -3286,15 +5609,13 @@ impl Runtime {
         let Some(window) = &self.window else {
             return false;
         };
-        window.ui.focus_path().into_iter().rev().any(|id| {
-            window
-                .listeners
-                .actions
-                .contains_key(&(id, action.type_id()))
-        })
+        let path = window.ui.focus_path();
+        window.ui.action_available(&path, action.type_id())
     }
 
     fn replace_menus(&mut self, event_loop: &ActiveEventLoop, menus: Vec<Menu>) -> bool {
+        #[cfg(not(target_os = "macos"))]
+        let _ = event_loop;
         let menu_actions = collect_menu_actions(&menus);
         #[cfg(target_os = "macos")]
         let next_host = match MacMenuHost::new(&menus, self.event_proxy.clone()) {
@@ -3348,10 +5669,8 @@ impl Runtime {
                     .window
                     .as_ref()
                     .and_then(|window| window.ui.selected_text());
-                if let Some(selected) = selected
-                    && let Some(clipboard) = self.clipboard()
-                {
-                    let _ = clipboard.set_text(selected.as_ref());
+                if let Some(selected) = selected {
+                    let _ = self.write_clipboard_text(selected.as_ref());
                     return true;
                 }
                 false
@@ -3364,9 +5683,7 @@ impl Runtime {
                 let Some(selected) = selected else {
                     return false;
                 };
-                let copied = self
-                    .clipboard()
-                    .is_some_and(|clipboard| clipboard.set_text(selected.as_ref()).is_ok());
+                let copied = self.write_clipboard_text(selected.as_ref());
                 if copied {
                     let result = self
                         .window
@@ -3386,9 +5703,7 @@ impl Runtime {
                 {
                     return false;
                 }
-                let pasted = self
-                    .clipboard()
-                    .and_then(|clipboard| clipboard.get_text().ok());
+                let pasted = self.read_clipboard_text();
                 if let Some(value) = pasted {
                     let result = self
                         .window
@@ -3515,6 +5830,10 @@ impl Runtime {
     }
 
     fn invoke_click(&mut self, event_loop: &ActiveEventLoop, id: ElementId) {
+        let activation_target = self
+            .window
+            .as_ref()
+            .and_then(|window| window.ui.activation_target(id));
         let form = self
             .window
             .as_ref()
@@ -3523,11 +5842,13 @@ impl Runtime {
             .window
             .as_ref()
             .and_then(|window| window.listeners.clicks.get(&id).cloned());
+        let mut default_prevented = false;
         if let Some(listener) = listener {
             let mut cx = self.event_context();
             if let Some(window) = &mut self.window {
                 listener(window.view.as_any_mut(), &mut cx);
             }
+            default_prevented = cx.prevent_default;
             if !self.apply_event_context(event_loop, cx, false, true) {
                 return;
             }
@@ -3537,6 +5858,24 @@ impl Runtime {
         }
         if let Some(form) = form {
             self.invoke_form_submission(event_loop, form, Some(id));
+        }
+        if default_prevented {
+            return;
+        }
+        let Some(target) = activation_target.filter(|target| *target != id) else {
+            return;
+        };
+        let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
+        if let Some(window) = &mut self.window {
+            window.ui.focus(target);
+        }
+        self.announce_focus_change(event_loop, previous_focus);
+        let clickable = self
+            .window
+            .as_ref()
+            .is_some_and(|window| window.ui.is_clickable(target));
+        if clickable {
+            self.invoke_click(event_loop, target);
         }
     }
 
@@ -3580,6 +5919,323 @@ impl Runtime {
             listener(window.view.as_any_mut(), &event, &mut cx);
         }
         self.apply_event_context(event_loop, cx, false, true)
+    }
+
+    /// Dispatch one bounded desktop mouse event through outside capture, capture, and bubble.
+    ///
+    /// `None` means the callback closed the runtime. `Some(true)` means at least one listener
+    /// prevented the retained default behavior.
+    fn invoke_mouse_event_at(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        position: Point,
+        kind: MouseListenerKind,
+        button: Option<MouseButton>,
+        event: MouseListenerEvent,
+    ) -> Option<bool> {
+        let (mut path, mut dispatch) = {
+            let window = self.window.as_mut()?;
+            (
+                std::mem::take(&mut window.mouse_event_path_scratch),
+                std::mem::take(&mut window.mouse_dispatch_scratch),
+            )
+        };
+        let path_complete = {
+            let window = self.window.as_ref()?;
+            let complete = window.ui.mouse_event_path_at(position, &mut path);
+            if complete {
+                window
+                    .ui
+                    .collect_mouse_dispatch(&path, kind, button, &mut dispatch);
+            }
+            complete
+        };
+        if let Some(window) = &mut self.window {
+            path.clear();
+            window.mouse_event_path_scratch = path;
+        }
+        if !path_complete {
+            tracing::warn!(
+                limit = crate::MAX_MOUSE_EVENT_PATH,
+                "ignored a targeted mouse event whose retained ancestor path exceeded the safety bound"
+            );
+            dispatch.clear();
+        }
+
+        let mut default_prevented = false;
+        for key in dispatch.iter().copied() {
+            let listener = self
+                .window
+                .as_ref()
+                .and_then(|window| window.listeners.mouse_listener(key));
+            let Some(listener) = listener else {
+                continue;
+            };
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(window.view.as_any_mut(), &event, &mut cx);
+            }
+            let stop_propagation = cx.stop_event_propagation;
+            default_prevented |= cx.prevent_default;
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return None;
+            }
+            if stop_propagation {
+                break;
+            }
+        }
+        if let Some(window) = &mut self.window {
+            dispatch.clear();
+            window.mouse_dispatch_scratch = dispatch;
+        }
+        Some(default_prevented)
+    }
+
+    /// Dispatch one raw key event through the retained root-to-focus capture path and reverse
+    /// bubble path. `None` means a callback exited the runtime; otherwise the result reports
+    /// whether any listener prevented QuickGUI's key-down default behavior.
+    fn invoke_key_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        event: KeyListenerEvent,
+    ) -> Option<bool> {
+        let Some(window) = &mut self.window else {
+            return Some(false);
+        };
+        let path = window.ui.focus_path();
+        let mut dispatch = std::mem::take(&mut window.key_dispatch_scratch);
+        window
+            .ui
+            .collect_key_dispatch(&path, event.kind(), &mut dispatch);
+
+        let mut default_prevented = false;
+        for binding in dispatch.iter().copied() {
+            let listener = self
+                .window
+                .as_ref()
+                .and_then(|window| window.listeners.key_listener(binding.key));
+            let Some(listener) = listener else {
+                continue;
+            };
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(window.view.as_any_mut(), &event, &mut cx);
+            }
+            let stop_propagation = cx.stop_event_propagation;
+            default_prevented |= cx.prevent_default;
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return None;
+            }
+            if stop_propagation {
+                break;
+            }
+        }
+
+        dispatch.clear();
+        if let Some(window) = &mut self.window {
+            window.key_dispatch_scratch = dispatch;
+        }
+        Some(default_prevented)
+    }
+
+    fn invoke_pending_mouse_hover(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        let mut changes = {
+            let Some(window) = &mut self.window else {
+                return false;
+            };
+            let mut changes = std::mem::take(&mut window.mouse_hover_changes_scratch);
+            window.ui.take_mouse_hover_changes(&mut changes);
+            changes
+        };
+        for change in changes.iter().copied() {
+            let listener = self
+                .window
+                .as_ref()
+                .and_then(|window| window.listeners.mouse_listener(change.key));
+            let Some(listener) = listener else {
+                continue;
+            };
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(
+                    window.view.as_any_mut(),
+                    &MouseListenerEvent::Hover(change.hovered),
+                    &mut cx,
+                );
+            }
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return false;
+            }
+        }
+        if let Some(window) = &mut self.window {
+            changes.clear();
+            window.mouse_hover_changes_scratch = changes;
+        }
+        true
+    }
+
+    /// Dispatch one wheel event from the topmost listener through listening ancestors.
+    ///
+    /// `None` means event processing closed the runtime. `Some(true)` means at least one listener
+    /// prevented retained default scrolling.
+    fn invoke_scroll_wheel(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        target: ElementId,
+        event: ScrollWheelEvent,
+    ) -> Option<bool> {
+        let mut current = Some(target);
+        let mut default_prevented = false;
+        while let Some(id) = current {
+            let listener = self
+                .window
+                .as_ref()
+                .and_then(|window| window.listeners.scroll_wheels.get(&id).cloned());
+            if let Some(listener) = listener {
+                let mut cx = self.event_context();
+                if let Some(window) = &mut self.window {
+                    listener(window.view.as_any_mut(), &event, &mut cx);
+                }
+                let stop_propagation = cx.stop_event_propagation;
+                default_prevented |= cx.prevent_default;
+                if !self.apply_event_context(event_loop, cx, false, true) {
+                    return None;
+                }
+                if stop_propagation {
+                    break;
+                }
+            }
+            current = self
+                .window
+                .as_ref()
+                .and_then(|window| window.ui.parent_scroll_wheel_listener(id));
+        }
+        Some(default_prevented)
+    }
+
+    fn invoke_touch(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        target: Option<ElementId>,
+        event: TouchEvent,
+    ) -> bool {
+        let mut current = target;
+        while let Some(id) = current {
+            let listener = self
+                .window
+                .as_ref()
+                .and_then(|window| window.listeners.touches.get(&id).cloned());
+            if let Some(listener) = listener {
+                let mut cx = self.event_context();
+                if let Some(window) = &mut self.window {
+                    listener(window.view.as_any_mut(), &event, &mut cx);
+                }
+                let stop_propagation = cx.stop_event_propagation;
+                if !self.apply_event_context(event_loop, cx, false, true) {
+                    return false;
+                }
+                if stop_propagation {
+                    break;
+                }
+            }
+            current = self
+                .window
+                .as_ref()
+                .and_then(|window| window.ui.parent_touch_listener(id));
+        }
+        self.dispatch(event_loop, Event::Touch(event), false)
+    }
+
+    fn invoke_mouse_pressure(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        target: Option<ElementId>,
+        event: MousePressureEvent,
+    ) -> bool {
+        let listener = target.and_then(|target| {
+            self.window
+                .as_ref()
+                .and_then(|window| window.listeners.mouse_pressures.get(&target).cloned())
+        });
+        if let Some(listener) = listener {
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(window.view.as_any_mut(), &event, &mut cx);
+            }
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return false;
+            }
+        }
+        self.dispatch(event_loop, Event::MousePressure(event), false)
+    }
+
+    fn invoke_pinch(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        target: Option<ElementId>,
+        event: PinchEvent,
+    ) -> bool {
+        let listener = target.and_then(|target| {
+            self.window
+                .as_ref()
+                .and_then(|window| window.listeners.pinches.get(&target).cloned())
+        });
+        if let Some(listener) = listener {
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(window.view.as_any_mut(), &event, &mut cx);
+            }
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return false;
+            }
+        }
+        self.dispatch(event_loop, Event::Pinch(event), false)
+    }
+
+    fn invoke_rotation(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        target: Option<ElementId>,
+        event: RotationEvent,
+    ) -> bool {
+        let listener = target.and_then(|target| {
+            self.window
+                .as_ref()
+                .and_then(|window| window.listeners.rotations.get(&target).cloned())
+        });
+        if let Some(listener) = listener {
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(window.view.as_any_mut(), &event, &mut cx);
+            }
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return false;
+            }
+        }
+        self.dispatch(event_loop, Event::Rotation(event), false)
+    }
+
+    fn invoke_smart_magnify(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        target: Option<ElementId>,
+        event: SmartMagnifyEvent,
+    ) -> bool {
+        let listener = target.and_then(|target| {
+            self.window
+                .as_ref()
+                .and_then(|window| window.listeners.smart_magnifies.get(&target).cloned())
+        });
+        if let Some(listener) = listener {
+            let mut cx = self.event_context();
+            if let Some(window) = &mut self.window {
+                listener(window.view.as_any_mut(), &event, &mut cx);
+            }
+            if !self.apply_event_context(event_loop, cx, false, true) {
+                return false;
+            }
+        }
+        self.dispatch(event_loop, Event::SmartMagnify(event), false)
     }
 
     fn invoke_drag_start(
@@ -3634,6 +6290,7 @@ impl Runtime {
             event.position,
             drag.cursor_offset,
             &mut window.renderer,
+            Instant::now(),
         ) {
             Ok(changed) => changed,
             Err(error) => {
@@ -4306,11 +6963,18 @@ impl Runtime {
         true
     }
 
-    fn clipboard(&mut self) -> Option<&mut Clipboard> {
-        if self.clipboard.is_none() {
-            self.clipboard = Clipboard::new().ok();
-        }
-        self.clipboard.as_mut()
+    fn write_clipboard_text(&self, text: &str) -> bool {
+        ClipboardItem::new_string(text)
+            .and_then(|item| self.clipboard.write(ClipboardTarget::General, item))
+            .is_ok()
+    }
+
+    fn read_clipboard_text(&self) -> Option<String> {
+        self.clipboard
+            .read(ClipboardTarget::General)
+            .ok()
+            .flatten()
+            .and_then(|item| item.text())
     }
 
     fn handle_static_text_key(
@@ -4515,10 +7179,8 @@ impl Runtime {
                     .window
                     .as_ref()
                     .and_then(|window| window.ui.selected_input_text());
-                if let Some(selected) = selected
-                    && let Some(clipboard) = self.clipboard()
-                {
-                    let _ = clipboard.set_text(selected.as_ref());
+                if let Some(selected) = selected {
+                    let _ = self.write_clipboard_text(selected.as_ref());
                 }
                 return true;
             }
@@ -4527,10 +7189,8 @@ impl Runtime {
                     .window
                     .as_ref()
                     .and_then(|window| window.ui.selected_input_text());
-                let copied = selected.is_some_and(|selected| {
-                    self.clipboard()
-                        .is_some_and(|clipboard| clipboard.set_text(selected.as_ref()).is_ok())
-                });
+                let copied =
+                    selected.is_some_and(|selected| self.write_clipboard_text(selected.as_ref()));
                 if !copied {
                     return true;
                 }
@@ -4539,9 +7199,7 @@ impl Runtime {
                     .map(|window| window.ui.input_backspace())
             }
             Key::Character(value) if primary && value.eq_ignore_ascii_case("v") => {
-                let pasted = self
-                    .clipboard()
-                    .and_then(|clipboard| clipboard.get_text().ok());
+                let pasted = self.read_clipboard_text();
                 pasted.and_then(|value| {
                     self.window
                         .as_mut()
@@ -4675,87 +7333,192 @@ impl Runtime {
         key_event: PendingKey,
     ) -> bool {
         let PendingKey {
-            key,
-            modifiers,
+            stroke,
             repeat,
             text,
         } = key_event;
-        if !repeat
-            && matches!(&key, Key::Escape)
-            && let Some(request) = self
-                .window
-                .as_ref()
-                .and_then(|window| window.ui.dismiss_topmost())
-        {
-            self.invoke_dismiss(event_loop, request);
-            return true;
-        }
-        #[cfg(target_os = "macos")]
-        if is_default_close_shortcut(&key, modifiers, repeat) {
-            if let Some(window) = self.window.as_ref()
-                && let Err(error) = perform_window_close(&window.window)
-            {
-                tracing::warn!(%error, "could not perform the default macOS close command");
-            }
-            return true;
-        }
+        let Keystroke {
+            key,
+            modifiers,
+            key_char,
+        } = stroke;
+        let default_prevented = match self.invoke_key_event(
+            event_loop,
+            KeyListenerEvent::Down(KeyDownEvent {
+                key: key.clone(),
+                key_char: key_char.clone(),
+                modifiers,
+                repeat,
+            }),
+        ) {
+            Some(default_prevented) => default_prevented,
+            None => return false,
+        };
 
-        let mut handled_by_input = self.handle_static_text_key(event_loop, &key, modifiers, repeat)
-            || self.handle_text_input_key(event_loop, &key, modifiers, repeat);
-        if !handled_by_input
-            && !modifiers.intersects(Modifiers::CONTROL | Modifiers::SUPER)
-            && let Some(text) = text.as_deref().filter(|text| {
-                !text.is_empty() && text.chars().all(|character| !character.is_control())
-            })
-            && self
-                .window
-                .as_ref()
-                .is_some_and(|window| window.ui.focused_text_input().is_some())
-        {
-            let result = self
-                .window
-                .as_mut()
-                .map(|window| window.ui.input_replace(text))
-                .unwrap_or_default();
-            let changed = result.change.is_some();
-            if !self.apply_input_result(event_loop, result, true)
-                || (changed && !self.dispatch(event_loop, Event::TextInput(text.to_owned()), false))
-            {
-                return false;
-            }
-            handled_by_input = true;
-        }
-
-        match &key {
-            _ if handled_by_input => {}
-            Key::Tab => {
-                let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
-                if let Some(window) = &mut self.window {
-                    window.ui.focus_next(modifiers.contains(Modifiers::SHIFT));
-                }
-                self.announce_focus_change(event_loop, previous_focus);
-            }
-            Key::Enter | Key::Space if !repeat => {
-                let target = self
+        if !default_prevented {
+            if !repeat
+                && matches!(&key, Key::Escape)
+                && let Some(request) = self
                     .window
                     .as_ref()
-                    .and_then(|window| window.ui.activate_focused());
-                if let Some(id) = target {
-                    self.invoke_click(event_loop, id);
-                }
+                    .and_then(|window| window.ui.dismiss_topmost())
+            {
+                self.invoke_dismiss(event_loop, request);
+                return true;
             }
-            _ => {}
+            #[cfg(target_os = "macos")]
+            if is_default_close_shortcut(&key, modifiers, repeat) {
+                if let Some(window) = self.window.as_ref()
+                    && let Err(error) = perform_window_close(&window.window)
+                {
+                    tracing::warn!(%error, "could not perform the default macOS close command");
+                }
+                return true;
+            }
+
+            let mut handled_by_input = self
+                .handle_static_text_key(event_loop, &key, modifiers, repeat)
+                || self.handle_text_input_key(event_loop, &key, modifiers, repeat);
+            if !handled_by_input
+                && !modifiers.intersects(Modifiers::CONTROL | Modifiers::SUPER)
+                && let Some(text) = text.as_deref().filter(|text| {
+                    !text.is_empty() && text.chars().all(|character| !character.is_control())
+                })
+                && self
+                    .window
+                    .as_ref()
+                    .is_some_and(|window| window.ui.focused_text_input().is_some())
+            {
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_replace(text))
+                    .unwrap_or_default();
+                let changed = result.change.is_some();
+                if !self.apply_input_result(event_loop, result, true)
+                    || (changed
+                        && !self.dispatch(event_loop, Event::TextInput(text.to_owned()), false))
+                {
+                    return false;
+                }
+                handled_by_input = true;
+            }
+
+            match &key {
+                _ if handled_by_input => {}
+                Key::Tab => {
+                    let previous_focus =
+                        self.window.as_ref().and_then(|window| window.ui.focused());
+                    if let Some(window) = &mut self.window {
+                        window.ui.focus_next(modifiers.contains(Modifiers::SHIFT));
+                    }
+                    self.announce_focus_change(event_loop, previous_focus);
+                }
+                Key::ArrowLeft if modifiers.is_empty() => {
+                    if !self.navigate_adjacent_tab(event_loop, false, true) {
+                        self.activate_adjacent_radio(event_loop, true);
+                    }
+                }
+                Key::ArrowRight if modifiers.is_empty() => {
+                    if !self.navigate_adjacent_tab(event_loop, false, false) {
+                        self.activate_adjacent_radio(event_loop, false);
+                    }
+                }
+                Key::ArrowUp if modifiers.is_empty() => {
+                    if !self.navigate_adjacent_tab(event_loop, true, true) {
+                        self.activate_adjacent_radio(event_loop, true);
+                    }
+                }
+                Key::ArrowDown if modifiers.is_empty() => {
+                    if !self.navigate_adjacent_tab(event_loop, true, false) {
+                        self.activate_adjacent_radio(event_loop, false);
+                    }
+                }
+                Key::Home if modifiers.is_empty() => {
+                    self.navigate_edge_tab(event_loop, false);
+                }
+                Key::End if modifiers.is_empty() => {
+                    self.navigate_edge_tab(event_loop, true);
+                }
+                Key::Enter | Key::Space if !repeat => {
+                    let target = self
+                        .window
+                        .as_ref()
+                        .and_then(|window| window.ui.activate_focused());
+                    if let Some(id) = target {
+                        self.invoke_click(event_loop, id);
+                    }
+                }
+                _ => {}
+            }
         }
 
         self.dispatch(
             event_loop,
             Event::KeyDown {
                 key,
+                key_char,
                 modifiers,
                 repeat,
             },
             false,
         )
+    }
+
+    fn activate_adjacent_radio(&mut self, event_loop: &ActiveEventLoop, reverse: bool) {
+        let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
+        let target = self
+            .window
+            .as_ref()
+            .and_then(|window| window.ui.adjacent_radio(reverse));
+        let Some(target) = target else {
+            return;
+        };
+        if let Some(window) = &mut self.window {
+            window.ui.focus(target);
+        }
+        self.announce_focus_change(event_loop, previous_focus);
+        self.invoke_click(event_loop, target);
+    }
+
+    fn navigate_adjacent_tab(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        vertical_axis: bool,
+        reverse: bool,
+    ) -> bool {
+        let target = self
+            .window
+            .as_ref()
+            .and_then(|window| window.ui.adjacent_tab(vertical_axis, reverse));
+        self.apply_tab_navigation(event_loop, target)
+    }
+
+    fn navigate_edge_tab(&mut self, event_loop: &ActiveEventLoop, last: bool) -> bool {
+        let target = self
+            .window
+            .as_ref()
+            .and_then(|window| window.ui.edge_tab(last));
+        self.apply_tab_navigation(event_loop, target)
+    }
+
+    fn apply_tab_navigation(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        target: Option<TabNavigationTarget>,
+    ) -> bool {
+        let Some(target) = target else {
+            return false;
+        };
+        let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
+        if let Some(window) = &mut self.window {
+            window.ui.focus(target.id);
+        }
+        self.announce_focus_change(event_loop, previous_focus);
+        if target.activate {
+            self.invoke_click(event_loop, target.id);
+        }
+        true
     }
 
     fn announce_focus_change(&mut self, event_loop: &ActiveEventLoop, previous: Option<ElementId>) {
@@ -4811,6 +7574,9 @@ impl Runtime {
         let background_tasks = self.background_tasks.clone();
         let foreground_tasks = self.foreground_tasks.clone();
         let globals = self.globals.clone();
+        let displays = self.displays.clone();
+        let keyboard_layout = self.keyboard.layout().clone();
+        let assets = self.assets.clone();
         let Some(state) = &mut self.window else {
             return;
         };
@@ -4854,9 +7620,12 @@ impl Runtime {
         let Some(state) = &mut self.window else {
             return;
         };
-        let started = Instant::now();
+        let started = FrameTimer::start();
+        #[cfg(feature = "inspector")]
+        let view_rebuilt = state.view_dirty;
         let mut request_animation_frame = false;
         if state.view_dirty {
+            let previous_mounted_focus = state.ui.focused();
             let focused_path = state.ui.focus_path();
             let (mut root, requested, repaint_deadline) = state.view.render(
                 state.logical_size,
@@ -4867,32 +7636,40 @@ impl Runtime {
                 &mut state.listeners,
                 window_handle,
                 window_state,
-                &background_tasks,
+                &displays,
+                &keyboard_layout,
+                &assets,
+                Some(&background_tasks),
                 &foreground_tasks,
                 &globals,
             );
             request_animation_frame = requested;
             state.view_deadline = repaint_deadline;
-            state.image_assets.resolve_tree(&mut root);
-            if let Err(error) = state.ui.set_root(
-                root,
-                state.logical_size,
-                state.scale_factor,
-                &mut state.renderer,
-            ) {
+            state.image_assets.begin_resolve_tree(&mut root);
+            let logical_size = state.logical_size;
+            let scale_factor = state.scale_factor;
+            let image_assets = &mut state.image_assets;
+            let ui = &mut state.ui;
+            let renderer = &mut state.renderer;
+            if let Err(error) =
+                ui.set_root_with_prepare(root, logical_size, scale_factor, renderer, |subtree| {
+                    image_assets.resolve_subtree(subtree)
+                })
+            {
                 self.fail(event_loop, AppError::View(error.to_string()));
                 return;
             }
+            let image_resolution_changed = image_assets.finish_resolve_frame();
+            request_animation_frame |= image_resolution_changed;
             if let Some(request) = state.pending_focus.take()
                 && state.ui.is_focusable(request)
             {
-                let previous = state.ui.focused();
                 state.ui.focus(request);
-                if previous != state.ui.focused() {
-                    mounted_focus_previous = Some(previous);
-                }
             }
-            state.view_dirty = false;
+            if previous_mounted_focus != state.ui.focused() {
+                mounted_focus_previous = Some(previous_mounted_focus);
+            }
+            state.view_dirty = image_resolution_changed;
         }
         let ime_target = state.ui.focused_text_input();
         if ime_target != state.ime_target {
@@ -4912,6 +7689,63 @@ impl Runtime {
         if let Err(error) = state.ui.paint(&mut state.scene, &mut state.renderer) {
             self.fail(event_loop, AppError::View(error.to_string()));
             return;
+        }
+        #[cfg(feature = "inspector")]
+        let retained_hover_pointer = state.pointer.filter(|point| {
+            !state
+                .inspector
+                .as_ref()
+                .is_some_and(|inspector| inspector.captures_pointer(*point))
+        });
+        #[cfg(not(feature = "inspector"))]
+        let retained_hover_pointer = state.pointer;
+        state.ui.refresh_mouse_hover(retained_hover_pointer);
+        // Paint rebuilds the retained hit stack even when only scrolling moved content. Resolve
+        // once during this already-damaged frame so a stationary pointer cannot keep the cursor
+        // belonging to the element that used to be underneath it.
+        if let Some(point) = state.pointer {
+            let cursor = desired_cursor(state, point);
+            set_cursor_if_changed(state, cursor);
+        }
+        let variable_list_measurements_changed = state.ui.variable_list_measurements_changed();
+        let declarative_animation_frame_requested =
+            state.ui.declarative_animation_frame_requested();
+        let detached_animation_frame_requested = state.ui.detached_animation_frame_requested();
+        let style_transition_frame_requested = state.ui.style_transition_frame_requested();
+        if variable_list_measurements_changed {
+            state.view_dirty = true;
+        }
+        #[cfg(feature = "inspector")]
+        if state.inspector.is_some() {
+            let metrics = state.metrics.current();
+            let viewport = state.logical_size;
+            let scale_factor = state.scale_factor;
+            let damage = InspectorFrameDamage {
+                view_rebuilt,
+                retained_scroll_changed: scroll_result.changed,
+                variable_measurements_changed: variable_list_measurements_changed,
+                animation_requested: request_animation_frame,
+                declarative_animation_requested: declarative_animation_frame_requested,
+                detached_animation_requested: detached_animation_frame_requested,
+                style_transition_requested: style_transition_frame_requested,
+            };
+            let RuntimeWindow {
+                ui,
+                inspector,
+                scene,
+                renderer,
+                ..
+            } = state;
+            let inspector = inspector
+                .as_mut()
+                .expect("inspector presence checked before split borrow");
+            inspector.refresh(ui, metrics, damage, viewport, scale_factor);
+            if let Err(error) =
+                inspector.paint(scene, renderer, viewport, scale_factor, Instant::now())
+            {
+                self.fail(event_loop, AppError::View(error.to_string()));
+                return;
+            }
         }
         #[cfg(target_os = "macos")]
         {
@@ -5013,20 +7847,37 @@ impl Runtime {
                 if let Some(guard) = state.first_frame_guard.take() {
                     guard.reveal();
                 }
-                if request_animation_frame && state.scheduler.invalidate() {
-                    state.view_dirty = true;
+                if (request_animation_frame
+                    || declarative_animation_frame_requested
+                    || detached_animation_frame_requested
+                    || style_transition_frame_requested
+                    || variable_list_measurements_changed)
+                    && state.scheduler.invalidate()
+                {
+                    state.view_dirty |=
+                        request_animation_frame || declarative_animation_frame_requested;
                     state.window.request_redraw();
                 }
             }
             Ok(RenderOutcome::Retry) => {
+                state.view_dirty |=
+                    request_animation_frame || declarative_animation_frame_requested;
                 if state.scheduler.invalidate() {
                     state.window.request_redraw();
                 }
             }
             Ok(RenderOutcome::Occluded) => {
                 // Wait for the platform to expose or resize the window; do not spin while hidden.
+                // Keep view-owned frame requests dirty so the first exposed frame (including the
+                // detached macOS first-present pass) can resume them instead of silently losing
+                // an animation that was declared while the surface was unavailable.
+                state.view_dirty |=
+                    request_animation_frame || declarative_animation_frame_requested;
             }
             Err(error) => self.fail(event_loop, AppError::Render(error.to_string())),
+        }
+        if !self.invoke_pending_mouse_hover(event_loop) {
+            return;
         }
         if let Some(previous) = mounted_focus_previous {
             self.announce_focus_change(event_loop, previous);
@@ -5042,6 +7893,7 @@ impl Runtime {
             view,
             options,
             parent,
+            popup_anchor_element: _,
         } = request;
         if let Err(error) = validate_window_options(&options) {
             self.fail(event_loop, AppError::Window(error.to_string()));
@@ -5052,37 +7904,81 @@ impl Runtime {
         self.modifiers = Modifiers::default();
 
         let requested_bounds = self.config.window_bounds;
+        let selected_display_id = self
+            .config
+            .display_id
+            .filter(|id| self.displays.find(*id).is_some())
+            .or_else(|| self.displays.primary_id());
+        let selected_display = selected_display_id
+            .and_then(|id| self.displays.find(id))
+            .cloned();
+        let selected_monitor = selected_display_id
+            .and_then(|id| crate::display::native_monitor(event_loop, id))
+            .or_else(|| event_loop.primary_monitor());
         let restore_rect = requested_bounds
             .map(WindowBounds::bounds)
-            .unwrap_or_else(|| Rect::from_size(self.config.size));
+            .unwrap_or_else(|| {
+                if self.config.display_id.is_some() {
+                    selected_display.as_ref().map_or_else(
+                        || Rect::from_size(self.config.size),
+                        |display| display.centered_bounds(self.config.size),
+                    )
+                } else {
+                    Rect::from_size(self.config.size)
+                }
+            });
         let parent_window = parent
             .and_then(|parent| self.window_handles.get(&parent).copied())
             .and_then(|window_id| self.windows.get(&window_id))
             .map(|entry| entry.state.window.clone());
+        if self.config.kind == WindowKind::AnchoredPopup && parent_window.is_none() {
+            self.fail(
+                event_loop,
+                AppError::Window(WindowCommandError::PopupParentRequired.to_string()),
+            );
+            return;
+        }
+
+        #[cfg(target_os = "macos")]
+        if self.config.tabbing_identifier.is_some() {
+            // Enable AppKit's process-wide automatic tabbing only while at least one QuickGUI
+            // window explicitly opts in. Every other window is configured as Disallowed below.
+            self.register_native_tabbing(event_loop);
+        }
 
         let mut attributes = Window::default_attributes()
             .with_title(self.config.title.clone())
             .with_visible(false)
             .with_resizable(self.config.is_resizable)
+            .with_transparent(self.config.window_background.is_transparent())
+            .with_blur(self.config.window_background.is_blurred())
+            .with_theme(self.config.preferred_appearance.map(to_winit_theme))
             .with_enabled_buttons(window_buttons(&self.config))
             .with_window_level(match self.config.kind {
-                WindowKind::Floating | WindowKind::PopUp => WindowLevel::AlwaysOnTop,
+                WindowKind::Floating | WindowKind::PopUp | WindowKind::AnchoredPopup => {
+                    WindowLevel::AlwaysOnTop
+                }
                 WindowKind::Normal | WindowKind::Dialog => WindowLevel::Normal,
             })
             .with_inner_size(LogicalSize::new(
                 restore_rect.width as f64,
                 restore_rect.height as f64,
             ));
-        if self.config.window_bounds.is_some() {
+        if (self.config.window_bounds.is_some() || self.config.display_id.is_some())
+            && self.config.kind != WindowKind::AnchoredPopup
+        {
             attributes = attributes.with_position(LogicalPosition::new(
                 restore_rect.x as f64,
                 restore_rect.y as f64,
             ));
         }
         match requested_bounds {
-            Some(WindowBounds::Maximized(_)) => attributes = attributes.with_maximized(true),
+            // Maximization is applied after the hidden concrete window is placed. AppKit can
+            // otherwise constrain the initializer frame to the main screen before maximizing.
+            Some(WindowBounds::Maximized(_)) => {}
             Some(WindowBounds::Fullscreen(_)) => {
-                attributes = attributes.with_fullscreen(Some(Fullscreen::Borderless(None)))
+                attributes = attributes
+                    .with_fullscreen(Some(Fullscreen::Borderless(selected_monitor.clone())))
             }
             Some(WindowBounds::Windowed(_)) | None => {}
         }
@@ -5104,6 +8000,47 @@ impl Runtime {
                     .with_fullsize_content_view(true);
             }
         }
+        #[cfg(target_os = "macos")]
+        if let Some(identifier) = self.config.tabbing_identifier.as_deref() {
+            attributes = attributes.with_tabbing_identifier(identifier);
+        }
+        #[cfg(target_os = "macos")]
+        if matches!(
+            self.config.kind,
+            WindowKind::PopUp | WindowKind::AnchoredPopup
+        ) {
+            attributes = attributes.with_panel(true);
+        }
+        #[cfg(target_os = "macos")]
+        if self.config.kind == WindowKind::AnchoredPopup {
+            attributes = attributes
+                .with_titlebar_transparent(true)
+                .with_title_hidden(true)
+                .with_titlebar_hidden(true)
+                .with_titlebar_buttons_hidden(true)
+                .with_fullsize_content_view(true);
+        }
+        #[cfg(not(target_os = "macos"))]
+        if let (Some(popup), Some(parent)) = (self.config.popup.as_ref(), parent_window.as_ref()) {
+            let local = crate::popup::unconstrained_popup_rect(
+                popup.anchor_rect,
+                Size::new(restore_rect.width, restore_rect.height),
+                popup,
+            );
+            if let Ok(parent_position) = parent.inner_position() {
+                let scale = sane_scale_factor(parent.scale_factor());
+                attributes = attributes.with_position(PhysicalPosition::new(
+                    parent_position.x + (local.x * scale).round() as i32,
+                    parent_position.y + (local.y * scale).round() as i32,
+                ));
+            }
+            if let Ok(parent_handle) = parent.window_handle() {
+                // SAFETY: `parent_window` retains the referenced native window through creation,
+                // and RuntimeWindow retains the parent handle for the complete child lifetime.
+                attributes = unsafe { attributes.with_parent_window(Some(parent_handle.as_raw())) };
+            }
+            attributes = attributes.with_decorations(false);
+        }
         if let Some(minimum) = self.config.minimum_size {
             attributes = attributes.with_min_inner_size(LogicalSize::new(
                 minimum.width as f64,
@@ -5117,8 +8054,78 @@ impl Runtime {
                 return;
             }
         };
+        // AppKit may constrain an initializer-created window to the main screen before Winit has a
+        // concrete `NSScreen` for a windowed request. Re-apply explicit global placement while the
+        // window is still hidden so a selected secondary display is authoritative on first frame.
+        if (self.config.window_bounds.is_some() || self.config.display_id.is_some())
+            && self.config.kind != WindowKind::AnchoredPopup
+            && !matches!(requested_bounds, Some(WindowBounds::Fullscreen(_)))
+        {
+            window.set_outer_position(LogicalPosition::new(
+                restore_rect.x as f64,
+                restore_rect.y as f64,
+            ));
+        }
+        if matches!(requested_bounds, Some(WindowBounds::Maximized(_))) {
+            window.set_maximized(true);
+        }
         let window_id = window.id();
         window.set_ime_allowed(false);
+        let appearance = self
+            .config
+            .preferred_appearance
+            .or_else(|| window.theme().map(map_window_appearance))
+            .or_else(|| event_loop.system_theme().map(map_window_appearance))
+            .unwrap_or_default();
+        #[cfg(target_os = "macos")]
+        if let Err(error) = configure_window_kind(
+            &window,
+            self.config.kind,
+            self.config.focus,
+            self.config
+                .popup
+                .as_ref()
+                .is_none_or(|popup| popup.accepts_key_focus),
+        ) {
+            self.fail(event_loop, AppError::Platform(error));
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if (self.config.represented_file.is_some()
+            || self.config.document_edited
+            || self.config.tabbing_identifier.is_some())
+            && let Err(error) = configure_document_window(
+                &window,
+                self.config.represented_file.as_deref(),
+                self.config.document_edited,
+                self.config.tabbing_identifier.as_deref(),
+            )
+        {
+            self.fail(event_loop, AppError::Platform(error));
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if self.config.represented_file.is_none()
+            && !self.config.document_edited
+            && self.config.tabbing_identifier.is_none()
+            && let Err(error) = set_window_tabbing_identifier(&window, None)
+        {
+            self.fail(event_loop, AppError::Platform(error));
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if let Some(popup) = self.config.popup.as_ref()
+            && let Err(error) = position_anchored_popup(
+                &window,
+                parent_window
+                    .as_ref()
+                    .expect("anchored popup parent checked above"),
+                popup,
+            )
+        {
+            self.fail(event_loop, AppError::Platform(error));
+            return;
+        }
         #[cfg(target_os = "macos")]
         if self.menu_host.is_none() {
             self.menu_host = match MacMenuHost::new(&self.menus, self.event_proxy.clone()) {
@@ -5140,6 +8147,8 @@ impl Runtime {
             window.clone(),
             event_loop,
             profile,
+            self.config.window_background,
+            self.font_system.clone(),
             shared_gpu.as_ref(),
         )) {
             Ok(renderer) => renderer,
@@ -5156,11 +8165,6 @@ impl Runtime {
             .or_insert_with(|| renderer.context());
         #[cfg(target_os = "macos")]
         if let Err(error) = configure_gpu_window_resize(&window) {
-            self.fail(event_loop, AppError::Platform(error));
-            return;
-        }
-        #[cfg(target_os = "macos")]
-        if let Err(error) = configure_window_kind(&window, self.config.kind) {
             self.fail(event_loop, AppError::Platform(error));
             return;
         }
@@ -5202,6 +8206,21 @@ impl Runtime {
         let logical_size = logical_window_size(physical, scale_factor);
         let logical_position = logical_window_position(&window, scale_factor)
             .unwrap_or_else(|| Point::new(restore_rect.x, restore_rect.y));
+        let display_id = crate::display::display_for_rect(
+            &self.displays,
+            Rect::new(
+                logical_position.x,
+                logical_position.y,
+                logical_size.width,
+                logical_size.height,
+            ),
+        )
+        .or_else(|| {
+            window
+                .current_monitor()
+                .map(|monitor| crate::display::native_display_id(&monitor))
+                .filter(|id| self.displays.find(*id).is_some())
+        });
         let restore_bounds = requested_bounds.map_or_else(
             || {
                 Rect::new(
@@ -5214,17 +8233,29 @@ impl Runtime {
             WindowBounds::bounds,
         );
         let maximized = matches!(requested_bounds, Some(WindowBounds::Maximized(_)));
+        #[cfg(target_os = "macos")]
+        let native_tabs = if self.config.tabbing_identifier.is_some() {
+            window_tab_state(&window).unwrap_or_else(|error| {
+                tracing::warn!(%error, "could not read initial native window tab state");
+                WindowTabState::default()
+            })
+        } else {
+            WindowTabState::default()
+        };
+        #[cfg(not(target_os = "macos"))]
+        let native_tabs = WindowTabState::default();
         let mut scheduler = FrameScheduler::default();
         scheduler.invalidate();
         #[cfg(target_os = "macos")]
         let reduce_motion = self.config.reduce_motion || crate::macos::system_reduce_motion();
         #[cfg(not(target_os = "macos"))]
         let reduce_motion = self.config.reduce_motion;
-        let mut ui = UiTree::new();
+        let mut ui = UiTree::new_at(self.animation_epoch);
+        ui.set_reduce_motion(reduce_motion);
         ui.set_animations_enabled(!reduce_motion, Instant::now());
         self.current_window = Some((window_id, handle));
         self.window_handles.insert(handle, window_id);
-        if self.active_window.is_none() && self.config.show {
+        if self.active_window.is_none() && self.config.show && self.config.focus {
             self.note_window_focused(window_id);
         }
         self.window = Some(RuntimeWindow {
@@ -5239,16 +8270,32 @@ impl Runtime {
             #[cfg(target_os = "macos")]
             first_frame_guard,
             ui,
+            #[cfg(feature = "inspector")]
+            inspector: self
+                .config
+                .inspector
+                .then(|| InspectorState::new(self.animation_epoch)),
             scheduler,
             scene: Scene::new(),
             metrics: MetricsTracker::default(),
             scale_factor,
             logical_size,
             logical_position,
+            display_id,
+            appearance,
+            native_tabs,
             restore_bounds,
             maximized,
             pointer: None,
             pointer_capture: None,
+            pressed_mouse_buttons: PressedMouseButtons::default(),
+            mouse_clicks: MouseClickTracker::default(),
+            mouse_event_path_scratch: Vec::with_capacity(16),
+            mouse_dispatch_scratch: Vec::with_capacity(16),
+            mouse_hover_changes_scratch: Vec::with_capacity(8),
+            key_dispatch_scratch: Vec::with_capacity(16),
+            action_dispatch_scratch: Vec::with_capacity(16),
+            touch_captures: HashMap::with_capacity(8),
             drag_candidate: None,
             drag_session: None,
             native_file_drag: None,
@@ -5332,9 +8379,54 @@ impl Runtime {
                 self.deactivate_window();
                 return;
             }
+
+            if self.config.kind != WindowKind::AnchoredPopup {
+                // GPU initialization gives AppKit and the Dock a complete launch turn while this
+                // window remains hidden. Re-read the bounded snapshot now so every ordinary
+                // window uses the work area that exists at its actual presentation boundary.
+                // Explicit global bounds remain authoritative; only `.display(id)` automatic
+                // centering is reconciled, before a single pixel can become visible.
+                self.refresh_displays(event_loop);
+                if requested_bounds.is_none()
+                    && self.config.display_id.is_some()
+                    && let Some(target) = self
+                        .config
+                        .display_id
+                        .filter(|id| self.displays.find(*id).is_some())
+                        .or_else(|| self.displays.primary_id())
+                        .and_then(|id| self.displays.find(id))
+                        .cloned()
+                    && let Some(state) = self.window.as_mut()
+                {
+                    let centered = target.centered_bounds(state.logical_size);
+                    state.window.set_outer_position(LogicalPosition::new(
+                        centered.x as f64,
+                        centered.y as f64,
+                    ));
+                    state.logical_position = Point::new(centered.x, centered.y);
+                    state.restore_bounds.x = centered.x;
+                    state.restore_bounds.y = centered.y;
+                    state.display_id = Some(target.id());
+                }
+            }
         }
 
         if self.config.show {
+            #[cfg(target_os = "macos")]
+            if let Some(popup) = self.config.popup.as_ref()
+                && let Some(state) = self.window.as_ref()
+                && let Err(error) = position_anchored_popup(
+                    &state.window,
+                    parent_window
+                        .as_ref()
+                        .expect("anchored popup parent checked above"),
+                    popup,
+                )
+            {
+                self.fail(event_loop, AppError::Platform(error));
+                self.deactivate_window();
+                return;
+            }
             #[cfg(target_os = "macos")]
             let relation_presented = match self.window.as_ref() {
                 Some(state) => match present_window_relation(
@@ -5353,10 +8445,30 @@ impl Runtime {
             };
             #[cfg(not(target_os = "macos"))]
             let relation_presented = false;
+            #[cfg(target_os = "macos")]
+            if window_is_grabbing_popup(&self.config)
+                && let Some(state) = self.window.as_ref()
+                && let Err(error) = self.popup_monitor.watch(handle, &state.window)
+            {
+                self.fail(event_loop, AppError::Platform(error));
+                self.deactivate_window();
+                return;
+            }
+            #[cfg(target_os = "macos")]
+            if let Some(state) = self.window.as_ref()
+                && let Err(error) = set_window_visibility(&state.window, true, self.config.focus)
+            {
+                self.popup_monitor.unwatch(handle);
+                self.fail(event_loop, AppError::Platform(error));
+                self.deactivate_window();
+                return;
+            }
             if let Some(state) = &mut self.window {
                 state.relation_presented = relation_presented;
                 state.visible = true;
+                #[cfg(not(target_os = "macos"))]
                 state.window.set_visible(true);
+                #[cfg(not(target_os = "macos"))]
                 if self.config.focus {
                     state.window.focus_window();
                 }
@@ -5438,11 +8550,28 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         }
 
         event_loop.set_control_flow(ControlFlow::Wait);
+        self.refresh_displays(event_loop);
         self.process_window_commands(event_loop);
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
         // Desktop surfaces remain valid. Mobile surface teardown will be added with mobile shells.
+    }
+
+    fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+        // Native termination (for example macOS Quit) can bypass EventContext::exit. Route it
+        // through the same child-first ownership teardown so foreground tasks and window-closed
+        // callbacks never depend on which quit path the operating system selected.
+        self.exit_requested = true;
+        self.pending_windows.clear();
+        self.close_requests
+            .extend(self.window_handles.keys().copied());
+        let closed = self.close_requested_window_trees(event_loop);
+        self.invoke_window_closed_callbacks(event_loop, closed);
+        #[cfg(target_os = "macos")]
+        self.restore_native_tabbing_baseline(event_loop);
+        self.pending_windows.clear();
+        self.platform_requests.clear();
     }
 
     fn window_event(
@@ -5454,6 +8583,25 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         if !self.activate_window(window_id) {
             return;
         }
+        #[cfg(target_os = "macos")]
+        let (event, platform_click_count) = match event {
+            WindowEvent::MouseInputWithClickCount {
+                device_id,
+                state,
+                button,
+                click_count,
+            } => (
+                WindowEvent::MouseInput {
+                    device_id,
+                    state,
+                    button,
+                },
+                Some(usize::from(click_count)),
+            ),
+            event => (event, None),
+        };
+        #[cfg(not(target_os = "macos"))]
+        let platform_click_count: Option<usize> = None;
         (|| {
             if let Some(state) = self.window.as_mut()
                 && state.window.id() == window_id
@@ -5491,6 +8639,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         physical.x as f32 / state.scale_factor,
                         physical.y as f32 / state.scale_factor,
                     );
+                    state.display_id = runtime_window_display_id(state, &self.displays);
                     state.maximized = runtime_window_is_maximized(state, &self.config);
                     if !runtime_window_is_fullscreen(state) && !state.maximized {
                         state.restore_bounds.x = state.logical_position.x;
@@ -5499,6 +8648,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     let logical_position = state.logical_position;
                     let scale_factor = state.scale_factor;
                     let observe = state.listeners.observes_window_state;
+                    #[cfg(target_os = "macos")]
+                    self.refresh_current_native_tab_state();
                     self.dispatch(
                         event_loop,
                         Event::Moved {
@@ -5508,10 +8659,26 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         observe,
                     );
                 }
+                WindowEvent::ThemeChanged(theme) => {
+                    if self.config.preferred_appearance.is_none() {
+                        let appearance = map_window_appearance(theme);
+                        let state = self.window.as_mut().expect("window checked above");
+                        if state.appearance != appearance {
+                            state.appearance = appearance;
+                            let observe = state.listeners.observes_window_state;
+                            self.dispatch(
+                                event_loop,
+                                Event::AppearanceChanged(appearance),
+                                observe,
+                            );
+                        }
+                    }
+                }
                 WindowEvent::Resized(physical) => {
                     let state = self.window.as_mut().expect("window checked above");
                     state.renderer.resize(physical.width, physical.height);
                     state.logical_size = logical_window_size(physical, state.scale_factor);
+                    state.display_id = runtime_window_display_id(state, &self.displays);
                     state.maximized = runtime_window_is_maximized(state, &self.config);
                     if !runtime_window_is_fullscreen(state) && !state.maximized {
                         state.restore_bounds.width = state.logical_size.width;
@@ -5532,6 +8699,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     let logical_size = state.logical_size;
                     let scale_factor = state.scale_factor;
                     state.view_dirty = true;
+                    #[cfg(target_os = "macos")]
+                    self.refresh_current_native_tab_state();
                     self.dispatch(
                         event_loop,
                         Event::Resized {
@@ -5552,6 +8721,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     {
                         state.logical_position = position;
                     }
+                    state.display_id = runtime_window_display_id(state, &self.displays);
                     state.maximized = runtime_window_is_maximized(state, &self.config);
                     if !runtime_window_is_fullscreen(state) && !state.maximized {
                         state.restore_bounds = Rect::new(
@@ -5576,6 +8746,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     let logical_size = state.logical_size;
                     let scale_factor = state.scale_factor;
                     state.view_dirty = true;
+                    #[cfg(target_os = "macos")]
+                    self.refresh_current_native_tab_state();
                     self.dispatch(
                         event_loop,
                         Event::Resized {
@@ -5588,9 +8760,12 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 WindowEvent::Occluded(false) => {
                     let state = self.window.as_mut().expect("window checked above");
                     state.occluded = false;
-                    if state.listeners.observes_window_state {
+                    if state.listeners.observes_window_state
+                        || state.ui.has_declarative_animations()
+                    {
                         state.view_dirty = true;
                     }
+                    state.ui.set_reduce_motion(state.reduce_motion);
                     state
                         .ui
                         .set_animations_enabled(!state.reduce_motion, Instant::now());
@@ -5612,6 +8787,45 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     let point = Point::new(position.x as f32 / scale, position.y as f32 / scale);
                     if let Some(state) = &mut self.window {
                         state.pointer = Some(point);
+                    }
+                    #[cfg(feature = "inspector")]
+                    {
+                        let consumed = self.window.as_ref().is_some_and(|state| {
+                            state
+                                .inspector
+                                .as_ref()
+                                .is_some_and(|inspector| inspector.captures_pointer(point))
+                        });
+                        if consumed {
+                            let state = self.window.as_mut().expect("window checked above");
+                            let inspector_changed = state
+                                .inspector
+                                .as_mut()
+                                .is_some_and(|inspector| inspector.pointer_moved(point));
+                            let app_changed = state.ui.pointer_left()
+                                | state.ui.update_scrollbar_hover(None, Instant::now());
+                            let cursor =
+                                state
+                                    .inspector
+                                    .as_ref()
+                                    .map_or(CursorIcon::Default, |inspector| {
+                                        if inspector.mode() == InspectorMode::Picking
+                                            && !inspector.panel_contains(point)
+                                        {
+                                            CursorIcon::Crosshair
+                                        } else {
+                                            CursorIcon::Default
+                                        }
+                                    });
+                            set_cursor_if_changed(state, cursor);
+                            if (inspector_changed || app_changed) && state.scheduler.invalidate() {
+                                state.window.request_redraw();
+                            }
+                            if !self.invoke_pending_mouse_hover(event_loop) {
+                                return;
+                            }
+                            return;
+                        }
                     }
                     let drag_start = self.window.as_ref().and_then(|state| {
                         let candidate = state.drag_candidate?;
@@ -5716,21 +8930,19 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         CursorIcon::Grabbing
                     } else if over_scrollbar || scrollbar_dragging || app_region_drag {
                         CursorIcon::Default
-                    } else if state.ui.wants_text_cursor(point) {
-                        CursorIcon::Text
-                    } else if state.ui.drag_source_at(point).is_some() {
-                        CursorIcon::Grab
-                    } else if state.ui.wants_pointer_cursor(point) {
-                        CursorIcon::Pointer
                     } else {
-                        CursorIcon::Default
+                        state
+                            .ui
+                            .cursor_style_at(point)
+                            .map_or(CursorIcon::Default, platform_cursor)
                     };
-                    if cursor != state.cursor {
-                        state.cursor = cursor;
-                        state.window.set_cursor(cursor);
-                    }
+                    set_cursor_if_changed(state, cursor);
+                    let pressed_button = state.pressed_mouse_buttons.current();
                     if repaint && state.scheduler.invalidate() {
                         state.window.request_redraw();
+                    }
+                    if !self.invoke_pending_mouse_hover(event_loop) {
+                        return;
                     }
                     if over_scrollbar || scrollbar_dragging || app_region_drag {
                         // Keep window-level pointer tracking coherent while element-level hit
@@ -5743,9 +8955,33 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     {
                         return;
                     }
+                    if self
+                        .invoke_mouse_event_at(
+                            event_loop,
+                            point,
+                            MouseListenerKind::Move,
+                            None,
+                            MouseListenerEvent::Move(MouseMoveEvent {
+                                position: point,
+                                pressed_button,
+                                modifiers: self.modifiers,
+                            }),
+                        )
+                        .is_none()
+                    {
+                        return;
+                    }
                     self.dispatch(event_loop, Event::PointerMoved(point), false);
                 }
                 WindowEvent::CursorLeft { .. } => {
+                    // Preserve the last retained in-window point for element-level exit dispatch.
+                    // The macOS external-drag probe below samples the hardware boundary and may
+                    // temporarily replace `state.pointer` with an out-of-window coordinate.
+                    let exit_position = self
+                        .window
+                        .as_ref()
+                        .and_then(|state| state.pointer)
+                        .unwrap_or(Point::ZERO);
                     #[cfg(target_os = "macos")]
                     {
                         let boundary_point = self
@@ -5763,6 +8999,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         }
                     }
                     let state = self.window.as_mut().expect("window checked above");
+                    let pressed_button = state.pressed_mouse_buttons.current();
                     state.pointer = None;
                     if state.cursor != CursorIcon::Default {
                         state.cursor = CursorIcon::Default;
@@ -5770,9 +9007,41 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     }
                     let repaint = state.ui.pointer_left()
                         | state.ui.update_scrollbar_hover(None, Instant::now())
-                        | state.ui.set_drag_over(None);
+                        | state.ui.set_drag_over(None)
+                        | {
+                            #[cfg(feature = "inspector")]
+                            {
+                                state
+                                    .inspector
+                                    .as_mut()
+                                    .is_some_and(InspectorState::pointer_left)
+                            }
+                            #[cfg(not(feature = "inspector"))]
+                            {
+                                false
+                            }
+                        };
                     if repaint && state.scheduler.invalidate() {
                         state.window.request_redraw();
+                    }
+                    if !self.invoke_pending_mouse_hover(event_loop) {
+                        return;
+                    }
+                    if self
+                        .invoke_mouse_event_at(
+                            event_loop,
+                            exit_position,
+                            MouseListenerKind::Exit,
+                            None,
+                            MouseListenerEvent::Exit(MouseExitEvent {
+                                position: exit_position,
+                                pressed_button,
+                                modifiers: self.modifiers,
+                            }),
+                        )
+                        .is_none()
+                    {
+                        return;
                     }
                     self.dispatch(event_loop, Event::PointerLeft, false);
                 }
@@ -5790,6 +9059,75 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 WindowEvent::MouseInput { state, button, .. } => {
                     let pressed = state == ElementState::Pressed;
                     let button = map_mouse_button(button);
+                    #[cfg(feature = "inspector")]
+                    {
+                        let (consumed, mut repaint, action) = {
+                            let window = self.window.as_mut().expect("window checked above");
+                            let point = window.pointer.unwrap_or(Point::ZERO);
+                            window.inspector.as_mut().map_or(
+                                (false, false, InspectorPointerAction::None),
+                                |inspector| {
+                                    inspector.pointer_button(
+                                        point,
+                                        pressed,
+                                        button == MouseButton::Left,
+                                    )
+                                },
+                            )
+                        };
+                        if consumed {
+                            match action {
+                                InspectorPointerAction::None => {}
+                                InspectorPointerAction::StartPicking => {
+                                    repaint |= self
+                                        .window
+                                        .as_mut()
+                                        .and_then(|window| window.inspector.as_mut())
+                                        .is_some_and(InspectorState::start_picking);
+                                }
+                                InspectorPointerAction::Close => {
+                                    self.config.inspector = false;
+                                    if let Some(window) = &mut self.window {
+                                        window.inspector = None;
+                                        reconcile_inspector_pointer_state(window);
+                                        if window.listeners.observes_window_state {
+                                            window.view_dirty = true;
+                                        }
+                                    }
+                                    repaint = true;
+                                }
+                            }
+                            let window = self.window.as_mut().expect("window retained");
+                            if repaint && window.scheduler.invalidate() {
+                                window.window.request_redraw();
+                            }
+                            return;
+                        }
+                    }
+                    #[cfg(target_os = "macos")]
+                    let native_click_count = platform_click_count;
+                    #[cfg(not(target_os = "macos"))]
+                    let native_click_count = platform_click_count;
+                    let (mouse_position, click_count, first_mouse) = {
+                        let window = self.window.as_mut().expect("window checked above");
+                        let position = window.pointer;
+                        let click_position = position.unwrap_or(Point::ZERO);
+                        let first_mouse = !window.focused;
+                        let click_count = if pressed {
+                            window.pressed_mouse_buttons.press(button);
+                            window.mouse_clicks.press(
+                                button,
+                                click_position,
+                                Instant::now(),
+                                native_click_count,
+                            )
+                        } else {
+                            let count = window.mouse_clicks.release(button, native_click_count);
+                            window.pressed_mouse_buttons.release(button);
+                            count
+                        };
+                        (position, click_count, first_mouse)
+                    };
                     #[cfg(target_os = "macos")]
                     let suppress_external_release = if button == MouseButton::Left {
                         let window = self.window.as_mut().expect("window checked above");
@@ -5834,7 +9172,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                                 && window.ui.scrollbar_drag_active()
                             {
                                 if !pressed {
-                                    window.ui.end_scrollbar_drag(now);
+                                    let result = window.ui.end_scrollbar_drag(now);
+                                    window.view_dirty |= result.view_dirty;
                                     window.ui.update_scrollbar_hover(window.pointer, now);
                                 }
                                 true
@@ -5897,20 +9236,103 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         }
                         return;
                     }
-                    if button == MouseButton::Left
-                        && !pressed
-                        && let Some(position) = self
-                            .window
-                            .as_ref()
-                            .filter(|window| window.drag_session.is_some())
-                            .and_then(|window| {
-                                window.pointer.or_else(|| {
-                                    window.drag_session.as_ref().map(|drag| drag.position)
-                                })
+                    // A direct captured-pointer release is terminal cleanup, not a preventable
+                    // default. Deliver it before general mouse-up callbacks so closing or
+                    // preventing from those callbacks cannot strand capture.
+                    let terminal_capture = if pressed {
+                        None
+                    } else {
+                        let window = self.window.as_mut().expect("window checked above");
+                        window.drag_candidate = None;
+                        window
+                            .pointer_capture
+                            .filter(|capture| capture.button == button)
+                            .map(|capture| {
+                                window.pointer_capture = None;
+                                let position = window.pointer.unwrap_or(capture.position);
+                                (
+                                    capture.target,
+                                    PointerEvent {
+                                        phase: PointerPhase::Up,
+                                        position,
+                                        origin: capture.origin,
+                                        delta: position - capture.position,
+                                        button,
+                                        modifiers: self.modifiers,
+                                    },
+                                )
                             })
+                    };
+                    if let Some((target, event)) = terminal_capture
+                        && !self.invoke_pointer(event_loop, target, event)
                     {
+                        return;
+                    }
+
+                    let default_prevented = if let Some(position) = mouse_position {
+                        let result = if pressed {
+                            self.invoke_mouse_event_at(
+                                event_loop,
+                                position,
+                                MouseListenerKind::Down,
+                                Some(button),
+                                MouseListenerEvent::Down(MouseDownEvent {
+                                    button,
+                                    position,
+                                    modifiers: self.modifiers,
+                                    click_count,
+                                    first_mouse,
+                                }),
+                            )
+                        } else {
+                            self.invoke_mouse_event_at(
+                                event_loop,
+                                position,
+                                MouseListenerKind::Up,
+                                Some(button),
+                                MouseListenerEvent::Up(MouseUpEvent {
+                                    button,
+                                    position,
+                                    modifiers: self.modifiers,
+                                    click_count,
+                                }),
+                            )
+                        };
+                        let Some(default_prevented) = result else {
+                            return;
+                        };
+                        default_prevented
+                    } else {
+                        false
+                    };
+
+                    let internal_drag_release = (button == MouseButton::Left && !pressed)
+                        .then(|| {
+                            self.window
+                                .as_ref()
+                                .filter(|window| window.drag_session.is_some())
+                                .and_then(|window| {
+                                    window.pointer.or_else(|| {
+                                        window.drag_session.as_ref().map(|drag| drag.position)
+                                    })
+                                })
+                        })
+                        .flatten();
+                    if let Some(position) = internal_drag_release {
                         if !self.finish_internal_drag(event_loop, position) {
                             return;
+                        }
+                        self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
+                        return;
+                    }
+                    if default_prevented {
+                        if !pressed {
+                            let window = self.window.as_mut().expect("window checked above");
+                            if window.ui.cancel_pointer_interaction()
+                                && window.scheduler.invalidate()
+                            {
+                                window.window.request_redraw();
+                            }
                         }
                         self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
                         return;
@@ -6057,41 +9479,259 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         self.invoke_click(event_loop, id);
                     }
                 }
-                WindowEvent::MouseWheel { delta, .. } => {
-                    let state = self.window.as_mut().expect("window checked above");
-                    if state
-                        .pointer
-                        .is_some_and(|point| state.ui.is_app_region_drag(point))
+                WindowEvent::Touch(touch) => {
+                    let event = {
+                        let state = self.window.as_ref().expect("window checked above");
+                        TouchEvent {
+                            id: TouchId(touch.id),
+                            phase: map_touch_phase(touch.phase),
+                            position: Point::new(
+                                touch.location.x as f32 / state.scale_factor,
+                                touch.location.y as f32 / state.scale_factor,
+                            ),
+                            force: touch.force.map(bounded_touch_force),
+                        }
+                        .bounded()
+                    };
+                    let target = {
+                        let state = self.window.as_mut().expect("window checked above");
+                        match event.phase {
+                            TouchPhase::Started => {
+                                state.touch_captures.remove(&event.id);
+                                let target = state.ui.touch_listener_at(event.position);
+                                if let Some(target) = target
+                                    && state.touch_captures.len() < MAX_ACTIVE_TOUCHES_PER_WINDOW
+                                {
+                                    state.touch_captures.insert(
+                                        event.id,
+                                        TouchCapture {
+                                            target,
+                                            last_event: event,
+                                        },
+                                    );
+                                    Some(target)
+                                } else {
+                                    None
+                                }
+                            }
+                            TouchPhase::Moved => {
+                                state.touch_captures.get_mut(&event.id).map(|capture| {
+                                    capture.last_event = event;
+                                    capture.target
+                                })
+                            }
+                            TouchPhase::Ended | TouchPhase::Cancelled => state
+                                .touch_captures
+                                .remove(&event.id)
+                                .map(|capture| capture.target),
+                        }
+                    };
+                    self.invoke_touch(event_loop, target, event);
+                }
+                WindowEvent::MouseWheel { delta, phase, .. } => {
+                    let (position, scale_factor, target) = {
+                        let state = self.window.as_ref().expect("window checked above");
+                        if state
+                            .pointer
+                            .is_some_and(|point| state.ui.is_app_region_drag(point))
+                        {
+                            return;
+                        }
+                        let position = state.pointer.unwrap_or(Point::ZERO);
+                        let target = state
+                            .pointer
+                            .and_then(|point| state.ui.scroll_wheel_listener_at(point));
+                        (position, state.scale_factor, target)
+                    };
+                    let delta = match delta {
+                        MouseScrollDelta::LineDelta(x, y) => ScrollDelta::Lines(Vector::new(x, y)),
+                        MouseScrollDelta::PixelDelta(delta) => ScrollDelta::Pixels(Vector::new(
+                            delta.x as f32 / scale_factor,
+                            delta.y as f32 / scale_factor,
+                        )),
+                    };
+                    let event = ScrollWheelEvent {
+                        position,
+                        delta,
+                        phase: map_gesture_phase(phase),
+                        modifiers: self.modifiers,
+                    }
+                    .bounded();
+                    #[cfg(feature = "inspector")]
+                    if let Some((consumed, changed)) = self.window.as_mut().and_then(|state| {
+                        let inspector = state.inspector.as_mut()?;
+                        Some(inspector.scroll(
+                            position,
+                            event.delta.pixel_delta(self.config.line_scroll_pixels),
+                        ))
+                    }) && consumed
                     {
+                        let state = self.window.as_mut().expect("window retained");
+                        if changed && state.scheduler.invalidate() {
+                            state.window.request_redraw();
+                        }
                         return;
                     }
-                    let delta = match delta {
-                        MouseScrollDelta::LineDelta(x, y) => Vector::new(
-                            x * self.config.line_scroll_pixels,
-                            y * self.config.line_scroll_pixels,
-                        ),
-                        MouseScrollDelta::PixelDelta(position) => Vector::new(
-                            position.x as f32 / state.scale_factor,
-                            position.y as f32 / state.scale_factor,
-                        ),
-                    };
+                    if let Some(target) = target {
+                        let Some(default_prevented) =
+                            self.invoke_scroll_wheel(event_loop, target, event)
+                        else {
+                            return;
+                        };
+                        if default_prevented {
+                            return;
+                        }
+                    }
+                    let delta = event.delta.pixel_delta(self.config.line_scroll_pixels);
+                    if delta.is_zero() {
+                        return;
+                    }
+                    let state = self
+                        .window
+                        .as_mut()
+                        .expect("window retained after callback");
                     if state.scheduler.accumulate_scroll(delta) {
                         state.window.request_redraw();
                     }
+                }
+                WindowEvent::TouchpadPressure {
+                    pressure, stage, ..
+                } => {
+                    let (position, target) = self
+                        .window
+                        .as_ref()
+                        .and_then(|window| {
+                            let position = window.pointer?;
+                            Some((position, window.ui.mouse_pressure_listener_at(position)))
+                        })
+                        .unwrap_or((Point::ZERO, None));
+                    self.invoke_mouse_pressure(
+                        event_loop,
+                        target,
+                        MousePressureEvent {
+                            position,
+                            pressure: bounded_pressure(pressure),
+                            stage: map_pressure_stage(stage),
+                            modifiers: self.modifiers,
+                        },
+                    );
+                }
+                WindowEvent::PinchGesture { delta, phase, .. } => {
+                    let (position, target) = self
+                        .window
+                        .as_ref()
+                        .and_then(|window| {
+                            let position = window.pointer?;
+                            Some((position, window.ui.pinch_listener_at(position)))
+                        })
+                        .unwrap_or((Point::ZERO, None));
+                    self.invoke_pinch(
+                        event_loop,
+                        target,
+                        PinchEvent {
+                            position,
+                            delta: bounded_gesture_delta(delta, MAX_PINCH_DELTA_PER_EVENT),
+                            phase: map_gesture_phase(phase),
+                            modifiers: self.modifiers,
+                        },
+                    );
+                }
+                WindowEvent::RotationGesture { delta, phase, .. } => {
+                    let (position, target) = self
+                        .window
+                        .as_ref()
+                        .and_then(|window| {
+                            let position = window.pointer?;
+                            Some((position, window.ui.rotation_listener_at(position)))
+                        })
+                        .unwrap_or((Point::ZERO, None));
+                    self.invoke_rotation(
+                        event_loop,
+                        target,
+                        RotationEvent {
+                            position,
+                            delta: bounded_gesture_delta(
+                                f64::from(delta),
+                                MAX_ROTATION_DEGREES_PER_EVENT,
+                            ),
+                            phase: map_gesture_phase(phase),
+                            modifiers: self.modifiers,
+                        },
+                    );
+                }
+                WindowEvent::DoubleTapGesture { .. } => {
+                    let (position, target) = self
+                        .window
+                        .as_ref()
+                        .and_then(|window| {
+                            let position = window.pointer?;
+                            Some((position, window.ui.smart_magnify_listener_at(position)))
+                        })
+                        .unwrap_or((Point::ZERO, None));
+                    self.invoke_smart_magnify(
+                        event_loop,
+                        target,
+                        SmartMagnifyEvent {
+                            position,
+                            modifiers: self.modifiers,
+                        },
+                    );
                 }
                 WindowEvent::ModifiersChanged(modifiers) => {
                     self.modifiers = map_modifiers(modifiers.state());
                     self.dispatch(event_loop, Event::ModifiersChanged(self.modifiers), false);
                 }
                 WindowEvent::KeyboardInput { event, .. } => {
-                    let key = map_key(&event.logical_key);
+                    let stroke = self.keyboard.keystroke(&event, self.modifiers);
+                    let key = stroke.key.clone();
+                    #[cfg(feature = "inspector")]
+                    if event.state == ElementState::Pressed
+                        && key == Key::Escape
+                        && self
+                            .window
+                            .as_ref()
+                            .is_some_and(|state| state.inspector.is_some())
+                    {
+                        self.config.inspector = false;
+                        let state = self.window.as_mut().expect("window checked above");
+                        state.inspector = None;
+                        reconcile_inspector_pointer_state(state);
+                        if state.listeners.observes_window_state {
+                            state.view_dirty = true;
+                        }
+                        if state.scheduler.invalidate() {
+                            state.window.request_redraw();
+                        }
+                        return;
+                    }
                     if event.state == ElementState::Pressed {
+                        if key == Key::Escape && window_is_grabbing_popup(&self.config) {
+                            if let Some(handle) = self.current_handle() {
+                                self.close_requests.push(handle);
+                            }
+                            return;
+                        }
                         if key == Key::Escape && self.cancel_internal_drag() {
+                            if self
+                                .invoke_key_event(
+                                    event_loop,
+                                    KeyListenerEvent::Down(KeyDownEvent {
+                                        key: key.clone(),
+                                        key_char: stroke.key_char.clone(),
+                                        modifiers: stroke.modifiers,
+                                        repeat: event.repeat,
+                                    }),
+                                )
+                                .is_none()
+                            {
+                                return;
+                            }
                             self.dispatch(
                                 event_loop,
                                 Event::KeyDown {
                                     key,
-                                    modifiers: self.modifiers,
+                                    key_char: stroke.key_char,
+                                    modifiers: stroke.modifiers,
                                     repeat: event.repeat,
                                 },
                                 false,
@@ -6101,18 +9741,36 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         self.handle_pressed_key(
                             event_loop,
                             PendingKey {
-                                key,
-                                modifiers: self.modifiers,
+                                stroke,
                                 repeat: event.repeat,
                                 text: event.text.map(|text| text.to_string()),
                             },
                         );
                     } else {
+                        let Keystroke {
+                            key,
+                            key_char,
+                            modifiers,
+                        } = stroke;
+                        if self
+                            .invoke_key_event(
+                                event_loop,
+                                KeyListenerEvent::Up(KeyUpEvent {
+                                    key: key.clone(),
+                                    key_char: key_char.clone(),
+                                    modifiers,
+                                }),
+                            )
+                            .is_none()
+                        {
+                            return;
+                        }
                         self.dispatch(
                             event_loop,
                             Event::KeyUp {
                                 key,
-                                modifiers: self.modifiers,
+                                key_char,
+                                modifiers,
                             },
                             false,
                         );
@@ -6147,6 +9805,29 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 }
                 WindowEvent::Ime(Ime::Enabled) => {}
                 WindowEvent::Focused(focused) => {
+                    let was_focused = self.window.as_ref().is_some_and(|state| state.focused);
+                    let never_key_popups_to_close = if !focused && was_focused {
+                        self.current_never_key_popup_children()
+                    } else {
+                        Vec::new()
+                    };
+                    #[cfg(target_os = "macos")]
+                    let popup_root_to_close = (!focused && was_focused)
+                        .then(|| self.current_grabbing_popup_root())
+                        .flatten()
+                        .and_then(|(root, window)| match window_contains_key_window(&window) {
+                            Ok(true) => None,
+                            Ok(false) => Some(root),
+                            Err(error) => {
+                                tracing::warn!(%error, "could not inspect popup-chain key focus");
+                                Some(root)
+                            }
+                        });
+                    #[cfg(not(target_os = "macos"))]
+                    let popup_root_to_close =
+                        (!focused && was_focused && window_is_grabbing_popup(&self.config))
+                            .then(|| self.current_handle())
+                            .flatten();
                     if let Some(state) = &mut self.window {
                         state.focused = focused;
                     }
@@ -6154,10 +9835,16 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         self.note_window_focused(window_id);
                     }
                     if !focused {
+                        if let Some(root) = popup_root_to_close {
+                            self.close_requests.push(root);
+                        }
+                        self.close_requests.extend(never_key_popups_to_close);
                         let cancelled = self.window.as_mut().and_then(|state| {
                             let capture = state.pointer_capture.take();
                             let internal_drag = state.drag_session.take().is_some();
                             state.drag_candidate = None;
+                            state.pressed_mouse_buttons = PressedMouseButtons::default();
+                            state.mouse_clicks.cancel();
                             #[cfg(target_os = "macos")]
                             {
                                 state.external_drag_mouse_down = None;
@@ -6192,6 +9879,21 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         {
                             return;
                         }
+                        loop {
+                            let cancelled_touch = self.window.as_mut().and_then(|state| {
+                                let id = state.touch_captures.keys().next().copied()?;
+                                let capture = state.touch_captures.remove(&id)?;
+                                let mut event = capture.last_event;
+                                event.phase = TouchPhase::Cancelled;
+                                Some((capture.target, event))
+                            });
+                            let Some((target, event)) = cancelled_touch else {
+                                break;
+                            };
+                            if !self.invoke_touch(event_loop, Some(target), event) {
+                                return;
+                            }
+                        }
                     }
                     #[cfg(target_os = "macos")]
                     if focused {
@@ -6199,11 +9901,14 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                             self.config.reduce_motion || crate::macos::system_reduce_motion();
                         let state = self.window.as_mut().expect("window checked above");
                         state.reduce_motion = reduce_motion;
+                        state.ui.set_reduce_motion(reduce_motion);
                         state.ui.set_animations_enabled(
                             !state.occluded && !reduce_motion,
                             Instant::now(),
                         );
                     }
+                    #[cfg(target_os = "macos")]
+                    self.refresh_current_native_tab_state();
                     self.dispatch(event_loop, Event::Focused(focused), true);
                 }
                 WindowEvent::Destroyed => {
@@ -6242,6 +9947,19 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             return;
         }
         #[cfg(target_os = "macos")]
+        if matches!(&event, RuntimeEvent::DisplaysChanged) {
+            self.refresh_displays(event_loop);
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if matches!(&event, RuntimeEvent::KeyboardLayoutChanged) {
+            if self.refresh_keyboard_layout() {
+                self.invoke_keyboard_layout_change(event_loop);
+                self.sync_active_native_menu_state();
+            }
+            return;
+        }
+        #[cfg(target_os = "macos")]
         if let RuntimeEvent::SystemNotificationAuthorization { granted, error } = &event {
             self.mac_application_host
                 .complete_system_notification_authorization(*granted, error.clone());
@@ -6250,6 +9968,21 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         #[cfg(target_os = "macos")]
         if let RuntimeEvent::SystemNotificationResponse(response) = &event {
             self.invoke_system_notification_response(event_loop, response.clone());
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if let RuntimeEvent::PopupDismissRequested(handle) = &event {
+            let should_close = self
+                .window_handles
+                .get(handle)
+                .and_then(|window_id| self.windows.get(window_id))
+                .is_some_and(|entry| {
+                    entry.state.visible && window_is_grabbing_popup(&entry.config)
+                });
+            if should_close {
+                self.close_requests.push(*handle);
+                self.process_window_commands(event_loop);
+            }
             return;
         }
         #[cfg(target_os = "macos")]
@@ -6292,6 +10025,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             #[cfg(target_os = "macos")]
             RuntimeEvent::NativeDropChanged(handle) => self.window_handles.get(handle).copied(),
             #[cfg(target_os = "macos")]
+            RuntimeEvent::PopupDismissRequested(_) => unreachable!("handled before routing"),
+            #[cfg(target_os = "macos")]
             RuntimeEvent::PlatformDialogClosed(_, _) => unreachable!("handled before routing"),
             #[cfg(target_os = "macos")]
             RuntimeEvent::PlatformDialogCancelled(_, _) => unreachable!("handled before routing"),
@@ -6299,6 +10034,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             RuntimeEvent::OpenUrls(_)
             | RuntimeEvent::Reopen { .. }
             | RuntimeEvent::SystemWake
+            | RuntimeEvent::DisplaysChanged
+            | RuntimeEvent::KeyboardLayoutChanged
             | RuntimeEvent::SystemNotificationAuthorization { .. }
             | RuntimeEvent::SystemNotificationResponse(_) => {
                 unreachable!("handled before window routing")
@@ -6382,6 +10119,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 }
             }
             #[cfg(target_os = "macos")]
+            RuntimeEvent::PopupDismissRequested(_) => unreachable!("handled before routing"),
+            #[cfg(target_os = "macos")]
             RuntimeEvent::PlatformDialogClosed(_, _) => unreachable!("handled before routing"),
             #[cfg(target_os = "macos")]
             RuntimeEvent::PlatformDialogCancelled(_, _) => {
@@ -6391,6 +10130,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             RuntimeEvent::OpenUrls(_)
             | RuntimeEvent::Reopen { .. }
             | RuntimeEvent::SystemWake
+            | RuntimeEvent::DisplaysChanged
+            | RuntimeEvent::KeyboardLayoutChanged
             | RuntimeEvent::SystemNotificationAuthorization { .. }
             | RuntimeEvent::SystemNotificationResponse(_) => {
                 unreachable!("handled before window routing")
@@ -6527,6 +10268,10 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     if state.ui.advance_animations(now) {
                         redraw = true;
                     }
+                    if state.ui.declarative_animation_due(now) {
+                        state.view_dirty = true;
+                        redraw = true;
+                    }
                     if state.ui.advance_scrollbars(now) {
                         redraw = true;
                     }
@@ -6592,6 +10337,31 @@ fn apply_windowed_geometry(state: &mut RuntimeWindow, bounds: Rect) {
     state.view_dirty = true;
 }
 
+/// Apply a resize command without sending a redundant native move for the unchanged origin.
+///
+/// On macOS, repeatedly calling `setFrameOrigin:` as part of a size-only animation forces extra
+/// window-server work and can make the content visibly lag behind the resize wave. Exiting a
+/// special state still follows the same contract as `set_window_bounds`; AppKit restores the
+/// saved origin and this function changes only the requested content size.
+fn apply_window_size(state: &mut RuntimeWindow, size: Size) {
+    state.window.set_minimized(false);
+    state.window.set_fullscreen(None);
+    if state.maximized {
+        state.window.set_maximized(false);
+    }
+    state.maximized = false;
+    state.restore_bounds.width = size.width;
+    state.restore_bounds.height = size.height;
+    if let Some(physical) = state
+        .window
+        .request_inner_size(LogicalSize::new(size.width as f64, size.height as f64))
+    {
+        state.renderer.resize(physical.width, physical.height);
+        state.logical_size = logical_window_size(physical, state.scale_factor);
+    }
+    state.view_dirty = true;
+}
+
 fn apply_window_bounds(state: &mut RuntimeWindow, bounds: WindowBounds) {
     let restore = bounds.bounds();
     state.window.set_minimized(false);
@@ -6609,7 +10379,7 @@ fn apply_window_bounds(state: &mut RuntimeWindow, bounds: WindowBounds) {
         }
         WindowBounds::Fullscreen(_) => state
             .window
-            .set_fullscreen(Some(Fullscreen::Borderless(None))),
+            .set_fullscreen(Some(Fullscreen::Borderless(state.window.current_monitor()))),
     }
 }
 
@@ -6632,11 +10402,20 @@ fn set_runtime_window_fullscreen(state: &mut RuntimeWindow, fullscreen: bool) ->
         }
         state
             .window
-            .set_fullscreen(Some(Fullscreen::Borderless(None)));
+            .set_fullscreen(Some(Fullscreen::Borderless(state.window.current_monitor())));
     } else {
         apply_window_bounds(state, WindowBounds::Windowed(state.restore_bounds));
     }
     true
+}
+
+fn constrained_window_size(size: Size, minimum: Option<Size>) -> Size {
+    minimum.map_or(size, |minimum| {
+        Size::new(
+            size.width.max(minimum.width),
+            size.height.max(minimum.height),
+        )
+    })
 }
 
 fn sane_scale_factor(value: f64) -> f32 {
@@ -6644,6 +10423,20 @@ fn sane_scale_factor(value: f64) -> f32 {
         value as f32
     } else {
         1.0
+    }
+}
+
+fn map_window_appearance(theme: Theme) -> WindowAppearance {
+    match theme {
+        Theme::Light => WindowAppearance::Light,
+        Theme::Dark => WindowAppearance::Dark,
+    }
+}
+
+fn to_winit_theme(appearance: WindowAppearance) -> Theme {
+    match appearance {
+        WindowAppearance::Light => Theme::Light,
+        WindowAppearance::Dark => Theme::Dark,
     }
 }
 
@@ -6696,6 +10489,25 @@ fn runtime_window_is_maximized(state: &RuntimeWindow, config: &AppConfig) -> boo
     }
 }
 
+fn runtime_window_display_id(state: &RuntimeWindow, displays: &Displays) -> Option<DisplayId> {
+    crate::display::display_for_rect(
+        displays,
+        Rect::new(
+            state.logical_position.x,
+            state.logical_position.y,
+            state.logical_size.width,
+            state.logical_size.height,
+        ),
+    )
+    .or_else(|| {
+        state
+            .window
+            .current_monitor()
+            .map(|monitor| crate::display::native_display_id(&monitor))
+            .filter(|id| displays.find(*id).is_some())
+    })
+}
+
 fn runtime_window_content_attached(state: &RuntimeWindow) -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -6722,6 +10534,19 @@ fn window_buttons(config: &AppConfig) -> WindowButtons {
     buttons
 }
 
+fn window_is_grabbing_popup(config: &AppConfig) -> bool {
+    config.kind == WindowKind::AnchoredPopup
+        && config.popup.as_ref().is_some_and(|popup| popup.grab)
+}
+
+fn window_is_never_key_popup(config: &AppConfig) -> bool {
+    config.kind == WindowKind::AnchoredPopup
+        && config
+            .popup
+            .as_ref()
+            .is_some_and(|popup| !popup.accepts_key_focus)
+}
+
 #[cfg(target_os = "macos")]
 fn implicit_native_movable(config: &AppConfig) -> bool {
     config.is_movable && config.title_bar_style == TitleBarStyle::Default
@@ -6740,6 +10565,136 @@ fn map_mouse_button(button: winit::event::MouseButton) -> MouseButton {
         winit::event::MouseButton::Back => MouseButton::Back,
         winit::event::MouseButton::Forward => MouseButton::Forward,
         winit::event::MouseButton::Other(value) => MouseButton::Other(value),
+    }
+}
+
+fn platform_cursor(style: CursorStyle) -> CursorIcon {
+    match style {
+        CursorStyle::Arrow => CursorIcon::Default,
+        CursorStyle::IBeam => CursorIcon::Text,
+        CursorStyle::Crosshair => CursorIcon::Crosshair,
+        CursorStyle::ClosedHand => CursorIcon::Grabbing,
+        CursorStyle::OpenHand => CursorIcon::Grab,
+        CursorStyle::PointingHand => CursorIcon::Pointer,
+        CursorStyle::ResizeLeft => CursorIcon::WResize,
+        CursorStyle::ResizeRight => CursorIcon::EResize,
+        CursorStyle::ResizeLeftRight => CursorIcon::EwResize,
+        CursorStyle::ResizeUp => CursorIcon::NResize,
+        CursorStyle::ResizeDown => CursorIcon::SResize,
+        CursorStyle::ResizeUpDown => CursorIcon::NsResize,
+        CursorStyle::ResizeUpLeftDownRight => CursorIcon::NwseResize,
+        CursorStyle::ResizeUpRightDownLeft => CursorIcon::NeswResize,
+        CursorStyle::ResizeColumn => CursorIcon::ColResize,
+        CursorStyle::ResizeRow => CursorIcon::RowResize,
+        CursorStyle::IBeamCursorForVerticalLayout => CursorIcon::VerticalText,
+        CursorStyle::OperationNotAllowed => CursorIcon::NotAllowed,
+        CursorStyle::DragLink => CursorIcon::Alias,
+        CursorStyle::DragCopy => CursorIcon::Copy,
+        CursorStyle::ContextualMenu => CursorIcon::ContextMenu,
+    }
+}
+
+#[cfg(feature = "inspector")]
+fn reconcile_inspector_pointer_state(state: &mut RuntimeWindow) -> bool {
+    state.pointer_capture = None;
+    state.drag_candidate = None;
+    let now = Instant::now();
+    let repaint = if state.inspector.is_some() {
+        state.ui.cancel_pointer_interaction()
+            | state.ui.pointer_left()
+            | state.ui.update_scrollbar_hover(None, now)
+    } else {
+        let scrollbar_changed = state.ui.update_scrollbar_hover(state.pointer, now);
+        let pointer_changed = state.pointer.is_some_and(|point| {
+            let RuntimeWindow { ui, renderer, .. } = state;
+            ui.pointer_moved(point, renderer)
+        });
+        scrollbar_changed | pointer_changed
+    };
+    let cursor = state
+        .pointer
+        .map_or(CursorIcon::Default, |point| desired_cursor(state, point));
+    set_cursor_if_changed(state, cursor);
+    repaint
+}
+
+fn desired_cursor(state: &RuntimeWindow, point: Point) -> CursorIcon {
+    #[cfg(feature = "inspector")]
+    if let Some(inspector) = &state.inspector
+        && inspector.captures_pointer(point)
+    {
+        return if inspector.mode() == InspectorMode::Picking && !inspector.panel_contains(point) {
+            CursorIcon::Crosshair
+        } else {
+            CursorIcon::Default
+        };
+    }
+    if state.drag_session.is_some() {
+        return CursorIcon::Grabbing;
+    }
+    if state.ui.scrollbar_drag_active()
+        || (state.pointer_capture.is_none()
+            && (state.ui.is_over_scrollbar(point) || state.ui.is_app_region_drag(point)))
+    {
+        return CursorIcon::Default;
+    }
+    state
+        .ui
+        .cursor_style_at(point)
+        .map_or(CursorIcon::Default, platform_cursor)
+}
+
+fn set_cursor_if_changed(state: &mut RuntimeWindow, cursor: CursorIcon) {
+    if cursor != state.cursor {
+        state.cursor = cursor;
+        state.window.set_cursor(cursor);
+    }
+}
+
+fn map_gesture_phase(phase: winit::event::TouchPhase) -> GesturePhase {
+    match phase {
+        winit::event::TouchPhase::Started => GesturePhase::Started,
+        winit::event::TouchPhase::Moved => GesturePhase::Moved,
+        winit::event::TouchPhase::Ended => GesturePhase::Ended,
+        winit::event::TouchPhase::Cancelled => GesturePhase::Cancelled,
+    }
+}
+
+fn map_touch_phase(phase: winit::event::TouchPhase) -> TouchPhase {
+    match phase {
+        winit::event::TouchPhase::Started => TouchPhase::Started,
+        winit::event::TouchPhase::Moved => TouchPhase::Moved,
+        winit::event::TouchPhase::Ended => TouchPhase::Ended,
+        winit::event::TouchPhase::Cancelled => TouchPhase::Cancelled,
+    }
+}
+
+fn bounded_touch_force(force: Force) -> f32 {
+    bounded_pressure(force.normalized() as f32)
+}
+
+fn bounded_pressure(pressure: f32) -> f32 {
+    if pressure.is_finite() {
+        pressure.clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+fn bounded_gesture_delta(delta: f64, limit: f32) -> f32 {
+    if delta.is_finite() {
+        (delta as f32).clamp(-limit, limit)
+    } else {
+        0.0
+    }
+}
+
+fn map_pressure_stage(stage: i64) -> PressureStage {
+    match stage {
+        0 => PressureStage::Zero,
+        1 => PressureStage::Normal,
+        2 => PressureStage::Force,
+        stage => PressureStage::Other(stage),
     }
 }
 
@@ -6775,55 +10730,43 @@ fn is_default_close_shortcut(key: &Key, modifiers: Modifiers, repeat: bool) -> b
         && matches!(key, Key::Character(value) if value.eq_ignore_ascii_case("w"))
 }
 
-fn map_key(key: &WinitKey) -> Key {
-    match key {
-        WinitKey::Character(value) => Key::Character(value.to_string()),
-        WinitKey::Named(NamedKey::ArrowUp) => Key::ArrowUp,
-        WinitKey::Named(NamedKey::ArrowDown) => Key::ArrowDown,
-        WinitKey::Named(NamedKey::ArrowLeft) => Key::ArrowLeft,
-        WinitKey::Named(NamedKey::ArrowRight) => Key::ArrowRight,
-        WinitKey::Named(NamedKey::PageUp) => Key::PageUp,
-        WinitKey::Named(NamedKey::PageDown) => Key::PageDown,
-        WinitKey::Named(NamedKey::Home) => Key::Home,
-        WinitKey::Named(NamedKey::End) => Key::End,
-        WinitKey::Named(NamedKey::Enter) => Key::Enter,
-        WinitKey::Named(NamedKey::Escape) => Key::Escape,
-        WinitKey::Named(NamedKey::Space) => Key::Space,
-        WinitKey::Named(NamedKey::Tab) => Key::Tab,
-        WinitKey::Named(NamedKey::Backspace) => Key::Backspace,
-        WinitKey::Named(NamedKey::Delete) => Key::Delete,
-        WinitKey::Named(NamedKey::Insert) => Key::Insert,
-        WinitKey::Named(NamedKey::F1) => Key::Function(1),
-        WinitKey::Named(NamedKey::F2) => Key::Function(2),
-        WinitKey::Named(NamedKey::F3) => Key::Function(3),
-        WinitKey::Named(NamedKey::F4) => Key::Function(4),
-        WinitKey::Named(NamedKey::F5) => Key::Function(5),
-        WinitKey::Named(NamedKey::F6) => Key::Function(6),
-        WinitKey::Named(NamedKey::F7) => Key::Function(7),
-        WinitKey::Named(NamedKey::F8) => Key::Function(8),
-        WinitKey::Named(NamedKey::F9) => Key::Function(9),
-        WinitKey::Named(NamedKey::F10) => Key::Function(10),
-        WinitKey::Named(NamedKey::F11) => Key::Function(11),
-        WinitKey::Named(NamedKey::F12) => Key::Function(12),
-        WinitKey::Named(NamedKey::F13) => Key::Function(13),
-        WinitKey::Named(NamedKey::F14) => Key::Function(14),
-        WinitKey::Named(NamedKey::F15) => Key::Function(15),
-        WinitKey::Named(NamedKey::F16) => Key::Function(16),
-        WinitKey::Named(NamedKey::F17) => Key::Function(17),
-        WinitKey::Named(NamedKey::F18) => Key::Function(18),
-        WinitKey::Named(NamedKey::F19) => Key::Function(19),
-        WinitKey::Named(NamedKey::F20) => Key::Function(20),
-        WinitKey::Named(NamedKey::F21) => Key::Function(21),
-        WinitKey::Named(NamedKey::F22) => Key::Function(22),
-        WinitKey::Named(NamedKey::F23) => Key::Function(23),
-        WinitKey::Named(NamedKey::F24) => Key::Function(24),
-        _ => Key::Other,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cursor_styles_map_to_the_matching_platform_cursor() {
+        let cases = [
+            (CursorStyle::Arrow, CursorIcon::Default),
+            (CursorStyle::IBeam, CursorIcon::Text),
+            (CursorStyle::Crosshair, CursorIcon::Crosshair),
+            (CursorStyle::ClosedHand, CursorIcon::Grabbing),
+            (CursorStyle::OpenHand, CursorIcon::Grab),
+            (CursorStyle::PointingHand, CursorIcon::Pointer),
+            (CursorStyle::ResizeLeft, CursorIcon::WResize),
+            (CursorStyle::ResizeRight, CursorIcon::EResize),
+            (CursorStyle::ResizeLeftRight, CursorIcon::EwResize),
+            (CursorStyle::ResizeUp, CursorIcon::NResize),
+            (CursorStyle::ResizeDown, CursorIcon::SResize),
+            (CursorStyle::ResizeUpDown, CursorIcon::NsResize),
+            (CursorStyle::ResizeUpLeftDownRight, CursorIcon::NwseResize),
+            (CursorStyle::ResizeUpRightDownLeft, CursorIcon::NeswResize),
+            (CursorStyle::ResizeColumn, CursorIcon::ColResize),
+            (CursorStyle::ResizeRow, CursorIcon::RowResize),
+            (
+                CursorStyle::IBeamCursorForVerticalLayout,
+                CursorIcon::VerticalText,
+            ),
+            (CursorStyle::OperationNotAllowed, CursorIcon::NotAllowed),
+            (CursorStyle::DragLink, CursorIcon::Alias),
+            (CursorStyle::DragCopy, CursorIcon::Copy),
+            (CursorStyle::ContextualMenu, CursorIcon::ContextMenu),
+        ];
+
+        for (style, expected) in cases {
+            assert_eq!(platform_cursor(style), expected);
+        }
+    }
 
     struct CounterView(u32);
 
@@ -6899,25 +10842,47 @@ mod tests {
             .on_open_urls(|_, _| {})
             .on_reopen(|_, _| {})
             .on_system_wake(|_| {})
-            .on_system_notification_response(|_, _| {});
+            .on_keyboard_layout_change(|_, _| {})
+            .on_system_notification_response(|_, _| {})
+            .on_window_closed(|_, _| {});
 
         assert!(app.application_callbacks.open_urls.is_some());
         assert!(app.application_callbacks.reopen.is_some());
         assert!(app.application_callbacks.system_wake.is_some());
+        assert!(app.application_callbacks.keyboard_layout.is_some());
         assert!(
             app.application_callbacks
                 .system_notification_response
                 .is_some()
         );
+        assert!(app.application_callbacks.window_closed.is_some());
 
         let app = App::new(CounterView(0));
         assert!(app.application_callbacks.open_urls.is_none());
         assert!(app.application_callbacks.reopen.is_none());
         assert!(app.application_callbacks.system_wake.is_none());
+        assert!(app.application_callbacks.keyboard_layout.is_none());
         assert!(
             app.application_callbacks
                 .system_notification_response
                 .is_none()
+        );
+        assert!(app.application_callbacks.window_closed.is_none());
+    }
+
+    #[test]
+    fn quit_mode_default_matches_native_desktop_convention() {
+        assert_eq!(
+            QuitMode::Default.quits_when_empty(),
+            cfg!(not(target_os = "macos"))
+        );
+        assert!(QuitMode::LastWindowClosed.quits_when_empty());
+        assert!(!QuitMode::Explicit.quits_when_empty());
+        assert_eq!(
+            App::new(CounterView(0))
+                .with_quit_mode(QuitMode::Explicit)
+                .quit_mode,
+            QuitMode::Explicit
         );
     }
 
@@ -6957,6 +10922,107 @@ mod tests {
     }
 
     #[test]
+    fn minimum_window_size_bounds_runtime_growth_without_rewriting_explicit_geometry() {
+        let minimum = Size::new(640.0, 420.0);
+        assert_eq!(
+            constrained_window_size(Size::new(320.0, 800.0), Some(minimum)),
+            Size::new(640.0, 800.0)
+        );
+        assert_eq!(
+            App::new(CounterView(0))
+                .minimum_size(500.0, 360.0)
+                .config
+                .minimum_size,
+            Some(Size::new(500.0, 360.0))
+        );
+        assert!(
+            App::new(CounterView(0))
+                .without_minimum_size()
+                .config
+                .minimum_size
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn window_appearance_builders_and_native_mapping_are_exact() {
+        let forced = WindowOptions::new("Inspector").window_appearance(WindowAppearance::Dark);
+        assert_eq!(forced.preferred_appearance, Some(WindowAppearance::Dark));
+        assert_eq!(forced.follow_system_appearance().preferred_appearance, None);
+
+        for appearance in [WindowAppearance::Light, WindowAppearance::Dark] {
+            assert_eq!(
+                map_window_appearance(to_winit_theme(appearance)),
+                appearance
+            );
+        }
+    }
+
+    #[test]
+    fn window_background_builder_retains_the_compositor_policy() {
+        let options =
+            WindowOptions::new("Palette").window_background(WindowBackgroundAppearance::Blurred);
+        assert_eq!(
+            options.window_background,
+            WindowBackgroundAppearance::Blurred
+        );
+        assert!(options.window_background.is_transparent());
+        assert!(options.window_background.is_blurred());
+        assert!(!WindowBackgroundAppearance::Opaque.is_transparent());
+
+        assert_eq!(
+            WindowBackgroundAppearance::Transparent
+                .changes_from(WindowBackgroundAppearance::Blurred),
+            WindowBackgroundChanges {
+                transparency: false,
+                blur: true,
+            }
+        );
+        assert_eq!(
+            WindowBackgroundAppearance::Opaque
+                .changes_from(WindowBackgroundAppearance::Transparent),
+            WindowBackgroundChanges {
+                transparency: true,
+                blur: false,
+            }
+        );
+        assert_eq!(
+            WindowBackgroundAppearance::Blurred.changes_from(WindowBackgroundAppearance::Opaque),
+            WindowBackgroundChanges {
+                transparency: true,
+                blur: true,
+            }
+        );
+    }
+
+    #[test]
+    fn anchored_popup_builder_selects_bounded_native_menu_defaults() {
+        let popup = crate::PopupOptions::new(Rect::new(24.0, 40.0, 120.0, 32.0));
+        let options = WindowOptions::new("Menu")
+            .size(240.0, 180.0)
+            .anchored_popup(popup.clone());
+
+        assert_eq!(options.kind, WindowKind::AnchoredPopup);
+        assert_eq!(options.popup, Some(popup));
+        assert_eq!(options.title_bar_style, TitleBarStyle::Hidden);
+        assert!(options.focus);
+        assert!(!options.is_movable);
+        assert!(!options.is_resizable);
+        assert!(!options.is_minimizable);
+        assert!(options.minimum_size.is_none());
+        assert_eq!(validate_window_options(&options), Ok(()));
+
+        let never_key_popup = crate::PopupOptions::new(Rect::ZERO)
+            .grab(false)
+            .accepts_key_focus(false);
+        let never_key = WindowOptions::new("Suggestions").anchored_popup(never_key_popup);
+        assert!(!never_key.focus);
+        assert!(window_is_never_key_popup(&never_key));
+        assert!(!window_is_grabbing_popup(&never_key));
+        assert_eq!(validate_window_options(&never_key), Ok(()));
+    }
+
+    #[test]
     fn window_options_reject_unbounded_native_inputs() {
         assert_eq!(
             validate_window_bounds(WindowBounds::windowed(f32::NAN, 0.0, 1.0, 1.0)),
@@ -6981,6 +11047,85 @@ mod tests {
                     .traffic_light_position(12.0, 12.0),
             ),
             Err(WindowCommandError::HiddenTitleBarTrafficLights)
+        );
+        assert_eq!(
+            validate_window_options(
+                &WindowOptions::new("Missing popup").window_kind(WindowKind::AnchoredPopup),
+            ),
+            Err(WindowCommandError::InvalidPopupConfiguration)
+        );
+        assert_eq!(
+            validate_window_options(&WindowOptions::new("Invalid popup").anchored_popup(
+                crate::PopupOptions::new(Rect::new(f32::INFINITY, 0.0, 0.0, 0.0)),
+            ),),
+            Err(WindowCommandError::InvalidPopupConfiguration)
+        );
+    }
+
+    #[test]
+    fn document_window_options_are_bounded_and_keep_gpui_aliases() {
+        let options = WindowOptions::new("Document")
+            .document_path("Cargo.toml")
+            .document_edited(true)
+            .tabbing_identifier("dev.quickgui.workspace");
+        assert_eq!(options.represented_file, Some(PathBuf::from("Cargo.toml")));
+        assert!(options.document_edited);
+        assert_eq!(
+            options.tabbing_identifier.as_deref(),
+            Some("dev.quickgui.workspace")
+        );
+        assert_eq!(validate_window_options(&options), Ok(()));
+
+        assert_eq!(
+            validate_window_options(&WindowOptions::new("Empty path").document_path("")),
+            Err(WindowCommandError::InvalidDocumentPath)
+        );
+        assert_eq!(
+            validate_window_options(&WindowOptions::new("NUL path").document_path("a\0b")),
+            Err(WindowCommandError::InvalidDocumentPath)
+        );
+        assert_eq!(
+            validate_window_options(&WindowOptions::new("Empty tab").tabbing_identifier("")),
+            Err(WindowCommandError::InvalidTabbingIdentifier)
+        );
+        assert_eq!(
+            validate_window_options(
+                &WindowOptions::new("Long tab")
+                    .tabbing_identifier("x".repeat(MAX_WINDOW_TABBING_IDENTIFIER_BYTES + 1)),
+            ),
+            Err(WindowCommandError::InvalidTabbingIdentifier)
+        );
+
+        assert!(WindowTabState::default().is_valid());
+        assert!(
+            !WindowTabState {
+                count: 0,
+                selected_index: None,
+                ..WindowTabState::default()
+            }
+            .is_valid()
+        );
+        assert!(
+            !WindowTabState {
+                count: 2,
+                selected_index: Some(2),
+                ..WindowTabState::default()
+            }
+            .is_valid()
+        );
+
+        let app = App::new(CounterView(0))
+            .represented_file("src/lib.rs")
+            .document_edited(true)
+            .tabbing_identifier("dev.quickgui.source");
+        assert_eq!(
+            app.config.represented_file,
+            Some(PathBuf::from("src/lib.rs"))
+        );
+        assert!(app.config.document_edited);
+        assert_eq!(
+            app.config.tabbing_identifier.as_deref(),
+            Some("dev.quickgui.source")
         );
     }
 
@@ -7364,6 +11509,69 @@ mod tests {
         assert_eq!(sane_scale_factor(0.0), 1.0);
         assert_eq!(sane_scale_factor(f64::NAN), 1.0);
         assert_eq!(sane_scale_factor(2.0), 2.0);
+    }
+
+    #[test]
+    fn native_gesture_values_are_finite_bounded_and_semantic() {
+        assert_eq!(bounded_pressure(-1.0), 0.0);
+        assert_eq!(bounded_pressure(0.625), 0.625);
+        assert_eq!(bounded_pressure(2.0), 1.0);
+        assert_eq!(bounded_pressure(f32::NAN), 0.0);
+
+        assert_eq!(bounded_gesture_delta(0.25, 8.0), 0.25);
+        assert_eq!(bounded_gesture_delta(99.0, 8.0), 8.0);
+        assert_eq!(bounded_gesture_delta(-99.0, 8.0), -8.0);
+        assert_eq!(bounded_gesture_delta(f64::INFINITY, 8.0), 0.0);
+
+        assert_eq!(map_pressure_stage(0), PressureStage::Zero);
+        assert_eq!(map_pressure_stage(1), PressureStage::Normal);
+        assert_eq!(map_pressure_stage(2), PressureStage::Force);
+        assert_eq!(map_pressure_stage(7), PressureStage::Other(7));
+
+        assert_eq!(bounded_touch_force(Force::Normalized(0.625)), 0.625);
+        assert_eq!(bounded_touch_force(Force::Normalized(2.0)), 1.0);
+        assert_eq!(bounded_touch_force(Force::Normalized(f64::NAN)), 0.0);
+        assert_eq!(
+            bounded_touch_force(Force::Calibrated {
+                force: 2.0,
+                max_possible_force: 4.0,
+                altitude_angle: None,
+            }),
+            0.5
+        );
+
+        assert_eq!(
+            map_gesture_phase(winit::event::TouchPhase::Started),
+            GesturePhase::Started
+        );
+        assert_eq!(
+            map_gesture_phase(winit::event::TouchPhase::Moved),
+            GesturePhase::Moved
+        );
+        assert_eq!(
+            map_gesture_phase(winit::event::TouchPhase::Ended),
+            GesturePhase::Ended
+        );
+        assert_eq!(
+            map_gesture_phase(winit::event::TouchPhase::Cancelled),
+            GesturePhase::Cancelled
+        );
+        assert_eq!(
+            map_touch_phase(winit::event::TouchPhase::Started),
+            TouchPhase::Started
+        );
+        assert_eq!(
+            map_touch_phase(winit::event::TouchPhase::Moved),
+            TouchPhase::Moved
+        );
+        assert_eq!(
+            map_touch_phase(winit::event::TouchPhase::Ended),
+            TouchPhase::Ended
+        );
+        assert_eq!(
+            map_touch_phase(winit::event::TouchPhase::Cancelled),
+            TouchPhase::Cancelled
+        );
     }
 
     #[test]

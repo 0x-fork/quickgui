@@ -1,0 +1,238 @@
+# Status and roadmap
+
+[Documentation index](README.md)
+
+Implemented now:
+
+- macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
+- sleeping heterogeneous multi-window runtime with stable handles, close interception, targeted focus/close/invalidation, resize, DPI, pointer, wheel, keyboard-layout-aware command identity, full IME preedit/commit routing, and focus events;
+- parent-owned normal, dialog-sheet, floating, and transient popup roles with retained restore
+  bounds, initial/runtime minimum inner sizes, declarative native-state snapshots, hidden first-frame
+  creation, child-first teardown, and bounded targeted runtime window commands;
+- true nonactivating macOS `NSPanel` popups with retained-element anchors, work-area flip/slide/resize constraints, cross-parent-edge rendering, independent grab/key-window eligibility, nested grab dismissal, interactive never-key children, and passive no-monitor operation;
+- window-owned macOS `NSAlert`, `NSOpenPanel`, and `NSSavePanel` futures with cancellation-safe lifecycle and hard request/result bounds, plus `NSWorkspace` URL/open/reveal actions and default Cmd-W close routing;
+- lazy bounded application clipboard items with text and hash-bound metadata, encoded images, native file lists, direct macOS general/Find pasteboards, cross-platform fallback projection, deterministic in-memory tests, and one shared editor-shortcut path;
+- bounded macOS system notifications with tag replacement, actions, dismissal, one-shot authorization, and application-wide response callbacks, plus opt-in URL-open, Dock-reopen, and system-wake lifecycle callbacks;
+- GPUI-shaped `QuitMode` semantics, structured child-first application teardown, post-destruction window callbacks, and a zero-work windowless macOS Dock-reopen state;
+- bounded immutable active-display snapshots with global logical work areas, scale/refresh metadata, stable macOS UUIDs, declarative change observation, current-display window state, display-targeted centered placement/fullscreen, disconnect fallback, and deterministic no-polling tests;
+- main-thread `Entity<T>`/`WeakEntity<T>` shared state with retained per-window observation, coalesced bounded notification fan-out, and automatic conditional unsubscribe, plus typed `EventEmitter` delivery with RAII `Subscription` lifetimes and bounded deterministic queues;
+- main-thread application globals with exact typed access, conditional per-window observation, RAII change subscriptions, deterministic deferred delivery, and bounded notification fan-out;
+- cancellable main-thread foreground futures with `Task` drop/detach semantics, fallible typed async view updates, exact event-loop timers, structured window-close cancellation, and hard task/poll/update/timer bounds;
+- bounded deterministic `TestAppContext` coverage for retained view updates, semantic click/focus/input/form interaction, two-phase typed actions and focused raw keys, contextual keymaps, globals, foreground futures/timers, application lifecycle hooks, and heterogeneous window ownership without creating native or GPU resources;
+- lazy deterministic `VisualTestContext` geometry assertions and bounded physical-pixel screenshots through the production Taffy, Cosmic Text, scene-ordering, and WGPU pipelines, with explicit comparison tolerances, exact injected time, and no native window or presentation loop;
+- compile-time opt-in per-window retained-tree inspection with topmost pointer picking, occluded-layer wheel traversal, frozen selection, an independent WGPU overlay tree, and bounded hierarchy/layout/clip/paint/hit/focus/accessibility/frame/cache snapshots; disabled builds contain no inspector state or hot-path branches and an open inspector owns no idle scheduler source;
+- compatible windows share WGPU device/queue ownership, one format-matched immutable shape
+  pipeline, Glyphon's device pipeline cache, and one lazy bounded image worker pool while retaining
+  independent surfaces, uniforms, upload buffers, glyph atlases, schedulers, input state, and
+  bounded render caches; path, image, SVG, and application-shader renderers initialize only after
+  their first scene primitive;
+- immutable application assets with normalized paths, zero-copy static bytes, deterministic bounded listings, stable worker-decoded image identities, direct view/event access, and validated custom fonts in one application-wide main-thread font database;
+- declarative elements, retained Taffy Flexbox with GPUI-shaped reverse flow, sizing, alignment, aspect-ratio, axis-gap, negative-margin, and auto-margin helpers, CSS Grid, layout-isolated parent-size container queries, absolute positioning, clipping, semantically complete `display: none` and layout-preserving visibility, inherited text alignment, complete fonts, bounded canonical OpenType features, ordered custom fallback families, slant, GPU-instanced solid/wavy decorations and fixed thickness helpers, and Tailwind-like helpers;
+- multiplicative GPUI/web-style subtree opacity across all GPU primitives and macOS `NSView`
+  children, with zero-opacity interaction/accessibility retention, paint-only transitions, and no
+  rich-text reshaping or offscreen group allocation;
+- native-style overlay scrollbars with 12-point hit tracks, captured thumb/track dragging, hover expansion, and one-shot auto-hide deadlines;
+- GPUI-compatible typed native cursors with Tailwind-style helpers, topmost/default overrides, automatic text and drag cursors, disabled-state semantics, stationary-pointer refresh, and no cursor-owned scheduling;
+- event-driven Force Touch, pinch, rotation, and smart-magnify input with bounded allocation-free payloads, topmost ancestor targeting, overlay blocking, and deterministic headless simulation;
+- captured raw multi-contact touch with stable contact-lifetime IDs, child-first bubbling, focus-loss cancellation, a 32-contact hard bound, deterministic simulation, and direct/indirect macOS `NSTouch` delivery through the existing content view;
+- GPUI-shaped element scroll-wheel events with precise pixel/line deltas, native gesture phases,
+  child-first bubbling, independent web-style propagation/default control, bounded payloads, and
+  an unchanged coalesced fast path for ordinary retained scrolling;
+- bounded desktop mouse down/up/move/exit dispatch with outside capture, root-to-target capture,
+  target-to-root bubble, independent propagation/default prevention, exact AppKit multi-click
+  counts, stationary-layout hover transitions, reusable scratch storage, and deterministic
+  headless/visual simulation, while direct pointer capture remains available for scrollbars and
+  custom drags;
+- event-driven native light/dark window appearance with system following, explicit per-window overrides, declarative observation, and deterministic no-polling simulation;
+- runtime opaque, transparent, and native-blurred window backgrounds with retained macOS Metal surfaces, component-diffed compositor mutation, and no idle work;
+- macOS hidden-inset titlebars with native traffic-light positioning and explicit topmost `drag`/`no-drag` app regions;
+- bounded native document-window integration with filesystem-preserving represented URLs, edited-state indication, character palette commands, opt-in AppKit system tabs, constant-size observable tab snapshots, deterministic simulation, and restoration of the process-wide automatic-tabbing policy without polling;
+- ordered `z_index` stacking layers plus portal-style overlays with anchor flip/shift, pointer blocking, outside/Escape dismissal, and focus restoration;
+- controlled window-bounded popovers with caller-owned unstyled trigger, combined portal/positioner,
+  popup, backdrop, title, description, and close parts; paired and derived stable IDs, exact
+  expanded/controls/has-popup and visible-label relationships, optional same-turn initial focus,
+  independent topmost Escape/outside dismissal, merged-surface shorthand, and no component-owned
+  store or scheduling, plus an unstyled `AnchoredPopover` child-window host for
+  cross-parent-edge content;
+- controlled unstyled in-window dialogs and alert dialogs with caller-owned portal/backdrop/popup/title/description/close parts, nested z-ordered focus containment, independent Escape/backdrop policy, exact focus restoration, modal AccessKit roles and visible relationships, overlay-plane native-view occlusion, and no component-owned scheduling;
+- arbitrary delayed GPU tooltips with keyboard accessibility and exact one-shot scheduling, plus
+  an unstyled `ContextMenuState` adapter with bubbling secondary-click triggers, caller-owned
+  popup/row parts, native cursor-point overflow surfaces, nested `PopupMenu` models, exact close
+  synchronization, exact group-label/separator accessibility, typed owner actions, and zero
+  closed-state work;
+- macOS `NSView` children composed between the base and transparent overlay WGPU surfaces, with atomic first-frame reveal, keyed lifetime, clipping, sizing, first-responder handoff, and merged AccessKit/AppKit accessibility routing;
+- keyed hover/active/focus/click state, captured pointer gestures, Tab traversal, keyboard button activation, and type-safe `ViewContext` listeners;
+- typed actions with root-to-focus capture and default-consuming focus-to-root bubble, two-phase focused raw key-down/up listeners with independent propagation/default prevention, non-focusable focus scopes, contextual keymaps, programmatic command dispatch, and replay-safe multi-stroke bindings;
+- bounded macOS keyboard-layout snapshots with event-driven observation, fixed command/Option/Shift translation tables, non-Latin and Dvorak-QWERTY command handling, alternate printable-character matching, opt-in Apple-localized key equivalents shared with native menus, and deterministic no-polling simulation;
+- reusable unstyled command-palette pickers with caller-owned input/empty/row/root presentation,
+  bounded fuzzy matching, UTF-8-safe highlight ranges, contextual keyboard navigation,
+  visible-only rows, focus restoration, and heterogeneous typed-action dispatch;
+- standalone unstyled `SelectState` with caller-owned trigger/listbox/option presentation on the
+  cross-parent-edge native popup host, exact child-close synchronization, stable identities,
+  preview/commit/cancel, bounded typeahead, disabled options, atomic source replacement, form
+  validation, active-descendant accessibility, and visible-only rows; standalone unstyled
+  `AutocompleteState` with caller-owned input/popup/option parts, arbitrary bounded text,
+  completion or action-only commits, fuzzy or externally filtered sources, in-place shared child
+  snapshots, a never-key cross-edge suggestion panel, owner-IME focus, owner-tree accessibility
+  proxies, and visible-only rows; and standalone unstyled `ComboboxState` with a distinct declared
+  value/edit-query contract, caller-owned parts, exact committed-label restoration, stable async
+  source rebinding, the same never-key overflow host, and ordinary text-editing/IME ownership;
+- controlled unstyled virtual data collections with one composite focus target: an
+  application-rendered sortable million-row table with caller-owned headers/cells, visible-only
+  rendering, and exact grid/header/cell semantics, plus a bounded million-node tree with
+  caller-composed rows/disclosures, a compact preorder arena, stable-ID selection/expansion,
+  atomic source replacement, visible-index rebuilding, disabled-node navigation, and exact
+  hierarchy/set semantics; both retain only bounded layout geometry, reuse `ListState` scrolling,
+  and add no idle scheduler source;
+- typed drag/drop with GPU previews and paint-only source/target states, arbitrary process-local values crossing macOS windows without serialization, plus bounded inbound/outbound file, text, and URL formats;
+- native macOS application menus with nested/system menus, contextual key equivalents, focused command validation, dynamic replacement, checked/disabled items, and AppKit responder-chain actions;
+- controlled plain or attributed single-line and wrapped multiline text editing with grapheme/word/line navigation and deletion, visual-line caret movement, mouse caret and drag selection, two-axis scrolling, copy/cut/paste, IME composition, and bounded text-plus-style undo/redo history;
+- semantic browser-style forms with nearest-form Return and submit-button routing, shared controlled field data, bounded document-order validation reports, deterministic first-invalid focus, and one-shot AccessKit live announcements;
+- controlled unstyled `Checkbox`, `Radio`, `RadioGroup`, and `Switch` descriptors with
+  caller-owned roots, indicators, thumbs, layout, paint, and motion; exact AccessKit toggle roles,
+  desktop arrow cursors, hidden-inset drag exclusion, roving Tab/arrow radio behavior,
+  accessibility-hidden decorative parts, and no component-owned allocation or scheduling;
+- controlled unstyled in-window `Tabs`/`Tab` parts with caller-owned root/list/tab/indicator/panel
+  presentation, manual or automatic horizontal/vertical navigation, a single roving Tab stop,
+  disabled-item skipping, optional looping and retained panels, exact AccessKit tab relationships,
+  deterministic idle coverage, and no component-owned registry or scheduling;
+- retained `StyledText` with bounded Unicode-safe byte ranges, per-run family/features/fallbacks/weight/slant/foreground/background/decorations, inherited left/center/right/justified alignment, GPUI-compatible whitespace/end/start/middle ellipsis/truncate/line-clamp helpers, cached Unicode-grapheme-safe overflow projection back to original selection offsets, wrapped BiDi shaping, visible-only decoration geometry, and document-order selection shared with ordinary text;
+- AccessKit trees with semantic roles, labels, disabled/selected state, native focus/click actions,
+  editable or immutable text-selection actions, distinct select/editable combobox roles and
+  autocomplete state, active-descendant relationships, exact tab/list/panel orientation and
+  relationships, exact option/table/tree positions, table row/column counts and indices, tree
+  levels/set positions, expanded state, and sort direction;
+- linear-light colors, premultiplied blending, analytic rounded rectangles, borders, CSS-ordered drop/inset shadows, and HiDPI rendering;
+- static, asynchronous, and animated PNG/JPEG/WebP/GIF/RGBA images with intrinsic layout, all web `object-fit` modes, rounded clipping, GPU grayscale, delayed loading/error fallbacks, per-element playback, Reduce Motion, stable identity, and hard-bounded CPU/GPU caches;
+- retained SVG/SVGZ icons and tessellated fill/stroke paths with intrinsic layout, web `object-fit`, transforms, dashes, arcs, two-stop gradients, analytic boundary antialiasing, and scoped custom canvas painting;
+- retained validated WGSL rectangle effects with framework-owned clipping and blending, bounded per-window pipeline caching, four per-instance parameter vectors, and one triple-buffered instanced upload;
+- bounded declarative one-shot, chained, local-repeat, and application-synchronized duration animations with finite easing, optional exact max-FPS deadlines, retained terminal values, occlusion-aware pause/resume, Reduce Motion static resolution, and independently owned tooltip/drag-preview motion that never rebuilds the application view;
+- retargetable declaration-time springs with retained position and velocity, analytic frame-rate-independent stepping across damping regimes, explicit playback states, finite-input recovery, and no delayed-frame catch-up loop;
+- web-style paint-only transitions for interaction and application state across background, border, radius, subtree opacity, inherited text color, and fixed-cap shadow lists, with continuous retargeting, optional exact throttling, occlusion pause, Reduce Motion resolution, and no view or layout rebuild per frame;
+- Cosmic Text/Glyphon shaping, real OpenType feature application, primary/custom/platform ordered fallback, rasterization, atlas reuse, and bounded canonical text-layout retention;
+- fixed-height O(1) virtualization plus sparse measured variable-height lists with stable logical
+  anchors, bottom/tail following, targeted remeasurement, clamped scrolling, shared native-style
+  scrollbar capture, hard metric/mount bounds, true Unix application-thread CPU telemetry, a
+  self-terminating macOS scroll/idle/process-CPU/peak-RSS gate, deterministic no-rebuild
+  retained-scroll coverage, and a separate live
+  resize/wrapped-text/native-child/lifecycle/first-responder/document-chrome gate with
+  context-menu interaction plus a 128-cycle current-memory plateau, presentation, CPU, cache,
+  draw-call, idle, and peak-RSS budgets.
+
+## Roadmap
+
+QuickGUI is macOS-first. Roadmap priority follows the needs of an editor-class desktop app:
+correct input, text, windows, accessibility, predictable resource ownership, and measured runtime
+behavior. “GPUI parity” here means those reusable framework contracts, not every Zed-specific
+service or every API exposed by AppKit.
+
+Roadmap state has a strict meaning:
+
+- **Implemented** means source, deterministic tests, a public example or guide, and explicit
+  ownership/resource bounds exist in the current working tree.
+- **Live accepted** additionally means the named behavior was exercised in a real native window on
+  every platform claimed by that milestone.
+- **Release-ready** additionally requires the clean candidate, package, toolchain, and publication
+  gates. Passing a unit test or compiling an example is never promoted to native visual proof.
+
+The current judgment is that QuickGUI has the core macOS framework surface and local release
+evidence needed for 0.1. It is not yet an official release, and broad ecosystem parity is not
+claimed. The remaining 0.1 work is a clean GitHub candidate and explicitly authorized delivery,
+not more components, unrelated input devices, or application-owned services. A new API becomes a
+0.1 blocker only when it fixes a release-critical correctness, accessibility, lifecycle,
+performance, or resource-ownership defect.
+Milestones are evidence-gated rather than date-gated:
+
+| Milestone | Product boundary | Exit criteria |
+| --- | --- | --- |
+| 0.1 | macOS-first framework foundation for editor-class applications. | P0.1 through P0.3 below, a clean automated GitHub candidate, reviewed release archives, and explicitly authorized P0.4 registry delivery. |
+| 0.2 | Productive macOS application development above the rendering/runtime foundation. | An unstyled component contract with live-accepted popup menu, select/autocomplete/combobox, dialog, document-window, inspector, table, and tree workflows plus broader assistive-technology coverage. |
+| 0.3 | Credible Windows and Linux runtime parity. | Native visual, IME, accessibility, clipboard, drag/drop, window-role, and performance gates on both platforms; compilation alone does not qualify. |
+| 1.0 | Stable cross-platform contract. | Supported-platform acceptance and resource budgets are green, public API compatibility/deprecation policy is documented, and no known release-blocking lifecycle, text, input, window, or accessibility defects remain. |
+
+The parity lanes are deliberately uneven:
+
+| Lane | Status | Next gap |
+| --- | --- | --- |
+| Retained rendering, layout, text, images, animation, and virtualization | 0.1 surface implemented and current resource gates green | Preserve the CPU, frame-time, memory, cache, and idle budgets as the framework grows. |
+| Focus, keyboard, typed actions, mouse, gestures, selection, forms, drag/drop, and IME | 0.1 surface implemented | Broaden manual real-device, IME, and VoiceOver workflow coverage after 0.1 without blocking the frozen release. |
+| macOS windows, menus, document state, platform services, native views, and accessibility projection | 0.1 source and focused display evidence complete; optional system tabs are deferred | Add mixed-scale and broader VoiceOver/native-child acceptance when the required hardware or workflow is available. |
+| State, globals, entities, foreground work, deterministic tests, visual tests, and inspection | Inspector implementation complete in the working tree | Run its live macOS overlay/native-child smoke while keeping disabled builds and closed inspectors at zero added idle work. |
+| High-level reusable application components and inspector tooling | Unstyled selection-control, tabs, popover, popup-menu, context-menu, standalone select, free-form autocomplete, constrained combobox, dialog, alert-dialog, field, fieldset, collapsible, accordion, picker, sortable virtual-table, and bounded virtual-tree foundations are source-complete. Context menus include bounded delayed hover and a right/left safe pointer corridor over actual child geometry. | Continue live accessibility, IME, pointer, multi-monitor, repeated-open, and large-data acceptance under 0.2, then follow the dependency-ordered [component ledger](component-roadmap.md). |
+| Windows/Linux behavioral parity | Compile-time foundation only | 0.3 native acceptance and platform integration. |
+
+The implemented list above describes current source. It does not make the repository release-ready
+by itself. Version 0.1 readiness is tracked in this order; native probes are rerun when their
+covered subsystem changes, not mechanically after unrelated documentation, packaging, example, or
+component work:
+
+| Priority | Work | Current state | Remaining exit criteria |
+| --- | --- | --- | --- |
+| P0.1 | Desktop mouse dispatch verification | **Complete in the current working tree.** Focused tests cover bounded ordering, stop/prevent independence, payloads, overlay blocking, callback invalidation, disabled nodes, hover, and idle sleep. The passing live WindowServer gate posts native AppKit events and verifies left/right down/up, outside capture, root-to-target capture, target-to-root bubble, independent stop/prevent behavior, exact buffered AppKit click counts, pressed-button drag motion, hover entry/exit, targeted window exit, and zero prevented default clicks. | No implementation or repeat run remains unless mouse dispatch changes. |
+| P0.2 | Window-constraint verification | **Complete in the current working tree.** Initial/runtime minimum size is validated, observable through `WindowState`, mutable through current/target-window set and clear commands, and applied without a correction loop. The passing live gate starts below a larger runtime minimum, verifies one-time growth and exact `NSWindow.contentMinSize`, clears both retained/native state, then resizes below the former minimum while wrapped text and native composition remain stable. Explicit programmatic geometry remains application-authored. | No implementation or repeat run remains unless window constraints, resizing, text layout, or native composition changes. |
+| P0.3 | macOS release-candidate acceptance | **Complete for the 2026-08-27 source candidate.** The current tree passes the full 561-test all-target suite, downstream test-support check, every example and benchmark target, current-stable and Rust 1.89 all-target checks, warning-free all-target Clippy, formatting/script/diff checks, rustdoc, and the five-archive Rust 1.89 downstream-consumer gate. The latest focused current-tree scroll run reached 95.0496 Hz at 9.9708% framework CPU and 14.650% whole-process CPU, with 1.3496 ms p95 frame CPU, 106.906 MiB peak RSS, 154.204 MiB peak footprint, bounded caches/draws, and zero extra idle frames. The current-tree schema-3 display gate passed first-render centering plus settled retained/native identity, 2x scale, native-frame origin, screen/work-area agreement, full native-frame containment, and no focus steal on both connected displays. The last complete full AppKit composition/mouse/popup/lifecycle soak passed before the display-startup correction; that correction is covered by the newer focused two-display gate and did not change those unrelated paths, so the full soak is not repeated. Both connected displays are 2x, so mixed-scale status is explicitly unavailable rather than passed. | No further local gate is required for 0.1 unless covered runtime code changes. Manual VoiceOver component wording, mixed-scale hardware, and broader product workflows continue under the 0.2 acceptance ledger; native system tabs remain out of scope. |
+| P0.4 | Registry delivery | **Prepared in the current working tree.** All five normalized archives compile as a fresh Rust 1.89 downstream crate. CI now verifies tag/version agreement, writes `SHA256SUMS`, and uploads the five archives plus release notes on clean non-PR runs without publishing. | Commit and push the candidate, require the clean GitHub workflow to pass, review its immutable artifact, then—only after explicit authorization—publish the four support crates and `quickgui` in dependency order and verify a fresh `quickgui = "=0.1.0"` project without path or patch dependencies. |
+
+Publication is last, not the next feature. P0.1 through P0.3 are complete; P0.4 waits only for a
+clean GitHub candidate, artifact review, and explicit authorization to change crates.io state.
+
+### 0.2 execution roadmap: macOS parity and developer experience
+
+Version 0.2 starts only after the 0.1 evidence and delivery gates. Work is ordered by reusable
+editor workflow and acceptance risk, not by novelty:
+
+| Priority | Outcome | Current state | Exit criteria |
+| --- | --- | --- | --- |
+| P1.1 | Unstyled component composition contract | **Source-complete in the current working tree.** Caller-owned selection-control, tabs, popover, select, autocomplete, combobox, menu, context-menu, dialog, alert-dialog, field, fieldset, collapsible, accordion, picker, virtual-table, and virtual-tree parts separate behavior from presentation. The old selection-control presets, framework-painted marks, `PopoverStyle`, `PickerStyle`, `TableStyle`, and `TreeStyle` are removed. `PickerLayout`, `TableLayout`, and `TreeLayout` retain only finite virtualization geometry; callers supply input, empty-state, header, cell, row, and disclosure elements plus root, highlight, and interaction-state presentation. | Live-accept the complete parts contract. Add a flip-aware arrow or multi-trigger animated viewport only with exact resolved-placement behavior, never a preferred-side approximation. |
+| P1.2 | Unstyled popup menu and context menu | **Popup-menu and context-menu foundations are implemented in the current working tree.** `PopupMenu` is separate from native `Menu` and supplies bounded action/checkbox/radio/submenu items, exact non-interactive separator roles, mounted visible-label relationships for caller-composed groups, caller-rendered roots/rows, active-descendant keyboard navigation, pointer highlighting, bounded timer-free typeahead, derived submenu anchors, cross-popup typed actions to the non-popup owner, whole-chain command close, and an owner-controlled hover hook. Optional accessibility relationships now cost one nullable pointer on ordinary elements and one fixed allocation only on relationship-bearing controls. `ContextMenuState` adds caller-owned trigger/root/row parts, exact secondary-click point placement on the cross-edge WGPU child host, replacement/native-close synchronization, 150 ms hover intent, a 300 ms actual-child-geometry pointer corridor that works for right and left placement, root-owned grab/monitor semantics across attached native descendants, chain-level AppKit focus dismissal, and nested child ownership without adding closed-state work. Styled examples exercise both anchored-button and cursor-point contracts. The self-driving live gate proves eight repeated native root/submenu command cycles, four owner-press dismissals, four Escape dismissals, 128 paced full native root/submenu resource lifecycles with 1.109 MiB positive RSS growth and zero positive footprint growth after the cycle-32 baseline, and one cooperative application-deactivation dismissal with the submenu open. It requires no accidental command delivery, correct active/inactive owner focus policy, complete child teardown, at most two popup windows, bounded draw/cache state, and zero extra idle frames. | Record live VoiceOver, human-visible popup appearance, multi-monitor/mixed-scale placement, and nested submenu placement. |
+| P1.3 | Standalone select, autocomplete, and combobox | **All three distinct unstyled foundations are implemented in the current working tree.** `SelectState` validates up to 65,536 options, preserves stable selection across atomic replacement, accepts caller-owned trigger/popup/row parts, opens an overflow-capable child, synchronizes every close path, supports preview/commit/cancel, disabled options, bounded timer-free typeahead, validation, active-descendant semantics, and visible-only mounting. `AutocompleteState` accepts caller-owned input/popup/row parts, retains arbitrary bounded text independently of suggestions, supports completion and dismiss-only commits, local fuzzy or externally filtered sources, in-place open source replacement, typed cross-window hover/commit, visible-only 20,000-result behavior, exact close synchronization, and zero added idle scheduling. `ComboboxState` reuses that native host while retaining a declared committed value independently from the bounded edit query, restores its label on Escape/Tab/outside/native closure, rejects unmatched or disabled commits, preserves stable selections across externally filtered absence, and exposes selected state independently from active preview. Both editable panels are permanently never-key, so owner text/IME focus remains authoritative; their visual children are accessibility-hidden while bounded ListBox/option proxies remain in the owner AccessKit tree. The old styled/select-only compatibility implementation is no longer exported or retained. | Live-accept Select, Autocomplete, and Combobox pointer/keyboard/scroll, IME composition, clipboard/undo, VoiceOver proxy wording/order and selected-versus-active state, edge and mixed-scale placement, owner focus loss, async result replacement, repeated-open CPU/memory, and idle behavior. Never serialize arbitrary `T` into forms implicitly. |
+| P1.4 | Dialog and alert-dialog composition | **Source-complete in the current working tree.** `Dialog` and `Dialog::alert` provide caller-owned portal/backdrop/popup/title/description/close parts, stable derived IDs, nested render-ordered focus traps, wrapping Tab and programmatic-focus containment, configurable independent Escape/backdrop dismissal, initial focus and restoration, hidden-inset no-drag regions, overlay-plane native-view occlusion, distinct modal AccessKit roles, mounted label/description relationships, deterministic interaction/accessibility tests, and a styled nested gallery. Closed descriptors and settled open dialogs add no timer, observer, task, or idle source. | Record live pointer-backdrop, Escape, nested focus, VoiceOver wording/order, embedded-native-view occlusion, hidden-inset dragging, and repeated-open CPU/memory acceptance on the release candidate. |
+| P1.5 | Remaining common component families | `Field`/`Fieldset`, `Collapsible`/`Accordion`, and in-window `Tabs` are source-complete in the current working tree. Tabs add controlled manual/automatic activation, horizontal/vertical roving focus, looping/non-looping edges, disabled skipping, exact panel relationships, caller-owned indicators, mounting policy, deterministic interaction/accessibility tests, and zero idle source. Disclosure parts retain their controlled single/multiple open state, current APG Tab/Enter/Space behavior, exact heading/region relationships, default unmounting or retained closed panels, and 4,096-open-value hard bound. The [component ledger](component-roadmap.md) records every remaining Base UI reference component as behavior-present, primitive-only, platform-only, or missing. | Live-accept Field/Fieldset, Collapsible/Accordion, and Tabs VoiceOver wording/order, pointer/keyboard behavior, group/disabled semantics, retained content, and application-styled states. Then add navigation, range, and feedback components only in dependency order and with a concrete product workflow. |
+| P1.6 | Product-driven collection workflows | Unstyled sortable virtual tables and expandable virtual trees are implemented. Multi-selection, column resize/reorder, inline editing, and lazy tree loading are intentionally absent. | First live-accept VoiceOver and large application data. Then implement only workflows backed by an editor/product scenario, with stable ownership, bounded state, visible-only work, deterministic tests, and a live resource gate. |
+| P1.7 | Inspector developer experience | The feature-gated read-only inspector is implemented with deterministic snapshots and zero disabled-build branches. | Pass the live overlay/native-child smoke, then evaluate source metadata and explicit live style editing without placing debug storage in normal elements or release builds. |
+| P1.8 | Broader assistive-technology workflows | Deterministic AccessKit projection covers text, forms, controls, tabs, popups, tables, trees, select, autocomplete proxies, and comboboxes; the complete live workflow matrix is not recorded. | Record VoiceOver scenarios for tabs, menus, popup preview/commit/cancel, dialogs, collection navigation/editing, drag/drop announcements, validation, document windows, and native-child focus while retaining zero polling. |
+
+Every new 0.2 component must identify the application-owned value/source, retained framework state,
+hard CPU/memory bounds, mounted work, invalidation events, accessibility model, deterministic tests,
+live macOS acceptance, and sleeping behavior. A fluent API or gallery alone is not completion.
+
+Known macOS gaps are therefore explicit: optional flip-aware popover arrow/multi-trigger viewport
+parts,
+pending tabs/popup-menu/select/autocomplete/combobox/dialog/field/disclosure live acceptance, arbitrary custom
+form-field serialization, multi-selection/editable collections, and complete live VoiceOver
+coverage. They are tracked here instead of being hidden behind a broad “GPUI parity” claim.
+
+### After 0.1: other desktop platforms
+
+1. Run native runtime, visual, IME, accessibility, clipboard, and performance acceptance on Windows
+   and Linux rather than treating compilation as runtime proof.
+2. Project application menus and platform window roles through native Windows/Linux facilities.
+3. Promote typed drags across QuickGUI windows and native applications on those platforms with the
+   same bounded payload and teardown rules as macOS.
+4. Publish a portable benchmark matrix with equivalent scroll, resize, text, idle, and memory
+   budgets.
+
+### Explicit 0.1 non-blockers
+
+- Keychain/credential storage belongs in an application or focused platform-service crate unless a
+  concrete framework ownership requirement appears.
+- `text_center` and inherited left/center/right/justified text alignment are already implemented
+  across ordinary and styled text; text alignment is part of the 0.1 surface, not deferred work.
+- Stylus/tablet axes are not a GPUI-parity requirement and are not on the macOS 0.1 roadmap.
+  QuickGUI already supports the relevant desktop gestures and Force Touch; specialized drawing
+  hardware can be considered only when a real application requires it.
+- Full Windows/Linux behavioral parity, mobile/touch-first widgets, and a bundled high-level design
+  system do not block the macOS-first release.
+- Native system-tab grouping, navigation, and detaching are optional and deferred; the existing
+  bounded API may remain experimental without blocking 0.1.
+
+See [Releasing QuickGUI 0.1](releasing.md) for the exact commands, package order, and immutable
+publication procedure.
+
+## Why this renderer
+
+Most desktop UI pixels are rectangles, glyphs, icons, images, and modest vector paths. Dedicated data-driven pipelines minimize CPU preparation and draw calls for that workload. QuickGUI uses retained Lyon tessellation plus a narrow WGPU path pipeline instead of making a general compute vector renderer part of every frame; the bounded application-shader path stays opt-in for specialized effects.
+
+The design is informed by the same proven ideas documented by [Zed's GPU UI architecture](https://zed.dev/blog/videogame), while changing the scheduling and ownership choices that matter for low CPU: no permanent redraw loop, frame-boundary input coalescing, retained layout between view changes, and bounded text/list caches. Sublime Text 4 likewise documents GPU compositing as the route to fluid high-DPI UI with lower power use in its [GPU rendering notes](https://www.sublimetext.com/docs/gpu_rendering.html).
+
+See the [architecture index](architecture/README.md) for the ownership and renderer model.

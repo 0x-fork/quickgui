@@ -8,8 +8,8 @@ use std::{
 };
 
 use quickgui::{
-    App, Color, Element, ElementId, Event, EventContext, Key, TitleBarStyle, View, ViewContext,
-    VirtualList, button, div, text,
+    App, Color, Element, ElementId, Event, EventContext, Key, ListState, TitleBarStyle, View,
+    ViewContext, VirtualList, button, div, text,
 };
 use serde::Deserialize;
 
@@ -23,6 +23,7 @@ const API_CONCURRENCY: usize = 8;
 const APP_HEADER_HEIGHT: f32 = 64.0;
 const PANEL_HEADER_HEIGHT: f32 = 62.0;
 const STORY_ROW_HEIGHT: f32 = 94.0;
+const ESTIMATED_COMMENT_ROW_HEIGHT: f32 = 104.0;
 const STORY_PANEL_FRACTION: f32 = 0.43;
 const REFRESH_ID: u64 = 0x2100_0000_0000_0001;
 const COMMENTS_SCROLL_ID: u64 = 0x2100_0000_0000_0002;
@@ -98,6 +99,7 @@ struct HackerNews {
     stories: Vec<Story>,
     comments: Vec<CommentRow>,
     story_list: VirtualList,
+    comment_list: ListState,
     selected_story: Option<usize>,
     split_x: f32,
     comment_generation: Arc<AtomicU64>,
@@ -111,6 +113,7 @@ impl HackerNews {
             stories: Vec::new(),
             comments: Vec::new(),
             story_list: VirtualList::new(0, STORY_ROW_HEIGHT).with_overscan(2),
+            comment_list: ListState::new(0, ESTIMATED_COMMENT_ROW_HEIGHT).with_overscan(3),
             selected_story: None,
             split_x: 0.0,
             comment_generation: Arc::new(AtomicU64::new(0)),
@@ -125,6 +128,7 @@ impl HackerNews {
         self.comments.clear();
         self.story_list.set_len(0);
         self.story_list.scroll_to(0.0);
+        self.comment_list.reset(0);
         self.selected_story = None;
     }
 
@@ -134,6 +138,7 @@ impl HackerNews {
         };
         self.selected_story = Some(index);
         self.comments.clear();
+        self.comment_list.reset(0);
         let generation = self
             .comment_generation
             .fetch_add(1, Ordering::Relaxed)
@@ -217,6 +222,7 @@ impl HackerNews {
                     match result {
                         Ok(FetchResult::Ready(comments)) => {
                             this.comments = comments;
+                            this.comment_list.set_item_count(this.comments.len());
                             this.comment_state = CommentState::Ready { story_id };
                         }
                         Ok(FetchResult::Failed(message)) => {
@@ -437,6 +443,9 @@ impl View for HackerNews {
         self.split_x = size.width * STORY_PANEL_FRACTION;
         let viewport_height = (size.height - APP_HEADER_HEIGHT - PANEL_HEADER_HEIGHT).max(0.0);
         self.story_list.set_viewport_height(viewport_height);
+        let comment_viewport_width = (size.width - self.split_x - 1.0).max(0.0);
+        self.comment_list
+            .set_viewport_size(comment_viewport_width, viewport_height);
 
         let story_rows = self
             .story_list
@@ -444,9 +453,10 @@ impl View for HackerNews {
             .range
             .map(|index| self.story_row(index))
             .collect::<Vec<_>>();
-        let comment_rows = (0..self.comments.len())
-            .map(|index| self.comment_row(index))
-            .collect::<Vec<_>>();
+        let visible_comments = self.comment_list.visible_rows();
+        let comment_rows = self
+            .comment_list
+            .render_rows(visible_comments.range, |index| self.comment_row(index));
 
         let selected_title = self
             .selected_story
@@ -562,9 +572,9 @@ impl View for HackerNews {
                                     .flex_1()
                                     .min_h(0.0)
                                     .w_full()
-                                    .flex_col()
-                                    .overflow_y_scroll()
-                                    .children(comment_rows)
+                                    .overflow_hidden()
+                                    .variable_virtual_scroll(&self.comment_list)
+                                    .child(comment_rows)
                                     .when(self.comments.is_empty(), |element| {
                                         element.child(
                                             div()

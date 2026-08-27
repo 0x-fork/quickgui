@@ -35,11 +35,11 @@ use objc2_app_kit::{
     NSDraggingContext, NSDraggingFormation, NSDraggingInfo, NSDraggingItem, NSDraggingSession,
     NSDraggingSource, NSEvent, NSEventMask, NSEventType, NSFilenamesPboardType,
     NSFloatingWindowLevel, NSImage, NSModalResponse, NSModalResponseCancel, NSModalResponseOK,
-    NSNormalWindowLevel, NSOpenPanel, NSPasteboard, NSPasteboardType, NSPasteboardTypeString,
-    NSPasteboardTypeURL, NSPasteboardWriting, NSPopUpMenuWindowLevel, NSResponder, NSSavePanel,
-    NSTitlePosition, NSView, NSViewLayerContentsRedrawPolicy, NSWindow, NSWindowAnimationBehavior,
-    NSWindowButton, NSWindowCollectionBehavior, NSWindowOrderingMode, NSWindowStyleMask,
-    NSWorkspace,
+    NSNormalWindowLevel, NSOpenPanel, NSPanel, NSPasteboard, NSPasteboardType,
+    NSPasteboardTypeString, NSPasteboardTypeURL, NSPasteboardWriting, NSPopUpMenuWindowLevel,
+    NSResponder, NSSavePanel, NSScreen, NSTitlePosition, NSView, NSViewLayerContentsRedrawPolicy,
+    NSWindow, NSWindowAnimationBehavior, NSWindowButton, NSWindowCollectionBehavior,
+    NSWindowOrderingMode, NSWindowStyleMask, NSWindowTabGroup, NSWindowTabbingMode, NSWorkspace,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSCopying, NSObject, NSPoint, NSRange, NSRect, NSSize, NSString,
@@ -47,13 +47,16 @@ use objc2_foundation::{
 };
 use winit::{
     event_loop::EventLoopProxy,
+    platform::macos::WindowExtMacOS,
     raw_window_handle::{HasWindowHandle, RawWindowHandle},
     window::Window,
 };
 
 use crate::{
     ElementId, ExternalDragOperation, ExternalDragPayload, ExternalDragText, ExternalDragUrl,
-    MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_URL_BYTES, Point, WindowHandle, WindowKind,
+    MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_URL_BYTES, MAX_GRABBING_POPUPS,
+    MAX_SYSTEM_WINDOW_TABS, Point, PopupOptions, Rect, Size, WindowHandle, WindowKind,
+    WindowTabState,
     native_view::NativeViewPlacement,
     platform::{
         MAX_PLATFORM_PATH_BYTES, MAX_SELECTED_PATHS, MAX_SELECTED_PATHS_TOTAL_BYTES,
@@ -1087,6 +1090,179 @@ impl Drop for MacExternalDragMonitor {
     }
 }
 
+struct PopupWatch {
+    handle: WindowHandle,
+    window: Retained<NSWindow>,
+}
+
+#[derive(Default)]
+struct PopupMonitorState {
+    watches: Vec<PopupWatch>,
+    dismiss_pending: bool,
+}
+
+impl PopupMonitorState {
+    fn request_top_dismiss(&mut self, event_window: Option<&NSWindow>) -> Option<WindowHandle> {
+        let watch = self.watches.last()?;
+        let inside =
+            event_window.is_some_and(|window| popup_window_contains(&watch.window, window));
+        if inside || self.dismiss_pending {
+            return None;
+        }
+        self.dismiss_pending = true;
+        Some(watch.handle)
+    }
+}
+
+fn popup_window_contains(root: &NSWindow, candidate: &NSWindow) -> bool {
+    if std::ptr::eq(root, candidate) {
+        return true;
+    }
+    let mut parent = unsafe { candidate.parentWindow() };
+    for _ in 0..MAX_GRABBING_POPUPS {
+        let Some(window) = parent else {
+            return false;
+        };
+        if std::ptr::eq(root, window.as_ref()) {
+            return true;
+        }
+        parent = unsafe { window.parentWindow() };
+    }
+    false
+}
+
+/// Return whether AppKit's key window is this window or one of its attached descendants.
+pub(crate) fn window_contains_key_window(window: &Arc<Window>) -> Result<bool, String> {
+    let root = appkit_window(window)?;
+    let mtm = MainThreadMarker::new().ok_or_else(|| {
+        "key-window ancestry must be queried on the AppKit main thread".to_owned()
+    })?;
+    Ok(NSApplication::sharedApplication(mtm)
+        .keyWindow()
+        .is_some_and(|key| popup_window_contains(&root, &key)))
+}
+
+/// One lazy pair of AppKit event monitors services every nested grabbing popup.
+///
+/// The monitors are absent while no popup owns a grab, so this path adds no idle mouse-event work
+/// to ordinary windows. Entries are bounded and the topmost popup alone owns dismissal semantics.
+pub(crate) struct MacPopupMonitor {
+    proxy: EventLoopProxy<RuntimeEvent>,
+    state: Rc<RefCell<PopupMonitorState>>,
+    local_monitor: Option<Retained<AnyObject>>,
+    global_monitor: Option<Retained<AnyObject>>,
+}
+
+impl MacPopupMonitor {
+    pub(crate) fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Self {
+        Self {
+            proxy,
+            state: Rc::new(RefCell::new(PopupMonitorState::default())),
+            local_monitor: None,
+            global_monitor: None,
+        }
+    }
+
+    fn install(&mut self) -> Result<(), String> {
+        if self.local_monitor.is_some() {
+            return Ok(());
+        }
+        MainThreadMarker::new().ok_or_else(|| {
+            "popup event monitoring must be installed on the AppKit main thread".to_owned()
+        })?;
+        let mask =
+            NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown | NSEventMask::OtherMouseDown;
+
+        let local_state = Rc::clone(&self.state);
+        let local_proxy = self.proxy.clone();
+        let local_block = RcBlock::new(move |event: NonNull<NSEvent>| {
+            let event_window =
+                MainThreadMarker::new().and_then(|mtm| unsafe { event.as_ref().window(mtm) });
+            let dismiss = local_state
+                .borrow_mut()
+                .request_top_dismiss(event_window.as_deref());
+            if let Some(handle) = dismiss {
+                let _ = local_proxy.send_event(RuntimeEvent::PopupDismissRequested(handle));
+            }
+            event.as_ptr()
+        });
+        self.local_monitor = Some(
+            unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(mask, &local_block) }
+                .ok_or_else(|| "could not install the AppKit popup event monitor".to_owned())?,
+        );
+
+        let global_state = Rc::clone(&self.state);
+        let global_proxy = self.proxy.clone();
+        let global_block = RcBlock::new(move |_event: NonNull<NSEvent>| {
+            let dismiss = global_state.borrow_mut().request_top_dismiss(None);
+            if let Some(handle) = dismiss {
+                let _ = global_proxy.send_event(RuntimeEvent::PopupDismissRequested(handle));
+            }
+        });
+        self.global_monitor =
+            unsafe { NSEvent::addGlobalMonitorForEventsMatchingMask_handler(mask, &global_block) };
+        Ok(())
+    }
+
+    fn uninstall(&mut self) {
+        if let Some(monitor) = self.local_monitor.take() {
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
+        if let Some(monitor) = self.global_monitor.take() {
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
+    }
+
+    pub(crate) fn watch(
+        &mut self,
+        handle: WindowHandle,
+        window: &Arc<Window>,
+    ) -> Result<(), String> {
+        let window = appkit_window(window)?;
+        {
+            let mut state = self.state.borrow_mut();
+            state.watches.retain(|watch| watch.handle != handle);
+            if state.watches.len() == MAX_GRABBING_POPUPS {
+                return Err(format!(
+                    "an application cannot retain more than {MAX_GRABBING_POPUPS} grabbing popups"
+                ));
+            }
+            state.watches.push(PopupWatch { handle, window });
+            state.dismiss_pending = false;
+        }
+        if let Err(error) = self.install() {
+            self.state
+                .borrow_mut()
+                .watches
+                .retain(|watch| watch.handle != handle);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn unwatch(&mut self, handle: WindowHandle) {
+        let empty = {
+            let mut state = self.state.borrow_mut();
+            let previous_top = state.watches.last().map(|watch| watch.handle);
+            state.watches.retain(|watch| watch.handle != handle);
+            let top = state.watches.last().map(|watch| watch.handle);
+            if top != previous_top {
+                state.dismiss_pending = false;
+            }
+            state.watches.is_empty()
+        };
+        if empty {
+            self.uninstall();
+        }
+    }
+}
+
+impl Drop for MacPopupMonitor {
+    fn drop(&mut self) {
+        self.uninstall();
+    }
+}
+
 /// Capture the native event synchronously while Winit delivers its matching button press.
 pub(crate) fn capture_left_mouse_down() -> Option<MacMouseDownEvent> {
     let mtm = MainThreadMarker::new()?;
@@ -1342,6 +1518,148 @@ fn appkit_window(window: &Arc<Window>) -> Result<Retained<NSWindow>, String> {
         .ok_or_else(|| "the AppKit content view pointer is null".to_owned())?;
     view.window()
         .ok_or_else(|| "the AppKit content view is not attached to a window".to_owned())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MacWindowTabAction {
+    SelectNext,
+    SelectPrevious,
+    Select(usize),
+    MergeAll,
+    MoveToNewWindow,
+    ToggleBar,
+    ToggleOverview,
+}
+
+/// Configure document-window state before the first hidden surface frame is presented.
+pub(crate) fn configure_document_window(
+    window: &Arc<Window>,
+    represented_file: Option<&Path>,
+    document_edited: bool,
+    tabbing_identifier: Option<&str>,
+) -> Result<(), String> {
+    let native = appkit_window(window)?;
+    if represented_file.is_some() {
+        set_native_represented_file(&native, represented_file)?;
+    }
+    if document_edited {
+        native.setDocumentEdited(true);
+    }
+    set_native_tabbing_identifier(&native, tabbing_identifier);
+    Ok(())
+}
+
+pub(crate) fn set_window_represented_file(
+    window: &Arc<Window>,
+    represented_file: Option<&Path>,
+) -> Result<(), String> {
+    let native = appkit_window(window)?;
+    set_native_represented_file(&native, represented_file)
+}
+
+fn set_native_represented_file(
+    window: &NSWindow,
+    represented_file: Option<&Path>,
+) -> Result<(), String> {
+    let url = represented_file
+        .map(|path| native_file_url(path, false))
+        .transpose()?;
+    unsafe {
+        window.setRepresentedURL(url.as_deref());
+    }
+    Ok(())
+}
+
+pub(crate) fn set_window_document_edited(window: &Arc<Window>, edited: bool) -> Result<(), String> {
+    appkit_window(window)?.setDocumentEdited(edited);
+    Ok(())
+}
+
+pub(crate) fn show_character_palette(window: &Arc<Window>) -> Result<(), String> {
+    let mtm = MainThreadMarker::new().ok_or_else(|| {
+        "the character palette must be presented on the AppKit main thread".to_owned()
+    })?;
+    let native = appkit_window(window)?;
+    NSApplication::sharedApplication(mtm).orderFrontCharacterPalette(Some(native.as_ref()));
+    Ok(())
+}
+
+pub(crate) fn set_window_tabbing_identifier(
+    window: &Arc<Window>,
+    identifier: Option<&str>,
+) -> Result<(), String> {
+    let native = appkit_window(window)?;
+    set_native_tabbing_identifier(&native, identifier);
+    Ok(())
+}
+
+fn set_native_tabbing_identifier(window: &NSWindow, identifier: Option<&str>) {
+    match identifier {
+        Some(identifier) => {
+            window.setTabbingMode(NSWindowTabbingMode::Preferred);
+            window.setTabbingIdentifier(&NSString::from_str(identifier));
+        }
+        None => {
+            window.setTabbingMode(NSWindowTabbingMode::Disallowed);
+            window.setTabbingIdentifier(&NSString::from_str(""));
+        }
+    }
+}
+
+pub(crate) fn perform_window_tab_action(
+    window: &Arc<Window>,
+    action: MacWindowTabAction,
+) -> Result<(), String> {
+    let native = appkit_window(window)?;
+    match action {
+        MacWindowTabAction::SelectNext => native.selectNextTab(None),
+        MacWindowTabAction::SelectPrevious => unsafe { native.selectPreviousTab(None) },
+        MacWindowTabAction::Select(index) => {
+            if let Some(group) = native.tabGroup() {
+                let windows = group.windows();
+                if index < windows.count() {
+                    let selected = unsafe { windows.objectAtIndex(index) };
+                    group.setSelectedWindow(Some(&selected));
+                }
+            }
+        }
+        MacWindowTabAction::MergeAll => unsafe { native.mergeAllWindows(None) },
+        MacWindowTabAction::MoveToNewWindow => unsafe { native.moveTabToNewWindow(None) },
+        MacWindowTabAction::ToggleBar => unsafe { native.toggleTabBar(None) },
+        MacWindowTabAction::ToggleOverview => unsafe { native.toggleTabOverview(None) },
+    }
+    Ok(())
+}
+
+pub(crate) fn window_tab_state(window: &Arc<Window>) -> Result<WindowTabState, String> {
+    let native = appkit_window(window)?;
+    let Some(group) = native.tabGroup() else {
+        return Ok(WindowTabState::default());
+    };
+    bounded_window_tab_state(&group)
+}
+
+fn bounded_window_tab_state(group: &NSWindowTabGroup) -> Result<WindowTabState, String> {
+    let windows = group.windows();
+    let total = windows.count();
+    if total == 0 {
+        return Ok(WindowTabState::default());
+    }
+    let count = total.min(MAX_SYSTEM_WINDOW_TABS);
+    let selected = unsafe { group.selectedWindow() };
+    let selected_index = selected.as_ref().and_then(|selected| {
+        (0..count).find(|index| {
+            let candidate = unsafe { windows.objectAtIndex(*index) };
+            Retained::as_ptr(&candidate) == Retained::as_ptr(selected)
+        })
+    });
+    Ok(WindowTabState {
+        count,
+        selected_index,
+        tab_bar_visible: unsafe { group.isTabBarVisible() },
+        overview_visible: unsafe { group.isOverviewVisible() },
+        truncated: total > count,
+    })
 }
 
 fn deepest_appkit_sheet(window: &Arc<Window>) -> Result<Retained<NSWindow>, String> {
@@ -1652,13 +1970,128 @@ pub(crate) fn perform_window_close(window: &Arc<Window>) -> Result<(), String> {
     Ok(())
 }
 
+fn top_left_screen_rect(rect: NSRect, main_screen_height: f32) -> Rect {
+    Rect::new(
+        rect.origin.x as f32,
+        main_screen_height - (rect.origin.y + rect.size.height) as f32,
+        rect.size.width as f32,
+        rect.size.height as f32,
+    )
+}
+
+fn appkit_main_screen_height(
+    mtm: MainThreadMarker,
+) -> Result<(Retained<NSArray<NSScreen>>, f32), String> {
+    let screens = NSScreen::screens(mtm);
+    let primary = screens
+        .iter()
+        .find(|screen| {
+            let origin = screen.frame().origin;
+            origin.x == 0.0 && origin.y == 0.0
+        })
+        .or_else(|| screens.iter().next())
+        .ok_or_else(|| "AppKit reported no screens".to_owned())?;
+    Ok((screens.clone(), primary.frame().size.height as f32))
+}
+
+/// Resolve and apply parent-relative popup geometry while both native windows remain hidden.
+pub(crate) fn position_anchored_popup(
+    window: &Arc<Window>,
+    parent: &Arc<Window>,
+    options: &PopupOptions,
+) -> Result<Rect, String> {
+    let mtm = MainThreadMarker::new()
+        .ok_or_else(|| "popup placement must be resolved on the AppKit main thread".to_owned())?;
+    let child = appkit_window(window)?;
+    let parent = appkit_window(parent)?;
+    let (screens, main_screen_height) = appkit_main_screen_height(mtm)?;
+
+    let parent_content = parent.contentRectForFrameRect(parent.frame());
+    let parent_content = top_left_screen_rect(parent_content, main_screen_height);
+    let anchor_rect = Rect::new(
+        parent_content.x + options.anchor_rect.x,
+        parent_content.y + options.anchor_rect.y,
+        options.anchor_rect.width,
+        options.anchor_rect.height,
+    );
+    let anchor_center = Point::new(
+        anchor_rect.x + anchor_rect.width * 0.5,
+        anchor_rect.y + anchor_rect.height * 0.5,
+    );
+    let screen = screens
+        .iter()
+        .find(|screen| {
+            top_left_screen_rect(screen.frame(), main_screen_height).contains(anchor_center)
+        })
+        .map(|screen| screen.retain())
+        .or_else(|| parent.screen())
+        .or_else(|| NSScreen::mainScreen(mtm))
+        .ok_or_else(|| "AppKit could not resolve the popup's target screen".to_owned())?;
+    let visible = top_left_screen_rect(screen.visibleFrame(), main_screen_height);
+    if visible.is_empty() {
+        return Err("AppKit reported an empty popup work area".to_owned());
+    }
+
+    let child_content = child.contentRectForFrameRect(child.frame());
+    let size = Size::new(
+        child_content.size.width as f32,
+        child_content.size.height as f32,
+    );
+    let resolved = crate::popup::place_popup(anchor_rect, size, visible, options);
+    let content_frame = NSRect::new(
+        NSPoint::new(
+            resolved.x as f64,
+            (main_screen_height - resolved.bottom()) as f64,
+        ),
+        NSSize::new(resolved.width as f64, resolved.height as f64),
+    );
+    let frame = unsafe { child.frameRectForContentRect(content_frame) };
+    child.setFrame_display(frame, false);
+    Ok(resolved)
+}
+
+/// Order a native window without accidentally making a `focus(false)` window key.
+pub(crate) fn set_window_visibility(
+    window: &Arc<Window>,
+    visible: bool,
+    focus: bool,
+) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    if visible {
+        if focus {
+            window.makeKeyAndOrderFront(None);
+        } else {
+            window.orderFront(None);
+        }
+    } else {
+        window.orderOut(None);
+    }
+    Ok(())
+}
+
 /// Apply native z-level, space, and animation semantics for one GPUI-shaped window role.
-pub(crate) fn configure_window_kind(window: &Arc<Window>, kind: WindowKind) -> Result<(), String> {
+pub(crate) fn configure_window_kind(
+    window: &Arc<Window>,
+    kind: WindowKind,
+    focus: bool,
+    accepts_key_focus: bool,
+) -> Result<(), String> {
+    if matches!(kind, WindowKind::PopUp | WindowKind::AnchoredPopup)
+        && !window.set_panel_can_become_key_window(accepts_key_focus)
+    {
+        return Err("a popup panel did not expose key-window policy".to_owned());
+    }
     let window = appkit_window(window)?;
     match kind {
         WindowKind::Normal | WindowKind::Dialog => window.setLevel(NSNormalWindowLevel),
         WindowKind::Floating => window.setLevel(NSFloatingWindowLevel),
-        WindowKind::PopUp => unsafe {
+        WindowKind::PopUp | WindowKind::AnchoredPopup => unsafe {
+            if !window.isKindOfClass(NSPanel::class()) {
+                return Err("a popup was not allocated as an AppKit NSPanel".to_owned());
+            }
+            let panel: Retained<NSPanel> = Retained::cast(window.clone());
+            panel.setFloatingPanel(true);
+            panel.setBecomesKeyOnlyIfNeeded(!focus);
             window.setLevel(NSPopUpMenuWindowLevel);
             window.setHidesOnDeactivate(true);
             window.setAnimationBehavior(NSWindowAnimationBehavior::UtilityWindow);
@@ -1678,13 +2111,27 @@ pub(crate) fn present_window_relation(
     parent: Option<&Arc<Window>>,
     kind: WindowKind,
 ) -> Result<bool, String> {
-    if kind != WindowKind::Dialog {
-        return Ok(false);
-    }
     let Some(parent) = parent else {
         return Ok(false);
     };
     let child = appkit_window(window)?;
+    if kind == WindowKind::AnchoredPopup {
+        let parent = appkit_window(parent)?;
+        if let Some(previous) = unsafe { child.parentWindow() }
+            && Retained::as_ptr(&previous) != Retained::as_ptr(&parent)
+        {
+            unsafe { previous.removeChildWindow(&child) };
+        }
+        if unsafe { child.parentWindow() }.is_none() {
+            unsafe {
+                parent.addChildWindow_ordered(&child, NSWindowOrderingMode::NSWindowAbove);
+            }
+        }
+        return Ok(true);
+    }
+    if kind != WindowKind::Dialog {
+        return Ok(false);
+    }
     let mut parent = appkit_window(parent)?;
     while let Some(sheet) = unsafe { parent.attachedSheet() } {
         parent = sheet;
@@ -1700,10 +2147,16 @@ pub(crate) fn dismiss_window_relation(
     window: &Arc<Window>,
     kind: WindowKind,
 ) -> Result<(), String> {
+    let child = appkit_window(window)?;
+    if kind == WindowKind::AnchoredPopup {
+        if let Some(parent) = unsafe { child.parentWindow() } {
+            unsafe { parent.removeChildWindow(&child) };
+        }
+        return Ok(());
+    }
     if kind != WindowKind::Dialog {
         return Ok(());
     }
-    let child = appkit_window(window)?;
     if let Some(parent) = unsafe { child.sheetParent() } {
         unsafe {
             parent.endSheet(&child);
@@ -2478,6 +2931,7 @@ impl MacNativeHost {
             );
             unsafe {
                 hosted.clip_view.setFrame(clip_frame);
+                hosted.clip_view.setAlphaValue(f64::from(placement.opacity));
                 hosted.rounded_view.setFrame(content_frame);
                 hosted
                     .content

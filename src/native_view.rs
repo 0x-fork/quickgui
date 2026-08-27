@@ -54,6 +54,7 @@ pub(crate) struct NativeViewPlacement {
     pub bounds: Rect,
     pub clip: Rect,
     pub corner_radius: f32,
+    pub opacity: f32,
     pub z_index: i16,
     pub source_order: usize,
 }

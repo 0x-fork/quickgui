@@ -19,7 +19,7 @@ struct VertexInput {
     @location(1) uv: vec4<f32>,
     @location(2) clip: vec4<f32>,
     @location(3) mask: vec4<f32>,
-    @location(4) radius_and_grayscale: vec2<f32>,
+    @location(4) radius_grayscale_opacity_padding: vec4<f32>,
 }
 
 struct VertexOutput {
@@ -28,7 +28,7 @@ struct VertexOutput {
     @location(1) logical_position: vec2<f32>,
     @location(2) @interpolate(flat) clip: vec4<f32>,
     @location(3) @interpolate(flat) mask: vec4<f32>,
-    @location(4) @interpolate(flat) radius_and_grayscale: vec2<f32>,
+    @location(4) @interpolate(flat) radius_grayscale_opacity_padding: vec4<f32>,
 }
 
 @vertex
@@ -55,7 +55,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.logical_position = logical_position;
     output.clip = input.clip;
     output.mask = input.mask;
-    output.radius_and_grayscale = input.radius_and_grayscale;
+    output.radius_grayscale_opacity_padding = input.radius_grayscale_opacity_padding;
     return output;
 }
 
@@ -80,7 +80,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let mask_position = input.logical_position - input.mask.xy;
-    let distance = rounded_rect_distance(mask_position, input.mask.zw, input.radius_and_grayscale.x);
+    let distance = rounded_rect_distance(
+        mask_position,
+        input.mask.zw,
+        input.radius_grayscale_opacity_padding.x,
+    );
     let antialias = max(fwidth(distance), 0.001);
     let coverage = clamp(0.5 - distance / antialias, 0.0, 1.0);
     if coverage <= 0.0 {
@@ -92,7 +96,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let color = mix(
         sampled.rgb,
         vec3<f32>(luminance),
-        clamp(input.radius_and_grayscale.y, 0.0, 1.0),
+        clamp(input.radius_grayscale_opacity_padding.y, 0.0, 1.0),
     );
-    return vec4<f32>(color * sampled.a, sampled.a) * coverage;
+    let opacity = clamp(input.radius_grayscale_opacity_padding.z, 0.0, 1.0);
+    return vec4<f32>(color * sampled.a, sampled.a) * coverage * opacity;
 }

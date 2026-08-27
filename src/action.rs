@@ -5,7 +5,20 @@ use std::{
     rc::Rc,
 };
 
-use crate::ElementId;
+use crate::{DispatchPhase, ElementId};
+
+/// Maximum typed action listeners attached to one retained element.
+pub const MAX_ACTION_LISTENERS_PER_ELEMENT: usize = 32;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ActionListenerKey(pub(crate) u32);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ActionListenerBinding {
+    pub(crate) key: ActionListenerKey,
+    pub(crate) action_type: TypeId,
+    pub(crate) phase: DispatchPhase,
+}
 
 /// A typed command that can be bound independently from the element that handles it.
 ///
@@ -76,14 +89,35 @@ impl PartialEq for AnyAction {
 }
 
 /// An opaque typed binding returned by [`crate::ViewContext::action_listener`].
+///
+/// Attach it with [`crate::Element::on_action`] for focus-to-root bubble dispatch or
+/// [`crate::Element::capture_action`] for root-to-focus capture dispatch.
 pub struct ActionListener<V, A> {
     pub(crate) id: ElementId,
+    pub(crate) key: ActionListenerKey,
+    pub(crate) action_type: TypeId,
     pub(crate) marker: PhantomData<fn(&mut V, &A)>,
 }
 
 impl<V, A> ActionListener<V, A> {
     pub(crate) fn id(&self) -> ElementId {
         self.id
+    }
+
+    pub(crate) fn key(&self) -> ActionListenerKey {
+        self.key
+    }
+
+    pub(crate) fn action_type(&self) -> TypeId {
+        self.action_type
+    }
+}
+
+impl<V, A> Copy for ActionListener<V, A> {}
+
+impl<V, A> Clone for ActionListener<V, A> {
+    fn clone(&self) -> Self {
+        *self
     }
 }
 

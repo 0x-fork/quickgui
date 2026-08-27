@@ -1,0 +1,102 @@
+# Context menus
+
+[Documentation index](README.md) · [Popovers and popup menus](popovers.md) · [Component roadmap](component-roadmap.md)
+
+QuickGUI separates the context-menu trigger, retained menu model, native popup host, and visual
+presentation:
+
+- `ContextMenuState` is application-owned and retains only the current direct child handle;
+- `PopupMenu` owns the validated items, keyboard navigation, typeahead, toggles, and submenus;
+- `ContextMenuLayout` owns structural popup and row measurements, never appearance;
+- the application supplies the target, popup root, and every rendered row;
+- the root menu opens at the exact secondary-click point in a separate WGPU child surface, so it
+  may extend beyond the owner window while native work-area constraints flip and slide it;
+- typed item actions are delivered to the nearest non-popup owner before the popup chain closes.
+
+Bind `popup_menu_key_bindings()` once on the application, retain one state value, then attach the
+behavior to any caller-owned element:
+
+```rust
+struct EditorView {
+    context_menu: ContextMenuState,
+}
+
+impl EditorView {
+    fn context_menu(view: &mut Self) -> &mut ContextMenuState {
+        &mut view.context_menu
+    }
+}
+
+let target = self.context_menu.element(
+    cx,
+    "editor-surface",
+    Self::context_menu,
+    div().size_full(),
+    ContextMenuLayout::new(224.0, 36.0)
+        .separator_height(9.0)
+        .group_label_height(22.0)
+        .vertical_padding(4.0),
+    |_view, _event| Some(application_menu()),
+    || div().p_1(),
+    render_menu_item,
+);
+```
+
+`target_part` can apply only the `has-popup` and expanded semantics when an application needs to
+compose the low-level `on_context_menu` listener itself. Neither API changes colors, borders,
+typography, cursor policy, focusability, drag regions, or ordinary click behavior.
+
+## Lifecycle and resource ownership
+
+Opening replaces any prior root surface. Exact direct-child close notification clears stale state
+after Escape, an outside press, command activation, programmatic close, or native teardown. A late
+close from an older replacement cannot clear the newer handle. Submenus are parented to the menu
+level that opened them and close child-first with the root. The root alone owns the menu-style
+grab and outside-click monitor. Attached submenu panels do not add monitors; AppKit focus moving
+between levels remains inside the chain, while focus leaving the complete chain dismisses its
+root.
+
+Closed state owns no window, renderer, timer, task, observer, event monitor, or scheduler source.
+An open root owns one child surface; each open submenu owns one additional child surface, bounded
+by `MAX_POPUP_MENU_DEPTH`. Pointer hover owns at most one cancellable exact deadline per open menu
+level while submenu intent is pending. Replacing the hovered row, leaving before open, entering the
+existing child, closing the child, or tearing down the popup cancels that deadline. A settled menu
+has no deadline, animation frame, or polling source. Menu item count, nesting, label bytes,
+aggregate text, and typeahead are bounded by the `PopupMenu` constants. Typeahead expiration is
+checked on the next key and schedules no timer.
+
+Large searchable datasets belong in a virtualized select, autocomplete, or command palette rather
+than a thousands-of-rows context menu. `ContextMenuLayout` clamps native dimensions to the window
+limits, while ordinary menu rows remain finite under the popup-menu model bounds.
+
+## Submenu pointer behavior
+
+Hovering a submenu row highlights it immediately and opens it after the exact
+`CONTEXT_MENU_SUBMENU_HOVER_DELAY` deadline. Right Arrow and click remain immediate. Once a child is
+open, QuickGUI receives its actual post-constraint desktop rectangle and protects a diagonal safe
+corridor from the parent pointer to the child's near edge. Crossing sibling rows inside that
+corridor defers replacement for at most `CONTEXT_MENU_SUBMENU_AIM_DELAY`; entering the child cancels
+the replacement. The near edge is derived from actual placement, so the same behavior applies when
+work-area fitting flips a submenu to the left.
+
+This coordination uses one root motion listener and row hover transitions, not one motion listener
+or timer per row. `PopupMenu::element_with_submenus_and_hover` exposes the appearance-free hover
+hook for another native host; `ContextMenuState` supplies the native menu-aim policy by default.
+
+Keyboard/click/hover submenu opening, nested native focus transfer, descendant-aware outside
+clicks, nested command dispatch, point placement, close synchronization, accessibility item roles,
+and edge constraints are implemented. The self-driving macOS gate now exercises eight submenu
+command closes, four owner-press dismissals, and four native Escape dismissals with a submenu open,
+requiring exact focus recovery, no accidental command, complete child teardown, and zero extra idle
+frames. A final cooperative application-deactivation cycle requires both popup windows to close
+while the owner remains non-key and unfocused. The resource phase additionally completes 128 real
+root-plus-submenu command lifecycles at a reported 50 ms inter-cycle cadence. Sampling after cycles
+32 and 128 on the current reference run showed 1.109 MiB positive RSS growth and no positive
+physical-footprint growth, below the enforced 16 MiB and 24 MiB budgets, with no more than two live
+popup windows and zero extra idle frames. These direct responder interactions are intentionally
+too short-lived for visual inspection. Remaining acceptance work is live VoiceOver confirmation
+of the implemented group/separator roles and relationships, focus announcements, and multi-monitor
+mixed-scale and nested-submenu placement.
+
+See [`tooltips_context_menu.rs`](../examples/tooltips_context_menu.rs) for a styled application-owned
+root and row renderer. The styling is gallery code, not framework API.

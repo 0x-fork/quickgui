@@ -44,6 +44,15 @@ impl Color {
         }
     }
 
+    pub(crate) fn multiply_alpha(self, opacity: f32) -> Self {
+        let opacity = if opacity.is_finite() {
+            opacity.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        self.with_alpha(self.a * opacity)
+    }
+
     pub(crate) fn as_array(self) -> [f32; 4] {
         [self.r, self.g, self.b, self.a]
     }

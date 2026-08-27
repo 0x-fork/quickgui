@@ -1,9 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use quickgui::{
-    App, Color, Drag, DragOrigin, DroppedFiles, DroppedText, DroppedUrl, Element, Event,
-    EventContext, ExternalDragOperation, ExternalDragPayload, ExternalDragText, ExternalDragUrl,
-    FileDragPaths, View, ViewContext, div, text,
+    Animation, AnimationExt as _, AnimationPhase, App, Color, Drag, DragOrigin, DroppedFiles,
+    DroppedText, DroppedUrl, Element, Event, EventContext, ExternalDragOperation,
+    ExternalDragPayload, ExternalDragText, ExternalDragUrl, FileDragPaths, View, ViewContext, div,
+    ease_out_quint, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
@@ -74,8 +75,6 @@ impl DragDropDemo {
 
     fn preview(label: Arc<str>, color: Color) -> Element {
         div()
-            .w(190.0)
-            .h(72.0)
             .flex_row()
             .items_center()
             .justify_center()
@@ -84,6 +83,17 @@ impl DragDropDemo {
             .bg(Color::rgba8(27, 31, 39, 235))
             .shadow_lg()
             .child(text(label).font_semibold().text_color(color))
+            .with_animation(
+                "drag-preview-entrance",
+                Animation::new(Duration::from_millis(120)).with_easing(ease_out_quint()),
+                |element, value| {
+                    let phase = AnimationPhase(value);
+                    element
+                        .w(phase.interpolate_clamped(166.0, 190.0))
+                        .h(phase.interpolate_clamped(62.0, 72.0))
+                        .rounded(phase.interpolate_clamped(6.0, 12.0))
+                },
+            )
     }
 }
 

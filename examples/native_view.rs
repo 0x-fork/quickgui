@@ -174,7 +174,10 @@ mod app {
                         .id("native-text-field")
                         .w_full()
                         .h(44.0)
-                        .rounded_lg(),
+                        .rounded_lg()
+                        .opacity(0.96)
+                        .hover(|style| style.opacity(1.0))
+                        .transition(std::time::Duration::from_millis(120)),
                 )
             } else {
                 root.child(

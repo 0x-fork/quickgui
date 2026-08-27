@@ -21,7 +21,11 @@ use objc2::{
     runtime::{AnyClass, AnyObject, Bool, NSObjectProtocol, ProtocolObject, Sel},
     sel,
 };
-use objc2_app_kit::{NSApplication, NSWorkspace, NSWorkspaceDidWakeNotification};
+use objc2_app_kit::{
+    NSApplication, NSApplicationDidBecomeActiveNotification,
+    NSApplicationDidChangeScreenParametersNotification, NSWorkspace,
+    NSWorkspaceDidWakeNotification,
+};
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSBundle, NSError, NSNotification, NSNotificationCenter, NSObject,
     NSSet, NSString, NSURL, NSUTF8StringEncoding,
@@ -241,36 +245,50 @@ impl Drop for MacApplicationDelegateHost {
     }
 }
 
-struct WorkspaceObserverIvars {
+struct ApplicationObserverIvars {
     proxy: EventLoopProxy<RuntimeEvent>,
 }
 
 declare_class!(
-    struct QuickGuiWorkspaceObserver;
+    struct QuickGuiApplicationObserver;
 
-    unsafe impl ClassType for QuickGuiWorkspaceObserver {
+    unsafe impl ClassType for QuickGuiApplicationObserver {
         type Super = NSObject;
         type Mutability = InteriorMutable;
-        const NAME: &'static str = "QuickGuiWorkspaceObserver";
+        const NAME: &'static str = "QuickGuiApplicationObserver";
     }
 
-    impl DeclaredClass for QuickGuiWorkspaceObserver {
-        type Ivars = WorkspaceObserverIvars;
+    impl DeclaredClass for QuickGuiApplicationObserver {
+        type Ivars = ApplicationObserverIvars;
     }
 
-    unsafe impl NSObjectProtocol for QuickGuiWorkspaceObserver {}
+    unsafe impl NSObjectProtocol for QuickGuiApplicationObserver {}
 
-    unsafe impl QuickGuiWorkspaceObserver {
+    unsafe impl QuickGuiApplicationObserver {
         #[method(quickGuiSystemDidWake:)]
         fn system_did_wake(&self, _notification: &NSNotification) {
             let _ = self.ivars().proxy.send_event(RuntimeEvent::SystemWake);
         }
+
+        #[method(quickGuiDisplaysDidChange:)]
+        fn displays_did_change(&self, _notification: &NSNotification) {
+            let _ = self.ivars().proxy.send_event(RuntimeEvent::DisplaysChanged);
+        }
+
+        #[method(quickGuiKeyboardLayoutDidChange:)]
+        fn keyboard_layout_did_change(&self, _notification: &NSNotification) {
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::KeyboardLayoutChanged);
+        }
+
     }
 );
 
-impl QuickGuiWorkspaceObserver {
+impl QuickGuiApplicationObserver {
     fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Retained<Self> {
-        let allocated = Self::alloc().set_ivars(WorkspaceObserverIvars { proxy });
+        let allocated = Self::alloc().set_ivars(ApplicationObserverIvars { proxy });
         unsafe { msg_send_id![super(allocated), init] }
     }
 }
@@ -569,8 +587,9 @@ impl Drop for MacSystemNotificationCenter {
 /// Owns AppKit application callbacks and lazily initialized UserNotifications state.
 pub(crate) struct MacApplicationHost {
     application_delegate: Option<MacApplicationDelegateHost>,
+    application_notifications: Retained<NSNotificationCenter>,
+    application_observer: Retained<QuickGuiApplicationObserver>,
     workspace_notifications: Option<Retained<NSNotificationCenter>>,
-    workspace_observer: Option<Retained<QuickGuiWorkspaceObserver>>,
     notifications_initialized: bool,
     notifications: Option<MacSystemNotificationCenter>,
     proxy: EventLoopProxy<RuntimeEvent>,
@@ -598,26 +617,56 @@ impl MacApplicationHost {
             })
             .transpose()?;
 
-        let (workspace_notifications, workspace_observer) = if observe_system_wake {
-            let observer = QuickGuiWorkspaceObserver::new(proxy.clone());
+        let application_observer = QuickGuiApplicationObserver::new(proxy.clone());
+        let application_notifications = unsafe { NSNotificationCenter::defaultCenter() };
+        unsafe {
+            application_notifications.addObserver_selector_name_object(
+                application_observer.as_ref(),
+                sel!(quickGuiDisplaysDidChange:),
+                Some(NSApplicationDidChangeScreenParametersNotification),
+                None,
+            );
+            // A regular command-line app receives its Dock presence only after AppKit finishes
+            // launching. A left or right Dock can change `NSScreen.visibleFrame` at that point
+            // without emitting a screen-parameters notification. Refreshing at activation keeps
+            // the immutable work-area snapshot authoritative, while equality suppression makes
+            // every unchanged activation free of view invalidation or redraw work.
+            application_notifications.addObserver_selector_name_object(
+                application_observer.as_ref(),
+                sel!(quickGuiDisplaysDidChange:),
+                Some(NSApplicationDidBecomeActiveNotification),
+                None,
+            );
+            let keyboard_layout_notification =
+                NSString::from_str("NSTextInputContextKeyboardSelectionDidChangeNotification");
+            application_notifications.addObserver_selector_name_object(
+                application_observer.as_ref(),
+                sel!(quickGuiKeyboardLayoutDidChange:),
+                Some(&keyboard_layout_notification),
+                None,
+            );
+        }
+
+        let workspace_notifications = if observe_system_wake {
             unsafe {
                 let center = NSWorkspace::sharedWorkspace().notificationCenter();
                 center.addObserver_selector_name_object(
-                    observer.as_ref(),
+                    application_observer.as_ref(),
                     sel!(quickGuiSystemDidWake:),
                     Some(NSWorkspaceDidWakeNotification),
                     None,
                 );
-                (Some(center), Some(observer))
+                Some(center)
             }
         } else {
-            (None, None)
+            None
         };
 
         let mut host = Self {
             application_delegate,
+            application_notifications,
+            application_observer,
             workspace_notifications,
-            workspace_observer,
             notifications_initialized: false,
             notifications: None,
             proxy,
@@ -663,12 +712,13 @@ impl MacApplicationHost {
 
 impl Drop for MacApplicationHost {
     fn drop(&mut self) {
-        if let (Some(center), Some(observer)) = (
-            self.workspace_notifications.take(),
-            self.workspace_observer.take(),
-        ) {
+        unsafe {
+            self.application_notifications
+                .removeObserver(self.application_observer.as_ref());
+        }
+        if let Some(center) = self.workspace_notifications.take() {
             unsafe {
-                center.removeObserver(observer.as_ref());
+                center.removeObserver(self.application_observer.as_ref());
             }
         }
         drop(self.application_delegate.take());

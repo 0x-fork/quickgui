@@ -212,16 +212,38 @@ impl ImageAssetCache {
     }
 
     pub(crate) fn resolve_tree(&mut self, root: &mut Element) {
-        self.frame = self.frame.wrapping_add(1).max(1);
-        self.resolve_element(root, 0);
-        self.remove_inactive_deferred();
+        self.begin_resolve_tree(root);
         for _ in 0..MAX_REPLACEMENT_DEPTH {
-            if !self.pump_deferred() {
+            if !self.finish_resolve_frame() {
                 break;
             }
             self.resolve_element(root, 0);
-            self.remove_inactive_deferred();
         }
+    }
+
+    /// Begin one declaration-wide cache frame without pruning resources that may be produced by
+    /// size-dependent callbacks later in the same declaration.
+    pub(crate) fn begin_resolve_tree(&mut self, root: &mut Element) {
+        self.frame = self.frame.wrapping_add(1).max(1);
+        self.resolve_element(root, 0);
+    }
+
+    /// Finish the current declaration after every container-query callback has visited its image
+    /// resources. Returns whether an active worker failure changed a resource to its fallback
+    /// state and therefore needs one correcting declaration.
+    pub(crate) fn finish_resolve_frame(&mut self) -> bool {
+        self.remove_inactive_deferred();
+        self.pump_deferred()
+    }
+
+    /// Resolve a subtree materialized after the surrounding cache frame has already begun.
+    ///
+    /// Container-query callbacks run only after their box has a layout size. Reusing the current
+    /// frame here keeps their resources active without advancing LRU time once per nested query.
+    /// Queue pumping is deliberately deferred until every sibling callback has run; otherwise an
+    /// older deferred sibling could be skipped before it is marked active in the new frame.
+    pub(crate) fn resolve_subtree(&mut self, root: &mut Element) {
+        self.resolve_element(root, 0);
     }
 
     pub(crate) fn complete(&mut self, completion: ImageLoadCompletion) -> bool {
@@ -338,6 +360,12 @@ impl ImageAssetCache {
     }
 
     fn resolve_element(&mut self, element: &mut Element, replacement_depth: usize) {
+        // `display: none` is a semantic subtree boundary, not only a paint optimization. Hidden
+        // resources must not start workers, consume cache residency, or keep loading deadlines
+        // alive until the application declares the subtree visible again.
+        if element.is_display_none() {
+            return;
+        }
         let mut replacement = None;
         let mut is_image = false;
         if let ElementKind::Image(image) = &mut element.kind {

@@ -2,7 +2,7 @@ use std::{
     any::{Any, TypeId},
     cell::{Ref, RefMut},
     future::Future,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -10,8 +10,10 @@ use bitflags::bitflags;
 use thiserror::Error;
 
 use crate::{
-    Action, AnyAction, ElementId, Entity, EntityId, EventEmitter, FocusHandle, Global, Menu, Point,
-    Size, Vector, View, WindowHandle, WindowOptions,
+    Action, AnyAction, Assets, Display, DisplayId, Displays, ElementId, Entity, EntityId,
+    EventEmitter, FocusHandle, Global, KeyboardLayout, Menu, Point, Size, Vector, View,
+    WindowHandle, WindowOptions,
+    clipboard::{ClipboardError, ClipboardItem, ClipboardService, ClipboardTarget},
     entity::{EntityEvent, MAX_ENTITY_EVENTS_PER_CALLBACK, MAX_ENTITY_NOTIFICATIONS_PER_EVENT},
     foreground::{AsyncViewContext, ForegroundTaskSpawnError, ForegroundTaskSpawner, Task},
     global::{GlobalStore, MAX_GLOBAL_NOTIFICATIONS_PER_EVENT},
@@ -20,10 +22,17 @@ use crate::{
         PromptButton, PromptLevel, SavePathOptions, SavePathResponse, SystemNotification,
     },
     runtime::{
-        WindowCommand, WindowCommandError, WindowRequest, validate_window_bounds,
-        validate_window_position, validate_window_size, validate_window_title,
+        MAX_SYSTEM_WINDOW_TABS, WindowAppearance, WindowBackgroundAppearance, WindowCommand,
+        WindowCommandError, WindowRequest, validate_window_bounds, validate_window_document_path,
+        validate_window_position, validate_window_size, validate_window_tabbing_identifier,
+        validate_window_title,
     },
 };
+
+/// Maximum actions one callback may target at another retained window.
+pub const MAX_TARGETED_ACTIONS_PER_EVENT: usize = 256;
+/// Maximum cross-window actions retained across one application effect cycle.
+pub const MAX_PENDING_TARGETED_ACTIONS: usize = 1_024;
 
 /// Framework-level input and window events, expressed in logical pixels.
 #[derive(Clone, Debug, PartialEq)]
@@ -43,13 +52,27 @@ pub enum Event {
     Dismiss(crate::ElementId),
     /// A coalesced scroll delta. Multiple platform wheel events may become one event.
     Scroll(Vector),
+    /// Force-sensitive pointer pressure targeted at the current logical pointer position.
+    MousePressure(MousePressureEvent),
+    /// A native pinch-to-zoom gesture.
+    Pinch(PinchEvent),
+    /// A native two-finger rotation gesture.
+    Rotation(RotationEvent),
+    /// A native smart-magnify gesture, normally a two-finger double tap on macOS.
+    SmartMagnify(SmartMagnifyEvent),
+    /// One raw platform touch contact, including direct and indirect touch surfaces.
+    Touch(TouchEvent),
     KeyDown {
+        /// Normalized command identity, independent from Caps Lock and text composition.
         key: Key,
+        /// Normalized printable character this press could produce before IME composition.
+        key_char: Option<Key>,
         modifiers: Modifiers,
         repeat: bool,
     },
     KeyUp {
         key: Key,
+        key_char: Option<Key>,
         modifiers: Modifiers,
     },
     /// Committed text from the platform input method.
@@ -59,6 +82,8 @@ pub enum Event {
     FocusChanged(Option<ElementId>),
     /// The native window itself gained or lost focus.
     Focused(bool),
+    /// The effective native light/dark appearance changed while following the system.
+    AppearanceChanged(WindowAppearance),
     /// The native window moved in logical desktop coordinates.
     Moved {
         logical_position: Point,
@@ -559,14 +584,91 @@ pub struct DropEvent {
     pub origin: DragOrigin,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum MouseButton {
+    #[default]
     Left,
     Right,
     Middle,
     Back,
     Forward,
     Other(u16),
+}
+
+/// One of the two ordered stages used for targeted desktop mouse dispatch.
+///
+/// Capture listeners run from the root toward the hit-tested target. Bubble listeners then run
+/// from that target back toward the root. Stopping propagation ends the remainder of both stages
+/// without changing the framework's default focus, selection, drag, or click behavior.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum DispatchPhase {
+    #[default]
+    Bubble,
+    Capture,
+}
+
+impl DispatchPhase {
+    pub const fn bubble(self) -> bool {
+        matches!(self, Self::Bubble)
+    }
+
+    pub const fn capture(self) -> bool {
+        matches!(self, Self::Capture)
+    }
+}
+
+/// A desktop mouse-button press targeted through the retained element tree.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MouseDownEvent {
+    pub button: MouseButton,
+    pub position: Point,
+    pub modifiers: Modifiers,
+    /// Native multi-click count. The first press is `1`.
+    pub click_count: usize,
+    /// Whether this press activated an otherwise unfocused native window.
+    pub first_mouse: bool,
+}
+
+impl MouseDownEvent {
+    pub const fn is_focusing(self) -> bool {
+        matches!(self.button, MouseButton::Left)
+    }
+}
+
+/// A desktop mouse-button release targeted through the retained element tree.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MouseUpEvent {
+    pub button: MouseButton,
+    pub position: Point,
+    pub modifiers: Modifiers,
+    /// Count shared with the matching [`MouseDownEvent`].
+    pub click_count: usize,
+}
+
+/// Mouse motion targeted through the retained element tree.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MouseMoveEvent {
+    pub position: Point,
+    pub pressed_button: Option<MouseButton>,
+    pub modifiers: Modifiers,
+}
+
+impl MouseMoveEvent {
+    pub const fn dragging(self) -> bool {
+        self.pressed_button.is_some()
+    }
+
+    pub fn dragging_button(self, button: MouseButton) -> bool {
+        matches!(self.pressed_button, Some(pressed) if pressed == button)
+    }
+}
+
+/// Mouse motion delivered when the pointer leaves the native window.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MouseExitEvent {
+    pub position: Point,
+    pub pressed_button: Option<MouseButton>,
+    pub modifiers: Modifiers,
 }
 
 /// The stage of a captured pointer interaction.
@@ -593,6 +695,219 @@ pub struct PointerEvent {
     /// Motion since the preceding captured event.
     pub delta: Vector,
     pub button: MouseButton,
+    pub modifiers: Modifiers,
+}
+
+/// Maximum absolute platform pixel delta retained from one scroll-wheel event.
+///
+/// Real trackpad deltas are many orders of magnitude smaller. The bound keeps malformed native
+/// input finite before application zoom or pan arithmetic sees it.
+pub const MAX_SCROLL_PIXELS_PER_EVENT: f32 = 1_048_576.0;
+
+/// Maximum absolute platform line delta retained from one scroll-wheel event.
+pub const MAX_SCROLL_LINES_PER_EVENT: f32 = 4_096.0;
+
+/// Native scroll-wheel movement before conversion into an application-selected line height.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ScrollDelta {
+    /// Exact logical-pixel movement from a trackpad or precise wheel.
+    Pixels(Vector),
+    /// Device line units from a discrete wheel.
+    Lines(Vector),
+}
+
+impl Default for ScrollDelta {
+    fn default() -> Self {
+        Self::Lines(Vector::ZERO)
+    }
+}
+
+impl ScrollDelta {
+    /// Whether this delta came from a precise pixel-scrolling device.
+    pub fn precise(&self) -> bool {
+        matches!(self, Self::Pixels(_))
+    }
+
+    /// Convert this delta to finite logical pixels using `line_height` for discrete wheels.
+    pub fn pixel_delta(&self, line_height: f32) -> Vector {
+        match *self {
+            Self::Pixels(delta) => bounded_scroll_vector(delta, MAX_SCROLL_PIXELS_PER_EVENT),
+            Self::Lines(delta) => {
+                let line_height = if line_height.is_finite() {
+                    line_height.clamp(0.0, MAX_SCROLL_PIXELS_PER_EVENT)
+                } else {
+                    0.0
+                };
+                bounded_scroll_vector(
+                    Vector::new(delta.x * line_height, delta.y * line_height),
+                    MAX_SCROLL_PIXELS_PER_EVENT,
+                )
+            }
+        }
+    }
+
+    pub(crate) fn bounded(self) -> Self {
+        match self {
+            Self::Pixels(delta) => {
+                Self::Pixels(bounded_scroll_vector(delta, MAX_SCROLL_PIXELS_PER_EVENT))
+            }
+            Self::Lines(delta) => {
+                Self::Lines(bounded_scroll_vector(delta, MAX_SCROLL_LINES_PER_EVENT))
+            }
+        }
+    }
+}
+
+/// A scroll-wheel event delivered through the topmost element's ancestor path.
+///
+/// Call [`EventContext::prevent_default`] to suppress retained scrolling and
+/// [`EventContext::stop_propagation`] to keep the event from reaching a listening ancestor.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ScrollWheelEvent {
+    pub position: Point,
+    pub delta: ScrollDelta,
+    pub phase: GesturePhase,
+    pub modifiers: Modifiers,
+}
+
+impl ScrollWheelEvent {
+    pub(crate) fn bounded(mut self) -> Self {
+        self.delta = self.delta.bounded();
+        self
+    }
+}
+
+fn bounded_scroll_vector(delta: Vector, limit: f32) -> Vector {
+    let component = |value: f32| {
+        if value.is_finite() {
+            value.clamp(-limit, limit)
+        } else {
+            0.0
+        }
+    };
+    Vector::new(component(delta.x), component(delta.y))
+}
+
+/// Maximum absolute magnification retained from one native pinch event.
+///
+/// Native deltas are normally small fractions. Bounding malformed platform input keeps
+/// application zoom arithmetic finite without changing ordinary gestures.
+pub const MAX_PINCH_DELTA_PER_EVENT: f32 = 8.0;
+
+/// Maximum absolute rotation retained from one native gesture event, in degrees.
+pub const MAX_ROTATION_DEGREES_PER_EVENT: f32 = 360.0;
+
+/// The lifecycle phase of a native continuous gesture.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum GesturePhase {
+    Started,
+    #[default]
+    Moved,
+    Ended,
+    Cancelled,
+}
+
+/// Maximum simultaneously captured touch contacts retained by one window.
+pub const MAX_ACTIVE_TOUCHES_PER_WINDOW: usize = 32;
+
+/// Maximum absolute logical coordinate accepted from a native touch sample.
+pub const MAX_TOUCH_COORDINATE: f32 = 16_777_216.0;
+
+/// Opaque identity for one touch from start through end or cancellation.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct TouchId(pub u64);
+
+/// The lifecycle phase of one raw touch contact.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum TouchPhase {
+    Started,
+    #[default]
+    Moved,
+    Ended,
+    Cancelled,
+}
+
+/// One fixed-size raw touch sample in logical top-left window coordinates.
+///
+/// QuickGUI hit-tests a contact only at [`TouchPhase::Started`] and captures the nearest listening
+/// element for the rest of that contact. This is distinct from mouse pointer capture and supports
+/// multiple simultaneous touch IDs.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TouchEvent {
+    pub id: TouchId,
+    pub phase: TouchPhase,
+    pub position: Point,
+    /// Normalized pressure in `0.0..=1.0` when reported by the platform.
+    pub force: Option<f32>,
+}
+
+impl TouchEvent {
+    pub(crate) fn bounded(mut self) -> Self {
+        let coordinate = |value: f32| {
+            if value.is_finite() {
+                value.clamp(-MAX_TOUCH_COORDINATE, MAX_TOUCH_COORDINATE)
+            } else {
+                0.0
+            }
+        };
+        self.position = Point::new(coordinate(self.position.x), coordinate(self.position.y));
+        self.force = self.force.map(|force| {
+            if force.is_finite() {
+                force.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        });
+        self
+    }
+}
+
+/// The click level reported by a force-sensitive pointing device.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum PressureStage {
+    #[default]
+    Zero,
+    Normal,
+    Force,
+    /// A future platform stage that QuickGUI does not assign a semantic name yet.
+    Other(i64),
+}
+
+/// Force-sensitive pointer input, currently produced by macOS Force Touch trackpads.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MousePressureEvent {
+    /// Logical top-left window coordinate of the pressure event.
+    pub position: Point,
+    /// Pressure within the current stage, normalized to `0.0..=1.0`.
+    pub pressure: f32,
+    pub stage: PressureStage,
+    pub modifiers: Modifiers,
+}
+
+/// A native pinch-to-zoom event targeted at the pointer's logical window position.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PinchEvent {
+    pub position: Point,
+    /// Positive values magnify and negative values shrink. `0.1` represents a 10% increment.
+    pub delta: f32,
+    pub phase: GesturePhase,
+    pub modifiers: Modifiers,
+}
+
+/// A native two-finger rotation event.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct RotationEvent {
+    pub position: Point,
+    /// Incremental rotation in degrees. Positive values rotate counterclockwise.
+    pub delta: f32,
+    pub phase: GesturePhase,
+    pub modifiers: Modifiers,
+}
+
+/// A native smart-magnify request, normally a two-finger double tap on macOS.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SmartMagnifyEvent {
+    pub position: Point,
     pub modifiers: Modifiers,
 }
 
@@ -626,6 +941,28 @@ pub enum Key {
     Other,
 }
 
+/// One normalized key press delivered through the focused element path.
+///
+/// Key listeners run after keymap actions have had a chance to consume the keystroke and before
+/// QuickGUI applies text-editing, focus-traversal, activation, or dismissal defaults.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeyDownEvent {
+    pub key: Key,
+    /// Printable character the physical press could produce before IME composition.
+    pub key_char: Option<Key>,
+    pub modifiers: Modifiers,
+    pub repeat: bool,
+}
+
+/// One normalized key release delivered through the focused element path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeyUpEvent {
+    pub key: Key,
+    /// Printable character the physical key could produce before IME composition.
+    pub key_char: Option<Key>,
+    pub modifiers: Modifiers,
+}
+
 bitflags! {
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct Modifiers: u8 {
@@ -641,13 +978,24 @@ bitflags! {
 pub struct EventContext {
     pub(crate) globals: GlobalStore,
     pub(crate) foreground_tasks: Option<ForegroundTaskSpawner>,
+    pub(crate) clipboard: Option<ClipboardService>,
+    pub(crate) displays: Displays,
+    pub(crate) keyboard_layout: KeyboardLayout,
+    pub(crate) assets: Assets,
     pub(crate) window: Option<WindowHandle>,
+    pub(crate) parent_window: Option<WindowHandle>,
+    pub(crate) popup_owner_window: Option<WindowHandle>,
+    pub(crate) popup_root_window: Option<WindowHandle>,
+    pub(crate) pointer_position: Option<Point>,
     pub(crate) invalidate: bool,
     pub(crate) exit: bool,
     pub(crate) focus: Option<Option<ElementId>>,
     pub(crate) actions: Vec<AnyAction>,
+    pub(crate) targeted_actions: Vec<(WindowHandle, AnyAction)>,
     pub(crate) menus: Option<Vec<Menu>>,
     pub(crate) propagate_action: bool,
+    pub(crate) stop_event_propagation: bool,
+    pub(crate) prevent_default: bool,
     pub(crate) open_windows: Vec<WindowRequest>,
     pub(crate) close_current_window: bool,
     pub(crate) close_windows: Vec<WindowHandle>,
@@ -664,18 +1012,128 @@ pub struct EventContext {
     pub(crate) notify_all_globals: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct EventWindowContext {
+    pub(crate) window: Option<WindowHandle>,
+    pub(crate) parent: Option<WindowHandle>,
+    pub(crate) popup_owner: Option<WindowHandle>,
+    pub(crate) popup_root: Option<WindowHandle>,
+    pub(crate) pointer_position: Option<Point>,
+}
+
 impl EventContext {
     pub(crate) fn with_runtime(
         globals: GlobalStore,
         foreground_tasks: ForegroundTaskSpawner,
-        window: Option<WindowHandle>,
+        clipboard: ClipboardService,
+        displays: Displays,
+        keyboard_layout: KeyboardLayout,
+        assets: Assets,
+        window_context: EventWindowContext,
     ) -> Self {
         Self {
             globals,
             foreground_tasks: Some(foreground_tasks),
-            window,
-            ..Self::default()
+            clipboard: Some(clipboard),
+            displays,
+            keyboard_layout,
+            assets,
+            window: window_context.window,
+            parent_window: window_context.parent,
+            popup_owner_window: window_context.popup_owner,
+            popup_root_window: window_context.popup_root,
+            pointer_position: window_context.pointer_position,
+            invalidate: false,
+            exit: false,
+            focus: None,
+            actions: Vec::new(),
+            targeted_actions: Vec::new(),
+            menus: None,
+            propagate_action: false,
+            stop_event_propagation: false,
+            prevent_default: false,
+            open_windows: Vec::new(),
+            close_current_window: false,
+            close_windows: Vec::new(),
+            focus_windows: Vec::new(),
+            invalidate_windows: Vec::new(),
+            window_commands: Vec::new(),
+            platform_requests: Vec::new(),
+            prevent_close: false,
+            form_submissions: Vec::new(),
+            entity_notifications: Vec::new(),
+            notify_all_entities: false,
+            entity_events: Vec::new(),
+            global_notifications: Vec::new(),
+            notify_all_globals: false,
         }
+    }
+
+    /// Read the latest bounded display snapshot without polling the operating system.
+    pub fn displays(&self) -> &[Display] {
+        self.displays.all()
+    }
+
+    pub fn primary_display(&self) -> Option<&Display> {
+        self.displays.primary()
+    }
+
+    pub fn find_display(&self, id: DisplayId) -> Option<&Display> {
+        self.displays.find(id)
+    }
+
+    /// Read the latest immutable keyboard-layout snapshot without querying the platform.
+    pub fn keyboard_layout(&self) -> &KeyboardLayout {
+        &self.keyboard_layout
+    }
+
+    /// Access the application's immutable asset source.
+    pub fn assets(&self) -> &Assets {
+        &self.assets
+    }
+
+    /// GPUI-shaped alias for [`Self::assets`].
+    pub fn asset_source(&self) -> &Assets {
+        self.assets()
+    }
+
+    /// Read a bounded item from the operating system's general clipboard.
+    ///
+    /// The operation is synchronous and belongs on QuickGUI's application thread. macOS checks
+    /// native NSData lengths before copying text or encoded image bytes into Rust-owned storage.
+    pub fn read_from_clipboard(&self) -> Result<Option<ClipboardItem>, ClipboardError> {
+        self.clipboard
+            .as_ref()
+            .ok_or(ClipboardError::Unavailable)?
+            .read(ClipboardTarget::General)
+    }
+
+    /// Replace the operating system's general clipboard with one validated item.
+    ///
+    /// Writing [`ClipboardItem::default`] clears the clipboard.
+    pub fn write_to_clipboard(&self, item: ClipboardItem) -> Result<(), ClipboardError> {
+        self.clipboard
+            .as_ref()
+            .ok_or(ClipboardError::Unavailable)?
+            .write(ClipboardTarget::General, item)
+    }
+
+    /// Read macOS's shared Find pasteboard without polling it.
+    #[cfg(target_os = "macos")]
+    pub fn read_from_find_pasteboard(&self) -> Result<Option<ClipboardItem>, ClipboardError> {
+        self.clipboard
+            .as_ref()
+            .ok_or(ClipboardError::Unavailable)?
+            .read(ClipboardTarget::Find)
+    }
+
+    /// Replace macOS's shared Find pasteboard. An empty item clears it.
+    #[cfg(target_os = "macos")]
+    pub fn write_to_find_pasteboard(&self, item: ClipboardItem) -> Result<(), ClipboardError> {
+        self.clipboard
+            .as_ref()
+            .ok_or(ClipboardError::Unavailable)?
+            .write(ClipboardTarget::Find, item)
     }
 
     /// Run a non-blocking future for the current window on the application thread.
@@ -801,6 +1259,9 @@ impl EventContext {
     }
 
     /// Ask the application event loop to exit cleanly.
+    ///
+    /// Every owned native window is torn down child-first, foreground work is cancelled, and the
+    /// application-level window-closed callback runs before the event loop terminates.
     pub fn exit(&mut self) {
         self.exit = true;
     }
@@ -815,8 +1276,42 @@ impl EventContext {
         handle
     }
 
+    /// Open a parent-owned native popup anchored to the latest retained bounds of an element.
+    ///
+    /// Unlike an in-window overlay, this popup owns a separate native window and WGPU surface, so
+    /// it may extend beyond the parent window while the platform constrains it to the display work
+    /// area. The anchor is resolved after the listener returns and before any invalidated rebuild;
+    /// no geometry observer, polling task, or hard-coded duplicate rectangle is required.
+    pub fn open_anchored_popup<V: View>(
+        &mut self,
+        anchor: impl Into<ElementId>,
+        view: V,
+        options: WindowOptions,
+    ) -> Result<WindowHandle, WindowCommandError> {
+        if self.window.is_none() {
+            return Err(WindowCommandError::Unavailable);
+        }
+        if options.kind != crate::WindowKind::AnchoredPopup || options.popup.is_none() {
+            return Err(WindowCommandError::InvalidPopupConfiguration);
+        }
+        let mut request = WindowRequest::with_parent(view, options, self.window);
+        request.popup_anchor_element = Some(anchor.into());
+        let handle = request.handle;
+        self.open_windows.push(request);
+        Ok(handle)
+    }
+
     pub fn window_handle(&self) -> Option<WindowHandle> {
         self.window
+    }
+
+    /// Latest logical pointer position in the current native window, when the pointer is inside.
+    ///
+    /// The value is captured from the input event being delivered and never polls the platform.
+    /// It is therefore safe to use from hover callbacks, whose compact payload contains only the
+    /// entered/exited state.
+    pub const fn pointer_position(&self) -> Option<Point> {
+        self.pointer_position
     }
 
     fn current_window_handle(&self) -> Result<WindowHandle, WindowCommandError> {
@@ -995,6 +1490,206 @@ impl EventContext {
         self.push_window_command(WindowCommand::SetTitle(handle, title))
     }
 
+    /// Represent a file in the current window's native document chrome.
+    pub fn set_represented_file(
+        &mut self,
+        path: impl Into<PathBuf>,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_represented_file_handle(handle, path)
+    }
+
+    /// Represent a file in a target window's native document chrome.
+    pub fn set_represented_file_handle(
+        &mut self,
+        handle: WindowHandle,
+        path: impl Into<PathBuf>,
+    ) -> Result<(), WindowCommandError> {
+        let path = path.into();
+        validate_window_document_path(&path)?;
+        self.push_window_command(WindowCommand::SetRepresentedFile(handle, Some(path)))
+    }
+
+    /// GPUI-compatible alias for [`Self::set_represented_file`].
+    pub fn set_document_path(&mut self, path: impl AsRef<Path>) -> Result<(), WindowCommandError> {
+        self.set_represented_file(path.as_ref().to_path_buf())
+    }
+
+    /// GPUI-compatible target-window alias for [`Self::set_represented_file_handle`].
+    pub fn set_document_path_handle(
+        &mut self,
+        handle: WindowHandle,
+        path: impl AsRef<Path>,
+    ) -> Result<(), WindowCommandError> {
+        self.set_represented_file_handle(handle, path.as_ref().to_path_buf())
+    }
+
+    pub fn clear_represented_file(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.clear_represented_file_handle(handle)
+    }
+
+    pub fn clear_represented_file_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetRepresentedFile(handle, None))
+    }
+
+    /// Set the current window's native unsaved-document indication.
+    pub fn set_window_edited(&mut self, edited: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_edited_handle(handle, edited)
+    }
+
+    pub fn set_window_edited_handle(
+        &mut self,
+        handle: WindowHandle,
+        edited: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetDocumentEdited(handle, edited))
+    }
+
+    /// Alias for [`Self::set_window_edited`].
+    pub fn set_document_edited(&mut self, edited: bool) -> Result<(), WindowCommandError> {
+        self.set_window_edited(edited)
+    }
+
+    /// Present AppKit's character palette for the current window.
+    pub fn show_character_palette(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.show_character_palette_handle(handle)
+    }
+
+    pub fn show_character_palette_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::ShowCharacterPalette(handle))
+    }
+
+    /// Opt the current window into native system tabbing.
+    pub fn set_tabbing_identifier(
+        &mut self,
+        identifier: impl Into<String>,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_tabbing_identifier_handle(handle, identifier)
+    }
+
+    pub fn set_tabbing_identifier_handle(
+        &mut self,
+        handle: WindowHandle,
+        identifier: impl Into<String>,
+    ) -> Result<(), WindowCommandError> {
+        let identifier = identifier.into();
+        validate_window_tabbing_identifier(&identifier)?;
+        self.push_window_command(WindowCommand::SetTabbingIdentifier(
+            handle,
+            Some(identifier),
+        ))
+    }
+
+    pub fn clear_tabbing_identifier(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.clear_tabbing_identifier_handle(handle)
+    }
+
+    pub fn clear_tabbing_identifier_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetTabbingIdentifier(handle, None))
+    }
+
+    pub fn select_next_tab(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.select_next_tab_handle(handle)
+    }
+
+    pub fn select_next_tab_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SelectNextTab(handle))
+    }
+
+    pub fn select_previous_tab(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.select_previous_tab_handle(handle)
+    }
+
+    pub fn select_previous_tab_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SelectPreviousTab(handle))
+    }
+
+    pub fn select_tab(&mut self, index: usize) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.select_tab_handle(handle, index)
+    }
+
+    pub fn select_tab_handle(
+        &mut self,
+        handle: WindowHandle,
+        index: usize,
+    ) -> Result<(), WindowCommandError> {
+        if index >= MAX_SYSTEM_WINDOW_TABS {
+            return Err(WindowCommandError::InvalidTabIndex);
+        }
+        self.push_window_command(WindowCommand::SelectTab(handle, index))
+    }
+
+    pub fn merge_all_windows(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.merge_all_windows_handle(handle)
+    }
+
+    pub fn merge_all_windows_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::MergeAllWindows(handle))
+    }
+
+    pub fn move_tab_to_new_window(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.move_tab_to_new_window_handle(handle)
+    }
+
+    pub fn move_tab_to_new_window_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::MoveTabToNewWindow(handle))
+    }
+
+    pub fn toggle_tab_bar(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.toggle_tab_bar_handle(handle)
+    }
+
+    pub fn toggle_tab_bar_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::ToggleTabBar(handle))
+    }
+
+    pub fn toggle_tab_overview(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.toggle_tab_overview_handle(handle)
+    }
+
+    pub fn toggle_tab_overview_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::ToggleTabOverview(handle))
+    }
+
     pub fn set_window_bounds(
         &mut self,
         bounds: crate::WindowBounds,
@@ -1142,6 +1837,36 @@ impl EventContext {
         self.push_window_command(WindowCommand::SetResizable(handle, resizable))
     }
 
+    /// Set the current window's minimum logical inner size.
+    pub fn set_window_minimum_size(&mut self, size: Size) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_minimum_size_handle(handle, size)
+    }
+
+    /// Set a target window's minimum logical inner size.
+    pub fn set_window_minimum_size_handle(
+        &mut self,
+        handle: WindowHandle,
+        size: Size,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_size(size)?;
+        self.push_window_command(WindowCommand::SetMinimumSize(handle, Some(size)))
+    }
+
+    /// Remove the current window's minimum-size constraint.
+    pub fn clear_window_minimum_size(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.clear_window_minimum_size_handle(handle)
+    }
+
+    /// Remove a target window's minimum-size constraint.
+    pub fn clear_window_minimum_size_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetMinimumSize(handle, None))
+    }
+
     pub fn set_window_minimizable(&mut self, minimizable: bool) -> Result<(), WindowCommandError> {
         let handle = self.current_window_handle()?;
         self.set_window_minimizable_handle(handle, minimizable)
@@ -1153,6 +1878,89 @@ impl EventContext {
         minimizable: bool,
     ) -> Result<(), WindowCommandError> {
         self.push_window_command(WindowCommand::SetMinimizable(handle, minimizable))
+    }
+
+    /// Force the current window's native chrome to one light/dark appearance.
+    pub fn set_window_appearance(
+        &mut self,
+        appearance: WindowAppearance,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_appearance_handle(handle, appearance)
+    }
+
+    /// Force a target window's native chrome to one light/dark appearance.
+    pub fn set_window_appearance_handle(
+        &mut self,
+        handle: WindowHandle,
+        appearance: WindowAppearance,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetAppearance(handle, Some(appearance)))
+    }
+
+    /// Return the current window to the operating system's effective appearance.
+    pub fn follow_system_window_appearance(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.follow_system_window_appearance_handle(handle)
+    }
+
+    /// Return a target window to the operating system's effective appearance.
+    pub fn follow_system_window_appearance_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetAppearance(handle, None))
+    }
+
+    /// Change how the native compositor treats transparent pixels in the current window.
+    pub fn set_window_background_appearance(
+        &mut self,
+        appearance: WindowBackgroundAppearance,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_background_appearance_handle(handle, appearance)
+    }
+
+    /// Change how the native compositor treats transparent pixels in a target window.
+    pub fn set_window_background_appearance_handle(
+        &mut self,
+        handle: WindowHandle,
+        appearance: WindowBackgroundAppearance,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetBackgroundAppearance(handle, appearance))
+    }
+
+    /// Open or close the retained-tree inspector for the current window.
+    #[cfg(feature = "inspector")]
+    pub fn set_inspector(&mut self, open: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_inspector_handle(handle, open)
+    }
+
+    /// Open or close the retained-tree inspector for a target window.
+    #[cfg(feature = "inspector")]
+    pub fn set_inspector_handle(
+        &mut self,
+        handle: WindowHandle,
+        open: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetInspector(handle, open))
+    }
+
+    /// Toggle the retained-tree inspector for the current window.
+    #[cfg(feature = "inspector")]
+    pub fn toggle_inspector(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.toggle_inspector_handle(handle)
+    }
+
+    /// Toggle the retained-tree inspector for a target window.
+    #[cfg(feature = "inspector")]
+    pub fn toggle_inspector_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::ToggleInspector(handle))
     }
 
     pub fn request_window_attention(&mut self) -> Result<(), WindowCommandError> {
@@ -1170,6 +1978,28 @@ impl EventContext {
     /// Close the window currently delivering this event.
     pub fn close_window(&mut self) {
         self.close_current_window = true;
+    }
+
+    /// Close the complete anchored-popup chain containing the current window.
+    ///
+    /// Closing the first popup lets the runtime tear down every descendant child-first and gives
+    /// native keyboard focus back to the nearest non-popup owner. Outside an anchored popup this
+    /// is a no-op and returns `false`.
+    pub fn close_popup_chain(&mut self) -> bool {
+        let Some(root) = self.popup_root_window else {
+            return false;
+        };
+        if let Some(owner) = self.popup_owner_window
+            && !self.focus_windows.contains(&owner)
+        {
+            self.focus_windows.push(owner);
+        }
+        if Some(root) == self.window {
+            self.close_current_window = true;
+        } else {
+            self.close_windows.push(root);
+        }
+        true
     }
 
     /// Close a window previously returned by [`Self::open_window`].
@@ -1239,6 +2069,86 @@ impl EventContext {
         self.actions.push(action);
     }
 
+    /// Dispatch a typed action through another window's focused retained path.
+    ///
+    /// Delivery is deferred until the current callback releases its view borrow. `false` means
+    /// this callback reached the hard cross-window action bound; a target that closes before
+    /// delivery is ignored safely.
+    pub fn dispatch_action_to_window<A: Action>(
+        &mut self,
+        window: WindowHandle,
+        action: A,
+    ) -> bool {
+        self.dispatch_any_action_to_window(window, AnyAction::new(action))
+    }
+
+    /// Dispatch a previously type-erased action through another window's focused retained path.
+    pub fn dispatch_any_action_to_window(
+        &mut self,
+        window: WindowHandle,
+        action: AnyAction,
+    ) -> bool {
+        if self.targeted_actions.len() == MAX_TARGETED_ACTIONS_PER_EVENT {
+            return false;
+        }
+        self.targeted_actions.push((window, action));
+        true
+    }
+
+    /// Dispatch a typed action to this native child window's parent.
+    ///
+    /// Returns `false` when the context is not attached to a child or the callback reached the
+    /// cross-window action bound.
+    pub fn dispatch_action_to_parent<A: Action>(&mut self, action: A) -> bool {
+        let Some(parent) = self.parent_window else {
+            return false;
+        };
+        self.dispatch_action_to_window(parent, action)
+    }
+
+    /// Dispatch a previously type-erased action to this native child window's parent.
+    pub fn dispatch_any_action_to_parent(&mut self, action: AnyAction) -> bool {
+        let Some(parent) = self.parent_window else {
+            return false;
+        };
+        self.dispatch_any_action_to_window(parent, action)
+    }
+
+    /// The parent of the current native child window, when one exists.
+    pub const fn parent_window_handle(&self) -> Option<WindowHandle> {
+        self.parent_window
+    }
+
+    /// Dispatch a typed action to the nearest non-popup owner of this anchored popup chain.
+    ///
+    /// This differs from [`Self::dispatch_action_to_parent`] for nested menus: a submenu's direct
+    /// parent is another popup window, while commands should reach the application window that
+    /// opened the popup chain.
+    pub fn dispatch_action_to_popup_owner<A: Action>(&mut self, action: A) -> bool {
+        let Some(owner) = self.popup_owner_window else {
+            return false;
+        };
+        self.dispatch_action_to_window(owner, action)
+    }
+
+    /// Dispatch a previously type-erased action to the nearest non-popup owner.
+    pub fn dispatch_any_action_to_popup_owner(&mut self, action: AnyAction) -> bool {
+        let Some(owner) = self.popup_owner_window else {
+            return false;
+        };
+        self.dispatch_any_action_to_window(owner, action)
+    }
+
+    /// The nearest non-popup owner of the current anchored popup chain, when one exists.
+    pub const fn popup_owner_window_handle(&self) -> Option<WindowHandle> {
+        self.popup_owner_window
+    }
+
+    /// The first anchored popup below the non-popup owner of the current popup chain.
+    pub const fn popup_root_window_handle(&self) -> Option<WindowHandle> {
+        self.popup_root_window
+    }
+
     /// Replace the application's native menu declaration.
     ///
     /// Use this after state changes that affect labels, checked state, or static availability.
@@ -1249,9 +2159,34 @@ impl EventContext {
 
     /// Allow the current action to continue bubbling to the next ancestor handler.
     ///
-    /// Action handlers consume by default, matching GPUI's command dispatch behavior.
+    /// Action handlers consume by default, matching GPUI's command dispatch behavior. For input
+    /// and capture-phase action events that propagate by default, this also cancels an earlier
+    /// [`Self::stop_propagation`] call made during the same callback.
     pub fn propagate(&mut self) {
         self.propagate_action = true;
+        self.stop_event_propagation = false;
+    }
+
+    /// Stop the current input event before it reaches another listening ancestor.
+    ///
+    /// Input events bubble by default. Capture-phase action listeners also use this method.
+    /// Stopping propagation does not suppress native default behavior; use
+    /// [`Self::prevent_default`] separately when replacing retained mouse, focus, selection,
+    /// drag, click, scroll, or key behavior.
+    pub fn stop_propagation(&mut self) {
+        self.stop_event_propagation = true;
+    }
+
+    /// Suppress the framework's default behavior for the current input event.
+    ///
+    /// For a [`ScrollWheelEvent`] this prevents retained scrolling. For a targeted desktop mouse
+    /// press or release it suppresses the framework's focus, text-selection, click, context-menu,
+    /// dismissal, and drag-start defaults. For a [`KeyDownEvent`] it suppresses text editing,
+    /// focus traversal, focused activation, dismissal, and the default macOS close shortcut.
+    /// Terminal pointer capture and drag cleanup still run. This does not stop propagation to
+    /// another listener.
+    pub fn prevent_default(&mut self) {
+        self.prevent_default = true;
     }
 }
 
@@ -1306,6 +2241,39 @@ mod tests {
     }
 
     #[test]
+    fn closing_popup_chain_restores_the_non_popup_owner_focus_once() {
+        let owner = WindowHandle::next();
+        let root = WindowHandle::next();
+        let child = WindowHandle::next();
+        let mut cx = EventContext {
+            window: Some(child),
+            popup_owner_window: Some(owner),
+            popup_root_window: Some(root),
+            ..EventContext::default()
+        };
+
+        assert!(cx.close_popup_chain());
+        assert!(cx.close_popup_chain());
+        assert_eq!(cx.focus_windows, [owner]);
+        assert_eq!(cx.close_windows, [root, root]);
+        assert!(!cx.close_current_window);
+
+        let mut root_context = EventContext {
+            window: Some(root),
+            popup_owner_window: Some(owner),
+            popup_root_window: Some(root),
+            ..EventContext::default()
+        };
+        assert!(root_context.close_popup_chain());
+        assert_eq!(root_context.focus_windows, [owner]);
+        assert!(root_context.close_current_window);
+
+        let mut ordinary_window = EventContext::default();
+        assert!(!ordinary_window.close_popup_chain());
+        assert!(ordinary_window.focus_windows.is_empty());
+    }
+
+    #[test]
     fn window_mutation_queue_is_bounded_and_validates_before_retaining() {
         let window = WindowHandle::next();
         let mut cx = EventContext {
@@ -1335,6 +2303,67 @@ mod tests {
                 .iter()
                 .all(|command| command.handle() == window)
         );
+    }
+
+    #[test]
+    fn document_window_commands_validate_and_retain_exact_native_intent() {
+        let window = WindowHandle::next();
+        let mut cx = EventContext {
+            window: Some(window),
+            ..EventContext::default()
+        };
+
+        assert_eq!(
+            cx.set_document_path(PathBuf::new()),
+            Err(WindowCommandError::InvalidDocumentPath)
+        );
+        assert_eq!(
+            cx.set_tabbing_identifier(""),
+            Err(WindowCommandError::InvalidTabbingIdentifier)
+        );
+        assert_eq!(
+            cx.select_tab(MAX_SYSTEM_WINDOW_TABS),
+            Err(WindowCommandError::InvalidTabIndex)
+        );
+        assert!(cx.window_commands.is_empty());
+
+        cx.set_document_path("Cargo.toml").unwrap();
+        cx.set_window_edited(true).unwrap();
+        cx.show_character_palette().unwrap();
+        cx.set_tabbing_identifier("dev.quickgui.workspace").unwrap();
+        cx.select_next_tab().unwrap();
+        cx.select_previous_tab().unwrap();
+        cx.select_tab(7).unwrap();
+        cx.merge_all_windows().unwrap();
+        cx.move_tab_to_new_window().unwrap();
+        cx.toggle_tab_bar().unwrap();
+        cx.toggle_tab_overview().unwrap();
+        cx.clear_represented_file().unwrap();
+        cx.clear_tabbing_identifier().unwrap();
+
+        assert_eq!(cx.window_commands.len(), 13);
+        assert!(matches!(
+            &cx.window_commands[0],
+            WindowCommand::SetRepresentedFile(handle, Some(path))
+                if *handle == window && path == &PathBuf::from("Cargo.toml")
+        ));
+        assert!(matches!(
+            &cx.window_commands[1],
+            WindowCommand::SetDocumentEdited(handle, true) if *handle == window
+        ));
+        assert!(matches!(
+            &cx.window_commands[3],
+            WindowCommand::SetTabbingIdentifier(handle, Some(identifier))
+                if *handle == window && identifier == "dev.quickgui.workspace"
+        ));
+        assert!(matches!(
+            &cx.window_commands[11],
+            WindowCommand::SetRepresentedFile(handle, None) if *handle == window
+        ));
+        assert!(matches!(
+            &cx.window_commands[12],
+            WindowCommand::SetTabbingIdentifier(handle, None) if *handle == window
+        ));
     }
 
     #[test]
@@ -1522,6 +2551,77 @@ mod tests {
     }
 
     #[test]
+    fn scroll_deltas_preserve_precision_and_bound_platform_values() {
+        let pixels = ScrollDelta::Pixels(Vector::new(12.5, -24.0)).bounded();
+        assert!(pixels.precise());
+        assert_eq!(pixels.pixel_delta(40.0), Vector::new(12.5, -24.0));
+
+        let lines = ScrollDelta::Lines(Vector::new(2.0, -3.0)).bounded();
+        assert!(!lines.precise());
+        assert_eq!(lines.pixel_delta(32.0), Vector::new(64.0, -96.0));
+
+        assert_eq!(
+            ScrollDelta::Pixels(Vector::new(f32::NAN, f32::INFINITY))
+                .bounded()
+                .pixel_delta(40.0),
+            Vector::ZERO
+        );
+        assert_eq!(
+            ScrollDelta::Lines(Vector::new(MAX_SCROLL_LINES_PER_EVENT * 2.0, -1.0))
+                .bounded()
+                .pixel_delta(f32::INFINITY),
+            Vector::ZERO
+        );
+        assert_eq!(
+            ScrollDelta::Pixels(Vector::new(MAX_SCROLL_PIXELS_PER_EVENT * 2.0, 0.0))
+                .bounded()
+                .pixel_delta(40.0),
+            Vector::new(MAX_SCROLL_PIXELS_PER_EVENT, 0.0)
+        );
+    }
+
+    #[test]
+    fn input_propagation_and_default_prevention_are_independent() {
+        let mut cx = EventContext::default();
+        cx.stop_propagation();
+        assert!(cx.stop_event_propagation);
+        assert!(!cx.prevent_default);
+
+        cx.prevent_default();
+        assert!(cx.stop_event_propagation);
+        assert!(cx.prevent_default);
+
+        cx.propagate();
+        assert!(!cx.stop_event_propagation);
+        assert!(cx.prevent_default);
+        assert!(cx.propagate_action);
+    }
+
+    #[test]
+    fn raw_touch_samples_are_finite_and_pressure_bounded() {
+        let event = TouchEvent {
+            id: TouchId(42),
+            phase: TouchPhase::Moved,
+            position: Point::new(f32::INFINITY, -MAX_TOUCH_COORDINATE * 2.0),
+            force: Some(1.5),
+        }
+        .bounded();
+
+        assert_eq!(event.id, TouchId(42));
+        assert_eq!(event.position, Point::new(0.0, -MAX_TOUCH_COORDINATE));
+        assert_eq!(event.force, Some(1.0));
+        assert_eq!(
+            TouchEvent {
+                force: Some(f32::NAN),
+                ..TouchEvent::default()
+            }
+            .bounded()
+            .force,
+            Some(0.0)
+        );
+    }
+
+    #[test]
     fn erased_command_registry_actions_keep_their_original_payload() {
         #[derive(Clone, Debug, Eq, PartialEq)]
         struct OpenLine(usize);
@@ -1534,6 +2634,41 @@ mod tests {
             cx.actions[0].downcast_ref::<OpenLine>(),
             Some(&OpenLine(42))
         );
+    }
+
+    #[test]
+    fn cross_window_actions_are_parent_aware_and_hard_bounded() {
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        struct OpenLine(usize);
+
+        let parent = WindowHandle::next();
+        let sibling = WindowHandle::next();
+        let mut cx = EventContext {
+            window: Some(WindowHandle::next()),
+            parent_window: Some(parent),
+            ..EventContext::default()
+        };
+        assert_eq!(cx.parent_window_handle(), Some(parent));
+        assert!(cx.dispatch_action_to_parent(OpenLine(7)));
+        assert!(cx.dispatch_action_to_window(sibling, OpenLine(9)));
+        assert_eq!(cx.targeted_actions.len(), 2);
+        assert_eq!(cx.targeted_actions[0].0, parent);
+        assert_eq!(
+            cx.targeted_actions[0].1.downcast_ref::<OpenLine>(),
+            Some(&OpenLine(7))
+        );
+        assert_eq!(cx.targeted_actions[1].0, sibling);
+
+        cx.targeted_actions.clear();
+        for line in 0..MAX_TARGETED_ACTIONS_PER_EVENT {
+            assert!(cx.dispatch_action_to_parent(OpenLine(line)));
+        }
+        assert!(!cx.dispatch_action_to_parent(OpenLine(usize::MAX)));
+        assert_eq!(cx.targeted_actions.len(), MAX_TARGETED_ACTIONS_PER_EVENT);
+
+        let mut root = EventContext::default();
+        assert!(!root.dispatch_action_to_parent(OpenLine(1)));
+        assert!(root.targeted_actions.is_empty());
     }
 
     #[test]

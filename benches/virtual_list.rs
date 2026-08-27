@@ -1,7 +1,9 @@
 use std::{hint::black_box, sync::Arc};
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use quickgui::{Color, Rect, Scene, TextId, TextRun, TextStyle, VirtualList};
+use quickgui::{
+    Color, ListOffset, ListState, Rect, Scene, TextId, TextRun, TextStyle, VirtualList, div,
+};
 
 fn virtual_list_benchmarks(c: &mut Criterion) {
     let mut list = VirtualList::new(100_000, 28.0).with_overscan(2);
@@ -31,6 +33,25 @@ fn virtual_list_benchmarks(c: &mut Criterion) {
                 ));
             }
             black_box(scene.text_runs().len())
+        })
+    });
+
+    let variable = ListState::new(100_000, 56.0).with_overscan(3);
+    variable.set_viewport_size(900.0, 720.0);
+    variable.scroll_to(ListOffset {
+        item_ix: 42_000,
+        offset_in_item: 17.0,
+    });
+    c.bench_function("100k variable list visible range", |b| {
+        b.iter(|| black_box(black_box(&variable).visible_rows()))
+    });
+    c.bench_function("100k variable list build visible rows", |b| {
+        b.iter(|| {
+            let range = black_box(&variable).visible_rows().range;
+            let rows = variable.render_rows(range, |index| {
+                div().h(if index.is_multiple_of(3) { 72.0 } else { 44.0 })
+            });
+            black_box(rows)
         })
     });
 }

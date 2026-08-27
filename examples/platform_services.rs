@@ -15,14 +15,7 @@ impl Global for ApplicationStatus {}
 
 fn main() -> Result<(), quickgui::AppError> {
     App::new(PlatformServices::default())
-        .config(
-            AppConfig::new("QuickGUI — Platform services")
-                .size(780.0, 620.0)
-                .minimum_size(620.0, 500.0)
-                .title_bar_style(TitleBarStyle::HiddenInset)
-                .traffic_light_position(16.0, 14.0)
-                .background(Color::rgb8(15, 17, 22)),
-        )
+        .config(platform_window_options())
         .global(ApplicationStatus(
             "No application lifecycle callback received yet.".to_owned(),
         ))
@@ -38,6 +31,9 @@ fn main() -> Result<(), quickgui::AppError> {
                     "macOS requested reopen; visible windows before request: {had_visible_windows}"
                 );
             });
+            if !had_visible_windows {
+                cx.open_window(PlatformServices::default(), platform_window_options());
+            }
         })
         .on_system_wake(|cx| {
             cx.update_global::<ApplicationStatus, _>(|status| {
@@ -50,7 +46,23 @@ fn main() -> Result<(), quickgui::AppError> {
                 status.0 = format!("Notification '{}' activated: {action}", response.tag);
             });
         })
+        .on_window_closed(|window, cx| {
+            cx.update_global::<ApplicationStatus, _>(|status| {
+                status.0 = format!(
+                    "Window {window:?} closed; the macOS application remains ready for Dock reopen."
+                );
+            });
+        })
         .run()
+}
+
+fn platform_window_options() -> AppConfig {
+    AppConfig::new("QuickGUI — Platform services")
+        .size(780.0, 620.0)
+        .minimum_size(620.0, 500.0)
+        .title_bar_style(TitleBarStyle::HiddenInset)
+        .traffic_light_position(16.0, 14.0)
+        .background(Color::rgb8(15, 17, 22))
 }
 
 struct PlatformServices {

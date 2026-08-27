@@ -1,8 +1,9 @@
 use std::{ops::Range, sync::Arc};
 
 use quickgui::{
-    App, Color, HighlightStyle, KeyBinding, Menu, MenuItem, OsAction, StyledText, TitleBarStyle,
-    View, ViewContext, button, div, styled_text, styled_text_area, text, text_area,
+    App, Color, Font, FontFallbacks, FontFamily, FontFeatureTag, FontFeatures, HighlightStyle,
+    KeyBinding, Menu, MenuItem, OsAction, StyledText, TitleBarStyle, View, ViewContext, button,
+    div, font, styled_text, styled_text_area, text, text_area,
 };
 
 quickgui::actions!(edit, [Cut, Copy, Paste, SelectAll]);
@@ -28,6 +29,7 @@ fn main() -> Result<(), quickgui::AppError> {
         warm: false,
         editable: Arc::from(SAMPLE),
         pasted: Arc::from(""),
+        code_font: code_font(),
     })
     .title("QuickGUI — Styled text")
     .size(820.0, 620.0)
@@ -47,6 +49,17 @@ struct StyledTextDemo {
     warm: bool,
     editable: Arc<str>,
     pasted: Arc<str>,
+    code_font: Font,
+}
+
+fn code_font() -> Font {
+    font(FontFamily::Monospace)
+        .features(FontFeatures::disable_ligatures())
+        .fallbacks(FontFallbacks::from_fonts([
+            "PingFang SC",
+            "Geeza Pro",
+            "Apple Color Emoji",
+        ]))
 }
 
 impl StyledTextDemo {
@@ -81,6 +94,14 @@ impl StyledTextDemo {
             HighlightStyle::default()
                 .color(Color::rgb8(103, 232, 249))
                 .background(accent),
+            &mut highlights,
+        );
+        push_one_if_present(
+            &content,
+            "->",
+            HighlightStyle::default()
+                .font_features(FontFeatures::new().enable(FontFeatureTag::CONTEXTUAL_ALTERNATES))
+                .color(Color::rgb8(251, 191, 36)),
             &mut highlights,
         );
         push_one_if_present(
@@ -120,7 +141,9 @@ impl StyledTextDemo {
             "underline",
             HighlightStyle::default()
                 .color(Color::rgb8(96, 165, 250))
-                .double_underline(),
+                .underline_color(Color::rgb8(248, 113, 113))
+                .text_decoration_2()
+                .text_decoration_wavy(),
             &mut highlights,
         );
         push_one_if_present(
@@ -182,6 +205,27 @@ impl View for StyledTextDemo {
                     )
                     .child(
                         div()
+                            .text_lg()
+                            .italic()
+                            .underline()
+                            .text_decoration_color(Color::rgb8(56, 189, 248))
+                            .child("Inherited italic underline · ")
+                            .child(
+                                text("locally reset")
+                                    .not_italic()
+                                    .text_decoration_none()
+                                    .text_color(Color::rgb8(148, 163, 184)),
+                            ),
+                    )
+                    .child(
+                        text("GPU-instanced wavy underline · one span, one shape")
+                            .text_lg()
+                            .text_decoration_color(Color::rgb8(248, 113, 113))
+                            .text_decoration_2()
+                            .text_decoration_wavy(),
+                    )
+                    .child(
+                        div()
                             .w_full()
                             .max_w(700.0)
                             .text_lg()
@@ -196,7 +240,7 @@ impl View for StyledTextDemo {
                             .rounded_xl()
                             .border(1.0, Color::rgb8(51, 65, 85))
                             .bg(Color::rgb8(22, 27, 34))
-                            .font_family(quickgui::FontFamily::Monospace)
+                            .font(self.code_font.clone())
                             .text_sm()
                             .line_height(22.0)
                             .child(self.code()),
@@ -228,7 +272,7 @@ impl View for StyledTextDemo {
                             .on_input(edit_code)
                             .placeholder("Write highlighted Rust-like text…")
                             .accessibility_label("Attributed code editor")
-                            .font_family(quickgui::FontFamily::Monospace)
+                            .font(self.code_font.clone())
                             .text_sm()
                             .line_height(22.0)
                             .no_wrap()
@@ -315,6 +359,7 @@ mod tests {
             warm: false,
             editable: Arc::from("let value = \"GPU cached\"; // str 🙂\nstr"),
             pasted: Arc::from(""),
+            code_font: code_font(),
         };
         let highlighted = demo.editable_code();
 

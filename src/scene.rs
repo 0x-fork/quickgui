@@ -1,10 +1,11 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
-use glyphon::Weight;
+use glyphon::{Style as GlyphStyle, Weight};
 
 use crate::{
-    Background, Color, CustomShader, Image, Path, Rect, ShaderParameters, Svg, SvgTransform,
-    TextHighlight, Vector,
+    Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Image, Path,
+    Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline, Vector,
+    font::{assert_valid_font_family, normalize_fallbacks},
     paint_order::{BoundsOrderTree, valid_bounds},
 };
 
@@ -34,19 +35,76 @@ impl TextId {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum FontFamily {
-    SansSerif,
-    Serif,
-    Monospace,
-    Named(Arc<str>),
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum TextWrap {
     None,
     Word,
     Glyph,
+}
+
+/// CSS-like whitespace handling for text descendants.
+///
+/// QuickGUI keeps [`TextWrap`] as the lower-level shaping control. This enum provides the GPUI and
+/// web-facing vocabulary without duplicating state in the retained style.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum WhiteSpace {
+    #[default]
+    Normal,
+    Nowrap,
+}
+
+impl From<WhiteSpace> for TextWrap {
+    fn from(value: WhiteSpace) -> Self {
+        match value {
+            WhiteSpace::Normal => Self::Word,
+            WhiteSpace::Nowrap => Self::None,
+        }
+    }
+}
+
+/// How overflowing text is replaced inside its assigned width.
+///
+/// The affix is commonly an ellipsis, but remains application-defined to match GPUI. Truncation
+/// is performed at Unicode grapheme boundaries and becomes part of the bounded retained text
+/// layout, so it adds no per-frame work once the width and style are stable.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum TextOverflow {
+    /// Preserve the start and replace the omitted tail with the supplied affix.
+    Truncate(Arc<str>),
+    /// Preserve the end and replace the omitted start with the supplied affix.
+    TruncateStart(Arc<str>),
+    /// Preserve both ends and replace the omitted middle with the supplied affix.
+    TruncateMiddle(Arc<str>),
+}
+
+impl TextOverflow {
+    /// End truncation using the single-character Unicode ellipsis.
+    pub fn ellipsis() -> Self {
+        static ELLIPSIS: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("…"));
+        Self::Truncate(Arc::clone(&ELLIPSIS))
+    }
+
+    /// Start truncation using the single-character Unicode ellipsis.
+    pub fn ellipsis_start() -> Self {
+        static ELLIPSIS: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("…"));
+        Self::TruncateStart(Arc::clone(&ELLIPSIS))
+    }
+
+    /// Middle truncation using the single-character Unicode ellipsis.
+    pub fn ellipsis_middle() -> Self {
+        static ELLIPSIS: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("…"));
+        Self::TruncateMiddle(Arc::clone(&ELLIPSIS))
+    }
+}
+
+/// Horizontal alignment of text lines within their element bounds.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+    Justify,
 }
 
 /// Text shaping strategy.
@@ -61,14 +119,29 @@ pub enum TextShaping {
     Basic,
 }
 
-/// Text metrics and shaping properties. Colors do not invalidate shaping.
+/// Text metrics and shaping properties. The ordinary foreground color does not invalidate
+/// shaping; explicit decoration colors remain part of the retained attribute key.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextStyle {
     pub font_size: f32,
     pub line_height: f32,
     pub family: FontFamily,
+    pub features: FontFeatures,
+    pub fallbacks: Option<FontFallbacks>,
     pub weight: Weight,
+    pub font_style: GlyphStyle,
+    pub underline: TextUnderline,
+    pub underline_color: Option<Color>,
+    /// Whether underlines use a spell-checker-style wave instead of a solid line.
+    pub underline_wavy: bool,
+    /// Logical-pixel underline thickness. Zero intentionally suppresses underline paint.
+    pub underline_thickness: f32,
+    pub strikethrough: bool,
+    pub strikethrough_color: Option<Color>,
+    pub align: TextAlign,
     pub wrap: TextWrap,
+    pub text_overflow: Option<TextOverflow>,
+    pub line_clamp: Option<usize>,
     pub shaping: TextShaping,
     pub color: Color,
 }
@@ -79,8 +152,20 @@ impl TextStyle {
             font_size,
             line_height: font_size * 1.35,
             family: FontFamily::SansSerif,
+            features: FontFeatures::new(),
+            fallbacks: None,
             weight: Weight::NORMAL,
+            font_style: GlyphStyle::Normal,
+            underline: TextUnderline::None,
+            underline_color: None,
+            underline_wavy: false,
+            underline_thickness: 1.0,
+            strikethrough: false,
+            strikethrough_color: None,
+            align: TextAlign::Left,
             wrap: TextWrap::Word,
+            text_overflow: None,
+            line_clamp: None,
             shaping: TextShaping::Advanced,
             color,
         }
@@ -91,8 +176,30 @@ impl TextStyle {
         self
     }
 
-    pub fn family(mut self, family: FontFamily) -> Self {
+    pub fn family(mut self, family: impl Into<FontFamily>) -> Self {
+        let family = family.into();
+        assert_valid_font_family(&family);
         self.family = family;
+        self
+    }
+
+    pub fn font_features(mut self, features: FontFeatures) -> Self {
+        self.features = features;
+        self
+    }
+
+    pub fn font_fallbacks(mut self, fallbacks: FontFallbacks) -> Self {
+        self.fallbacks = (!fallbacks.is_empty()).then_some(fallbacks);
+        self
+    }
+
+    pub fn font(mut self, font: Font) -> Self {
+        assert_valid_font_family(&font.family);
+        self.family = font.family;
+        self.features = font.features;
+        self.fallbacks = normalize_fallbacks(font.fallbacks);
+        self.weight = font.weight;
+        self.font_style = font.style;
         self
     }
 
@@ -101,8 +208,127 @@ impl TextStyle {
         self
     }
 
+    pub fn font_style(mut self, style: GlyphStyle) -> Self {
+        self.font_style = style;
+        self
+    }
+
+    pub fn underline(mut self) -> Self {
+        self.underline = TextUnderline::Single;
+        self.underline_wavy = false;
+        self.underline_thickness = 1.0;
+        self
+    }
+
+    pub fn double_underline(mut self) -> Self {
+        self.underline = TextUnderline::Double;
+        self.underline_wavy = false;
+        self.underline_thickness = 1.0;
+        self
+    }
+
+    pub fn underline_color(mut self, color: Color) -> Self {
+        if self.underline == TextUnderline::None {
+            self.underline = TextUnderline::Single;
+            self.underline_wavy = false;
+            self.underline_thickness = 1.0;
+        }
+        self.underline_color = Some(color);
+        self
+    }
+
+    pub fn text_decoration_none(mut self) -> Self {
+        self.underline = TextUnderline::None;
+        self.underline_color = None;
+        self.underline_wavy = false;
+        self.underline_thickness = 1.0;
+        self.strikethrough = false;
+        self.strikethrough_color = None;
+        self
+    }
+
+    pub fn text_decoration_solid(mut self) -> Self {
+        if self.underline == TextUnderline::None {
+            self.underline = TextUnderline::Single;
+        }
+        self.underline_wavy = false;
+        self
+    }
+
+    pub fn text_decoration_wavy(mut self) -> Self {
+        if self.underline == TextUnderline::None {
+            self.underline = TextUnderline::Single;
+        }
+        self.underline_wavy = true;
+        self
+    }
+
+    fn text_decoration_thickness(mut self, thickness: f32) -> Self {
+        if self.underline == TextUnderline::None {
+            self.underline = TextUnderline::Single;
+        }
+        self.underline_thickness = thickness;
+        self
+    }
+
+    pub fn text_decoration_0(self) -> Self {
+        self.text_decoration_thickness(0.0)
+    }
+
+    pub fn text_decoration_1(self) -> Self {
+        self.text_decoration_thickness(1.0)
+    }
+
+    pub fn text_decoration_2(self) -> Self {
+        self.text_decoration_thickness(2.0)
+    }
+
+    pub fn text_decoration_4(self) -> Self {
+        self.text_decoration_thickness(4.0)
+    }
+
+    pub fn text_decoration_8(self) -> Self {
+        self.text_decoration_thickness(8.0)
+    }
+
+    pub fn strikethrough(mut self) -> Self {
+        self.strikethrough = true;
+        self
+    }
+
+    pub fn strikethrough_color(mut self, color: Color) -> Self {
+        self.strikethrough = true;
+        self.strikethrough_color = Some(color);
+        self
+    }
+
+    pub(crate) fn has_decorations(&self) -> bool {
+        (self.underline != TextUnderline::None && self.underline_thickness > 0.0)
+            || self.strikethrough
+    }
+
+    pub fn align(mut self, align: TextAlign) -> Self {
+        self.align = align;
+        self
+    }
+
     pub fn wrap(mut self, wrap: TextWrap) -> Self {
         self.wrap = wrap;
+        self
+    }
+
+    pub fn white_space(mut self, white_space: WhiteSpace) -> Self {
+        self.wrap = white_space.into();
+        self
+    }
+
+    pub fn text_overflow(mut self, overflow: TextOverflow) -> Self {
+        self.text_overflow = Some(overflow);
+        self
+    }
+
+    pub fn line_clamp(mut self, lines: usize) -> Self {
+        self.line_clamp = Some(lines.max(1));
         self
     }
 
@@ -144,6 +370,48 @@ impl Quad {
         self.border_width = width.max(0.0);
         self.border_color = color;
         self
+    }
+
+    pub fn clip(mut self, clip: Rect) -> Self {
+        self.clip = Some(clip);
+        self
+    }
+}
+
+/// One underline wave evaluated analytically by the shared instanced-shape shader.
+///
+/// Keeping a whole visual span in one instance avoids generating or retaining a CPU-side path for
+/// every wave crest. The geometry is already clipped to visible text lines before it reaches the
+/// scene.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WavyUnderline {
+    pub rect: Rect,
+    pub baseline: f32,
+    pub amplitude: f32,
+    pub thickness: f32,
+    pub wavelength: f32,
+    pub color: Color,
+    pub clip: Option<Rect>,
+}
+
+impl WavyUnderline {
+    pub fn new(
+        rect: Rect,
+        baseline: f32,
+        amplitude: f32,
+        thickness: f32,
+        wavelength: f32,
+        color: Color,
+    ) -> Self {
+        Self {
+            rect,
+            baseline,
+            amplitude,
+            thickness,
+            wavelength,
+            color,
+            clip: None,
+        }
     }
 
     pub fn clip(mut self, clip: Rect) -> Self {
@@ -214,6 +482,11 @@ impl BoxShadow {
     pub const fn is_inset(self) -> bool {
         self.inset
     }
+
+    fn multiply_alpha(mut self, opacity: f32) -> Self {
+        self.color = self.color.multiply_alpha(opacity);
+        self
+    }
 }
 
 fn finite_or_zero(value: f32) -> f32 {
@@ -259,6 +532,7 @@ pub struct ImagePrimitive {
     pub mask: Rect,
     pub radius: f32,
     pub grayscale: bool,
+    pub opacity: f32,
     pub clip: Option<Rect>,
 }
 
@@ -271,6 +545,7 @@ impl ImagePrimitive {
             mask: destination,
             radius: 0.0,
             grayscale: false,
+            opacity: 1.0,
             clip: None,
         }
     }
@@ -292,6 +567,11 @@ impl ImagePrimitive {
 
     pub fn grayscale(mut self, grayscale: bool) -> Self {
         self.grayscale = grayscale;
+        self
+    }
+
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.opacity = sanitize_opacity(opacity);
         self
     }
 
@@ -385,6 +665,7 @@ pub struct CustomShaderPrimitive {
     pub shader: CustomShader,
     pub rect: Rect,
     pub parameters: ShaderParameters,
+    pub opacity: f32,
     pub clip: Option<Rect>,
 }
 
@@ -394,12 +675,18 @@ impl CustomShaderPrimitive {
             shader: shader.into(),
             rect,
             parameters: ShaderParameters::default(),
+            opacity: 1.0,
             clip: None,
         }
     }
 
     pub fn parameters(mut self, parameters: impl Into<ShaderParameters>) -> Self {
         self.parameters = parameters.into();
+        self
+    }
+
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.opacity = sanitize_opacity(opacity);
         self
     }
 
@@ -478,6 +765,7 @@ pub struct TextRun {
     pub content: Arc<str>,
     pub bounds: Rect,
     pub style: TextStyle,
+    pub opacity: f32,
     pub clip: Option<Rect>,
     pub(crate) highlights: Option<Arc<[TextHighlight]>>,
 }
@@ -489,6 +777,7 @@ impl TextRun {
             content,
             bounds,
             style,
+            opacity: 1.0,
             clip: None,
             highlights: None,
         }
@@ -496,6 +785,11 @@ impl TextRun {
 
     pub fn clip(mut self, clip: Rect) -> Self {
         self.clip = Some(clip);
+        self
+    }
+
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.opacity = sanitize_opacity(opacity);
         self
     }
 
@@ -507,16 +801,30 @@ impl TextRun {
     }
 
     fn has_visible_paint(&self) -> bool {
-        self.style.color.a > 0.0
-            || self.highlights.as_deref().is_some_and(|highlights| {
-                highlights.iter().any(|highlight| {
-                    let style = &highlight.style;
-                    style.color.is_some_and(|color| color.a > 0.0)
-                        || style.background.is_some_and(|color| color.a > 0.0)
-                        || style.underline_color.is_some_and(|color| color.a > 0.0)
-                        || style.strikethrough_color.is_some_and(|color| color.a > 0.0)
-                })
-            })
+        self.opacity > 0.0
+            && (self.style.color.a > 0.0
+                || (self.style.underline != TextUnderline::None
+                    && self.style.underline_thickness > 0.0
+                    && self
+                        .style
+                        .underline_color
+                        .is_some_and(|color| color.a > 0.0))
+                || self
+                    .style
+                    .strikethrough_color
+                    .is_some_and(|color| self.style.strikethrough && color.a > 0.0)
+                || self.highlights.as_deref().is_some_and(|highlights| {
+                    highlights.iter().any(|highlight| {
+                        let style = &highlight.style;
+                        style.color.is_some_and(|color| color.a > 0.0)
+                            || style.background.is_some_and(|color| color.a > 0.0)
+                            || (style.underline != TextUnderline::None
+                                && style.underline_thickness != Some(0.0)
+                                && style.underline_color.is_some_and(|color| color.a > 0.0))
+                            || (style.strikethrough
+                                && style.strikethrough_color.is_some_and(|color| color.a > 0.0))
+                    })
+                }))
     }
 }
 
@@ -542,6 +850,7 @@ pub(crate) struct PaintLayerKey {
 pub(crate) struct PaintLayer {
     key: PaintLayerKey,
     quads: Vec<Quad>,
+    wavy_underlines: Vec<WavyUnderline>,
     shadows: Vec<Shadow>,
     shapes: Vec<ShapeRef>,
     images: Vec<ImagePrimitive>,
@@ -557,6 +866,7 @@ pub(crate) struct PaintLayer {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ShapeRef {
     Quad(usize),
+    WavyUnderline(usize),
     Shadow(usize),
 }
 
@@ -581,6 +891,7 @@ impl PaintLayer {
         Self {
             key,
             quads: Vec::new(),
+            wavy_underlines: Vec::new(),
             shadows: Vec::new(),
             shapes: Vec::new(),
             images: Vec::new(),
@@ -600,6 +911,10 @@ impl PaintLayer {
 
     pub(crate) fn quads(&self) -> &[Quad] {
         &self.quads
+    }
+
+    pub(crate) fn wavy_underlines(&self) -> &[WavyUnderline] {
+        &self.wavy_underlines
     }
 
     pub(crate) fn shadows(&self) -> &[Shadow] {
@@ -648,6 +963,7 @@ impl PaintLayer {
 
     fn clear(&mut self) {
         self.quads.clear();
+        self.wavy_underlines.clear();
         self.shadows.clear();
         self.shapes.clear();
         self.images.clear();
@@ -667,6 +983,7 @@ pub struct Scene {
     background: Color,
     layers: Vec<PaintLayer>,
     used_layers: usize,
+    opacity: f32,
 }
 
 impl Scene {
@@ -676,6 +993,7 @@ impl Scene {
             layers: vec![PaintLayer {
                 key: PaintLayerKey::default(),
                 quads: Vec::with_capacity(256),
+                wavy_underlines: Vec::with_capacity(32),
                 shadows: Vec::with_capacity(64),
                 shapes: Vec::with_capacity(320),
                 images: Vec::with_capacity(64),
@@ -688,6 +1006,7 @@ impl Scene {
                 max_order: 0,
             }],
             used_layers: 1,
+            opacity: 1.0,
         }
     }
 
@@ -704,13 +1023,16 @@ impl Scene {
         }
         self.layers[0].key = PaintLayerKey::default();
         self.used_layers = 1;
+        self.opacity = 1.0;
     }
 
     pub fn push_quad(&mut self, quad: Quad) {
         self.push_quad_in(PaintLayerKey::default(), quad);
     }
 
-    pub(crate) fn push_quad_in(&mut self, key: PaintLayerKey, quad: Quad) {
+    pub(crate) fn push_quad_in(&mut self, key: PaintLayerKey, mut quad: Quad) {
+        quad.fill = quad.fill.multiply_alpha(self.opacity);
+        quad.border_color = quad.border_color.multiply_alpha(self.opacity);
         if (quad.fill.a > 0.0 || quad.border_color.a > 0.0)
             && let Some(bounds) = clipped_paint_bounds(quad.rect, [quad.clip])
         {
@@ -723,11 +1045,34 @@ impl Scene {
         }
     }
 
+    pub(crate) fn push_wavy_underline_in(
+        &mut self,
+        key: PaintLayerKey,
+        mut underline: WavyUnderline,
+    ) {
+        underline.color = underline.color.multiply_alpha(self.opacity);
+        if underline.color.a > 0.0
+            && underline.thickness > 0.0
+            && underline.amplitude >= 0.0
+            && underline.wavelength > 0.0
+            && underline.baseline.is_finite()
+            && let Some(bounds) = clipped_paint_bounds(underline.rect, [underline.clip])
+        {
+            let layer = self.layer_mut(key);
+            let index = layer.wavy_underlines.len();
+            layer.wavy_underlines.push(underline);
+            let shape = ShapeRef::WavyUnderline(index);
+            layer.shapes.push(shape);
+            layer.push_paint(bounds, PrimitiveRef::Shape(shape));
+        }
+    }
+
     pub fn push_shadow(&mut self, shadow: Shadow) {
         self.push_shadow_in(PaintLayerKey::default(), shadow);
     }
 
-    pub(crate) fn push_shadow_in(&mut self, key: PaintLayerKey, shadow: Shadow) {
+    pub(crate) fn push_shadow_in(&mut self, key: PaintLayerKey, mut shadow: Shadow) {
+        shadow.style = shadow.style.multiply_alpha(self.opacity);
         if shadow.style.color().a > 0.0
             && let Some(bounds) = shadow_render_bounds(&shadow)
             && let Some(bounds) = clipped_paint_bounds(bounds, [shadow.clip])
@@ -749,8 +1094,10 @@ impl Scene {
         self.push_image_in(PaintLayerKey::default(), image);
     }
 
-    pub(crate) fn push_image_in(&mut self, key: PaintLayerKey, image: ImagePrimitive) {
-        if valid_bounds(image.source_uv)
+    pub(crate) fn push_image_in(&mut self, key: PaintLayerKey, mut image: ImagePrimitive) {
+        image.opacity = sanitize_opacity(image.opacity * self.opacity);
+        if image.opacity > 0.0
+            && valid_bounds(image.source_uv)
             && let Some(bounds) =
                 clipped_paint_bounds(image.destination, [Some(image.mask), image.clip])
         {
@@ -769,7 +1116,8 @@ impl Scene {
         self.push_path_in(PaintLayerKey::default(), path);
     }
 
-    pub(crate) fn push_path_in(&mut self, key: PaintLayerKey, path: PathPrimitive) {
+    pub(crate) fn push_path_in(&mut self, key: PaintLayerKey, mut path: PathPrimitive) {
+        path.background = path.background.multiply_alpha(self.opacity);
         if !path.path.is_empty()
             && path.background.is_visible()
             && let Some(bounds) = clipped_paint_bounds(path.render_bounds(), [path.clip])
@@ -788,9 +1136,12 @@ impl Scene {
     pub(crate) fn push_custom_shader_in(
         &mut self,
         key: PaintLayerKey,
-        shader: CustomShaderPrimitive,
+        mut shader: CustomShaderPrimitive,
     ) {
-        if let Some(bounds) = clipped_paint_bounds(shader.rect, [shader.clip]) {
+        shader.opacity = sanitize_opacity(shader.opacity * self.opacity);
+        if shader.opacity > 0.0
+            && let Some(bounds) = clipped_paint_bounds(shader.rect, [shader.clip])
+        {
             let layer = self.layer_mut(key);
             let index = layer.custom_shaders.len();
             layer.custom_shaders.push(shader);
@@ -798,7 +1149,8 @@ impl Scene {
         }
     }
 
-    pub(crate) fn push_svg_in(&mut self, key: PaintLayerKey, svg: SvgPrimitive) {
+    pub(crate) fn push_svg_in(&mut self, key: PaintLayerKey, mut svg: SvgPrimitive) {
+        svg.color = svg.color.multiply_alpha(self.opacity);
         if !svg.destination.is_empty()
             && !svg.source_uv.is_empty()
             && !svg.mask.is_empty()
@@ -817,7 +1169,8 @@ impl Scene {
         self.push_text_in(PaintLayerKey::default(), text);
     }
 
-    pub(crate) fn push_text_in(&mut self, key: PaintLayerKey, text: TextRun) {
+    pub(crate) fn push_text_in(&mut self, key: PaintLayerKey, mut text: TextRun) {
+        text.opacity = sanitize_opacity(text.opacity * self.opacity);
         if text.has_visible_paint()
             && let Some(bounds) = clipped_paint_bounds(text.bounds, [text.clip])
         {
@@ -830,6 +1183,20 @@ impl Scene {
 
     pub fn background(&self) -> Color {
         self.background
+    }
+
+    pub(crate) fn multiply_opacity(&mut self, opacity: f32) -> f32 {
+        let previous = self.opacity;
+        self.opacity = sanitize_opacity(previous * sanitize_opacity(opacity));
+        previous
+    }
+
+    pub(crate) fn restore_opacity(&mut self, opacity: f32) {
+        self.opacity = sanitize_opacity(opacity);
+    }
+
+    pub(crate) fn current_opacity(&self) -> f32 {
+        self.opacity
     }
 
     pub fn quads(&self) -> &[Quad] {
@@ -966,6 +1333,14 @@ fn clipped_paint_bounds<const N: usize>(
     Some(bounds)
 }
 
+fn sanitize_opacity(opacity: f32) -> f32 {
+    if opacity.is_finite() {
+        opacity.clamp(0.0, 1.0)
+    } else {
+        1.0
+    }
+}
+
 fn dilate_rect(rect: Rect, amount: f32) -> Rect {
     let left = rect.x - amount;
     let top = rect.y - amount;
@@ -1014,8 +1389,57 @@ mod tests {
     }
 
     #[test]
+    fn scoped_opacity_multiplies_retained_primitives_and_restores_exactly() {
+        let mut scene = Scene::new();
+        let previous = scene.multiply_opacity(0.5);
+        assert_eq!(previous, 1.0);
+        let parent = scene.multiply_opacity(0.5);
+        assert_eq!(parent, 0.5);
+
+        scene.push_quad(
+            Quad::new(Rect::new(0.0, 0.0, 10.0, 10.0), Color::WHITE).border(1.0, Color::WHITE),
+        );
+        scene.push_shadow(Shadow::new(
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            BoxShadow::new(0.0, 1.0, Color::WHITE),
+        ));
+        scene.push_text(
+            TextRun::new(
+                TextId::new(91),
+                Arc::from("faded"),
+                Rect::new(0.0, 0.0, 40.0, 20.0),
+                TextStyle::new(14.0, Color::WHITE),
+            )
+            .opacity(0.5),
+        );
+        let shader = CustomShader::new(
+            "fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> { return vec4<f32>(1.0, 1.0, 1.0, 1.0 + input.uv.x * 0.0); }",
+        )
+        .unwrap();
+        scene.push_custom_shader(
+            CustomShaderPrimitive::new(shader, Rect::new(0.0, 0.0, 10.0, 10.0)).opacity(0.5),
+        );
+
+        assert_eq!(scene.quads()[0].fill.a, 0.25);
+        assert_eq!(scene.quads()[0].border_color.a, 0.25);
+        assert_eq!(scene.shadows()[0].style.color().a, 0.25);
+        assert_eq!(scene.text_runs()[0].opacity, 0.125);
+        assert_eq!(scene.custom_shaders()[0].opacity, 0.125);
+
+        scene.restore_opacity(parent);
+        scene.restore_opacity(previous);
+        scene.push_quad(Quad::new(Rect::new(20.0, 0.0, 10.0, 10.0), Color::WHITE));
+        assert_eq!(scene.quads()[1].fill.a, 1.0);
+
+        scene.multiply_opacity(0.0);
+        scene.clear(Color::BLACK);
+        assert_eq!(scene.current_opacity(), 1.0);
+    }
+
+    #[test]
     fn text_wraps_by_default_and_can_opt_out() {
         let style = TextStyle::new(14.0, Color::WHITE);
+        assert_eq!(style.align, TextAlign::Left);
         assert_eq!(style.wrap, TextWrap::Word);
         assert_eq!(style.wrap(TextWrap::None).wrap, TextWrap::None);
     }

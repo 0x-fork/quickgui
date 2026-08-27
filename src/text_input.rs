@@ -10,7 +10,8 @@ use std::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    FontFamily, TextHighlight, element::InputConstraints, styled_text::MAX_TEXT_HIGHLIGHTS,
+    FontFallbacks, FontFamily, FontFeatures, TextHighlight, element::InputConstraints,
+    styled_text::MAX_TEXT_HIGHLIGHTS,
 };
 
 #[derive(Clone, Debug)]
@@ -62,7 +63,21 @@ impl EditSnapshot {
                     Some(FontFamily::SansSerif | FontFamily::Serif | FontFamily::Monospace)
                     | None => 0,
                 };
-                bytes.saturating_add(family_bytes)
+                let feature_bytes = highlight
+                    .style
+                    .features
+                    .as_ref()
+                    .map_or(0, FontFeatures::retained_bytes);
+                let fallback_bytes = highlight
+                    .style
+                    .fallbacks
+                    .as_ref()
+                    .and_then(Option::as_ref)
+                    .map_or(0, FontFallbacks::retained_bytes);
+                bytes
+                    .saturating_add(family_bytes)
+                    .saturating_add(feature_bytes)
+                    .saturating_add(fallback_bytes)
             }))
     }
 }

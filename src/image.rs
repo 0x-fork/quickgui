@@ -158,12 +158,17 @@ type CustomAnimatedImageLoader = dyn Fn() -> Result<AnimatedImage, Arc<str>> + S
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum ImageResourceKey {
     Path(Arc<Path>),
+    Asset { source: u64, path: Arc<str> },
     Custom(u64),
 }
 
 #[derive(Clone)]
 enum ImageResourceLoader {
     Path(Arc<Path>),
+    Asset {
+        assets: crate::Assets,
+        path: Arc<str>,
+    },
     Custom(Arc<CustomImageLoader>),
     Animated(Arc<CustomAnimatedImageLoader>),
 }
@@ -187,6 +192,16 @@ impl ImageResource {
         }
     }
 
+    pub(crate) fn from_asset(assets: crate::Assets, path: Arc<str>) -> Self {
+        Self {
+            key: ImageResourceKey::Asset {
+                source: assets.id(),
+                path: path.clone(),
+            },
+            loader: ImageResourceLoader::Asset { assets, path },
+        }
+    }
+
     /// Create a retained custom background loader.
     pub fn custom<F, E>(loader: F) -> Self
     where
@@ -205,7 +220,9 @@ impl ImageResource {
     pub fn path(&self) -> Option<&Path> {
         match &self.loader {
             ImageResourceLoader::Path(path) => Some(path),
-            ImageResourceLoader::Custom(_) | ImageResourceLoader::Animated(_) => None,
+            ImageResourceLoader::Asset { .. }
+            | ImageResourceLoader::Custom(_)
+            | ImageResourceLoader::Animated(_) => None,
         }
     }
 
@@ -217,6 +234,12 @@ impl ImageResource {
         match &self.loader {
             ImageResourceLoader::Path(path) => {
                 ImageAsset::open(path).map_err(|error| Arc::from(error.to_string()))
+            }
+            ImageResourceLoader::Asset { assets, path } => {
+                let bytes = assets
+                    .load_required(path)
+                    .map_err(|error| Arc::from(error.to_string()))?;
+                ImageAsset::decode(bytes.as_ref()).map_err(|error| Arc::from(error.to_string()))
             }
             ImageResourceLoader::Custom(loader) => loader().map(ImageAsset::Static),
             ImageResourceLoader::Animated(loader) => loader().map(ImageAsset::Animated),
@@ -245,6 +268,11 @@ impl fmt::Debug for ImageResource {
             ImageResourceKey::Path(path) => formatter
                 .debug_tuple("ImageResource::Path")
                 .field(path)
+                .finish(),
+            ImageResourceKey::Asset { source, path } => formatter
+                .debug_struct("ImageResource::Asset")
+                .field("source", source)
+                .field("path", path)
                 .finish(),
             ImageResourceKey::Custom(id) => formatter
                 .debug_tuple("ImageResource::Custom")
@@ -512,7 +540,7 @@ pub enum ImageError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AnimatedImageFrame;
+    use crate::{AnimatedImageFrame, Assets, BundledAssets};
     use image_codecs::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 
     fn temporary_path(label: &str) -> PathBuf {
@@ -563,6 +591,35 @@ mod tests {
         let resource = ImageResource::custom(|| Err::<Image, _>("not available"));
         assert_eq!(resource, resource.clone());
         assert_eq!(resource.load().unwrap_err().as_ref(), "not available");
+    }
+
+    #[test]
+    fn asset_resources_deduplicate_by_source_and_path_and_decode_on_demand() {
+        let pixels = [7, 11, 13, 255];
+        let mut encoded = Vec::new();
+        PngEncoder::new(&mut encoded)
+            .write_image(&pixels, 1, 1, ExtendedColorType::Rgba8)
+            .unwrap();
+
+        let mut bundle = BundledAssets::new();
+        bundle.insert("images/pixel.png", encoded).unwrap();
+        let assets = Assets::new(bundle.clone());
+        let first = assets.image("images/pixel.png").unwrap();
+        let second = assets.image("images/pixel.png").unwrap();
+        assert_eq!(first, second);
+
+        let ImageAsset::Static(decoded) = first.load().unwrap() else {
+            panic!("PNG asset decoded as an animation");
+        };
+        assert_eq!(decoded.size(), Size::new(1.0, 1.0));
+        assert_eq!(decoded.rgba(), pixels);
+
+        let other_source = Assets::new(bundle);
+        assert_ne!(
+            first,
+            other_source.image("images/pixel.png").unwrap(),
+            "distinct application asset sources must not alias renderer cache entries"
+        );
     }
 
     #[test]

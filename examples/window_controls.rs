@@ -472,6 +472,7 @@ fn kind_label(kind: WindowKind) -> &'static str {
     match kind {
         WindowKind::Normal => "Normal",
         WindowKind::PopUp => "PopUp",
+        WindowKind::AnchoredPopup => "AnchoredPopup",
         WindowKind::Floating => "Floating",
         WindowKind::Dialog => "Dialog",
     }

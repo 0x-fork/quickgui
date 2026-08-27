@@ -242,6 +242,18 @@ impl Background {
             Self::LinearGradient(gradient) => gradient.stops.iter().any(|stop| stop.color.a > 0.0),
         }
     }
+
+    pub(crate) fn multiply_alpha(self, opacity: f32) -> Self {
+        match self {
+            Self::Solid(color) => Self::Solid(color.multiply_alpha(opacity)),
+            Self::LinearGradient(mut gradient) => {
+                for stop in &mut gradient.stops {
+                    stop.color = stop.color.multiply_alpha(opacity);
+                }
+                Self::LinearGradient(gradient)
+            }
+        }
+    }
 }
 
 impl From<Color> for Background {

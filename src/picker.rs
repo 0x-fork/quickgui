@@ -4,8 +4,8 @@ use thiserror::Error;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    AccessibilityRole, Color, Element, ElementId, EventContext, FocusHandle, HighlightStyle,
-    IntoElement, KeyBinding, StyledText, ViewContext, VirtualList, button, div, text, text_input,
+    AccessibilityRole, Element, ElementId, EventContext, FocusHandle, IntoElement, KeyBinding,
+    ViewContext, VirtualList, div,
 };
 
 /// Maximum number of source items retained by one picker.
@@ -68,6 +68,7 @@ pub fn picker_key_bindings() -> [KeyBinding; 7] {
 /// A value and its searchable, presentational picker metadata.
 #[derive(Clone, Debug)]
 pub struct PickerItem<T> {
+    id: Option<ElementId>,
     label: Arc<str>,
     detail: Option<Arc<str>>,
     keywords: Arc<str>,
@@ -79,6 +80,7 @@ pub struct PickerItem<T> {
 impl<T> PickerItem<T> {
     pub fn new(label: impl Into<Arc<str>>, value: T) -> Self {
         Self {
+            id: None,
             label: label.into(),
             detail: None,
             keywords: Arc::from(""),
@@ -86,6 +88,12 @@ impl<T> PickerItem<T> {
             value,
             disabled: false,
         }
+    }
+
+    /// Assign a stable identity used by reusable selection controls across source replacement.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
     }
 
     pub fn detail(mut self, detail: impl Into<Arc<str>>) -> Self {
@@ -113,6 +121,10 @@ impl<T> PickerItem<T> {
 
     pub fn label(&self) -> &Arc<str> {
         &self.label
+    }
+
+    pub const fn stable_id(&self) -> Option<ElementId> {
+        self.id
     }
 
     pub fn detail_text(&self) -> Option<&Arc<str>> {
@@ -153,57 +165,44 @@ pub enum PickerError {
     },
     #[error("picker searchable text uses {bytes} bytes; the total limit is {limit}")]
     TextBudgetExceeded { bytes: usize, limit: usize },
+    #[error("picker item ID {id:?} is declared more than once")]
+    DuplicateId { id: ElementId },
 }
 
-/// Visual configuration for the reusable picker surface.
-#[derive(Clone, Debug, PartialEq)]
-pub struct PickerStyle {
-    pub width: f32,
+/// How a picker turns its controlled query into the bounded result set.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PickerFilterMode {
+    /// Rank locally retained items with QuickGUI's bounded fuzzy matcher.
+    #[default]
+    Fuzzy,
+    /// Preserve source order and expose every supplied item, regardless of the query.
+    ///
+    /// Use this when an application or asynchronous service already filtered the source.
+    None,
+}
+
+/// Structural geometry retained by one virtualized picker.
+///
+/// The layout intentionally contains no width, color, typography, border, radius, shadow,
+/// placeholder, empty-state copy, or animation token. Those belong to the caller-owned elements
+/// passed to [`PickerState::element`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PickerLayout {
     pub row_height: f32,
     pub max_visible_rows: usize,
-    pub placeholder: Arc<str>,
-    pub no_matches_text: Arc<str>,
-    pub background: Color,
-    pub input_background: Color,
-    pub border: Color,
-    pub selection: Color,
-    pub selection_hover: Color,
-    pub row_hover: Color,
-    pub text: Color,
-    pub muted_text: Color,
-    pub matched_text: Color,
 }
 
-impl Default for PickerStyle {
-    fn default() -> Self {
+impl PickerLayout {
+    pub fn new(row_height: f32) -> Self {
         Self {
-            width: 560.0,
-            row_height: 48.0,
+            row_height: finite_clamped(row_height, 24.0, 256.0, 48.0),
             max_visible_rows: 9,
-            placeholder: Arc::from("Type a command…"),
-            no_matches_text: Arc::from("No matching commands"),
-            background: Color::rgb8(27, 30, 37),
-            input_background: Color::rgb8(20, 23, 29),
-            border: Color::rgb8(74, 81, 96),
-            selection: Color::rgb8(39, 76, 119),
-            selection_hover: Color::rgb8(45, 88, 137),
-            row_hover: Color::rgb8(43, 48, 59),
-            text: Color::rgb8(234, 236, 241),
-            muted_text: Color::rgb8(145, 151, 164),
-            matched_text: Color::rgb8(126, 231, 212),
         }
     }
-}
 
-impl PickerStyle {
-    pub fn width(mut self, width: f32) -> Self {
-        self.width = width;
-        self.sanitized()
-    }
-
-    pub fn row_height(mut self, height: f32) -> Self {
-        self.row_height = height;
-        self.sanitized()
+    pub fn row_height(mut self, row_height: f32) -> Self {
+        self.row_height = finite_clamped(row_height, 24.0, 256.0, 48.0);
+        self
     }
 
     pub fn max_visible_rows(mut self, rows: usize) -> Self {
@@ -211,21 +210,16 @@ impl PickerStyle {
         self.sanitized()
     }
 
-    pub fn placeholder(mut self, placeholder: impl Into<Arc<str>>) -> Self {
-        self.placeholder = placeholder.into();
-        self
-    }
-
-    pub fn no_matches_text(mut self, text: impl Into<Arc<str>>) -> Self {
-        self.no_matches_text = text.into();
-        self
-    }
-
     fn sanitized(mut self) -> Self {
-        self.width = finite_at_least(self.width, 1.0, 560.0);
-        self.row_height = finite_at_least(self.row_height, 24.0, 48.0);
+        self.row_height = finite_clamped(self.row_height, 24.0, 256.0, 48.0);
         self.max_visible_rows = self.max_visible_rows.clamp(1, MAX_VISIBLE_PICKER_ROWS);
         self
+    }
+}
+
+impl Default for PickerLayout {
+    fn default() -> Self {
+        Self::new(48.0)
     }
 }
 
@@ -233,7 +227,7 @@ impl PickerStyle {
 struct MatchEntry {
     source_index: usize,
     score: i32,
-    label_ranges: Box<[Range<usize>]>,
+    label_ranges: Arc<[Range<usize>]>,
 }
 
 /// A borrowed ranked picker result.
@@ -242,7 +236,7 @@ pub struct PickerMatch<'a, T> {
     result_index: usize,
     source_index: usize,
     score: i32,
-    label_ranges: &'a [Range<usize>],
+    label_ranges: &'a Arc<[Range<usize>]>,
     item: &'a PickerItem<T>,
     selected: bool,
 }
@@ -264,6 +258,10 @@ impl<'a, T> PickerMatch<'a, T> {
         self.label_ranges
     }
 
+    pub(crate) fn shared_label_ranges(&self) -> Arc<[Range<usize>]> {
+        self.label_ranges.clone()
+    }
+
     pub fn item(&self) -> &'a PickerItem<T> {
         self.item
     }
@@ -278,13 +276,14 @@ impl<'a, T> PickerMatch<'a, T> {
 /// Matching runs only when source items or the controlled query change. Results and search text
 /// are hard-bounded; scrolling and hover reuse the framework's retained list and paint paths.
 pub struct PickerState<T> {
-    items: Vec<PickerItem<T>>,
+    items: Arc<[PickerItem<T>]>,
     query: Arc<str>,
+    filter_mode: PickerFilterMode,
     matches: Vec<MatchEntry>,
     total_match_count: usize,
     selected_result: Option<usize>,
     list: VirtualList,
-    style: PickerStyle,
+    layout: PickerLayout,
     score_scratch: Vec<(i32, usize)>,
 }
 
@@ -294,11 +293,12 @@ impl<T> fmt::Debug for PickerState<T> {
             .debug_struct("PickerState")
             .field("items", &self.items.len())
             .field("query", &self.query)
+            .field("filter_mode", &self.filter_mode)
             .field("matches", &self.matches.len())
             .field("total_match_count", &self.total_match_count)
             .field("selected_result", &self.selected_result)
             .field("list", &self.list)
-            .field("style", &self.style)
+            .field("layout", &self.layout)
             .finish_non_exhaustive()
     }
 }
@@ -306,40 +306,46 @@ impl<T> fmt::Debug for PickerState<T> {
 impl<T> PickerState<T> {
     pub fn new(items: impl IntoIterator<Item = PickerItem<T>>) -> Result<Self, PickerError> {
         let items = collect_picker_items(items)?;
-        let style = PickerStyle::default().sanitized();
+        let layout = PickerLayout::default();
         let mut state = Self {
-            items,
+            items: Arc::from(items),
             query: Arc::from(""),
+            filter_mode: PickerFilterMode::Fuzzy,
             matches: Vec::with_capacity(MAX_PICKER_RESULTS.min(256)),
             total_match_count: 0,
             selected_result: None,
-            list: VirtualList::new(0, style.row_height).with_overscan(1),
-            style,
+            list: VirtualList::new(0, layout.row_height).with_overscan(1),
+            layout,
             score_scratch: Vec::new(),
         };
         state.rebuild_matches();
         Ok(state)
     }
 
-    pub fn with_style(mut self, style: PickerStyle) -> Self {
-        self.set_style(style);
+    pub fn with_layout(mut self, layout: PickerLayout) -> Self {
+        self.set_layout(layout);
         self
     }
 
-    pub fn style(&self) -> &PickerStyle {
-        &self.style
+    pub const fn layout(&self) -> PickerLayout {
+        self.layout
     }
 
-    pub fn set_style(&mut self, style: PickerStyle) -> bool {
-        let style = style.sanitized();
-        if self.style == style {
+    pub fn set_layout(&mut self, layout: PickerLayout) -> bool {
+        let layout = layout.sanitized();
+        if self.layout == layout {
             return false;
         }
-        let row_height_changed = self.style.row_height != style.row_height;
-        self.style = style;
+        let row_height_changed = self.layout.row_height != layout.row_height;
+        self.layout = layout;
         if row_height_changed {
+            let viewport_height = self.list.viewport_height();
             self.list =
-                VirtualList::new(self.matches.len(), self.style.row_height).with_overscan(1);
+                VirtualList::new(self.matches.len(), self.layout.row_height).with_overscan(1);
+            self.list.set_viewport_height(viewport_height);
+            if let Some(selected) = self.selected_result {
+                self.list.scroll_to_reveal(selected);
+            }
         }
         true
     }
@@ -348,13 +354,41 @@ impl<T> PickerState<T> {
         &mut self,
         items: impl IntoIterator<Item = PickerItem<T>>,
     ) -> Result<(), PickerError> {
-        self.items = collect_picker_items(items)?;
+        self.items = Arc::from(collect_picker_items(items)?);
         self.rebuild_matches();
         Ok(())
     }
 
     pub fn items(&self) -> &[PickerItem<T>] {
         &self.items
+    }
+
+    pub(crate) fn shared_items(&self) -> Arc<[PickerItem<T>]> {
+        self.items.clone()
+    }
+
+    pub const fn filter_mode(&self) -> PickerFilterMode {
+        self.filter_mode
+    }
+
+    pub fn set_filter_mode(&mut self, filter_mode: PickerFilterMode) -> bool {
+        if self.filter_mode == filter_mode {
+            return false;
+        }
+        self.filter_mode = filter_mode;
+        self.rebuild_matches();
+        true
+    }
+
+    pub fn item_at(&self, source_index: usize) -> Option<&PickerItem<T>> {
+        self.items.get(source_index)
+    }
+
+    pub fn source_index_for_id(&self, id: impl Into<ElementId>) -> Option<usize> {
+        let id = id.into();
+        self.items
+            .iter()
+            .position(|item| item.stable_id() == Some(id))
     }
 
     pub fn query(&self) -> &Arc<str> {
@@ -400,6 +434,10 @@ impl<T> PickerState<T> {
         self.selected_result
     }
 
+    pub fn selected_source_index(&self) -> Option<usize> {
+        self.selected_match().map(|matched| matched.source_index())
+    }
+
     pub fn match_at(&self, result_index: usize) -> Option<PickerMatch<'_, T>> {
         let entry = self.matches.get(result_index)?;
         Some(PickerMatch {
@@ -429,6 +467,10 @@ impl<T> PickerState<T> {
 
     pub fn virtual_list(&self) -> &VirtualList {
         &self.list
+    }
+
+    pub(crate) fn set_result_viewport_height(&mut self, height: f32) {
+        self.list.set_viewport_height(height);
     }
 
     pub fn select_result(&mut self, result_index: usize) -> bool {
@@ -495,29 +537,42 @@ impl<T> PickerState<T> {
         FocusHandle::new(derived_picker_id(id.into(), INPUT_ID_TAG, 0))
     }
 
-    /// Build a complete uniform-row picker surface using view-local typed listeners.
+    /// Build a complete unstyled uniform-row picker from caller-owned elements.
+    ///
+    /// `input`, `empty`, and every value returned by `render_row` keep their declared layout and
+    /// appearance. QuickGUI adds only stable identity, bounded virtual positioning, input/action
+    /// listeners, selection/disabled semantics, and activation behavior. The returned root is
+    /// also unpainted and can be extended with caller-owned status content before mounting.
     ///
     /// `access` identifies this state inside the owning view when an event arrives. `activate`
     /// receives a clone of the selected value, so the picker can close and restore focus before
     /// dispatching an application command without retaining a borrow into view state.
-    pub fn element<V, Activate>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn element<V, E, RenderRow, Activate>(
         &mut self,
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
         access: fn(&mut V) -> &mut PickerState<T>,
+        input: Element,
+        empty: Element,
+        mut render_row: RenderRow,
         activate: Activate,
     ) -> Element
     where
         V: 'static,
         T: Clone + 'static,
+        E: IntoElement,
+        RenderRow: FnMut(PickerMatch<'_, T>) -> E,
         Activate: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
     {
         let id = id.into();
+        let label = label.into();
         let input_focus = Self::input_focus_handle(id);
         let input_id = input_focus.id();
-        let style = self.style.clone();
-        let visible_row_count = self.matches.len().min(style.max_visible_rows);
-        let results_height = visible_row_count as f32 * style.row_height;
+        let layout = self.layout;
+        let visible_row_count = self.matches.len().min(layout.max_visible_rows);
+        let results_height = visible_row_count as f32 * layout.row_height;
         self.list.set_viewport_height(results_height);
         if let Some(selected) = self.selected_result {
             self.list.scroll_to_reveal(selected);
@@ -571,79 +626,38 @@ impl<T> PickerState<T> {
             let entry = &self.matches[result_index];
             let item = &self.items[entry.source_index];
             let source_index = entry.source_index;
-            let row_id = derived_picker_id(id, ROW_ID_TAG, source_index as u64);
+            let row_id = derived_picker_id(
+                id,
+                ROW_ID_TAG,
+                item.stable_id()
+                    .map_or(source_index as u64, ElementId::as_u64),
+            );
             let selected = self.selected_result == Some(result_index);
             let disabled = item.disabled;
-            let label = if entry.label_ranges.is_empty() {
-                text(item.label.clone())
-            } else {
-                StyledText::new(item.label.clone())
-                    .with_highlights(entry.label_ranges.iter().cloned().map(|range| {
-                        (
-                            range,
-                            HighlightStyle::default()
-                                .color(style.matched_text)
-                                .font_semibold(),
-                        )
-                    }))
-                    .into_element()
-            }
-            .text_sm()
-            .font_medium()
-            .no_wrap()
-            .text_color(if disabled {
-                style.muted_text
-            } else {
-                style.text
-            });
-
-            let mut label_stack = div().min_w(0.0).flex_1().flex_col().child(label);
-            if let Some(detail) = &item.detail {
-                label_stack = label_stack.child(
-                    text(detail.clone())
-                        .text_xs()
-                        .no_wrap()
-                        .text_color(style.muted_text),
-                );
-            }
-
-            let mut row = button()
+            let matched = PickerMatch {
+                result_index,
+                source_index,
+                score: entry.score,
+                label_ranges: &entry.label_ranges,
+                item,
+                selected,
+            };
+            let mut row = render_row(matched)
+                .into_element()
                 .id(row_id)
                 .disabled(disabled)
                 .selected(selected)
                 .accessibility_role(AccessibilityRole::MenuItem)
                 .accessibility_label(item.label.clone())
+                .tab_index(-1)
                 .absolute()
-                .top(result_index as f32 * style.row_height - self.list.scroll_offset())
+                .top(result_index as f32 * layout.row_height - self.list.scroll_offset())
                 .left(0.0)
                 .w_full()
-                .h(style.row_height)
-                .flex_row()
+                .h(layout.row_height)
                 .flex_none()
-                .items_center()
-                .gap_3()
-                .px_3()
-                .bg(if selected {
-                    style.selection
-                } else {
-                    Color::TRANSPARENT
-                })
-                .hover(|hover| {
-                    hover.bg(if selected {
-                        style.selection_hover
-                    } else {
-                        style.row_hover
-                    })
-                })
-                .child(label_stack);
-            if let Some(shortcut) = &item.shortcut {
-                row = row.child(
-                    text(shortcut.clone())
-                        .text_xs()
-                        .no_wrap()
-                        .text_color(style.muted_text),
-                );
-            }
+                .app_region_no_drag()
+                .cursor_default();
             if !disabled {
                 let clicked_value = item.value.clone();
                 let clicked_activate = activate.clone();
@@ -658,17 +672,10 @@ impl<T> PickerState<T> {
 
         let results = if self.matches.is_empty() {
             div()
-                .h(style.row_height)
+                .h(layout.row_height)
                 .w_full()
-                .flex_row()
-                .items_center()
-                .px_3()
                 .accessibility_role(AccessibilityRole::List)
-                .child(
-                    text(style.no_matches_text.clone())
-                        .text_sm()
-                        .text_color(style.muted_text),
-                )
+                .child(empty)
         } else {
             div()
                 .relative()
@@ -677,26 +684,7 @@ impl<T> PickerState<T> {
                 .overflow_hidden()
                 .virtual_scroll(&self.list)
                 .accessibility_role(AccessibilityRole::List)
-                .accessibility_label("Picker results")
                 .children(rows)
-        };
-
-        let status = if self.results_truncated() {
-            format!(
-                "Showing {} of {} matches",
-                self.matches.len(),
-                self.total_match_count
-            )
-        } else {
-            format!(
-                "{} match{}",
-                self.total_match_count,
-                if self.total_match_count == 1 {
-                    ""
-                } else {
-                    "es"
-                }
-            )
         };
 
         div()
@@ -710,50 +698,26 @@ impl<T> PickerState<T> {
             .on_action(last)
             .on_action(confirm)
             .accessibility_role(AccessibilityRole::Dialog)
-            .accessibility_label("Command palette")
-            .w(style.width)
+            .accessibility_label(label)
             .flex_col()
             .overflow_hidden()
-            .rounded_xl()
-            .border(1.0, style.border)
-            .shadow_xl()
-            .bg(style.background)
-            .text_color(style.text)
+            .app_region_no_drag()
             .child(
-                text_input(self.query.clone())
+                input
+                    .id(input_id)
                     .track_focus(input_focus)
                     .auto_focus()
                     .on_input(query)
                     .max_length(MAX_PICKER_QUERY_GRAPHEMES)
-                    .placeholder(style.placeholder.clone())
-                    .h(48.0)
-                    .w_full()
-                    .px_3()
-                    .border(1.0, style.border)
-                    .focus(|focus| focus.border(2.0, style.matched_text))
-                    .bg(style.input_background),
+                    .app_region_no_drag(),
             )
             .child(results)
-            .child(
-                div()
-                    .h(24.0)
-                    .w_full()
-                    .flex_row()
-                    .items_center()
-                    .px_3()
-                    .child(
-                        text(status)
-                            .text_xs()
-                            .no_wrap()
-                            .text_color(style.muted_text),
-                    ),
-            )
     }
 
     fn rebuild_matches(&mut self) {
         let normalized_query = normalized_query(&self.query);
         self.score_scratch.clear();
-        if normalized_query.is_empty() {
+        if normalized_query.is_empty() || self.filter_mode == PickerFilterMode::None {
             self.total_match_count = self.items.len();
             self.matches.clear();
             self.matches
@@ -761,7 +725,7 @@ impl<T> PickerState<T> {
                     (0..self.items.len().min(MAX_PICKER_RESULTS)).map(|source_index| MatchEntry {
                         source_index,
                         score: 0,
-                        label_ranges: Box::new([]),
+                        label_ranges: Arc::from([]),
                     }),
                 );
         } else {
@@ -801,7 +765,7 @@ impl<T> PickerState<T> {
                 self.matches.push(MatchEntry {
                     source_index,
                     score,
-                    label_ranges: ranges.into_boxed_slice(),
+                    label_ranges: Arc::from(ranges),
                 });
             }
         }
@@ -843,7 +807,7 @@ impl<T> PickerState<T> {
         if self.matches.is_empty() {
             return false;
         }
-        let page = (self.list.viewport_height() / self.style.row_height)
+        let page = (self.list.viewport_height() / self.layout.row_height)
             .floor()
             .max(1.0) as usize;
         let current =
@@ -885,11 +849,12 @@ fn compare_ranked<T>(
         .then_with(|| left.1.cmp(&right.1))
 }
 
-fn collect_picker_items<T>(
+pub(crate) fn collect_picker_items<T>(
     items: impl IntoIterator<Item = PickerItem<T>>,
 ) -> Result<Vec<PickerItem<T>>, PickerError> {
     let iterator = items.into_iter();
     let mut collected = Vec::with_capacity(iterator.size_hint().0.min(MAX_PICKER_ITEMS));
+    let mut stable_ids = Vec::with_capacity(collected.capacity().min(256));
     let mut total_bytes = 0usize;
     for (index, item) in iterator.enumerate() {
         if index == MAX_PICKER_ITEMS {
@@ -912,7 +877,14 @@ fn collect_picker_items<T>(
                 limit: MAX_PICKER_TEXT_BYTES,
             });
         }
+        if let Some(id) = item.stable_id() {
+            stable_ids.push(id);
+        }
         collected.push(item);
+    }
+    stable_ids.sort_unstable_by_key(|id| id.as_u64());
+    if let Some(duplicate) = stable_ids.windows(2).find(|ids| ids[0] == ids[1]) {
+        return Err(PickerError::DuplicateId { id: duplicate[0] });
     }
     Ok(collected)
 }
@@ -1116,17 +1088,18 @@ fn derived_picker_id(parent: ElementId, tag: u64, value: u64) -> ElementId {
     ElementId::new(hash)
 }
 
-fn finite_at_least(value: f32, minimum: f32, fallback: f32) -> f32 {
+fn finite_clamped(value: f32, minimum: f32, maximum: f32, fallback: f32) -> f32 {
     if value.is_finite() {
-        value.max(minimum)
+        value.clamp(minimum, maximum)
     } else {
-        fallback
+        fallback.clamp(minimum, maximum)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{App, Color, View, text, text_input};
 
     fn item(label: &str) -> PickerItem<usize> {
         PickerItem::new(label, 0)
@@ -1178,6 +1151,30 @@ mod tests {
     }
 
     #[test]
+    fn filter_none_preserves_externally_filtered_source_order() {
+        let mut picker = PickerState::new([
+            item("Remote second"),
+            item("Remote first"),
+            item("Remote third"),
+        ])
+        .unwrap();
+        assert!(picker.set_filter_mode(PickerFilterMode::None));
+        assert!(picker.set_query("does not match locally"));
+
+        assert_eq!(picker.result_count(), 3);
+        assert_eq!(picker.total_match_count(), 3);
+        assert_eq!(
+            picker.match_at(0).unwrap().item().label().as_ref(),
+            "Remote second"
+        );
+        assert_eq!(picker.match_at(0).unwrap().score(), 0);
+        assert!(picker.match_at(0).unwrap().label_ranges().is_empty());
+        assert!(!picker.set_filter_mode(PickerFilterMode::None));
+        assert!(picker.set_filter_mode(PickerFilterMode::Fuzzy));
+        assert_eq!(picker.result_count(), 0);
+    }
+
+    #[test]
     fn navigation_skips_disabled_results_wraps_and_reveals_selection() {
         let items = (0..20).map(|index| {
             PickerItem::new(format!("Command {index:02}"), index).disabled(index == 1)
@@ -1185,7 +1182,7 @@ mod tests {
         let mut picker = PickerState::new(items).unwrap();
         picker
             .list
-            .set_viewport_height(picker.style.row_height * 3.0);
+            .set_viewport_height(picker.layout.row_height * 3.0);
 
         assert_eq!(picker.selected_result_index(), Some(0));
         assert!(picker.select_next());
@@ -1206,7 +1203,7 @@ mod tests {
             PickerItem::new("Gamma", 3),
         ])
         .unwrap();
-        picker.list.set_viewport_height(picker.style.row_height);
+        picker.list.set_viewport_height(picker.layout.row_height);
         picker.set_query("gamma");
         assert_eq!(picker.selected_value(), Some(&3));
 
@@ -1258,6 +1255,17 @@ mod tests {
                 limit: MAX_PICKER_ITEM_TEXT_BYTES,
             }
         );
+
+        assert_eq!(
+            PickerState::new([
+                PickerItem::new("Alpha", ()).id("duplicate"),
+                PickerItem::new("Beta", ()).id("duplicate"),
+            ])
+            .unwrap_err(),
+            PickerError::DuplicateId {
+                id: "duplicate".into(),
+            }
+        );
     }
 
     #[test]
@@ -1278,14 +1286,94 @@ mod tests {
         );
     }
 
+    struct PickerView {
+        picker: PickerState<usize>,
+        activated: Option<usize>,
+    }
+
+    impl Default for PickerView {
+        fn default() -> Self {
+            Self {
+                picker: PickerState::new([
+                    PickerItem::new("Alpha", 1),
+                    PickerItem::new("Beta", 2),
+                    PickerItem::new("Gamma", 3),
+                ])
+                .unwrap(),
+                activated: None,
+            }
+        }
+    }
+
+    impl PickerView {
+        fn picker(view: &mut Self) -> &mut PickerState<usize> {
+            &mut view.picker
+        }
+    }
+
+    impl View for PickerView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let query = self.picker.query().clone();
+            self.picker
+                .element(
+                    cx,
+                    "picker",
+                    "Test picker",
+                    Self::picker,
+                    text_input(query).h(42.0).bg(Color::rgb8(3, 4, 5)),
+                    div()
+                        .h(48.0)
+                        .bg(Color::rgb8(6, 7, 8))
+                        .child("Nothing found"),
+                    |matched| {
+                        div()
+                            .bg(if matched.is_selected() {
+                                Color::rgb8(9, 10, 11)
+                            } else {
+                                Color::TRANSPARENT
+                            })
+                            .child(text(matched.item().label().clone()))
+                    },
+                    |view, value, cx| {
+                        view.activated = Some(value);
+                        cx.invalidate();
+                    },
+                )
+                .w(280.0)
+                .bg(Color::rgb8(12, 13, 14))
+        }
+    }
+
     #[test]
-    fn style_dimensions_are_sanitized_without_unbounded_visible_mounts() {
-        let style = PickerStyle::default()
-            .width(f32::NAN)
+    fn unstyled_picker_uses_caller_elements_and_existing_input_action_paths() {
+        let app = App::new(PickerView::default()).bind_keys(picker_key_bindings());
+        let (mut cx, view) = app.into_test_context().unwrap();
+        let window = view.window_handle();
+        assert_eq!(
+            cx.focused(window).unwrap(),
+            Some(PickerState::<usize>::input_focus_handle("picker").id())
+        );
+
+        cx.simulate_keystrokes(window, "g enter").unwrap();
+        assert_eq!(
+            cx.read(view, |view| view.picker.query().clone())
+                .unwrap()
+                .as_ref(),
+            "g"
+        );
+        assert_eq!(cx.read(view, |view| view.activated).unwrap(), Some(3));
+
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    #[test]
+    fn layout_dimensions_are_sanitized_without_unbounded_visible_mounts() {
+        let layout = PickerLayout::default()
             .row_height(-20.0)
             .max_visible_rows(usize::MAX);
-        assert_eq!(style.width, 560.0);
-        assert_eq!(style.row_height, 24.0);
-        assert_eq!(style.max_visible_rows, MAX_VISIBLE_PICKER_ROWS);
+        assert_eq!(layout.row_height, 24.0);
+        assert_eq!(layout.max_visible_rows, MAX_VISIBLE_PICKER_ROWS);
     }
 }

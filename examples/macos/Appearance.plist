@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>QuickGUI Appearance</string>
+    <key>CFBundleExecutable</key>
+    <string>appearance</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.quickgui.appearance</string>
+    <key>CFBundleName</key>
+    <string>QuickGUI Appearance</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>

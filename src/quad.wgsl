@@ -104,6 +104,21 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
+    // A complete underline span is one instance. The fragment shader evaluates its wave
+    // analytically, so long diagnostics do not create CPU-side path vertices or extra draws.
+    if input.params.x > 2.5 {
+        let thickness = max(input.params.z, 0.0001);
+        let wavelength = max(input.params.w, 0.0001);
+        let amplitude = max(input.subject.x, 0.0);
+        let wave_y = input.params.y + amplitude * sin(
+            6.28318530718 * input.logical_position.x / wavelength,
+        );
+        let distance = abs(input.logical_position.y - wave_y) - thickness * 0.5;
+        let wave_coverage = coverage(distance);
+        let alpha = input.primary.a * wave_coverage;
+        return vec4<f32>(input.primary.rgb * alpha, alpha);
+    }
+
     let subject_distance = rounded_rect_distance(
         input.logical_position,
         input.subject,

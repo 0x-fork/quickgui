@@ -333,14 +333,20 @@ fn menu_item(
     action: Option<objc2::runtime::Sel>,
     key_equivalent: &str,
 ) -> Retained<NSMenuItem> {
-    unsafe {
+    let item = unsafe {
         NSMenuItem::initWithTitle_action_keyEquivalent(
             mtm.alloc(),
             &NSString::from_str(title),
             action,
             &NSString::from_str(key_equivalent),
         )
+    };
+    if item.respondsToSelector(sel!(setAllowsAutomaticKeyEquivalentLocalization:)) {
+        // The keymap has already applied the binding's explicit localization policy. Letting
+        // AppKit remap again would make the menu label and QuickGUI dispatch disagree.
+        unsafe { item.setAllowsAutomaticKeyEquivalentLocalization(false) };
     }
+    item
 }
 
 fn appkit_key_equivalent(stroke: &Keystroke) -> Option<(String, NSEventModifierFlags)> {
