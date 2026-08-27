@@ -1,0 +1,12 @@
+{
+  "name": "quickgui-solid-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun --conditions=browser --preload @quickgui/solid/register app.tsx"
+  },
+  "dependencies": {
+    "@quickgui/solid": "workspace:*",
+    "solid-js": "2.0.0-rc.3"
+  }
+}

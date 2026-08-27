@@ -24,6 +24,8 @@ use accesskit_winit::{
 use thiserror::Error;
 #[cfg(target_os = "macos")]
 use winit::platform::macos::{ActiveEventLoopExtMacOS, WindowAttributesExtMacOS};
+#[cfg(not(target_arch = "wasm32"))]
+use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
 use winit::{
     application::ApplicationHandler,
     dpi::{LogicalPosition, LogicalSize, PhysicalSize},
@@ -127,6 +129,7 @@ use crate::macos_application::MacApplicationHost;
 use crate::macos_menu::{MacMenuHost, MacMenuItemState};
 
 pub(crate) enum RuntimeEvent {
+    ExternalCommandsReady,
     Accessibility(AccessibilityEvent),
     ImageLoaded(WindowHandle, ImageLoadCompletion),
     BackgroundCompleted(BackgroundCompletion),
@@ -2811,6 +2814,148 @@ pub enum AppError {
     Asset(#[from] AssetError),
 }
 
+/// Result of one externally driven application-loop turn.
+///
+/// [`AppRunner`] returns control after a native redraw or after its caller-provided timeout. This
+/// lets another runtime, such as Bun, service its own tasks without moving QuickGUI or AppKit off
+/// the platform application thread.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum AppRunStatus {
+    Continue,
+    Exited(i32),
+}
+
+/// A QuickGUI application whose native event loop is advanced by an external runtime.
+///
+/// Create and pump this value on the platform application thread. Each call still dispatches
+/// redraw and lifecycle callbacks synchronously inside Winit, which is required for correct macOS
+/// resize behavior. A blocking [`App::run`] remains the simplest choice for ordinary Rust apps.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct AppRunner {
+    event_loop: EventLoop<RuntimeEvent>,
+    runtime: Runtime,
+    root_window: WindowHandle,
+    status: AppRunStatus,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl AppRunner {
+    /// Advance native events until a redraw completes, the timeout elapses, or the app exits.
+    ///
+    /// `None` may block indefinitely. External runtimes should normally pass a bounded timeout so
+    /// they can service timers and I/O even when the native application is otherwise idle.
+    pub fn pump(&mut self, timeout: Option<Duration>) -> Result<AppRunStatus, AppError> {
+        if matches!(self.status, AppRunStatus::Exited(_)) {
+            return Ok(self.status);
+        }
+        let status = self.event_loop.pump_app_events(timeout, &mut self.runtime);
+        if let Some(error) = self.runtime.fatal_error.take() {
+            self.status = AppRunStatus::Exited(1);
+            return Err(error);
+        }
+        self.status = match status {
+            PumpStatus::Continue => AppRunStatus::Continue,
+            PumpStatus::Exit(code) => AppRunStatus::Exited(code),
+        };
+        Ok(self.status)
+    }
+
+    /// Stable handle of the initial application window.
+    pub const fn root_window(&self) -> WindowHandle {
+        self.root_window
+    }
+
+    /// Queue a new top-level window from an embedding runtime.
+    ///
+    /// The handle is stable immediately. The platform window is created during the next event
+    /// loop turn, so callers can finish installing retained state before pumping again.
+    pub fn open_window<V: View>(
+        &mut self,
+        view: V,
+        options: WindowOptions,
+    ) -> Result<WindowHandle, AppError> {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return Err(AppError::Window(
+                "cannot open a window after the application event loop exited".to_owned(),
+            ));
+        }
+        validate_window_options(&options).map_err(|error| AppError::Window(error.to_string()))?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| AppError::Window("application event loop is closed".to_owned()))?;
+        let request = WindowRequest::new(view, options);
+        let handle = request.handle;
+        self.runtime.pending_windows.push_back(request);
+        Ok(handle)
+    }
+
+    /// Mark one externally owned view dirty and request at most one native redraw.
+    ///
+    /// A window queued for creation also returns `true`: its first render will read the newest
+    /// retained state without scheduling a redundant frame.
+    pub fn invalidate_window(&mut self, handle: WindowHandle) -> bool {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return false;
+        }
+        if self
+            .runtime
+            .pending_windows
+            .iter()
+            .any(|request| request.handle == handle)
+        {
+            return true;
+        }
+        self.runtime.invalidate_external(handle)
+    }
+
+    /// Close a queued or mounted window.
+    ///
+    /// Returns `false` when the handle is unknown or the application already exited.
+    pub fn close_window(&mut self, handle: WindowHandle) -> bool {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return false;
+        }
+        let pending = self
+            .runtime
+            .pending_windows
+            .iter()
+            .position(|request| request.handle == handle);
+        let mounted = self.runtime.window_handles.contains_key(&handle)
+            || self.runtime.current_handle() == Some(handle);
+        if pending.is_none() && !mounted {
+            return false;
+        }
+        if self
+            .runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .is_err()
+        {
+            return false;
+        }
+        if let Some(index) = pending {
+            self.runtime.pending_windows.remove(index);
+        } else if !self.runtime.close_requests.contains(&handle) {
+            self.runtime.close_requests.push(handle);
+        }
+        true
+    }
+
+    /// Mark the root view dirty and request exactly one native redraw.
+    ///
+    /// Returns `false` only after exit or before the first pump has mounted the root window. State
+    /// installed before that first pump is naturally read by the initial render.
+    pub fn invalidate_root(&mut self) -> bool {
+        self.invalidate_window(self.root_window)
+    }
+
+    pub const fn status(&self) -> AppRunStatus {
+        self.status
+    }
+}
+
 type OpenUrlsCallback = Box<dyn FnMut(OpenUrls, &mut EventContext)>;
 type ReopenCallback = Box<dyn FnMut(bool, &mut EventContext)>;
 type SystemWakeCallback = Box<dyn FnMut(&mut EventContext)>;
@@ -3164,12 +3309,20 @@ impl<V: View> App<V> {
         self
     }
 
-    pub fn run(self) -> Result<(), AppError> {
+    /// Convert this application into an externally pumped native event loop.
+    ///
+    /// This is intended for embedders which already own a language runtime on the platform main
+    /// thread. It preserves QuickGUI's damage-driven scheduling: the caller chooses only the
+    /// maximum time before control is yielded back to that runtime.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn into_runner(self) -> Result<AppRunner, AppError> {
         let event_loop = EventLoop::with_user_event().build()?;
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut runtime = Runtime::new(
+        let initial_window = WindowRequest::new(self.view, self.config);
+        let root_window = initial_window.handle;
+        let runtime = Runtime::new(
             RuntimeStartup {
-                initial_window: WindowRequest::new(self.view, self.config),
+                initial_window,
                 globals: self.globals,
                 keymap: self.keymap,
                 menus: self.menus,
@@ -3180,10 +3333,51 @@ impl<V: View> App<V> {
             },
             event_loop.create_proxy(),
         )?;
-        event_loop.run_app(&mut runtime)?;
-        match runtime.fatal_error.take() {
-            Some(error) => Err(error),
-            None => Ok(()),
+        Ok(AppRunner {
+            event_loop,
+            runtime,
+            root_window,
+            status: AppRunStatus::Continue,
+        })
+    }
+
+    pub fn run(self) -> Result<(), AppError> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let AppRunner {
+                event_loop,
+                mut runtime,
+                ..
+            } = self.into_runner()?;
+            event_loop.run_app(&mut runtime)?;
+            return match runtime.fatal_error.take() {
+                Some(error) => Err(error),
+                None => Ok(()),
+            };
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let event_loop = EventLoop::with_user_event().build()?;
+            event_loop.set_control_flow(ControlFlow::Wait);
+            let mut runtime = Runtime::new(
+                RuntimeStartup {
+                    initial_window: WindowRequest::new(self.view, self.config),
+                    globals: self.globals,
+                    keymap: self.keymap,
+                    menus: self.menus,
+                    assets: self.assets,
+                    fonts: self.fonts,
+                    application_callbacks: self.application_callbacks,
+                    quit_mode: self.quit_mode,
+                },
+                event_loop.create_proxy(),
+            )?;
+            event_loop.run_app(&mut runtime)?;
+            match runtime.fatal_error.take() {
+                Some(error) => Err(error),
+                None => Ok(()),
+            }
         }
     }
 }
@@ -3811,6 +4005,31 @@ impl Runtime {
                 pointer_position: self.window.as_ref().and_then(|window| window.pointer),
             },
         )
+    }
+
+    fn invalidate_external(&mut self, handle: WindowHandle) -> bool {
+        if self.current_handle() == Some(handle) {
+            let Some(window) = self.window.as_mut() else {
+                return false;
+            };
+            window.view_dirty = true;
+            if window.visible && window.scheduler.invalidate() {
+                window.window.request_redraw();
+            }
+            return true;
+        }
+
+        let Some(window_id) = self.window_handles.get(&handle).copied() else {
+            return false;
+        };
+        let Some(entry) = self.windows.get_mut(&window_id) else {
+            return false;
+        };
+        entry.state.view_dirty = true;
+        if entry.state.visible && entry.state.scheduler.invalidate() {
+            entry.state.window.request_redraw();
+        }
+        true
     }
 
     fn current_popup_context(&self) -> Option<PopupWindowContext> {
@@ -9924,6 +10143,10 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: RuntimeEvent) {
+        if matches!(&event, RuntimeEvent::ExternalCommandsReady) {
+            self.process_window_commands(event_loop);
+            return;
+        }
         if matches!(&event, RuntimeEvent::ForegroundTasksReady) {
             self.process_foreground_tasks(event_loop);
             return;
@@ -10010,6 +10233,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         }
         let released_image_capacity = matches!(&event, RuntimeEvent::ImageLoaded(_, _));
         let target = match &event {
+            RuntimeEvent::ExternalCommandsReady => unreachable!("handled before target routing"),
             RuntimeEvent::Accessibility(event) => Some(event.window_id),
             RuntimeEvent::ImageLoaded(handle, _) => self.window_handles.get(handle).copied(),
             RuntimeEvent::BackgroundCompleted(completion) => {
@@ -10049,6 +10273,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             return;
         }
         (|| match event {
+            RuntimeEvent::ExternalCommandsReady => unreachable!("handled before window routing"),
             RuntimeEvent::ImageLoaded(_, completion) => {
                 let Some(state) = &mut self.window else {
                     return;

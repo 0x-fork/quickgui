@@ -1,3 +1,7 @@
-/target
+target/
 /vendor/*/target
 *.profraw
+node_modules
+.DS_Store
+dist
+*.node

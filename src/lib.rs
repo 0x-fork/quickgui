@@ -268,6 +268,8 @@ pub use runtime::{
     TouchListener, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
     WindowCommandError, WindowHandle, WindowKind, WindowOptions, WindowState, WindowTabState,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use runtime::{AppRunStatus, AppRunner};
 #[cfg(any(test, feature = "test-support"))]
 pub use runtime::{
     MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,

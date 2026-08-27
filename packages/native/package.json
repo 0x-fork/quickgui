@@ -1,0 +1,38 @@
+{
+  "name": "@quickgui/native",
+  "version": "0.0.1",
+  "description": "Low-overhead Bun and Node-API host for QuickGUI",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./protocol": "./protocol.ts"
+  },
+  "files": [
+    "index.ts",
+    "protocol.ts",
+    "scripts",
+    "binding.js",
+    "binding.d.ts",
+    "*.node",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun ./scripts/build.ts",
+    "build:debug": "bun ./scripts/build.ts --debug",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.8.6"
+  },
+  "napi": {
+    "binaryName": "quickgui-native",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin"
+    ]
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "license": "MIT OR Apache-2.0"
+}

@@ -1,0 +1,21 @@
+[package]
+name = "quickgui-native-napi"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+napi = { version = "3.12.2", features = ["napi9"] }
+napi-derive = "3.6.3"
+quickgui = { path = "../.." }
+
+[build-dependencies]
+napi-build = "2.4.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
