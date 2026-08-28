@@ -13,7 +13,7 @@ use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClas
 use objc2_app_kit::{
     NSAppKitVersionNumber, NSAppKitVersionNumber10_12, NSAppearance, NSAppearanceCustomization,
     NSAppearanceNameAqua, NSApplication, NSApplicationPresentationOptions, NSBackingStoreType,
-    NSColor, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard,
+    NSColor, NSDragOperation, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard,
     NSRequestUserAttentionType, NSScreen, NSView, NSWindow, NSWindowButton, NSWindowDelegate,
     NSWindowFullScreenButton, NSWindowLevel, NSWindowOcclusionState, NSWindowOrderingMode,
     NSWindowSharingType, NSWindowStyleMask, NSWindowTabbingMode, NSWindowTitleVisibility,
@@ -369,7 +369,7 @@ declare_class!(
     unsafe impl NSDraggingDestination for WindowDelegate {
         /// Invoked when the dragged image enters destination bounds or frame
         #[method(draggingEntered:)]
-        fn dragging_entered(&self, sender: &NSObject) -> bool {
+        fn dragging_entered(&self, sender: &NSObject) -> NSDragOperation {
             trace_scope!("draggingEntered:");
 
             use std::path::PathBuf;
@@ -377,7 +377,7 @@ declare_class!(
             let pb: Retained<NSPasteboard> = unsafe { msg_send_id![sender, draggingPasteboard] };
             let filenames = match pb.propertyListForType(unsafe { NSFilenamesPboardType }) {
                 Some(filenames) => filenames,
-                None => return false.into(),
+                None => return NSDragOperation::None,
             };
             let filenames: Retained<NSArray<NSString>> = unsafe { Retained::cast(filenames) };
 
@@ -386,7 +386,7 @@ declare_class!(
                 self.queue_event(WindowEvent::HoveredFile(path));
             });
 
-            true
+            NSDragOperation::Copy
         }
 
         /// Invoked when the image is released

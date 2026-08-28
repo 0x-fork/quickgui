@@ -241,7 +241,6 @@ pub(crate) struct GpuRenderer {
     opaque_alpha_mode: CompositeAlphaMode,
     transparent_alpha_mode: Option<CompositeAlphaMode>,
     desired_surface_size: (u32, u32),
-    last_frame_surface_size: (u32, u32),
     /// The extent WGPU validates surface operations against. On macOS this is a grow-only
     /// capacity during resize bursts; the CAMetalLayer drawable itself remains exact-sized.
     configured_surface_size: Option<(u32, u32)>,
@@ -373,7 +372,6 @@ impl GpuRenderer {
             opaque_alpha_mode,
             transparent_alpha_mode,
             desired_surface_size,
-            last_frame_surface_size: desired_surface_size,
             configured_surface_size,
             #[cfg(target_os = "macos")]
             metal_layer,
@@ -478,18 +476,14 @@ impl GpuRenderer {
     /// AppKit frame change.
     ///
     /// WGPU recreates a configured surface only after `Device::maintain(Wait)`, even though a
-    /// CAMetalLayer can scale a drawable whose resolution differs from its view. Keep WGPU's
-    /// validated extent as a bounded grow-only capacity and retain one layer drawable size through
-    /// a resize burst. QuickGUI projects every primitive against the exact logical viewport, so
-    /// Core Animation's final scaling preserves current geometry. A full configure is needed only
-    /// when the window exceeds the validated capacity, and an exact-size drawable is restored on
-    /// the first stable frame for sharp stationary output.
+    /// CAMetalLayer drawable size can change independently of the configured WGPU extent. Keep
+    /// WGPU's validated extent as a bounded grow-only capacity, but keep the actual layer drawable
+    /// exact-sized on every frame. That avoids both the blocking surface reconfiguration path and
+    /// Core Animation resampling text while a resize gesture is in progress. A full configure is
+    /// needed only when the window exceeds the validated capacity.
     #[cfg(target_os = "macos")]
     fn configure_macos_surface_for_frame(&mut self) {
         let desired = self.desired_surface_size;
-        let size_changed = self.last_frame_surface_size != desired;
-        self.last_frame_surface_size = desired;
-        let live_resize = unsafe { self.appkit_view.inLiveResize() };
         let maximum = self.device.limits().max_texture_dimension_2d;
         let capacity = self.configured_surface_size.map_or(desired, |current| {
             grow_surface_capacity(current, desired, maximum)
@@ -506,11 +500,11 @@ impl GpuRenderer {
             self.configured_surface_size = Some(capacity);
             self.metal_drawable_size = Some(capacity);
         }
-        // Keep one drawable pool stable throughout a resize burst. Core Animation scales that
-        // texture to the view, while QuickGUI still lays out and projects the scene against the
-        // exact current viewport. Once AppKit has left live resize and one frame observes a stable
-        // size, snap back to a native-resolution drawable for sharp stationary text.
-        if !size_changed && !live_resize && self.metal_drawable_size != Some(desired) {
+        // `Surface::configure` resets the layer to the capacity extent. Restore the exact current
+        // drawable immediately, and update it on subsequent frames without reconfiguring WGPU.
+        // Glyph quads then land on native backing pixels instead of passing through a changing
+        // Core Animation scale that makes text stems shimmer between thick and thin.
+        if self.metal_drawable_size != Some(desired) {
             set_metal_drawable_size(&self.metal_layer, desired);
             if let Some(overlay) = &self.overlay_surface {
                 set_metal_drawable_size(&overlay.metal_layer, desired);
@@ -1284,7 +1278,20 @@ impl OffscreenRenderer {
         logical_size: Size,
         scale_factor: f32,
     ) -> Result<crate::VisualSnapshot, crate::VisualTestError> {
+        let target_size = visual_physical_size(logical_size, scale_factor)?;
+        self.render_to_snapshot_with_target(scene, logical_size, scale_factor, target_size)
+    }
+
+    fn render_to_snapshot_with_target(
+        &mut self,
+        scene: &Scene,
+        logical_size: Size,
+        scale_factor: f32,
+        target_size: (u32, u32),
+    ) -> Result<crate::VisualSnapshot, crate::VisualTestError> {
         let (physical_width, physical_height) = visual_physical_size(logical_size, scale_factor)?;
+        let (target_width, target_height) = target_size;
+        crate::visual_test::validate_snapshot_dimensions(target_width, target_height)?;
         let logical_viewport = Rect::new(0.0, 0.0, logical_size.width, logical_size.height);
         self.shapes.prepare(
             &self.device,
@@ -1353,8 +1360,8 @@ impl OffscreenRenderer {
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("quickgui visual-test target"),
             size: wgpu::Extent3d {
-                width: physical_width,
-                height: physical_height,
+                width: target_width,
+                height: target_height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -1365,7 +1372,7 @@ impl OffscreenRenderer {
             view_formats: &[],
         });
         let view = texture.create_view(&TextureViewDescriptor::default());
-        let unpadded_bytes_per_row = physical_width
+        let unpadded_bytes_per_row = target_width
             .checked_mul(4)
             .ok_or(crate::VisualTestError::TooLarge { bytes: u64::MAX })?;
         let padded_bytes_per_row = unpadded_bytes_per_row
@@ -1374,7 +1381,7 @@ impl OffscreenRenderer {
             .and_then(|rows| rows.checked_mul(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT))
             .ok_or(crate::VisualTestError::TooLarge { bytes: u64::MAX })?;
         let readback_bytes = u64::from(padded_bytes_per_row)
-            .checked_mul(u64::from(physical_height))
+            .checked_mul(u64::from(target_height))
             .ok_or(crate::VisualTestError::TooLarge { bytes: u64::MAX })?;
         if readback_bytes > crate::MAX_VISUAL_TEST_BYTES {
             return Err(crate::VisualTestError::TooLarge {
@@ -1440,12 +1447,12 @@ impl OffscreenRenderer {
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(physical_height),
+                    rows_per_image: Some(target_height),
                 },
             },
             wgpu::Extent3d {
-                width: physical_width,
-                height: physical_height,
+                width: target_width,
+                height: target_height,
                 depth_or_array_layers: 1,
             },
         );
@@ -1470,18 +1477,15 @@ impl OffscreenRenderer {
         let tight_row = unpadded_bytes_per_row as usize;
         let padded_row = padded_bytes_per_row as usize;
         let tight_bytes = tight_row
-            .checked_mul(physical_height as usize)
+            .checked_mul(target_height as usize)
             .ok_or(crate::VisualTestError::TooLarge { bytes: u64::MAX })?;
         let mut rgba = Vec::with_capacity(tight_bytes);
-        for row in mapped
-            .chunks_exact(padded_row)
-            .take(physical_height as usize)
-        {
+        for row in mapped.chunks_exact(padded_row).take(target_height as usize) {
             rgba.extend_from_slice(&row[..tight_row]);
         }
         drop(mapped);
         readback.unmap();
-        crate::VisualSnapshot::from_rgba(physical_width, physical_height, rgba)
+        crate::VisualSnapshot::from_rgba(target_width, target_height, rgba)
     }
 }
 
@@ -4563,6 +4567,58 @@ mod tests {
         }
         for sample in samples.windows(2) {
             assert!(sample[0][0].abs_diff(sample[1][0]) <= 2, "{samples:?}");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn oversized_target_keeps_primitive_clips_in_logical_viewport_space() {
+        let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+        let mut renderer = pollster::block_on(OffscreenRenderer::new(
+            PerformanceProfile::Balanced,
+            font_system,
+        ))
+        .unwrap();
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+
+        // Model the live-resize path: layout and projection use a 64px current viewport while
+        // Metal retains a 128px render target. Drawable-pixel clipping would incorrectly discard
+        // every primitive below y=32 logical after projection doubles its target position.
+        scene.push_quad(Quad::new(Rect::new(0.0, 40.0, 16.0, 16.0), Color::WHITE));
+        let image = Image::from_rgba(1, 1, Arc::<[u8]>::from([255, 255, 255, 255])).unwrap();
+        scene.push_image(ImagePrimitive::new(
+            image,
+            Rect::new(16.0, 40.0, 16.0, 16.0),
+        ));
+        let svg = Svg::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="white"/></svg>"#,
+        )
+        .unwrap();
+        scene.push_svg(SvgPrimitive::new(
+            svg,
+            Rect::new(32.0, 40.0, 16.0, 16.0),
+            Color::WHITE,
+        ));
+        let shader = CustomShader::new(
+            "fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> { return vec4<f32>(1.0, 1.0, 1.0, 1.0 + input.uv.x * 0.0); }",
+        )
+        .unwrap();
+        scene.push_custom_shader(CustomShaderPrimitive::new(
+            shader,
+            Rect::new(48.0, 40.0, 16.0, 16.0),
+        ));
+        scene.finish();
+
+        let snapshot = renderer
+            .render_to_snapshot_with_target(&scene, Size::new(64.0, 64.0), 1.0, (128, 128))
+            .unwrap();
+        let samples = [16, 48, 80, 112].map(|x| snapshot.pixel(x, 96).unwrap());
+        for sample in samples {
+            assert!(sample[0] > 240, "{sample:?}");
+            assert!(sample[1] > 240, "{sample:?}");
+            assert!(sample[2] > 240, "{sample:?}");
+            assert_eq!(sample[3], 255);
         }
     }
 

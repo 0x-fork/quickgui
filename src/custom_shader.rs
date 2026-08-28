@@ -30,7 +30,7 @@ struct QuickGuiFragmentInput {
     @builtin(position) physical_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) logical_position: vec2<f32>,
-    @location(2) @interpolate(flat) physical_clip: vec4<f32>,
+    @location(2) @interpolate(flat) logical_clip: vec4<f32>,
     @location(3) @interpolate(flat) size: vec2<f32>,
     @location(4) @interpolate(flat) params_0: vec4<f32>,
     @location(5) @interpolate(flat) params_1: vec4<f32>,
@@ -43,11 +43,11 @@ struct QuickGuiFragmentInput {
 const FRAGMENT_SUFFIX: &str = r#"
 @fragment
 fn fs_main(input: QuickGuiFragmentInput) -> @location(0) vec4<f32> {
-    let position = input.physical_position.xy;
-    if position.x < input.physical_clip.x
-        || position.y < input.physical_clip.y
-        || position.x >= input.physical_clip.z
-        || position.y >= input.physical_clip.w
+    let position = input.logical_position;
+    if position.x < input.logical_clip.x
+        || position.y < input.logical_clip.y
+        || position.x >= input.logical_clip.z
+        || position.y >= input.logical_clip.w
     {
         discard;
     }

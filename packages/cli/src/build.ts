@@ -12,7 +12,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { quickguiSolidPlugin } from "@quickgui/solid/compiler";
 import type { BunPlugin } from "bun";
@@ -38,20 +37,30 @@ export interface BuildResult {
 }
 
 const nativeExports = [
+  "abortAppHost",
   "applyBatch",
+  "applyHostedBatch",
   "closeWindow",
+  "closeHostedWindow",
   "createApp",
   "createAnchoredWindow",
+  "createHostedAnchoredWindow",
+  "createHostedApp",
+  "createHostedWindow",
   "createWindow",
   "destroyApp",
+  "destroyHostedApp",
   "focusNode",
+  "focusHostedNode",
   "protocolVersion",
   "pumpApp",
+  "runAppHost",
   "startApp",
+  "startHostedApp",
   "takeEvents",
+  "waitForHostedEvents",
 ] as const;
 
-const devHostEntrypoint = fileURLToPath(new URL("./dev-host.ts", import.meta.url));
 const nativeBindingShimSuffix = ".quickgui-binding-shim.js";
 
 export async function buildProject(
@@ -106,7 +115,7 @@ async function buildMacApp(
   mkdirSync(macos, { recursive: true });
   mkdirSync(resources, { recursive: true });
   const executablePath = resolve(macos, config.executableName);
-  await compileExecutable(config, options, executablePath);
+  await compileExecutable(config, options, executablePath, stagingRoot);
   chmodSync(executablePath, 0o755);
 
   let iconFile: string | undefined;
@@ -118,27 +127,11 @@ async function buildMacApp(
   }
   const reservedResources = new Set<string>([
     ...(iconFile ? [iconFile] : []),
-    ...(options.mode === "development" ? ["quickgui-dev.json"] : []),
   ]);
   copyResources(config.resources, resources, reservedResources);
   if (config.macos.icon && iconFile) {
     cpSync(config.macos.icon, resolve(resources, iconFile));
   }
-  if (options.mode === "development") {
-    writeFileSync(
-      resolve(resources, "quickgui-dev.json"),
-      `${JSON.stringify(
-        {
-          version: 1,
-          projectRoot: config.projectRoot,
-          entry: config.entry,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  }
-
   writeFileSync(
     resolve(contents, "Info.plist"),
     macInfoPlist({
@@ -180,7 +173,7 @@ async function buildExecutable(
   const info = targetInfo(options.target);
   const suffix = info.platform === "windows" ? ".exe" : "";
   const executablePath = resolve(stagingRoot, `${config.executableName}${suffix}`);
-  await compileExecutable(config, options, executablePath);
+  await compileExecutable(config, options, executablePath, stagingRoot);
   if (info.platform !== "windows") chmodSync(executablePath, 0o755);
   return {
     artifactPath: executablePath,
@@ -194,6 +187,7 @@ async function compileExecutable(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   executablePath: string,
+  stagingRoot: string,
 ): Promise<void> {
   const info = targetInfo(options.target);
   const windows =
@@ -212,17 +206,32 @@ async function compileExecutable(
   let result: Bun.BuildOutput;
   try {
     const production = options.mode === "production";
+    const hostEntrypoint = resolve(stagingRoot, "quickgui-app-host.ts");
+    const workerEntrypoint = resolve(stagingRoot, "quickgui-app-worker.ts");
+    const nativeHostModule = Bun.resolveSync("@quickgui/native/host", import.meta.dir);
+    writeFileSync(
+      hostEntrypoint,
+      `import { runApplicationWorker } from ${JSON.stringify(nativeHostModule)};\n` +
+        `const exitCode = await runApplicationWorker("./quickgui-app-worker.ts");\n` +
+        `process.exit(exitCode);\n`,
+    );
+    writeFileSync(
+      workerEntrypoint,
+      `postMessage("quickgui:worker-ready");\n` +
+        `import { reportWorkerFailure } from ${JSON.stringify(nativeHostModule)};\n` +
+        `try {\n  await import(${JSON.stringify(config.entry)});\n} catch (error) {\n` +
+        `  reportWorkerFailure(error);\n  throw error;\n}\n`,
+    );
     result = await Bun.build({
-      entrypoints: [production ? config.entry : devHostEntrypoint],
+      entrypoints: [hostEntrypoint, workerEntrypoint],
+      throw: false,
       target: "bun",
       format: "esm",
       conditions: ["browser"],
-      plugins: production
-        ? [
-            quickguiSolidPlugin({ development: false, projectRoot: config.projectRoot }),
-            nativeBindingPlugin(info.nativeAddon, options.target),
-          ]
-        : [],
+      plugins: [
+        quickguiSolidPlugin({ development: !production, projectRoot: config.projectRoot }),
+        nativeBindingPlugin(info.nativeAddon, options.target),
+      ],
       minify: production,
       sourcemap: production ? "none" : "inline",
       env: "disable",

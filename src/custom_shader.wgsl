@@ -22,7 +22,7 @@ struct VertexOutput {
     @builtin(position) physical_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) logical_position: vec2<f32>,
-    @location(2) @interpolate(flat) physical_clip: vec4<f32>,
+    @location(2) @interpolate(flat) logical_clip: vec4<f32>,
     @location(3) @interpolate(flat) size: vec2<f32>,
     @location(4) @interpolate(flat) params_0: vec4<f32>,
     @location(5) @interpolate(flat) params_1: vec4<f32>,
@@ -54,7 +54,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     );
     output.uv = uv;
     output.logical_position = logical_position;
-    output.physical_clip = input.clip * view.scale;
+    output.logical_clip = input.clip;
     output.size = input.rect.zw;
     output.params_0 = input.params_0;
     output.params_1 = input.params_1;

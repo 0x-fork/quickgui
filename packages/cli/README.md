@@ -14,19 +14,18 @@ bun run dev
 `quickgui dev` creates a genuine native development application. On macOS this is an ad-hoc-signed
 `.app` under `.quickgui/dev/<target>/` and the CLI runs its `Contents/MacOS` executable.
 
-The app source is not bundled into that development application. The host loads the TS/TSX entry
-from disk with the built-in Solid compiler on every launch. Source edits therefore start a candidate
-process without rebuilding or repackaging the `.app`; once its first native window is ready, the
-CLI stops the prior process. A compile or startup failure leaves the prior app running. Changes to
-bundle metadata, icons, entitlements, or copied resources repackage the host because those values
-belong to the native bundle.
+Each development build compiles two Bun entrypoints into the bundle's executable: a minimal native
+main-thread host and the current TS/TSX application Worker. Source edits create and sign a candidate
+`.app`; after its first native window completes an event-loop turn, the CLI stops the prior process.
+A compile or startup failure leaves the prior app running. The generated `.app` is self-contained
+and can also be launched directly from Finder or LaunchServices.
 
-The bundle contains a small development manifest with the external project paths, so it can also
-be launched directly from Finder or LaunchServices. Direct launch runs the current source once;
-the CLI must remain in charge for watching and candidate-first restart.
+AppKit/Winit stays permanently on the process main thread. Bun timers, fetch, streaming, and other
+application work stay on the Worker's supported event loop. Bounded native queues and an explicit
+Winit wake connect them without an idle polling interval.
 
-QuickGUI uses process restart instead of in-isolate hot replacement because AppKit/Winit application
-state is process-owned.
+QuickGUI uses candidate-first process restart instead of in-isolate hot replacement because
+AppKit/Winit application state is process-owned.
 
 ## Production builds
 

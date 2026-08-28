@@ -1,10 +1,13 @@
 # @quickgui/native
 
-Low-level Bun/N-API host for QuickGUI. It retains a JavaScript node tree, sends bounded binary
-mutation batches to Rust, pumps one native application loop on the macOS main thread, and routes
-bounded native events to independent `Window` trees. Native input nodes route controlled value
-payloads, including masked password fields, and native Markdown nodes retain QuickGUI core
-parser/render state across mutations. `new Window({ anchor: node, ... })` creates a display-aware,
+Low-level Bun/N-API host for QuickGUI. AppKit/Winit permanently owns the process main thread while
+the application runs on Bun's ordinary Worker event loop. Bounded native command and event queues
+connect the two; a Winit proxy wakes the main thread only when Worker work arrives. Settled
+applications therefore block without a polling interval, timer shim, or descriptor scan. The host
+retains a JavaScript node tree, sends bounded binary mutation batches to Rust, and routes bounded
+native events to independent `Window` trees. Native input nodes route
+controlled value payloads, including masked password fields, and native Markdown nodes retain
+QuickGUI core parser/render state across mutations. `new Window({ anchor: node, ... })` creates a display-aware,
 parent-owned native popup. Its public lifecycle remains `new App()`, `new Window(options)`, and
 `window.close()`.
 

@@ -69,12 +69,10 @@ fn rounded_rect_distance(position: vec2<f32>, size: vec2<f32>, radius_value: f32
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let physical_position = input.position.xy;
-    let physical_clip = input.clip * view.scale;
-    if physical_position.x < physical_clip.x
-        || physical_position.y < physical_clip.y
-        || physical_position.x >= physical_clip.z
-        || physical_position.y >= physical_clip.w
+    if input.logical_position.x < input.clip.x
+        || input.logical_position.y < input.clip.y
+        || input.logical_position.x >= input.clip.z
+        || input.logical_position.y >= input.clip.w
     {
         discard;
     }

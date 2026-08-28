@@ -40,7 +40,6 @@ export async function runDev(options: DevOptions): Promise<number> {
 
   const abortController = new AbortController();
   let currentProcess: AppProcess | undefined;
-  let bundleKey = developmentBundleKey(config, options.signingIdentity);
   let stopping = false;
   let reloadQueued = false;
   let reloadPromise: Promise<void> | undefined;
@@ -50,14 +49,11 @@ export async function runDev(options: DevOptions): Promise<number> {
   const reload = async (): Promise<void> => {
     try {
       const nextConfig = await loadConfig(projectRoot, options.configFile);
-      const nextBundleKey = developmentBundleKey(nextConfig, options.signingIdentity);
-      let nextBuild = build;
-      if (
-        nextBundleKey !== bundleKey ||
-        (changedPath && touchesBundleInput(changedPath, nextConfig))
-      ) {
-        nextBuild = await packageDevelopmentHost(nextConfig, target, options.signingIdentity);
-      }
+      const nextBuild = await packageDevelopmentHost(
+        nextConfig,
+        target,
+        options.signingIdentity,
+      );
       const candidate = await launchApplication(nextBuild, nextConfig, abortController.signal);
       if (stopping) {
         await stopApplication(candidate);
@@ -67,7 +63,6 @@ export async function runDev(options: DevOptions): Promise<number> {
       currentProcess = candidate;
       config = nextConfig;
       build = nextBuild;
-      bundleKey = nextBundleKey;
       if (previous) await stopApplication(previous);
       console.log(`[quickgui] Reloaded (pid ${candidate.pid})`);
     } catch (error) {
@@ -163,8 +158,6 @@ async function launchApplication(
       ...process.env,
       NODE_ENV: "development",
       QUICKGUI_DEV: "1",
-      QUICKGUI_ENTRY: config.entry,
-      QUICKGUI_PROJECT_ROOT: config.projectRoot,
     },
     stdin: "ignore",
     stdout: "inherit",
@@ -210,34 +203,6 @@ async function stopApplication(child: AppProcess): Promise<void> {
   await Promise.race([child.exited, Bun.sleep(1_500)]);
   if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   await child.exited;
-}
-
-function developmentBundleKey(
-  config: ResolvedQuickGuiConfig,
-  signingIdentity?: string,
-): string {
-  return JSON.stringify({
-    name: config.name,
-    executableName: config.executableName,
-    identifier: config.identifier,
-    version: config.version,
-    buildVersion: config.buildVersion,
-    entry: config.entry,
-    resources: config.resources,
-    macos: config.macos,
-    windows: config.windows,
-    signingIdentity: signingIdentity ?? null,
-  });
-}
-
-function touchesBundleInput(path: string, config: ResolvedQuickGuiConfig): boolean {
-  const inputs = [
-    ...config.resources,
-    config.macos.icon,
-    config.macos.entitlements,
-    config.windows.icon,
-  ].filter((value): value is string => !!value);
-  return inputs.some((input) => path === input || path.startsWith(`${input}${sep}`));
 }
 
 function shouldIgnoreChange(root: string, path: string, outDir: string): boolean {

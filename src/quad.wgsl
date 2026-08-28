@@ -53,7 +53,11 @@ fn vs_main(input: VertexInput, @builtin(vertex_index) vertex_index: u32) -> Vert
     output.geometry = input.geometry;
     output.primary = input.primary;
     output.secondary = input.secondary;
-    output.clip = input.clip * view.scale;
+    // Keep clipping in the same logical coordinate space as the primitive. During a macOS live
+    // resize the Metal drawable may intentionally remain larger than the current viewport; the
+    // fragment builtin position is then expressed in drawable pixels and cannot be compared to
+    // current-viewport pixels without clipping the primitive by the resize ratio a second time.
+    output.clip = input.clip;
     output.params = input.params;
     output.subject = input.subject;
     return output;
@@ -98,9 +102,9 @@ fn blurred_coverage(distance: f32, blur_radius: f32) -> f32 {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let pixel = input.position.xy;
-    if pixel.x < input.clip.x || pixel.y < input.clip.y ||
-       pixel.x >= input.clip.z || pixel.y >= input.clip.w {
+    let logical_position = input.logical_position;
+    if logical_position.x < input.clip.x || logical_position.y < input.clip.y ||
+       logical_position.x >= input.clip.z || logical_position.y >= input.clip.w {
         discard;
     }
 

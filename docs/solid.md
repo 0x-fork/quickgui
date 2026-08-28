@@ -18,9 +18,10 @@ For application development, the preferred path is the [QuickGUI CLI](cli.md):
 quickgui dev
 ```
 
-On macOS this runs a real signed `.app` whose stable host loads the project TSX directly from disk.
-Source changes restart that host without rebundling or repackaging the application. The CLI owns
-the Solid compiler setup, so applications do not need a Bun preload or a special start command.
+On macOS this runs a real signed `.app` with AppKit/Winit on the process main thread and the compiled
+project TSX in a Bun Worker. Source changes build a candidate `.app` and replace the previous
+process only after its first native window is ready. The CLI owns the Solid compiler setup, so
+applications do not need a Bun preload or a special start command.
 
 ```tsx
 import { App, Button, Text, View, Window, render, type NativeNode } from "@quickgui/solid";
@@ -54,8 +55,8 @@ render(() => <Counter />, mainWindow);
 await app.run();
 ```
 
-`App` owns the native event loop and establishes the application context for its JavaScript
-isolate. Window configuration and rendered state belong to `Window`. Constructing a `Window` works
+`App` establishes the application context for its JavaScript Worker while the native host owns the
+platform event loop. Window configuration and rendered state belong to `Window`. Constructing a `Window` works
 both before and after `run` starts, so an event handler can open another independent native window
 without creating another application runtime:
 

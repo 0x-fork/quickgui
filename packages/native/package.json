@@ -5,10 +5,12 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
+    "./host": "./host.ts",
     "./protocol": "./protocol.ts"
   },
   "files": [
     "index.ts",
+    "host.ts",
     "protocol.ts",
     "scripts",
     "binding.js",

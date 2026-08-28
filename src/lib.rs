@@ -275,7 +275,7 @@ pub use runtime::{
     WindowCommandError, WindowHandle, WindowKind, WindowOptions, WindowState, WindowTabState,
 };
 #[cfg(not(target_arch = "wasm32"))]
-pub use runtime::{AppRunStatus, AppRunner};
+pub use runtime::{AppRunStatus, AppRunner, AppRunnerWaker};
 #[cfg(any(test, feature = "test-support"))]
 pub use runtime::{
     MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,

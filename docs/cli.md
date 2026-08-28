@@ -27,23 +27,23 @@ On macOS, development first creates and ad-hoc signs a real bundle at
 `.quickgui/dev/darwin-arm64/<executable>.app`. The CLI directly owns the process created from that
 bundle's `Contents/MacOS` executable, so the running GUI has normal bundle and `Info.plist` context.
 
-The development bundle contains a stable Bun-powered host, not the application bundle. At launch
-the host registers the project-installed Solid compiler and imports the configured TS/TSX entry
-from disk. Ordinary source edits therefore follow this sequence:
+The development executable contains two compiled Bun entrypoints: a minimal native host and the
+configured TS/TSX application Worker. Ordinary source edits therefore follow this sequence:
 
-1. start a new host process using the unchanged `.app`;
-2. compile and load the edited source on demand;
-3. wait until QuickGUI starts its first native window;
+1. compile the edited source and package a candidate `.app`;
+2. start the candidate process with AppKit/Winit on its main thread and application code in a Bun
+   Worker;
+3. wait until QuickGUI completes the first native window event-loop turn;
 4. stop only the previous process owned by this CLI session.
 
-There is no source bundling, `.app` replacement, or soft in-isolate reload in that path. If the new
-source cannot compile or exits before a window is ready, the candidate is discarded and the last
-working app stays open. Bundle metadata, icons, entitlements, and copied resources are repackaged
-when they change because macOS reads them from the bundle.
+There is no soft in-isolate reload. If the new source cannot compile or exits before a window is
+ready, the candidate is discarded and the last working app stays open. The generated `.app` is
+self-contained and also works when launched directly; use `quickgui dev` when the CLI should own
+watching and candidate-first process replacement.
 
-A small manifest in `Contents/Resources` records the external project paths, so the generated
-`.app` also works when launched directly. Direct launch evaluates the current source but does not
-provide watching; use `quickgui dev` when the CLI should own reload and process cleanup.
+AppKit/Winit permanently owns the process main thread. Bun timers, fetch, streaming, and other
+application work run on the Worker's normal event loop. Bounded command/event queues and a Winit
+proxy wake join the two without periodic native pumping.
 
 Available development options:
 

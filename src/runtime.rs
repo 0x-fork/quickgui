@@ -2826,6 +2826,27 @@ pub enum AppRunStatus {
     Exited(i32),
 }
 
+/// Thread-safe wake handle for an externally pumped [`AppRunner`].
+///
+/// Embedding runtimes can block the platform event loop indefinitely, then use this handle from a
+/// worker or command producer when native work becomes ready. A blocked [`AppRunner::pump`] call
+/// returns without forcing a periodic polling timeout.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone)]
+pub struct AppRunnerWaker {
+    proxy: EventLoopProxy<RuntimeEvent>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl AppRunnerWaker {
+    /// Wake the application event loop, returning `false` after it has closed.
+    pub fn wake(&self) -> bool {
+        self.proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .is_ok()
+    }
+}
+
 /// A QuickGUI application whose native event loop is advanced by an external runtime.
 ///
 /// Create and pump this value on the platform application thread. Each call still dispatches
@@ -2843,8 +2864,8 @@ pub struct AppRunner {
 impl AppRunner {
     /// Advance native events until a redraw completes, the timeout elapses, or the app exits.
     ///
-    /// `None` may block indefinitely. External runtimes should normally pass a bounded timeout so
-    /// they can service timers and I/O even when the native application is otherwise idle.
+    /// `None` may block indefinitely. External runtimes can pair it with [`Self::waker`] so their
+    /// command producer interrupts the blocked pump without periodic polling.
     pub fn pump(&mut self, timeout: Option<Duration>) -> Result<AppRunStatus, AppError> {
         if matches!(self.status, AppRunStatus::Exited(_)) {
             return Ok(self.status);
@@ -2859,6 +2880,13 @@ impl AppRunner {
             PumpStatus::Exit(code) => AppRunStatus::Exited(code),
         };
         Ok(self.status)
+    }
+
+    /// Return a thread-safe handle that interrupts a blocking [`Self::pump`] call.
+    pub fn waker(&self) -> AppRunnerWaker {
+        AppRunnerWaker {
+            proxy: self.runtime.event_proxy.clone(),
+        }
     }
 
     /// Stable handle of the initial application window.

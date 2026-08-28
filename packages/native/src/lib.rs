@@ -3,16 +3,22 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt,
     rc::Rc,
-    sync::Arc,
+    sync::{
+        Arc, Condvar, LazyLock, Mutex,
+        atomic::{AtomicU32, Ordering},
+    },
     time::Duration,
 };
 
-use napi::{Error, Result, bindgen_prelude::Buffer};
+use napi::{
+    Env, Error, Result, Task,
+    bindgen_prelude::{AsyncTask, Buffer, Function},
+};
 use napi_derive::napi;
 use quickgui::{
     AccessibilityRole, AnchorPlacement, AnchoredPopover, App as QuickGuiApp, AppConfig, AppRegion,
-    AppRunStatus, AppRunner, Color, CursorStyle, Element, ElementId, FontWeight, IntoElement,
-    Markdown, MarkdownStyle, QuitMode, TextAlign, TitleBarStyle, View, ViewContext,
+    AppRunStatus, AppRunner, AppRunnerWaker, Color, CursorStyle, Element, ElementId, FontWeight,
+    IntoElement, Markdown, MarkdownStyle, QuitMode, TextAlign, TitleBarStyle, View, ViewContext,
     WindowBackgroundAppearance, WindowHandle, button, div, text, text_area, text_input,
 };
 
@@ -26,6 +32,7 @@ const MAX_NODES: usize = 262_144;
 const MAX_TREE_DEPTH: usize = 512;
 const MAX_STRING_BYTES: usize = 1024 * 1024;
 const MAX_QUEUED_EVENTS: usize = 8_192;
+const MAX_HOST_COMMANDS: usize = 8_192;
 const MAX_WINDOWS: usize = 256;
 const NO_ANCHOR: u32 = u32::MAX;
 
@@ -138,6 +145,263 @@ pub struct NativeEvent {
     pub window: u32,
     pub target: u32,
     pub value: Option<String>,
+}
+
+#[derive(Clone)]
+#[napi(object)]
+pub struct HostedAppUpdate {
+    pub events: Vec<NativeEvent>,
+    pub exit_code: Option<i32>,
+}
+
+struct SyncReply<T> {
+    value: Mutex<Option<std::result::Result<T, String>>>,
+    ready: Condvar,
+}
+
+impl<T> SyncReply<T> {
+    fn new() -> Self {
+        Self {
+            value: Mutex::new(None),
+            ready: Condvar::new(),
+        }
+    }
+
+    fn complete(&self, value: std::result::Result<T, String>) {
+        *lock(&self.value) = Some(value);
+        self.ready.notify_all();
+    }
+
+    fn wait(&self) -> std::result::Result<T, String> {
+        let mut value = lock(&self.value);
+        while value.is_none() {
+            value = wait(&self.ready, value);
+        }
+        value
+            .take()
+            .expect("a completed QuickGUI host reply must contain a value")
+    }
+}
+
+enum HostCommand {
+    CreateApp {
+        app: u32,
+        reply: Arc<SyncReply<()>>,
+    },
+    CreateWindow {
+        app: u32,
+        options: NativeWindowOptions,
+        reply: Arc<SyncReply<u32>>,
+    },
+    CreateAnchoredWindow {
+        app: u32,
+        parent: u32,
+        anchor: u32,
+        options: NativeWindowOptions,
+        reply: Arc<SyncReply<u32>>,
+    },
+    ApplyBatch {
+        app: u32,
+        window: u32,
+        batch: Vec<u8>,
+    },
+    CloseWindow {
+        app: u32,
+        window: u32,
+        reply: Arc<SyncReply<bool>>,
+    },
+    FocusNode {
+        app: u32,
+        window: u32,
+        node: u32,
+        reply: Arc<SyncReply<bool>>,
+    },
+    StartApp {
+        app: u32,
+        reply: Arc<SyncReply<()>>,
+    },
+    DestroyApp {
+        app: u32,
+        reply: Arc<SyncReply<bool>>,
+    },
+}
+
+#[derive(Default)]
+struct HostState {
+    running: bool,
+    app: Option<u32>,
+    commands: VecDeque<HostCommand>,
+    events: VecDeque<NativeEvent>,
+    exit_code: Option<i32>,
+    failure: Option<String>,
+    waker: Option<AppRunnerWaker>,
+}
+
+struct HostCoordinator {
+    next_app: AtomicU32,
+    state: Mutex<HostState>,
+    changed: Condvar,
+}
+
+impl HostCoordinator {
+    fn new() -> Self {
+        Self {
+            next_app: AtomicU32::new(1),
+            state: Mutex::new(HostState::default()),
+            changed: Condvar::new(),
+        }
+    }
+
+    fn allocate_app(&self) -> std::result::Result<u32, String> {
+        let app = self
+            .next_app
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| {
+                id.checked_add(1).filter(|next| *next != 0)
+            })
+            .map_err(|_| "QuickGUI hosted app id space exhausted".to_owned())?
+            .max(1);
+        Ok(app)
+    }
+
+    fn enqueue(&self, command: HostCommand) -> std::result::Result<(), String> {
+        let waker = {
+            let mut state = lock(&self.state);
+            if let Some(error) = state.failure.clone() {
+                return Err(error);
+            }
+            if state.commands.len() >= MAX_HOST_COMMANDS {
+                return Err("QuickGUI host command queue is full".to_owned());
+            }
+            state.commands.push_back(command);
+            state.waker.clone()
+        };
+        self.changed.notify_all();
+        if let Some(waker) = waker {
+            waker.wake();
+        }
+        Ok(())
+    }
+
+    fn begin(&self) -> std::result::Result<(), String> {
+        let mut state = lock(&self.state);
+        if state.running {
+            return Err("the QuickGUI native host is already running".to_owned());
+        }
+        state.running = true;
+        Ok(())
+    }
+
+    fn finish(&self) {
+        let mut state = lock(&self.state);
+        state.running = false;
+        state.waker = None;
+        self.changed.notify_all();
+    }
+
+    fn wait_for_commands(&self) -> std::result::Result<VecDeque<HostCommand>, String> {
+        let mut state = lock(&self.state);
+        while state.commands.is_empty() && state.failure.is_none() {
+            state = wait(&self.changed, state);
+        }
+        if let Some(error) = state.failure.clone() {
+            return Err(error);
+        }
+        Ok(std::mem::take(&mut state.commands))
+    }
+
+    fn take_commands(&self) -> std::result::Result<VecDeque<HostCommand>, String> {
+        let mut state = lock(&self.state);
+        if let Some(error) = state.failure.clone() {
+            return Err(error);
+        }
+        Ok(std::mem::take(&mut state.commands))
+    }
+
+    fn set_app(&self, app: u32) -> std::result::Result<(), String> {
+        let mut state = lock(&self.state);
+        if state.app.is_some() {
+            return Err("a QuickGUI hosted app is already active".to_owned());
+        }
+        state.app = Some(app);
+        state.events.clear();
+        state.exit_code = None;
+        state.failure = None;
+        Ok(())
+    }
+
+    fn set_waker(&self, waker: AppRunnerWaker) {
+        lock(&self.state).waker = Some(waker);
+    }
+
+    fn publish_events(&self, events: impl IntoIterator<Item = NativeEvent>) {
+        let mut state = lock(&self.state);
+        for event in events {
+            if state.events.len() >= MAX_QUEUED_EVENTS {
+                break;
+            }
+            state.events.push_back(event);
+        }
+        drop(state);
+        self.changed.notify_all();
+    }
+
+    fn publish_exit(&self, code: i32) {
+        let mut state = lock(&self.state);
+        state.exit_code = Some(code.max(0));
+        state.waker = None;
+        drop(state);
+        self.changed.notify_all();
+    }
+
+    fn fail(&self, error: String) {
+        let waker = {
+            let mut state = lock(&self.state);
+            if state.failure.is_none() {
+                state.failure = Some(error);
+            }
+            state.waker.clone()
+        };
+        self.changed.notify_all();
+        if let Some(waker) = waker {
+            waker.wake();
+        }
+    }
+
+    fn wait_for_update(&self, app: u32) -> std::result::Result<HostedAppUpdate, String> {
+        let mut state = lock(&self.state);
+        loop {
+            if state.app != Some(app) {
+                return Err(format!("unknown QuickGUI hosted app {app}"));
+            }
+            if let Some(error) = state.failure.clone() {
+                return Err(error);
+            }
+            if !state.events.is_empty() || state.exit_code.is_some() {
+                return Ok(HostedAppUpdate {
+                    events: state.events.drain(..).collect(),
+                    exit_code: state.exit_code,
+                });
+            }
+            state = wait(&self.changed, state);
+        }
+    }
+}
+
+static HOST: LazyLock<HostCoordinator> = LazyLock::new(HostCoordinator::new);
+
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn wait<'a, T>(
+    condvar: &Condvar,
+    guard: std::sync::MutexGuard<'a, T>,
+) -> std::sync::MutexGuard<'a, T> {
+    condvar
+        .wait(guard)
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1529,6 +1793,43 @@ impl NativeRuntime {
         true
     }
 
+    fn apply_batch(
+        &mut self,
+        window: u32,
+        batch: &[u8],
+    ) -> std::result::Result<u32, String> {
+        let mutations = decode_batch(batch).map_err(|error| error.to_string())?;
+        self.sync_closed_windows();
+        let native_window = self
+            .windows
+            .get(&window)
+            .ok_or_else(|| format!("unknown QuickGUI window {window}"))?;
+        let revision = apply_mutations(&mut native_window.tree.borrow_mut(), mutations)
+            .map_err(|error| error.to_string())?;
+        if let (Some(runner), Some(handle)) = (&mut self.runner, native_window.handle) {
+            runner.invalidate_window(handle);
+        }
+        Ok(revision)
+    }
+
+    fn focus_node(&mut self, window: u32, node: u32) -> std::result::Result<bool, String> {
+        self.sync_closed_windows();
+        let native_window = self
+            .windows
+            .get(&window)
+            .ok_or_else(|| format!("unknown QuickGUI window {window}"))?;
+        if !native_window.tree.borrow().nodes.contains_key(&node) {
+            return Ok(false);
+        }
+        let Some(handle) = native_window.handle else {
+            return Ok(false);
+        };
+        let Some(runner) = &mut self.runner else {
+            return Ok(false);
+        };
+        Ok(runner.focus_element(handle, ElementId::new(node as u64)))
+    }
+
     fn sync_closed_windows(&mut self) {
         let closed = std::mem::take(&mut *self.closed_windows.borrow_mut());
         if closed.is_empty() {
@@ -1538,6 +1839,19 @@ impl NativeRuntime {
             self.windows.remove(id);
         }
         self.window_order.retain(|id| !closed.contains(id));
+    }
+
+    fn drain_events(&mut self) -> Vec<NativeEvent> {
+        self.events
+            .borrow_mut()
+            .drain(..)
+            .map(|event| NativeEvent {
+                kind: event.kind.to_owned(),
+                window: event.window,
+                target: event.target,
+                value: event.value.map(|value| value.to_string()),
+            })
+            .collect()
     }
 }
 
@@ -1686,20 +2000,7 @@ pub fn create_anchored_window(
 
 #[napi]
 pub fn apply_batch(app: u32, window: u32, batch: Buffer) -> Result<u32> {
-    let mutations = decode_batch(&batch).map_err(|error| Error::from_reason(error.to_string()))?;
-    with_app_mut(app, |runtime| {
-        runtime.sync_closed_windows();
-        let native_window = runtime
-            .windows
-            .get(&window)
-            .ok_or_else(|| format!("unknown QuickGUI window {window}"))?;
-        let revision = apply_mutations(&mut native_window.tree.borrow_mut(), mutations)
-            .map_err(|error| error.to_string())?;
-        if let (Some(runner), Some(handle)) = (&mut runtime.runner, native_window.handle) {
-            runner.invalidate_window(handle);
-        }
-        Ok(revision)
-    })
+    with_app_mut(app, |runtime| runtime.apply_batch(window, &batch))
 }
 
 #[napi]
@@ -1709,23 +2010,7 @@ pub fn close_window(app: u32, window: u32) -> Result<bool> {
 
 #[napi]
 pub fn focus_node(app: u32, window: u32, node: u32) -> Result<bool> {
-    with_app_mut(app, |runtime| {
-        runtime.sync_closed_windows();
-        let native_window = runtime
-            .windows
-            .get(&window)
-            .ok_or_else(|| format!("unknown QuickGUI window {window}"))?;
-        if !native_window.tree.borrow().nodes.contains_key(&node) {
-            return Ok(false);
-        }
-        let Some(handle) = native_window.handle else {
-            return Ok(false);
-        };
-        let Some(runner) = &mut runtime.runner else {
-            return Ok(false);
-        };
-        Ok(runner.focus_element(handle, ElementId::new(node as u64)))
-    })
+    with_app_mut(app, |runtime| runtime.focus_node(window, node))
 }
 
 #[napi]
@@ -1757,24 +2042,315 @@ pub fn pump_app(app: u32, timeout_ms: Option<f64>) -> Result<i32> {
 
 #[napi]
 pub fn take_events(app: u32) -> Result<Vec<NativeEvent>> {
-    with_app_mut(app, |runtime| {
-        Ok(runtime
-            .events
-            .borrow_mut()
-            .drain(..)
-            .map(|event| NativeEvent {
-                kind: event.kind.to_owned(),
-                window: event.window,
-                target: event.target,
-                value: event.value.map(|value| value.to_string()),
-            })
-            .collect())
-    })
+    with_app_mut(app, |runtime| Ok(runtime.drain_events()))
 }
 
 #[napi]
 pub fn destroy_app(app: u32) -> Result<bool> {
     REGISTRY.with(|registry| Ok(registry.borrow_mut().apps.remove(&app).is_some()))
+}
+
+#[napi]
+pub fn create_hosted_app() -> Result<u32> {
+    let app = HOST.allocate_app().map_err(Error::from_reason)?;
+    HOST.set_app(app).map_err(Error::from_reason)?;
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::CreateApp {
+        app,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)?;
+    Ok(app)
+}
+
+#[napi]
+pub fn create_hosted_window(
+    app: u32,
+    options: Option<NativeWindowOptions>,
+) -> Result<u32> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::CreateWindow {
+        app,
+        options: options.unwrap_or_default(),
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn create_hosted_anchored_window(
+    app: u32,
+    parent: u32,
+    anchor: u32,
+    options: Option<NativeWindowOptions>,
+) -> Result<u32> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::CreateAnchoredWindow {
+        app,
+        parent,
+        anchor,
+        options: options.unwrap_or_default(),
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn apply_hosted_batch(app: u32, window: u32, batch: Buffer) -> Result<u32> {
+    if batch.len() > MAX_BATCH_BYTES {
+        return Err(Error::from_reason(format!(
+            "mutation batch exceeds {MAX_BATCH_BYTES} bytes"
+        )));
+    }
+    HOST.enqueue(HostCommand::ApplyBatch {
+        app,
+        window,
+        batch: batch.to_vec(),
+    })
+    .map_err(Error::from_reason)?;
+    Ok(0)
+}
+
+#[napi]
+pub fn close_hosted_window(app: u32, window: u32) -> Result<bool> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::CloseWindow {
+        app,
+        window,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn focus_hosted_node(app: u32, window: u32, node: u32) -> Result<bool> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::FocusNode {
+        app,
+        window,
+        node,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn start_hosted_app(app: u32) -> Result<()> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::StartApp {
+        app,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn destroy_hosted_app(app: u32) -> Result<bool> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::DestroyApp {
+        app,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[doc(hidden)]
+pub struct WaitForHostedEvents {
+    app: u32,
+}
+
+impl Task for WaitForHostedEvents {
+    type Output = HostedAppUpdate;
+    type JsValue = HostedAppUpdate;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        HOST.wait_for_update(self.app).map_err(Error::from_reason)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+#[napi(ts_return_type = "Promise<HostedAppUpdate>")]
+pub fn wait_for_hosted_events(app: u32) -> AsyncTask<WaitForHostedEvents> {
+    AsyncTask::new(WaitForHostedEvents { app })
+}
+
+#[napi]
+pub fn abort_app_host(message: String) {
+    HOST.fail(message);
+}
+
+#[napi]
+pub fn run_app_host(on_ready: Option<Function<'_, (), ()>>) -> Result<i32> {
+    HOST.begin().map_err(Error::from_reason)?;
+    let result = run_app_host_loop(on_ready.as_ref());
+    if let Err(error) = &result {
+        HOST.fail(error.clone());
+    }
+    HOST.finish();
+    result.map_err(Error::from_reason)
+}
+
+fn run_app_host_loop(
+    on_ready: Option<&Function<'_, (), ()>>,
+) -> std::result::Result<i32, String> {
+    let mut active_app = None;
+    let mut runtime: Option<NativeRuntime> = None;
+    let mut ready_reported = false;
+
+    loop {
+        let running = runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.runner.is_some());
+        let mut commands = if running {
+            HOST.take_commands()?
+        } else {
+            HOST.wait_for_commands()?
+        };
+
+        while let Some(command) = commands.pop_front() {
+            match command {
+                HostCommand::CreateApp { app, reply } => {
+                    let result = if runtime.is_some() {
+                        Err("a QuickGUI native host can own only one app".to_owned())
+                    } else {
+                        active_app = Some(app);
+                        runtime = Some(NativeRuntime::new());
+                        Ok(())
+                    };
+                    reply.complete(result);
+                }
+                HostCommand::CreateWindow {
+                    app,
+                    options,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| runtime.create_window(options),
+                    ));
+                }
+                HostCommand::CreateAnchoredWindow {
+                    app,
+                    parent,
+                    anchor,
+                    options,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| runtime.create_anchored_window(parent, anchor, options),
+                    ));
+                }
+                HostCommand::ApplyBatch { app, window, batch } => {
+                    with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
+                        runtime.apply_batch(window, &batch)
+                    })?;
+                }
+                HostCommand::CloseWindow {
+                    app,
+                    window,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| Ok(runtime.close_window(window)),
+                    ));
+                }
+                HostCommand::FocusNode {
+                    app,
+                    window,
+                    node,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| runtime.focus_node(window, node),
+                    ));
+                }
+                HostCommand::StartApp { app, reply } => {
+                    let result = with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        NativeRuntime::start,
+                    );
+                    if result.is_ok() {
+                        let waker = runtime
+                            .as_ref()
+                            .and_then(|runtime| runtime.runner.as_ref())
+                            .expect("a started QuickGUI host must own an AppRunner")
+                            .waker();
+                        HOST.set_waker(waker);
+                    }
+                    reply.complete(result);
+                }
+                HostCommand::DestroyApp { app, reply } => {
+                    let result = if active_app == Some(app) && runtime.is_some() {
+                        HOST.publish_exit(0);
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    };
+                    reply.complete(result);
+                    return Ok(0);
+                }
+            }
+        }
+
+        let Some(runtime) = runtime.as_mut() else {
+            continue;
+        };
+        runtime.sync_closed_windows();
+        HOST.publish_events(runtime.drain_events());
+
+        let Some(runner) = runtime.runner.as_mut() else {
+            continue;
+        };
+        let status = runner.pump(None).map_err(|error| error.to_string())?;
+        if !ready_reported {
+            if let Some(on_ready) = on_ready {
+                on_ready.call(()).map_err(|error| error.to_string())?;
+            }
+            ready_reported = true;
+        }
+        runtime.sync_closed_windows();
+        HOST.publish_events(runtime.drain_events());
+        if let AppRunStatus::Exited(code) = status {
+            let code = code.max(0);
+            HOST.publish_exit(code);
+            return Ok(code);
+        }
+    }
+}
+
+fn with_hosted_runtime<T>(
+    active_app: Option<u32>,
+    runtime: Option<&mut NativeRuntime>,
+    app: u32,
+    callback: impl FnOnce(&mut NativeRuntime) -> std::result::Result<T, String>,
+) -> std::result::Result<T, String> {
+    if active_app != Some(app) {
+        return Err(format!("unknown QuickGUI hosted app {app}"));
+    }
+    callback(runtime.ok_or_else(|| format!("unknown QuickGUI hosted app {app}"))?)
 }
 
 #[napi]

@@ -62,12 +62,13 @@ export interface WindowOptions {
 }
 
 export interface RunOptions {
-  /** Maximum time native event processing may block Bun before yielding. */
+  /** Pump interval used only when running a source file outside the QuickGUI CLI host. */
   sliceMs?: number;
 }
 
 let nextNodeId = 1;
 let activeApp: App | undefined;
+const hostedRuntime = process.env.QUICKGUI_APP_WORKER === "1";
 
 const nativeProtocolVersion = binding.protocolVersion();
 if (nativeProtocolVersion !== PROTOCOL_VERSION) {
@@ -99,7 +100,9 @@ export class NativeNode {
     const host = this.host;
     if (!host || host.closed) return false;
     host.flush();
-    return binding.focusNode(host.app.nativeId, host.nativeId, this.id);
+    return hostedRuntime
+      ? binding.focusHostedNode(host.app.nativeId, host.nativeId, this.id)
+      : binding.focusNode(host.app.nativeId, host.nativeId, this.id);
   }
 }
 
@@ -138,7 +141,7 @@ export class App {
     if (activeApp) {
       throw new Error("a QuickGUI App is already active in this JavaScript isolate");
     }
-    this.nativeId = binding.createApp();
+    this.nativeId = hostedRuntime ? binding.createHostedApp() : binding.createApp();
     activeApp = this;
   }
 
@@ -151,21 +154,28 @@ export class App {
     this.#assertAlive();
     if (this.#started) return;
     this.flush();
-    binding.startApp(this.nativeId);
+    if (hostedRuntime) binding.startHostedApp(this.nativeId);
+    else binding.startApp(this.nativeId);
     this.#started = true;
-    notifyDevelopmentHostReady();
   }
 
   pump(sliceMs = 16): number {
     this.start();
-    const exitCode = binding.pumpApp(this.nativeId, sliceMs);
+    return this.#finishPump(binding.pumpApp(this.nativeId, sliceMs));
+  }
+
+  #finishPump(exitCode: number): number {
     this.dispatchEvents();
     this.flush();
     return exitCode;
   }
 
   dispatchEvents(): void {
-    for (const event of binding.takeEvents(this.nativeId)) {
+    this.#dispatchNativeEvents(binding.takeEvents(this.nativeId));
+  }
+
+  #dispatchNativeEvents(events: binding.NativeEvent[]): void {
+    for (const event of events) {
       const window = this.windows.get(event.window);
       if (!window) continue;
       if (event.kind === "close") {
@@ -179,9 +189,19 @@ export class App {
   async run(options: RunOptions = {}): Promise<number> {
     if (this.#running) throw new Error("this QuickGUI app is already running");
     this.#running = true;
-    const sliceMs = Math.max(0, Math.min(options.sliceMs ?? 16, 1_000));
     try {
       this.start();
+      if (hostedRuntime) {
+        for (;;) {
+          const update = await binding.waitForHostedEvents(this.nativeId);
+          this.#dispatchNativeEvents(update.events);
+          this.flush();
+          if (update.exitCode !== undefined && update.exitCode !== null) {
+            return update.exitCode;
+          }
+        }
+      }
+      const sliceMs = Math.max(0, Math.min(options.sliceMs ?? 16, 1_000));
       for (;;) {
         const exitCode = this.pump(sliceMs);
         if (exitCode >= 0) return exitCode;
@@ -194,7 +214,8 @@ export class App {
 
   destroy(): void {
     if (this.#destroyed) return;
-    binding.destroyApp(this.nativeId);
+    if (hostedRuntime) binding.destroyHostedApp(this.nativeId);
+    else binding.destroyApp(this.nativeId);
     this.#destroyed = true;
     if (activeApp === this) activeApp = undefined;
     for (const window of this.windows.values()) window._didDestroy();
@@ -208,7 +229,10 @@ export class App {
 
   _closeWindow(window: Window): void {
     if (this.#destroyed || window.closed) return;
-    if (binding.closeWindow(this.nativeId, window.nativeId)) this._didCloseWindow(window);
+    const closed = hostedRuntime
+      ? binding.closeHostedWindow(this.nativeId, window.nativeId)
+      : binding.closeWindow(this.nativeId, window.nativeId);
+    if (closed) this._didCloseWindow(window);
   }
 
   _didCloseWindow(window: Window): void {
@@ -219,15 +243,6 @@ export class App {
 
   #assertAlive(): void {
     if (this.#destroyed) throw new Error("this QuickGUI app has been destroyed");
-  }
-}
-
-function notifyDevelopmentHostReady(): void {
-  if (process.env.QUICKGUI_DEV !== "1" || typeof process.send !== "function") return;
-  try {
-    process.send({ type: "quickgui-ready" });
-  } catch {
-    // The CLI may have exited while the application was starting.
   }
 }
 
@@ -276,14 +291,23 @@ export class Window {
         throw new Error("an anchored Window requires a mounted node in an open parent Window");
       }
       parent.flush();
-      this.nativeId = binding.createAnchoredWindow(
-        app.nativeId,
-        parent.nativeId,
-        options.anchor.id,
-        nativeOptions,
-      );
+      this.nativeId = hostedRuntime
+        ? binding.createHostedAnchoredWindow(
+            app.nativeId,
+            parent.nativeId,
+            options.anchor.id,
+            nativeOptions,
+          )
+        : binding.createAnchoredWindow(
+            app.nativeId,
+            parent.nativeId,
+            options.anchor.id,
+            nativeOptions,
+          );
     } else {
-      this.nativeId = binding.createWindow(app.nativeId, nativeOptions);
+      this.nativeId = hostedRuntime
+        ? binding.createHostedWindow(app.nativeId, nativeOptions)
+        : binding.createWindow(app.nativeId, nativeOptions);
     }
     this.root = new NativeNode(NativeNodeTag.View, "", ROOT_NODE_ID);
     this.root.host = this;
@@ -315,7 +339,10 @@ export class Window {
     if (this.#batch.empty) return undefined;
     const batch = this.#batch;
     this.#batch = new MutationBatch();
-    return binding.applyBatch(this.app.nativeId, this.nativeId, batch.finish());
+    const bytes = batch.finish();
+    return hostedRuntime
+      ? binding.applyHostedBatch(this.app.nativeId, this.nativeId, bytes)
+      : binding.applyBatch(this.app.nativeId, this.nativeId, bytes);
   }
 
   _dispatchEvent(type: NativeEventType, targetId: number, value?: string): void {
