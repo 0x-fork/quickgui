@@ -1716,6 +1716,7 @@ impl DetachedTree {
             .retain(|id, _| displayed_ids.contains(id));
         self.scroll_end_states
             .retain(|id, _| displayed_ids.contains(id));
+        report_variable_list_layout_measurements(&root, &self.taffy)?;
         self.natural_bounds.clear();
         self.root = root;
         self.root_node = Some(root_node);
@@ -1742,6 +1743,7 @@ impl DetachedTree {
             if container_queries_need_resolution(&self.root, &self.taffy)? {
                 self.motion.needs_resolve = true;
             }
+            report_variable_list_layout_measurements(&self.root, &self.taffy)?;
         }
         Ok(())
     }
@@ -2821,6 +2823,12 @@ impl UiTree {
         self.finalize_declarative_motion_registry();
         if self.mounted_state_dirty {
             self.sync_mounted_root(now)?;
+        }
+        if let Some(root) = &self.root {
+            // Variable-list geometry comes from the completed Taffy layout. Commit it before
+            // paint chooses the retained scroll translation so a width-dependent row (notably a
+            // wrapped Markdown message) cannot expose one frame at the previous tail offset.
+            report_variable_list_layout_measurements(root, &self.taffy)?;
         }
         if let Some(preview) = &mut self.drag_preview {
             preview.tree.layout(viewport, scale_factor, renderer)?;
@@ -5397,11 +5405,16 @@ fn compute_detached_layout(
                     {
                         return size;
                     }
-                    let max_width = known.width.or_else(|| match available.width {
+                    // For a leaf with padding or a border, Taffy passes its assigned border-box
+                    // width in `known` while the definite available width has already had those
+                    // insets removed. Text shaping is content-box work, so using `known.width`
+                    // here makes layout count fewer lines than paint and lets the final line cross
+                    // a grid-row border during resize.
+                    let max_width = match available.width {
                         AvailableSpace::Definite(width) => Some(width.max(0.0)),
                         AvailableSpace::MinContent => Some(0.0),
                         AvailableSpace::MaxContent => None,
-                    });
+                    };
                     let measured = if let Some(highlights) = highlights {
                         renderer.measure_styled_text(
                             *id,
@@ -5415,8 +5428,8 @@ fn compute_detached_layout(
                         renderer.measure_text(*id, content, text_style, max_width, scale_factor)
                     };
                     TaffySize {
-                        width: known.width.unwrap_or(measured.width),
-                        height: known.height.unwrap_or(measured.height),
+                        width: measured.width,
+                        height: measured.height,
                     }
                 }
                 MeasureContext::Image { intrinsic } => {
@@ -6226,6 +6239,37 @@ fn collect_layout_bounds(
     Ok(())
 }
 
+/// Commit variable-list viewport and row measurements from a completed layout.
+///
+/// This deliberately runs before paint. Measuring while recursively painting a row is too late:
+/// its parent has already resolved the retained scroll translation, which can present a stale
+/// bottom anchor for one frame when wrapped content changes height during resize.
+fn report_variable_list_layout_measurements(
+    element: &Element,
+    taffy: &TaffyTree<MeasureContext>,
+) -> Result<bool, UiError> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return Ok(false);
+    }
+    let node = element
+        .taffy_node
+        .expect("layout nodes are assigned before list measurement");
+    let layout = taffy.layout(node)?;
+    let mut changed = false;
+    if let Some(virtual_scroll) = &element.virtual_scroll {
+        changed |= virtual_scroll
+            .handle
+            .report_viewport(Size::new(layout.size.width, layout.size.height));
+    }
+    if let Some(measurement) = &element.list_item_measurement {
+        changed |= measurement.report_height(layout.size.height);
+    }
+    for child in &element.children {
+        changed |= report_variable_list_layout_measurements(child, taffy)?;
+    }
+    Ok(changed)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AnchorSide {
     Top,
@@ -6397,6 +6441,25 @@ fn own_text_clip(element: &Element, bounds: Rect, parent_clip: Rect) -> Rect {
     } else {
         parent_clip
     }
+}
+
+/// Return the box Cosmic Text must use for a text leaf.
+///
+/// Taffy measures leaf content before adding its resolved padding and border. Painting with the
+/// border box would therefore give Cosmic Text a different width from layout: padded wrapped text
+/// could alternate between the two line breaks on consecutive resize frames and spill into a
+/// neighboring grid cell. Keep shaping, selection, decorations, and paint in the same content box.
+fn text_content_bounds(bounds: Rect, layout: &taffy::tree::Layout) -> Rect {
+    let left = layout.border.left + layout.padding.left;
+    let right = layout.border.right + layout.padding.right;
+    let top = layout.border.top + layout.padding.top;
+    let bottom = layout.border.bottom + layout.padding.bottom;
+    Rect::new(
+        bounds.x + left,
+        bounds.y + top,
+        (bounds.width - left - right).max(0.0),
+        (bounds.height - top - bottom).max(0.0),
+    )
 }
 
 fn element_has_outset_shadow(element: &Element) -> bool {
@@ -6643,14 +6706,6 @@ fn paint_element(
         natural
     };
     element_bounds.insert(element.runtime_id, bounds);
-    if let Some(virtual_scroll) = &element.virtual_scroll {
-        virtual_scroll
-            .handle
-            .report_viewport(Size::new(bounds.width, bounds.height));
-    }
-    if let Some(measurement) = &element.list_item_measurement {
-        measurement.report_height(bounds.height);
-    }
 
     // A clipped leaf cannot contribute pixels or interaction regions. Avoid emitting offscreen
     // text/image primitives for long documents while retaining its measured and accessibility
@@ -6882,18 +6937,19 @@ fn paint_element(
             if let Some(color) = state_text_color {
                 style.color = color;
             }
+            let text_bounds = text_content_bounds(bounds, layout);
             let text_clip = own_text_clip(element, bounds, parent_clip);
-            let decorations = if style.has_decorations() && !bounds.is_empty() {
-                text_clip.intersection(bounds).map(|clip| {
-                    let visible_y =
-                        (clip.y - bounds.y).max(0.0)..(clip.bottom() - bounds.y).min(bounds.height);
+            let decorations = if style.has_decorations() && !text_bounds.is_empty() {
+                text_clip.intersection(text_bounds).map(|clip| {
+                    let visible_y = (clip.y - text_bounds.y).max(0.0)
+                        ..(clip.bottom() - text_bounds.y).min(text_bounds.height);
                     renderer
                         .text_geometry(
                             TextId::new(element.runtime_id.value()),
                             content,
                             &style,
                             None,
-                            bounds.width,
+                            text_bounds.width,
                             scale_factor,
                             visible_y,
                         )
@@ -6908,7 +6964,7 @@ fn paint_element(
                 content,
                 &style,
                 None,
-                bounds,
+                text_bounds,
                 text_clip,
                 layer,
                 order,
@@ -6924,7 +6980,7 @@ fn paint_element(
                 TextRun::new(
                     TextId::new(element.runtime_id.value()),
                     content.clone(),
-                    bounds,
+                    text_bounds,
                     style,
                 )
                 .clip(text_clip),
@@ -6935,7 +6991,7 @@ fn paint_element(
                         scene,
                         layer,
                         decoration,
-                        Point::new(bounds.x, bounds.y),
+                        Point::new(text_bounds.x, text_bounds.y),
                         text_clip,
                     );
                 }
@@ -6948,18 +7004,19 @@ fn paint_element(
             }
             let text_id = TextId::new(element.runtime_id.value());
             let highlights = styled.shared_highlights().clone();
+            let text_bounds = text_content_bounds(bounds, layout);
             let text_clip = own_text_clip(element, bounds, parent_clip);
-            if !bounds.is_empty()
-                && let Some(clip) = text_clip.intersection(bounds)
+            if !text_bounds.is_empty()
+                && let Some(clip) = text_clip.intersection(text_bounds)
             {
-                let visible_y =
-                    (clip.y - bounds.y).max(0.0)..(clip.bottom() - bounds.y).min(bounds.height);
+                let visible_y = (clip.y - text_bounds.y).max(0.0)
+                    ..(clip.bottom() - text_bounds.y).min(text_bounds.height);
                 let geometry = renderer.text_geometry(
                     text_id,
                     styled.content(),
                     &style,
                     Some(&highlights),
-                    bounds.width,
+                    text_bounds.width,
                     scale_factor,
                     visible_y,
                 );
@@ -6968,8 +7025,8 @@ fn paint_element(
                         layer,
                         Quad::new(
                             Rect::new(
-                                bounds.x + background.rect.x,
-                                bounds.y + background.rect.y,
+                                text_bounds.x + background.rect.x,
+                                text_bounds.y + background.rect.y,
                                 background.rect.width,
                                 background.rect.height,
                             ),
@@ -6984,7 +7041,7 @@ fn paint_element(
                     styled.content(),
                     &style,
                     Some(&highlights),
-                    bounds,
+                    text_bounds,
                     text_clip,
                     layer,
                     order,
@@ -6997,7 +7054,7 @@ fn paint_element(
                 );
                 scene.push_text_in(
                     layer,
-                    TextRun::new(text_id, styled.content().clone(), bounds, style)
+                    TextRun::new(text_id, styled.content().clone(), text_bounds, style)
                         .with_highlights(highlights)
                         .clip(text_clip),
                 );
@@ -7006,7 +7063,7 @@ fn paint_element(
                         scene,
                         layer,
                         decoration,
-                        Point::new(bounds.x, bounds.y),
+                        Point::new(text_bounds.x, text_bounds.y),
                         clip,
                     );
                 }
@@ -9239,9 +9296,14 @@ mod tests {
     use crate::element::InputConstraints;
     use crate::{
         AnimatedImageFrame, Animation, AnimationExt, AnimationRepeat, FocusHandle, Image,
-        PathBuilder, SpringAnimation, Transition, button, container_query, div, form, img, text,
-        text_input,
+        IntoElement, PathBuilder, SpringAnimation, Transition, button, container_query, div, form,
+        img, text, text_input,
     };
+
+    thread_local! {
+        static RECORDED_TEXT_WIDTHS: std::cell::RefCell<Option<Vec<Option<f32>>>> =
+            const { std::cell::RefCell::new(None) };
+    }
 
     struct TestTextLayout;
 
@@ -9254,6 +9316,11 @@ mod tests {
             max_width: Option<f32>,
             _scale_factor: f32,
         ) -> Size {
+            RECORDED_TEXT_WIDTHS.with(|recording| {
+                if let Some(widths) = recording.borrow_mut().as_mut() {
+                    widths.push(max_width);
+                }
+            });
             let natural_width = content.chars().count() as f32 * style.font_size * 0.5;
             Size::new(
                 max_width.map_or(natural_width, |width| natural_width.min(width)),
@@ -10208,6 +10275,72 @@ mod tests {
                 .iter()
                 .any(|(id, _)| *id == accessibility_id(text_id))
         );
+    }
+
+    #[test]
+    fn padded_text_measures_and_paints_in_one_content_box() {
+        let plain_id = ElementId::named("padded-plain-text");
+        let styled_id = ElementId::named("padded-styled-text");
+        let root = div().size(240.0, 50.0).flex_row().items_start().children([
+            text("plain")
+                .id(plain_id)
+                .w(100.0)
+                .px(10.0)
+                .py(5.0)
+                .line_height(20.0)
+                .border(2.0, Color::WHITE),
+            crate::styled_text("styled")
+                .into_element()
+                .id(styled_id)
+                .w(100.0)
+                .px(4.0)
+                .py(3.0)
+                .line_height(20.0)
+                .border(1.0, Color::WHITE),
+        ]);
+        let mut tree = UiTree::new();
+        RECORDED_TEXT_WIDTHS.with(|recording| *recording.borrow_mut() = Some(Vec::new()));
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(240.0, 50.0), 1.0, &mut renderer)
+            .unwrap();
+        let measured_widths = RECORDED_TEXT_WIDTHS.with(|recording| {
+            recording
+                .borrow_mut()
+                .take()
+                .expect("active width recording")
+        });
+
+        assert!(measured_widths.contains(&Some(76.0)));
+        assert!(measured_widths.contains(&Some(90.0)));
+        assert!(
+            !measured_widths.contains(&Some(100.0)),
+            "assigned border-box widths must never reach text shaping: {:?}",
+            measured_widths
+        );
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let plain = scene
+            .text_runs()
+            .iter()
+            .find(|run| run.id == TextId::new(plain_id.value()))
+            .expect("plain text run");
+        let styled = scene
+            .text_runs()
+            .iter()
+            .find(|run| run.id == TextId::new(styled_id.value()))
+            .expect("styled text run");
+
+        assert_eq!(
+            tree.element_bounds(plain_id),
+            Some(Rect::new(0.0, 0.0, 100.0, 34.0))
+        );
+        assert_eq!(plain.bounds, Rect::new(12.0, 7.0, 76.0, 20.0));
+        assert_eq!(
+            tree.element_bounds(styled_id),
+            Some(Rect::new(100.0, 0.0, 100.0, 28.0))
+        );
+        assert_eq!(styled.bounds, Rect::new(105.0, 4.0, 90.0, 20.0));
     }
 
     #[test]
@@ -12017,6 +12150,48 @@ mod tests {
         assert_eq!(
             tree.take_variable_list_measurement_update(),
             ScrollResult::default()
+        );
+    }
+
+    #[test]
+    fn variable_list_relayout_commits_tail_measurement_before_first_paint() {
+        let list = crate::ListState::new(1, 50.0)
+            .with_overscan(0)
+            .with_follow_mode(crate::FollowMode::Tail);
+        list.set_viewport_size(100.0, 40.0);
+        let row = ElementId::named("width-dependent-tail-row");
+        let rows = list.render_rows(list.visible_rows().range, |_| {
+            div().id(row).w_full().aspect_ratio(2.0)
+        });
+        let root = div()
+            .relative()
+            .size_full()
+            .overflow_hidden()
+            .variable_virtual_scroll(&list)
+            .child(rows);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(100.0, 40.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert_eq!(list.scroll_offset(), 10.0);
+        assert_eq!(
+            tree.element_bounds(row),
+            Some(Rect::new(0.0, -10.0, 100.0, 50.0))
+        );
+
+        tree.relayout_with_prepare(Size::new(200.0, 40.0), 1.0, &mut renderer, |_| {})
+            .unwrap();
+        scene.clear(Color::TRANSPARENT);
+        tree.paint(&mut scene, &mut renderer).unwrap();
+
+        assert_eq!(list.scroll_offset(), 60.0);
+        assert_eq!(
+            tree.element_bounds(row),
+            Some(Rect::new(0.0, -60.0, 200.0, 100.0)),
+            "the first post-resize paint must use the newly measured tail offset"
         );
     }
 
