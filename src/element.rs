@@ -32,7 +32,9 @@ use crate::{
     animation::ElementAnimation,
     font::{assert_valid_font_family, normalize_fallbacks},
     spring::ElementSpring,
-    virtual_list::{ListItemMeasurement, ListState, VirtualList, VirtualScrollHandle},
+    virtual_list::{
+        ListItemMeasurement, ListState, VirtualList, VirtualScrollHandle, VirtualScrollMount,
+    },
 };
 
 #[cfg(target_os = "macos")]
@@ -1100,6 +1102,7 @@ pub(crate) struct VirtualScrollStyle {
     pub handle: VirtualScrollHandle,
     pub max_offset_y: f32,
     pub measurement_revision: u64,
+    pub mount: VirtualScrollMount,
 }
 
 pub(crate) type DropPredicateCallback = Arc<dyn Fn(&dyn Any) -> bool>;
@@ -2925,6 +2928,7 @@ impl Element {
             handle: list.scroll_handle(),
             max_offset_y: list.max_scroll_offset(),
             measurement_revision: 0,
+            mount: list.scroll_mount(),
         });
         self
     }
@@ -2938,11 +2942,12 @@ impl Element {
     /// retained path as ordinary scrolling and fixed-height virtualization.
     pub fn variable_virtual_scroll(mut self, list: &ListState) -> Self {
         self.layout.overflow.y = Overflow::Hidden;
-        let (handle, max_offset_y, measurement_revision) = list.scroll_binding();
+        let (handle, max_offset_y, measurement_revision, mount) = list.scroll_binding();
         self.virtual_scroll = Some(VirtualScrollStyle {
             handle,
             max_offset_y,
             measurement_revision,
+            mount,
         });
         self
     }

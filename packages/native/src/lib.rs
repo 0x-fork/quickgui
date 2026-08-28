@@ -17,13 +17,14 @@ use napi::{
 use napi_derive::napi;
 use quickgui::{
     AccessibilityRole, AnchorPlacement, AnchoredPopover, App as QuickGuiApp, AppConfig, AppRegion,
-    AppRunStatus, AppRunner, AppRunnerWaker, Color, CursorStyle, Element, ElementId, FontWeight,
-    IntoElement, Markdown, MarkdownStyle, QuitMode, TextAlign, TitleBarStyle, View, ViewContext,
-    WindowBackgroundAppearance, WindowHandle, button, div, text, text_area, text_input,
+    AppRunStatus, AppRunner, AppRunnerWaker, Color, CursorStyle, Element, ElementId, FollowMode,
+    FontWeight, IntoElement, ListAlignment, ListState, Markdown, MarkdownStyle, QuitMode, TextAlign,
+    TitleBarStyle, View, ViewContext, WindowBackgroundAppearance, WindowHandle, button, div, text,
+    text_area, text_input,
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 3;
+const PROTOCOL_VERSION: u16 = 4;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -113,7 +114,11 @@ mod property {
     pub const MARKDOWN_CODE_FONT_SIZE: u16 = 74;
     pub const SCROLL_TO_END_REVISION: u16 = 75;
     pub const PASSWORD: u16 = 76;
-    pub const LAST: u16 = PASSWORD;
+    pub const ESTIMATED_ITEM_HEIGHT: u16 = 77;
+    pub const OVERSCAN: u16 = 78;
+    pub const LIST_ALIGNMENT: u16 = 79;
+    pub const FOLLOW_MODE: u16 = 80;
+    pub const LAST: u16 = FOLLOW_MODE;
 }
 
 #[derive(Clone, Default)]
@@ -413,6 +418,7 @@ enum NodeTag {
     Sentinel,
     Input,
     Markdown,
+    VirtualList,
 }
 
 impl NodeTag {
@@ -424,6 +430,7 @@ impl NodeTag {
             4 => Ok(Self::Sentinel),
             5 => Ok(Self::Input),
             6 => Ok(Self::Markdown),
+            7 => Ok(Self::VirtualList),
             _ => Err(ProtocolError::new(format!("unknown node tag {value}"))),
         }
     }
@@ -983,11 +990,92 @@ struct QueuedEvent {
 
 type EventQueue = Rc<RefCell<VecDeque<QueuedEvent>>>;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NativeListConfig {
+    estimated_item_height: f32,
+    overscan: usize,
+    alignment: ListAlignment,
+    follow_mode: FollowMode,
+}
+
+impl NativeListConfig {
+    fn from_node(node: &NativeNode) -> Self {
+        let estimated_item_height = node
+            .number(property::ESTIMATED_ITEM_HEIGHT)
+            .unwrap_or(160.0)
+            .clamp(1.0, 1_048_576.0);
+        let overscan = node
+            .number(property::OVERSCAN)
+            .unwrap_or(2.0)
+            .max(0.0) as usize;
+        let alignment = match node.string(property::LIST_ALIGNMENT) {
+            Some("bottom") => ListAlignment::Bottom,
+            _ => ListAlignment::Top,
+        };
+        let follow_mode = match node.string(property::FOLLOW_MODE) {
+            Some("tail") => FollowMode::Tail,
+            _ => FollowMode::Normal,
+        };
+        Self {
+            estimated_item_height,
+            overscan,
+            alignment,
+            follow_mode,
+        }
+    }
+
+    fn create_state(self, item_count: usize) -> ListState {
+        ListState::new(item_count, self.estimated_item_height)
+            .with_overscan(self.overscan)
+            .with_alignment(self.alignment)
+            .with_follow_mode(self.follow_mode)
+    }
+}
+
+struct NativeListState {
+    config: NativeListConfig,
+    children: Vec<u32>,
+    list: ListState,
+}
+
+impl NativeListState {
+    fn new(node: &NativeNode) -> Self {
+        let config = NativeListConfig::from_node(node);
+        Self {
+            config,
+            children: node.children.clone(),
+            list: config.create_state(node.children.len()),
+        }
+    }
+
+    fn sync(&mut self, node: &NativeNode) {
+        let config = NativeListConfig::from_node(node);
+        if self.config != config {
+            self.config = config;
+            self.children.clone_from(&node.children);
+            self.list = config.create_state(self.children.len());
+            return;
+        }
+        if self.children == node.children {
+            return;
+        }
+        let stable_prefix = self.children.starts_with(&node.children)
+            || node.children.starts_with(&self.children);
+        if stable_prefix {
+            self.list.set_item_count(node.children.len());
+        } else {
+            self.list.reset(node.children.len());
+        }
+        self.children.clone_from(&node.children);
+    }
+}
+
 struct NativeView {
     window: u32,
     tree: Rc<RefCell<NativeTree>>,
     events: EventQueue,
     markdown: Rc<RefCell<HashMap<u32, Markdown>>>,
+    lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
 }
 
 impl View for NativeView {
@@ -999,6 +1087,12 @@ impl View for NativeView {
                 .get(id)
                 .is_some_and(|node| node.tag == NodeTag::Markdown)
         });
+        let mut lists = self.lists.borrow_mut();
+        lists.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::VirtualList)
+        });
         let mut root = div()
             .id(ElementId::new(ROOT_ELEMENT_ID))
             .size_full()
@@ -1006,7 +1100,16 @@ impl View for NativeView {
             .min_h(0.0);
         if let Some(node) = tree.nodes.get(&ROOT_NODE) {
             root = root.children(node.children.iter().filter_map(|id| {
-                build_element(*id, self.window, &tree, &self.events, &mut markdown, cx, 0)
+                build_element(
+                    *id,
+                    self.window,
+                    &tree,
+                    &self.events,
+                    &mut markdown,
+                    &mut lists,
+                    cx,
+                    0,
+                )
             }));
         }
         root
@@ -1019,6 +1122,7 @@ fn build_element(
     tree: &NativeTree,
     events: &EventQueue,
     markdown: &mut HashMap<u32, Markdown>,
+    lists: &mut HashMap<u32, NativeListState>,
     cx: &mut ViewContext<'_, NativeView>,
     depth: usize,
 ) -> Option<Element> {
@@ -1112,6 +1216,7 @@ fn build_element(
             state.set_text(node.string(property::VALUE).unwrap_or_default());
             state.element(element_id)
         }
+        NodeTag::VirtualList => div(),
     }
     .id(element_id);
 
@@ -1150,13 +1255,62 @@ fn build_element(
         element = element.on_hover(listener);
     }
 
-    if !matches!(
-        node.tag,
-        NodeTag::Text | NodeTag::Sentinel | NodeTag::Input | NodeTag::Markdown
-    ) {
-        element = element.children(node.children.iter().filter_map(|child| {
-            build_element(*child, window, tree, events, markdown, cx, depth + 1)
-        }));
+    match node.tag {
+        NodeTag::VirtualList => {
+            let state = lists
+                .entry(id)
+                .or_insert_with(|| NativeListState::new(node));
+            state.sync(node);
+            let list = state.list.clone();
+            let children = state.children.clone();
+            let visible = list.visible_rows().range;
+            let gap = node
+                .number(property::ROW_GAP)
+                .or_else(|| node.number(property::GAP))
+                .unwrap_or(0.0)
+                .max(0.0);
+            let alignment = node.string(property::ALIGN_ITEMS);
+            let item_count = children.len();
+            let rows = list.render_rows(visible, |index| {
+                let child = build_element(
+                    children[index],
+                    window,
+                    tree,
+                    events,
+                    markdown,
+                    lists,
+                    cx,
+                    depth + 1,
+                )
+                .unwrap_or_else(|| div().hidden());
+                let mut row = div().w_full().flex_none().flex_row().child(child);
+                row = match alignment {
+                    Some("center") => row.justify_center(),
+                    Some("flex-end" | "end") => row.justify_end(),
+                    _ => row.justify_start(),
+                };
+                if gap > 0.0 && index + 1 < item_count {
+                    row = row.padding(0.0, 0.0, gap, 0.0);
+                }
+                row
+            });
+            element = element.child(rows).variable_virtual_scroll(&list);
+        }
+        NodeTag::Text | NodeTag::Sentinel | NodeTag::Input | NodeTag::Markdown => {}
+        NodeTag::Root | NodeTag::View | NodeTag::Button => {
+            element = element.children(node.children.iter().filter_map(|child| {
+                build_element(
+                    *child,
+                    window,
+                    tree,
+                    events,
+                    markdown,
+                    lists,
+                    cx,
+                    depth + 1,
+                )
+            }));
+        }
     }
     Some(element)
 }
@@ -1563,6 +1717,7 @@ struct NativeWindowRuntime {
     config: AppConfig,
     tree: Rc<RefCell<NativeTree>>,
     markdown: Rc<RefCell<HashMap<u32, Markdown>>>,
+    lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
     handle: Option<WindowHandle>,
 }
 
@@ -1573,6 +1728,7 @@ impl NativeWindowRuntime {
             tree: Rc::clone(&self.tree),
             events: Rc::clone(events),
             markdown: Rc::clone(&self.markdown),
+            lists: Rc::clone(&self.lists),
         }
     }
 }
@@ -1616,6 +1772,7 @@ impl NativeRuntime {
             config,
             tree: Rc::new(RefCell::new(NativeTree::default())),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
             handle: None,
         };
         if let Some(runner) = &mut self.runner {
@@ -1665,6 +1822,7 @@ impl NativeRuntime {
             config,
             tree: Rc::new(RefCell::new(NativeTree::default())),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
             handle: None,
         };
         let runner = self
@@ -2502,6 +2660,7 @@ mod tests {
             tree: Rc::new(RefCell::new(tree)),
             events: Rc::clone(&events),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
         };
         let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
         let window = view.window_handle();
@@ -2534,5 +2693,59 @@ mod tests {
         assert_eq!(event.window, 3);
         assert_eq!(event.target, input_id);
         assert_eq!(event.value.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn native_virtual_list_mounts_only_the_initial_window_and_overscan() {
+        let list_id = 40;
+        let first_item_id = 1_000;
+        let item_count = 100;
+        let mut tree = NativeTree::default();
+        let mut list = NativeNode::new(NodeTag::VirtualList);
+        list.parent = Some(ROOT_NODE);
+        list.set_property(
+            property::ESTIMATED_ITEM_HEIGHT,
+            Some(PropertyValue::Number(24.0)),
+        );
+        list.set_property(property::OVERSCAN, Some(PropertyValue::Number(2.0)));
+        for index in 0..item_count {
+            let id = first_item_id + index;
+            let mut item = NativeNode::new(NodeTag::Text);
+            item.parent = Some(list_id);
+            item.text = Arc::from(format!("Item {index}"));
+            tree.nodes.insert(id, item);
+            list.children.push(id);
+        }
+        tree.nodes.insert(list_id, list);
+        tree.nodes
+            .get_mut(&ROOT_NODE)
+            .unwrap()
+            .children
+            .push(list_id);
+
+        let lists = Rc::new(RefCell::new(HashMap::new()));
+        let view = NativeView {
+            window: 4,
+            tree: Rc::new(RefCell::new(tree)),
+            events: Rc::new(RefCell::new(VecDeque::new())),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::clone(&lists),
+        };
+        let (cx, view) = quickgui::TestAppContext::new(view).unwrap();
+        let window = view.window_handle();
+
+        assert!(
+            cx.contains_element(window, ElementId::new(first_item_id as u64))
+                .unwrap()
+        );
+        assert!(
+            !cx.contains_element(
+                window,
+                ElementId::new((first_item_id + item_count - 1) as u64),
+            )
+            .unwrap()
+        );
+        let mounted = lists.borrow()[&list_id].list.visible_rows().len();
+        assert!(mounted < item_count as usize);
     }
 }

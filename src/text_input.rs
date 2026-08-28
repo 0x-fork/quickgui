@@ -1121,12 +1121,18 @@ pub(crate) fn selectable_character_lengths(value: &str) -> Vec<u8> {
 }
 
 pub(crate) fn accessibility_character_index(value: &str, byte_index: usize) -> usize {
-    let byte_index = byte_index.min(value.len());
+    accessibility_character_index_from_lengths(&selectable_character_lengths(value), byte_index)
+}
+
+pub(crate) fn accessibility_character_index_from_lengths(
+    character_lengths: &[u8],
+    byte_index: usize,
+) -> usize {
     let mut offset = 0_usize;
-    selectable_character_lengths(value)
-        .into_iter()
+    character_lengths
+        .iter()
         .take_while(|length| {
-            let next = offset + usize::from(*length);
+            let next = offset + usize::from(**length);
             if next <= byte_index {
                 offset = next;
                 true

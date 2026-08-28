@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -11,6 +11,7 @@ export const enum NativeNodeTag {
   Sentinel = 4,
   Input = 5,
   Markdown = 6,
+  VirtualList = 7,
 }
 
 export const enum PropertyCode {
@@ -90,6 +91,10 @@ export const enum PropertyCode {
   MarkdownCodeFontSize = 74,
   ScrollToEndRevision = 75,
   Password = 76,
+  EstimatedItemHeight = 77,
+  Overscan = 78,
+  ListAlignment = 79,
+  FollowMode = 80,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

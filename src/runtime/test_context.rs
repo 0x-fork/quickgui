@@ -1919,9 +1919,9 @@ impl TestAppContext {
                             .paint(&mut scene, &mut renderer, viewport, scale_factor, now)
                             .map_err(|error| TestAppError::View(error.to_string()))?;
                     }
-                    let changed = state.ui.variable_list_measurements_changed();
-                    state.dirty |= changed;
-                    changed
+                    let update = state.ui.take_variable_list_measurement_update();
+                    state.dirty |= update.view_dirty;
+                    update.changed
                 };
                 if measurements_changed {
                     self.run_until_idle()?;
@@ -6388,7 +6388,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn visual_context_converges_variable_list_measurements_without_idle_frames() {
+    fn visual_context_converges_variable_list_measurements_without_view_or_idle_frames() {
         let list = ListState::new(5, 24.0).with_overscan(1);
         let (mut cx, view) = App::new(VariableListVisualView { list: list.clone() })
             .size(100.0, 60.0)
@@ -6406,7 +6406,10 @@ mod tests {
             .unwrap();
         assert!(list.stats().measured_items >= 3);
         let converged_renders = cx.render_count(window).unwrap();
-        assert!(converged_renders > initial_renders);
+        assert_eq!(
+            converged_renders, initial_renders,
+            "mounted measurement convergence must not rerender the declarative view"
+        );
 
         // Re-reading settled geometry performs layout on demand but does not rebuild the view.
         cx.element_bounds(window, ElementId::new(0x7001)).unwrap();

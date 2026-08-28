@@ -6,6 +6,7 @@ import {
   Markdown,
   Text,
   View,
+  VirtualList,
   Window,
   type NativeNode,
   render,
@@ -81,7 +82,6 @@ const [activeConversationId, setActiveConversationId] = createSignal(
   initialHistory.activeConversationId,
 );
 const [activeRequest, setActiveRequest] = createSignal<ActiveChatRequest>();
-const [scrollRevision, setScrollRevision] = createSignal(0);
 let nextConversationId =
   Math.max(...initialHistory.conversations.map((conversation) => conversation.id)) + 1;
 let nextMessageId =
@@ -183,9 +183,6 @@ function updateMessage(
         : conversation,
     ),
   );
-  if (activeConversationId() === conversationId) {
-    setScrollRevision((revision) => revision + 1);
-  }
   flush();
 }
 
@@ -221,7 +218,6 @@ function selectConversation(id: number): void {
   retainActiveDraft();
   setActiveConversationId(id);
   setDraft(nextConversation.draft);
-  setScrollRevision((revision) => revision + 1);
   scheduleHistoryPersist();
   flush();
 }
@@ -239,7 +235,6 @@ function startNewConversation(): void {
     [conversation, ...currentConversations].slice(0, MAX_CONVERSATIONS),
   );
   setDraft("");
-  setScrollRevision((revision) => revision + 1);
   scheduleHistoryPersist();
   flush();
 }
@@ -326,7 +321,6 @@ async function sendMessage(submittedValue?: string): Promise<void> {
 
   setDraft("");
   appendTranscript(conversationId, userMessage, assistantMessage);
-  setScrollRevision((revision) => revision + 1);
   const controller = new AbortController();
   setActiveRequest({ conversationId, controller });
   // Paint the submitted message and streaming placeholder before waiting on the provider.
@@ -825,34 +819,28 @@ function Chat() {
           </Button>
         </View>
 
-        <View
+        <VirtualList
+          estimatedItemHeight={240}
+          overscan={1}
+          listAlignment="top"
+          followMode="tail"
           style={{
             display: "flex",
+            flexDirection: "column",
             flex: 1,
             minHeight: 0,
-            overflowY: "auto",
-            scrollToEndRevision: scrollRevision(),
             alignItems: "center",
+            gap: 14,
             paddingTop: 24,
             paddingRight: 28,
             paddingBottom: 24,
             paddingLeft: 28,
           }}
         >
-          <View
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              width: "100%",
-              maxWidth: 760,
-              gap: 14,
-            }}
-          >
-            <For each={messages()} keyed={(message) => message.id}>
-              {(message) => <MessageCard message={message()} />}
-            </For>
-          </View>
-        </View>
+          <For each={messages()} keyed={(message) => message.id}>
+            {(message) => <MessageCard message={message()} />}
+          </For>
+        </VirtualList>
 
         <View
           style={{

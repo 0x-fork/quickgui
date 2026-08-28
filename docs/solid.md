@@ -5,7 +5,7 @@ QuickGUI includes an experimental Bun host split into two unstyled packages:
 - `@quickgui/native` owns the N-API boundary, application loop, per-window retained trees, binary
   mutation batches, and window-routed event queue.
 - `@quickgui/solid` owns Solid 2 JSX compilation, fine-grained reactive updates, and the host
-  components `View`, `Text`, `Button`, `Input`, `TextArea`, and `Markdown`.
+  components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, and `VirtualList`.
 
 The renderer does not use a webview or virtual DOM. Solid updates the affected retained native
 nodes, and one binary batch crosses N-API before QuickGUI invalidates the WGPU window.
@@ -104,6 +104,18 @@ masked secure field, then switch the controlled `type` to `"text"` for an explic
 `Markdown` is QuickGUI core's retained native renderer, accepts controlled `content`/`source` and
 `streaming` props, and is documented in the [Markdown guide](markdown.md).
 
+Use the unstyled `VirtualList` for long variable-height collections. Its direct children are the
+logical rows; native layout mounts only the visible range and overscan, measures real wrapped row
+heights, preserves the scroll anchor, and can follow an appended chat tail:
+
+```tsx
+<VirtualList estimatedItemHeight={180} overscan={1} followMode="tail">
+  <For each={messages()} keyed={(message) => message.id}>
+    {(message) => <MessageCard message={message()} />}
+  </For>
+</VirtualList>
+```
+
 The runnable source and CLI configuration are in
 [`examples/solid`](../examples/solid).
 
@@ -114,11 +126,11 @@ paced updates, and core Markdown rendering.
 ## Current boundary
 
 This vertical slice supports dynamically created independent and anchored native windows, retained
-view/text/button/input/Markdown nodes, password inputs, reactive properties and text,
-click/hover/input/submit events, web-shaped Flexbox styling, hidden-inset titlebars, traffic-light
-positioning, a stable real-`.app` development host, and self-contained production packaging on the
-current macOS target. It is not yet the full Rust API surface: declarative popup parts, lists, menus,
-native child views, accessibility actions, every native binary target, and dedicated JavaScript
-performance gates still need bindings and acceptance.
+view/text/button/input/Markdown nodes, variable-height virtual lists, password inputs, reactive
+properties and text, click/hover/input/submit events, web-shaped Flexbox styling, hidden-inset
+titlebars, traffic-light positioning, a stable real-`.app` development host, and self-contained
+production packaging on the current macOS target. It is not yet the full Rust API surface:
+declarative popup parts, menus, native child views, accessibility actions, every native binary
+target, and dedicated JavaScript performance gates still need bindings and acceptance.
 
 Return to the [documentation index](README.md).

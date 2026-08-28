@@ -49,6 +49,36 @@ pub(crate) enum VirtualScrollHandle {
     Variable(ListScrollHandle),
 }
 
+/// Geometry captured when a virtual-list declaration mounts its current slice.
+///
+/// Input may move within `content_range` without rebuilding that declaration: paint translates
+/// the retained slice by the difference from `layout_offset_y`. Once the viewport leaves the
+/// mounted coverage, the view rebuilds to replace the slice.
+#[derive(Clone, Debug)]
+pub(crate) struct VirtualScrollMount {
+    pub(crate) layout_offset_y: f32,
+    content_range: Option<Range<f32>>,
+}
+
+impl VirtualScrollMount {
+    fn new(layout_offset_y: f32, content_range: Option<Range<f32>>) -> Self {
+        Self {
+            layout_offset_y,
+            content_range,
+        }
+    }
+
+    pub(crate) fn retains_viewport(&self, offset_y: f32, viewport_height: f32) -> bool {
+        let Some(content) = &self.content_range else {
+            return false;
+        };
+        let viewport_height = sane_list_dimension(viewport_height);
+        let viewport_bottom = offset_y + viewport_height;
+        offset_y + LIST_MEASUREMENT_EPSILON >= content.start
+            && viewport_bottom <= content.end + LIST_MEASUREMENT_EPSILON
+    }
+}
+
 impl VirtualScrollHandle {
     pub(crate) fn offset(&self) -> f32 {
         match self {
@@ -80,6 +110,13 @@ impl VirtualScrollHandle {
         }
     }
 
+    pub(crate) fn max_offset(&self, declared: f32) -> f32 {
+        match self {
+            Self::Fixed(_) => declared,
+            Self::Variable(handle) => handle.max_offset(),
+        }
+    }
+
     pub(crate) fn report_viewport(&self, size: Size) -> bool {
         match self {
             Self::Fixed(_) => false,
@@ -97,6 +134,15 @@ impl VirtualScrollHandle {
         match self {
             Self::Fixed(_) => false,
             Self::Variable(handle) => handle.scrollbar_drag_ended(),
+        }
+    }
+
+    /// Refresh measured mounted coverage while preserving the declaration's layout offset.
+    /// Returns whether the currently mounted slice still covers the current viewport.
+    pub(crate) fn refresh_mount_after_measurement(&self, mount: &mut VirtualScrollMount) -> bool {
+        match self {
+            Self::Fixed(_) => true,
+            Self::Variable(handle) => handle.refresh_mount_after_measurement(mount),
         }
     }
 }
@@ -277,6 +323,13 @@ impl VirtualList {
     pub(crate) fn scroll_handle(&self) -> VirtualScrollHandle {
         VirtualScrollHandle::Fixed(Arc::clone(&self.scroll_offset))
     }
+
+    pub(crate) fn scroll_mount(&self) -> VirtualScrollMount {
+        let range = self.visible_rows().range;
+        let content_range = (!range.is_empty())
+            .then(|| range.start as f32 * self.row_height..range.end as f32 * self.row_height);
+        VirtualScrollMount::new(self.scroll_offset(), content_range)
+    }
 }
 
 /// Maximum number of items retained by one variable-height [`ListState`].
@@ -410,6 +463,7 @@ struct ListStateInner {
     generation: u64,
     measurement_revision: u64,
     scrollbar_drag_max_offset: Option<f32>,
+    mounted_range: Option<Range<usize>>,
 }
 
 #[derive(Clone, Copy)]
@@ -478,13 +532,20 @@ impl ListStateInner {
             next.height = self.viewport.height;
         }
         let anchor = self.capture_anchor();
+        let mounted = self.visible_rows().range;
         self.viewport = next;
         if width_changed {
-            self.metrics.clear_measurements();
-            self.generation = self.generation.wrapping_add(1);
+            // Rows in the current declaration are about to be laid out at the new width, so keep
+            // their measurements and let their existing handles replace them during this paint.
+            // Discard only offscreen measurements, whose wrapped height can no longer be trusted.
+            // This avoids an estimate-only intermediate view rebuild on every resize step.
+            self.metrics.clear_range(0..mounted.start);
+            self.metrics.clear_range(mounted.end..self.metrics.len);
         }
         self.restore_anchor(anchor);
-        self.bump_measurement_revision();
+        if self.visible_rows().range != mounted {
+            self.bump_measurement_revision();
+        }
         true
     }
 
@@ -594,6 +655,10 @@ impl ListScrollHandle {
         self.0.borrow().measurement_revision
     }
 
+    fn max_offset(&self) -> f32 {
+        self.0.borrow().effective_max_scroll_offset()
+    }
+
     fn report_viewport(&self, size: Size) -> bool {
         self.0.borrow_mut().report_viewport(size)
     }
@@ -624,6 +689,15 @@ impl ListScrollHandle {
         }
         changed
     }
+
+    fn refresh_mount_after_measurement(&self, mount: &mut VirtualScrollMount) -> bool {
+        let state = self.0.borrow();
+        mount.content_range = state.mounted_range.as_ref().and_then(|range| {
+            (!range.is_empty())
+                .then(|| state.metrics.item_top(range.start)..state.metrics.item_top(range.end))
+        });
+        mount.retains_viewport(state.scroll_offset, state.viewport.height)
+    }
 }
 
 impl ListState {
@@ -651,6 +725,7 @@ impl ListState {
             generation: 0,
             measurement_revision: 0,
             scrollbar_drag_max_offset: None,
+            mounted_range: None,
         })))
     }
 
@@ -941,12 +1016,13 @@ impl ListState {
         E: IntoElement,
     {
         let (id, generation, start, end, origin, handle) = {
-            let state = self.0.borrow();
+            let mut state = self.0.borrow_mut();
             let start = range.start.min(state.metrics.len);
             let end = range
                 .end
                 .min(state.metrics.len)
                 .min(start.saturating_add(MAX_MOUNTED_LIST_ITEMS));
+            state.mounted_range = Some(start..end);
             (
                 state.id,
                 state.generation,
@@ -999,13 +1075,18 @@ impl ListState {
         self.0.borrow().metrics.stats()
     }
 
-    pub(crate) fn scroll_binding(&self) -> (VirtualScrollHandle, f32, u64) {
+    pub(crate) fn scroll_binding(&self) -> (VirtualScrollHandle, f32, u64, VirtualScrollMount) {
         let state = self.0.borrow();
         let handle = ListScrollHandle(Rc::clone(&self.0));
+        let content_range = state.mounted_range.as_ref().and_then(|range| {
+            (!range.is_empty())
+                .then(|| state.metrics.item_top(range.start)..state.metrics.item_top(range.end))
+        });
         (
             VirtualScrollHandle::Variable(handle),
             state.effective_max_scroll_offset(),
             state.measurement_revision,
+            VirtualScrollMount::new(state.scroll_offset, content_range),
         )
     }
 }
@@ -1466,6 +1547,28 @@ mod tests {
         list.set_viewport_size(280.0, 100.0);
         assert_eq!(list.stats().measured_items, 0);
         assert_eq!(list.logical_scroll_top(), anchor);
+    }
+
+    #[test]
+    fn width_changes_keep_mounted_measurements_and_drop_only_offscreen_rows() {
+        let list = ListState::new(100, 20.0).with_overscan(0);
+        list.set_viewport_size(300.0, 100.0);
+        let generation = list.0.borrow().generation;
+        let handle = ListScrollHandle(Rc::clone(&list.0));
+        assert!(handle.report_item_height(0, generation, 60.0));
+        assert!(handle.report_item_height(50, generation, 80.0));
+        assert_eq!(list.stats().measured_items, 2);
+
+        let revision = handle.measurement_revision();
+        list.set_viewport_size(280.0, 100.0);
+
+        assert_eq!(list.0.borrow().generation, generation);
+        assert_eq!(list.0.borrow().metrics.item_height(0), 60.0);
+        assert_eq!(list.0.borrow().metrics.item_height(50), 20.0);
+        assert_eq!(list.stats().measured_items, 1);
+        assert_eq!(handle.measurement_revision(), revision);
+        assert_eq!(handle.max_offset(), list.max_scroll_offset());
+        assert!(handle.report_item_height(0, generation, 80.0));
     }
 
     #[test]

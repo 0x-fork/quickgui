@@ -108,6 +108,10 @@ const properties: Record<string, PropertyEntry> = {
   markdownBlockGap: { code: PropertyCode.MarkdownBlockGap },
   markdownCodeFontSize: { code: PropertyCode.MarkdownCodeFontSize },
   scrollToEndRevision: { code: PropertyCode.ScrollToEndRevision },
+  estimatedItemHeight: { code: PropertyCode.EstimatedItemHeight },
+  overscan: { code: PropertyCode.Overscan },
+  listAlignment: { code: PropertyCode.ListAlignment },
+  followMode: { code: PropertyCode.FollowMode },
 };
 
 const colorProperties = new Set([
@@ -266,7 +270,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const universal = createRenderer<NativeNode>({
   createElement(tag, staticProps) {
     const name = tag as NativeElementName;
-    if (!["view", "div", "text", "button", "input", "textarea", "markdown"].includes(name)) {
+    if (
+      ![
+        "view",
+        "div",
+        "text",
+        "button",
+        "input",
+        "textarea",
+        "markdown",
+        "virtual-list",
+      ].includes(name)
+    ) {
       throw new TypeError(`unknown QuickGUI element <${tag}>`);
     }
     const node = createNativeElement(name);
@@ -328,6 +343,13 @@ export function TextArea(props: JSX.InputProps): NativeNode {
 /** Retained, incremental native Markdown document. */
 export function Markdown(props: JSX.MarkdownProps): NativeNode {
   const node = universal.createElement("markdown");
+  universal.spread(node, props);
+  return node;
+}
+
+/** Unstyled variable-height list; only visible child blocks are mounted by QuickGUI core. */
+export function VirtualList(props: JSX.VirtualListProps): NativeNode {
+  const node = universal.createElement("virtual-list");
   universal.spread(node, props);
   return node;
 }
@@ -478,6 +500,13 @@ export namespace JSX {
     streaming?: boolean;
   }
 
+  export interface VirtualListProps extends NativeProps {
+    estimatedItemHeight?: number;
+    overscan?: number;
+    listAlignment?: "top" | "bottom";
+    followMode?: "normal" | "tail";
+  }
+
   export interface IntrinsicElements {
     view: NativeProps;
     div: NativeProps;
@@ -486,5 +515,6 @@ export namespace JSX {
     input: InputProps;
     textarea: InputProps;
     markdown: MarkdownProps;
+    "virtual-list": VirtualListProps;
   }
 }

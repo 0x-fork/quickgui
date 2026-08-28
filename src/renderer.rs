@@ -170,7 +170,10 @@ const MAX_RETAINED_TEXT_LAYOUTS: usize = 256;
 // pathological overlap forever. Each Glyphon renderer starts with a 4 KiB buffer.
 const MAX_RETAINED_TEXT_RENDERERS: usize = 32;
 const MAX_RETAINED_TEXT_COLORS: usize = 64;
-const TEXT_RETENTION_FRAMES: u64 = 8;
+// Keep recently visited text alive across an ordinary back-and-forth scroll gesture. The two
+// caches remain hard-capped below, so extending the age window trades no unbounded memory for the
+// ability to reuse shaped Markdown after it has been offscreen for a few seconds.
+const TEXT_RETENTION_FRAMES: u64 = 600;
 const BASIC_FRAGMENT_MIN_BYTES: usize = 24;
 
 #[derive(Debug, Error)]

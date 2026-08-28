@@ -96,6 +96,7 @@ use crate::inspector::{
 
 const MAX_NESTED_FORM_SUBMISSIONS: u8 = 8;
 const MAX_WINDOW_LIFECYCLE_TURNS: usize = 1_024;
+const ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Maximum targeted desktop mouse callbacks declared by one window render.
 pub const MAX_MOUSE_LISTENERS_PER_WINDOW: usize = 8_192;
@@ -1092,11 +1093,17 @@ pub struct ViewContext<'a, V> {
 }
 
 impl<V: 'static> ViewContext<'_, V> {
-    pub fn size(&self) -> Size {
+    /// Read the viewport size and observe future size or scale-factor changes for this view.
+    ///
+    /// Views that do not read viewport geometry stay mounted during native window resize; the
+    /// runtime relays out their retained declaration directly.
+    pub fn size(&mut self) -> Size {
+        self.listeners.observes_viewport = true;
         self.size
     }
 
-    pub fn scale_factor(&self) -> f32 {
+    pub fn scale_factor(&mut self) -> f32 {
+        self.listeners.observes_viewport = true;
         self.scale_factor
     }
 
@@ -2189,6 +2196,7 @@ struct ListenerRegistry {
     observed_entities: HashSet<EntityId>,
     observed_globals: HashSet<TypeId>,
     observes_window_state: bool,
+    observes_viewport: bool,
     observes_displays: bool,
     observes_keyboard_layout: bool,
     entity_events: HashMap<(EntityId, TypeId), Vec<EntityEventSubscription>>,
@@ -2395,6 +2403,7 @@ impl ListenerRegistry {
         self.observed_entities.clear();
         self.observed_globals.clear();
         self.observes_window_state = false;
+        self.observes_viewport = false;
         self.observes_displays = false;
         self.observes_keyboard_layout = false;
         self.child_window_closed.clear();
@@ -3542,11 +3551,105 @@ struct RuntimeWindow {
     relation_presented: bool,
     reduce_motion: bool,
     view_dirty: bool,
+    layout_dirty: bool,
     view_deadline: Option<Instant>,
+    accessibility_updates: AccessibilityUpdateSchedule,
     listeners: ListenerRegistry,
     accessibility: AccessibilityAdapter,
     // The window is last so GPU surface state is dropped before its native handle.
     window: Arc<Window>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AccessibilityUpdateKind {
+    Full,
+    ScrollGeometry,
+    LayoutGeometry,
+}
+
+#[derive(Default)]
+struct AccessibilityUpdateSchedule {
+    active: bool,
+    geometry_deadline: Option<Instant>,
+    pending_geometry: Option<AccessibilityUpdateKind>,
+    update_due: bool,
+}
+
+impl AccessibilityUpdateSchedule {
+    fn activate(&mut self) {
+        self.active = true;
+    }
+
+    fn deactivate(&mut self) {
+        *self = Self::default();
+    }
+
+    /// Coalesce geometry-only scroll and resize updates while keeping accessibility responsive at
+    /// 10 Hz. Semantic redraws are never delayed, and an idle correction is scheduled after the
+    /// last geometry frame without keeping the event loop awake in between.
+    fn should_update(
+        &mut self,
+        retained_geometry: Option<AccessibilityUpdateKind>,
+        now: Instant,
+    ) -> Option<AccessibilityUpdateKind> {
+        if !self.active {
+            return None;
+        }
+
+        if let Some(kind) = retained_geometry {
+            debug_assert!(kind != AccessibilityUpdateKind::Full);
+            self.pending_geometry = Some(match (self.pending_geometry, kind) {
+                (Some(AccessibilityUpdateKind::LayoutGeometry), _)
+                | (_, AccessibilityUpdateKind::LayoutGeometry) => {
+                    AccessibilityUpdateKind::LayoutGeometry
+                }
+                _ => AccessibilityUpdateKind::ScrollGeometry,
+            });
+            if self.pending_geometry == Some(AccessibilityUpdateKind::LayoutGeometry) {
+                // A resize can produce a new full layout every display refresh. Intermediate
+                // accessibility geometry is immediately obsolete, so debounce it and publish one
+                // complete correction after the live resize settles. Scroll geometry remains
+                // throttled below because assistive navigation benefits from progress updates.
+                self.update_due = false;
+                self.geometry_deadline = Some(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL);
+                return None;
+            }
+            let update = self
+                .update_due
+                .then(|| self.pending_geometry.take())
+                .flatten();
+            self.update_due = false;
+            self.geometry_deadline
+                .get_or_insert(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL);
+            return update;
+        }
+
+        if std::mem::take(&mut self.update_due) {
+            // This is the correction frame requested by `advance`, not a semantic redraw. Retain
+            // the pending geometry kind so a finished scroll can still use the one-node update.
+            return self.pending_geometry.take();
+        }
+
+        self.geometry_deadline = None;
+        self.pending_geometry = None;
+        Some(AccessibilityUpdateKind::Full)
+    }
+
+    fn advance(&mut self, now: Instant) -> bool {
+        if !self.active {
+            return false;
+        }
+        if self.geometry_deadline.is_none_or(|deadline| deadline > now) {
+            return false;
+        }
+        self.geometry_deadline = None;
+        self.update_due = true;
+        true
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.geometry_deadline
+    }
 }
 
 impl RuntimeWindow {
@@ -5003,7 +5106,8 @@ impl Runtime {
                                     state.logical_size =
                                         logical_window_size(physical, state.scale_factor);
                                 }
-                                state.view_dirty = true;
+                                state.layout_dirty = true;
+                                state.view_dirty |= state.listeners.observes_viewport;
                                 force_redraw = true;
                             }
                         }
@@ -7958,7 +8062,8 @@ impl Runtime {
             state
                 .renderer
                 .resize(physical_size.width, physical_size.height);
-            state.view_dirty = true;
+            state.layout_dirty = true;
+            state.view_dirty |= state.listeners.observes_viewport;
         }
         state.scheduler.begin_redraw();
 
@@ -7985,9 +8090,21 @@ impl Runtime {
         let Some(state) = &mut self.window else {
             return;
         };
+        let retained_scroll_only = scroll_result.changed
+            && !scroll_result.view_dirty
+            && !state.view_dirty
+            && !state.layout_dirty;
+        let retained_layout_only = state.layout_dirty && !state.view_dirty;
+        let accessibility_geometry = if retained_layout_only {
+            Some(AccessibilityUpdateKind::LayoutGeometry)
+        } else if retained_scroll_only {
+            Some(AccessibilityUpdateKind::ScrollGeometry)
+        } else {
+            None
+        };
         let started = FrameTimer::start();
         #[cfg(feature = "inspector")]
-        let view_rebuilt = state.view_dirty;
+        let view_rebuilt = state.view_dirty || state.layout_dirty;
         let mut request_animation_frame = false;
         if state.view_dirty {
             let previous_mounted_focus = state.ui.focused();
@@ -8034,7 +8151,24 @@ impl Runtime {
             if previous_mounted_focus != state.ui.focused() {
                 mounted_focus_previous = Some(previous_mounted_focus);
             }
+            state.layout_dirty = false;
             state.view_dirty = image_resolution_changed;
+        } else if state.layout_dirty {
+            let logical_size = state.logical_size;
+            let scale_factor = state.scale_factor;
+            let image_assets = &mut state.image_assets;
+            let ui = &mut state.ui;
+            let renderer = &mut state.renderer;
+            if let Err(error) =
+                ui.relayout_with_prepare(logical_size, scale_factor, renderer, |subtree| {
+                    image_assets.resolve_subtree(subtree)
+                })
+            {
+                self.fail(event_loop, AppError::View(error.to_string()));
+                return;
+            }
+            request_animation_frame |= image_assets.finish_resolve_frame();
+            state.layout_dirty = false;
         }
         let ime_target = state.ui.focused_text_input();
         if ime_target != state.ime_target {
@@ -8072,12 +8206,13 @@ impl Runtime {
             let cursor = desired_cursor(state, point);
             set_cursor_if_changed(state, cursor);
         }
-        let variable_list_measurements_changed = state.ui.variable_list_measurements_changed();
+        let variable_list_measurement_update = state.ui.take_variable_list_measurement_update();
+        let variable_list_measurements_changed = variable_list_measurement_update.changed;
         let declarative_animation_frame_requested =
             state.ui.declarative_animation_frame_requested();
         let detached_animation_frame_requested = state.ui.detached_animation_frame_requested();
         let style_transition_frame_requested = state.ui.style_transition_frame_requested();
-        if variable_list_measurements_changed {
+        if variable_list_measurement_update.view_dirty {
             state.view_dirty = true;
         }
         #[cfg(feature = "inspector")]
@@ -8186,11 +8321,21 @@ impl Runtime {
                 LogicalSize::new(caret.width.max(1.0) as f64, caret.height.max(1.0) as f64),
             );
         }
-        let window_title = self.config.title.as_str();
-        let RuntimeWindow {
-            accessibility, ui, ..
-        } = state;
-        accessibility.update_if_active(|| ui.accessibility_update(window_title));
+        if let Some(update_kind) = state
+            .accessibility_updates
+            .should_update(accessibility_geometry, Instant::now())
+        {
+            let window_title = self.config.title.as_str();
+            let RuntimeWindow {
+                accessibility, ui, ..
+            } = state;
+            accessibility.update_if_active(|| match update_kind {
+                AccessibilityUpdateKind::ScrollGeometry => ui.accessibility_scroll_update(),
+                AccessibilityUpdateKind::Full | AccessibilityUpdateKind::LayoutGeometry => {
+                    ui.accessibility_update(window_title)
+                }
+            });
+        }
 
         match state.renderer.render(&state.scene, state.scale_factor) {
             Ok(RenderOutcome::Presented(mut stats)) => {
@@ -8683,7 +8828,9 @@ impl Runtime {
             relation_presented: false,
             reduce_motion,
             view_dirty: true,
+            layout_dirty: true,
             view_deadline: None,
+            accessibility_updates: AccessibilityUpdateSchedule::default(),
             listeners: ListenerRegistry::default(),
             accessibility,
             window,
@@ -9063,7 +9210,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     }
                     let logical_size = state.logical_size;
                     let scale_factor = state.scale_factor;
-                    state.view_dirty = true;
+                    state.layout_dirty = true;
+                    state.view_dirty |= state.listeners.observes_viewport;
                     #[cfg(target_os = "macos")]
                     self.refresh_current_native_tab_state();
                     self.dispatch(
@@ -9110,7 +9258,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     }
                     let logical_size = state.logical_size;
                     let scale_factor = state.scale_factor;
-                    state.view_dirty = true;
+                    state.layout_dirty = true;
+                    state.view_dirty |= state.listeners.observes_viewport;
                     #[cfg(target_os = "macos")]
                     self.refresh_current_native_tab_state();
                     self.dispatch(
@@ -10511,6 +10660,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 AccessibilityWindowEvent::InitialTreeRequested => {
                     let window_title = self.config.title.as_str();
                     let window = self.window.as_mut().expect("window checked above");
+                    window.accessibility_updates.activate();
                     let RuntimeWindow {
                         accessibility, ui, ..
                     } = window;
@@ -10584,7 +10734,11 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     }
                     self.announce_focus_change(event_loop, previous_focus);
                 }
-                AccessibilityWindowEvent::AccessibilityDeactivated => {}
+                AccessibilityWindowEvent::AccessibilityDeactivated => {
+                    if let Some(window) = &mut self.window {
+                        window.accessibility_updates.deactivate();
+                    }
+                }
             },
         })();
         self.deactivate_window();
@@ -10622,6 +10776,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 scrollbar_deadline,
                 tooltip_deadline,
                 view_deadline,
+                accessibility_deadline,
             ) = self
                 .window
                 .as_mut()
@@ -10649,6 +10804,9 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     if state.ui.advance_tooltips(now) {
                         redraw = true;
                     }
+                    if state.accessibility_updates.advance(now) {
+                        redraw = true;
+                    }
                     if redraw && state.scheduler.invalidate() {
                         state.window.request_redraw();
                     }
@@ -10658,9 +10816,10 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         state.ui.next_scrollbar_deadline(),
                         state.ui.next_tooltip_deadline(),
                         state.view_deadline,
+                        state.accessibility_updates.deadline(),
                     )
                 })
-                .unwrap_or((None, None, None, None, None));
+                .unwrap_or((None, None, None, None, None, None));
             let pending_deadline = self.pending_input.as_ref().map(|pending| pending.deadline);
             let window_deadline = [
                 pending_deadline,
@@ -10669,6 +10828,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 scrollbar_deadline,
                 tooltip_deadline,
                 view_deadline,
+                accessibility_deadline,
             ]
             .into_iter()
             .flatten()
@@ -10705,7 +10865,8 @@ fn apply_windowed_geometry(state: &mut RuntimeWindow, bounds: Rect) {
         state.renderer.resize(physical.width, physical.height);
         state.logical_size = logical_window_size(physical, state.scale_factor);
     }
-    state.view_dirty = true;
+    state.layout_dirty = true;
+    state.view_dirty |= state.listeners.observes_viewport;
 }
 
 /// Apply a resize command without sending a redundant native move for the unchanged origin.
@@ -10730,7 +10891,8 @@ fn apply_window_size(state: &mut RuntimeWindow, size: Size) {
         state.renderer.resize(physical.width, physical.height);
         state.logical_size = logical_window_size(physical, state.scale_factor);
     }
-    state.view_dirty = true;
+    state.layout_dirty = true;
+    state.view_dirty |= state.listeners.observes_viewport;
 }
 
 fn apply_window_bounds(state: &mut RuntimeWindow, bounds: WindowBounds) {
@@ -11504,12 +11666,86 @@ mod tests {
     fn window_state_observation_is_declarative() {
         let mut listeners = ListenerRegistry {
             observes_window_state: true,
+            observes_viewport: true,
             ..ListenerRegistry::default()
         };
 
         listeners.clear();
 
         assert!(!listeners.observes_window_state);
+        assert!(!listeners.observes_viewport);
+    }
+
+    #[test]
+    fn accessibility_geometry_updates_are_coalesced_without_an_idle_loop() {
+        let now = Instant::now();
+        let mut updates = AccessibilityUpdateSchedule::default();
+
+        assert_eq!(
+            updates.should_update(Some(AccessibilityUpdateKind::ScrollGeometry), now),
+            None
+        );
+        assert_eq!(updates.deadline(), None);
+        updates.activate();
+        assert_eq!(
+            updates.should_update(Some(AccessibilityUpdateKind::ScrollGeometry), now),
+            None
+        );
+        assert_eq!(
+            updates.deadline(),
+            Some(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL)
+        );
+        assert!(
+            !updates
+                .advance(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL - Duration::from_millis(1))
+        );
+        assert!(updates.advance(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL));
+        assert_eq!(
+            updates.should_update(None, now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL),
+            Some(AccessibilityUpdateKind::ScrollGeometry),
+            "the timer correction must retain the incremental scroll update kind"
+        );
+        assert_eq!(updates.deadline(), None);
+
+        assert_eq!(
+            updates.should_update(
+                Some(AccessibilityUpdateKind::LayoutGeometry),
+                now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL
+            ),
+            None
+        );
+        assert_eq!(
+            updates.deadline(),
+            Some(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL * 2)
+        );
+        let later_resize = now
+            + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL
+            + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL / 2;
+        assert_eq!(
+            updates.should_update(Some(AccessibilityUpdateKind::LayoutGeometry), later_resize),
+            None
+        );
+        assert_eq!(
+            updates.deadline(),
+            Some(later_resize + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL),
+            "continuous resize frames move the trailing correction deadline"
+        );
+        assert!(!updates.advance(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL * 2));
+        assert!(updates.advance(later_resize + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL));
+        assert_eq!(
+            updates.should_update(None, later_resize + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL),
+            Some(AccessibilityUpdateKind::LayoutGeometry)
+        );
+
+        assert_eq!(
+            updates.should_update(None, now),
+            Some(AccessibilityUpdateKind::Full)
+        );
+        assert_eq!(updates.deadline(), None);
+        assert!(!updates.advance(now + Duration::from_secs(1)));
+
+        updates.deactivate();
+        assert_eq!(updates.should_update(None, now), None);
     }
 
     #[test]

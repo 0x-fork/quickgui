@@ -7,7 +7,8 @@ Implemented now:
 - experimental macOS Bun/N-API hosting with an externally pumped main-thread application loop,
   dynamically created `App`/`Window` lifecycles, independent transactional bounded retained trees,
   window-routed bounded click/hover/input/submit delivery, and an unstyled Solid 2 renderer exposing
-  `View`, `Text`, `Button`, `Input`, `TextArea`, and retained core `Markdown`, plus a project CLI for
+  `View`, `Text`, `Button`, `Input`, `TextArea`, retained core `Markdown`, and variable-height
+  `VirtualList`, plus a project CLI for
   safe initialization, stable real-`.app` development hosts, candidate-first source restart, and
   self-contained signed production packaging; this is a first vertical slice, not yet parity with
   the Rust framework surface or a published JavaScript release;

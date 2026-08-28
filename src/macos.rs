@@ -1499,8 +1499,12 @@ pub(crate) fn set_window_movable(window: &Arc<Window>, movable: bool) -> Result<
     let window = view
         .window()
         .ok_or_else(|| "the AppKit content view is not attached to a window".to_owned())?;
-    window.setMovable(movable);
-    window.setMovableByWindowBackground(false);
+    if unsafe { window.isMovable() } != movable {
+        window.setMovable(movable);
+    }
+    if unsafe { window.isMovableByWindowBackground() } {
+        window.setMovableByWindowBackground(false);
+    }
     Ok(())
 }
 
@@ -2271,8 +2275,12 @@ pub(crate) fn position_traffic_lights(window: &Arc<Window>, position: Point) -> 
     for button in [Some(close), Some(minimize), zoom].into_iter().flatten() {
         let button_frame = NSView::frame(&button);
         let origin = traffic_light_origin(position, titlebar_height, button_frame.size.height, x);
-        unsafe {
-            NSView::setFrameOrigin(&button, origin);
+        if (button_frame.origin.x - origin.x).abs() > 0.01
+            || (button_frame.origin.y - origin.y).abs() > 0.01
+        {
+            unsafe {
+                NSView::setFrameOrigin(&button, origin);
+            }
         }
         x += spacing;
     }

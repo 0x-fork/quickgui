@@ -18,7 +18,8 @@ export type NativeElementName =
   | "button"
   | "input"
   | "textarea"
-  | "markdown";
+  | "markdown"
+  | "virtual-list";
 export type NativeEventType =
   | "click"
   | "mouseenter"
@@ -451,7 +452,9 @@ export function createNativeElement(name: NativeElementName): NativeNode {
         ? NativeNodeTag.Input
         : name === "markdown"
           ? NativeNodeTag.Markdown
-          : NativeNodeTag.View;
+          : name === "virtual-list"
+            ? NativeNodeTag.VirtualList
+            : NativeNodeTag.View;
   const node = new NativeNode(tag);
   if (name === "textarea") setNativeProperty(node, PropertyCode.Multiline, true);
   return node;

@@ -8,6 +8,7 @@ import {
   Markdown,
   Text,
   View,
+  VirtualList,
   Window,
   createComponent,
   createElement,
@@ -164,5 +165,21 @@ describe("Solid universal host", () => {
     expect(markdown.properties.get(PropertyCode.Value)).toBe("# Hello");
     expect(markdown.properties.get(PropertyCode.Streaming)).toBe(true);
     expect(markdown.properties.get(PropertyCode.MarkdownLinkColor)).toBeTypeOf("number");
+  });
+
+  test("creates unstyled variable lists with native windowing properties", () => {
+    const list = createComponent(VirtualList, {
+      estimatedItemHeight: 180,
+      overscan: 3,
+      listAlignment: "bottom",
+      followMode: "tail",
+      children: createComponent(Text, { children: "Visible row" }),
+    });
+
+    expect(list.properties.get(PropertyCode.EstimatedItemHeight)).toBe(180);
+    expect(list.properties.get(PropertyCode.Overscan)).toBe(3);
+    expect(list.properties.get(PropertyCode.ListAlignment)).toBe("bottom");
+    expect(list.properties.get(PropertyCode.FollowMode)).toBe("tail");
+    expect(list.children).toHaveLength(1);
   });
 });

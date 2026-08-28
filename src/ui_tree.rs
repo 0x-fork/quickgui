@@ -12,7 +12,7 @@ use accesskit::{
     Node as AccessibilityNode, NodeId as AccessibilityNodeId,
     Orientation as NativeAccessibilityOrientation, Rect as AccessibilityRect, Role,
     SortDirection as NativeAccessibilitySortDirection, TextPosition, TextSelection,
-    Toggled as AccessibilityToggled, Tree, TreeId, TreeUpdate,
+    Toggled as AccessibilityToggled, Tree, TreeId, TreeUpdate, Vec2 as AccessibilityVector,
 };
 use taffy::{
     geometry::Size as TaffySize,
@@ -50,9 +50,10 @@ use crate::{
     spring::{ElementSpring, SpringConfig, SpringPlayback, SpringState},
     text_input::{
         TextInputState, accessibility_byte_index, accessibility_character_index,
-        boundary_at_or_before, selectable_character_lengths,
+        accessibility_character_index_from_lengths, boundary_at_or_before,
+        selectable_character_lengths,
     },
-    virtual_list::VirtualScrollHandle,
+    virtual_list::{VirtualScrollHandle, VirtualScrollMount},
 };
 
 #[cfg(target_os = "macos")]
@@ -338,6 +339,14 @@ struct ScrollRegion {
 struct RetainedVirtualScroll {
     handle: VirtualScrollHandle,
     measurement_revision: u64,
+    mount: VirtualScrollMount,
+}
+
+impl RetainedVirtualScroll {
+    fn update_from_input(&self, offset_y: f32, viewport_height: f32) -> bool {
+        self.handle.set_offset_from_input(offset_y);
+        !self.mount.retains_viewport(offset_y, viewport_height)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -456,6 +465,7 @@ impl PasswordDisplay {
 struct SelectableTextEntry {
     id: ElementId,
     content: Arc<str>,
+    character_lengths: Arc<[u8]>,
 }
 
 #[derive(Clone)]
@@ -2309,12 +2319,18 @@ impl UiTree {
             sync_text_inputs(root, &mut self.text_inputs, &mut input_ids);
             self.text_inputs.retain(|id, _| input_ids.contains(id));
 
-            self.selectable_texts.clear();
+            let previous_selectable_texts = std::mem::take(&mut self.selectable_texts);
+            self.selectable_texts = Vec::with_capacity(previous_selectable_texts.len());
+            let mut previous_selectable_texts = previous_selectable_texts
+                .into_iter()
+                .map(|entry| (entry.id, entry))
+                .collect::<HashMap<_, _>>();
             self.selectable_text_indices.clear();
             collect_selectable_texts(
                 root,
                 &mut self.selectable_texts,
                 &mut self.selectable_text_indices,
+                &mut previous_selectable_texts,
             );
             sync_static_text_selection(
                 &mut self.static_text_selection,
@@ -2666,12 +2682,23 @@ impl UiTree {
 
     /// Whether a mounted variable-height list learned geometry after this declaration was built.
     ///
-    /// The runtime uses this edge-triggered revision comparison to request one correcting rebuild;
+    /// The runtime uses this edge-triggered revision comparison to request one correcting frame.
+    /// A view rebuild is needed only when the measured mounted slice no longer covers the viewport;
     /// unchanged retained lists create no redraw source.
-    pub(crate) fn variable_list_measurements_changed(&self) -> bool {
-        self.virtual_scroll_handles
-            .values()
-            .any(|binding| binding.handle.measurement_revision() != binding.measurement_revision)
+    pub(crate) fn take_variable_list_measurement_update(&mut self) -> ScrollResult {
+        let mut result = ScrollResult::default();
+        for binding in self.virtual_scroll_handles.values_mut() {
+            let revision = binding.handle.measurement_revision();
+            if revision == binding.measurement_revision {
+                continue;
+            }
+            binding.measurement_revision = revision;
+            result.changed = true;
+            result.view_dirty |= !binding
+                .handle
+                .refresh_mount_after_measurement(&mut binding.mount);
+        }
+        result
     }
 
     #[cfg(test)]
@@ -2699,6 +2726,27 @@ impl UiTree {
         now: Instant,
     ) -> Result<(), UiError> {
         self.layout_with_prepare_at(viewport, scale_factor, renderer, now, &mut |_| {})
+    }
+
+    /// Recompute layout for the mounted declaration without rebuilding the application view.
+    ///
+    /// Resize-only frames use this retained path. Size-dependent container-query callbacks still
+    /// receive their preparation hook, while stable element, text-input, scroll, and accessibility
+    /// state remains mounted.
+    pub(crate) fn relayout_with_prepare(
+        &mut self,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+        mut prepare: impl FnMut(&mut Element),
+    ) -> Result<(), UiError> {
+        self.layout_with_prepare_at(
+            viewport,
+            scale_factor,
+            renderer,
+            Instant::now(),
+            &mut prepare,
+        )
     }
 
     /// Discard CPU-only semantic measurement caches before an exact offscreen visual layout.
@@ -3402,10 +3450,12 @@ impl UiTree {
                 .clamp(0.0, geometry.travel);
             offset.y = thumb_top / geometry.travel * region.max_offset.y;
         }
-        let view_dirty = region.virtual_scroll && *offset != previous;
-        if view_dirty && let Some(binding) = self.virtual_scroll_handles.get(&region.id) {
-            binding.handle.set_offset_from_input(offset.y);
-        }
+        let view_dirty = region.virtual_scroll
+            && *offset != previous
+            && self
+                .virtual_scroll_handles
+                .get(&region.id)
+                .is_none_or(|binding| binding.update_from_input(offset.y, region.bounds.height));
         if let Some(binding) = self.virtual_scroll_handles.get(&region.id) {
             binding.handle.scrollbar_drag_started();
         }
@@ -3457,14 +3507,14 @@ impl UiTree {
             ScrollResult::default()
         } else {
             offset.y = next;
-            if region.virtual_scroll
-                && let Some(binding) = self.virtual_scroll_handles.get(&region.id)
-            {
-                binding.handle.set_offset_from_input(next);
-            }
+            let view_dirty = region.virtual_scroll
+                && self
+                    .virtual_scroll_handles
+                    .get(&region.id)
+                    .is_none_or(|binding| binding.update_from_input(next, region.bounds.height));
             ScrollResult {
                 changed: true,
-                view_dirty: region.virtual_scroll,
+                view_dirty,
             }
         }
     }
@@ -3746,14 +3796,16 @@ impl UiTree {
                 if !state.hovered && !state.dragging {
                     state.visible_until = now.checked_add(SCROLLBAR_AUTO_HIDE_DELAY);
                 }
-                if region.virtual_scroll
-                    && let Some(binding) = self.virtual_scroll_handles.get(&region.id)
-                {
-                    binding.handle.set_offset_from_input(next.y);
-                }
+                let view_dirty = region.virtual_scroll
+                    && self
+                        .virtual_scroll_handles
+                        .get(&region.id)
+                        .is_none_or(|binding| {
+                            binding.update_from_input(next.y, region.bounds.height)
+                        });
                 return ScrollResult {
                     changed: true,
-                    view_dirty: region.virtual_scroll,
+                    view_dirty,
                 };
             }
         }
@@ -5087,6 +5139,7 @@ impl UiTree {
             root_children.push(accessibility_id(element.runtime_id));
             let context = AccessibilityBuildContext {
                 element_bounds: &self.element_bounds,
+                scroll_offsets: &self.scroll_offsets,
                 text_inputs: &self.text_inputs,
                 selectable_texts: &self.selectable_texts,
                 selectable_text_indices: &self.selectable_text_indices,
@@ -5094,7 +5147,13 @@ impl UiTree {
                 accessibility_text_ids: &self.accessibility_text_ids,
                 accessible_ids: &accessible_ids,
             };
-            build_accessibility_nodes(element, &context, &mut nodes);
+            build_accessibility_nodes(
+                element,
+                &context,
+                &mut nodes,
+                Vector::ZERO,
+                AccessibilityBuildMode::Full,
+            );
         }
         if let Some(announcement) = &self.validation_announcement {
             root_children.push(announcement.node);
@@ -5109,6 +5168,48 @@ impl UiTree {
         TreeUpdate {
             nodes,
             tree: Some(Tree::new(ACCESSIBILITY_ROOT_ID)),
+            tree_id: TreeId::ROOT,
+            focus: self
+                .focused
+                .filter(|id| accessible_ids.contains(id))
+                .map(accessibility_id)
+                .unwrap_or(ACCESSIBILITY_ROOT_ID),
+        }
+    }
+
+    /// Update only scrolling containers after a retained scroll. Full accessibility trees encode
+    /// descendants in stable, unscrolled coordinates and put the live translation on the scroll
+    /// container, so AccessKit does not need to diff every text node while the viewport moves.
+    pub fn accessibility_scroll_update(&self) -> TreeUpdate {
+        let mut accessible_ids = HashSet::with_capacity(self.visible_ids.len());
+        if let Some(element) = &self.root {
+            collect_accessible_ids(element, &mut accessible_ids);
+        }
+        let mut nodes = Vec::with_capacity(self.scroll_offsets.len());
+        if let Some(element) = &self.root
+            && accessible_ids.contains(&element.runtime_id)
+        {
+            let context = AccessibilityBuildContext {
+                element_bounds: &self.element_bounds,
+                scroll_offsets: &self.scroll_offsets,
+                text_inputs: &self.text_inputs,
+                selectable_texts: &self.selectable_texts,
+                selectable_text_indices: &self.selectable_text_indices,
+                static_text_selection: self.static_text_selection,
+                accessibility_text_ids: &self.accessibility_text_ids,
+                accessible_ids: &accessible_ids,
+            };
+            build_accessibility_nodes(
+                element,
+                &context,
+                &mut nodes,
+                Vector::ZERO,
+                AccessibilityBuildMode::ScrollContainers,
+            );
+        }
+        TreeUpdate {
+            nodes,
+            tree: None,
             tree_id: TreeId::ROOT,
             focus: self
                 .focused
@@ -6097,6 +6198,16 @@ fn collect_layout_bounds(
         offset.x = offset.x.clamp(0.0, max_offset.x);
         offset.y = offset.y.clamp(0.0, max_offset.y);
         scroll = *offset;
+    } else if let Some(virtual_scroll) = &element.virtual_scroll {
+        let max_offset = virtual_scroll
+            .handle
+            .max_offset(virtual_scroll.max_offset_y)
+            .max(0.0);
+        let offset = scroll_offsets.entry(element.runtime_id).or_default();
+        offset.x = 0.0;
+        offset.y = virtual_scroll.handle.offset().clamp(0.0, max_offset);
+        scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
+        scroll_end_states.remove(&element.runtime_id);
     } else {
         scroll_end_states.remove(&element.runtime_id);
     }
@@ -6286,6 +6397,23 @@ fn own_text_clip(element: &Element, bounds: Rect, parent_clip: Rect) -> Rect {
     } else {
         parent_clip
     }
+}
+
+fn element_has_outset_shadow(element: &Element) -> bool {
+    [
+        element.visual.shadows.as_deref(),
+        element.hover.shadows.as_deref(),
+        element.active.shadows.as_deref(),
+        element.focus.shadows.as_deref(),
+        element.invalid_style.shadows.as_deref(),
+        element.disabled_style.shadows.as_deref(),
+        element.dragging.shadows.as_deref(),
+        element.drag_over.shadows.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .flatten()
+    .any(|shadow| !shadow.is_inset())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -6522,6 +6650,21 @@ fn paint_element(
     }
     if let Some(measurement) = &element.list_item_measurement {
         measurement.report_height(bounds.height);
+    }
+
+    // A clipped leaf cannot contribute pixels or interaction regions. Avoid emitting offscreen
+    // text/image primitives for long documents while retaining its measured and accessibility
+    // bounds above. Outset shadows are the one leaf effect allowed to cross its own bounds.
+    let effective_parent_clip = if element.portal {
+        viewport
+    } else {
+        parent_clip
+    };
+    if element.children.is_empty()
+        && effective_parent_clip.intersection(bounds).is_none()
+        && !element_has_outset_shadow(element)
+    {
+        return Ok(());
     }
 
     let plane = element.plane.unwrap_or(parent_layer.plane);
@@ -7279,6 +7422,15 @@ fn paint_element(
         offset.y = offset.y.clamp(0.0, max_offset.y);
         scroll = *offset;
         scroll_max_offset = Some(max_offset);
+    } else if let Some(virtual_scroll) = &element.virtual_scroll {
+        let max_offset_y = virtual_scroll
+            .handle
+            .max_offset(virtual_scroll.max_offset_y)
+            .max(0.0);
+        let offset = scroll_offsets.entry(element.runtime_id).or_default();
+        offset.x = 0.0;
+        offset.y = virtual_scroll.handle.offset().clamp(0.0, max_offset_y);
+        scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
     }
 
     let child_origin = Point::new(bounds.x - scroll.x, bounds.y - scroll.y);
@@ -7356,7 +7508,13 @@ fn paint_element(
     let vertical_scroll = if let Some(max_offset) = scroll_max_offset {
         Some((max_offset, scroll.y, false))
     } else if let Some(virtual_scroll) = &element.virtual_scroll {
-        let max_offset = Vector::new(0.0, virtual_scroll.max_offset_y.max(0.0));
+        let max_offset = Vector::new(
+            0.0,
+            virtual_scroll
+                .handle
+                .max_offset(virtual_scroll.max_offset_y)
+                .max(0.0),
+        );
         let offset = scroll_offsets.entry(element.runtime_id).or_default();
         offset.x = 0.0;
         offset.y = offset.y.clamp(0.0, max_offset.y);
@@ -8126,6 +8284,7 @@ fn find_auto_focus(element: &Element) -> Option<ElementId> {
 
 struct AccessibilityBuildContext<'a> {
     element_bounds: &'a HashMap<ElementId, Rect>,
+    scroll_offsets: &'a HashMap<ElementId, Vector>,
     text_inputs: &'a HashMap<ElementId, TextInputState>,
     selectable_texts: &'a [SelectableTextEntry],
     selectable_text_indices: &'a HashMap<ElementId, usize>,
@@ -8134,19 +8293,78 @@ struct AccessibilityBuildContext<'a> {
     accessible_ids: &'a HashSet<ElementId>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AccessibilityBuildMode {
+    Full,
+    ScrollContainers,
+}
+
+fn accessibility_scroll_translation(
+    element: &Element,
+    scroll_offsets: &HashMap<ElementId, Vector>,
+) -> Option<Vector> {
+    let overflow_scroll = !matches!(&element.kind, ElementKind::TextInput(_))
+        && (element.layout.overflow.x == Overflow::Scroll
+            || element.layout.overflow.y == Overflow::Scroll);
+    if overflow_scroll {
+        return Some(
+            scroll_offsets
+                .get(&element.runtime_id)
+                .copied()
+                .unwrap_or_default(),
+        );
+    }
+    element.virtual_scroll.as_ref().map(|virtual_scroll| {
+        let offset_y = scroll_offsets
+            .get(&element.runtime_id)
+            .map_or_else(|| virtual_scroll.handle.offset(), |offset| offset.y);
+        Vector::new(0.0, offset_y - virtual_scroll.mount.layout_offset_y)
+    })
+}
+
+fn accessibility_unscrolled_bounds(bounds: Rect, translation: Vector) -> Rect {
+    Rect::new(
+        bounds.x + translation.x,
+        bounds.y + translation.y,
+        bounds.width,
+        bounds.height,
+    )
+}
+
 fn build_accessibility_nodes(
     element: &Element,
     context: &AccessibilityBuildContext<'_>,
     nodes: &mut Vec<(AccessibilityNodeId, AccessibilityNode)>,
+    inherited_scroll_translation: Vector,
+    mode: AccessibilityBuildMode,
 ) {
     if !context.accessible_ids.contains(&element.runtime_id) {
         return;
     }
-    let Some(bounds) = context.element_bounds.get(&element.runtime_id).copied() else {
+    let Some(viewport_bounds) = context.element_bounds.get(&element.runtime_id).copied() else {
         return;
     };
+    let own_scroll_translation = accessibility_scroll_translation(element, context.scroll_offsets);
+    let content_scroll_translation =
+        inherited_scroll_translation + own_scroll_translation.unwrap_or_default();
+    if mode == AccessibilityBuildMode::ScrollContainers && own_scroll_translation.is_none() {
+        for child in &element.children {
+            build_accessibility_nodes(child, context, nodes, content_scroll_translation, mode);
+        }
+        return;
+    }
+    let bounds = accessibility_unscrolled_bounds(viewport_bounds, content_scroll_translation);
     let mut node = AccessibilityNode::new(accessibility_role(element.accessibility.role));
     node.set_bounds(accessibility_rect(bounds));
+    if let Some(scroll) = own_scroll_translation {
+        node.set_transform(Affine::translate(AccessibilityVector::new(
+            -(scroll.x as f64),
+            -(scroll.y as f64),
+        )));
+        node.set_clips_children();
+        node.set_scroll_x(scroll.x as f64);
+        node.set_scroll_y(scroll.y as f64);
+    }
     let mut children = element
         .children
         .iter()
@@ -8267,11 +8485,17 @@ fn build_accessibility_nodes(
         node.set_text_selection(TextSelection {
             anchor: TextPosition {
                 node: text_id,
-                character_index: accessibility_character_index(&entry.content, anchor_offset),
+                character_index: accessibility_character_index_from_lengths(
+                    &entry.character_lengths,
+                    anchor_offset,
+                ),
             },
             focus: TextPosition {
                 node: text_id,
-                character_index: accessibility_character_index(&entry.content, focus_offset),
+                character_index: accessibility_character_index_from_lengths(
+                    &entry.character_lengths,
+                    focus_offset,
+                ),
             },
         });
         if !element.accessibility.disabled {
@@ -8281,7 +8505,7 @@ fn build_accessibility_nodes(
         let mut text_node = AccessibilityNode::new(Role::TextRun);
         text_node.set_bounds(accessibility_rect(bounds));
         text_node.set_value(entry.content.to_string());
-        text_node.set_character_lengths(selectable_character_lengths(&entry.content));
+        text_node.set_character_lengths(entry.character_lengths.to_vec());
         nodes.push((text_id, text_node));
     } else if let Some(value) = &element.accessibility.value {
         node.set_value(value.to_string());
@@ -8405,7 +8629,7 @@ fn build_accessibility_nodes(
     nodes.push((accessibility_id(element.runtime_id), node));
 
     for child in &element.children {
-        build_accessibility_nodes(child, context, nodes);
+        build_accessibility_nodes(child, context, nodes, content_scroll_translation, mode);
     }
 }
 
@@ -8650,20 +8874,27 @@ fn collect_selectable_texts(
     element: &Element,
     entries: &mut Vec<SelectableTextEntry>,
     indices: &mut HashMap<ElementId, usize>,
+    previous: &mut HashMap<ElementId, SelectableTextEntry>,
 ) {
     if element.is_display_none() || element.is_visibility_hidden() {
         return;
     }
     if let Some(content) = selectable_text_content(element) {
         let document_index = entries.len();
+        let character_lengths = previous
+            .remove(&element.runtime_id)
+            .filter(|entry| entry.content == *content)
+            .map(|entry| entry.character_lengths)
+            .unwrap_or_else(|| selectable_character_lengths(content).into());
         entries.push(SelectableTextEntry {
             id: element.runtime_id,
             content: content.clone(),
+            character_lengths,
         });
         indices.insert(element.runtime_id, document_index);
     }
     for child in &element.children {
-        collect_selectable_texts(child, entries, indices);
+        collect_selectable_texts(child, entries, indices, previous);
     }
 }
 
@@ -8826,7 +9057,10 @@ fn sync_virtual_scrolls(
         return;
     }
     if let Some(virtual_scroll) = &element.virtual_scroll {
-        let max_offset = virtual_scroll.max_offset_y.max(0.0);
+        let max_offset = virtual_scroll
+            .handle
+            .max_offset(virtual_scroll.max_offset_y)
+            .max(0.0);
         let next = virtual_scroll.handle.offset().clamp(0.0, max_offset);
         virtual_scroll.handle.set_offset_silent(next);
         let previous = offsets.insert(element.runtime_id, Vector::new(0.0, next));
@@ -8841,6 +9075,7 @@ fn sync_virtual_scrolls(
             RetainedVirtualScroll {
                 handle: virtual_scroll.handle.clone(),
                 measurement_revision: virtual_scroll.measurement_revision,
+                mount: virtual_scroll.mount.clone(),
             },
         );
     }
@@ -9885,6 +10120,93 @@ mod tests {
                 .nodes
                 .iter()
                 .any(|(id, _)| *id == accessibility_id(control))
+        );
+    }
+
+    #[test]
+    fn retained_scroll_accessibility_updates_only_the_container() {
+        let scroll_id = ElementId::named("accessibility-scroll");
+        let child_id = ElementId::named("accessibility-scroll-child");
+        let root = div()
+            .id(scroll_id)
+            .size(100.0, 100.0)
+            .overflow_y_scroll()
+            .child(
+                div()
+                    .h(300.0)
+                    .flex_none()
+                    .child(button().id(child_id).size(80.0, 24.0).child("Open")),
+            );
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(100.0, 100.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let initial_child_bounds = tree
+            .accessibility_update("Scroll test")
+            .nodes
+            .into_iter()
+            .find_map(|(id, node)| (id == accessibility_id(child_id)).then(|| node.bounds()))
+            .flatten()
+            .expect("accessible child bounds");
+
+        tree.scroll_offsets
+            .insert(scroll_id, Vector::new(0.0, 80.0));
+        scene.clear(Color::TRANSPARENT);
+        tree.paint(&mut scene, &mut renderer).unwrap();
+
+        let update = tree.accessibility_scroll_update();
+        assert_eq!(update.nodes.len(), 1);
+        let (node_id, node) = &update.nodes[0];
+        assert_eq!(*node_id, accessibility_id(scroll_id));
+        assert_eq!(node.bounds().expect("scroll bounds").y0, 80.0);
+        assert_eq!(
+            node.transform(),
+            Some(&Affine::translate(AccessibilityVector::new(0.0, -80.0)))
+        );
+        assert!(node.clips_children());
+
+        let scrolled_child_bounds = tree
+            .accessibility_update("Scroll test")
+            .nodes
+            .into_iter()
+            .find_map(|(id, node)| (id == accessibility_id(child_id)).then(|| node.bounds()))
+            .flatten()
+            .expect("accessible child bounds after scrolling");
+        assert_eq!(scrolled_child_bounds, initial_child_bounds);
+    }
+
+    #[test]
+    fn clipped_offscreen_text_keeps_bounds_without_emitting_a_text_run() {
+        let text_id = ElementId::named("offscreen-text");
+        let root = div().relative().size(100.0, 100.0).overflow_hidden().child(
+            text("outside")
+                .id(text_id)
+                .absolute()
+                .top(160.0)
+                .left(0.0)
+                .size(100.0, 20.0),
+        );
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(100.0, 100.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+
+        assert!(scene.text_runs().is_empty());
+        assert_eq!(
+            tree.element_bounds(text_id),
+            Some(Rect::new(0.0, 160.0, 100.0, 20.0))
+        );
+        assert!(
+            tree.accessibility_update("Cull test")
+                .nodes
+                .iter()
+                .any(|(id, _)| *id == accessibility_id(text_id))
         );
     }
 
@@ -11551,6 +11873,7 @@ mod tests {
             RetainedVirtualScroll {
                 measurement_revision: handle.measurement_revision(),
                 handle,
+                mount: list.scroll_mount(),
             },
         );
         tree.scroll_regions.push(ScrollRegion {
@@ -11612,6 +11935,92 @@ mod tests {
     }
 
     #[test]
+    fn virtual_scroll_translates_the_mounted_overscan_before_rebuilding() {
+        let mut list = crate::VirtualList::new(100, 10.0).with_overscan(2);
+        list.set_viewport_height(100.0);
+        let row = ElementId::named("retained-virtual-row");
+        let root = div()
+            .id("retained-virtual-viewport")
+            .relative()
+            .size(100.0, 100.0)
+            .overflow_hidden()
+            .virtual_scroll(&list)
+            .child(
+                div()
+                    .id(row)
+                    .absolute()
+                    .top(0.0)
+                    .left(0.0)
+                    .size(100.0, 10.0),
+            );
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(100.0, 100.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert_eq!(
+            tree.element_bounds(row),
+            Some(Rect::new(0.0, 0.0, 100.0, 10.0))
+        );
+
+        let now = Instant::now();
+        assert_eq!(
+            tree.scroll_at(Some(Point::new(50.0, 50.0)), Vector::new(0.0, -10.0), now,),
+            ScrollResult {
+                changed: true,
+                view_dirty: false,
+            }
+        );
+        scene.clear(Color::TRANSPARENT);
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert_eq!(
+            tree.element_bounds(row),
+            Some(Rect::new(0.0, -10.0, 100.0, 10.0))
+        );
+
+        assert_eq!(
+            tree.scroll_at(Some(Point::new(50.0, 50.0)), Vector::new(0.0, -11.0), now,),
+            ScrollResult {
+                changed: true,
+                view_dirty: true,
+            }
+        );
+    }
+
+    #[test]
+    fn variable_list_measurements_inside_the_mounted_slice_do_not_rebuild_the_view() {
+        let list = crate::ListState::new(10, 20.0).with_overscan(0);
+        list.set_viewport_size(100.0, 100.0);
+        let rows = list.render_rows(list.visible_rows().range, |_| div().h(200.0));
+        let root = div()
+            .relative()
+            .size(100.0, 100.0)
+            .overflow_hidden()
+            .variable_virtual_scroll(&list)
+            .child(rows);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(100.0, 100.0), 1.0, &mut renderer)
+            .unwrap();
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+
+        assert_eq!(
+            tree.take_variable_list_measurement_update(),
+            ScrollResult {
+                changed: true,
+                view_dirty: false,
+            }
+        );
+        assert_eq!(
+            tree.take_variable_list_measurement_update(),
+            ScrollResult::default()
+        );
+    }
+
+    #[test]
     fn overflow_and_virtual_sibling_scrollbars_keep_independent_native_state() {
         let mut tree = UiTree::new();
         let overflow_id = ElementId::new(72);
@@ -11626,6 +12035,7 @@ mod tests {
             RetainedVirtualScroll {
                 measurement_revision: handle.measurement_revision(),
                 handle,
+                mount: list.scroll_mount(),
             },
         );
         let region = |id, bounds, virtual_scroll, source| ScrollRegion {
@@ -12530,14 +12940,17 @@ mod tests {
             SelectableTextEntry {
                 id: ids[0],
                 content: Arc::from("alpha"),
+                character_lengths: selectable_character_lengths("alpha").into(),
             },
             SelectableTextEntry {
                 id: ids[1],
                 content: Arc::from("beta"),
+                character_lengths: selectable_character_lengths("beta").into(),
             },
             SelectableTextEntry {
                 id: ids[2],
                 content: Arc::from("gamma"),
+                character_lengths: selectable_character_lengths("gamma").into(),
             },
         ];
         tree.selectable_text_indices = ids
@@ -12657,6 +13070,7 @@ mod tests {
         tree.selectable_texts.push(SelectableTextEntry {
             id: text_id,
             content: Arc::from("document"),
+            character_lengths: selectable_character_lengths("document").into(),
         });
         tree.selectable_text_indices.insert(text_id, 0);
         tree.static_text_selection = Some(StaticTextSelection {
