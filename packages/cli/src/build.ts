@@ -41,8 +41,10 @@ const nativeExports = [
   "applyBatch",
   "closeWindow",
   "createApp",
+  "createAnchoredWindow",
   "createWindow",
   "destroyApp",
+  "focusNode",
   "protocolVersion",
   "pumpApp",
   "startApp",
@@ -50,6 +52,7 @@ const nativeExports = [
 ] as const;
 
 const devHostEntrypoint = fileURLToPath(new URL("./dev-host.ts", import.meta.url));
+const nativeBindingShimSuffix = ".quickgui-binding-shim.js";
 
 export async function buildProject(
   config: ResolvedQuickGuiConfig,
@@ -216,7 +219,7 @@ async function compileExecutable(
       conditions: ["browser"],
       plugins: production
         ? [
-            quickguiSolidPlugin({ development: false }),
+            quickguiSolidPlugin({ development: false, projectRoot: config.projectRoot }),
             nativeBindingPlugin(info.nativeAddon, options.target),
           ]
         : [],
@@ -277,11 +280,19 @@ export function nativeBindingPlugin(
               `Install a native package that supports ${target} or choose an available target.`,
           );
         }
-        return { path: addonPath, namespace: "quickgui-native" };
+        // Keep the generated JavaScript shim and the actual `.node` module at distinct module
+        // identities. Reusing `addonPath` for both makes Bun resolve the shim's own `require()`
+        // back to itself, producing a recursive initializer in the standalone executable.
+        return {
+          path: `${addonPath}${nativeBindingShimSuffix}`,
+          namespace: "quickgui-native",
+        };
       });
       build.onLoad({ filter: /.*/, namespace: "quickgui-native" }, ({ path }) => ({
+        // Bun embeds directly required Node-API addons in standalone executables. The literal
+        // target path must point at the real `.node` file, not this virtual shim.
         contents:
-          `const nativeBinding = require(${JSON.stringify(path)});\n` +
+          `const nativeBinding = require(${JSON.stringify(path.slice(0, -nativeBindingShimSuffix.length))});\n` +
           `export const { ${nativeExports.join(", ")} } = nativeBinding;\n`,
         loader: "js",
       }));

@@ -3,6 +3,7 @@ import {
   MutationBatch,
   NativeNodeTag,
   PropertyCode,
+  PROTOCOL_VERSION,
   ROOT_NODE_ID,
   type NativePropertyValue,
 } from "./protocol.ts";
@@ -10,10 +11,35 @@ import {
 export { PropertyCode } from "./protocol.ts";
 
 export type ColorValue = number | string;
-export type NativeElementName = "view" | "div" | "text" | "button";
-export type NativeEventType = "click" | "mouseenter" | "mouseleave";
+export type NativeElementName =
+  | "view"
+  | "div"
+  | "text"
+  | "button"
+  | "input"
+  | "textarea"
+  | "markdown";
+export type NativeEventType =
+  | "click"
+  | "mouseenter"
+  | "mouseleave"
+  | "input"
+  | "submit";
 export type NativeEventListener = (event: QuickGuiEvent) => void;
 export type WindowCloseListener = (window: Window) => void;
+export type PopupPlacement =
+  | "top-start"
+  | "top"
+  | "top-end"
+  | "bottom-start"
+  | "bottom"
+  | "bottom-end"
+  | "left-start"
+  | "left"
+  | "left-end"
+  | "right-start"
+  | "right"
+  | "right-end";
 
 export interface WindowOptions {
   title?: string;
@@ -26,6 +52,13 @@ export interface WindowOptions {
   trafficLightPosition?: { x: number; y: number };
   transparent?: boolean;
   blur?: boolean;
+  /** Open this window as a native child popup anchored to the mounted node. */
+  anchor?: NativeNode;
+  placement?: PopupPlacement;
+  gap?: number;
+  offset?: { x: number; y: number };
+  grab?: boolean;
+  acceptsKeyFocus?: boolean;
 }
 
 export interface RunOptions {
@@ -35,6 +68,13 @@ export interface RunOptions {
 
 let nextNodeId = 1;
 let activeApp: App | undefined;
+
+const nativeProtocolVersion = binding.protocolVersion();
+if (nativeProtocolVersion !== PROTOCOL_VERSION) {
+  throw new Error(
+    `QuickGUI native protocol mismatch: JavaScript uses ${PROTOCOL_VERSION}, binding uses ${nativeProtocolVersion}. Reinstall or rebuild @quickgui/native.`,
+  );
+}
 
 export class NativeNode {
   readonly id: number;
@@ -53,6 +93,14 @@ export class NativeNode {
     this.tag = tag;
     this.text = text;
   }
+
+  /** Focus this mounted node, matching the web `HTMLElement.focus()` shape. */
+  focus(): boolean {
+    const host = this.host;
+    if (!host || host.closed) return false;
+    host.flush();
+    return binding.focusNode(host.app.nativeId, host.nativeId, this.id);
+  }
 }
 
 export class QuickGuiEvent {
@@ -61,11 +109,13 @@ export class QuickGuiEvent {
   currentTarget: NativeNode;
   defaultPrevented = false;
   propagationStopped = false;
+  readonly value: string | undefined;
 
-  constructor(type: NativeEventType, target: NativeNode) {
+  constructor(type: NativeEventType, target: NativeNode, value?: string) {
     this.type = type;
     this.target = target;
     this.currentTarget = target;
+    this.value = value;
   }
 
   preventDefault(): void {
@@ -121,7 +171,7 @@ export class App {
       if (event.kind === "close") {
         this._didCloseWindow(window);
       } else {
-        window._dispatchEvent(event.kind as NativeEventType, event.target);
+        window._dispatchEvent(event.kind as NativeEventType, event.target, event.value);
       }
     }
   }
@@ -209,8 +259,32 @@ export class Window {
     }
     if (options.transparent !== undefined) nativeOptions.transparent = options.transparent;
     if (options.blur !== undefined) nativeOptions.blur = options.blur;
+    if (options.placement !== undefined) nativeOptions.popupPlacement = options.placement;
+    if (options.gap !== undefined) nativeOptions.popupGap = options.gap;
+    if (options.offset !== undefined) {
+      nativeOptions.popupOffsetX = options.offset.x;
+      nativeOptions.popupOffsetY = options.offset.y;
+    }
+    if (options.grab !== undefined) nativeOptions.popupGrab = options.grab;
+    if (options.acceptsKeyFocus !== undefined) {
+      nativeOptions.popupAcceptsKeyFocus = options.acceptsKeyFocus;
+    }
     this.app = app;
-    this.nativeId = binding.createWindow(app.nativeId, nativeOptions);
+    if (options.anchor) {
+      const parent = options.anchor.host;
+      if (!parent || parent.closed || !options.anchor.materialized) {
+        throw new Error("an anchored Window requires a mounted node in an open parent Window");
+      }
+      parent.flush();
+      this.nativeId = binding.createAnchoredWindow(
+        app.nativeId,
+        parent.nativeId,
+        options.anchor.id,
+        nativeOptions,
+      );
+    } else {
+      this.nativeId = binding.createWindow(app.nativeId, nativeOptions);
+    }
     this.root = new NativeNode(NativeNodeTag.View, "", ROOT_NODE_ID);
     this.root.host = this;
     this.root.materialized = true;
@@ -244,10 +318,10 @@ export class Window {
     return binding.applyBatch(this.app.nativeId, this.nativeId, batch.finish());
   }
 
-  _dispatchEvent(type: NativeEventType, targetId: number): void {
+  _dispatchEvent(type: NativeEventType, targetId: number, value?: string): void {
     const target = this.nodes.get(targetId);
     if (!target) return;
-    const quickGuiEvent = new QuickGuiEvent(type, target);
+    const quickGuiEvent = new QuickGuiEvent(type, target, value);
     if (type === "mouseenter" || type === "mouseleave") {
       target.listeners.get(type)?.(quickGuiEvent);
       return;
@@ -343,7 +417,17 @@ export class Window {
 }
 
 export function createNativeElement(name: NativeElementName): NativeNode {
-  return new NativeNode(name === "button" ? NativeNodeTag.Button : NativeNodeTag.View);
+  const tag =
+    name === "button"
+      ? NativeNodeTag.Button
+      : name === "input" || name === "textarea"
+        ? NativeNodeTag.Input
+        : name === "markdown"
+          ? NativeNodeTag.Markdown
+          : NativeNodeTag.View;
+  const node = new NativeNode(tag);
+  if (name === "textarea") setNativeProperty(node, PropertyCode.Multiline, true);
+  return node;
 }
 
 export function createNativeText(value: string): NativeNode {
@@ -394,6 +478,10 @@ export function setNativeEventListener(
   else node.listeners.delete(type);
   if (type === "click") {
     setNativeProperty(node, PropertyCode.ClickListener, node.listeners.has("click"));
+  } else if (type === "input") {
+    setNativeProperty(node, PropertyCode.InputListener, node.listeners.has("input"));
+  } else if (type === "submit") {
+    setNativeProperty(node, PropertyCode.SubmitListener, node.listeners.has("submit"));
   } else {
     const listensForHover = node.listeners.has("mouseenter") || node.listeners.has("mouseleave");
     setNativeProperty(node, PropertyCode.HoverListener, listensForHover);

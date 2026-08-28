@@ -49,6 +49,7 @@ mod macos_key_equivalents;
 mod macos_keyboard;
 #[cfg(target_os = "macos")]
 mod macos_menu;
+mod markdown;
 mod menu;
 mod metrics;
 #[cfg(target_os = "macos")]
@@ -212,6 +213,11 @@ pub use keyboard::{
 };
 pub use keymap::{
     ContextPredicate, KeyBinding, KeyContext, Keymap, KeymapError, KeymapMatch, Keystroke,
+};
+pub use markdown::{
+    MAX_MARKDOWN_BLOCKS, MAX_MARKDOWN_NESTING_DEPTH, MAX_MARKDOWN_SOURCE_BYTES, Markdown,
+    MarkdownBlock, MarkdownInlineRun, MarkdownInlineStyle, MarkdownListItem, MarkdownStyle,
+    MarkdownTableAlign, MarkdownUpdate,
 };
 pub use menu::{Menu, MenuItem, OsAction, OsMenu, SystemMenuType};
 pub use metrics::{FrameMetrics, RenderStats};

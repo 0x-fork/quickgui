@@ -398,6 +398,7 @@ pub enum AccessibilityRole {
     RadioGroup,
     Switch,
     TextInput,
+    PasswordInput,
     MultilineTextInput,
     Dialog,
     AlertDialog,
@@ -680,6 +681,7 @@ pub(crate) struct TextInputElement {
     pub highlights: Arc<[TextHighlight]>,
     pub placeholder: Arc<str>,
     pub multiline: bool,
+    pub password: bool,
     pub constraints: InputConstraints,
 }
 
@@ -1247,6 +1249,7 @@ pub struct Element {
     pub(crate) tooltip: Option<Tooltip>,
     pub(crate) app_region: Option<AppRegion>,
     pub(crate) virtual_scroll: Option<VirtualScrollStyle>,
+    pub(crate) scroll_to_end_revision: Option<u64>,
     pub(crate) list_item_measurement: Option<ListItemMeasurement>,
     pub(crate) animation: Option<ElementAnimation>,
     pub(crate) spring: Option<ElementSpring>,
@@ -1470,6 +1473,7 @@ impl Element {
             tooltip: None,
             app_region: None,
             virtual_scroll: None,
+            scroll_to_end_revision: None,
             list_item_measurement: None,
             animation: None,
             spring: None,
@@ -1573,6 +1577,7 @@ impl Element {
             highlights,
             placeholder: Arc::from(""),
             multiline,
+            password: false,
             constraints: InputConstraints::default(),
         });
         element.layout.size = TaffySize {
@@ -2898,6 +2903,16 @@ impl Element {
         self
     }
 
+    /// Follow the end of an ordinary vertical overflow container when `revision` changes.
+    ///
+    /// The first declaration starts at the end. Later revisions keep following only while the
+    /// user was already at the previous end; scrolling away pauses following, and returning to
+    /// the end resumes it on the next revision. This performs no scheduling or per-frame work.
+    pub fn scroll_to_end(mut self, revision: u64) -> Self {
+        self.scroll_to_end_revision = Some(revision);
+        self
+    }
+
     /// Bind this clipped viewport to a fixed-height [`VirtualList`].
     ///
     /// The mounted rows remain application-controlled, while QuickGUI owns the native-style
@@ -3141,6 +3156,29 @@ impl Element {
         if let ElementKind::TextInput(input) = &mut self.kind {
             input.placeholder = placeholder.into();
         }
+        self
+    }
+
+    /// Mask the visible value and expose native secure-text-field semantics.
+    ///
+    /// Password inputs retain their real controlled value for editing and submit listeners, but
+    /// paint one bullet per Unicode grapheme and do not expose selections to clipboard actions.
+    /// Calling this with `false` restores an ordinary single-line text input, which supports
+    /// web-style reveal buttons without replacing the retained input state.
+    pub fn password(mut self, password: bool) -> Self {
+        let ElementKind::TextInput(input) = &mut self.kind else {
+            panic!("password can only be applied to a text input");
+        };
+        assert!(
+            !password || !input.multiline,
+            "a text area cannot be a password input"
+        );
+        input.password = password;
+        self.accessibility.role = if password {
+            AccessibilityRole::PasswordInput
+        } else {
+            AccessibilityRole::TextInput
+        };
         self
     }
 
@@ -3785,9 +3823,15 @@ impl Element {
         self.bind_listener_id(listener.id());
         self.focusable = true;
         self.set_implicit_cursor(CursorStyle::IBeam);
-        if self.accessibility.role != AccessibilityRole::MultilineTextInput {
-            self.accessibility.role = AccessibilityRole::TextInput;
-        }
+        self.accessibility.role = match &self.kind {
+            ElementKind::TextInput(TextInputElement {
+                multiline: true, ..
+            }) => AccessibilityRole::MultilineTextInput,
+            ElementKind::TextInput(TextInputElement { password: true, .. }) => {
+                AccessibilityRole::PasswordInput
+            }
+            _ => AccessibilityRole::TextInput,
+        };
         self
     }
 
@@ -3806,7 +3850,14 @@ impl Element {
         self.bind_listener_id(listener.id());
         self.focusable = true;
         self.set_implicit_cursor(CursorStyle::IBeam);
-        self.accessibility.role = AccessibilityRole::TextInput;
+        self.accessibility.role = if matches!(
+            &self.kind,
+            ElementKind::TextInput(TextInputElement { password: true, .. })
+        ) {
+            AccessibilityRole::PasswordInput
+        } else {
+            AccessibilityRole::TextInput
+        };
         self
     }
 
@@ -4899,6 +4950,25 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
                 if input.value.as_ref() == "hello"
                     && input.placeholder.as_ref() == "Type here"
                     && !input.multiline
+                    && !input.password
+        ));
+    }
+
+    #[test]
+    fn password_inputs_expose_secure_semantics_without_replacing_the_value() {
+        let element = text_input("sk-secret").password(true);
+
+        assert_eq!(element.accessibility.role, AccessibilityRole::PasswordInput);
+        assert!(matches!(
+            &element.kind,
+            ElementKind::TextInput(input) if input.password && !input.multiline
+        ));
+
+        let revealed = element.password(false);
+        assert_eq!(revealed.accessibility.role, AccessibilityRole::TextInput);
+        assert!(matches!(
+            &revealed.kind,
+            ElementKind::TextInput(input) if !input.password && input.value.as_ref() == "sk-secret"
         ));
     }
 

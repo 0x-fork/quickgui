@@ -10,6 +10,18 @@ All notable user-facing changes to QuickGUI are recorded here.
   development host. On macOS, development runs a signed `.app`, loads project TS/TSX on demand,
   restarts without repackaging on source edits, and keeps the prior app alive when a candidate
   cannot start.
+- Added controlled `Input`/`TextArea` and retained core `Markdown` bindings to
+  `@quickgui/native`/`@quickgui/solid`, plus a packaged Solid AI chat example using Vercel AI SDK
+  streaming and the DeepSeek provider.
+- Fixed native controlled inputs resetting each keystroke before Solid could commit the queued
+  value update.
+- Fixed the Solid compiler plugin to preserve and then correctly erase TypeScript syntax after JSX
+  lowering, allowing typed `.tsx` applications to build for production.
+
+### Framework
+
+- Added a bounded retained native `Markdown` document with CommonMark tables, task lists, streamed
+  tail mending, append-only settled-prefix parsing, and cached `StyledText` flattening.
 
 ## 0.1.0 - 2026-08-27
 

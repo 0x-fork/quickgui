@@ -16,6 +16,9 @@ quickgui = { path = "../.." }
 [build-dependencies]
 napi-build = "2.4.1"
 
+[dev-dependencies]
+quickgui = { path = "../..", features = ["test-support"] }
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

@@ -5,7 +5,7 @@ QuickGUI includes an experimental Bun host split into two unstyled packages:
 - `@quickgui/native` owns the N-API boundary, application loop, per-window retained trees, binary
   mutation batches, and window-routed event queue.
 - `@quickgui/solid` owns Solid 2 JSX compilation, fine-grained reactive updates, and the host
-  components `View`, `Text`, and `Button`.
+  components `View`, `Text`, `Button`, `Input`, `TextArea`, and `Markdown`.
 
 The renderer does not use a webview or virtual DOM. Solid updates the affected retained native
 nodes, and one binary batch crosses N-API before QuickGUI invalidates the WGPU window.
@@ -23,7 +23,7 @@ Source changes restart that host without rebundling or repackaging the applicati
 the Solid compiler setup, so applications do not need a Bun preload or a special start command.
 
 ```tsx
-import { App, Button, Text, View, Window, render } from "@quickgui/solid";
+import { App, Button, Text, View, Window, render, type NativeNode } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
 const app = new App();
@@ -69,20 +69,55 @@ function openSettings() {
 Closing a `Window` automatically disposes every Solid root mounted into it. Closing the last window
 ends the current JavaScript host run.
 
-`View`, `Text`, and `Button` are intentionally unstyled. Their `style` prop uses web-shaped names
+Pass a mounted node as `anchor` to create a parent-owned native popup surface. Placement is resolved
+against the display work area, so the popup can extend beyond its parent window and flips or slides
+back on screen when needed:
+
+```tsx
+let trigger: NativeNode | undefined;
+
+<Button ref={(node) => { trigger = node; }} onClick={() => {
+  if (!trigger) return;
+  const popup = new Window({
+    title: "Provider settings",
+    anchor: trigger,
+    width: 420,
+    height: 280,
+    placement: "bottom-end",
+    gap: 8,
+  });
+  render(() => <ProviderSettings close={() => popup.close()} />, popup);
+}}>
+  Provider settings
+</Button>
+```
+
+All Solid host components are intentionally unstyled. Their `style` prop uses web-shaped names
 for the currently bridged QuickGUI layout, text, paint, overflow, cursor, positioning, and
 `appRegion` properties. Native events are flushed at a Solid 2 event boundary before the retained
 mutation batch is submitted.
 
+`Input` and `TextArea` are controlled native editors. Update their `value` from `event.value` in
+`onInput`; Return on a single-line `Input` invokes `onSubmit`. Use `<Input type="password">` for a
+masked secure field, then switch the controlled `type` to `"text"` for an explicit reveal action.
+`Markdown` is QuickGUI core's retained native renderer, accepts controlled `content`/`source` and
+`streaming` props, and is documented in the [Markdown guide](markdown.md).
+
 The runnable source and CLI configuration are in
 [`examples/solid`](../examples/solid).
 
+The [Solid AI chat example](../examples/ai-chat-solid) adds Vercel AI SDK/DeepSeek streaming, an
+anchored provider-settings popup with a revealable password field, controlled input, cancellation,
+paced updates, and core Markdown rendering.
+
 ## Current boundary
 
-This first vertical slice supports dynamically created independent native windows, retained
-view/text/button nodes, reactive properties and text, click and hover events, web-shaped Flexbox
-styling, hidden-inset titlebars, and traffic-light positioning. It is not yet the full Rust API
-surface: inputs, lists, menus, popovers, native child views, accessibility actions, packaging of
-every native binary target, and production performance gates still need dedicated bindings.
+This vertical slice supports dynamically created independent and anchored native windows, retained
+view/text/button/input/Markdown nodes, password inputs, reactive properties and text,
+click/hover/input/submit events, web-shaped Flexbox styling, hidden-inset titlebars, traffic-light
+positioning, a stable real-`.app` development host, and self-contained production packaging on the
+current macOS target. It is not yet the full Rust API surface: declarative popup parts, lists, menus,
+native child views, accessibility actions, every native binary target, and dedicated JavaScript
+performance gates still need bindings and acceptance.
 
 Return to the [documentation index](README.md).

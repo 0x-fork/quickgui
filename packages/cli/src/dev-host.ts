@@ -20,7 +20,7 @@ process.chdir(projectRoot);
 
 const compilerPath = Bun.resolveSync("@quickgui/solid/compiler", projectRoot);
 const { quickguiSolidPlugin } = await import(pathToFileURL(compilerPath).href);
-plugin(quickguiSolidPlugin({ development: true }));
+plugin(quickguiSolidPlugin({ development: true, projectRoot }));
 
 const entryUrl = pathToFileURL(resolve(entry));
 entryUrl.searchParams.set("quickgui_launch", `${Date.now()}`);

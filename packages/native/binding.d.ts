@@ -4,16 +4,21 @@ export declare function applyBatch(app: number, window: number, batch: Buffer): 
 
 export declare function closeWindow(app: number, window: number): boolean
 
+export declare function createAnchoredWindow(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null): number
+
 export declare function createApp(): number
 
 export declare function createWindow(app: number, options?: NativeWindowOptions | undefined | null): number
 
 export declare function destroyApp(app: number): boolean
 
+export declare function focusNode(app: number, window: number, node: number): boolean
+
 export interface NativeEvent {
   kind: string
   window: number
   target: number
+  value?: string
 }
 
 export interface NativeWindowOptions {
@@ -28,6 +33,12 @@ export interface NativeWindowOptions {
   trafficLightY?: number
   transparent?: boolean
   blur?: boolean
+  popupPlacement?: string
+  popupGap?: number
+  popupOffsetX?: number
+  popupOffsetY?: number
+  popupGrab?: boolean
+  popupAcceptsKeyFocus?: boolean
 }
 
 export declare function protocolVersion(): number

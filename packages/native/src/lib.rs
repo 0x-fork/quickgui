@@ -10,13 +10,14 @@ use std::{
 use napi::{Error, Result, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use quickgui::{
-    AccessibilityRole, App as QuickGuiApp, AppConfig, AppRegion, AppRunStatus, AppRunner, Color,
-    CursorStyle, Element, ElementId, FontWeight, IntoElement, QuitMode, TextAlign, TitleBarStyle,
-    View, ViewContext, WindowBackgroundAppearance, WindowHandle, button, div, text,
+    AccessibilityRole, AnchorPlacement, AnchoredPopover, App as QuickGuiApp, AppConfig, AppRegion,
+    AppRunStatus, AppRunner, Color, CursorStyle, Element, ElementId, FontWeight, IntoElement,
+    Markdown, MarkdownStyle, QuitMode, TextAlign, TitleBarStyle, View, ViewContext,
+    WindowBackgroundAppearance, WindowHandle, button, div, text, text_area, text_input,
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 1;
+const PROTOCOL_VERSION: u16 = 3;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -90,7 +91,22 @@ mod property {
     pub const HOVER_LISTENER: u16 = 59;
     pub const VISIBILITY: u16 = 60;
     pub const ASPECT_RATIO: u16 = 61;
-    pub const LAST: u16 = ASPECT_RATIO;
+    pub const VALUE: u16 = 62;
+    pub const PLACEHOLDER: u16 = 63;
+    pub const MULTILINE: u16 = 64;
+    pub const INPUT_LISTENER: u16 = 65;
+    pub const SUBMIT_LISTENER: u16 = 66;
+    pub const STREAMING: u16 = 67;
+    pub const MARKDOWN_CODE_BACKGROUND: u16 = 68;
+    pub const MARKDOWN_BORDER_COLOR: u16 = 69;
+    pub const MARKDOWN_MUTED_COLOR: u16 = 70;
+    pub const MARKDOWN_LINK_COLOR: u16 = 71;
+    pub const MARKDOWN_CODE_TEXT_COLOR: u16 = 72;
+    pub const MARKDOWN_BLOCK_GAP: u16 = 73;
+    pub const MARKDOWN_CODE_FONT_SIZE: u16 = 74;
+    pub const SCROLL_TO_END_REVISION: u16 = 75;
+    pub const PASSWORD: u16 = 76;
+    pub const LAST: u16 = PASSWORD;
 }
 
 #[derive(Clone, Default)]
@@ -107,6 +123,12 @@ pub struct NativeWindowOptions {
     pub traffic_light_y: Option<f64>,
     pub transparent: Option<bool>,
     pub blur: Option<bool>,
+    pub popup_placement: Option<String>,
+    pub popup_gap: Option<f64>,
+    pub popup_offset_x: Option<f64>,
+    pub popup_offset_y: Option<f64>,
+    pub popup_grab: Option<bool>,
+    pub popup_accepts_key_focus: Option<bool>,
 }
 
 #[derive(Clone)]
@@ -115,6 +137,7 @@ pub struct NativeEvent {
     pub kind: String,
     pub window: u32,
     pub target: u32,
+    pub value: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -124,6 +147,8 @@ enum NodeTag {
     Button,
     Text,
     Sentinel,
+    Input,
+    Markdown,
 }
 
 impl NodeTag {
@@ -133,6 +158,8 @@ impl NodeTag {
             2 => Ok(Self::Button),
             3 => Ok(Self::Text),
             4 => Ok(Self::Sentinel),
+            5 => Ok(Self::Input),
+            6 => Ok(Self::Markdown),
             _ => Err(ProtocolError::new(format!("unknown node tag {value}"))),
         }
     }
@@ -687,6 +714,7 @@ struct QueuedEvent {
     kind: &'static str,
     window: u32,
     target: u32,
+    value: Option<Arc<str>>,
 }
 
 type EventQueue = Rc<RefCell<VecDeque<QueuedEvent>>>;
@@ -695,22 +723,27 @@ struct NativeView {
     window: u32,
     tree: Rc<RefCell<NativeTree>>,
     events: EventQueue,
+    markdown: Rc<RefCell<HashMap<u32, Markdown>>>,
 }
 
 impl View for NativeView {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
         let tree = self.tree.borrow();
+        let mut markdown = self.markdown.borrow_mut();
+        markdown.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Markdown)
+        });
         let mut root = div()
             .id(ElementId::new(ROOT_ELEMENT_ID))
             .size_full()
             .min_w(0.0)
             .min_h(0.0);
         if let Some(node) = tree.nodes.get(&ROOT_NODE) {
-            root = root.children(
-                node.children
-                    .iter()
-                    .filter_map(|id| build_element(*id, self.window, &tree, &self.events, cx, 0)),
-            );
+            root = root.children(node.children.iter().filter_map(|id| {
+                build_element(*id, self.window, &tree, &self.events, &mut markdown, cx, 0)
+            }));
         }
         root
     }
@@ -721,6 +754,7 @@ fn build_element(
     window: u32,
     tree: &NativeTree,
     events: &EventQueue,
+    markdown: &mut HashMap<u32, Markdown>,
     cx: &mut ViewContext<'_, NativeView>,
     depth: usize,
 ) -> Option<Element> {
@@ -735,6 +769,85 @@ fn build_element(
         NodeTag::Button => button().cursor_default(),
         NodeTag::Text => text(node.text.clone()),
         NodeTag::Sentinel => div().hidden(),
+        NodeTag::Input => {
+            let multiline = node.boolean(property::MULTILINE).unwrap_or(false);
+            let mut input = if multiline {
+                text_area(node.string(property::VALUE).unwrap_or_default())
+            } else {
+                text_input(node.string(property::VALUE).unwrap_or_default())
+            }
+            .bg(Color::TRANSPARENT)
+            .border(0.0, Color::TRANSPARENT)
+            .rounded(0.0);
+            if let Some(placeholder) = node.string(property::PLACEHOLDER) {
+                input = input.placeholder(placeholder);
+            }
+            if !multiline && node.boolean(property::PASSWORD).unwrap_or(false) {
+                input = input.password(true);
+            }
+            if node.boolean(property::INPUT_LISTENER).unwrap_or(false) {
+                let events = Rc::clone(events);
+                // The retained input state already schedules its paint. Rebuilding here would read
+                // the previous JavaScript-controlled value before Bun drains this queued event,
+                // resetting every keystroke before Solid can commit the matching mutation batch.
+                let listener = cx.input_listener(element_id, move |_view, value, _cx| {
+                    enqueue_event(
+                        &events,
+                        QueuedEvent {
+                            kind: "input",
+                            window,
+                            target: id,
+                            value: Some(Arc::from(value)),
+                        },
+                    );
+                });
+                input = input.on_input(listener);
+            }
+            if !multiline && node.boolean(property::SUBMIT_LISTENER).unwrap_or(false) {
+                let events = Rc::clone(events);
+                // Submit has the same controlled-state boundary as input: JavaScript must consume
+                // the queued value before a render can safely read the controlled property again.
+                let listener = cx.submit_listener(element_id, move |_view, value, _cx| {
+                    enqueue_event(
+                        &events,
+                        QueuedEvent {
+                            kind: "submit",
+                            window,
+                            target: id,
+                            value: Some(Arc::from(value)),
+                        },
+                    );
+                });
+                input = input.on_submit(listener);
+            }
+            input
+        }
+        NodeTag::Markdown => {
+            let mut markdown_style = MarkdownStyle::default();
+            markdown_style.text_color = node.color(property::COLOR);
+            markdown_style.font_size = node
+                .number(property::FONT_SIZE)
+                .unwrap_or(markdown_style.font_size);
+            markdown_style.line_height = node
+                .number(property::LINE_HEIGHT)
+                .unwrap_or(markdown_style.line_height);
+            markdown_style.code_background = node.color(property::MARKDOWN_CODE_BACKGROUND);
+            markdown_style.border_color = node.color(property::MARKDOWN_BORDER_COLOR);
+            markdown_style.muted_color = node.color(property::MARKDOWN_MUTED_COLOR);
+            markdown_style.link_color = node.color(property::MARKDOWN_LINK_COLOR);
+            markdown_style.code_text_color = node.color(property::MARKDOWN_CODE_TEXT_COLOR);
+            markdown_style.block_gap = node
+                .number(property::MARKDOWN_BLOCK_GAP)
+                .unwrap_or(markdown_style.block_gap);
+            markdown_style.code_font_size = node
+                .number(property::MARKDOWN_CODE_FONT_SIZE)
+                .unwrap_or(markdown_style.code_font_size);
+            let state = markdown.entry(id).or_default();
+            state.set_streaming(node.boolean(property::STREAMING).unwrap_or(false));
+            state.set_style(markdown_style);
+            state.set_text(node.string(property::VALUE).unwrap_or_default());
+            state.element(element_id)
+        }
     }
     .id(element_id);
 
@@ -749,6 +862,7 @@ fn build_element(
                     kind: "click",
                     window,
                     target: id,
+                    value: None,
                 },
             );
             cx.invalidate();
@@ -764,6 +878,7 @@ fn build_element(
                     kind: if *hovered { "mouseenter" } else { "mouseleave" },
                     window,
                     target: id,
+                    value: None,
                 },
             );
             cx.invalidate();
@@ -771,12 +886,13 @@ fn build_element(
         element = element.on_hover(listener);
     }
 
-    if !matches!(node.tag, NodeTag::Text | NodeTag::Sentinel) {
-        element = element.children(
-            node.children
-                .iter()
-                .filter_map(|child| build_element(*child, window, tree, events, cx, depth + 1)),
-        );
+    if !matches!(
+        node.tag,
+        NodeTag::Text | NodeTag::Sentinel | NodeTag::Input | NodeTag::Markdown
+    ) {
+        element = element.children(node.children.iter().filter_map(|child| {
+            build_element(*child, window, tree, events, markdown, cx, depth + 1)
+        }));
     }
     Some(element)
 }
@@ -979,6 +1095,9 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     {
         element = element.overflow_y_scroll();
     }
+    if let Some(value) = node.number(property::SCROLL_TO_END_REVISION) {
+        element = element.scroll_to_end(value.max(0.0) as u64);
+    }
     if let Some(value) = node.string(property::CURSOR) {
         element = element.cursor(cursor(value));
     }
@@ -1179,6 +1298,7 @@ fn accessibility_role(value: &str) -> Option<AccessibilityRole> {
 struct NativeWindowRuntime {
     config: AppConfig,
     tree: Rc<RefCell<NativeTree>>,
+    markdown: Rc<RefCell<HashMap<u32, Markdown>>>,
     handle: Option<WindowHandle>,
 }
 
@@ -1188,6 +1308,7 @@ impl NativeWindowRuntime {
             window,
             tree: Rc::clone(&self.tree),
             events: Rc::clone(events),
+            markdown: Rc::clone(&self.markdown),
         }
     }
 }
@@ -1230,6 +1351,7 @@ impl NativeRuntime {
         let mut window = NativeWindowRuntime {
             config,
             tree: Rc::new(RefCell::new(NativeTree::default())),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
             handle: None,
         };
         if let Some(runner) = &mut self.runner {
@@ -1239,6 +1361,62 @@ impl NativeRuntime {
             self.handles.borrow_mut().insert(handle, id);
             window.handle = Some(handle);
         }
+        self.windows.insert(id, window);
+        self.window_order.push(id);
+        Ok(id)
+    }
+
+    fn create_anchored_window(
+        &mut self,
+        parent: u32,
+        anchor: u32,
+        options: NativeWindowOptions,
+    ) -> std::result::Result<u32, String> {
+        self.sync_closed_windows();
+        if self.windows.len() >= MAX_WINDOWS {
+            return Err(format!(
+                "an application cannot own more than {MAX_WINDOWS} windows"
+            ));
+        }
+        let parent_handle = {
+            let parent_window = self
+                .windows
+                .get(&parent)
+                .ok_or_else(|| format!("unknown QuickGUI parent window {parent}"))?;
+            if !parent_window.tree.borrow().nodes.contains_key(&anchor) {
+                return Err(format!(
+                    "anchored popup trigger node {anchor} is not mounted in parent window {parent}"
+                ));
+            }
+            parent_window
+                .handle
+                .ok_or_else(|| "an anchored popup requires a running parent window".to_owned())?
+        };
+        let id = self.next_window_id.max(1);
+        self.next_window_id = id
+            .checked_add(1)
+            .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?;
+        let config = anchored_window_config(&options)?;
+        let mut window = NativeWindowRuntime {
+            config,
+            tree: Rc::new(RefCell::new(NativeTree::default())),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            handle: None,
+        };
+        let runner = self
+            .runner
+            .as_mut()
+            .ok_or_else(|| "an anchored popup requires a running application".to_owned())?;
+        let handle = runner
+            .open_anchored_popup(
+                parent_handle,
+                ElementId::new(anchor as u64),
+                window.view(id, &self.events),
+                window.config.clone(),
+            )
+            .map_err(|error| error.to_string())?;
+        self.handles.borrow_mut().insert(handle, id);
+        window.handle = Some(handle);
         self.windows.insert(id, window);
         self.window_order.push(id);
         Ok(id)
@@ -1278,6 +1456,7 @@ impl NativeRuntime {
                         kind: "close",
                         window,
                         target: ROOT_NODE,
+                        value: None,
                     },
                 );
                 let mut closed = closed_windows.borrow_mut();
@@ -1324,6 +1503,7 @@ impl NativeRuntime {
                     kind: "close",
                     window,
                     target: ROOT_NODE,
+                    value: None,
                 },
             );
             return true;
@@ -1343,6 +1523,7 @@ impl NativeRuntime {
                 kind: "close",
                 window,
                 target: ROOT_NODE,
+                value: None,
             },
         );
         true
@@ -1402,6 +1583,48 @@ fn window_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig
     Ok(config)
 }
 
+fn anchored_window_config(
+    options: &NativeWindowOptions,
+) -> std::result::Result<AppConfig, String> {
+    let placement = match options.popup_placement.as_deref() {
+        Some("top-start") => AnchorPlacement::TopStart,
+        Some("top") => AnchorPlacement::Top,
+        Some("top-end") => AnchorPlacement::TopEnd,
+        Some("bottom-start") | None => AnchorPlacement::BottomStart,
+        Some("bottom") => AnchorPlacement::Bottom,
+        Some("bottom-end") => AnchorPlacement::BottomEnd,
+        Some("left-start") => AnchorPlacement::LeftStart,
+        Some("left") => AnchorPlacement::Left,
+        Some("left-end") => AnchorPlacement::LeftEnd,
+        Some("right-start") => AnchorPlacement::RightStart,
+        Some("right") => AnchorPlacement::Right,
+        Some("right-end") => AnchorPlacement::RightEnd,
+        Some(value) => return Err(format!("unknown popup placement `{value}`")),
+    };
+    let mut popover = AnchoredPopover::new(
+        finite_dimension(options.width, 420.0),
+        finite_dimension(options.height, 300.0),
+    )
+    .placement(placement)
+    .gap(finite_number(options.popup_gap).unwrap_or(0.0))
+    .offset(
+        finite_number(options.popup_offset_x).unwrap_or(0.0),
+        finite_number(options.popup_offset_y).unwrap_or(0.0),
+    );
+    if let Some(grab) = options.popup_grab {
+        popover = popover.grab(grab);
+    }
+    if let Some(accepts_key_focus) = options.popup_accepts_key_focus {
+        popover = popover.accepts_key_focus(accepts_key_focus);
+    }
+    Ok(popover.window_options(
+        options
+            .title
+            .clone()
+            .unwrap_or_else(|| "QuickGUI popover".to_owned()),
+    ))
+}
+
 #[derive(Default)]
 struct Registry {
     next_id: u32,
@@ -1450,6 +1673,18 @@ pub fn create_window(app: u32, options: Option<NativeWindowOptions>) -> Result<u
 }
 
 #[napi]
+pub fn create_anchored_window(
+    app: u32,
+    parent: u32,
+    anchor: u32,
+    options: Option<NativeWindowOptions>,
+) -> Result<u32> {
+    with_app_mut(app, |runtime| {
+        runtime.create_anchored_window(parent, anchor, options.unwrap_or_default())
+    })
+}
+
+#[napi]
 pub fn apply_batch(app: u32, window: u32, batch: Buffer) -> Result<u32> {
     let mutations = decode_batch(&batch).map_err(|error| Error::from_reason(error.to_string()))?;
     with_app_mut(app, |runtime| {
@@ -1470,6 +1705,27 @@ pub fn apply_batch(app: u32, window: u32, batch: Buffer) -> Result<u32> {
 #[napi]
 pub fn close_window(app: u32, window: u32) -> Result<bool> {
     with_app_mut(app, |runtime| Ok(runtime.close_window(window)))
+}
+
+#[napi]
+pub fn focus_node(app: u32, window: u32, node: u32) -> Result<bool> {
+    with_app_mut(app, |runtime| {
+        runtime.sync_closed_windows();
+        let native_window = runtime
+            .windows
+            .get(&window)
+            .ok_or_else(|| format!("unknown QuickGUI window {window}"))?;
+        if !native_window.tree.borrow().nodes.contains_key(&node) {
+            return Ok(false);
+        }
+        let Some(handle) = native_window.handle else {
+            return Ok(false);
+        };
+        let Some(runner) = &mut runtime.runner else {
+            return Ok(false);
+        };
+        Ok(runner.focus_element(handle, ElementId::new(node as u64)))
+    })
 }
 
 #[napi]
@@ -1510,6 +1766,7 @@ pub fn take_events(app: u32) -> Result<Vec<NativeEvent>> {
                 kind: event.kind.to_owned(),
                 window: event.window,
                 target: event.target,
+                value: event.value.map(|value| value.to_string()),
             })
             .collect())
     })
@@ -1646,5 +1903,60 @@ mod tests {
     fn malformed_batch_is_rejected_before_tree_mutation() {
         let error = decode_batch(b"not a batch").unwrap_err();
         assert!(error.to_string().contains("magic"));
+    }
+
+    #[test]
+    fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value() {
+        let input_id = 7;
+        let mut tree = NativeTree::default();
+        let mut input = NativeNode::new(NodeTag::Input);
+        input.parent = Some(ROOT_NODE);
+        input.set_property(property::INPUT_LISTENER, Some(PropertyValue::Bool(true)));
+        input.set_property(property::SUBMIT_LISTENER, Some(PropertyValue::Bool(true)));
+        tree.nodes.insert(input_id, input);
+        tree.nodes
+            .get_mut(&ROOT_NODE)
+            .unwrap()
+            .children
+            .push(input_id);
+
+        let events = Rc::new(RefCell::new(VecDeque::new()));
+        let view = NativeView {
+            window: 3,
+            tree: Rc::new(RefCell::new(tree)),
+            events: Rc::clone(&events),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+        };
+        let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+        let window = view.window_handle();
+
+        cx.focus(window, ElementId::new(input_id as u64)).unwrap();
+        cx.simulate_input(window, "hello").unwrap();
+
+        assert_eq!(
+            cx.focused_input_value(window).unwrap().as_deref(),
+            Some("hello")
+        );
+        let event = events.borrow_mut().pop_front().unwrap();
+        assert_eq!(event.kind, "input");
+        assert_eq!(event.window, 3);
+        assert_eq!(event.target, input_id);
+        assert_eq!(event.value.as_deref(), Some("hello"));
+
+        cx.simulate_keystrokes(window, "enter").unwrap();
+
+        assert_eq!(
+            cx.focused(window).unwrap(),
+            Some(ElementId::new(input_id as u64))
+        );
+        assert_eq!(
+            cx.focused_input_value(window).unwrap().as_deref(),
+            Some("hello")
+        );
+        let event = events.borrow_mut().pop_front().unwrap();
+        assert_eq!(event.kind, "submit");
+        assert_eq!(event.window, 3);
+        assert_eq!(event.target, input_id);
+        assert_eq!(event.value.as_deref(), Some("hello"));
     }
 }

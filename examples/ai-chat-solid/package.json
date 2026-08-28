@@ -1,0 +1,19 @@
+{
+  "name": "quickgui-solid-ai-chat-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "quickgui dev",
+    "build": "quickgui build"
+  },
+  "dependencies": {
+    "@ai-sdk/deepseek": "3.0.35",
+    "@quickgui/solid": "workspace:*",
+    "ai": "7.0.83",
+    "solid-js": "2.0.0-rc.3",
+    "zod": "4.1.8"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "workspace:*"
+  }
+}

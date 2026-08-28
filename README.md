@@ -119,6 +119,13 @@ cd examples/solid
 bun run dev
 ```
 
+The complete DeepSeek streaming example uses QuickGUI core Markdown:
+
+```console
+cd examples/ai-chat-solid
+bun run dev
+```
+
 This creates and runs a real development `.app` on macOS while loading `app.tsx` from disk. Rust
 framework examples remain available directly through Cargo:
 

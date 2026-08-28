@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { QuickGuiEvent } from "@quickgui/native";
+import { PropertyCode, QuickGuiEvent } from "@quickgui/native";
 import { createSignal, onCleanup } from "solid-js";
 import {
   App,
   Button,
+  Input,
+  Markdown,
   Text,
   View,
   Window,
@@ -79,5 +81,88 @@ describe("Solid universal host", () => {
     expect(window.root.children).toHaveLength(0);
     dispose();
     app.destroy();
+  });
+
+  test("commits shared signal writes before a secondary window root closes", () => {
+    const app = new App();
+    const mainWindow = new Window({ title: "Main" });
+    const secondaryWindow = new Window({ title: "Secondary" });
+    const [value, setValue] = createSignal("before");
+    const disposeMain = render(
+      () =>
+        createComponent(Text, {
+          get children() {
+            return value();
+          },
+        }),
+      mainWindow,
+    );
+    const disposeSecondary = render(
+      () =>
+        createComponent(Button, {
+          onClick: () => {
+            setValue("after");
+            secondaryWindow.close();
+          },
+          children: "Save",
+        }),
+      secondaryWindow,
+    );
+
+    const text = mainWindow.root.children[0]!;
+    const button = secondaryWindow.root.children[0]!;
+    expect(text.children[0]?.text).toBe("before");
+    button.listeners.get("click")!(new QuickGuiEvent("click", button));
+
+    expect(secondaryWindow.closed).toBe(true);
+    expect(text.children[0]?.text).toBe("after");
+    disposeSecondary();
+    disposeMain();
+    app.destroy();
+  });
+
+  test("bridges controlled input values and exact native input and submit payloads", () => {
+    let value = "";
+    let submitted = "";
+    const input = createComponent(Input, {
+      value: "hello",
+      onInput: (event: QuickGuiEvent) => {
+        value = event.value ?? "";
+      },
+      onSubmit: (event: QuickGuiEvent) => {
+        submitted = event.value ?? "";
+      },
+    });
+
+    expect(input.properties.get(PropertyCode.Value)).toBe("hello");
+    expect(input.properties.get(PropertyCode.InputListener)).toBe(true);
+    expect(input.properties.get(PropertyCode.SubmitListener)).toBe(true);
+    input.listeners.get("input")!(new QuickGuiEvent("input", input, "hello world"));
+    expect(value).toBe("hello world");
+    input.listeners.get("submit")!(new QuickGuiEvent("submit", input, "hello world"));
+    expect(submitted).toBe("hello world");
+  });
+
+  test("maps web-style password input types without replacing the controlled value", () => {
+    const input = createComponent(Input, { type: "password", value: "sk-secret" });
+
+    expect(input.properties.get(PropertyCode.Password)).toBe(true);
+    expect(input.properties.get(PropertyCode.Value)).toBe("sk-secret");
+
+    setProp(input, "type", "text", "password");
+    expect(input.properties.get(PropertyCode.Password)).toBe(false);
+    expect(input.properties.get(PropertyCode.Value)).toBe("sk-secret");
+  });
+
+  test("retains Markdown source and streaming presentation properties", () => {
+    const markdown = createComponent(Markdown, {
+      content: "# Hello",
+      streaming: true,
+      markdownLinkColor: "#60a5fa",
+    });
+
+    expect(markdown.properties.get(PropertyCode.Value)).toBe("# Hello");
+    expect(markdown.properties.get(PropertyCode.Streaming)).toBe(true);
+    expect(markdown.properties.get(PropertyCode.MarkdownLinkColor)).toBeTypeOf("number");
   });
 });

@@ -1,5 +1,5 @@
 import { createRenderer } from "@solidjs/universal";
-import { flush as flushSolid } from "solid-js";
+import { flush as flushSolid, type Element as SolidElement } from "solid-js";
 import {
   App,
   type NativeElementName,
@@ -24,7 +24,7 @@ import {
 } from "@quickgui/native";
 
 export { App, NativeNode, Window } from "@quickgui/native";
-export type { QuickGuiEvent, RunOptions, WindowOptions } from "@quickgui/native";
+export type { PopupPlacement, QuickGuiEvent, RunOptions, WindowOptions } from "@quickgui/native";
 
 type PropertyInput = unknown;
 type PropertyEntry = {
@@ -94,12 +94,31 @@ const properties: Record<string, PropertyEntry> = {
   userSelect: { code: PropertyCode.UserSelect },
   visibility: { code: PropertyCode.Visibility },
   aspectRatio: { code: PropertyCode.AspectRatio },
+  value: { code: PropertyCode.Value },
+  content: { code: PropertyCode.Value },
+  source: { code: PropertyCode.Value },
+  placeholder: { code: PropertyCode.Placeholder },
+  multiline: { code: PropertyCode.Multiline },
+  streaming: { code: PropertyCode.Streaming },
+  markdownCodeBackground: { code: PropertyCode.MarkdownCodeBackground, color: true },
+  markdownBorderColor: { code: PropertyCode.MarkdownBorderColor, color: true },
+  markdownMutedColor: { code: PropertyCode.MarkdownMutedColor, color: true },
+  markdownLinkColor: { code: PropertyCode.MarkdownLinkColor, color: true },
+  markdownCodeTextColor: { code: PropertyCode.MarkdownCodeTextColor, color: true },
+  markdownBlockGap: { code: PropertyCode.MarkdownBlockGap },
+  markdownCodeFontSize: { code: PropertyCode.MarkdownCodeFontSize },
+  scrollToEndRevision: { code: PropertyCode.ScrollToEndRevision },
 };
 
 const colorProperties = new Set([
   PropertyCode.BackgroundColor,
   PropertyCode.Color,
   PropertyCode.BorderColor,
+  PropertyCode.MarkdownCodeBackground,
+  PropertyCode.MarkdownBorderColor,
+  PropertyCode.MarkdownMutedColor,
+  PropertyCode.MarkdownLinkColor,
+  PropertyCode.MarkdownCodeTextColor,
 ]);
 
 function setProperty(node: NativeNode, name: string, value: PropertyInput, previous?: PropertyInput) {
@@ -128,6 +147,10 @@ function setProperty(node: NativeNode, name: string, value: PropertyInput, previ
   }
   if (name === "class" || name === "className") return;
   if (name === "aria-label") name = "ariaLabel";
+  if (name === "type") {
+    setNativeProperty(node, PropertyCode.Password, value === "password");
+    return;
+  }
   if (name === "flex") {
     setFlex(node, value);
     return;
@@ -209,7 +232,13 @@ function isLengthProperty(code: PropertyCode): boolean {
   );
 }
 
-function eventName(name: string): "click" | "mouseenter" | "mouseleave" | undefined {
+function eventName(name: string):
+  | "click"
+  | "mouseenter"
+  | "mouseleave"
+  | "input"
+  | "submit"
+  | undefined {
   switch (name.toLowerCase()) {
     case "onclick":
     case "on:click":
@@ -220,6 +249,11 @@ function eventName(name: string): "click" | "mouseenter" | "mouseleave" | undefi
     case "onmouseleave":
     case "onpointerleave":
       return "mouseleave";
+    case "oninput":
+    case "onchange":
+      return "input";
+    case "onsubmit":
+      return "submit";
     default:
       return undefined;
   }
@@ -232,7 +266,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const universal = createRenderer<NativeNode>({
   createElement(tag, staticProps) {
     const name = tag as NativeElementName;
-    if (!["view", "div", "text", "button"].includes(name)) {
+    if (!["view", "div", "text", "button", "input", "textarea", "markdown"].includes(name)) {
       throw new TypeError(`unknown QuickGUI element <${tag}>`);
     }
     const node = createNativeElement(name);
@@ -277,9 +311,30 @@ export function Button(props: JSX.NativeProps): NativeNode {
   return node;
 }
 
-export function render(code: () => NativeNode, target: Window | NativeNode): () => void {
+/** Controlled, unstyled single-line native text input. */
+export function Input(props: JSX.InputProps): NativeNode {
+  const node = universal.createElement("input");
+  universal.spread(node, props);
+  return node;
+}
+
+/** Controlled, unstyled multiline native text area. */
+export function TextArea(props: JSX.InputProps): NativeNode {
+  const node = universal.createElement("textarea");
+  universal.spread(node, props);
+  return node;
+}
+
+/** Retained, incremental native Markdown document. */
+export function Markdown(props: JSX.MarkdownProps): NativeNode {
+  const node = universal.createElement("markdown");
+  universal.spread(node, props);
+  return node;
+}
+
+export function render(code: () => JSX.Element, target: Window | NativeNode): () => void {
   const root = target instanceof Window ? target.root : target;
-  const nativeDispose = nativeRender(code, root);
+  const nativeDispose = nativeRender(code as () => NativeNode, root);
   const window = target instanceof Window ? target : root.host;
   let disposed = false;
   let untrack = () => {};
@@ -309,8 +364,8 @@ export const applyRef = universal.applyRef;
 export const ref = universal.ref;
 
 export namespace JSX {
-  export type Element = NativeNode;
-  export type Child = Element | string | number | boolean | null | undefined;
+  export type Element = SolidElement;
+  export type Child = SolidElement;
   export type EventHandler = NativeEventListener;
 
   export interface ElementChildrenAttribute {
@@ -379,6 +434,14 @@ export namespace JSX {
     userSelect?: "auto" | "text" | "none";
     visibility?: "visible" | "hidden";
     aspectRatio?: number;
+    markdownCodeBackground?: number | string;
+    markdownBorderColor?: number | string;
+    markdownMutedColor?: number | string;
+    markdownLinkColor?: number | string;
+    markdownCodeTextColor?: number | string;
+    markdownBlockGap?: number;
+    markdownCodeFontSize?: number;
+    scrollToEndRevision?: number;
   }
 
   export interface NativeProps extends Style {
@@ -397,6 +460,22 @@ export namespace JSX {
     onMouseLeave?: EventHandler;
     onPointerEnter?: EventHandler;
     onPointerLeave?: EventHandler;
+    onInput?: EventHandler;
+    onChange?: EventHandler;
+    onSubmit?: EventHandler;
+  }
+
+  export interface InputProps extends NativeProps {
+    type?: "text" | "password";
+    value?: string;
+    placeholder?: string;
+    multiline?: boolean;
+  }
+
+  export interface MarkdownProps extends NativeProps {
+    content?: string;
+    source?: string;
+    streaming?: boolean;
   }
 
   export interface IntrinsicElements {
@@ -404,5 +483,8 @@ export namespace JSX {
     div: NativeProps;
     text: NativeProps;
     button: NativeProps;
+    input: InputProps;
+    textarea: InputProps;
+    markdown: MarkdownProps;
   }
 }

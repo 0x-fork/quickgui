@@ -6,11 +6,11 @@ Implemented now:
 
 - experimental macOS Bun/N-API hosting with an externally pumped main-thread application loop,
   dynamically created `App`/`Window` lifecycles, independent transactional bounded retained trees,
-  window-routed bounded click/hover delivery, and an unstyled Solid 2 renderer exposing `View`,
-  `Text`, and `Button`, plus a project CLI for safe initialization, stable real-`.app` development
-  hosts, candidate-first source restart, and self-contained signed production packaging; this is a
-  first vertical slice, not yet parity with the Rust framework surface or a published JavaScript
-  release;
+  window-routed bounded click/hover/input/submit delivery, and an unstyled Solid 2 renderer exposing
+  `View`, `Text`, `Button`, `Input`, `TextArea`, and retained core `Markdown`, plus a project CLI for
+  safe initialization, stable real-`.app` development hosts, candidate-first source restart, and
+  self-contained signed production packaging; this is a first vertical slice, not yet parity with
+  the Rust framework surface or a published JavaScript release;
 - macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
 - sleeping heterogeneous multi-window runtime with stable handles, close interception, targeted focus/close/invalidation, resize, DPI, pointer, wheel, keyboard-layout-aware command identity, full IME preedit/commit routing, and focus events;
 - parent-owned normal, dialog-sheet, floating, and transient popup roles with retained restore
@@ -104,6 +104,10 @@ Implemented now:
   disabled-item skipping, optional looping and retained panels, exact AccessKit tab relationships,
   deterministic idle coverage, and no component-owned registry or scheduling;
 - retained `StyledText` with bounded Unicode-safe byte ranges, per-run family/features/fallbacks/weight/slant/foreground/background/decorations, inherited left/center/right/justified alignment, GPUI-compatible whitespace/end/start/middle ellipsis/truncate/line-clamp helpers, cached Unicode-grapheme-safe overflow projection back to original selection offsets, wrapped BiDi shaping, visible-only decoration geometry, and document-order selection shared with ordinary text;
+- bounded retained native `Markdown` with CommonMark tables, task lists, quotes, code, semantic
+  application-owned styling, append-only settled-prefix parsing, streamed-tail marker mending,
+  cached `StyledText` flattening, UTF-8-safe source limits, and no webview, network ownership, or
+  idle work;
 - AccessKit trees with semantic roles, labels, disabled/selected state, native focus/click actions,
   editable or immutable text-selection actions, distinct select/editable combobox roles and
   autocomplete state, active-descendant relationships, exact tab/list/panel orientation and

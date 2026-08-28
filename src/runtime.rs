@@ -2891,6 +2891,49 @@ impl AppRunner {
         Ok(handle)
     }
 
+    /// Queue a native popup anchored to one currently mounted element in a parent window.
+    ///
+    /// Embedding runtimes call this after their host-language event callback returns. The latest
+    /// retained element bounds are captured synchronously, so the popup keeps the same
+    /// display-aware flip/slide behavior as [`EventContext::open_anchored_popup`] without a
+    /// parallel geometry observer in the embedding layer.
+    pub fn open_anchored_popup<V: View>(
+        &mut self,
+        parent: WindowHandle,
+        anchor: ElementId,
+        view: V,
+        mut options: WindowOptions,
+    ) -> Result<WindowHandle, AppError> {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return Err(AppError::Window(
+                "cannot open a popup after the application event loop exited".to_owned(),
+            ));
+        }
+        validate_window_options(&options).map_err(|error| AppError::Window(error.to_string()))?;
+        if options.kind != WindowKind::AnchoredPopup || options.popup.is_none() {
+            return Err(AppError::Window(
+                WindowCommandError::InvalidPopupConfiguration.to_string(),
+            ));
+        }
+        let bounds = self
+            .runtime
+            .element_bounds_external(parent, anchor)
+            .ok_or_else(|| {
+                AppError::Window(format!(
+                    "anchored popup trigger {anchor:?} is not mounted in its parent window"
+                ))
+            })?;
+        options.popup.as_mut().expect("validated popup").anchor_rect = bounds;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| AppError::Window("application event loop is closed".to_owned()))?;
+        let request = WindowRequest::with_parent(view, options, Some(parent));
+        let handle = request.handle;
+        self.runtime.pending_windows.push_back(request);
+        Ok(handle)
+    }
+
     /// Mark one externally owned view dirty and request at most one native redraw.
     ///
     /// A window queued for creation also returns `true`: its first render will read the newest
@@ -2908,6 +2951,19 @@ impl AppRunner {
             return true;
         }
         self.runtime.invalidate_external(handle)
+    }
+
+    /// Focus one mounted element from an embedding runtime.
+    ///
+    /// This is the imperative counterpart to [`crate::Element::auto_focus`]. It is intended for
+    /// host bindings that expose web-like `element.focus()` behavior after an external event has
+    /// returned to the host language. The request is applied synchronously and schedules at most
+    /// one redraw when focus changes.
+    pub fn focus_element(&mut self, handle: WindowHandle, element: ElementId) -> bool {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return false;
+        }
+        self.runtime.focus_external(handle, element)
     }
 
     /// Close a queued or mounted window.
@@ -4028,6 +4084,68 @@ impl Runtime {
         entry.state.view_dirty = true;
         if entry.state.visible && entry.state.scheduler.invalidate() {
             entry.state.window.request_redraw();
+        }
+        true
+    }
+
+    fn element_bounds_external(&self, handle: WindowHandle, element: ElementId) -> Option<Rect> {
+        if self.current_handle() == Some(handle) {
+            return self
+                .window
+                .as_ref()
+                .and_then(|window| window.ui.element_bounds(element));
+        }
+        let window_id = self.window_handles.get(&handle)?;
+        self.windows
+            .get(window_id)
+            .and_then(|entry| entry.state.ui.element_bounds(element))
+    }
+
+    fn focus_external(&mut self, handle: WindowHandle, element: ElementId) -> bool {
+        if self.current_handle() == Some(handle) {
+            let Some(window) = self.window.as_mut() else {
+                return false;
+            };
+            if !window.ui.is_focusable(element) {
+                return false;
+            }
+            let changed = window.ui.focus(element);
+            window.pending_focus = None;
+            if changed {
+                self.pending_input = None;
+                #[cfg(target_os = "macos")]
+                if let Some(host) = &window.native_host {
+                    host.focus_framework();
+                }
+                window.view_dirty = true;
+                if window.visible && window.scheduler.invalidate() {
+                    window.window.request_redraw();
+                }
+            }
+            return true;
+        }
+
+        let Some(window_id) = self.window_handles.get(&handle).copied() else {
+            return false;
+        };
+        let Some(entry) = self.windows.get_mut(&window_id) else {
+            return false;
+        };
+        if !entry.state.ui.is_focusable(element) {
+            return false;
+        }
+        let changed = entry.state.ui.focus(element);
+        entry.state.pending_focus = None;
+        if changed {
+            entry.pending_input = None;
+            #[cfg(target_os = "macos")]
+            if let Some(host) = &entry.state.native_host {
+                host.focus_framework();
+            }
+            entry.state.view_dirty = true;
+            if entry.state.visible && entry.state.scheduler.invalidate() {
+                entry.state.window.request_redraw();
+            }
         }
         true
     }

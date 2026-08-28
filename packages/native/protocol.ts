@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 3;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -9,6 +9,8 @@ export const enum NativeNodeTag {
   Button = 2,
   Text = 3,
   Sentinel = 4,
+  Input = 5,
+  Markdown = 6,
 }
 
 export const enum PropertyCode {
@@ -73,6 +75,21 @@ export const enum PropertyCode {
   HoverListener = 59,
   Visibility = 60,
   AspectRatio = 61,
+  Value = 62,
+  Placeholder = 63,
+  Multiline = 64,
+  InputListener = 65,
+  SubmitListener = 66,
+  Streaming = 67,
+  MarkdownCodeBackground = 68,
+  MarkdownBorderColor = 69,
+  MarkdownMutedColor = 70,
+  MarkdownLinkColor = 71,
+  MarkdownCodeTextColor = 72,
+  MarkdownBlockGap = 73,
+  MarkdownCodeFontSize = 74,
+  ScrollToEndRevision = 75,
+  Password = 76,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

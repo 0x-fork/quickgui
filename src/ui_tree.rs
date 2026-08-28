@@ -401,11 +401,55 @@ struct TextInputRegion {
     bounds: Rect,
     clip: Rect,
     content: Arc<str>,
+    password: Option<PasswordDisplay>,
     highlights: Option<Arc<[TextHighlight]>>,
     style: TextStyle,
     scroll: Vector,
     max_scroll: Vector,
     caret_bounds: Rect,
+}
+
+const PASSWORD_MASK: &str = "•";
+
+/// A display-only password projection with exact source/display boundary translation.
+///
+/// The retained editor always owns the real string. Rendering one mask glyph per grapheme keeps
+/// Unicode cursor and selection behavior web-like without placing the secret in a scene command.
+#[derive(Clone)]
+struct PasswordDisplay {
+    content: Arc<str>,
+    source_boundaries: Arc<[usize]>,
+}
+
+impl PasswordDisplay {
+    fn new(source: &str) -> Self {
+        let graphemes = source.grapheme_indices(true).collect::<Vec<_>>();
+        let mut masked = String::with_capacity(graphemes.len() * PASSWORD_MASK.len());
+        let mut source_boundaries = Vec::with_capacity(graphemes.len() + 1);
+        source_boundaries.push(0);
+        for (start, grapheme) in graphemes {
+            masked.push_str(PASSWORD_MASK);
+            source_boundaries.push(start + grapheme.len());
+        }
+        Self {
+            content: Arc::from(masked),
+            source_boundaries: Arc::from(source_boundaries),
+        }
+    }
+
+    fn display_index(&self, source_index: usize) -> usize {
+        self.source_boundaries
+            .partition_point(|boundary| *boundary <= source_index)
+            .saturating_sub(1)
+            .min(self.source_boundaries.len().saturating_sub(1))
+            * PASSWORD_MASK.len()
+    }
+
+    fn source_index(&self, display_index: usize) -> usize {
+        let grapheme = (display_index / PASSWORD_MASK.len())
+            .min(self.source_boundaries.len().saturating_sub(1));
+        self.source_boundaries[grapheme]
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -478,6 +522,12 @@ pub(crate) struct ScrollResult {
     pub view_dirty: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ScrollEndState {
+    revision: u64,
+    previous_max_y: f32,
+}
+
 pub(crate) struct UiTree {
     root: Option<Element>,
     taffy: TaffyTree<MeasureContext>,
@@ -489,6 +539,7 @@ pub(crate) struct UiTree {
     /// Displayed IDs whose complete ancestor chain is painted (`visibility != hidden`).
     visible_ids: HashSet<ElementId>,
     scroll_offsets: HashMap<ElementId, Vector>,
+    scroll_end_states: HashMap<ElementId, ScrollEndState>,
     virtual_scroll_handles: HashMap<ElementId, RetainedVirtualScroll>,
     natural_bounds: HashMap<ElementId, Rect>,
     element_bounds: HashMap<ElementId, Rect>,
@@ -818,6 +869,7 @@ struct DetachedTree {
     input_ids: HashSet<ElementId>,
     animation_ids: HashSet<ElementId>,
     scroll_offsets: HashMap<ElementId, Vector>,
+    scroll_end_states: HashMap<ElementId, ScrollEndState>,
     natural_bounds: HashMap<ElementId, Rect>,
     paint_bounds: HashMap<ElementId, Rect>,
     text_inputs: HashMap<ElementId, TextInputState>,
@@ -1554,6 +1606,7 @@ impl DetachedTree {
             input_ids: HashSet::with_capacity(4),
             animation_ids: HashSet::with_capacity(4),
             scroll_offsets: HashMap::new(),
+            scroll_end_states: HashMap::new(),
             natural_bounds: HashMap::new(),
             paint_bounds: HashMap::with_capacity(32),
             text_inputs: HashMap::new(),
@@ -1651,6 +1704,8 @@ impl DetachedTree {
         collect_displayed_ids(&root, &mut displayed_ids);
         self.scroll_offsets
             .retain(|id, _| displayed_ids.contains(id));
+        self.scroll_end_states
+            .retain(|id, _| displayed_ids.contains(id));
         self.natural_bounds.clear();
         self.root = root;
         self.root_node = Some(root_node);
@@ -1710,6 +1765,7 @@ impl DetachedTree {
             &self.root,
             &self.taffy,
             &mut self.scroll_offsets,
+            &mut self.scroll_end_states,
             &mut self.natural_bounds,
             origin,
         )?;
@@ -1963,6 +2019,7 @@ impl UiTree {
             displayed_ids: HashSet::with_capacity(256),
             visible_ids: HashSet::with_capacity(256),
             scroll_offsets: HashMap::new(),
+            scroll_end_states: HashMap::with_capacity(8),
             virtual_scroll_handles: HashMap::with_capacity(8),
             natural_bounds: HashMap::with_capacity(256),
             element_bounds: HashMap::with_capacity(256),
@@ -2292,6 +2349,8 @@ impl UiTree {
         self.rebuild_dispatch_index();
         self.rebuild_drop_predicates();
         self.scroll_offsets
+            .retain(|id, _| self.displayed_ids.contains(id));
+        self.scroll_end_states
             .retain(|id, _| self.displayed_ids.contains(id));
         self.scrollbar_states
             .retain(|id, _| self.displayed_ids.contains(id));
@@ -2799,6 +2858,7 @@ impl UiTree {
             root,
             &self.taffy,
             &mut self.scroll_offsets,
+            &mut self.scroll_end_states,
             &mut self.natural_bounds,
             Point::ZERO,
         )?;
@@ -4365,8 +4425,22 @@ impl UiTree {
     }
 
     pub(crate) fn selected_input_text(&self) -> Option<Arc<str>> {
-        self.focused_text_input()
-            .and_then(|id| self.text_inputs.get(&id))
+        let id = self.focused_text_input()?;
+        if self
+            .root
+            .as_ref()
+            .and_then(|root| find_element(root, id))
+            .is_some_and(|element| {
+                matches!(
+                    &element.kind,
+                    ElementKind::TextInput(input) if input.password
+                )
+            })
+        {
+            return None;
+        }
+        self.text_inputs
+            .get(&id)
             .and_then(TextInputState::selected_text)
             .map(Arc::from)
     }
@@ -5541,6 +5615,7 @@ fn sanitize_detached_element(element: &mut Element, preserve_motion: bool) {
     element.tooltip = None;
     element.app_region = None;
     element.virtual_scroll = None;
+    element.scroll_to_end_revision = None;
     element.list_item_measurement = None;
     if !preserve_motion {
         element.animation = None;
@@ -5567,6 +5642,22 @@ pub(crate) struct PointerResult {
     pub dismissed: Option<DismissRequest>,
     pub pointer_listener: Option<ElementId>,
     pub drag_source: Option<ElementId>,
+}
+
+fn text_input_max_scroll(
+    content_size: Size,
+    viewport: Size,
+    line_height: f32,
+    multiline: bool,
+) -> Vector {
+    Vector::new(
+        (content_size.width - viewport.width).max(0.0),
+        if multiline {
+            (content_size.height.max(line_height) - viewport.height).max(0.0)
+        } else {
+            0.0
+        },
+    )
 }
 
 fn scroll_to_reveal_caret(
@@ -5606,7 +5697,7 @@ fn text_input_index_at(
     if region.content.is_empty() {
         return 0;
     }
-    renderer.text_index_for_point_with_highlights(
+    let display_index = renderer.text_index_for_point_with_highlights(
         TextId::new(region.id.value()),
         &region.content,
         &region.style,
@@ -5617,7 +5708,10 @@ fn text_input_index_at(
             point.x - region.bounds.x + region.scroll.x,
             point.y - region.bounds.y + region.scroll.y,
         ),
-    )
+    );
+    region.password.as_ref().map_or(display_index, |password| {
+        password.source_index(display_index)
+    })
 }
 
 fn squared_distance_to_rect(point: Point, rect: Rect) -> f32 {
@@ -5904,11 +5998,14 @@ fn build_layout_node(
         ElementKind::TextInput(input) => {
             let content = if input.value.is_empty() {
                 input.placeholder.clone()
+            } else if input.password {
+                PasswordDisplay::new(&input.value).content
             } else {
                 input.value.clone()
             };
-            let highlights = (!input.value.is_empty() && !input.highlights.is_empty())
-                .then(|| input.highlights.clone());
+            let highlights =
+                (!input.password && !input.value.is_empty() && !input.highlights.is_empty())
+                    .then(|| input.highlights.clone());
             taffy.new_leaf_with_context(
                 element.layout.clone(),
                 MeasureContext::Text {
@@ -5929,10 +6026,39 @@ fn build_layout_node(
     Ok(node)
 }
 
+fn apply_scroll_end_revision(
+    id: ElementId,
+    revision: Option<u64>,
+    max_y: f32,
+    offset: &mut Vector,
+    states: &mut HashMap<ElementId, ScrollEndState>,
+) {
+    let Some(revision) = revision else {
+        states.remove(&id);
+        return;
+    };
+    let should_follow = states.get(&id).is_none_or(|state| {
+        let declaration_changed =
+            state.revision != revision || (state.previous_max_y - max_y).abs() > f32::EPSILON;
+        declaration_changed && offset.y >= state.previous_max_y - 1.0
+    });
+    if should_follow {
+        offset.y = max_y;
+    }
+    states.insert(
+        id,
+        ScrollEndState {
+            revision,
+            previous_max_y: max_y,
+        },
+    );
+}
+
 fn collect_layout_bounds(
     element: &Element,
     taffy: &TaffyTree<MeasureContext>,
     scroll_offsets: &mut HashMap<ElementId, Vector>,
+    scroll_end_states: &mut HashMap<ElementId, ScrollEndState>,
     bounds: &mut HashMap<ElementId, Rect>,
     parent_origin: Point,
 ) -> Result<(), UiError> {
@@ -5961,14 +6087,30 @@ fn collect_layout_bounds(
             (layout.content_size.height - layout.size.height).max(0.0),
         );
         let offset = scroll_offsets.entry(element.runtime_id).or_default();
+        apply_scroll_end_revision(
+            element.runtime_id,
+            element.scroll_to_end_revision,
+            max_offset.y,
+            offset,
+            scroll_end_states,
+        );
         offset.x = offset.x.clamp(0.0, max_offset.x);
         offset.y = offset.y.clamp(0.0, max_offset.y);
         scroll = *offset;
+    } else {
+        scroll_end_states.remove(&element.runtime_id);
     }
 
     let child_origin = Point::new(element_bounds.x - scroll.x, element_bounds.y - scroll.y);
     for child in &element.children {
-        collect_layout_bounds(child, taffy, scroll_offsets, bounds, child_origin)?;
+        collect_layout_bounds(
+            child,
+            taffy,
+            scroll_offsets,
+            scroll_end_states,
+            bounds,
+            child_origin,
+        )?;
     }
     Ok(())
 }
@@ -6847,8 +6989,19 @@ fn paint_element(
                 && text_viewport.height > 0.0
                 && let Some(text_clip) = parent_clip.intersection(text_viewport)
             {
-                let content = input_state.shared_text();
-                let highlights = (!content.is_empty())
+                let source_content = input_state.shared_text();
+                let password = input
+                    .password
+                    .then(|| PasswordDisplay::new(&source_content));
+                let content = password
+                    .as_ref()
+                    .map_or_else(|| source_content.clone(), |display| display.content.clone());
+                let display_index = |source_index| {
+                    password
+                        .as_ref()
+                        .map_or(source_index, |display| display.display_index(source_index))
+                };
+                let highlights = (!input.password && !content.is_empty())
                     .then(|| input_state.shared_highlights())
                     .filter(|highlights| !highlights.is_empty());
                 let text_id = TextId::new(element.runtime_id.value());
@@ -6883,12 +7036,14 @@ fn paint_element(
                         highlights.as_ref(),
                         text_viewport.width,
                         scale_factor,
-                        input_state.caret(),
+                        display_index(input_state.caret()),
                     )
                 };
-                let max_scroll = Vector::new(
-                    (content_size.width - text_viewport.width).max(0.0),
-                    (content_size.height.max(style.line_height) - text_viewport.height).max(0.0),
+                let max_scroll = text_input_max_scroll(
+                    content_size,
+                    Size::new(text_viewport.width, text_viewport.height),
+                    style.line_height,
+                    input.multiline,
                 );
                 let mut scroll = scroll_offsets
                     .get(&element.runtime_id)
@@ -6961,8 +7116,8 @@ fn paint_element(
                         text_viewport.width,
                         scale_factor,
                         scroll.y..scroll.y + text_viewport.height,
-                        selection.start,
-                        selection.end,
+                        display_index(selection.start),
+                        display_index(selection.end),
                     ) {
                         scene.push_quad_in(
                             layer,
@@ -6997,8 +7152,8 @@ fn paint_element(
                         text_viewport.width,
                         scale_factor,
                         scroll.y..scroll.y + text_viewport.height,
-                        marked.start,
-                        marked.end,
+                        display_index(marked.start),
+                        display_index(marked.end),
                     ) {
                         scene.push_quad_in(
                             layer,
@@ -7050,13 +7205,14 @@ fn paint_element(
                     bounds: text_viewport,
                     clip: text_clip,
                     content,
+                    password,
                     highlights,
                     style,
                     scroll,
                     max_scroll,
                     caret_bounds,
                 });
-                if max_scroll.x > 0.0 || max_scroll.y > 0.0 {
+                if input.multiline && max_scroll.y > 0.0 {
                     let scrollbar_bounds = Rect::new(
                         bounds.x,
                         text_viewport.y,
@@ -8032,7 +8188,30 @@ fn build_accessibility_nodes(
         node.set_description(description.to_string());
     }
     if let Some((state, text_id)) = text_input {
-        node.set_value(state.text());
+        let password = matches!(
+            &element.kind,
+            ElementKind::TextInput(input) if input.password
+        )
+        .then(|| PasswordDisplay::new(state.text()));
+        let accessible_text = password
+            .as_ref()
+            .map_or_else(|| state.shared_text(), |display| display.content.clone());
+        let accessible_character_index = |source_index| {
+            password.as_ref().map_or_else(
+                || state.accessibility_character_index(source_index),
+                |display| {
+                    accessibility_character_index(
+                        &display.content,
+                        display.display_index(source_index),
+                    )
+                },
+            )
+        };
+        let accessible_character_lengths = password.as_ref().map_or_else(
+            || state.accessibility_character_lengths(),
+            |display| selectable_character_lengths(&display.content),
+        );
+        node.set_value(accessible_text.to_string());
         if let ElementKind::TextInput(input) = &element.kind
             && !input.placeholder.is_empty()
         {
@@ -8040,11 +8219,11 @@ fn build_accessibility_nodes(
         }
         let anchor = TextPosition {
             node: text_id,
-            character_index: state.accessibility_character_index(state.anchor()),
+            character_index: accessible_character_index(state.anchor()),
         };
         let focus = TextPosition {
             node: text_id,
-            character_index: state.accessibility_character_index(state.caret()),
+            character_index: accessible_character_index(state.caret()),
         };
         node.set_text_selection(TextSelection { anchor, focus });
         if !element.accessibility.disabled {
@@ -8054,8 +8233,8 @@ fn build_accessibility_nodes(
 
         let mut text_node = AccessibilityNode::new(Role::TextRun);
         text_node.set_bounds(accessibility_rect(bounds));
-        text_node.set_value(state.text());
-        text_node.set_character_lengths(state.accessibility_character_lengths());
+        text_node.set_value(accessible_text.to_string());
+        text_node.set_character_lengths(accessible_character_lengths);
         nodes.push((text_id, text_node));
     } else if let Some(((document_index, entry), text_id)) = selectable_text {
         node.set_value(entry.content.to_string());
@@ -8300,6 +8479,7 @@ fn accessibility_role(role: AccessibilityRole) -> Role {
         AccessibilityRole::RadioGroup => Role::RadioGroup,
         AccessibilityRole::Switch => Role::Switch,
         AccessibilityRole::TextInput => Role::TextInput,
+        AccessibilityRole::PasswordInput => Role::PasswordInput,
         AccessibilityRole::MultilineTextInput => Role::MultilineTextInput,
         AccessibilityRole::Dialog => Role::Dialog,
         AccessibilityRole::AlertDialog => Role::AlertDialog,
@@ -10686,6 +10866,56 @@ mod tests {
     }
 
     #[test]
+    fn password_inputs_mask_scene_and_accessibility_values_and_disable_copy() {
+        let id = ElementId::new(46);
+        let secret = "sk-é👨‍👩‍👧‍👦";
+        let masked = PASSWORD_MASK.repeat(secret.graphemes(true).count());
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(
+            crate::text_input(secret).id(id).password(true),
+            Size::new(320.0, 100.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+        assert!(tree.focus(id));
+        assert!(tree.input_select_all().repaint);
+
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let input_text = scene
+            .text_runs()
+            .iter()
+            .find(|run| run.id == TextId::new(id.value()))
+            .expect("password text run");
+        assert_eq!(input_text.content.as_ref(), masked);
+        assert!(!input_text.content.contains(secret));
+        assert!(tree.selected_input_text().is_none());
+
+        let update = tree.accessibility_update("Password test");
+        let node = update
+            .nodes
+            .iter()
+            .find_map(|(node_id, node)| (*node_id == accessibility_id(id)).then_some(node))
+            .expect("password accessibility node");
+        assert_eq!(node.role(), Role::PasswordInput);
+        assert_eq!(node.value(), Some(masked.as_str()));
+
+        let display = PasswordDisplay::new(secret);
+        for boundary in secret
+            .grapheme_indices(true)
+            .map(|(index, _)| index)
+            .chain([secret.len()])
+        {
+            assert_eq!(
+                display.source_index(display.display_index(boundary)),
+                boundary
+            );
+        }
+    }
+
+    #[test]
     fn invalid_form_reports_in_document_order_focuses_and_announces_once() {
         let form_id = ElementId::new(100);
         let first_id = ElementId::new(101);
@@ -10994,6 +11224,28 @@ mod tests {
         assert!(tree.advance_scrollbars(deadline));
         assert!(!tree.advance_scrollbars(deadline));
         assert!(tree.next_scrollbar_deadline().is_none());
+    }
+
+    #[test]
+    fn scroll_end_following_pauses_when_the_user_scrolls_away() {
+        let id = ElementId::new(91);
+        let mut states = HashMap::new();
+        let mut offset = Vector::ZERO;
+
+        apply_scroll_end_revision(id, Some(1), 100.0, &mut offset, &mut states);
+        assert_eq!(offset.y, 100.0);
+        apply_scroll_end_revision(id, Some(2), 160.0, &mut offset, &mut states);
+        assert_eq!(offset.y, 160.0);
+
+        offset.y = 40.0;
+        apply_scroll_end_revision(id, Some(3), 220.0, &mut offset, &mut states);
+        assert_eq!(offset.y, 40.0);
+
+        offset.y = 220.0;
+        apply_scroll_end_revision(id, Some(4), 260.0, &mut offset, &mut states);
+        assert_eq!(offset.y, 260.0);
+        apply_scroll_end_revision(id, None, 260.0, &mut offset, &mut states);
+        assert!(!states.contains_key(&id));
     }
 
     #[test]
@@ -11479,6 +11731,21 @@ mod tests {
                 Vector::new(1_000.0, 0.0),
             ),
             Vector::ZERO,
+        );
+    }
+
+    #[test]
+    fn single_line_input_never_exposes_vertical_scroll() {
+        let content = Size::new(600.0, 28.0);
+        let viewport = Size::new(200.0, 20.0);
+
+        assert_eq!(
+            text_input_max_scroll(content, viewport, 20.0, false),
+            Vector::new(400.0, 0.0)
+        );
+        assert_eq!(
+            text_input_max_scroll(content, viewport, 20.0, true),
+            Vector::new(400.0, 8.0)
         );
     }
 
