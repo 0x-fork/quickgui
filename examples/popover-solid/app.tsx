@@ -1,4 +1,4 @@
-import { app, type NativeNode, Window } from "@quickgui/native";
+import { app, Window } from "@quickgui/native";
 import { Button, Popover, SystemPopover, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
@@ -79,8 +79,6 @@ function PopoverExample() {
   const [status, setStatus] = createSignal("Open either surface to compare its native behavior.");
   const [systemOpen, setSystemOpen] = createSignal(false);
   const [inWindowOpen, setInWindowOpen] = createSignal(false);
-  let systemTrigger: NativeNode | undefined;
-  let inWindowTrigger: NativeNode | undefined;
 
   function setSystemPopoverOpen(open: boolean) {
     setSystemOpen(open);
@@ -88,7 +86,6 @@ function PopoverExample() {
   }
 
   function closeSystemPopover() {
-    systemTrigger?.focus();
     setSystemOpen(false);
     setStatus("System popover closed.");
   }
@@ -99,7 +96,6 @@ function PopoverExample() {
   }
 
   function closeInWindowPopover() {
-    inWindowTrigger?.focus();
     setInWindowOpen(false);
     setStatus("In-window popover closed.");
   }
@@ -182,12 +178,7 @@ function PopoverExample() {
                 open={systemOpen()}
                 onOpenChange={(open) => setSystemPopoverOpen(open)}
               >
-                <SystemPopover.Trigger
-                  ref={(node) => {
-                    systemTrigger = node;
-                  }}
-                  style={buttonStyle}
-                >
+                <SystemPopover.Trigger style={buttonStyle}>
                   {systemOpen() ? "Close system" : "Open system"}
                 </SystemPopover.Trigger>
                 <SystemPopover.Content
@@ -228,12 +219,7 @@ function PopoverExample() {
                 open={inWindowOpen()}
                 onOpenChange={(open) => setInWindowPopoverOpen(open)}
               >
-                <Popover.Trigger
-                  ref={(node) => {
-                    inWindowTrigger = node;
-                  }}
-                  style={buttonStyle}
-                >
+                <Popover.Trigger style={buttonStyle}>
                   {inWindowOpen() ? "Close in-window" : "Open in-window"}
                 </Popover.Trigger>
                 <Popover.Content

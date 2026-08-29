@@ -309,6 +309,7 @@ impl VisualTestContext<'_> {
 
 struct TestWindow {
     parent: Option<WindowHandle>,
+    restore_focus_on_close: Option<ElementId>,
     view: Box<dyn AnyView>,
     ui: UiTree,
     #[cfg(feature = "inspector")]
@@ -1737,7 +1738,7 @@ impl TestAppContext {
             cx.open_windows.clear();
         } else {
             for request in &mut cx.open_windows {
-                let Some(anchor) = request.popover_anchor_element.take() else {
+                let Some(anchor) = request.popover_anchor_element else {
                     continue;
                 };
                 let origin = origin.ok_or_else(|| {
@@ -2017,6 +2018,7 @@ impl TestAppContext {
             );
             let window = TestWindow {
                 parent: request.parent,
+                restore_focus_on_close: request.popover_anchor_element,
                 view: request.view,
                 ui: UiTree::new_at(self.animation_epoch),
                 #[cfg(feature = "inspector")]
@@ -2081,12 +2083,17 @@ impl TestAppContext {
 
         let mut closed = Vec::with_capacity(order.len());
         for window in order {
-            let parent = self.windows.get(&window).and_then(|window| window.parent);
+            let (parent, restore_focus) = self
+                .windows
+                .get(&window)
+                .map(|window| (window.parent, window.restore_focus_on_close))
+                .unwrap_or((None, None));
             self.foreground_tasks.cancel_window(window);
             if self.windows.remove(&window).is_some() {
                 closed.push(ClosedWindow {
                     handle: window,
                     parent,
+                    restore_focus,
                 });
             }
         }
@@ -2116,8 +2123,9 @@ impl TestAppContext {
                     callbacks.extend(listeners.any_child_window_closed.iter().cloned());
                     callbacks
                 };
-                if !callbacks.is_empty() {
+                if !callbacks.is_empty() || closed.restore_focus.is_some() {
                     let mut cx = self.event_context(Some(parent));
+                    cx.focus = closed.restore_focus.map(Some);
                     for callback in callbacks {
                         callback(
                             self.window_mut(parent)?.view.as_any_mut(),

@@ -174,6 +174,10 @@ const [systemOpen, setSystemOpen] = createSignal(false);
 </SystemPopover.Root>
 ```
 
+Whenever controlled or uncontrolled state transitions from open to closed, the Rust core restores
+focus to the trigger retained by the popover relation. Applications and renderer bindings do not
+retain a trigger ref or call `focus()` when closing content explicitly.
+
 Pressing an open `SystemPopover.Trigger` dismisses the active native popover and consumes that anchor
 press. The trigger does not receive a later click against already-dismissed controlled state, so the
 compound state settles closed instead of immediately reopening it.

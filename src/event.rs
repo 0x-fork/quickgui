@@ -1284,7 +1284,8 @@ impl EventContext {
     /// Unlike an in-window overlay, this popover owns a separate native window and WGPU surface, so
     /// it may extend beyond the parent window while the platform constrains it to the display work
     /// area. The anchor is resolved after the listener returns and before any invalidated rebuild;
-    /// no geometry observer, polling task, or hard-coded duplicate rectangle is required.
+    /// it also remains the parent's focus-restoration target until the child closes. No geometry
+    /// observer, polling task, or hard-coded duplicate rectangle is required.
     pub fn open_system_popover<V: View>(
         &mut self,
         anchor: impl Into<ElementId>,

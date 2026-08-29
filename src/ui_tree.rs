@@ -404,6 +404,12 @@ pub(crate) struct DismissRequest {
     pub restore_focus: Option<ElementId>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FocusRestoration {
+    surface: ElementId,
+    target: ElementId,
+}
+
 #[derive(Clone)]
 struct TextInputRegion {
     id: ElementId,
@@ -580,6 +586,7 @@ pub(crate) struct UiTree {
     scrollbar_states: HashMap<ElementId, ScrollbarState>,
     hovered_scrollbar: Option<ElementId>,
     dismiss_regions: Vec<DismissRegion>,
+    focus_restorations: Vec<FocusRestoration>,
     #[cfg(target_os = "macos")]
     native_views: Vec<NativeViewPlacement>,
     text_input_regions: Vec<TextInputRegion>,
@@ -2062,6 +2069,7 @@ impl UiTree {
             scrollbar_states: HashMap::with_capacity(8),
             hovered_scrollbar: None,
             dismiss_regions: Vec::with_capacity(4),
+            focus_restorations: Vec::with_capacity(4),
             #[cfg(target_os = "macos")]
             native_views: Vec::with_capacity(4),
             text_input_regions: Vec::with_capacity(8),
@@ -2364,6 +2372,19 @@ impl UiTree {
             }
         }
         self.rebuild_focus_index();
+        let restore_focus = self
+            .focus_restorations
+            .iter()
+            .rev()
+            .find_map(|restoration| {
+                (!self.seen_ids.contains(&restoration.surface)
+                    && self.focusable_ids.contains(&restoration.target))
+                .then_some(restoration.target)
+            });
+        self.focus_restorations.clear();
+        if let Some(root) = &self.root {
+            collect_focus_restorations(root, &self.displayed_ids, &mut self.focus_restorations);
+        }
         self.rebuild_dispatch_index();
         self.rebuild_drop_predicates();
         self.scroll_offsets
@@ -2405,7 +2426,9 @@ impl UiTree {
         {
             self.drag_over = None;
         }
-        if self
+        if let Some(target) = restore_focus {
+            self.focus(target);
+        } else if self
             .focused
             .is_some_and(|id| !self.focusable_ids.contains(&id))
         {
@@ -8798,6 +8821,25 @@ fn collect_displayed_ids(element: &Element, ids: &mut HashSet<ElementId>) {
     ids.insert(element.runtime_id);
     for child in &element.children {
         collect_displayed_ids(child, ids);
+    }
+}
+
+fn collect_focus_restorations(
+    element: &Element,
+    displayed_ids: &HashSet<ElementId>,
+    restorations: &mut Vec<FocusRestoration>,
+) {
+    if !displayed_ids.contains(&element.runtime_id) {
+        return;
+    }
+    if let Some(target) = element.restore_focus {
+        restorations.push(FocusRestoration {
+            surface: element.runtime_id,
+            target: target.id(),
+        });
+    }
+    for child in &element.children {
+        collect_focus_restorations(child, displayed_ids, restorations);
     }
 }
 

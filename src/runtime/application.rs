@@ -104,7 +104,8 @@ impl AppRunner {
     /// Embedding runtimes may call this before the parent's first presented frame. Resolution is
     /// queued with the child request and occurs at the window-creation boundary, after every
     /// earlier parent request has completed retained layout. This preserves the same display-aware
-    /// behavior as [`EventContext::open_system_popover`] without polling or a geometry observer.
+    /// behavior and core-owned trigger focus restoration as [`EventContext::open_system_popover`]
+    /// without polling or a geometry observer.
     pub fn open_system_popover<V: View>(
         &mut self,
         parent: WindowHandle,

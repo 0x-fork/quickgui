@@ -196,13 +196,6 @@ impl Popover {
         cx.focus(self.initial_focus.unwrap_or_else(|| self.popover_focus()));
     }
 
-    /// Return focus to the paired trigger after an explicit action closes the popover.
-    ///
-    /// Escape and outside-press dismissal already restore this handle automatically.
-    pub fn focus_trigger(self, cx: &mut EventContext) {
-        cx.focus(self.trigger_focus());
-    }
-
     /// Decorate an application-owned trigger without adding appearance.
     pub fn trigger_part(self, trigger: Element) -> Element {
         let trigger = trigger
@@ -342,7 +335,8 @@ fn derived_popover_id(parent: ElementId, avoid: ElementId, tag: u64) -> ElementI
 ///
 /// Popover size is explicit, matching the platform popover contract. The trigger rectangle itself is
 /// resolved from retained element geometry by [`EventContext::open_system_popover`], so callers do
-/// not duplicate coordinates or install a layout observer.
+/// not duplicate coordinates or install a layout observer. Closing the child restores parent focus
+/// to that retained trigger unless the trigger or parent was destroyed with it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SystemPopover {
     size: Size,
@@ -767,16 +761,20 @@ mod tests {
                         .expect("a mounted window can open a system popover"),
                 );
             });
-            div().size_full().relative().child(
-                button()
-                    .id("anchor")
-                    .absolute()
-                    .left(280.0)
-                    .top(180.0)
-                    .w(40.0)
-                    .h(30.0)
-                    .on_click(open),
-            )
+            div()
+                .size_full()
+                .relative()
+                .child(
+                    button()
+                        .id("anchor")
+                        .absolute()
+                        .left(280.0)
+                        .top(180.0)
+                        .w(40.0)
+                        .h(30.0)
+                        .on_click(open),
+                )
+                .child(button().id("other").child("Other"))
         }
     }
 
@@ -813,6 +811,22 @@ mod tests {
         let renders = cx.render_count(popover).unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(cx.render_count(popover).unwrap(), renders);
+
+        cx.focus(parent, "other").unwrap();
+        assert_eq!(cx.focused(parent).unwrap(), Some("other".into()));
+        cx.update(launcher, |_view, cx| cx.close_window_handle(popover))
+            .unwrap();
+        assert!(!cx.is_window_open(popover));
+        assert_eq!(cx.focused(parent).unwrap(), Some("anchor".into()));
+
+        cx.click(parent, "anchor").unwrap();
+        let owned_popover = cx
+            .read(launcher, |view| view.popover)
+            .unwrap()
+            .expect("the anchor can reopen its system popover");
+        assert!(cx.is_window_open(owned_popover));
+        cx.update(launcher, |_view, cx| cx.close_window()).unwrap();
+        assert!(cx.windows().is_empty());
     }
 
     #[derive(Default)]
@@ -835,15 +849,12 @@ mod tests {
                 view.open = !view.open;
                 if view.open {
                     popover.focus_surface(cx);
-                } else {
-                    popover.focus_trigger(cx);
                 }
                 cx.invalidate();
             });
             let choose = cx.listener("choose", move |view, cx| {
                 view.chosen = true;
                 view.open = false;
-                popover.focus_trigger(cx);
                 cx.invalidate();
             });
 
@@ -900,6 +911,24 @@ mod tests {
 
         cx.simulate_keystrokes(window, "escape").unwrap();
         assert!(!cx.read(view, |view| view.open).unwrap());
+        assert!(!cx.contains_element(window, "surface").unwrap());
+        assert_eq!(cx.focused(window).unwrap(), Some("trigger".into()));
+
+        cx.click(window, "trigger").unwrap();
+        cx.update(view, |view, cx| {
+            view.open = !view.open;
+            view.open = !view.open;
+            cx.invalidate();
+        })
+        .unwrap();
+        assert!(cx.contains_element(window, "surface").unwrap());
+        assert_eq!(cx.focused(window).unwrap(), Some("choose".into()));
+
+        cx.update(view, |view, cx| {
+            view.open = false;
+            cx.invalidate();
+        })
+        .unwrap();
         assert!(!cx.contains_element(window, "surface").unwrap());
         assert_eq!(cx.focused(window).unwrap(), Some("trigger".into()));
 

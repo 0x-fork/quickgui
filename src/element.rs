@@ -4007,7 +4007,7 @@ impl Element {
         self
     }
 
-    /// Restore focus to this handle when a dismissible surface closes.
+    /// Restore focus to this handle when a dismissible surface closes or leaves the retained tree.
     pub fn restore_focus_to(mut self, handle: FocusHandle) -> Self {
         self.restore_focus = Some(handle);
         self

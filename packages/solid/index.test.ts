@@ -241,6 +241,9 @@ describe("Solid universal host", () => {
     });
 
     const trigger = window.root.children[0]!;
+    window._focusNode = () => {
+      throw new Error("Popover focus restoration must stay in the Rust core");
+    };
     expect(window.root.children).toEqual([trigger]);
 
     window._dispatchEvent("click", trigger.id);
@@ -258,12 +261,21 @@ describe("Solid universal host", () => {
     expect(changes).toEqual([{ open: true, reason: "trigger-press" }]);
 
     popover.listeners.get("dismiss")!(new QuickGuiEvent("dismiss", popover));
+    await Promise.resolve();
+    await Promise.resolve();
     expect(open()).toBe(false);
     expect(window.root.children).toEqual([trigger]);
     expect(changes).toEqual([
       { open: true, reason: "trigger-press" },
       { open: false, reason: "dismiss" },
     ]);
+
+    window._dispatchEvent("click", trigger.id);
+    expect(open()).toBe(true);
+    setOpen(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(window.root.children).toEqual([trigger]);
     window.close();
   });
 
@@ -300,6 +312,9 @@ describe("Solid universal host", () => {
     });
 
     const trigger = owner.root.children[0]!;
+    owner._focusNode = () => {
+      throw new Error("SystemPopover focus restoration must stay in the Rust core");
+    };
     expect(trigger.materialized).toBe(true);
     expect(trigger.host).toBe(owner);
     expect(owner.nodes.has(trigger.id)).toBe(true);
@@ -321,6 +336,7 @@ describe("Solid universal host", () => {
 
     systemWindow!.close();
     await Promise.resolve();
+    await Promise.resolve();
     expect(open()).toBe(false);
     expect(systemWindow!.closed).toBe(true);
     expect(systemWindow!.root.children).toHaveLength(0);
@@ -339,6 +355,7 @@ describe("Solid universal host", () => {
     // native close still settles the controlled JSX lifecycle normally.
     reopened!.close();
     await Promise.resolve();
+    await Promise.resolve();
     expect(open()).toBe(false);
     expect(changes.at(-1)).toEqual({ open: false, reason: "dismiss" });
     expect([...app.windows.values()]).toEqual([owner]);
@@ -350,5 +367,7 @@ describe("Solid universal host", () => {
     owner.close();
     expect(ownedPopover!.closed).toBe(true);
     expect([...app.windows.values()]).toEqual([]);
+    await Promise.resolve();
+    await Promise.resolve();
   });
 });

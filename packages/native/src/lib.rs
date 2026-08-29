@@ -1446,8 +1446,9 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
             "flex" => match node.string(property::FLEX_DIRECTION) {
                 Some("row") => element.flex_row(),
                 Some("row-reverse") => element.flex_row_reverse(),
+                Some("column") => element.flex_col(),
                 Some("column-reverse") => element.flex_col_reverse(),
-                _ => element.flex_col(),
+                _ => element.flex(),
             },
             "grid" => element.grid(),
             _ => element.block(),
@@ -3401,6 +3402,91 @@ mod tests {
     }
 
     #[test]
+    fn flex_without_direction_uses_css_row_default() {
+        let implicit_row_id = 10;
+        let row_first_id = 11;
+        let row_second_id = 12;
+        let explicit_column_id = 20;
+        let column_first_id = 21;
+        let column_second_id = 22;
+        let mut tree = NativeTree::default();
+
+        let mut implicit_row = NativeNode::new(NodeTag::Button);
+        implicit_row.parent = Some(ROOT_NODE);
+        implicit_row.children.extend([row_first_id, row_second_id]);
+        implicit_row.set_property(
+            property::DISPLAY,
+            Some(PropertyValue::String(Arc::from("flex"))),
+        );
+        implicit_row.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+        implicit_row.set_property(property::HEIGHT, Some(PropertyValue::Number(60.0)));
+        tree.nodes.insert(implicit_row_id, implicit_row);
+
+        let mut explicit_column = NativeNode::new(NodeTag::Button);
+        explicit_column.parent = Some(ROOT_NODE);
+        explicit_column
+            .children
+            .extend([column_first_id, column_second_id]);
+        explicit_column.set_property(
+            property::DISPLAY,
+            Some(PropertyValue::String(Arc::from("flex"))),
+        );
+        explicit_column.set_property(
+            property::FLEX_DIRECTION,
+            Some(PropertyValue::String(Arc::from("column"))),
+        );
+        explicit_column.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+        explicit_column.set_property(property::HEIGHT, Some(PropertyValue::Number(60.0)));
+        tree.nodes.insert(explicit_column_id, explicit_column);
+
+        for (id, parent, value) in [
+            (row_first_id, implicit_row_id, "Count:"),
+            (row_second_id, implicit_row_id, "0"),
+            (column_first_id, explicit_column_id, "Count:"),
+            (column_second_id, explicit_column_id, "0"),
+        ] {
+            let mut text = NativeNode::new(NodeTag::Text);
+            text.parent = Some(parent);
+            text.text = Arc::from(value);
+            tree.nodes.insert(id, text);
+        }
+        tree.nodes
+            .get_mut(&ROOT_NODE)
+            .unwrap()
+            .children
+            .extend([implicit_row_id, explicit_column_id]);
+
+        let view = NativeView {
+            window: 4,
+            handles: None,
+            tree: Rc::new(RefCell::new(tree)),
+            events: Rc::new(RefCell::new(VecDeque::new())),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
+        };
+        let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+        let window = view.window_handle();
+
+        let row_first = cx
+            .element_bounds(window, ElementId::new(row_first_id as u64))
+            .unwrap();
+        let row_second = cx
+            .element_bounds(window, ElementId::new(row_second_id as u64))
+            .unwrap();
+        assert_eq!(row_second.y, row_first.y);
+        assert!(row_second.x >= row_first.right());
+
+        let column_first = cx
+            .element_bounds(window, ElementId::new(column_first_id as u64))
+            .unwrap();
+        let column_second = cx
+            .element_bounds(window, ElementId::new(column_second_id as u64))
+            .unwrap();
+        assert_eq!(column_second.x, column_first.x);
+        assert!(column_second.y >= column_first.bottom());
+    }
+
+    #[test]
     fn retained_popover_uses_core_placement_dismissal_and_focus_restoration() {
         let trigger_id = 20;
         let popover_id = 21;
@@ -3463,6 +3549,22 @@ mod tests {
         assert_eq!(event.kind, "dismiss");
         assert_eq!(event.window, 5);
         assert_eq!(event.target, popover_id);
+
+        cx.focus(window, popover_element).unwrap();
+        cx.update(view, |view, cx| {
+            let mut tree = view.tree.borrow_mut();
+            tree.nodes
+                .get_mut(&ROOT_NODE)
+                .unwrap()
+                .children
+                .retain(|child| *child != popover_id);
+            tree.nodes.remove(&popover_id);
+            cx.invalidate();
+        })
+        .unwrap();
+
+        assert!(!cx.contains_element(window, popover_element).unwrap());
+        assert_eq!(cx.focused(window).unwrap(), Some(trigger_element));
     }
 
     #[test]

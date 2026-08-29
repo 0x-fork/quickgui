@@ -80,7 +80,6 @@ let nextMessageId =
       conversation.messages.map((message) => message.id),
     ),
   ) + 1;
-let providerSettingsButton: NativeNode | undefined;
 let composer: NativeNode | undefined;
 let historyWriteTimer: ReturnType<typeof setTimeout> | undefined;
 let pendingHistory: ConversationHistory | undefined;
@@ -367,13 +366,11 @@ async function sendMessage(submittedValue?: string): Promise<void> {
 }
 
 function openProviderSettings(): void {
-  if (!providerSettingsButton) return;
   setSettingsOpen(true);
   flush();
 }
 
 function closeProviderSettings(): void {
-  providerSettingsButton?.focus();
   setSettingsOpen(false);
 }
 
@@ -794,12 +791,7 @@ function Chat() {
             open={settingsOpen()}
             onOpenChange={(open) => setSettingsOpen(open)}
           >
-            <SystemPopover.Trigger
-              ref={(node) => {
-                providerSettingsButton = node;
-              }}
-              style={{ ...secondaryButtonStyle, appRegion: "no-drag" }}
-            >
+            <SystemPopover.Trigger style={{ ...secondaryButtonStyle, appRegion: "no-drag" }}>
               {apiKey() ? "Provider settings" : "Set API key"}
             </SystemPopover.Trigger>
             <SystemPopover.Content

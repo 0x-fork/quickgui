@@ -99,8 +99,6 @@ impl View for PopoverGallery {
             this.account_open = opening;
             if opening {
                 account.focus_surface(cx);
-            } else {
-                account.focus_trigger(cx);
             }
             cx.invalidate();
         });
@@ -112,15 +110,12 @@ impl View for PopoverGallery {
         let close_account = cx.listener(account.close_id(), move |this, cx| {
             this.account_open = false;
             this.nested_open = false;
-            account.focus_trigger(cx);
             cx.invalidate();
         });
         let toggle_nested = cx.listener(nested.trigger_id(), move |this, cx| {
             this.nested_open = !this.nested_open;
             if this.nested_open {
                 nested.focus_surface(cx);
-            } else {
-                nested.focus_trigger(cx);
             }
             cx.invalidate();
         });
@@ -134,8 +129,6 @@ impl View for PopoverGallery {
             this.actions_open = opening;
             if opening {
                 actions.focus_surface(cx);
-            } else {
-                actions.focus_trigger(cx);
             }
             cx.invalidate();
         });
@@ -145,23 +138,18 @@ impl View for PopoverGallery {
         });
         let profile = cx.listener("profile", move |this, cx| {
             this.select("Profile selected", cx);
-            account.focus_trigger(cx);
         });
         let preferences = cx.listener("preferences", move |this, cx| {
             this.select("Preferences selected", cx);
-            account.focus_trigger(cx);
         });
         let shortcut = cx.listener("shortcut", move |this, cx| {
             this.select("Keyboard shortcut changed", cx);
-            nested.focus_trigger(cx);
         });
         let duplicate = cx.listener("duplicate", move |this, cx| {
             this.select("Duplicate selected", cx);
-            actions.focus_trigger(cx);
         });
         let archive = cx.listener("archive", move |this, cx| {
             this.select("Archive selected", cx);
-            actions.focus_trigger(cx);
         });
 
         let mut root = div()

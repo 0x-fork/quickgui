@@ -9,7 +9,8 @@ This example compares the two controlled JSX popover surfaces available to a Sol
 
 Both expose the same compound `Root`, `Trigger`, and `Content` API. The root owns controlled or
 uncontrolled open state, the trigger registers its native anchor internally, and the content part
-owns size and placement.
+owns size and placement. Closing either surface restores focus to its trigger without an
+application- or renderer-managed ref; the Rust core owns that lifecycle.
 
 ```console
 cd examples/popover-solid

@@ -996,7 +996,8 @@ pub(crate) struct WindowRequest {
     view: Box<dyn AnyView>,
     pub(crate) options: WindowOptions,
     pub(crate) parent: Option<WindowHandle>,
-    /// Resolve this anchor from the parent window's retained layout at the event boundary.
+    /// Resolve this anchor from the parent window's retained layout at the event boundary and
+    /// retain it as the focus-restoration target for the child lifetime.
     pub(crate) popover_anchor_element: Option<ElementId>,
 }
 
@@ -2985,10 +2986,12 @@ struct PopoverWindowContext {
 struct ClosedWindow {
     handle: WindowHandle,
     parent: Option<WindowHandle>,
+    restore_focus: Option<ElementId>,
 }
 
 struct RuntimeWindow {
     parent: Option<WindowHandle>,
+    restore_focus_on_close: Option<ElementId>,
     view: Box<dyn AnyView>,
     renderer: GpuRenderer,
     image_assets: ImageAssetCache,
@@ -4942,10 +4945,11 @@ impl Runtime {
             let Some(window_id) = self.window_handles.remove(&handle) else {
                 continue;
             };
-            let parent = self
+            let (parent, restore_focus) = self
                 .windows
                 .get(&window_id)
-                .and_then(|entry| entry.state.parent);
+                .map(|entry| (entry.state.parent, entry.state.restore_focus_on_close))
+                .unwrap_or((None, None));
             self.foreground_tasks.cancel_window(handle);
             #[cfg(target_os = "macos")]
             if let Some(dialog) = self.active_platform_dialogs.remove(&Some(handle)) {
@@ -4988,7 +4992,11 @@ impl Runtime {
             if self.active_window == Some(window_id) {
                 self.active_window = self.focus_history.last().copied();
             }
-            closed.push(ClosedWindow { handle, parent });
+            closed.push(ClosedWindow {
+                handle,
+                parent,
+                restore_focus,
+            });
         }
         #[cfg(target_os = "macos")]
         if !closed.is_empty() {
@@ -5025,8 +5033,9 @@ impl Runtime {
                         callbacks
                     })
                     .unwrap_or_default();
-                if !callbacks.is_empty() {
+                if !callbacks.is_empty() || closed.restore_focus.is_some() {
                     let mut context = self.event_context();
+                    context.focus = closed.restore_focus.map(Some);
                     if let Some(window) = &mut self.window {
                         for callback in callbacks {
                             callback(window.view.as_any_mut(), closed.handle, &mut context);
@@ -5198,7 +5207,7 @@ impl Runtime {
         &self,
         request: &mut WindowRequest,
     ) -> Result<(), AppError> {
-        let Some(anchor) = request.popover_anchor_element.take() else {
+        let Some(anchor) = request.popover_anchor_element else {
             return Ok(());
         };
         let parent = request.parent.ok_or_else(|| {
@@ -5389,7 +5398,7 @@ impl Runtime {
         }
         self.targeted_actions.extend(cx.targeted_actions.drain(..));
         for request in &mut cx.open_windows {
-            let Some(anchor) = request.popover_anchor_element.take() else {
+            let Some(anchor) = request.popover_anchor_element else {
                 continue;
             };
             let Some(bounds) = self
@@ -7928,7 +7937,7 @@ impl Runtime {
             view,
             options,
             parent,
-            popover_anchor_element: _,
+            popover_anchor_element,
         } = request;
         if let Err(error) = validate_window_options(&options) {
             self.fail(event_loop, AppError::Window(error.to_string()));
@@ -8317,6 +8326,7 @@ impl Runtime {
         }
         self.window = Some(RuntimeWindow {
             parent,
+            restore_focus_on_close: popover_anchor_element,
             view,
             renderer,
             image_assets: ImageAssetCache::new(handle, self.image_workers.clone()),
