@@ -1,11 +1,9 @@
-import { createRenderer } from "@solidjs/universal";
+import { createRenderer as createUniversalRenderer } from "@solidjs/universal";
 import { flush as flushSolid, type Element as SolidElement } from "solid-js";
 import {
-  App,
   type NativeElementName,
   type NativeEventListener,
   NativeNode,
-  Window,
   PropertyCode,
   cleanupNativeNodes,
   createNativeElement,
@@ -21,82 +19,7 @@ import {
   replaceNativeText,
   setNativeEventListener,
   setNativeProperty,
-} from "@quickgui/native";
-
-export {
-  App,
-  Appearance,
-  AutoStart,
-  Clipboard,
-  GlobalShortcut,
-  Dialog,
-  DeepLink,
-  Keyboard,
-  Menu,
-  Notifications,
-  PowerMonitor,
-  SecureStorage,
-  NativeNode,
-  Screen,
-  Shell,
-  Tray,
-  TrayIcon,
-  Updater,
-  Window,
-} from "@quickgui/native";
-export type {
-  AppearanceMode,
-  AppearancePreference,
-  AlertDialogButton,
-  AlertDialogButtonRole,
-  AlertDialogLevel,
-  AlertDialogOptions,
-  AppEventMap,
-  AutoStartMode,
-  AutoStartOptions,
-  AvailableUpdate,
-  ClipboardEntry,
-  ClipboardFilesEntry,
-  ClipboardImageEntry,
-  ClipboardItem,
-  ClipboardTextEntry,
-  Display,
-  GlobalShortcutListener,
-  FileDialogFilter,
-  KeyboardLayout,
-  MenuActionItem,
-  MenuDefinition,
-  MenuItem,
-  MenuRole,
-  MenuSeparatorItem,
-  MenuServicesItem,
-  MenuSubmenuItem,
-  NotificationAction,
-  NotificationOptions,
-  NotificationResponse,
-  PowerEvent,
-  ProtocolRegistrationOptions,
-  OpenDialogOptions,
-  OpenDialogProperty,
-  OpenDialogResult,
-  PopupPlacement,
-  QuickGuiEvent,
-  Rectangle,
-  RunOptions,
-  SaveDialogOptions,
-  SaveDialogResult,
-  SecondInstanceEvent,
-  TrayEvent,
-  TrayEventType,
-  TrayIconOptions,
-  TrayIconSource,
-  TrayMenuActionItem,
-  TrayMenuItem,
-  TrayMenuSeparatorItem,
-  TrayMenuSubmenuItem,
-  UpdateClientOptions,
-  WindowOptions,
-  WindowState,
+  type WindowRenderer,
 } from "@quickgui/native";
 
 type PropertyInput = unknown;
@@ -340,7 +263,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const universal = createRenderer<NativeNode>({
+const universal = createUniversalRenderer<NativeNode>({
   createElement(tag, staticProps) {
     const name = tag as NativeElementName;
     if (
@@ -427,22 +350,18 @@ export function VirtualList(props: JSX.VirtualListProps): NativeNode {
   return node;
 }
 
-export function render(code: () => JSX.Element, target: Window | NativeNode): () => void {
-  const root = target instanceof Window ? target.root : target;
-  const nativeDispose = nativeRender(code as () => NativeNode, root);
-  const window = target instanceof Window ? target : root.host;
-  let disposed = false;
-  let untrack = () => {};
-  const dispose = () => {
-    if (disposed) return;
-    disposed = true;
-    untrack();
-    nativeDispose();
-    root.host?.flush();
+export function createRenderer(code: () => JSX.Element): WindowRenderer {
+  return (window) => {
+    const nativeDispose = nativeRender(() => code() as NativeNode, window.root);
+    let disposed = false;
+    window.flush();
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      nativeDispose();
+      window.flush();
+    };
   };
-  if (window) untrack = window._trackMount(dispose);
-  root.host?.flush();
-  return dispose;
 }
 
 export const effect = universal.effect;

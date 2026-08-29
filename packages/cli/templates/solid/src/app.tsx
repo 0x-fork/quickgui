@@ -1,12 +1,14 @@
-import { App, Button, Text, View, Window, render } from "@quickgui/solid";
+import { app, Window } from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
-const app = new App();
-const window = new Window({
+await app.whenReady();
+new Window({
   title: {{APP_NAME}},
   width: 720,
   height: 480,
   background: "#0b1020",
+  renderer: createRenderer(() => <Counter />),
 });
 
 function Counter() {
@@ -45,6 +47,3 @@ function Counter() {
     </View>
   );
 }
-
-render(() => <Counter />, window);
-await app.run();

@@ -1,8 +1,9 @@
-import { App, Button, Text, View, Window, render } from "@quickgui/solid";
+import { app, Window } from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
-const app = new App();
-const mainWindow = new Window({
+await app.whenReady();
+new Window({
   title: "QuickGUI + Solid 2",
   width: 760,
   height: 520,
@@ -11,54 +12,55 @@ const mainWindow = new Window({
   background: "#090d16",
   titleBarStyle: "hiddenInset",
   trafficLightPosition: { x: 16, y: 13 },
+  renderer: createRenderer(() => <Counter />),
 });
 
 function openDetailsWindow() {
-  const detailsWindow = new Window({
+  new Window({
     title: "Dynamic QuickGUI window",
     width: 420,
     height: 260,
     minimumWidth: 320,
     minimumHeight: 200,
     background: "#111827",
-  });
-  render(
-    () => (
-      <View
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          width: "100%",
-          height: "100%",
-          justifyContent: "center",
-          gap: 16,
-          padding: 28,
-          backgroundColor: "#111827",
-          color: "#e2e8f0",
-        }}
-      >
-        <Text style={{ fontSize: 22, fontWeight: 700 }}>Created while the app is running</Text>
-        <Text style={{ color: "#94a3b8", lineHeight: 21 }}>
-          This window has its own retained tree and native lifecycle.
-        </Text>
-        <Button
-          onClick={() => detailsWindow.close()}
+    renderer: createRenderer(() => {
+      const window = Window.getCurrentWindow();
+      return (
+        <View
           style={{
             display: "flex",
-            height: 40,
-            alignItems: "center",
+            flexDirection: "column",
+            width: "100%",
+            height: "100%",
             justifyContent: "center",
-            backgroundColor: "#334155",
-            borderRadius: 9,
-            cursor: "default",
+            gap: 16,
+            padding: 28,
+            backgroundColor: "#111827",
+            color: "#e2e8f0",
           }}
         >
-          Close window
-        </Button>
-      </View>
-    ),
-    detailsWindow,
-  );
+          <Text style={{ fontSize: 22, fontWeight: 700 }}>Created while the app is running</Text>
+          <Text style={{ color: "#94a3b8", lineHeight: 21 }}>
+            This window has its own retained tree and native lifecycle.
+          </Text>
+          <Button
+            onClick={() => window.close()}
+            style={{
+              display: "flex",
+              height: 40,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#334155",
+              borderRadius: 9,
+              cursor: "default",
+            }}
+          >
+            Close window
+          </Button>
+        </View>
+      );
+    }),
+  });
 }
 
 function Counter() {
@@ -162,6 +164,3 @@ function Counter() {
     </View>
   );
 }
-
-render(() => <Counter />, mainWindow);
-await app.run();

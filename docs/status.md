@@ -5,7 +5,8 @@
 Implemented now:
 
 - experimental macOS Bun/N-API hosting with an externally pumped main-thread application loop,
-  dynamically created `App`/`Window` lifecycles, independent transactional bounded retained trees,
+  a core-backed singleton application readiness lifecycle, dynamically created `Window` instances,
+  independent transactional bounded retained trees,
   window-routed bounded click/hover/input/submit delivery, and an unstyled Solid 2 renderer exposing
   `View`, `Text`, `Button`, `Input`, `TextArea`, retained core `Markdown`, and variable-height
   `VirtualList`, plus a project CLI for

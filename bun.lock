@@ -13,6 +13,7 @@
       "name": "quickgui-solid-ai-chat-example",
       "dependencies": {
         "@ai-sdk/deepseek": "3.0.35",
+        "@quickgui/native": "workspace:*",
         "@quickgui/solid": "workspace:*",
         "ai": "7.0.83",
         "solid-js": "2.0.0-rc.3",
@@ -25,6 +26,7 @@
     "examples/alert-dialog-solid": {
       "name": "quickgui-solid-alert-dialog-example",
       "dependencies": {
+        "@quickgui/native": "workspace:*",
         "@quickgui/solid": "workspace:*",
         "solid-js": "2.0.0-rc.3",
       },
@@ -35,6 +37,7 @@
     "examples/file-dialog-solid": {
       "name": "quickgui-solid-file-dialog-example",
       "dependencies": {
+        "@quickgui/native": "workspace:*",
         "@quickgui/solid": "workspace:*",
         "solid-js": "2.0.0-rc.3",
       },
@@ -45,6 +48,7 @@
     "examples/solid": {
       "name": "quickgui-solid-example",
       "dependencies": {
+        "@quickgui/native": "workspace:*",
         "@quickgui/solid": "workspace:*",
         "solid-js": "2.0.0-rc.3",
       },
@@ -55,6 +59,7 @@
     "examples/system-api-solid": {
       "name": "quickgui-solid-system-api-example",
       "dependencies": {
+        "@quickgui/native": "workspace:*",
         "@quickgui/solid": "workspace:*",
         "solid-js": "2.0.0-rc.3",
       },

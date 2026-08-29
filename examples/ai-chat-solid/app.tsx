@@ -1,15 +1,13 @@
 import { createDeepSeek } from "@ai-sdk/deepseek";
+import { app, type NativeNode, Window } from "@quickgui/native";
 import {
-  App,
   Button,
+  createRenderer,
   Input,
   Markdown,
   Text,
   View,
   VirtualList,
-  Window,
-  type NativeNode,
-  render,
 } from "@quickgui/solid";
 import { streamText } from "ai";
 import { For, createSignal, flush } from "solid-js";
@@ -59,17 +57,7 @@ if (!environmentApiKey) {
     console.error("Unable to load the DeepSeek API key from macOS Keychain", error);
   }
 }
-const app = new App();
-const mainWindow = new Window({
-  title: "QuickGUI AI Chat",
-  width: 1080,
-  height: 720,
-  minimumWidth: 760,
-  minimumHeight: 480,
-  background: "#0b0d12",
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 16, y: 15 },
-});
+await app.whenReady();
 
 const [apiKey, setApiKey] = createSignal(environmentApiKey || storedApiKey);
 const [draft, setDraft] = createSignal(
@@ -387,15 +375,16 @@ function openProviderSettings(anchor = providerSettingsButton): void {
     height: 310,
     placement: "bottom-end",
     gap: 8,
+    renderer: createRenderer(() => <ProviderSettings />),
   });
   settingsWindow = window;
   window.onClose(() => {
     if (settingsWindow === window) settingsWindow = undefined;
   });
-  render(() => <ProviderSettings window={window} />, window);
 }
 
-function ProviderSettings(props: { window: Window }) {
+function ProviderSettings() {
+  const window = Window.getCurrentWindow();
   const [value, setValue] = createSignal(apiKey());
   const [revealed, setRevealed] = createSignal(false);
   const [errorMessage, setErrorMessage] = createSignal("");
@@ -411,7 +400,7 @@ function ProviderSettings(props: { window: Window }) {
       await saveDeepSeekApiKey(nextValue);
       setApiKey(nextValue);
       flush();
-      props.window.close();
+      window.close();
     } catch (error) {
       setSaving(false);
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -427,7 +416,7 @@ function ProviderSettings(props: { window: Window }) {
       await deleteDeepSeekApiKey();
       setApiKey("");
       flush();
-      props.window.close();
+      window.close();
     } catch (error) {
       setSaving(false);
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -522,7 +511,7 @@ function ProviderSettings(props: { window: Window }) {
           </Button>
         ) : null}
         <Button
-          onClick={() => props.window.close()}
+          onClick={() => window.close()}
           disabled={saving()}
           style={secondaryButtonStyle}
         >
@@ -951,6 +940,15 @@ const stopButtonStyle = {
   color: "#fecaca",
 };
 
-render(() => <Chat />, mainWindow);
-await app.run();
-await flushHistoryPersist();
+new Window({
+  title: "QuickGUI AI Chat",
+  width: 1080,
+  height: 720,
+  minimumWidth: 760,
+  minimumHeight: 480,
+  background: "#0b0d12",
+  titleBarStyle: "hiddenInset",
+  trafficLightPosition: { x: 16, y: 15 },
+  renderer: createRenderer(() => <Chat />),
+});
+app.on("quit", flushHistoryPersist);

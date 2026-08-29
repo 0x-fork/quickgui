@@ -1,7 +1,6 @@
 import {
-  App,
+  app,
   AutoStart,
-  Button,
   Clipboard,
   DeepLink,
   GlobalShortcut,
@@ -11,33 +10,17 @@ import {
   Screen,
   SecureStorage,
   Shell,
-  Text,
   Tray,
   type TrayIcon,
   Updater,
-  View,
   Window,
-  render,
-} from "@quickgui/solid";
+} from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
 const identifier = "dev.quickgui.system-api-example";
 const appName = "QuickGUI System APIs";
-const app = new App();
-const mainWindow = new Window({
-  title: appName,
-  width: 760,
-  height: 640,
-  minimumWidth: 620,
-  minimumHeight: 520,
-  background: "#0b0e14",
-});
-
-const primary = await app.requestSingleInstanceLock(identifier);
-if (!primary) {
-  app.destroy();
-  process.exit(0);
-}
+await app.whenReady();
 
 const autoStartOptions = {
   appName: identifier,
@@ -66,6 +49,7 @@ const buttonStyle = {
 } as const;
 
 function SystemApiExample() {
+  const window = Window.getCurrentWindow();
   const [status, setStatus] = createSignal(
     `Primary instance · updater target ${Updater.defaultTarget()}`,
   );
@@ -74,8 +58,8 @@ function SystemApiExample() {
   let unregisterShortcut: (() => Promise<void>) | undefined;
 
   app.on("secondInstance", ({ argv }) => {
-    mainWindow.show();
-    mainWindow.focus();
+    window.show();
+    window.focus();
     setStatus(`A second launch forwarded ${argv.length} argument(s).`);
   });
   app.on("openUrls", (urls) => setStatus(`Deep link: ${urls.join(", ")}`));
@@ -91,7 +75,7 @@ function SystemApiExample() {
     {
       label: "App",
       items: [
-        { label: "Show window", click: () => mainWindow.show() },
+        { label: "Show window", click: () => window.show() },
         { type: "separator" },
         { label: "Quit", click: () => app.quit() },
       ],
@@ -206,8 +190,8 @@ function SystemApiExample() {
               return "Unregistered shift+alt+KeyQ.";
             }
             unregisterShortcut = await GlobalShortcut.register("shift+alt+KeyQ", () => {
-              mainWindow.show();
-              mainWindow.focus();
+              window.show();
+              window.focus();
               setStatus("The global shortcut was pressed.");
             });
             return "Registered shift+alt+KeyQ.";
@@ -222,7 +206,7 @@ function SystemApiExample() {
               icon: makeTrayIcon(),
               tooltip: appName,
               menu: [
-                { label: "Show window", click: () => mainWindow.show() },
+                { label: "Show window", click: () => window.show() },
                 { type: "separator" },
                 { label: "Quit", click: () => app.quit() },
               ],
@@ -272,5 +256,18 @@ function makeTrayIcon(): { data: Uint8Array; width: number; height: number } {
   return { data, width, height };
 }
 
-render(() => <SystemApiExample />, mainWindow);
-await app.run();
+const primary = await app.requestSingleInstanceLock(identifier);
+if (!primary) {
+  app.destroy();
+  process.exit(0);
+}
+
+new Window({
+  title: appName,
+  width: 760,
+  height: 640,
+  minimumWidth: 620,
+  minimumHeight: 520,
+  background: "#0b0e14",
+  renderer: createRenderer(() => <SystemApiExample />),
+});

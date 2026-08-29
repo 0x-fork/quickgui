@@ -11,8 +11,12 @@ cd my-app
 bun run dev
 ```
 
-The scaffold imports `App`, `Window`, `View`, `Text`, `Button`, and `render` from
-`@quickgui/solid`. Solid reactivity such as `createSignal` comes directly from `solid-js`.
+The scaffold imports `app` and `Window` from `@quickgui/native`, then imports `View`, `Text`,
+`Button`, and `createRenderer` from `@quickgui/solid`. Both QuickGUI packages are direct
+dependencies. It awaits `app.whenReady()` before creating its first window; the CLI owns the
+native application loop, and application code never calls `app.run()`. When readiness resolves,
+new windows begin opening immediately. Solid reactivity such as `createSignal` comes directly from
+`solid-js`.
 
 Initialization refuses to overwrite a non-empty directory. Use `--no-install` when dependency
 installation belongs to another workflow.

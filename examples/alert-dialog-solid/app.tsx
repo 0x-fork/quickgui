@@ -1,17 +1,8 @@
-import { App, Button, Dialog, Text, View, Window, render } from "@quickgui/solid";
+import { app, Dialog, Window } from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
-const app = new App();
-const mainWindow = new Window({
-  title: "QuickGUI Alert Dialogs",
-  width: 680,
-  height: 500,
-  minimumWidth: 540,
-  minimumHeight: 420,
-  background: "#0b0e14",
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 16, y: 14 },
-});
+await app.whenReady();
 
 const buttonStyle = {
   display: "flex",
@@ -31,6 +22,7 @@ const buttonStyle = {
 } as const;
 
 function AlertDialogExample() {
+  const window = Window.getCurrentWindow();
   const [pending, setPending] = createSignal(false);
   const [status, setStatus] = createSignal("Choose a dialog to present.");
 
@@ -46,7 +38,7 @@ function AlertDialogExample() {
 
   async function showSaveDialog() {
     await present(async () => {
-      const response = await Dialog.showAlertDialog(mainWindow, {
+      const response = await Dialog.showAlertDialog(window, {
         level: "warning",
         message: "Save changes before closing?",
         detail: "Your edits will be lost if you close this document without saving.",
@@ -62,7 +54,7 @@ function AlertDialogExample() {
 
   async function showCriticalDialog() {
     await present(async () => {
-      const response = await Dialog.showAlertDialog(mainWindow, {
+      const response = await Dialog.showAlertDialog(window, {
         level: "critical",
         message: "Delete this workspace?",
         detail: "This example does not delete anything; it only demonstrates critical styling.",
@@ -180,5 +172,14 @@ function AlertDialogExample() {
   );
 }
 
-render(() => <AlertDialogExample />, mainWindow);
-await app.run();
+new Window({
+  title: "QuickGUI Alert Dialogs",
+  width: 680,
+  height: 500,
+  minimumWidth: 540,
+  minimumHeight: 420,
+  background: "#0b0e14",
+  titleBarStyle: "hiddenInset",
+  trafficLightPosition: { x: 16, y: 14 },
+  renderer: createRenderer(() => <AlertDialogExample />),
+});

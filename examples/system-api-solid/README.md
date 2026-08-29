@@ -1,7 +1,7 @@
 # QuickGUI Solid system APIs
 
-This example exercises system services owned by QuickGUI core and re-exported unchanged through
-`@quickgui/native` and `@quickgui/solid`.
+This example imports system services from `@quickgui/native` and the renderer components from
+`@quickgui/solid`.
 
 ```console
 cd examples/system-api-solid

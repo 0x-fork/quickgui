@@ -70,6 +70,8 @@ export const nativeExports = [
   "getWindowState",
   "isAutoStartEnabled",
   "isAutoStartSupported",
+  "isAppReady",
+  "isHostedAppReady",
   "isProtocolRegistered",
   "isSecureStorageSupported",
   "performGlobalShortcutAction",
@@ -79,6 +81,8 @@ export const nativeExports = [
   "performShellAction",
   "performWindowAction",
   "protocolVersion",
+  "prepareApp",
+  "prepareHostedApp",
   "pumpApp",
   "readClipboard",
   "readHostedClipboard",
@@ -266,6 +270,7 @@ async function compileExecutable(
     const hostEntrypoint = resolve(stagingRoot, "quickgui-app-host.ts");
     const workerEntrypoint = resolve(stagingRoot, "quickgui-app-worker.ts");
     const nativeHostModule = Bun.resolveSync("@quickgui/native/host", import.meta.dir);
+    const nativeApplicationModule = Bun.resolveSync("@quickgui/native", import.meta.dir);
     writeFileSync(
       hostEntrypoint,
       `import { runApplicationWorker } from ${JSON.stringify(nativeHostModule)};\n` +
@@ -276,7 +281,9 @@ async function compileExecutable(
       workerEntrypoint,
       `postMessage("quickgui:worker-ready");\n` +
         `import { reportWorkerFailure } from ${JSON.stringify(nativeHostModule)};\n` +
-        `try {\n  await import(${JSON.stringify(config.entry)});\n} catch (error) {\n` +
+        `try {\n  await import(${JSON.stringify(config.entry)});\n` +
+        `  const { app } = await import(${JSON.stringify(nativeApplicationModule)});\n` +
+        `  await app.run();\n} catch (error) {\n` +
         `  reportWorkerFailure(error);\n  throw error;\n}\n`,
     );
     result = await Bun.build({

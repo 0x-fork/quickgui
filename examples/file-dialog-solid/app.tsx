@@ -1,16 +1,9 @@
 import { join } from "node:path";
-import { App, Button, Dialog, Text, View, Window, render } from "@quickgui/solid";
+import { app, Dialog, Window } from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
-const app = new App();
-const mainWindow = new Window({
-  title: "QuickGUI File Dialogs",
-  width: 720,
-  height: 520,
-  minimumWidth: 560,
-  minimumHeight: 440,
-  background: "#0b0e14",
-});
+await app.whenReady();
 
 const buttonStyle = {
   display: "flex",
@@ -30,12 +23,13 @@ const buttonStyle = {
 } as const;
 
 function FileDialogExample() {
+  const window = Window.getCurrentWindow();
   const [pending, setPending] = createSignal(false);
   const [status, setStatus] = createSignal("Choose an open or save dialog.");
 
   async function openFiles() {
     await present(async () => {
-      const result = await Dialog.showOpenDialog(mainWindow, {
+      const result = await Dialog.showOpenDialog(window, {
         title: "Open text files",
         defaultPath: process.cwd(),
         filters: [
@@ -65,7 +59,7 @@ function FileDialogExample() {
 
   async function saveFile() {
     await present(async () => {
-      const result = await Dialog.showSaveDialog(mainWindow, {
+      const result = await Dialog.showSaveDialog(window, {
         title: "Choose a save destination",
         defaultPath: join(process.cwd(), "quickgui-example.txt"),
         filters: [{ name: "Text", extensions: ["txt"] }],
@@ -188,5 +182,12 @@ function FileDialogExample() {
   );
 }
 
-render(() => <FileDialogExample />, mainWindow);
-await app.run();
+new Window({
+  title: "QuickGUI File Dialogs",
+  width: 720,
+  height: 520,
+  minimumWidth: 560,
+  minimumHeight: 440,
+  background: "#0b0e14",
+  renderer: createRenderer(() => <FileDialogExample />),
+});

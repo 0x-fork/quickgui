@@ -1,9 +1,9 @@
 # @quickgui/solid
 
 Solid 2 renderer for QuickGUI. It exports unstyled `View`, `Text`, `Button`, `Input`, `TextArea`,
-retained core `Markdown`, and variable-height `VirtualList` host components, plus `App`, `Window`,
-the native `Dialog` namespace, and `render`. Import reactive primitives from `solid-js`
-itself.
+retained core `Markdown`, variable-height `VirtualList` host components, and `createRenderer`.
+Import native application/window APIs from `@quickgui/native` and reactive primitives from
+`solid-js` itself.
 
 Run applications through the QuickGUI CLI:
 
@@ -12,15 +12,23 @@ bun run dev
 ```
 
 ```tsx
-import { App, Button, Window, render } from "@quickgui/solid";
+import { app, Window } from "@quickgui/native";
+import { Button, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
-const app = new App();
-const window = new Window({ title: "QuickGUI" });
-const [count, setCount] = createSignal(0);
-render(() => <Button onClick={() => setCount(count() + 1)}>Count: {count()}</Button>, window);
-await app.run();
+function Counter() {
+  const [count, setCount] = createSignal(0);
+  return <Button onClick={() => setCount(count() + 1)}>Count: {count()}</Button>;
+}
+
+await app.whenReady();
+new Window({
+  title: "QuickGUI",
+  renderer: createRenderer(() => <Counter />),
+});
 ```
+
+The CLI owns the native application loop; application source does not call `app.run()`.
 
 See the [Solid renderer guide](../../docs/solid.md) and the
 [runnable example](../../examples/solid/app.tsx). The

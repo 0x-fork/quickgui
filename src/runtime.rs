@@ -1008,8 +1008,17 @@ impl WindowRequest {
         options: WindowOptions,
         parent: Option<WindowHandle>,
     ) -> Self {
+        Self::with_handle(view, options, parent, WindowHandle::next())
+    }
+
+    pub(crate) fn with_handle<V: View>(
+        view: V,
+        options: WindowOptions,
+        parent: Option<WindowHandle>,
+        handle: WindowHandle,
+    ) -> Self {
         Self {
-            handle: WindowHandle::next(),
+            handle,
             view: Box::new(ViewAdapter(view)),
             options,
             parent,
@@ -2916,9 +2925,9 @@ struct ApplicationCallbacks {
 
 mod application;
 mod external;
-pub use application::App;
 #[cfg(not(target_arch = "wasm32"))]
 pub use application::AppRunner;
+pub use application::{App, Application};
 mod global_shortcut;
 mod platform_dialog;
 mod power_monitor;
@@ -3533,6 +3542,8 @@ struct Runtime {
     _linux_power_monitor: Option<power_monitor::LinuxPowerMonitor>,
     application_callbacks: ApplicationCallbacks,
     quit_mode: QuitMode,
+    ready: bool,
+    opened_window: bool,
     exit_requested: bool,
     // The following four fields are the currently activated window. Event delivery is serialized
     // by Winit, so moving one entry into this slot keeps the mature single-window hot path narrow
@@ -3557,7 +3568,7 @@ struct Runtime {
 }
 
 struct RuntimeStartup {
-    initial_window: WindowRequest,
+    initial_window: Option<WindowRequest>,
     globals: GlobalStore,
     keymap: Keymap,
     menus: Vec<Menu>,
@@ -3607,7 +3618,7 @@ impl Runtime {
         keymap.set_key_equivalents(keyboard.key_equivalents());
         let menu_actions = collect_menu_actions(&menus);
         let mut pending_windows = VecDeque::with_capacity(2);
-        pending_windows.push_back(initial_window);
+        pending_windows.extend(initial_window);
         let image_workers = ImageWorkerPoolHandle::new(event_proxy.clone());
         let background_tasks = BackgroundTaskPoolHandle::new(event_proxy.clone());
         let foreground_tasks = ForegroundTaskSpawner::new(event_proxy.clone());
@@ -3713,6 +3724,8 @@ impl Runtime {
             _linux_power_monitor: linux_power_monitor,
             application_callbacks,
             quit_mode,
+            ready: false,
+            opened_window: false,
             exit_requested: false,
             config: AppConfig::default(),
             keymap,
@@ -5152,7 +5165,7 @@ impl Runtime {
                 continue;
             }
 
-            if self.windows.is_empty() && self.quit_mode.quits_when_empty() {
+            if self.opened_window && self.windows.is_empty() && self.quit_mode.quits_when_empty() {
                 event_loop.exit();
             }
             return;
@@ -8478,6 +8491,7 @@ impl Runtime {
                 state.window.request_redraw();
             }
         }
+        self.opened_window = true;
         self.deactivate_window();
     }
 
@@ -8565,6 +8579,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             return;
         }
 
+        self.ready = true;
         event_loop.set_control_flow(ControlFlow::Wait);
         self.initialize_global_shortcuts();
         self.refresh_displays(event_loop);
@@ -10987,6 +11002,20 @@ mod tests {
                 .is_none()
         );
         assert!(app.application_callbacks.window_closed.is_none());
+    }
+
+    #[test]
+    fn windowless_application_builder_retains_core_lifecycle_configuration() {
+        let application = Application::new()
+            .with_quit_mode(QuitMode::Explicit)
+            .global(RuntimeGlobal(9))
+            .on_open_urls(|_, _| {})
+            .on_window_closed(|_, _| {});
+
+        assert_eq!(application.quit_mode, QuitMode::Explicit);
+        assert_eq!(application.globals.get::<RuntimeGlobal>().0, 9);
+        assert!(application.application_callbacks.open_urls.is_some());
+        assert!(application.application_callbacks.window_closed.is_some());
     }
 
     #[test]

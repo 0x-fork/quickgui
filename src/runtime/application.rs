@@ -10,6 +10,7 @@ pub struct AppRunner {
     pub(super) event_loop: EventLoop<RuntimeEvent>,
     pub(super) runtime: Runtime,
     pub(super) root_window: WindowHandle,
+    pub(super) root_window_pending: bool,
     pub(super) status: AppRunStatus,
 }
 
@@ -43,8 +44,29 @@ impl AppRunner {
     }
 
     /// Stable handle of the initial application window.
+    ///
+    /// A windowless [`Application`] reserves this handle until [`Self::open_window`] queues its
+    /// first top-level window.
     pub const fn root_window(&self) -> WindowHandle {
         self.root_window
+    }
+
+    /// Whether the platform application completed its native initialization.
+    ///
+    /// A newly created runner becomes ready during its first [`Self::pump`] call, even when it
+    /// does not yet own a window. Embedding runtimes should wait for this boundary before opening
+    /// their first window.
+    pub const fn is_ready(&self) -> bool {
+        self.runtime.ready
+    }
+
+    /// Window currently activated for a synchronous core callback, if any.
+    ///
+    /// View and event callbacks should normally use [`ViewContext::window_handle`] and
+    /// [`EventContext::window_handle`] directly. This accessor lets bindings project that same
+    /// core context into their host language without maintaining separate window identity.
+    pub fn current_window(&self) -> Option<WindowHandle> {
+        self.runtime.current_handle()
     }
 
     /// Queue a new top-level window from an embedding runtime.
@@ -66,7 +88,12 @@ impl AppRunner {
             .event_proxy
             .send_event(RuntimeEvent::ExternalCommandsReady)
             .map_err(|_| AppError::Window("application event loop is closed".to_owned()))?;
-        let request = WindowRequest::new(view, options);
+        let request = if self.root_window_pending {
+            self.root_window_pending = false;
+            WindowRequest::with_handle(view, options, None, self.root_window)
+        } else {
+            WindowRequest::new(view, options)
+        };
         let handle = request.handle;
         self.runtime.pending_windows.push_back(request);
         Ok(handle)
@@ -337,6 +364,219 @@ impl AppRunner {
 
     pub const fn status(&self) -> AppRunStatus {
         self.status
+    }
+}
+
+/// Configures a native application independently from its windows.
+///
+/// This is the core lifecycle used by language bindings and other embedders. Convert it into an
+/// [`AppRunner`], pump once until [`AppRunner::is_ready`] is true, then queue the first window with
+/// [`AppRunner::open_window`]. Ordinary Rust applications can continue to use [`App::new`], which
+/// combines this lifecycle with an initial root view.
+pub struct Application {
+    pub(super) keymap: Keymap,
+    pub(super) menus: Vec<Menu>,
+    pub(super) globals: GlobalStore,
+    pub(super) assets: Assets,
+    pub(super) fonts: Vec<FontSource>,
+    pub(super) application_callbacks: ApplicationCallbacks,
+    pub(super) quit_mode: QuitMode,
+}
+
+impl Application {
+    pub fn new() -> Self {
+        Self {
+            keymap: Keymap::default(),
+            menus: Vec::new(),
+            globals: GlobalStore::default(),
+            assets: Assets::default(),
+            fonts: Vec::new(),
+            application_callbacks: ApplicationCallbacks::default(),
+            quit_mode: QuitMode::Default,
+        }
+    }
+
+    /// Configure when closing the final window terminates the application.
+    pub fn quit_mode(mut self, mode: QuitMode) -> Self {
+        self.quit_mode = mode;
+        self
+    }
+
+    /// GPUI-compatible alias for [`Self::quit_mode`].
+    pub fn with_quit_mode(self, mode: QuitMode) -> Self {
+        self.quit_mode(mode)
+    }
+
+    /// Install the immutable application asset source used by every window.
+    pub fn with_assets(mut self, source: impl crate::AssetSource) -> Self {
+        self.assets = Assets::new(source);
+        self
+    }
+
+    /// Install an already shared application asset handle.
+    pub fn assets(mut self, assets: Assets) -> Self {
+        self.assets = assets;
+        self
+    }
+
+    /// Register one custom OpenType font file or asset path before launch.
+    pub fn font(mut self, font: impl Into<FontSource>) -> Self {
+        self.fonts.push(font.into());
+        self
+    }
+
+    /// Register custom fonts in declaration order before launch.
+    pub fn fonts(mut self, fonts: impl IntoIterator<Item = impl Into<FontSource>>) -> Self {
+        self.fonts.extend(fonts.into_iter().map(Into::into));
+        self
+    }
+
+    /// Add application key bindings. Later bindings take precedence at equal context depth.
+    pub fn bind_keys(mut self, bindings: impl IntoIterator<Item = KeyBinding>) -> Self {
+        self.keymap.add_bindings(bindings);
+        self
+    }
+
+    /// Replace the complete application keymap.
+    pub fn keymap(mut self, keymap: Keymap) -> Self {
+        self.keymap = keymap;
+        self
+    }
+
+    /// Append one declarative application menu.
+    pub fn menu(mut self, menu: Menu) -> Self {
+        self.menus.push(menu);
+        self
+    }
+
+    /// Replace the complete declarative application menu set.
+    pub fn menus(mut self, menus: impl IntoIterator<Item = Menu>) -> Self {
+        self.menus = menus.into_iter().collect();
+        self
+    }
+
+    /// Install or replace one main-thread application-global value before launch.
+    pub fn global<G: Global>(self, global: G) -> Self {
+        self.globals.set(global);
+        self
+    }
+
+    /// Handle URLs supplied by the operating system, including `file:` URLs.
+    pub fn on_open_urls(
+        mut self,
+        callback: impl FnMut(OpenUrls, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.open_urls = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle a Dock/Finder request to reopen an already-running macOS application.
+    pub fn on_reopen(mut self, callback: impl FnMut(bool, &mut EventContext) + 'static) -> Self {
+        self.application_callbacks.reopen = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle the operating system waking from sleep.
+    pub fn on_system_wake(mut self, callback: impl FnMut(&mut EventContext) + 'static) -> Self {
+        self.application_callbacks.system_wake = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle a native keyboard-layout change.
+    pub fn on_keyboard_layout_change(
+        mut self,
+        callback: impl FnMut(&KeyboardLayout, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.keyboard_layout = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle activation of a delivered system notification or action button.
+    pub fn on_system_notification_response(
+        mut self,
+        callback: impl FnMut(SystemNotificationResponse, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.system_notification_response = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle a registered system-wide keyboard shortcut when it is pressed.
+    pub fn on_global_shortcut(
+        mut self,
+        callback: impl FnMut(GlobalShortcutEvent, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.global_shortcut = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle arguments and the working directory forwarded by a later process.
+    pub fn on_second_instance(
+        mut self,
+        callback: impl FnMut(SecondInstanceEvent, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.second_instance = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle native system suspend, resume, lock-screen, and unlock-screen events.
+    pub fn on_power_event(
+        mut self,
+        callback: impl FnMut(PowerEvent, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.power_event = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle clicks, scrolling, and native menu actions from application tray icons.
+    pub fn on_tray_event(
+        mut self,
+        callback: impl FnMut(TrayEvent, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.tray_event = Some(Box::new(callback));
+        self
+    }
+
+    /// Run after a native window and its owned resources have been removed.
+    pub fn on_window_closed(
+        mut self,
+        callback: impl FnMut(WindowHandle, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.window_closed = Some(Box::new(callback));
+        self
+    }
+
+    /// Convert this windowless application into an externally pumped native event loop.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn into_runner(self) -> Result<AppRunner, AppError> {
+        let event_loop = EventLoop::with_user_event().build()?;
+        event_loop.set_control_flow(ControlFlow::Wait);
+        let root_window = WindowHandle::next();
+        let runtime = Runtime::new(
+            RuntimeStartup {
+                initial_window: None,
+                globals: self.globals,
+                keymap: self.keymap,
+                menus: self.menus,
+                assets: self.assets,
+                fonts: self.fonts,
+                application_callbacks: self.application_callbacks,
+                quit_mode: self.quit_mode,
+            },
+            event_loop.create_proxy(),
+        )?;
+        Ok(AppRunner {
+            event_loop,
+            runtime,
+            root_window,
+            root_window_pending: true,
+            status: AppRunStatus::Continue,
+        })
+    }
+}
+
+impl Default for Application {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -724,7 +964,7 @@ impl<V: View> App<V> {
         let root_window = initial_window.handle;
         let runtime = Runtime::new(
             RuntimeStartup {
-                initial_window,
+                initial_window: Some(initial_window),
                 globals: self.globals,
                 keymap: self.keymap,
                 menus: self.menus,
@@ -739,6 +979,7 @@ impl<V: View> App<V> {
             event_loop,
             runtime,
             root_window,
+            root_window_pending: false,
             status: AppRunStatus::Continue,
         })
     }
@@ -764,7 +1005,7 @@ impl<V: View> App<V> {
             event_loop.set_control_flow(ControlFlow::Wait);
             let mut runtime = Runtime::new(
                 RuntimeStartup {
-                    initial_window: WindowRequest::new(self.view, self.config),
+                    initial_window: Some(WindowRequest::new(self.view, self.config)),
                     globals: self.globals,
                     keymap: self.keymap,
                     menus: self.menus,

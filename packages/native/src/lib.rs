@@ -17,11 +17,11 @@ use napi::{
 };
 use napi_derive::napi;
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, AnchoredPopover, App as QuickGuiApp, AppConfig, AppRegion,
-    AppRunStatus, AppRunner, AppRunnerWaker, Color, CursorStyle, Element, ElementId, FollowMode,
-    FontWeight, IntoElement, ListAlignment, ListState, Markdown, MarkdownStyle, QuitMode,
-    TextAlign, TitleBarStyle, View, ViewContext, WindowBackgroundAppearance, WindowHandle, button,
-    div, text, text_area, text_input,
+    AccessibilityRole, AnchorPlacement, AnchoredPopover, AppConfig, AppRegion, AppRunStatus,
+    AppRunner, AppRunnerWaker, Application as QuickGuiApplication, Color, CursorStyle, Element,
+    ElementId, FollowMode, FontWeight, IntoElement, ListAlignment, ListState, Markdown,
+    MarkdownStyle, QuitMode, TextAlign, TitleBarStyle, View, ViewContext,
+    WindowBackgroundAppearance, WindowHandle, button, div, text, text_area, text_input,
 };
 
 mod dialog;
@@ -212,6 +212,7 @@ enum HostCommand {
     CreateWindow {
         app: u32,
         options: NativeWindowOptions,
+        initial_batch: Vec<u8>,
         reply: Arc<SyncReply<u32>>,
     },
     CreateAnchoredWindow {
@@ -219,6 +220,7 @@ enum HostCommand {
         parent: u32,
         anchor: u32,
         options: NativeWindowOptions,
+        initial_batch: Vec<u8>,
         reply: Arc<SyncReply<u32>>,
     },
     ApplyBatch {
@@ -263,9 +265,13 @@ enum HostCommand {
         command: system::SystemCommand,
         reply: Arc<SyncReply<system::SystemCommandResult>>,
     },
-    StartApp {
+    PrepareApp {
         app: u32,
         reply: Arc<SyncReply<()>>,
+    },
+    IsAppReady {
+        app: u32,
+        reply: Arc<SyncReply<bool>>,
     },
     DestroyApp {
         app: u32,
@@ -1111,6 +1117,7 @@ impl NativeListState {
 
 struct NativeView {
     window: u32,
+    handles: Option<Rc<RefCell<HashMap<WindowHandle, u32>>>>,
     tree: Rc<RefCell<NativeTree>>,
     events: EventQueue,
     markdown: Rc<RefCell<HashMap<u32, Markdown>>>,
@@ -1122,6 +1129,13 @@ struct NativeMenuAction(u32);
 
 impl View for NativeView {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let window = self.handles.as_ref().map_or(self.window, |handles| {
+            handles
+                .borrow()
+                .get(&cx.window_handle())
+                .copied()
+                .expect("a native binding view must retain its core window handle")
+        });
         let tree = self.tree.borrow();
         let mut markdown = self.markdown.borrow_mut();
         markdown.retain(|id, _| {
@@ -1144,7 +1158,7 @@ impl View for NativeView {
             root = root.children(node.children.iter().filter_map(|id| {
                 build_element(
                     *id,
-                    self.window,
+                    window,
                     &tree,
                     &self.events,
                     &mut markdown,
@@ -1155,7 +1169,6 @@ impl View for NativeView {
             }));
         }
         let events = Rc::clone(&self.events);
-        let window = self.window;
         let menu_action = cx.action_listener(
             ElementId::new(ROOT_ELEMENT_ID),
             move |_view, action: &NativeMenuAction, _cx| {
@@ -1771,15 +1784,36 @@ struct NativeWindowRuntime {
 }
 
 impl NativeWindowRuntime {
-    fn view(&self, window: u32, events: &EventQueue) -> NativeView {
+    fn view(
+        &self,
+        window: u32,
+        events: &EventQueue,
+        handles: &Rc<RefCell<HashMap<WindowHandle, u32>>>,
+    ) -> NativeView {
         NativeView {
             window,
+            handles: Some(Rc::clone(handles)),
             tree: Rc::clone(&self.tree),
             events: Rc::clone(events),
             markdown: Rc::clone(&self.markdown),
             lists: Rc::clone(&self.lists),
         }
     }
+}
+
+fn native_tree_from_initial_batch(batch: &[u8]) -> std::result::Result<NativeTree, String> {
+    if batch.is_empty() {
+        return Ok(NativeTree::default());
+    }
+    if batch.len() > MAX_BATCH_BYTES {
+        return Err(format!(
+            "initial mutation batch exceeds {MAX_BATCH_BYTES} bytes"
+        ));
+    }
+    let mutations = decode_batch(batch).map_err(|error| error.to_string())?;
+    let mut tree = NativeTree::default();
+    apply_mutations(&mut tree, mutations).map_err(|error| error.to_string())?;
+    Ok(tree)
 }
 
 struct NativeRuntime {
@@ -1815,7 +1849,11 @@ impl NativeRuntime {
         }
     }
 
-    fn create_window(&mut self, options: NativeWindowOptions) -> std::result::Result<u32, String> {
+    fn create_window(
+        &mut self,
+        options: NativeWindowOptions,
+        initial_batch: &[u8],
+    ) -> std::result::Result<u32, String> {
         self.sync_closed_windows();
         if self.windows.len() >= MAX_WINDOWS {
             return Err(format!(
@@ -1829,14 +1867,17 @@ impl NativeRuntime {
         let config = window_config(&options)?;
         let mut window = NativeWindowRuntime {
             config,
-            tree: Rc::new(RefCell::new(NativeTree::default())),
+            tree: Rc::new(RefCell::new(native_tree_from_initial_batch(initial_batch)?)),
             markdown: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
             handle: None,
         };
         if let Some(runner) = &mut self.runner {
             let handle = runner
-                .open_window(window.view(id, &self.events), window.config.clone())
+                .open_window(
+                    window.view(id, &self.events, &self.handles),
+                    window.config.clone(),
+                )
                 .map_err(|error| error.to_string())?;
             self.handles.borrow_mut().insert(handle, id);
             window.handle = Some(handle);
@@ -1851,6 +1892,7 @@ impl NativeRuntime {
         parent: u32,
         anchor: u32,
         options: NativeWindowOptions,
+        initial_batch: &[u8],
     ) -> std::result::Result<u32, String> {
         self.sync_closed_windows();
         if self.windows.len() >= MAX_WINDOWS {
@@ -1879,7 +1921,7 @@ impl NativeRuntime {
         let config = anchored_window_config(&options)?;
         let mut window = NativeWindowRuntime {
             config,
-            tree: Rc::new(RefCell::new(NativeTree::default())),
+            tree: Rc::new(RefCell::new(native_tree_from_initial_batch(initial_batch)?)),
             markdown: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
             handle: None,
@@ -1892,7 +1934,7 @@ impl NativeRuntime {
             .open_anchored_popup(
                 parent_handle,
                 ElementId::new(anchor as u64),
-                window.view(id, &self.events),
+                window.view(id, &self.events, &self.handles),
                 window.config.clone(),
             )
             .map_err(|error| error.to_string())?;
@@ -1903,23 +1945,23 @@ impl NativeRuntime {
         Ok(id)
     }
 
-    fn start(&mut self) -> std::result::Result<(), String> {
+    fn prepare(&mut self) -> std::result::Result<(), String> {
         if self.runner.is_some() {
-            return Ok(());
+            return self.finish_preparing();
         }
         let staged = self
             .window_order
             .iter()
             .filter_map(|id| {
-                self.windows
-                    .get(id)
-                    .map(|window| (*id, window.config.clone(), window.view(*id, &self.events)))
+                self.windows.get(id).map(|window| {
+                    (
+                        *id,
+                        window.config.clone(),
+                        window.view(*id, &self.events, &self.handles),
+                    )
+                })
             })
             .collect::<Vec<_>>();
-        let mut staged = staged.into_iter();
-        let Some((root_id, root_config, root_view)) = staged.next() else {
-            return Err("createWindow must be called before starting the application".to_owned());
-        };
         let handles = Rc::clone(&self.handles);
         let callback_handles = Rc::clone(&self.handles);
         let callback_events = Rc::clone(&self.events);
@@ -1933,8 +1975,7 @@ impl NativeRuntime {
         let power_events = Rc::clone(&self.events);
         let tray_events = Rc::clone(&self.events);
         let closed_windows = Rc::clone(&self.closed_windows);
-        let mut runner = QuickGuiApp::new(root_view)
-            .config(root_config)
+        let mut runner = QuickGuiApplication::new()
             .quit_mode(QuitMode::LastWindowClosed)
             .on_open_urls(move |urls, _cx| {
                 let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())
@@ -2107,9 +2148,6 @@ impl NativeRuntime {
             .into_runner()
             .map_err(|error| error.to_string())?;
         let mut mounted = Vec::with_capacity(self.windows.len());
-        let root_handle = runner.root_window();
-        handles.borrow_mut().insert(root_handle, root_id);
-        mounted.push((root_id, root_handle));
         for (id, config, view) in staged {
             let handle = match runner.open_window(view, config) {
                 Ok(handle) => handle,
@@ -2127,7 +2165,35 @@ impl NativeRuntime {
             }
         }
         self.runner = Some(runner);
-        Ok(())
+        self.finish_preparing()
+    }
+
+    fn finish_preparing(&mut self) -> std::result::Result<(), String> {
+        let runner = self
+            .runner
+            .as_mut()
+            .ok_or_else(|| "the QuickGUI application runner is unavailable".to_owned())?;
+        for _ in 0..8 {
+            if runner.is_ready() {
+                return Ok(());
+            }
+            match runner
+                .pump(Some(Duration::ZERO))
+                .map_err(|error| error.to_string())?
+            {
+                AppRunStatus::Continue => {}
+                AppRunStatus::Exited(code) => {
+                    return Err(format!(
+                        "the QuickGUI application exited with code {code} before becoming ready"
+                    ));
+                }
+            }
+        }
+        Err("the native QuickGUI application did not become ready".to_owned())
+    }
+
+    fn is_ready(&self) -> bool {
+        self.runner.as_ref().is_some_and(AppRunner::is_ready)
     }
 
     fn close_window(&mut self, window: u32) -> bool {
@@ -2494,9 +2560,16 @@ pub fn create_app() -> Result<u32> {
 }
 
 #[napi]
-pub fn create_window(app: u32, options: Option<NativeWindowOptions>) -> Result<u32> {
+pub fn create_window(
+    app: u32,
+    options: Option<NativeWindowOptions>,
+    initial_batch: Option<Buffer>,
+) -> Result<u32> {
     with_app_mut(app, |runtime| {
-        runtime.create_window(options.unwrap_or_default())
+        runtime.create_window(
+            options.unwrap_or_default(),
+            initial_batch.as_deref().unwrap_or_default(),
+        )
     })
 }
 
@@ -2506,9 +2579,15 @@ pub fn create_anchored_window(
     parent: u32,
     anchor: u32,
     options: Option<NativeWindowOptions>,
+    initial_batch: Option<Buffer>,
 ) -> Result<u32> {
     with_app_mut(app, |runtime| {
-        runtime.create_anchored_window(parent, anchor, options.unwrap_or_default())
+        runtime.create_anchored_window(
+            parent,
+            anchor,
+            options.unwrap_or_default(),
+            initial_batch.as_deref().unwrap_or_default(),
+        )
     })
 }
 
@@ -2565,7 +2644,17 @@ pub fn show_save_dialog(
 
 #[napi]
 pub fn start_app(app: u32) -> Result<()> {
-    with_app_mut(app, NativeRuntime::start)
+    prepare_app(app)
+}
+
+#[napi]
+pub fn prepare_app(app: u32) -> Result<()> {
+    with_app_mut(app, NativeRuntime::prepare)
+}
+
+#[napi]
+pub fn is_app_ready(app: u32) -> Result<bool> {
+    with_app_mut(app, |runtime| Ok(runtime.is_ready()))
 }
 
 /// Return `-1` while running or the non-negative native exit code after termination.
@@ -2579,7 +2668,7 @@ pub fn pump_app(app: u32, timeout_ms: Option<f64>) -> Result<i32> {
         let status = runtime
             .runner
             .as_mut()
-            .ok_or_else(|| "startApp must be called before pumpApp".to_owned())?
+            .ok_or_else(|| "prepareApp must be called before pumpApp".to_owned())?
             .pump(Some(Duration::from_secs_f64(timeout / 1_000.0)))
             .map_err(|error| error.to_string())?;
         runtime.sync_closed_windows();
@@ -2615,11 +2704,16 @@ pub fn create_hosted_app() -> Result<u32> {
 }
 
 #[napi]
-pub fn create_hosted_window(app: u32, options: Option<NativeWindowOptions>) -> Result<u32> {
+pub fn create_hosted_window(
+    app: u32,
+    options: Option<NativeWindowOptions>,
+    initial_batch: Option<Buffer>,
+) -> Result<u32> {
     let reply = Arc::new(SyncReply::new());
     HOST.enqueue(HostCommand::CreateWindow {
         app,
         options: options.unwrap_or_default(),
+        initial_batch: initial_batch.map_or_else(Vec::new, |batch| batch.to_vec()),
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
@@ -2632,6 +2726,7 @@ pub fn create_hosted_anchored_window(
     parent: u32,
     anchor: u32,
     options: Option<NativeWindowOptions>,
+    initial_batch: Option<Buffer>,
 ) -> Result<u32> {
     let reply = Arc::new(SyncReply::new());
     HOST.enqueue(HostCommand::CreateAnchoredWindow {
@@ -2639,6 +2734,7 @@ pub fn create_hosted_anchored_window(
         parent,
         anchor,
         options: options.unwrap_or_default(),
+        initial_batch: initial_batch.map_or_else(Vec::new, |batch| batch.to_vec()),
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
@@ -2745,8 +2841,24 @@ pub fn show_hosted_save_dialog(
 
 #[napi]
 pub fn start_hosted_app(app: u32) -> Result<()> {
+    prepare_hosted_app(app)
+}
+
+#[napi]
+pub fn prepare_hosted_app(app: u32) -> Result<()> {
     let reply = Arc::new(SyncReply::new());
-    HOST.enqueue(HostCommand::StartApp {
+    HOST.enqueue(HostCommand::PrepareApp {
+        app,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn is_hosted_app_ready(app: u32) -> Result<bool> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::IsAppReady {
         app,
         reply: Arc::clone(&reply),
     })
@@ -2834,13 +2946,14 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                 HostCommand::CreateWindow {
                     app,
                     options,
+                    initial_batch,
                     reply,
                 } => {
                     reply.complete(with_hosted_runtime(
                         active_app,
                         runtime.as_mut(),
                         app,
-                        |runtime| runtime.create_window(options),
+                        |runtime| runtime.create_window(options, &initial_batch),
                     ));
                 }
                 HostCommand::CreateAnchoredWindow {
@@ -2848,13 +2961,16 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                     parent,
                     anchor,
                     options,
+                    initial_batch,
                     reply,
                 } => {
                     reply.complete(with_hosted_runtime(
                         active_app,
                         runtime.as_mut(),
                         app,
-                        |runtime| runtime.create_anchored_window(parent, anchor, options),
+                        |runtime| {
+                            runtime.create_anchored_window(parent, anchor, options, &initial_batch)
+                        },
                     ));
                 }
                 HostCommand::ApplyBatch { app, window, batch } => {
@@ -2937,12 +3053,12 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                         |runtime| runtime.execute_system_command(command),
                     ));
                 }
-                HostCommand::StartApp { app, reply } => {
+                HostCommand::PrepareApp { app, reply } => {
                     let result = with_hosted_runtime(
                         active_app,
                         runtime.as_mut(),
                         app,
-                        NativeRuntime::start,
+                        NativeRuntime::prepare,
                     );
                     if result.is_ok() {
                         let waker = runtime
@@ -2953,6 +3069,14 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                         HOST.set_waker(waker);
                     }
                     reply.complete(result);
+                }
+                HostCommand::IsAppReady { app, reply } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| Ok(runtime.is_ready()),
+                    ));
                 }
                 HostCommand::DestroyApp { app, reply } => {
                     let result = if active_app == Some(app) && runtime.is_some() {
@@ -3094,6 +3218,23 @@ mod tests {
     }
 
     #[test]
+    fn initial_window_batch_is_committed_before_the_core_view_opens() {
+        let mut writer = BatchWriter::new();
+        writer.op(2);
+        writer.u32(1);
+        writer.string("Ready");
+        writer.op(6);
+        writer.u32(ROOT_NODE);
+        writer.u32(1);
+        writer.u32(NO_ANCHOR);
+
+        let tree = native_tree_from_initial_batch(&writer.finish()).unwrap();
+        assert_eq!(tree.revision, 1);
+        assert_eq!(tree.nodes[&ROOT_NODE].children, [1]);
+        assert_eq!(tree.nodes[&1].text.as_ref(), "Ready");
+    }
+
+    #[test]
     fn failed_cycle_does_not_mutate_the_committed_tree() {
         let mut tree = NativeTree::default();
         let mut setup = BatchWriter::new();
@@ -3150,6 +3291,7 @@ mod tests {
         let events = Rc::new(RefCell::new(VecDeque::new()));
         let view = NativeView {
             window: 3,
+            handles: None,
             tree: Rc::new(RefCell::new(tree)),
             events: Rc::clone(&events),
             markdown: Rc::new(RefCell::new(HashMap::new())),
@@ -3219,6 +3361,7 @@ mod tests {
         let lists = Rc::new(RefCell::new(HashMap::new()));
         let view = NativeView {
             window: 4,
+            handles: None,
             tree: Rc::new(RefCell::new(tree)),
             events: Rc::new(RefCell::new(VecDeque::new())),
             markdown: Rc::new(RefCell::new(HashMap::new())),

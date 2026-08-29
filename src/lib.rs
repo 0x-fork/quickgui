@@ -271,8 +271,8 @@ pub use quickgui_system::{
     MAX_UPDATE_SIGNATURE_BYTES, UpdateClient, default_update_target,
 };
 pub use runtime::{
-    App, AppConfig, AppError, ClickListener, ContextMenuListener, DismissListener, Drag,
-    DragListener, DropListener, FormInvalidListener, FormSubmitListener, GlobalShortcutEvent,
+    App, AppConfig, AppError, Application, ClickListener, ContextMenuListener, DismissListener,
+    Drag, DragListener, DropListener, FormInvalidListener, FormSubmitListener, GlobalShortcutEvent,
     HoverListener, InputListener, KeyDownListener, KeyUpListener, MAX_ACTION_LISTENERS_PER_WINDOW,
     MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW, MAX_GLOBAL_SHORTCUT_ACCELERATOR_BYTES,
     MAX_GLOBAL_SHORTCUTS, MAX_KEY_LISTENERS_PER_WINDOW, MAX_MOUSE_LISTENERS_PER_WINDOW,

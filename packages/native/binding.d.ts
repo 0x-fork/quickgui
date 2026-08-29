@@ -12,17 +12,17 @@ export declare function closeHostedWindow(app: number, window: number): boolean
 
 export declare function closeWindow(app: number, window: number): boolean
 
-export declare function createAnchoredWindow(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null): number
+export declare function createAnchoredWindow(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
 export declare function createApp(): number
 
-export declare function createHostedAnchoredWindow(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null): number
+export declare function createHostedAnchoredWindow(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
 export declare function createHostedApp(): number
 
-export declare function createHostedWindow(app: number, options?: NativeWindowOptions | undefined | null): number
+export declare function createHostedWindow(app: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
-export declare function createWindow(app: number, options?: NativeWindowOptions | undefined | null): number
+export declare function createWindow(app: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
 export declare function defaultUpdateTarget(): string
 
@@ -67,9 +67,13 @@ export interface HostedAppUpdate {
   exitCode?: number
 }
 
+export declare function isAppReady(app: number): boolean
+
 export declare function isAutoStartEnabled(options: NativeAutoStartOptions): Promise<boolean>
 
 export declare function isAutoStartSupported(): boolean
+
+export declare function isHostedAppReady(app: number): boolean
 
 export declare function isProtocolRegistered(options: NativeProtocolRegistrationOptions): Promise<boolean>
 
@@ -272,6 +276,10 @@ export declare function performHostedWindowAction(app: number, window: number, a
 export declare function performShellAction(app: number, request: number, action: string, value: string): void
 
 export declare function performWindowAction(app: number, window: number, action: string, value?: string | undefined | null): void
+
+export declare function prepareApp(app: number): void
+
+export declare function prepareHostedApp(app: number): void
 
 export declare function protocolVersion(): number
 

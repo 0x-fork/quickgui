@@ -1,24 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import { PropertyCode, QuickGuiEvent } from "@quickgui/native";
+import { app, PropertyCode, QuickGuiEvent, Window } from "@quickgui/native";
 import { createSignal, onCleanup } from "solid-js";
+import * as solid from "./index.ts";
 import {
-  App,
   Button,
   Input,
   Markdown,
   Text,
   View,
   VirtualList,
-  Window,
   createComponent,
   createElement,
+  createRenderer,
   createTextNode,
   insertNode,
-  render,
   setProp,
 } from "./index.ts";
 
 describe("Solid universal host", () => {
+  test("keeps native application APIs in @quickgui/native", () => {
+    expect("app" in solid).toBe(false);
+    expect("Window" in solid).toBe(false);
+    expect("Dialog" in solid).toBe(false);
+  });
+
   test("retains an unattached native tree without crossing N-API", () => {
     const parent = createElement("view");
     const child = createTextNode("hello");
@@ -31,48 +36,61 @@ describe("Solid universal host", () => {
     expect(parent.properties.size).toBe(2);
   });
 
-  test("flushes Solid 2 signal writes at the native event boundary", () => {
-    const root = createElement("view");
-    const dispose = render(() => {
-      const [count, setCount] = createSignal(0);
-      return createComponent(View, {
-        get children() {
-          return [
-            createComponent(Text, {
-              get children() {
-                return `Count: ${count()}`;
-              },
-            }),
-            createComponent(Button, {
-              onClick: () => setCount((value) => value + 1),
-              children: "Increment",
-            }),
-          ];
-        },
-      });
-    }, root);
+  test("flushes Solid 2 signal writes at the native event boundary", async () => {
+    await app.whenReady();
+    let renderedWindow: Window | undefined;
+    let eventWindow: Window | undefined;
+    const window = new Window({
+      renderer: createRenderer(() => {
+        renderedWindow = Window.getCurrentWindow();
+        const [count, setCount] = createSignal(0);
+        return createComponent(View, {
+          get children() {
+            return [
+              createComponent(Text, {
+                get children() {
+                  return `Count: ${count()}`;
+                },
+              }),
+              createComponent(Button, {
+                onClick: () => {
+                  eventWindow = Window.getCurrentWindow();
+                  setCount((value) => value + 1);
+                },
+                children: "Increment",
+              }),
+            ];
+          },
+        });
+      }),
+    });
 
-    const container = root.children[0]!;
+    const container = window.root.children[0]!;
     const count = container.children[0]!;
     const button = container.children[1]!;
+    expect(renderedWindow).toBe(window);
     expect(count.children[0]?.text).toBe("Count: 0");
 
-    button.listeners.get("click")!(new QuickGuiEvent("click", button));
+    window._dispatchEvent("click", button.id);
 
     expect(count.children[0]?.text).toBe("Count: 1");
-    dispose();
+    expect(eventWindow).toBe(window);
+    expect(() => Window.getCurrentWindow()).toThrow("while rendering or handling a window event");
+    window.close();
   });
 
-  test("disposes a mounted Solid root when its Window closes", () => {
-    const app = new App();
-    const window = new Window({ title: "Dispose test" });
+  test("disposes a mounted Solid root when its Window closes", async () => {
+    await app.whenReady();
     let cleaned = false;
-    const dispose = render(() => {
-      onCleanup(() => {
-        cleaned = true;
-      });
-      return createComponent(View, { children: "Mounted" });
-    }, window);
+    const window = new Window({
+      title: "Dispose test",
+      renderer: createRenderer(() => {
+        onCleanup(() => {
+          cleaned = true;
+        });
+        return createComponent(View, { children: "Mounted" });
+      }),
+    });
 
     expect(window.root.children).toHaveLength(1);
     window.close();
@@ -80,46 +98,43 @@ describe("Solid universal host", () => {
     expect(window.closed).toBe(true);
     expect(cleaned).toBe(true);
     expect(window.root.children).toHaveLength(0);
-    dispose();
-    app.destroy();
   });
 
-  test("commits shared signal writes before a secondary window root closes", () => {
-    const app = new App();
-    const mainWindow = new Window({ title: "Main" });
-    const secondaryWindow = new Window({ title: "Secondary" });
+  test("commits shared signal writes before a secondary window root closes", async () => {
+    await app.whenReady();
     const [value, setValue] = createSignal("before");
-    const disposeMain = render(
-      () =>
+    const mainWindow = new Window({
+      title: "Main",
+      renderer: createRenderer(() =>
         createComponent(Text, {
           get children() {
             return value();
           },
         }),
-      mainWindow,
-    );
-    const disposeSecondary = render(
-      () =>
-        createComponent(Button, {
+      ),
+    });
+    const secondaryWindow = new Window({
+      title: "Secondary",
+      renderer: createRenderer(() => {
+        const window = Window.getCurrentWindow();
+        return createComponent(Button, {
           onClick: () => {
             setValue("after");
-            secondaryWindow.close();
+            window.close();
           },
           children: "Save",
-        }),
-      secondaryWindow,
-    );
+        });
+      }),
+    });
 
     const text = mainWindow.root.children[0]!;
     const button = secondaryWindow.root.children[0]!;
     expect(text.children[0]?.text).toBe("before");
-    button.listeners.get("click")!(new QuickGuiEvent("click", button));
+    secondaryWindow._dispatchEvent("click", button.id);
 
     expect(secondaryWindow.closed).toBe(true);
     expect(text.children[0]?.text).toBe("after");
-    disposeSecondary();
-    disposeMain();
-    app.destroy();
+    mainWindow.close();
   });
 
   test("bridges controlled input values and exact native input and submit payloads", () => {

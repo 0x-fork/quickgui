@@ -6,6 +6,12 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### JavaScript tooling
 
+- Changed Solid window mounting to `new Window({ renderer: createRenderer(() => <App />) })`.
+  Applications now import native lifecycle APIs from `@quickgui/native` directly; the Solid
+  package no longer re-exports them. The Electron-style singleton `app` exposes `whenReady()`, the
+  CLI owns its application loop, and creating a window before readiness now throws explicitly.
+  Readiness comes from the new windowless Rust-core `Application`/`AppRunner` lifecycle, while
+  `Window.getCurrentWindow()` projects the core-routed render or event window.
 - Added `@quickgui/cli` project initialization, target-aware production builds, and a stable native
   development host. On macOS, development runs a signed `.app`, loads project TS/TSX on demand,
   restarts without repackaging on source edits, and keeps the prior app alive when a candidate

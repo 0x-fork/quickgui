@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@ai-sdk/deepseek": "3.0.35",
+    "@quickgui/native": "workspace:*",
     "@quickgui/solid": "workspace:*",
     "ai": "7.0.83",
     "solid-js": "2.0.0-rc.3",

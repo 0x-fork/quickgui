@@ -4,12 +4,21 @@
 
 ## Application and window ownership
 
+The windowless `Application` builder is the core lifecycle boundary for embedders. Its
+`AppRunner` becomes ready on the first native event-loop turn without requiring a placeholder
+window, and `open_window` reserves a stable handle before native creation. `App::new(view)` remains
+the Rust convenience API that supplies the first view up front. Closing an empty application does
+not accidentally trigger `LastWindowClosed`; that policy begins after a native window has opened.
+
 The application runtime owns a registry keyed by Winit's native `WindowId` plus a second map from
 public `WindowHandle` values. A handle is allocated before native creation, so an event callback
 can open a window and immediately retain an identity for later focus, invalidation, or close
 commands. Winit serializes callbacks; the runtime temporarily activates only the target entry while
 delivering one event, then returns it to the registry. That keeps the established single-window hot
 path direct without sharing pointer, keyboard, focus, scheduling, or cache state between windows.
+Rust views and listeners read this identity from `ViewContext::window_handle` and
+`EventContext::window_handle`; language bindings project those core-routed handles into their own
+callback context rather than choosing a window from focus or creation order.
 
 Every entry owns a type-erased `View` boundary, but its listener callbacks downcast back to the
 original concrete view type before application code runs. This allows one application to host

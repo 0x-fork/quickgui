@@ -160,13 +160,20 @@ test("project initialization renders a complete Solid scaffold", async () => {
   expect(JSON.parse(readFileSync(join(project, "package.json"), "utf8"))).toMatchObject({
     name: "sample-app",
     scripts: { dev: "quickgui dev", build: "quickgui build" },
+    dependencies: {
+      "@quickgui/native": "^0.0.1",
+      "@quickgui/solid": "^0.0.1",
+    },
   });
   expect(readFileSync(join(project, "quickgui.config.ts"), "utf8")).toContain(
     'identifier: "com.example.sample-app"',
   );
-  expect(readFileSync(join(project, "src/app.tsx"), "utf8")).toContain(
-    'from "@quickgui/solid"',
-  );
+  const applicationSource = readFileSync(join(project, "src/app.tsx"), "utf8");
+  expect(applicationSource).toContain('from "@quickgui/native"');
+  expect(applicationSource).toContain('from "@quickgui/solid"');
+  expect(applicationSource).toContain("await app.whenReady()");
+  expect(applicationSource).toContain("renderer: createRenderer(");
+  expect(applicationSource).not.toContain("app.run()");
   expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".quickgui");
   expect(readFileSync(join(project, "README.md"), "utf8")).not.toContain("{{");
 });

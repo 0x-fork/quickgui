@@ -3,9 +3,10 @@
 QuickGUI includes an experimental Bun host split into two unstyled packages:
 
 - `@quickgui/native` owns the N-API boundary, application loop, per-window retained trees, binary
-  mutation batches, and window-routed event queue.
+  mutation batches, window-routed event queue, and renderer-owned `Window` lifecycle.
 - `@quickgui/solid` owns Solid 2 JSX compilation, fine-grained reactive updates, and the host
-  components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, and `VirtualList`.
+  components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, and `VirtualList`, plus the
+  `createRenderer` adapter passed to a native `Window`.
 
 The renderer does not use a webview or virtual DOM. Solid updates the affected retained native
 nodes, and one binary batch crosses N-API before QuickGUI invalidates the WGPU window.
@@ -24,11 +25,9 @@ process only after its first native window is ready. The CLI owns the Solid comp
 applications do not need a Bun preload or a special start command.
 
 ```tsx
-import { App, Button, Dialog, Text, View, Window, render, type NativeNode } from "@quickgui/solid";
+import { app, Dialog, type NativeNode, Window } from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
-
-const app = new App();
-const mainWindow = new Window({ title: "Counter", width: 480, height: 320 });
 
 function Counter() {
   const [count, setCount] = createSignal(0);
@@ -51,24 +50,48 @@ function Counter() {
   );
 }
 
-render(() => <Counter />, mainWindow);
-await app.run();
+await app.whenReady();
+const mainWindow = new Window({
+  title: "Counter",
+  width: 480,
+  height: 320,
+  renderer: createRenderer(() => <Counter />),
+});
 ```
 
-`App` establishes the application context for its JavaScript Worker while the native host owns the
-platform event loop. Window configuration and rendered state belong to `Window`. Constructing a `Window` works
-both before and after `run` starts, so an event handler can open another independent native window
-without creating another application runtime:
+The singleton `app` establishes the application context for its JavaScript Worker while the CLI
+host owns the platform event loop. Applications depend on both packages directly: lifecycle,
+platform APIs, and
+`Window` come from `@quickgui/native`; Solid components and `createRenderer` come from
+`@quickgui/solid`. Await `app.whenReady()` before constructing the first window; constructing one
+earlier throws instead of silently staging it. The native application loop is ready when that
+promise resolves, so the window begins opening immediately; application code does not call
+`app.run()`. The renderer's initial mutation batch is committed in Rust before native creation, so
+the first visible frame cannot race an empty Solid tree. Windows constructed later from event
+handlers follow the same path:
 
 ```tsx
 function openSettings() {
-  const settings = new Window({ title: "Settings", width: 520, height: 420 });
-  render(() => <Settings close={() => settings.close()} />, settings);
+  new Window({
+    title: "Settings",
+    width: 520,
+    height: 420,
+    renderer: createRenderer(() => {
+      const window = Window.getCurrentWindow();
+      return <Settings close={() => window.close()} />;
+    }),
+  });
 }
 ```
 
-Closing a `Window` automatically disposes every Solid root mounted into it. Closing the last window
-ends the current JavaScript host run.
+Closing a `Window` automatically disposes its Solid renderer root. Closing the last window ends the
+current JavaScript host run.
+
+`Window.getCurrentWindow()` returns the window whose renderer or native event callback is running.
+Read it during component setup and retain the result for asynchronous work; it intentionally throws
+outside window-bound rendering or event dispatch instead of guessing from focus or creation order.
+The binding projects the same identity exposed by Rust's `ViewContext::window_handle` and
+`EventContext::window_handle`.
 
 Use the `Dialog` namespace for operating-system prompts. Passing a `Window` first attaches a native
 sheet; omit it to present application-modal UI. Alert dialogs resolve with the zero-based index of
@@ -137,15 +160,18 @@ let trigger: NativeNode | undefined;
 
 <Button ref={(node) => { trigger = node; }} onClick={() => {
   if (!trigger) return;
-  const popup = new Window({
+  new Window({
     title: "Provider settings",
     anchor: trigger,
     width: 420,
     height: 280,
     placement: "bottom-end",
     gap: 8,
+    renderer: createRenderer(() => {
+      const window = Window.getCurrentWindow();
+      return <ProviderSettings close={() => window.close()} />;
+    }),
   });
-  render(() => <ProviderSettings close={() => popup.close()} />, popup);
 }}>
   Provider settings
 </Button>

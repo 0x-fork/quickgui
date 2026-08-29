@@ -154,6 +154,7 @@ import type {
 } from "./system.ts";
 
 export type WindowCloseListener = (window: Window) => void;
+export type WindowRenderer = (window: Window) => () => void;
 export type PopupPlacement =
   | "top-start"
   | "top"
@@ -169,6 +170,7 @@ export type PopupPlacement =
   | "right-end";
 
 export interface WindowOptions {
+  renderer: WindowRenderer;
   title?: string;
   width?: number;
   height?: number;
@@ -194,6 +196,8 @@ export interface RunOptions {
 }
 
 export interface AppEventMap {
+  ready: undefined;
+  quit: { exitCode: number };
   openUrls: readonly string[];
   reopen: { hasVisibleWindows: boolean };
   systemWake: undefined;
@@ -212,13 +216,24 @@ type PendingDialog = {
 };
 
 let activeApp: App | undefined;
+let currentWindow: Window | undefined;
 const hostedRuntime = process.env.QUICKGUI_APP_WORKER === "1";
+
+function withCurrentWindow<T>(window: Window, callback: () => T): T {
+  const previous = currentWindow;
+  currentWindow = window;
+  try {
+    return callback();
+  } finally {
+    currentWindow = previous;
+  }
+}
 
 configureSystemContext(
   () => {
     const app = activeApp;
     if (!app) throw new Error("create a QuickGUI App before using a native system API");
-    app.start();
+    app._assertReady();
     return { appId: app.nativeId, hosted: hostedRuntime };
   },
   (window) => {
@@ -228,7 +243,7 @@ configureSystemContext(
     if (!resolved || resolved.closed || app.windows.get(resolved.nativeId) !== resolved) {
       throw new Error("a native window API requires an open QuickGUI Window");
     }
-    app.start();
+    app._assertReady();
     return {
       context: { appId: app.nativeId, hosted: hostedRuntime },
       window: resolved,
@@ -243,18 +258,18 @@ if (nativeProtocolVersion !== PROTOCOL_VERSION) {
   );
 }
 
-export class App {
+class App {
   readonly nativeId: number;
   readonly windows = new Map<number, Window>();
-  #started = false;
   #running = false;
   #destroyed = false;
+  readonly #readyPromise: Promise<void>;
   #nextDialogRequest = 1;
   readonly #pendingDialogs = new Map<number, PendingDialog>();
   #singleInstanceIdentifier: string | undefined;
   readonly #appEventListeners = new Map<
     keyof AppEventMap,
-    Set<(payload: unknown) => void>
+    Set<(payload: unknown) => unknown>
   >();
 
   constructor() {
@@ -263,6 +278,26 @@ export class App {
     }
     this.nativeId = hostedRuntime ? binding.createHostedApp() : binding.createApp();
     activeApp = this;
+    this.#readyPromise = Promise.resolve().then(() => {
+      this.#assertAlive();
+      if (hostedRuntime) binding.prepareHostedApp(this.nativeId);
+      else binding.prepareApp(this.nativeId);
+      if (!this.isReady()) {
+        throw new Error("the native QuickGUI application did not become ready");
+      }
+      this.#emitAppEvent("ready", undefined);
+    });
+  }
+
+  isReady(): boolean {
+    this.#assertAlive();
+    return hostedRuntime
+      ? binding.isHostedAppReady(this.nativeId)
+      : binding.isAppReady(this.nativeId);
+  }
+
+  whenReady(): Promise<void> {
+    return this.#readyPromise;
   }
 
   flush(): void {
@@ -270,17 +305,9 @@ export class App {
     for (const window of this.windows.values()) window.flush();
   }
 
-  start(): void {
-    this.#assertAlive();
-    if (this.#started) return;
-    this.flush();
-    if (hostedRuntime) binding.startHostedApp(this.nativeId);
-    else binding.startApp(this.nativeId);
-    this.#started = true;
-  }
-
   pump(sliceMs = 16): number {
-    this.start();
+    this._assertReady();
+    this.flush();
     return this.#finishPump(binding.pumpApp(this.nativeId, sliceMs));
   }
 
@@ -335,24 +362,33 @@ export class App {
   async run(options: RunOptions = {}): Promise<number> {
     if (this.#running) throw new Error("this QuickGUI app is already running");
     this.#running = true;
+    let exitCode: number | undefined;
     try {
-      this.start();
+      await this.whenReady();
       if (hostedRuntime) {
         for (;;) {
           const update = await binding.waitForHostedEvents(this.nativeId);
           this.#dispatchNativeEvents(update.events);
           this.flush();
           if (update.exitCode !== undefined && update.exitCode !== null) {
-            return update.exitCode;
+            exitCode = update.exitCode;
+            break;
           }
         }
+      } else {
+        const sliceMs = Math.max(0, Math.min(options.sliceMs ?? 16, 1_000));
+        for (;;) {
+          const nextExitCode = this.pump(sliceMs);
+          if (nextExitCode >= 0) {
+            exitCode = nextExitCode;
+            break;
+          }
+          await Bun.sleep(0);
+        }
       }
-      const sliceMs = Math.max(0, Math.min(options.sliceMs ?? 16, 1_000));
-      for (;;) {
-        const exitCode = this.pump(sliceMs);
-        if (exitCode >= 0) return exitCode;
-        await Bun.sleep(0);
-      }
+      if (exitCode === undefined) throw new Error("the QuickGUI app exited without a status code");
+      await this.#emitAppEventAndWait("quit", { exitCode });
+      return exitCode;
     } finally {
       this.#running = false;
       this.releaseSingleInstanceLock();
@@ -367,7 +403,7 @@ export class App {
       }
       return true;
     }
-    this.start();
+    this._assertReady();
     const acquired = hostedRuntime
       ? binding.requestHostedSingleInstanceLock(this.nativeId, identifier)
       : binding.requestSingleInstanceLock(this.nativeId, identifier);
@@ -385,7 +421,7 @@ export class App {
   /** Request an orderly native shutdown. Returns false after shutdown already began. */
   quit(): boolean {
     this.#assertAlive();
-    this.start();
+    this._assertReady();
     return hostedRuntime
       ? binding.exitHostedApp(this.nativeId)
       : binding.exitApp(this.nativeId);
@@ -474,9 +510,25 @@ export class App {
     for (const listener of this.#appEventListeners.get(type) ?? []) listener(payload);
   }
 
+  async #emitAppEventAndWait<K extends keyof AppEventMap>(
+    type: K,
+    payload: AppEventMap[K],
+  ): Promise<void> {
+    await Promise.all(
+      [...(this.#appEventListeners.get(type) ?? [])].map((listener) => listener(payload)),
+    );
+  }
+
   _registerWindow(window: Window): void {
     this.#assertAlive();
     this.windows.set(window.nativeId, window);
+  }
+
+  _assertReady(): void {
+    this.#assertAlive();
+    if (!this.isReady()) {
+      throw new Error("await app.whenReady() before using the native QuickGUI application");
+    }
   }
 
   _closeWindow(window: Window): void {
@@ -651,13 +703,27 @@ export class Window {
   readonly nodes = new Map<number, NativeNode>();
   #batch = new MutationBatch();
   #flushScheduled = false;
+  #nativeReady = false;
   #closed = false;
   readonly #closeListeners = new Set<WindowCloseListener>();
   readonly #mountDisposers = new Set<() => void>();
 
-  constructor(options: WindowOptions = {}) {
+  /** Return the Window whose renderer or native event callback is currently executing. */
+  static getCurrentWindow(): Window {
+    if (!currentWindow) {
+      throw new Error(
+        "Window.getCurrentWindow() must be called while rendering or handling a window event",
+      );
+    }
+    return currentWindow;
+  }
+
+  constructor(options: WindowOptions) {
     const app = activeApp;
-    if (!app) throw new Error("create a QuickGUI App before creating a Window");
+    if (!app) throw new Error("the QuickGUI app is unavailable");
+    if (!app.isReady()) {
+      throw new Error("await app.whenReady() before creating a QuickGUI Window");
+    }
     const nativeOptions: binding.NativeWindowOptions = {};
     if (options.title !== undefined) nativeOptions.title = options.title;
     if (options.width !== undefined) nativeOptions.width = options.width;
@@ -682,36 +748,53 @@ export class Window {
     if (options.acceptsKeyFocus !== undefined) {
       nativeOptions.popupAcceptsKeyFocus = options.acceptsKeyFocus;
     }
-    this.app = app;
-    if (options.anchor) {
-      const parent = options.anchor.host;
-      if (!parent || parent.closed || !options.anchor.materialized) {
-        throw new Error("an anchored Window requires a mounted node in an open parent Window");
-      }
-      parent.flush();
-      this.nativeId = hostedRuntime
-        ? binding.createHostedAnchoredWindow(
-            app.nativeId,
-            parent.nativeId,
-            options.anchor.id,
-            nativeOptions,
-          )
-        : binding.createAnchoredWindow(
-            app.nativeId,
-            parent.nativeId,
-            options.anchor.id,
-            nativeOptions,
-          );
-    } else {
-      this.nativeId = hostedRuntime
-        ? binding.createHostedWindow(app.nativeId, nativeOptions)
-        : binding.createWindow(app.nativeId, nativeOptions);
+    const parent = options.anchor?.host;
+    if (
+      options.anchor &&
+      (!parent || parent.closed || !options.anchor.materialized)
+    ) {
+      throw new Error("an anchored Window requires a mounted node in an open parent Window");
     }
+    parent?.flush();
+    this.app = app;
     this.root = new NativeNode(NativeNodeTag.View, "", ROOT_NODE_ID);
     this.root.host = this;
     this.root.materialized = true;
     this.nodes.set(ROOT_NODE_ID, this.root);
-    app._registerWindow(this);
+    try {
+      const dispose = withCurrentWindow(this, () => options.renderer(this));
+      if (typeof dispose !== "function") {
+        throw new TypeError("a QuickGUI Window renderer must return a dispose function");
+      }
+      this._trackMount(dispose);
+      const initialBatch = this.#takePendingBatch();
+      if (options.anchor) {
+        this.nativeId = hostedRuntime
+          ? binding.createHostedAnchoredWindow(
+              app.nativeId,
+              parent!.nativeId,
+              options.anchor.id,
+              nativeOptions,
+              initialBatch,
+            )
+          : binding.createAnchoredWindow(
+              app.nativeId,
+              parent!.nativeId,
+              options.anchor.id,
+              nativeOptions,
+              initialBatch,
+            );
+      } else {
+        this.nativeId = hostedRuntime
+          ? binding.createHostedWindow(app.nativeId, nativeOptions, initialBatch)
+          : binding.createWindow(app.nativeId, nativeOptions, initialBatch);
+      }
+      this.#nativeReady = true;
+      app._registerWindow(this);
+    } catch (error) {
+      this._didClose();
+      throw error;
+    }
   }
 
   get closed(): boolean {
@@ -797,7 +880,7 @@ export class Window {
   }
 
   flush(): number | undefined {
-    if (this.#closed) return undefined;
+    if (this.#closed || !this.#nativeReady) return undefined;
     this.#flushScheduled = false;
     if (this.#batch.empty) return undefined;
     const batch = this.#batch;
@@ -808,21 +891,30 @@ export class Window {
       : binding.applyBatch(this.app.nativeId, this.nativeId, bytes);
   }
 
+  #takePendingBatch() {
+    this.#flushScheduled = false;
+    const batch = this.#batch;
+    this.#batch = new MutationBatch();
+    return batch.finish();
+  }
+
   _dispatchEvent(type: NativeEventType, targetId: number, value?: string): void {
-    const target = this.nodes.get(targetId);
-    if (!target) return;
-    const quickGuiEvent = new QuickGuiEvent(type, target, value);
-    if (type === "mouseenter" || type === "mouseleave") {
-      target.listeners.get(type)?.(quickGuiEvent);
-      return;
-    }
-    let current: NativeNode | undefined = target;
-    while (current) {
-      quickGuiEvent.currentTarget = current;
-      current.listeners.get(type)?.(quickGuiEvent);
-      if (quickGuiEvent.propagationStopped) break;
-      current = current.parent;
-    }
+    withCurrentWindow(this, () => {
+      const target = this.nodes.get(targetId);
+      if (!target) return;
+      const quickGuiEvent = new QuickGuiEvent(type, target, value);
+      if (type === "mouseenter" || type === "mouseleave") {
+        target.listeners.get(type)?.(quickGuiEvent);
+        return;
+      }
+      let current: NativeNode | undefined = target;
+      while (current) {
+        quickGuiEvent.currentTarget = current;
+        current.listeners.get(type)?.(quickGuiEvent);
+        if (quickGuiEvent.propagationStopped) break;
+        current = current.parent;
+      }
+    });
   }
 
   _didClose(): void {
@@ -960,3 +1052,6 @@ export const Dialog = Object.freeze({
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
+
+export type Application = App;
+export const app = new App();
