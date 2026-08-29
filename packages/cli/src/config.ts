@@ -7,12 +7,23 @@ import { parseTarget, type QuickGuiTarget } from "./targets.ts";
 
 export type { QuickGuiTarget } from "./targets.ts";
 
+export interface MacOSNotarizationConfig {
+  /** Profile created with `xcrun notarytool store-credentials`. */
+  keychainProfile: string;
+  /** Optional non-default Keychain containing the profile. */
+  keychain?: string;
+}
+
 export interface MacOSConfig {
   minimumSystemVersion?: string;
   category?: string;
   icon?: string;
   signingIdentity?: string;
   entitlements?: string;
+  /** Mounted disk image title. `create-dmg` limits this to 27 characters. */
+  dmgTitle?: string;
+  /** Submit the production DMG to Apple's notary service and staple its ticket. */
+  notarization?: MacOSNotarizationConfig;
 }
 
 export interface WindowsConfig {
@@ -103,6 +114,7 @@ export function resolveConfig(
   const windows = objectOrEmpty(input.windows, "windows");
   const icon = optionalString(macos.icon, "macos.icon", 1_024);
   const entitlements = optionalString(macos.entitlements, "macos.entitlements", 1_024);
+  const notarization = resolveMacOSNotarization(macos.notarization, projectRoot);
   const windowsIcon = optionalString(windows.icon, "windows.icon", 1_024);
 
   return {
@@ -127,6 +139,10 @@ export function resolveConfig(
         ? { signingIdentity: String(macos.signingIdentity) }
         : {}),
       ...(entitlements ? { entitlements: resolveRelative(projectRoot, entitlements) } : {}),
+      ...(optionalString(macos.dmgTitle, "macos.dmgTitle", 27)
+        ? { dmgTitle: String(macos.dmgTitle) }
+        : {}),
+      ...(notarization ? { notarization } : {}),
     },
     windows: {
       hideConsole: optionalBoolean(windows.hideConsole, "windows.hideConsole") ?? true,
@@ -143,6 +159,24 @@ export function resolveConfig(
     },
     projectRoot: resolve(projectRoot),
     configPath: resolve(configPath),
+  };
+}
+
+function resolveMacOSNotarization(
+  value: unknown,
+  projectRoot: string,
+): MacOSNotarizationConfig | undefined {
+  if (value === undefined) return undefined;
+  const notarization = objectOrEmpty(value, "macos.notarization");
+  const keychainProfile = requiredString(
+    notarization.keychainProfile,
+    "macos.notarization.keychainProfile",
+    512,
+  );
+  const keychain = optionalString(notarization.keychain, "macos.notarization.keychain", 1_024);
+  return {
+    keychainProfile,
+    ...(keychain ? { keychain: resolveRelative(projectRoot, keychain) } : {}),
   };
 }
 

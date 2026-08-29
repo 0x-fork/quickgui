@@ -1,5 +1,6 @@
 export type {
   MacOSConfig,
+  MacOSNotarizationConfig,
   QuickGuiConfig,
   QuickGuiTarget,
   WindowsConfig,

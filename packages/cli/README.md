@@ -30,15 +30,19 @@ AppKit/Winit application state is process-owned.
 ## Production builds
 
 `quickgui build` compiles the application, Solid renderer, Bun runtime, and target N-API addon into
-a self-contained executable. A macOS target is wrapped in a signed `.app` under
-`dist/<target>/`.
+a self-contained executable. A production macOS target emits a signed `.app` and a versioned `.dmg`
+created with `create-dmg` under `dist/<target>/`; disk-image creation requires Node.js 20 or later.
 
 ```console
 bun run build --target darwin-arm64
 bun run build --target windows-x64
+bun run build --sign "Developer ID Application: Example (TEAMID)" --notarize quickgui-notary
 ```
 
 A target build requires the installed `@quickgui/native` package to contain that target's addon.
+`--notarize` names credentials previously stored with `xcrun notarytool store-credentials`; the CLI
+waits for acceptance, staples the DMG, and validates the ticket. The same profile can be configured
+as `macos.notarization.keychainProfile`.
 
 ## Configuration
 
@@ -55,6 +59,8 @@ export default defineConfig({
   macos: {
     icon: "assets/AppIcon.icns",
     minimumSystemVersion: "13.0",
+    signingIdentity: "Developer ID Application: Example (TEAMID)",
+    notarization: { keychainProfile: "quickgui-notary" },
   },
 });
 ```

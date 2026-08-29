@@ -27,6 +27,7 @@ export type ParsedCliCommand =
       target?: QuickGuiTarget;
       outDir?: string;
       signingIdentity?: string;
+      notarizationProfile?: string;
     };
 
 interface OptionSpec {
@@ -109,11 +110,13 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       "--target": { key: "target", value: true },
       "--out-dir": { key: "outDir", value: true },
       "--sign": { key: "signingIdentity", value: true },
+      "--notarize": { key: "notarizationProfile", value: true },
     });
     rejectPositionals(parsed, "quickgui build");
     const target = stringOption(parsed, "target");
     const outDir = stringOption(parsed, "outDir");
     const signingIdentity = stringOption(parsed, "signingIdentity");
+    const notarizationProfile = stringOption(parsed, "notarizationProfile");
     return {
       command: "build",
       project: stringOption(parsed, "project") ?? ".",
@@ -121,6 +124,7 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       ...(target ? { target: parseTarget(target) } : {}),
       ...(outDir ? { outDir } : {}),
       ...(signingIdentity ? { signingIdentity } : {}),
+      ...(notarizationProfile ? { notarizationProfile } : {}),
     };
   }
 

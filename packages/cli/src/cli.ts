@@ -48,8 +48,12 @@ async function runBuild(
     target,
     ...(command.outDir ? { outDir: command.outDir } : {}),
     ...(command.signingIdentity ? { signingIdentity: command.signingIdentity } : {}),
+    ...(command.notarizationProfile
+      ? { notarization: { keychainProfile: command.notarizationProfile } }
+      : {}),
   });
   console.log(`[quickgui] Created ${result.artifactPath}`);
+  if (result.dmgPath) console.log(`[quickgui] Created ${result.dmgPath}`);
   return 0;
 }
 
@@ -92,6 +96,7 @@ Options:
                             linux-x64, windows-arm64, or windows-x64
   --out-dir <directory>      Output directory override
   --sign <identity>          macOS signing identity (default: ad-hoc)
+  --notarize <profile>       Notary Keychain profile for the macOS DMG
   -h, --help                 Show this help`;
   }
   return `QuickGUI CLI ${CLI_VERSION}

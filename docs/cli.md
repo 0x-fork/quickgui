@@ -68,12 +68,28 @@ Development runs only the host architecture. Use `build --target` to cross-compi
 quickgui build
 quickgui build --target darwin-arm64
 quickgui build --target windows-x64 --out-dir artifacts
+quickgui build --sign "Developer ID Application: Example (TEAMID)" --notarize quickgui-notary
 ```
 
 Production compilation embeds the application, Solid runtime, Bun runtime, and selected N-API
-addon. macOS output is a signed `.app`; Linux and Windows output a native executable. Ad-hoc signing
-is the macOS default. Pass `--sign <identity>` or set `macos.signingIdentity` for a distributable
-identity. Notarization and installer generation remain release-pipeline responsibilities.
+addon. macOS output includes both a signed `.app` and a versioned `.dmg` created with
+[`create-dmg`](https://github.com/sindresorhus/create-dmg); Linux and Windows output a native
+executable. Building the disk image requires Node.js 20 or later. Ad-hoc app signing is the macOS
+default, while a DMG built with a real signing identity is timestamped and signed with the same
+identity.
+
+Set `macos.notarization` or pass `--notarize <profile>` to submit the DMG with `notarytool --wait`,
+then staple and validate the accepted ticket. The profile must already exist in the Keychain:
+
+```console
+xcrun notarytool store-credentials quickgui-notary \
+  --apple-id developer@example.com \
+  --team-id TEAMID
+```
+
+Notarization requires a Developer ID signing identity; QuickGUI rejects an ad-hoc notarization
+attempt before compiling the application. Development builds remain `.app`-only and never create
+or notarize a DMG.
 
 Recognized targets are `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`,
 `windows-arm64`, and `windows-x64`. A build is available only when the installed
@@ -99,8 +115,13 @@ export default defineConfig({
     icon: "assets/AppIcon.icns",
     minimumSystemVersion: "13.0",
     category: "public.app-category.developer-tools",
-    signingIdentity: "-",
+    signingIdentity: "Developer ID Application: Example (TEAMID)",
     entitlements: "Entitlements.plist",
+    dmgTitle: "My App",
+    notarization: {
+      keychainProfile: "quickgui-notary",
+      // keychain: "ci.keychain-db", // Optional non-default Keychain.
+    },
   },
   windows: {
     icon: "assets/app.ico",

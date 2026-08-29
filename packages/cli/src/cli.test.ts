@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { parseCliArgs } from "./args.ts";
-import { macInfoPlist, nativeExports } from "./build.ts";
+import {
+  macDmgFilename,
+  macInfoPlist,
+  macNotarytoolArguments,
+  nativeExports,
+} from "./build.ts";
 import { resolveConfig } from "./config.ts";
 import { ActiveProcessMonitor } from "./dev.ts";
 import { initProject } from "./init.ts";
@@ -35,13 +40,23 @@ describe("CLI arguments", () => {
       launch: false,
     });
     expect(
-      parseCliArgs(["build", "--project", "demo", "--out-dir=artifacts", "--sign", "-"]),
+      parseCliArgs([
+        "build",
+        "--project",
+        "demo",
+        "--out-dir=artifacts",
+        "--sign",
+        "Developer ID Application: Example",
+        "--notarize",
+        "quickgui-notary",
+      ]),
     ).toEqual({
       command: "build",
       project: "demo",
       configFile: "quickgui.config.ts",
       outDir: "artifacts",
-      signingIdentity: "-",
+      signingIdentity: "Developer ID Application: Example",
+      notarizationProfile: "quickgui-notary",
     });
   });
 
@@ -90,6 +105,13 @@ describe("project configuration", () => {
         entry: "ui/main.tsx",
         resources: ["assets"],
         protocols: ["QuickGUI", "quickgui+preview", "quickgui"],
+        macos: {
+          dmgTitle: "Great App",
+          notarization: {
+            keychainProfile: "quickgui-notary",
+            keychain: "ci.keychain-db",
+          },
+        },
       },
       root,
     );
@@ -98,6 +120,11 @@ describe("project configuration", () => {
     expect(config.resources).toEqual([join(root, "assets")]);
     expect(config.protocols).toEqual(["quickgui", "quickgui+preview"]);
     expect(config.macos.minimumSystemVersion).toBe("13.0");
+    expect(config.macos.dmgTitle).toBe("Great App");
+    expect(config.macos.notarization).toEqual({
+      keychainProfile: "quickgui-notary",
+      keychain: join(root, "ci.keychain-db"),
+    });
   });
 
   test("rejects an invalid bundle identifier", () => {
@@ -114,6 +141,50 @@ describe("project configuration", () => {
       ),
     ).toThrow("Invalid URL scheme");
   });
+
+  test("validates macOS DMG and notarization configuration", () => {
+    expect(() =>
+      resolveConfig(
+        {
+          name: "Bad",
+          identifier: "com.example.bad",
+          macos: { dmgTitle: "This disk image title is much too long" },
+        },
+        temporaryRoot(),
+      ),
+    ).toThrow("macos.dmgTitle");
+    expect(() =>
+      resolveConfig(
+        {
+          name: "Bad",
+          identifier: "com.example.bad",
+          macos: { notarization: {} },
+        },
+        temporaryRoot(),
+      ),
+    ).toThrow("macos.notarization.keychainProfile");
+  });
+});
+
+test("macOS packaging derives its DMG name and notarytool command", () => {
+  expect(macDmgFilename("My App", "1.2.3")).toBe("My App 1.2.3.dmg");
+  expect(() => macDmgFilename("Bad/App", "1.2.3")).toThrow("path separators");
+  expect(
+    macNotarytoolArguments("/tmp/My App 1.2.3.dmg", {
+      keychainProfile: "quickgui-notary",
+      keychain: "/tmp/ci.keychain-db",
+    }),
+  ).toEqual([
+    "xcrun",
+    "notarytool",
+    "submit",
+    "/tmp/My App 1.2.3.dmg",
+    "--keychain-profile",
+    "quickgui-notary",
+    "--keychain",
+    "/tmp/ci.keychain-db",
+    "--wait",
+  ]);
 });
 
 test("macOS metadata is escaped and complete", () => {

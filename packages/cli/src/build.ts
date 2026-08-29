@@ -16,7 +16,7 @@ import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { quickguiSolidPlugin } from "@quickgui/solid/compiler";
 import type { BunPlugin } from "bun";
 
-import type { ResolvedQuickGuiConfig } from "./config.ts";
+import type { MacOSNotarizationConfig, ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { targetInfo, type QuickGuiTarget } from "./targets.ts";
 
@@ -27,6 +27,7 @@ export interface BuildProjectOptions {
   target: QuickGuiTarget;
   outDir?: string;
   signingIdentity?: string;
+  notarization?: MacOSNotarizationConfig;
 }
 
 export interface BuildResult {
@@ -34,6 +35,7 @@ export interface BuildResult {
   executablePath: string;
   target: QuickGuiTarget;
   mode: BuildMode;
+  dmgPath?: string;
 }
 
 export const nativeExports = [
@@ -129,6 +131,9 @@ export async function buildProject(
 ): Promise<BuildResult> {
   const info = targetInfo(options.target);
   validateInputs(config, info.platform);
+  if (info.platform === "darwin" && options.mode === "production") {
+    validateMacPackaging(config, options);
+  }
   const baseOutDir = options.outDir
     ? resolve(config.projectRoot, options.outDir)
     : options.mode === "development"
@@ -144,13 +149,25 @@ export async function buildProject(
         ? await buildMacApp(config, options, stagingRoot)
         : await buildExecutable(config, options, stagingRoot);
     const finalPath = resolve(targetOutDir, basename(staged.artifactPath));
-    replaceArtifact(staged.artifactPath, finalPath, stagingRoot);
+    const finalDmgPath = staged.dmgPath
+      ? resolve(targetOutDir, basename(staged.dmgPath))
+      : undefined;
+    replaceArtifacts(
+      [
+        { stagedPath: staged.artifactPath, finalPath },
+        ...(staged.dmgPath && finalDmgPath
+          ? [{ stagedPath: staged.dmgPath, finalPath: finalDmgPath }]
+          : []),
+      ],
+      stagingRoot,
+    );
     const executablePath = resolve(finalPath, relative(staged.artifactPath, staged.executablePath));
     return {
       artifactPath: finalPath,
       executablePath,
       target: options.target,
       mode: options.mode,
+      ...(finalDmgPath ? { dmgPath: finalDmgPath } : {}),
     };
   } finally {
     if (existsSync(stagingRoot)) rmSync(stagingRoot, { recursive: true, force: true });
@@ -165,6 +182,11 @@ async function buildMacApp(
   if (process.platform !== "darwin") {
     throw new CliError("macOS .app bundles must currently be assembled and signed on macOS");
   }
+  const identity = options.signingIdentity ?? config.macos.signingIdentity ?? "-";
+  const notarization =
+    options.mode === "production"
+      ? (options.notarization ?? config.macos.notarization)
+      : undefined;
   const displayName = options.mode === "development" ? `${config.name} Dev` : config.name;
   const identifier =
     options.mode === "development" ? `${config.identifier}.dev` : config.identifier;
@@ -209,8 +231,11 @@ async function buildMacApp(
   );
   writeFileSync(resolve(contents, "PkgInfo"), "APPL????");
 
-  const identity = options.signingIdentity ?? config.macos.signingIdentity ?? "-";
-  const signArguments = ["codesign", "--force", "--deep", "--sign", identity];
+  const signArguments = ["codesign", "--force", "--deep"];
+  if (options.mode === "production" && identity !== "-") {
+    signArguments.push("--options", "runtime", "--timestamp");
+  }
+  signArguments.push("--sign", identity);
   if (config.macos.entitlements) {
     signArguments.push("--entitlements", config.macos.entitlements);
   }
@@ -218,12 +243,102 @@ async function buildMacApp(
   await run(signArguments, config.projectRoot);
   await run(["codesign", "--verify", "--deep", "--strict", appPath], config.projectRoot);
 
+  const dmgPath =
+    options.mode === "production"
+      ? await buildMacDmg(config, appPath, stagingRoot, identity, notarization)
+      : undefined;
+
   return {
     artifactPath: appPath,
     executablePath,
     target: options.target,
     mode: options.mode,
+    ...(dmgPath ? { dmgPath } : {}),
   };
+}
+
+async function buildMacDmg(
+  config: ResolvedQuickGuiConfig,
+  appPath: string,
+  stagingRoot: string,
+  identity: string,
+  notarization?: MacOSNotarizationConfig,
+): Promise<string> {
+  const dmgPath = resolve(stagingRoot, macDmgFilename(config.name, config.version));
+  const dmgTitle = config.macos.dmgTitle ?? config.name;
+  const createDmgCli = resolveCreateDmgCli();
+  await run(
+    [
+      resolveNodeExecutable(),
+      createDmgCli,
+      "--overwrite",
+      "--no-code-sign",
+      `--dmg-title=${dmgTitle}`,
+      appPath,
+      stagingRoot,
+    ],
+    config.projectRoot,
+  );
+  if (!existsSync(dmgPath) || !statSync(dmgPath).isFile()) {
+    throw new CliError(`create-dmg did not produce the expected disk image: ${dmgPath}`);
+  }
+
+  if (identity !== "-") {
+    await run(
+      ["codesign", "--force", "--timestamp", "--sign", identity, dmgPath],
+      config.projectRoot,
+    );
+    await run(["codesign", "--verify", "--strict", dmgPath], config.projectRoot);
+  }
+
+  if (notarization) {
+    console.log(`[quickgui] Notarizing ${basename(dmgPath)}`);
+    await run(macNotarytoolArguments(dmgPath, notarization), config.projectRoot);
+    await run(["xcrun", "stapler", "staple", dmgPath], config.projectRoot);
+    await run(["xcrun", "stapler", "validate", dmgPath], config.projectRoot);
+  }
+
+  return dmgPath;
+}
+
+function resolveCreateDmgCli(): string {
+  try {
+    return Bun.resolveSync("create-dmg/cli.js", import.meta.dir);
+  } catch (error) {
+    throw new CliError("Could not resolve the bundled create-dmg CLI", { cause: error });
+  }
+}
+
+function resolveNodeExecutable(): string {
+  const node = Bun.which("node");
+  if (!node) {
+    throw new CliError("create-dmg requires Node.js 20 or later to build a macOS disk image");
+  }
+  return node;
+}
+
+export function macDmgFilename(name: string, version: string): string {
+  const filename = `${name} ${version}.dmg`;
+  if (filename.includes("\0") || basename(filename) !== filename) {
+    throw new CliError("Application name and version cannot contain path separators on macOS");
+  }
+  return filename;
+}
+
+export function macNotarytoolArguments(
+  dmgPath: string,
+  notarization: MacOSNotarizationConfig,
+): string[] {
+  return [
+    "xcrun",
+    "notarytool",
+    "submit",
+    dmgPath,
+    "--keychain-profile",
+    notarization.keychainProfile,
+    ...(notarization.keychain ? ["--keychain", notarization.keychain] : []),
+    "--wait",
+  ];
 }
 
 async function buildExecutable(
@@ -391,20 +506,56 @@ function findPackageRoot(importer: string, expectedName: string): string | undef
   }
 }
 
-function replaceArtifact(stagedPath: string, finalPath: string, stagingRoot: string): void {
-  if (!existsSync(finalPath)) {
-    renameSync(stagedPath, finalPath);
-    return;
-  }
-  const backupPath = resolve(stagingRoot, ".quickgui-previous-artifact");
-  renameSync(finalPath, backupPath);
+function replaceArtifacts(
+  artifacts: Array<{ stagedPath: string; finalPath: string }>,
+  stagingRoot: string,
+): void {
+  const backups: Array<{ finalPath: string; backupPath: string }> = [];
+  const installed: Array<{ stagedPath: string; finalPath: string }> = [];
   try {
-    renameSync(stagedPath, finalPath);
+    for (const [index, artifact] of artifacts.entries()) {
+      if (existsSync(artifact.finalPath)) {
+        const backupPath = resolve(stagingRoot, `.quickgui-previous-artifact-${index}`);
+        renameSync(artifact.finalPath, backupPath);
+        backups.push({ finalPath: artifact.finalPath, backupPath });
+      }
+      renameSync(artifact.stagedPath, artifact.finalPath);
+      installed.push(artifact);
+    }
   } catch (error) {
-    renameSync(backupPath, finalPath);
+    for (const artifact of installed.reverse()) {
+      renameSync(artifact.finalPath, artifact.stagedPath);
+    }
+    for (const backup of backups.reverse()) {
+      renameSync(backup.backupPath, backup.finalPath);
+    }
     throw error;
   }
-  rmSync(backupPath, { recursive: true, force: true });
+  for (const backup of backups) {
+    rmSync(backup.backupPath, { recursive: true, force: true });
+  }
+}
+
+function validateMacPackaging(
+  config: ResolvedQuickGuiConfig,
+  options: BuildProjectOptions,
+): void {
+  resolveNodeExecutable();
+  resolveCreateDmgCli();
+  macDmgFilename(config.name, config.version);
+  const dmgTitle = config.macos.dmgTitle ?? config.name;
+  if (dmgTitle.length > 27) {
+    throw new CliError(
+      "The macOS DMG title cannot exceed 27 characters; set macos.dmgTitle to a shorter title",
+    );
+  }
+  const identity = options.signingIdentity ?? config.macos.signingIdentity ?? "-";
+  const notarization = options.notarization ?? config.macos.notarization;
+  if (notarization && identity === "-") {
+    throw new CliError(
+      "macOS notarization requires a Developer ID signing identity; configure macos.signingIdentity or pass --sign",
+    );
+  }
 }
 
 function validateInputs(

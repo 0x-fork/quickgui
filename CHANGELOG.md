@@ -16,6 +16,8 @@ All notable user-facing changes to QuickGUI are recorded here.
   development host. On macOS, development runs a signed `.app`, loads project TS/TSX on demand,
   restarts without repackaging on source edits, and keeps the prior app alive when a candidate
   cannot start.
+- Production macOS builds now retain the signed `.app`, create a versioned DMG with `create-dmg`,
+  and can submit, staple, and validate the DMG with an Apple Notary Keychain profile.
 - Added controlled `Input`/`TextArea` and retained core `Markdown` bindings to
   `@quickgui/native`/`@quickgui/solid`, plus a packaged Solid AI chat example using Vercel AI SDK
   streaming and the DeepSeek provider.

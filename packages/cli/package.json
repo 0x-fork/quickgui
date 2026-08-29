@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@quickgui/native": "workspace:*",
-    "@quickgui/solid": "workspace:*"
+    "@quickgui/solid": "workspace:*",
+    "create-dmg": "^8.1.0"
   },
   "engines": {
     "bun": ">=1.3.0"
