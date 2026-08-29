@@ -1,20 +1,20 @@
 use std::{fmt, ops::Range, sync::Arc};
 
 use crate::{
-    AutocompleteListState, AutocompleteOptionState, AutocompletePopupLayout,
+    AutocompleteListState, AutocompleteOptionState, AutocompletePopoverLayout,
     AutocompleteSelectionBehavior, AutocompleteState, Element, ElementId, EventContext,
     PickerError, PickerFilterMode, PickerItem, ViewContext, WindowHandle,
     autocomplete::AutocompleteAccess,
 };
 
-/// Maximum option rows mounted by one constrained combobox popup.
+/// Maximum option rows mounted by one constrained combobox popover.
 pub const MAX_COMBOBOX_VISIBLE_ROWS: usize = crate::MAX_AUTOCOMPLETE_VISIBLE_ROWS;
 
 /// Structural geometry for the constrained combobox's separate native suggestion surface.
 ///
 /// This is the same geometry contract used by free-form autocomplete. It contains no color,
 /// typography, border, radius, shadow, icon, or animation tokens.
-pub type ComboboxPopupLayout = AutocompletePopupLayout;
+pub type ComboboxPopoverLayout = AutocompletePopoverLayout;
 
 /// State supplied to the caller-owned suggestion-surface renderer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,7 +61,7 @@ impl SelectionMarker {
 
 /// Controlled, editable, single-value combobox constrained to declared items.
 ///
-/// The application owns the input, popup-root, and option elements. QuickGUI owns bounded
+/// The application owns the input, popover-root, and option elements. QuickGUI owns bounded
 /// matching, keyboard navigation, a never-key overflow-capable native child, exact dismissal,
 /// committed-value restoration, pointer selection, owner-tree accessibility proxies, and
 /// visible-only mounting. Unlike [`crate::AutocompleteState`], arbitrary text is an editing query,
@@ -115,7 +115,7 @@ where
         })
     }
 
-    pub fn with_layout(mut self, layout: ComboboxPopupLayout) -> Self {
+    pub fn with_layout(mut self, layout: ComboboxPopoverLayout) -> Self {
         self.autocomplete = self.autocomplete.with_layout(layout);
         self
     }
@@ -145,12 +145,12 @@ where
         self
     }
 
-    pub const fn layout(&self) -> ComboboxPopupLayout {
+    pub const fn layout(&self) -> ComboboxPopoverLayout {
         self.autocomplete.layout()
     }
 
-    /// Replace popup geometry and synchronously dismiss an obsolete fixed-size child.
-    pub fn set_layout(&mut self, layout: ComboboxPopupLayout, cx: &mut EventContext) -> bool {
+    /// Replace popover geometry and synchronously dismiss an obsolete fixed-size child.
+    pub fn set_layout(&mut self, layout: ComboboxPopoverLayout, cx: &mut EventContext) -> bool {
         if !self.autocomplete.set_layout(layout, cx) {
             return false;
         }
@@ -253,8 +253,8 @@ where
         true
     }
 
-    pub const fn popup_window(&self) -> Option<WindowHandle> {
-        self.autocomplete.popup_window()
+    pub const fn popover_window(&self) -> Option<WindowHandle> {
+        self.autocomplete.popover_window()
     }
 
     pub const fn is_open(&self) -> bool {
@@ -331,14 +331,14 @@ where
 
     /// Build the complete unstyled constrained interaction from caller-owned parts.
     #[allow(clippy::too_many_arguments)]
-    pub fn element<V, PopupRoot, RenderOption, QueryChanged, Change>(
+    pub fn element<V, PopoverRoot, RenderOption, QueryChanged, Change>(
         &mut self,
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         access: fn(&mut V) -> &mut ComboboxState<T>,
         input: Element,
-        popup_root: PopupRoot,
+        popover_root: PopoverRoot,
         render_option: RenderOption,
         query_changed: QueryChanged,
         change: Change,
@@ -346,7 +346,7 @@ where
     where
         V: 'static,
         T: 'static,
-        PopupRoot: Fn(ComboboxListState) -> Element + Clone + 'static,
+        PopoverRoot: Fn(ComboboxListState) -> Element + Clone + 'static,
         RenderOption: Fn(&PickerItem<T>, ComboboxOptionState) -> Element + Clone + 'static,
         QueryChanged: Fn(&mut V, Arc<str>, &mut EventContext) + Clone + 'static,
         Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
@@ -359,7 +359,7 @@ where
         });
 
         let list_root = move |state: AutocompleteListState| {
-            popup_root(ComboboxListState {
+            popover_root(ComboboxListState {
                 result_count: state.result_count,
                 total_match_count: state.total_match_count,
                 active_index: state.active_index,
@@ -546,7 +546,7 @@ mod tests {
         ]
     }
 
-    fn popup_root(state: ComboboxListState) -> Element {
+    fn popover_root(state: ComboboxListState) -> Element {
         div()
             .bg(Color::BLACK)
             .child(text(format!("{} results", state.result_count)))
@@ -569,7 +569,7 @@ mod tests {
             Self {
                 combobox: ComboboxState::new(options())
                     .unwrap()
-                    .with_layout(ComboboxPopupLayout::new(220.0, 32.0).max_visible_rows(2))
+                    .with_layout(ComboboxPopoverLayout::new(220.0, 32.0).max_visible_rows(2))
                     .with_selected_id("banana"),
                 queries: Vec::new(),
                 changes: Vec::new(),
@@ -592,7 +592,7 @@ mod tests {
                 "Fruit",
                 Self::combobox,
                 input,
-                popup_root,
+                popover_root,
                 option_row,
                 |view, query, _cx| view.queries.push(query),
                 |view, value, _cx| view.changes.push(value),
@@ -692,14 +692,14 @@ mod tests {
         cx.focus(window, "fruit").unwrap();
         cx.simulate_keystrokes(window, "platform-a").unwrap();
         cx.simulate_input(window, "ap").unwrap();
-        let popup = cx
-            .read(owner, |view| view.combobox.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.combobox.popover_window().unwrap())
             .unwrap();
         assert!(
             !cx.simulate_mouse_down(window, "after-combobox", MouseDownEvent::default(),)
                 .unwrap()
         );
-        assert!(!cx.is_window_open(popup));
+        assert!(!cx.is_window_open(popover));
         assert_eq!(
             cx.read(owner, |view| view.combobox.input_value().clone())
                 .unwrap(),
@@ -709,10 +709,10 @@ mod tests {
         cx.focus(window, "fruit").unwrap();
         cx.simulate_keystrokes(window, "platform-a").unwrap();
         cx.simulate_input(window, "ap").unwrap();
-        let popup = cx
-            .read(owner, |view| view.combobox.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.combobox.popover_window().unwrap())
             .unwrap();
-        cx.update(owner, |_view, cx| cx.close_window_handle(popup))
+        cx.update(owner, |_view, cx| cx.close_window_handle(popover))
             .unwrap();
         assert_eq!(
             cx.read(owner, |view| view.combobox.input_value().clone())
@@ -735,21 +735,21 @@ mod tests {
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();
-        let (popup, row) = cx
+        let (popover, row) = cx
             .read(owner, |view| {
                 (
-                    view.combobox.popup_window().unwrap(),
+                    view.combobox.popover_window().unwrap(),
                     view.combobox.option_id_for_source("fruit", 2).unwrap(),
                 )
             })
             .unwrap();
         assert_eq!(
-            cx.window_state(popup).unwrap().kind,
-            crate::WindowKind::AnchoredPopup
+            cx.window_state(popover).unwrap().kind,
+            crate::WindowKind::SystemPopover
         );
         assert_eq!(cx.focused(window).unwrap(), Some("fruit".into()));
-        cx.click(popup, row).unwrap();
-        assert!(!cx.is_window_open(popup));
+        cx.click(popover, row).unwrap();
+        assert!(!cx.is_window_open(popover));
         assert_eq!(cx.focused(window).unwrap(), Some("fruit".into()));
         assert_eq!(
             cx.read(owner, |view| view.combobox.selected_value().copied())
@@ -772,8 +772,8 @@ mod tests {
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();
-        let popup = cx
-            .read(owner, |view| view.combobox.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.combobox.popover_window().unwrap())
             .unwrap();
 
         cx.update(owner, |view, cx| {
@@ -790,8 +790,9 @@ mod tests {
         })
         .unwrap();
         assert_eq!(
-            cx.read(owner, |view| view.combobox.popup_window()).unwrap(),
-            Some(popup)
+            cx.read(owner, |view| view.combobox.popover_window())
+                .unwrap(),
+            Some(popover)
         );
         assert_eq!(
             cx.read(owner, |view| view.combobox.selected_source_index())
@@ -812,8 +813,9 @@ mod tests {
         })
         .unwrap();
         assert_eq!(
-            cx.read(owner, |view| view.combobox.popup_window()).unwrap(),
-            Some(popup)
+            cx.read(owner, |view| view.combobox.popover_window())
+                .unwrap(),
+            Some(popover)
         );
         assert_eq!(
             cx.read(owner, |view| view.combobox.selected_source_index())
@@ -884,7 +886,7 @@ mod tests {
                     .id(index as u64 + 1)
             }))
             .unwrap()
-            .with_layout(ComboboxPopupLayout::new(240.0, 30.0).max_visible_rows(5));
+            .with_layout(ComboboxPopoverLayout::new(240.0, 30.0).max_visible_rows(5));
             Self { combobox, clones }
         }
 
@@ -918,8 +920,8 @@ mod tests {
         let window = owner.window_handle();
         cx.focus(window, "large-combobox").unwrap();
         cx.click(window, "large-combobox").unwrap();
-        let popup = cx
-            .read(owner, |view| view.combobox.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.combobox.popover_window().unwrap())
             .unwrap();
         assert_eq!(cx.read(owner, |view| view.clones.get()).unwrap(), 0);
 
@@ -932,21 +934,21 @@ mod tests {
                             .unwrap()
                     })
                     .unwrap();
-                cx.element_bounds(popup, id).is_ok()
+                cx.element_bounds(popover, id).is_ok()
             })
             .count();
         assert!((1..=7).contains(&mounted));
 
         let owner_renders = cx.render_count(window).unwrap();
-        let child_renders = cx.render_count(popup).unwrap();
+        let child_renders = cx.render_count(popover).unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(cx.render_count(window).unwrap(), owner_renders);
-        assert_eq!(cx.render_count(popup).unwrap(), child_renders);
+        assert_eq!(cx.render_count(popover).unwrap(), child_renders);
         assert_eq!(cx.read(owner, |view| view.clones.get()).unwrap(), 0);
     }
 
     #[test]
-    fn programmatic_selection_rejects_disabled_items_and_closed_state_has_no_popup() {
+    fn programmatic_selection_rejects_disabled_items_and_closed_state_has_no_popover() {
         let mut state = ComboboxState::new(options()).unwrap();
         let mut cx = EventContext::default();
         assert!(!state.set_selected_source(1, &mut cx));
@@ -956,7 +958,7 @@ mod tests {
         assert!(state.clear_selection(&mut cx));
         assert_eq!(state.selected_value(), None);
         assert_eq!(state.input_value().as_ref(), "");
-        assert_eq!(state.popup_window(), None);
+        assert_eq!(state.popover_window(), None);
     }
 
     #[test]

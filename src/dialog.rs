@@ -1,8 +1,10 @@
-use crate::{AccessibilityPopup, AccessibilityRole, Element, ElementId, EventContext, FocusHandle};
+use crate::{
+    AccessibilityPopover, AccessibilityRole, Element, ElementId, EventContext, FocusHandle,
+};
 
 const DIALOG_ROOT_ID_TAG: u64 = 0x6405_1ba9_158d_f8fd;
 const DIALOG_BACKDROP_ID_TAG: u64 = 0xfbf2_90af_5f5b_982d;
-const DIALOG_POPUP_ID_TAG: u64 = 0x21e9_d20f_8574_4dd8;
+const DIALOG_POPOVER_ID_TAG: u64 = 0x21e9_d20f_8574_4dd8;
 const DIALOG_TITLE_ID_TAG: u64 = 0xb50c_ee8e_b0c0_8ed7;
 const DIALOG_DESCRIPTION_ID_TAG: u64 = 0x86a8_0ac0_5627_538e;
 const DIALOG_CLOSE_ID_TAG: u64 = 0xe5d1_e6af_b19b_c827;
@@ -86,7 +88,7 @@ impl Dialog {
     /// Prefer one mounted descendant when this dialog opens.
     ///
     /// Without an explicit target, the focus trap chooses its first enabled Tab stop and falls
-    /// back to the popup root when no interactive descendant exists.
+    /// back to the popover root when no interactive descendant exists.
     pub fn initial_focus(mut self, focus: impl Into<ElementId>) -> Self {
         self.initial_focus = Some(FocusHandle::new(focus));
         self
@@ -116,8 +118,8 @@ impl Dialog {
         derived_dialog_id(self.id, DIALOG_BACKDROP_ID_TAG)
     }
 
-    pub fn popup_id(self) -> ElementId {
-        derived_dialog_id(self.id, DIALOG_POPUP_ID_TAG)
+    pub fn popover_id(self) -> ElementId {
+        derived_dialog_id(self.id, DIALOG_POPOVER_ID_TAG)
     }
 
     pub fn title_id(self) -> ElementId {
@@ -132,13 +134,13 @@ impl Dialog {
         derived_dialog_id(self.id, DIALOG_CLOSE_ID_TAG)
     }
 
-    pub fn popup_focus(self) -> FocusHandle {
-        FocusHandle::new(self.popup_id())
+    pub fn popover_focus(self) -> FocusHandle {
+        FocusHandle::new(self.popover_id())
     }
 
     /// Request the declared initial focus in the same event that mounts the dialog.
     pub fn focus_initial(self, cx: &mut EventContext) {
-        cx.focus(self.initial_focus.unwrap_or_else(|| self.popup_focus()));
+        cx.focus(self.initial_focus.unwrap_or_else(|| self.popover_focus()));
     }
 
     /// Restore the declared focus after an explicit close action.
@@ -156,12 +158,12 @@ impl Dialog {
             .id(id)
             .focusable()
             .accessibility_role(AccessibilityRole::Button)
-            .accessibility_has_popup(AccessibilityPopup::Dialog)
+            .accessibility_has_popover(AccessibilityPopover::Dialog)
             .accessibility_expanded(self.open)
             .app_region_no_drag()
             .user_select_none();
         if self.open {
-            trigger.accessibility_controls(self.popup_id())
+            trigger.accessibility_controls(self.popover_id())
         } else {
             trigger
         }
@@ -189,16 +191,16 @@ impl Dialog {
             .cursor_default()
     }
 
-    /// Decorate the caller-owned modal popup.
+    /// Decorate the caller-owned modal popover.
     ///
-    /// The popup is a negative-Tab-index focus fallback. Enabled descendant Tab stops are chosen
+    /// The popover is a negative-Tab-index focus fallback. Enabled descendant Tab stops are chosen
     /// first when the enclosing trap mounts. Title and description relationships project only
     /// when the corresponding parts are mounted, so incomplete compositions never emit dangling
     /// native node references.
-    pub fn popup_part(self, popup: Element) -> Element {
-        let mut popup = popup
-            .id(self.popup_id())
-            .track_focus(self.popup_focus())
+    pub fn popover_part(self, popover: Element) -> Element {
+        let mut popover = popover
+            .id(self.popover_id())
+            .track_focus(self.popover_focus())
             .tab_index(-1)
             .accessibility_role(self.kind.accessibility_role())
             .accessibility_modal(true)
@@ -207,23 +209,23 @@ impl Dialog {
             .app_region_no_drag()
             .cursor_default();
         if self.dismiss_on_escape {
-            popup = popup.dismiss_on_escape();
+            popover = popover.dismiss_on_escape();
         }
         if self.dismiss_on_backdrop {
-            popup = popup.dismiss_on_pointer_outside();
+            popover = popover.dismiss_on_pointer_outside();
         }
         if let Some(focus) = self.restore_focus {
-            popup = popup.restore_focus_to(focus);
+            popover = popover.restore_focus_to(focus);
         }
-        popup
+        popover
     }
 
-    /// Assign the stable visible label target used by the popup.
+    /// Assign the stable visible label target used by the popover.
     pub fn title_part(self, title: Element) -> Element {
         title.id(self.title_id())
     }
 
-    /// Assign the stable visible description target used by the popup.
+    /// Assign the stable visible description target used by the popover.
     pub fn description_part(self, description: Element) -> Element {
         description.id(self.description_id())
     }
@@ -264,13 +266,13 @@ mod tests {
         let trigger = dialog.trigger_part("open-settings", div());
         assert_eq!(trigger.accessibility.role, AccessibilityRole::Button);
         assert_eq!(
-            trigger.accessibility.has_popup,
-            Some(AccessibilityPopup::Dialog)
+            trigger.accessibility.has_popover,
+            Some(AccessibilityPopover::Dialog)
         );
         assert_eq!(trigger.accessibility.expanded, Some(true));
         assert_eq!(
             trigger.accessibility.relations.controls(),
-            Some(dialog.popup_id())
+            Some(dialog.popover_id())
         );
 
         let root = dialog.root_part(div());
@@ -280,23 +282,23 @@ mod tests {
         assert_eq!(root.visual.background, None);
         assert_eq!(root.visual.border_color, None);
 
-        let popup = dialog.popup_part(div());
-        assert_eq!(popup.accessibility.role, AccessibilityRole::Dialog);
-        assert!(popup.accessibility.modal);
+        let popover = dialog.popover_part(div());
+        assert_eq!(popover.accessibility.role, AccessibilityRole::Dialog);
+        assert!(popover.accessibility.modal);
         assert_eq!(
-            popup.accessibility.relations.labelled_by(),
+            popover.accessibility.relations.labelled_by(),
             Some(dialog.title_id())
         );
         assert_eq!(
-            popup.accessibility.relations.described_by(),
+            popover.accessibility.relations.described_by(),
             Some(dialog.description_id())
         );
-        assert!(popup.dismiss_policy.on_escape());
-        assert!(popup.dismiss_policy.on_pointer_outside());
-        assert_eq!(popup.visual.background, None);
-        assert_eq!(popup.visual.border_color, None);
+        assert!(popover.dismiss_policy.on_escape());
+        assert!(popover.dismiss_policy.on_pointer_outside());
+        assert_eq!(popover.visual.background, None);
+        assert_eq!(popover.visual.border_color, None);
 
-        let alert = Dialog::alert("delete", true).popup_part(div());
+        let alert = Dialog::alert("delete", true).popover_part(div());
         assert_eq!(alert.accessibility.role, AccessibilityRole::AlertDialog);
         assert!(alert.dismiss_policy.on_escape());
         assert!(!alert.dismiss_policy.on_pointer_outside());
@@ -308,7 +310,7 @@ mod tests {
         let ids = [
             dialog.root_id(),
             dialog.backdrop_id(),
-            dialog.popup_id(),
+            dialog.popover_id(),
             dialog.title_id(),
             dialog.description_id(),
             dialog.close_id(),
@@ -318,7 +320,7 @@ mod tests {
             assert_ne!(*id, ElementId::new(u64::MAX));
             assert!(!ids[..index].contains(id));
         }
-        assert_eq!(dialog.popup_id(), Dialog::new(0_u64, false).popup_id());
+        assert_eq!(dialog.popover_id(), Dialog::new(0_u64, false).popover_id());
     }
 
     #[derive(Default)]
@@ -343,7 +345,7 @@ mod tests {
                 dialog.focus_restore(cx);
                 cx.invalidate();
             });
-            let dismiss = cx.dismiss_listener(dialog.popup_id(), move |view, cx| {
+            let dismiss = cx.dismiss_listener(dialog.popover_id(), move |view, cx| {
                 view.open = false;
                 view.closed += 1;
                 cx.invalidate();
@@ -359,8 +361,8 @@ mod tests {
                 )
                 .child(button().id("outside").child("Outside"));
             if self.open {
-                let popup = dialog
-                    .popup_part(
+                let popover = dialog
+                    .popover_part(
                         div()
                             .w(240.0)
                             .h(160.0)
@@ -376,7 +378,7 @@ mod tests {
                     dialog
                         .root_part(div().flex_row().items_center().justify_center())
                         .child(dialog.backdrop_part(div()))
-                        .child(popup),
+                        .child(popover),
                 );
             }
             root

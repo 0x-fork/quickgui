@@ -1,14 +1,14 @@
 use std::{fmt, ops::Range, sync::Arc};
 
 use crate::{
-    AccessibilityAutoComplete, AccessibilityPopup, AccessibilityRole, AnchorPlacement,
+    AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AnchorPlacement,
     ComboboxConfirm, ComboboxNext, ComboboxPageDown, ComboboxPageUp, ComboboxPrevious, Element,
     ElementId, Entity, EventContext, FocusHandle, Key, MAX_VALIDATION_MESSAGE_BYTES, PickerError,
     PickerFilterMode, PickerItem, PickerState, View, ViewContext, VirtualList, WindowHandle, div,
     element::ElementKind,
 };
 
-/// Maximum option rows mounted by one autocomplete popup before virtual scrolling takes over.
+/// Maximum option rows mounted by one autocomplete popover before virtual scrolling takes over.
 pub const MAX_AUTOCOMPLETE_VISIBLE_ROWS: usize = 64;
 /// Maximum UTF-8 bytes retained for one free-form autocomplete value.
 pub const MAX_AUTOCOMPLETE_VALUE_BYTES: usize = 64 * 1024;
@@ -21,7 +21,7 @@ const OPTION_ID_TAG: u64 = 0x7673_faca_7f67_69de;
 ///
 /// No color, typography, border, radius, shadow, or animation token is retained here.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AutocompletePopupLayout {
+pub struct AutocompletePopoverLayout {
     pub width: f32,
     pub row_height: f32,
     pub max_visible_rows: usize,
@@ -29,7 +29,7 @@ pub struct AutocompletePopupLayout {
     pub anchor_gap: f32,
 }
 
-impl AutocompletePopupLayout {
+impl AutocompletePopoverLayout {
     pub fn new(width: f32, row_height: f32) -> Self {
         Self {
             width: finite_clamped(width, 1.0, 4_096.0, 280.0),
@@ -75,12 +75,12 @@ impl AutocompletePopupLayout {
         self
     }
 
-    fn popup_height(self) -> f32 {
+    fn popover_height(self) -> f32 {
         self.max_visible_rows as f32 * self.row_height
     }
 }
 
-impl Default for AutocompletePopupLayout {
+impl Default for AutocompletePopoverLayout {
     fn default() -> Self {
         Self::new(280.0, 36.0)
     }
@@ -122,7 +122,7 @@ struct AutocompleteMatchSnapshot {
     label_ranges: Arc<[Range<usize>]>,
 }
 
-struct AutocompletePopupSnapshot<T> {
+struct AutocompletePopoverSnapshot<T> {
     items: Arc<[PickerItem<T>]>,
     matches: Arc<[AutocompleteMatchSnapshot]>,
     total_match_count: usize,
@@ -130,7 +130,7 @@ struct AutocompletePopupSnapshot<T> {
     source_revision: u64,
 }
 
-impl<T> Clone for AutocompletePopupSnapshot<T> {
+impl<T> Clone for AutocompletePopoverSnapshot<T> {
     fn clone(&self) -> Self {
         Self {
             items: self.items.clone(),
@@ -142,7 +142,7 @@ impl<T> Clone for AutocompletePopupSnapshot<T> {
     }
 }
 
-impl<T> AutocompletePopupSnapshot<T> {
+impl<T> AutocompletePopoverSnapshot<T> {
     fn list_state(&self) -> AutocompleteListState {
         AutocompleteListState {
             result_count: self.matches.len(),
@@ -191,14 +191,14 @@ fn autocomplete_identity<T>(state: &mut AutocompleteState<T>) -> &mut Autocomple
 pub struct AutocompleteState<T> {
     picker: PickerState<T>,
     value: Arc<str>,
-    popup: Option<WindowHandle>,
-    popup_snapshot: Option<Entity<AutocompletePopupSnapshot<T>>>,
+    popover: Option<WindowHandle>,
+    popover_snapshot: Option<Entity<AutocompletePopoverSnapshot<T>>>,
     source_revision: u64,
     disabled: bool,
     invalid: bool,
     validation_message: Option<Arc<str>>,
     validation_message_truncated: bool,
-    layout: AutocompletePopupLayout,
+    layout: AutocompletePopoverLayout,
     selection_behavior: AutocompleteSelectionBehavior,
 }
 
@@ -208,8 +208,8 @@ impl<T> fmt::Debug for AutocompleteState<T> {
             .debug_struct("AutocompleteState")
             .field("picker", &self.picker)
             .field("value", &self.value)
-            .field("popup", &self.popup)
-            .field("popup_snapshot", &self.popup_snapshot)
+            .field("popover", &self.popover)
+            .field("popover_snapshot", &self.popover_snapshot)
             .field("source_revision", &self.source_revision)
             .field("disabled", &self.disabled)
             .field("invalid", &self.invalid)
@@ -228,19 +228,19 @@ impl<T> AutocompleteState<T> {
         Ok(Self {
             picker: PickerState::new(items)?,
             value: Arc::from(""),
-            popup: None,
-            popup_snapshot: None,
+            popover: None,
+            popover_snapshot: None,
             source_revision: 1,
             disabled: false,
             invalid: false,
             validation_message: None,
             validation_message_truncated: false,
-            layout: AutocompletePopupLayout::default(),
+            layout: AutocompletePopoverLayout::default(),
             selection_behavior: AutocompleteSelectionBehavior::CompleteInput,
         })
     }
 
-    pub fn with_layout(mut self, layout: AutocompletePopupLayout) -> Self {
+    pub fn with_layout(mut self, layout: AutocompletePopoverLayout) -> Self {
         self.layout = layout.sanitized();
         self
     }
@@ -250,12 +250,12 @@ impl<T> AutocompleteState<T> {
         self
     }
 
-    pub const fn layout(&self) -> AutocompletePopupLayout {
+    pub const fn layout(&self) -> AutocompletePopoverLayout {
         self.layout
     }
 
-    /// Replace native popup geometry, closing an open fixed-size child first.
-    pub fn set_layout(&mut self, layout: AutocompletePopupLayout, cx: &mut EventContext) -> bool {
+    /// Replace native popover geometry, closing an open fixed-size child first.
+    pub fn set_layout(&mut self, layout: AutocompletePopoverLayout, cx: &mut EventContext) -> bool {
         let layout = layout.sanitized();
         if self.layout == layout {
             return false;
@@ -293,7 +293,7 @@ impl<T> AutocompleteState<T> {
         }
         self.value = value;
         self.picker.set_query(&self.value);
-        self.sync_popup(cx);
+        self.sync_popover(cx);
         true
     }
 
@@ -310,7 +310,7 @@ impl<T> AutocompleteState<T> {
         if !self.picker.set_query(query) {
             return false;
         }
-        self.sync_popup(cx);
+        self.sync_popover(cx);
         true
     }
 
@@ -326,7 +326,7 @@ impl<T> AutocompleteState<T> {
     ) -> Result<(), PickerError> {
         self.picker.set_items(items)?;
         self.source_revision = self.source_revision.wrapping_add(1).max(1);
-        self.sync_popup(cx);
+        self.sync_popover(cx);
         Ok(())
     }
 
@@ -342,16 +342,16 @@ impl<T> AutocompleteState<T> {
         if !self.picker.set_filter_mode(filter_mode) {
             return false;
         }
-        self.sync_popup(cx);
+        self.sync_popover(cx);
         true
     }
 
-    pub const fn popup_window(&self) -> Option<WindowHandle> {
-        self.popup
+    pub const fn popover_window(&self) -> Option<WindowHandle> {
+        self.popover
     }
 
     pub const fn is_open(&self) -> bool {
-        self.popup.is_some()
+        self.popover.is_some()
     }
 
     pub const fn is_disabled(&self) -> bool {
@@ -420,11 +420,11 @@ impl<T> AutocompleteState<T> {
     }
 
     pub fn close(&mut self, cx: &mut EventContext) -> bool {
-        self.popup_snapshot = None;
-        let Some(popup) = self.popup.take() else {
+        self.popover_snapshot = None;
+        let Some(popover) = self.popover.take() else {
             return false;
         };
-        cx.close_window_handle(popup);
+        cx.close_window_handle(popover);
         true
     }
 
@@ -441,7 +441,7 @@ impl<T> AutocompleteState<T> {
         Some(autocomplete_option_id(id.into(), item, source_index))
     }
 
-    fn snapshot(&self) -> AutocompletePopupSnapshot<T> {
+    fn snapshot(&self) -> AutocompletePopoverSnapshot<T> {
         let mut matches = Vec::with_capacity(self.picker.result_count());
         for result_index in 0..self.picker.result_count() {
             let matched = self
@@ -454,7 +454,7 @@ impl<T> AutocompleteState<T> {
                 label_ranges: matched.shared_label_ranges(),
             });
         }
-        AutocompletePopupSnapshot {
+        AutocompletePopoverSnapshot {
             items: self.picker.shared_items(),
             matches: Arc::from(matches),
             total_match_count: self.picker.total_match_count(),
@@ -463,24 +463,24 @@ impl<T> AutocompleteState<T> {
         }
     }
 
-    fn sync_popup(&mut self, cx: &mut EventContext) {
-        let Some(entity) = self.popup_snapshot.clone() else {
+    fn sync_popover(&mut self, cx: &mut EventContext) {
+        let Some(entity) = self.popover_snapshot.clone() else {
             return;
         };
         let snapshot = self.snapshot();
         entity.update(cx, |current, _cx| *current = snapshot);
     }
 
-    /// Build the complete unstyled interaction from caller-owned input, popup, and row elements.
+    /// Build the complete unstyled interaction from caller-owned input, popover, and row elements.
     #[allow(clippy::too_many_arguments)]
-    pub fn element<V, PopupRoot, RenderOption, ValueChanged, Select>(
+    pub fn element<V, PopoverRoot, RenderOption, ValueChanged, Select>(
         &mut self,
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         access: fn(&mut V) -> &mut AutocompleteState<T>,
         input: Element,
-        popup_root: PopupRoot,
+        popover_root: PopoverRoot,
         render_option: RenderOption,
         value_changed: ValueChanged,
         select: Select,
@@ -488,7 +488,7 @@ impl<T> AutocompleteState<T> {
     where
         V: 'static,
         T: Clone + 'static,
-        PopupRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
+        PopoverRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
         RenderOption: Fn(&PickerItem<T>, AutocompleteOptionState) -> Element + Clone + 'static,
         ValueChanged: Fn(&mut V, Arc<str>, &mut EventContext) + Clone + 'static,
         Select: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
@@ -503,7 +503,7 @@ impl<T> AutocompleteState<T> {
             label,
             AutocompleteAccess::new(access, autocomplete_identity::<T>),
             input,
-            popup_root,
+            popover_root,
             render_option,
             value_changed,
             select_with_source,
@@ -516,12 +516,12 @@ impl<T> AutocompleteState<T> {
     ///
     /// The public free-form API intentionally reports only the application value. A constrained
     /// combobox additionally needs the exact source identity and every dismissal path so it can
-    /// restore its last committed label without duplicating the native popup engine.
+    /// restore its last committed label without duplicating the native popover engine.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn element_with_source<
         V,
         S,
-        PopupRoot,
+        PopoverRoot,
         RenderOption,
         ValueChanged,
         Select,
@@ -533,7 +533,7 @@ impl<T> AutocompleteState<T> {
         label: impl Into<Arc<str>>,
         access: AutocompleteAccess<V, S, T>,
         input: Element,
-        popup_root: PopupRoot,
+        popover_root: PopoverRoot,
         render_option: RenderOption,
         value_changed: ValueChanged,
         select: Select,
@@ -544,7 +544,7 @@ impl<T> AutocompleteState<T> {
         V: 'static,
         S: 'static,
         T: Clone + 'static,
-        PopupRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
+        PopoverRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
         RenderOption: Fn(&PickerItem<T>, AutocompleteOptionState) -> Element + Clone + 'static,
         ValueChanged: Fn(&mut V, Arc<str>, &mut EventContext) + Clone + 'static,
         Select: Fn(&mut V, usize, T, &mut EventContext) + Clone + 'static,
@@ -565,12 +565,12 @@ impl<T> AutocompleteState<T> {
         let focus = FocusHandle::new(id);
         let surface_id = Self::surface_id(id);
         let renderers = AutocompleteRenderers {
-            popup_root,
+            popover_root,
             render_option,
         };
         let layout = self.layout;
         self.picker
-            .set_result_viewport_height(layout.popup_height());
+            .set_result_viewport_height(layout.popover_height());
         if let Some(active) = self.picker.selected_result_index() {
             self.picker.select_result(active);
         }
@@ -578,9 +578,9 @@ impl<T> AutocompleteState<T> {
         let child_dismiss = dismiss.clone();
         cx.on_any_child_window_closed(move |view, closed, cx| {
             let state = access.get(view);
-            if state.popup == Some(closed) {
-                state.popup = None;
-                state.popup_snapshot = None;
+            if state.popover == Some(closed) {
+                state.popover = None;
+                state.popover_snapshot = None;
                 child_dismiss(view, cx);
                 cx.invalidate();
             }
@@ -593,7 +593,7 @@ impl<T> AutocompleteState<T> {
             }
             let changed = {
                 let state = access.get(view);
-                if state.popup != Some(action.popup)
+                if state.popover != Some(action.popover)
                     || state.source_revision != action.source_revision
                 {
                     return;
@@ -601,7 +601,7 @@ impl<T> AutocompleteState<T> {
                 state.picker.select_result(action.result_index)
             };
             if changed {
-                access.get(view).sync_popup(cx);
+                access.get(view).sync_popover(cx);
                 cx.invalidate();
             }
         });
@@ -617,7 +617,7 @@ impl<T> AutocompleteState<T> {
                 view,
                 cx,
                 access,
-                Some((action.popup, action.source_revision)),
+                Some((action.popover, action.source_revision)),
                 action.source_index,
                 &commit_value_changed,
                 &commit_select,
@@ -636,7 +636,7 @@ impl<T> AutocompleteState<T> {
             if changed {
                 input_value_changed(view, value, cx);
             }
-            open_autocomplete_popup(
+            open_autocomplete_popover(
                 view,
                 cx,
                 id,
@@ -652,7 +652,7 @@ impl<T> AutocompleteState<T> {
         let click_renderers = renderers.clone();
         let click_label = label.clone();
         let click = cx.listener(id, move |view, cx| {
-            open_autocomplete_popup(
+            open_autocomplete_popover(
                 view,
                 cx,
                 id,
@@ -668,11 +668,11 @@ impl<T> AutocompleteState<T> {
         let previous = cx.action_listener(id, move |view, _: &ComboboxPrevious, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_previous() {
-                    access.get(view).sync_popup(cx);
+                    access.get(view).sync_popover(cx);
                     cx.invalidate();
                 }
             } else {
-                open_autocomplete_popup(
+                open_autocomplete_popover(
                     view,
                     cx,
                     id,
@@ -687,11 +687,11 @@ impl<T> AutocompleteState<T> {
         let next = cx.action_listener(id, move |view, _: &ComboboxNext, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_next() {
-                    access.get(view).sync_popup(cx);
+                    access.get(view).sync_popover(cx);
                     cx.invalidate();
                 }
             } else {
-                open_autocomplete_popup(
+                open_autocomplete_popover(
                     view,
                     cx,
                     id,
@@ -706,11 +706,11 @@ impl<T> AutocompleteState<T> {
         let page_up = cx.action_listener(id, move |view, _: &ComboboxPageUp, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_page_up() {
-                    access.get(view).sync_popup(cx);
+                    access.get(view).sync_popover(cx);
                     cx.invalidate();
                 }
             } else {
-                open_autocomplete_popup(
+                open_autocomplete_popover(
                     view,
                     cx,
                     id,
@@ -725,11 +725,11 @@ impl<T> AutocompleteState<T> {
         let page_down = cx.action_listener(id, move |view, _: &ComboboxPageDown, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_page_down() {
-                    access.get(view).sync_popup(cx);
+                    access.get(view).sync_popover(cx);
                     cx.invalidate();
                 }
             } else {
-                open_autocomplete_popup(
+                open_autocomplete_popover(
                     view,
                     cx,
                     id,
@@ -793,7 +793,7 @@ impl<T> AutocompleteState<T> {
             .accessibility_role(AccessibilityRole::EditableComboBox)
             .accessibility_label(label.clone())
             .accessibility_auto_complete(AccessibilityAutoComplete::List)
-            .accessibility_has_popup(AccessibilityPopup::ListBox)
+            .accessibility_has_popover(AccessibilityPopover::ListBox)
             .accessibility_expanded(self.is_open())
             .disabled(self.disabled)
             .invalid(self.invalid)
@@ -898,15 +898,15 @@ impl<T> AutocompleteState<T> {
 }
 
 #[derive(Clone)]
-struct AutocompleteRenderers<PopupRoot, RenderOption> {
-    popup_root: PopupRoot,
+struct AutocompleteRenderers<PopoverRoot, RenderOption> {
+    popover_root: PopoverRoot,
     render_option: RenderOption,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct AutocompletePreview {
     control: ElementId,
-    popup: WindowHandle,
+    popover: WindowHandle,
     source_revision: u64,
     result_index: usize,
 }
@@ -914,44 +914,44 @@ struct AutocompletePreview {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct AutocompleteCommit {
     control: ElementId,
-    popup: WindowHandle,
+    popover: WindowHandle,
     source_revision: u64,
     source_index: usize,
 }
 
-fn open_autocomplete_popup<V, S, T, PopupRoot, RenderOption>(
+fn open_autocomplete_popover<V, S, T, PopoverRoot, RenderOption>(
     view: &mut V,
     cx: &mut EventContext,
     id: ElementId,
     label: Arc<str>,
     access: AutocompleteAccess<V, S, T>,
-    renderers: AutocompleteRenderers<PopupRoot, RenderOption>,
+    renderers: AutocompleteRenderers<PopoverRoot, RenderOption>,
 ) where
     V: 'static,
     S: 'static,
     T: Clone + 'static,
-    PopupRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
+    PopoverRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
     RenderOption: Fn(&PickerItem<T>, AutocompleteOptionState) -> Element + Clone + 'static,
 {
     let (snapshot, layout) = {
         let state = access.get(view);
-        if state.disabled || state.popup.is_some() {
+        if state.disabled || state.popover.is_some() {
             return;
         }
         (state.snapshot(), state.layout)
     };
     let entity = Entity::new(snapshot);
-    let popup = AutocompletePopupView::new(id, entity.clone(), layout, renderers);
-    let result = crate::AnchoredPopover::new(layout.width, layout.popup_height())
+    let popover = AutocompletePopoverView::new(id, entity.clone(), layout, renderers);
+    let result = crate::SystemPopover::new(layout.width, layout.popover_height())
         .placement(layout.placement)
         .gap(layout.anchor_gap)
         .grab(false)
         .accepts_key_focus(false)
-        .open(cx, id, label.to_string(), popup);
+        .open(cx, id, label.to_string(), popover);
     if let Ok(handle) = result {
         let state = access.get(view);
-        state.popup = Some(handle);
-        state.popup_snapshot = Some(entity);
+        state.popover = Some(handle);
+        state.popover_snapshot = Some(entity);
         cx.invalidate();
     }
 }
@@ -973,11 +973,11 @@ where
 {
     let (value, completed_value) = {
         let state = access.get(view);
-        let Some(popup) = state.popup else {
+        let Some(popover) = state.popover else {
             return false;
         };
-        if let Some((expected_popup, expected_revision)) = expected
-            && (popup != expected_popup || state.source_revision != expected_revision)
+        if let Some((expected_popover, expected_revision)) = expected
+            && (popover != expected_popover || state.source_revision != expected_revision)
         {
             return false;
         }
@@ -1011,25 +1011,25 @@ where
     true
 }
 
-struct AutocompletePopupView<T, PopupRoot, RenderOption> {
+struct AutocompletePopoverView<T, PopoverRoot, RenderOption> {
     control: ElementId,
-    snapshot: Entity<AutocompletePopupSnapshot<T>>,
+    snapshot: Entity<AutocompletePopoverSnapshot<T>>,
     list: VirtualList,
-    layout: AutocompletePopupLayout,
-    renderers: AutocompleteRenderers<PopupRoot, RenderOption>,
+    layout: AutocompletePopoverLayout,
+    renderers: AutocompleteRenderers<PopoverRoot, RenderOption>,
 }
 
-impl<T, PopupRoot, RenderOption> AutocompletePopupView<T, PopupRoot, RenderOption> {
+impl<T, PopoverRoot, RenderOption> AutocompletePopoverView<T, PopoverRoot, RenderOption> {
     fn new(
         control: ElementId,
-        snapshot: Entity<AutocompletePopupSnapshot<T>>,
-        layout: AutocompletePopupLayout,
-        renderers: AutocompleteRenderers<PopupRoot, RenderOption>,
+        snapshot: Entity<AutocompletePopoverSnapshot<T>>,
+        layout: AutocompletePopoverLayout,
+        renderers: AutocompleteRenderers<PopoverRoot, RenderOption>,
     ) -> Self {
         let (len, active) =
             snapshot.read(|snapshot| (snapshot.matches.len(), snapshot.active_index));
         let mut list = VirtualList::new(len, layout.row_height).with_overscan(1);
-        list.set_viewport_height(layout.popup_height());
+        list.set_viewport_height(layout.popover_height());
         if let Some(active) = active {
             list.scroll_to_reveal(active);
         }
@@ -1043,21 +1043,21 @@ impl<T, PopupRoot, RenderOption> AutocompletePopupView<T, PopupRoot, RenderOptio
     }
 }
 
-impl<T, PopupRoot, RenderOption> View for AutocompletePopupView<T, PopupRoot, RenderOption>
+impl<T, PopoverRoot, RenderOption> View for AutocompletePopoverView<T, PopoverRoot, RenderOption>
 where
     T: Clone + 'static,
-    PopupRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
+    PopoverRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
     RenderOption: Fn(&PickerItem<T>, AutocompleteOptionState) -> Element + Clone + 'static,
 {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl crate::IntoElement {
         let snapshot = cx.observe(&self.snapshot, Clone::clone);
         self.list.set_len(snapshot.matches.len());
-        self.list.set_viewport_height(self.layout.popup_height());
+        self.list.set_viewport_height(self.layout.popover_height());
         if let Some(active) = snapshot.active_index {
             self.list.scroll_to_reveal(active);
         }
 
-        let popup = cx.window_handle();
+        let popover = cx.window_handle();
         let mut rows = Vec::with_capacity(self.list.visible_rows().len());
         for result_index in self.list.visible_rows().range {
             let Some(matched) = snapshot.matches.get(result_index) else {
@@ -1093,9 +1093,9 @@ where
                 let source_revision = snapshot.source_revision;
                 let hover = cx.hover_listener(row_id, move |_view, hovered, cx| {
                     if *hovered {
-                        cx.dispatch_action_to_popup_owner(AutocompletePreview {
+                        cx.dispatch_action_to_popover_owner(AutocompletePreview {
                             control,
-                            popup,
+                            popover,
                             source_revision,
                             result_index,
                         });
@@ -1103,9 +1103,9 @@ where
                 });
                 let source_index = matched.source_index;
                 let click = cx.listener(row_id, move |_view, cx| {
-                    if cx.dispatch_action_to_popup_owner(AutocompleteCommit {
+                    if cx.dispatch_action_to_popover_owner(AutocompleteCommit {
                         control,
-                        popup,
+                        popover,
                         source_revision,
                         source_index,
                     }) {
@@ -1123,7 +1123,7 @@ where
             .overflow_hidden()
             .virtual_scroll(&self.list)
             .children(rows);
-        (self.renderers.popup_root)(snapshot.list_state())
+        (self.renderers.popover_root)(snapshot.list_state())
             .id(AutocompleteState::<T>::surface_id(self.control))
             .size_full()
             .overflow_hidden()
@@ -1212,7 +1212,7 @@ mod tests {
         ]
     }
 
-    fn popup_root(state: AutocompleteListState) -> Element {
+    fn popover_root(state: AutocompleteListState) -> Element {
         div()
             .bg(Color::BLACK)
             .child(text(format!("{} results", state.result_count)))
@@ -1234,7 +1234,7 @@ mod tests {
         fn new(behavior: AutocompleteSelectionBehavior) -> Self {
             let mut autocomplete = AutocompleteState::new(options())
                 .unwrap()
-                .with_layout(AutocompletePopupLayout::new(220.0, 32.0).max_visible_rows(2));
+                .with_layout(AutocompletePopoverLayout::new(220.0, 32.0).max_visible_rows(2));
             autocomplete.set_selection_behavior(behavior);
             Self {
                 autocomplete,
@@ -1259,7 +1259,7 @@ mod tests {
                 "Fruit",
                 Self::autocomplete,
                 input,
-                popup_root,
+                popover_root,
                 option_row,
                 |view, value, _cx| view.values.push(value),
                 |view, value, _cx| view.selected.push(value),
@@ -1358,29 +1358,29 @@ mod tests {
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();
-        let (popup, row) = cx
+        let (popover, row) = cx
             .read(owner, |view| {
                 (
-                    view.autocomplete.popup_window().unwrap(),
+                    view.autocomplete.popover_window().unwrap(),
                     view.autocomplete.option_id_for_source("fruit", 0).unwrap(),
                 )
             })
             .unwrap();
         assert_eq!(
-            cx.window_state(popup).unwrap().kind,
-            crate::WindowKind::AnchoredPopup
+            cx.window_state(popover).unwrap().kind,
+            crate::WindowKind::SystemPopover
         );
         assert_eq!(cx.focused(window).unwrap(), Some("fruit".into()));
-        cx.click(popup, row).unwrap();
+        cx.click(popover, row).unwrap();
 
-        assert!(!cx.is_window_open(popup));
+        assert!(!cx.is_window_open(popover));
         assert_eq!(cx.focused(window).unwrap(), Some("fruit".into()));
         assert_eq!(
             cx.read(owner, |view| view.selected.clone()).unwrap(),
             vec!["apple"]
         );
         assert_eq!(
-            cx.read(owner, |view| view.autocomplete.popup_window())
+            cx.read(owner, |view| view.autocomplete.popover_window())
                 .unwrap(),
             None
         );
@@ -1397,14 +1397,14 @@ mod tests {
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.simulate_input(window, "custom").unwrap();
-        let popup = cx
-            .read(owner, |view| view.autocomplete.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.autocomplete.popover_window().unwrap())
             .unwrap();
         assert!(
             !cx.simulate_mouse_down(window, "after-autocomplete", MouseDownEvent::default())
                 .unwrap()
         );
-        assert!(!cx.is_window_open(popup));
+        assert!(!cx.is_window_open(popover));
         assert_eq!(
             cx.read(owner, |view| view.autocomplete.value().clone())
                 .unwrap(),
@@ -1423,8 +1423,8 @@ mod tests {
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();
-        let popup = cx
-            .read(owner, |view| view.autocomplete.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.autocomplete.popover_window().unwrap())
             .unwrap();
         cx.update(owner, |view, cx| {
             view.autocomplete
@@ -1440,16 +1440,16 @@ mod tests {
         })
         .unwrap();
         assert_eq!(
-            cx.read(owner, |view| view.autocomplete.popup_window())
+            cx.read(owner, |view| view.autocomplete.popover_window())
                 .unwrap(),
-            Some(popup)
+            Some(popover)
         );
         let row = cx
             .read(owner, |view| {
                 view.autocomplete.option_id_for_source("fruit", 0).unwrap()
             })
             .unwrap();
-        cx.click(popup, row).unwrap();
+        cx.click(popover, row).unwrap();
         assert_eq!(
             cx.read(owner, |view| view.selected.clone()).unwrap(),
             vec!["cherry"]
@@ -1489,14 +1489,14 @@ mod tests {
         assert!(state.value().len() <= MAX_AUTOCOMPLETE_VALUE_BYTES);
         assert!(state.value().is_char_boundary(state.value().len()));
 
-        let options = crate::AnchoredPopover::new(240.0, 120.0)
+        let options = crate::SystemPopover::new(240.0, 120.0)
             .grab(false)
             .accepts_key_focus(false)
             .window_options("Autocomplete");
-        let popup = options.popup.expect("anchored popup options");
+        let popover = options.popover.expect("system popover options");
         assert!(!options.focus);
-        assert!(!popup.grab);
-        assert!(!popup.accepts_key_focus);
+        assert!(!popover.grab);
+        assert!(!popover.accepts_key_focus);
     }
 
     #[test]
@@ -1504,21 +1504,21 @@ mod tests {
         let items = (0..20_000).map(|index| PickerItem::new(format!("Item {index}"), index));
         let mut state = AutocompleteState::new(items)
             .unwrap()
-            .with_layout(AutocompletePopupLayout::new(240.0, 30.0).max_visible_rows(5));
+            .with_layout(AutocompletePopoverLayout::new(240.0, 30.0).max_visible_rows(5));
         state
             .picker
-            .set_result_viewport_height(state.layout.popup_height());
+            .set_result_viewport_height(state.layout.popover_height());
         let snapshot = Entity::new(state.snapshot());
-        let popup = AutocompletePopupView::new(
+        let popover = AutocompletePopoverView::new(
             "large-autocomplete".into(),
             snapshot,
             state.layout,
             AutocompleteRenderers {
-                popup_root: |_state: AutocompleteListState| div(),
+                popover_root: |_state: AutocompleteListState| div(),
                 render_option: |_item: &PickerItem<usize>, _state: AutocompleteOptionState| div(),
             },
         );
-        assert!(popup.list.visible_rows().len() <= 7);
+        assert!(popover.list.visible_rows().len() <= 7);
 
         let (mut cx, owner) = App::new(AutocompleteOwner::new(
             AutocompleteSelectionBehavior::CompleteInput,
@@ -1530,7 +1530,7 @@ mod tests {
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();
         let child = cx
-            .read(owner, |view| view.autocomplete.popup_window().unwrap())
+            .read(owner, |view| view.autocomplete.popover_window().unwrap())
             .unwrap();
         let owner_renders = cx.render_count(window).unwrap();
         let child_renders = cx.render_count(child).unwrap();

@@ -621,16 +621,16 @@ impl TestAppContext {
     }
 
     #[cfg(test)]
-    pub(crate) fn popup_grabs_focus(
+    pub(crate) fn popover_grabs_focus(
         &self,
         window: WindowHandle,
     ) -> Result<Option<bool>, TestAppError> {
         Ok(self
             .window(window)?
             .config
-            .popup
+            .popover
             .as_ref()
-            .map(|popup| popup.grab))
+            .map(|popover| popover.grab))
     }
 
     /// Inject a bounded native tab-group snapshot and rebuild only an observing view.
@@ -1507,7 +1507,7 @@ impl TestAppContext {
             }
             progress |= self.process_foreground_tasks()?;
             // Production delivers queued cross-window actions before applying the close tree from
-            // the same callback. Popup commands therefore reach their owner before the popup
+            // the same callback. Popover commands therefore reach their owner before the popover
             // chain is destroyed; the deterministic runtime preserves that exact ordering.
             progress |= self.close_pending_windows()?;
             progress |= self.rebuild_dirty_windows()?;
@@ -1668,7 +1668,7 @@ impl TestAppContext {
         let parent = window
             .and_then(|window| self.windows.get(&window))
             .and_then(|window| window.parent);
-        let popup_context = window.and_then(|window| self.popup_context(window));
+        let popover_context = window.and_then(|window| self.popover_context(window));
         let pointer_position = window
             .and_then(|window| self.windows.get(&window))
             .and_then(|window| window.pointer);
@@ -1682,24 +1682,24 @@ impl TestAppContext {
             crate::event::EventWindowContext {
                 window,
                 parent,
-                popup_owner: popup_context.map(|context| context.owner),
-                popup_root: popup_context.map(|context| context.root),
+                popover_owner: popover_context.map(|context| context.owner),
+                popover_root: popover_context.map(|context| context.root),
                 pointer_position,
             },
         )
     }
 
-    fn popup_context(&self, window: WindowHandle) -> Option<PopupWindowContext> {
+    fn popover_context(&self, window: WindowHandle) -> Option<PopoverWindowContext> {
         let current = self.windows.get(&window)?;
-        if current.config.kind != WindowKind::AnchoredPopup {
+        if current.config.kind != WindowKind::SystemPopover {
             return None;
         }
         let mut root = window;
         let mut ancestor = current.parent?;
         loop {
             let window = self.windows.get(&ancestor)?;
-            if window.config.kind != WindowKind::AnchoredPopup {
-                return Some(PopupWindowContext {
+            if window.config.kind != WindowKind::SystemPopover {
+                return Some(PopoverWindowContext {
                     owner: ancestor,
                     root,
                 });
@@ -1737,13 +1737,11 @@ impl TestAppContext {
             cx.open_windows.clear();
         } else {
             for request in &mut cx.open_windows {
-                let Some(anchor) = request.popup_anchor_element.take() else {
+                let Some(anchor) = request.popover_anchor_element.take() else {
                     continue;
                 };
                 let origin = origin.ok_or_else(|| {
-                    TestAppError::View(
-                        "an element-anchored popup requires a parent test window".to_owned(),
-                    )
+                    TestAppError::View("a SystemPopover requires a parent test window".to_owned())
                 })?;
                 // Production pointer events arrive after a presented frame has populated retained
                 // geometry. Headless semantic tests intentionally skip paint, so prepare the same
@@ -1755,10 +1753,10 @@ impl TestAppContext {
                         element: anchor,
                     },
                 )?;
-                let popup = request.options.popup.as_mut().ok_or_else(|| {
-                    TestAppError::View(WindowCommandError::InvalidPopupConfiguration.to_string())
+                let popover = request.options.popover.as_mut().ok_or_else(|| {
+                    TestAppError::View(WindowCommandError::InvalidPopoverConfiguration.to_string())
                 })?;
-                popup.anchor_rect = bounds;
+                popover.anchor_rect = bounds;
             }
             self.pending_windows.extend(cx.open_windows.drain(..));
         }
@@ -3043,37 +3041,41 @@ fn test_window_state(
 ) -> WindowState {
     let preferred_display = options.display_id.and_then(|id| displays.find(id));
     let placement_display = preferred_display.or_else(|| displays.primary());
-    let popup_bounds = options.popup.as_ref().zip(parent).map(|(popup, parent)| {
-        let parent = parent.bounds.bounds();
-        let anchor = Rect::new(
-            parent.x + popup.anchor_rect.x,
-            parent.y + popup.anchor_rect.y,
-            popup.anchor_rect.width,
-            popup.anchor_rect.height,
-        );
-        #[cfg(any(target_os = "macos", test))]
-        {
-            let anchor_center = Point::new(
-                anchor.x + anchor.width * 0.5,
-                anchor.y + anchor.height * 0.5,
+    let popover_bounds = options
+        .popover
+        .as_ref()
+        .zip(parent)
+        .map(|(popover, parent)| {
+            let parent = parent.bounds.bounds();
+            let anchor = Rect::new(
+                parent.x + popover.anchor_rect.x,
+                parent.y + popover.anchor_rect.y,
+                popover.anchor_rect.width,
+                popover.anchor_rect.height,
             );
-            let visible = displays
-                .all()
-                .iter()
-                .find(|display| display.visible_bounds().contains(anchor_center))
-                .or_else(|| displays.primary())
-                .map_or_else(
-                    || Rect::new(-1_000_000.0, -1_000_000.0, 2_000_000.0, 2_000_000.0),
-                    Display::visible_bounds,
+            #[cfg(any(target_os = "macos", test))]
+            {
+                let anchor_center = Point::new(
+                    anchor.x + anchor.width * 0.5,
+                    anchor.y + anchor.height * 0.5,
                 );
-            crate::popup::place_popup(anchor, options.size, visible, popup)
-        }
-        #[cfg(not(any(target_os = "macos", test)))]
-        {
-            crate::popup::unconstrained_popup_rect(anchor, options.size, popup)
-        }
-    });
-    let bounds = popup_bounds.map_or_else(
+                let visible = displays
+                    .all()
+                    .iter()
+                    .find(|display| display.visible_bounds().contains(anchor_center))
+                    .or_else(|| displays.primary())
+                    .map_or_else(
+                        || Rect::new(-1_000_000.0, -1_000_000.0, 2_000_000.0, 2_000_000.0),
+                        Display::visible_bounds,
+                    );
+                crate::popover::place_popover(anchor, options.size, visible, popover)
+            }
+            #[cfg(not(any(target_os = "macos", test)))]
+            {
+                crate::popover::unconstrained_popover_rect(anchor, options.size, popover)
+            }
+        });
+    let bounds = popover_bounds.map_or_else(
         || {
             options.window_bounds.unwrap_or_else(|| {
                 WindowBounds::Windowed(if options.display_id.is_some() {

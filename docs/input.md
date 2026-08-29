@@ -158,10 +158,13 @@ Focus loss synthesizes one cancellation for every retained contact. A window cap
 contacts, positions are finite bounded logical points, and optional force is normalized to
 `0.0..=1.0`.
 
-On macOS the existing Winit content view accepts AppKit direct and indirect `NSTouch` contacts and
-forwards exact began, moved, ended, and cancelled sets. Resting touches are excluded, and AppKit
-does not expose contact force through this path. The listener owns no recognizer, global monitor,
-timer, polling source, or idle frame; invalidations still coalesce through the ordinary scheduler.
+On macOS the existing Winit content view accepts only direct AppKit `NSTouch` contacts and forwards
+exact began, moved, ended, and cancelled sets. Indirect trackpad contacts do not have a corresponding
+window position, so they remain on the scroll, pinch, rotation, smart-magnify, and pressure paths
+instead of being fabricated as hit-testable touches. Resting touches are excluded, and AppKit does
+not expose contact force through the direct-touch path. The listener owns no recognizer, global
+monitor, timer, polling source, or idle frame; invalidations still coalesce through the ordinary
+scheduler.
 
 ### Native pressure and gestures
 

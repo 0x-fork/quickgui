@@ -21,6 +21,9 @@ All notable user-facing changes to QuickGUI are recorded here.
 - Added controlled `Input`/`TextArea` and retained core `Markdown` bindings to
   `@quickgui/native`/`@quickgui/solid`, plus a packaged Solid AI chat example using Vercel AI SDK
   streaming and the DeepSeek provider.
+- Added Base-UI-shaped `Root`/`Trigger`/`Popup` parts for Solid `Popover` and `SystemPopover`.
+  Triggers now register their retained native anchor internally, while only the system popup subtree
+  crosses into its parent-owned native child window renderer.
 - Fixed native controlled inputs resetting each keystroke before Solid could commit the queued
   value update.
 - Fixed the Solid compiler plugin to preserve and then correctly erase TypeScript syntax after JSX
@@ -56,7 +59,7 @@ Initial macOS-first framework release.
 
 - Keyboard, mouse, IME, editable and selectable text, forms, accessibility, gestures, native
   cursors, tooltips, typed drag and drop, and deterministic input simulation.
-- Unstyled selection controls, tabs, fields, disclosures, dialogs, popup menus, pickers, virtual
+- Unstyled selection controls, tabs, fields, disclosures, dialogs, popover menus, pickers, virtual
   tables, and virtual trees with application-owned presentation.
 
 ### Validation and resource ownership
@@ -64,7 +67,7 @@ Initial macOS-first framework release.
 - A 561-test library suite, downstream test-support coverage, all-example and benchmark compilation,
   warning-free Clippy/rustdoc gates, and Rust 1.89 downstream package verification.
 - Live 100,000-row scrolling and AppKit composition gates enforce frame-time, CPU, memory, cache,
-  lifecycle, resize, focus, native-view, popup, and idle-frame budgets.
+  lifecycle, resize, focus, native-view, popover, and idle-frame budgets.
 
 ### Platform scope
 

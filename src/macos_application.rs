@@ -23,8 +23,8 @@ use objc2::{
 };
 use objc2_app_kit::{
     NSApplication, NSApplicationDidBecomeActiveNotification,
-    NSApplicationDidChangeScreenParametersNotification, NSWorkspace,
-    NSWorkspaceDidWakeNotification, NSWorkspaceSessionDidBecomeActiveNotification,
+    NSApplicationDidChangeScreenParametersNotification, NSApplicationDidResignActiveNotification,
+    NSWorkspace, NSWorkspaceDidWakeNotification, NSWorkspaceSessionDidBecomeActiveNotification,
     NSWorkspaceSessionDidResignActiveNotification, NSWorkspaceWillSleepNotification,
 };
 use objc2_foundation::{
@@ -302,6 +302,14 @@ declare_class!(
         #[method(quickGuiDisplaysDidChange:)]
         fn displays_did_change(&self, _notification: &NSNotification) {
             let _ = self.ivars().proxy.send_event(RuntimeEvent::DisplaysChanged);
+        }
+
+        #[method(quickGuiApplicationDidResignActive:)]
+        fn application_did_resign_active(&self, _notification: &NSNotification) {
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::ApplicationDeactivated);
         }
 
         #[method(quickGuiKeyboardLayoutDidChange:)]
@@ -664,6 +672,12 @@ impl MacApplicationHost {
                 application_observer.as_ref(),
                 sel!(quickGuiDisplaysDidChange:),
                 Some(NSApplicationDidBecomeActiveNotification),
+                None,
+            );
+            application_notifications.addObserver_selector_name_object(
+                application_observer.as_ref(),
+                sel!(quickGuiApplicationDidResignActive:),
+                Some(NSApplicationDidResignActiveNotification),
                 None,
             );
             let keyboard_layout_notification =

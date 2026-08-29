@@ -1,11 +1,11 @@
 use quickgui::{
     AccessibilityRole, AnchorPlacement, App, AutocompleteListState, AutocompleteOptionState,
-    AutocompletePopupLayout, AutocompleteState, CONTEXT_MENU_SUBMENU_AIM_DELAY,
+    AutocompletePopoverLayout, AutocompleteState, CONTEXT_MENU_SUBMENU_AIM_DELAY,
     CONTEXT_MENU_SUBMENU_HOVER_DELAY, Checkbox, ComboboxListState, ComboboxOptionState,
-    ComboboxPopupLayout, ComboboxState, ContextMenuLayout, ContextMenuState, Dialog, FontFallbacks,
+    ComboboxPopoverLayout, ComboboxState, ContextMenuLayout, ContextMenuState, Dialog, FontFallbacks,
     Accordion, AccordionState, Collapsible, Field, Fieldset, FontFamily, FontFeatureTag,
     FontFeatures, IntoElement, PickerItem, PickerLayout,
-    PickerState, Popover, PopoverKind, PopupMenu, PopupMenuItem, Radio, RadioGroup, SelectState,
+    PickerState, Popover, PopoverKind, PopoverMenu, PopoverMenuItem, Radio, RadioGroup, SelectState,
     Switch, TableColumn, TableLayout, TableState, ToggleState, TreeLayout, TreeNode, TreeState, View,
     ViewContext, checkbox, combobox_key_bindings, div, font, radio, radio_group, switch, text,
     text_input,
@@ -27,13 +27,13 @@ impl PackagedApp {
                 PickerItem::new("Apricot", "apricot").id("apricot"),
             ])
             .expect("packaged AutocompleteState API should accept a valid bounded source")
-            .with_layout(AutocompletePopupLayout::new(240.0, 36.0)),
+            .with_layout(AutocompletePopoverLayout::new(240.0, 36.0)),
             combobox: ComboboxState::new([
                 PickerItem::new("System", "system").id("system"),
                 PickerItem::new("Dark", "dark").id("dark"),
             ])
             .expect("packaged ComboboxState API should accept a valid bounded source")
-            .with_layout(ComboboxPopupLayout::new(240.0, 36.0))
+            .with_layout(ComboboxPopoverLayout::new(240.0, 36.0))
             .with_selected_id("system"),
             picker: PickerState::new([
                 PickerItem::new("Open", "open").id("open"),
@@ -176,7 +176,7 @@ impl View for PackagedApp {
 }
 
 fn main() {
-    let popover = Popover::new("packaged-trigger", "packaged-popup", true)
+    let popover = Popover::new("packaged-trigger", "packaged-popover", true)
         .kind(PopoverKind::Dialog)
         .placement(AnchorPlacement::BottomEnd)
         .anchor_gap(8.0)
@@ -184,7 +184,7 @@ fn main() {
     let popover = popover.initial_focus(popover.close_id());
     let _popover_trigger = popover.trigger_part(div()).child("Open packaged popover");
     let _popover_positioner =
-        popover.positioner_part(div().child(popover.popup_part(div()).children([
+        popover.positioner_part(div().child(popover.popover_part(div()).children([
             popover.title_part(text("Packaged popover")),
             popover.description_part(text("Packaged unstyled parts")),
             popover.close_part("Close packaged popover", div()),
@@ -255,16 +255,16 @@ fn main() {
         CONTEXT_MENU_SUBMENU_HOVER_DELAY,
         CONTEXT_MENU_SUBMENU_AIM_DELAY,
     );
-    let popup_menu = PopupMenu::new([
-        PopupMenuItem::group_label("File"),
-        PopupMenuItem::action("open", "Open", ()),
-        PopupMenuItem::separator(),
+    let popover_menu = PopoverMenu::new([
+        PopoverMenuItem::group_label("File"),
+        PopoverMenuItem::action("open", "Open", ()),
+        PopoverMenuItem::separator(),
     ])
-    .expect("packaged PopupMenu API should accept labeled groups and separators");
-    let _group = popup_menu
+    .expect("packaged PopoverMenu API should accept labeled groups and separators");
+    let _group = popover_menu
         .labeled_group_part("packaged-menu", 0, div())
         .expect("the packaged group label should name its group part");
-    let _separator = popup_menu
+    let _separator = popover_menu
         .item_part("packaged-menu", 2, div())
         .expect("the packaged separator part should project semantics");
     let _labelled = div()
@@ -274,7 +274,7 @@ fn main() {
     let dialog = Dialog::alert("packaged-dialog", true).restore_focus_to("packaged-trigger");
     let _dialog_root = dialog.root_part(div()).children([
         dialog.backdrop_part(div()),
-        dialog.popup_part(div()).children([
+        dialog.popover_part(div()).children([
             dialog.title_part(text("Packaged alert")),
             dialog.description_part(text("Packaged description")),
         ]),

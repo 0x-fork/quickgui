@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, ComboboxOptionState, ComboboxPopupLayout, ComboboxState, HighlightStyle,
-    IntoElement, PickerItem, SelectPopupLayout, SelectState, StyledText, TitleBarStyle, View,
+    App, Color, ComboboxOptionState, ComboboxPopoverLayout, ComboboxState, HighlightStyle,
+    IntoElement, PickerItem, SelectPopoverLayout, SelectState, StyledText, TitleBarStyle, View,
     ViewContext, combobox_key_bindings, div, select_key_bindings, text, text_input,
 };
 
@@ -37,7 +37,7 @@ impl ComboboxGallery {
                 .disabled(true),
         ])
         .expect("theme options are valid")
-        .with_layout(SelectPopupLayout::new(320.0, 40.0).max_visible_rows(8));
+        .with_layout(SelectPopoverLayout::new(320.0, 40.0).max_visible_rows(8));
         theme.select_id("system");
 
         let items = (0..SYMBOLS).map(|index| {
@@ -59,7 +59,7 @@ impl ComboboxGallery {
         });
         let symbol = ComboboxState::new(items)
             .expect("symbol options are valid")
-            .with_layout(ComboboxPopupLayout::new(420.0, 42.0).max_visible_rows(7))
+            .with_layout(ComboboxPopoverLayout::new(420.0, 42.0).max_visible_rows(7))
             .with_selected_source(42);
 
         Self {
@@ -344,7 +344,7 @@ impl View for ComboboxGallery {
                                     .gap_1()
                                     .child(text("Standalone unstyled select").font_semibold())
                                     .child(
-                                        text("The caller owns every pixel. QuickGUI supplies a separate native popup surface, preview/commit/cancel behavior, typeahead, virtualization, and exact close synchronization. Disabled choices remain in source order and cannot be committed.")
+                                        text("The caller owns every pixel. QuickGUI supplies a separate native popover surface, preview/commit/cancel behavior, typeahead, virtualization, and exact close synchronization. Disabled choices remain in source order and cannot be committed.")
                                             .wrap()
                                             .text_sm()
                                             .text_color(muted),
@@ -376,7 +376,7 @@ impl View for ComboboxGallery {
                                             .gap_1()
                                             .child(text("Unstyled constrained combobox").font_semibold())
                                             .child(
-                                                text("The caller owns the input, popup, and rows. Typing filters a bounded 20,000-item source; only a declared enabled option can become the value. Escape, Tab, or an outside press restores the last committed label.")
+                                                text("The caller owns the input, popover, and rows. Typing filters a bounded 20,000-item source; only a declared enabled option can become the value. Escape, Tab, or an outside press restores the last committed label.")
                                                     .wrap()
                                                     .text_sm()
                                                     .text_color(muted),
@@ -398,7 +398,7 @@ impl View for ComboboxGallery {
                             )
                             .child(symbol)
                             .child(
-                                text("Only the viewport plus one overscan row is mounted; closing the popup retains no overlay and schedules no frame.")
+                                text("Only the viewport plus one overscan row is mounted; closing the popover retains no overlay and schedules no frame.")
                                     .wrap()
                                     .text_xs()
                                     .text_color(muted),

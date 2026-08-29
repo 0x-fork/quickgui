@@ -82,7 +82,7 @@ if [[ $probe_status -ne 0 ]]; then
   exit "$probe_status"
 fi
 if ! grep -q '^QUICKGUI_ACCEPTANCE_RESULT .*"passed":true' "$probe_log"; then
-  echo "macos-acceptance-gate: no passing resize/text/native-view/focus/document/popup result was emitted" >&2
+  echo "macos-acceptance-gate: no passing resize/text/native-view/focus/document/popover result was emitted" >&2
   exit 1
 fi
 if ! grep -q '^QUICKGUI_LIFECYCLE_RESULT .*"passed":true' "$probe_log"; then

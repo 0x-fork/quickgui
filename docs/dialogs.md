@@ -36,7 +36,7 @@ let open = cx.listener("open-settings", move |view, cx| {
     dialog.focus_initial(cx);
     cx.invalidate();
 });
-let dismiss = cx.dismiss_listener(dialog.popup_id(), |view, cx| {
+let dismiss = cx.dismiss_listener(dialog.popover_id(), |view, cx| {
     view.settings_open = false;
     cx.invalidate();
 });
@@ -46,8 +46,8 @@ let trigger = dialog
     .on_click(open);
 
 if self.settings_open {
-    let popup = dialog
-        .popup_part(
+    let popover = dialog
+        .popover_part(
             div()
                 .child(dialog.title_part(text("Settings")))
                 .child(dialog.description_part(text("Edit account settings")))
@@ -58,13 +58,13 @@ if self.settings_open {
     let portal = dialog
         .root_part(div().flex_row().items_center().justify_center())
         .child(dialog.backdrop_part(div()))
-        .child(popup);
+        .child(popover);
 }
 ```
 
 Mount `root_part` only while the controlled value is open. `root_part` fills the viewport but does
-not choose popup alignment; Flexbox, Grid, or absolute positioning on the caller root remains
-application presentation. The backdrop and popup likewise receive no authored color or size.
+not choose popover alignment; Flexbox, Grid, or absolute positioning on the caller root remains
+application presentation. The backdrop and popover likewise receive no authored color or size.
 
 `close_part(label, element)` decorates a caller element with a stable close-control ID and button
 semantics. Its listener still belongs to the application. Explicit close callbacks call
@@ -75,7 +75,7 @@ retained restore target automatically.
 
 `.focus_trap()` is a general retained element primitive. Mounted traps are ordered by render plane,
 effective `z_index`, and source order; only the topmost trap contributes framework focusability or
-Tab stops. Mounting a trap focuses its first enabled Tab stop, falling back to the popup root. If a
+Tab stops. Mounting a trap focuses its first enabled Tab stop, falling back to the popover root. If a
 focused child disappears, focus moves to the first remaining stop instead of escaping the modal.
 
 Programmatic QuickGUI focus, pointer focus, Tab, Shift-Tab, and accessibility focus actions use the
@@ -85,7 +85,7 @@ rebuilt only with the ordinary declarative tree.
 
 ## Dismissal policy
 
-An ordinary `Dialog::new` dismisses on Escape and a press outside its popup. `Dialog::alert`
+An ordinary `Dialog::new` dismisses on Escape and a press outside its popover. `Dialog::alert`
 dismisses on Escape but blocks backdrop presses by default, preventing accidental confirmation
 loss. Both policies are configurable:
 
@@ -100,7 +100,7 @@ the overlay root even when backdrop dismissal is disabled.
 
 ## Accessibility and native composition
 
-Ordinary and alert popups project distinct AccessKit `Dialog` and `AlertDialog` roles, explicit
+Ordinary and alert popovers project distinct AccessKit `Dialog` and `AlertDialog` roles, explicit
 modal state, and `labelled-by`/`described-by` relationships to the mounted visible parts. Dangling
 or self-referential targets are omitted. Accessibility relationships use one nullable pointer on
 ordinary elements and allocate one fixed record only for elements that declare relations.

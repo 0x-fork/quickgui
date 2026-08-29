@@ -59,7 +59,7 @@ scripts/macos-display-acceptance-gate.sh
 ```
 
 Run a focused probe after changing the subsystem it covers. Do not repeat the complete composition
-and 128-cycle popup soak merely because documentation, packaging, examples, or unrelated component
+and 128-cycle popover soak merely because documentation, packaging, examples, or unrelated component
 code changed. A release decision may combine the last passing full composition probe with newer
 focused performance or display evidence, provided the intervening change and its focused coverage
 are recorded in [the status ledger](status.md).

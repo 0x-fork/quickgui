@@ -128,7 +128,7 @@ cargo run --release --example selection_controls
 
 The tabs gallery demonstrates caller-owned horizontal and vertical tab presentation. It covers
 manual and automatic activation, disabled-item skipping, looping, retained and unmounted panels,
-and application-owned indicators in one ordinary window; it opens no popup or native child
+and application-owned indicators in one ordinary window; it opens no popover or native child
 surface:
 
 ```console
@@ -154,17 +154,17 @@ timer, registry, or idle frame:
 cargo run --release --example focus_accessibility
 ```
 
-The controlled-popover gallery combines caller-owned trigger/positioner/popup/title/description/
+The controlled-popover gallery combines caller-owned trigger/positioner/popover/title/description/
 close parts, same-turn opening focus, independent Escape/outside dismissal, exact restoration,
 nested topmost surfaces, edge-aware placement, and application-owned light/dark presentation. Open
-settled popups add no idle scheduling source:
+settled popovers add no idle scheduling source:
 
 ```console
 cargo run --release --example popovers
 ```
 
 The dialog gallery composes an ordinary editing dialog and a nested consequential alert from
-caller-styled portal, backdrop, popup, title, description, and close parts. It exercises topmost
+caller-styled portal, backdrop, popover, title, description, and close parts. It exercises topmost
 focus trapping, wrapping Tab traversal, independent Escape/backdrop policy, exact restoration,
 hidden-inset no-drag regions, and the overlay plane used above native children. Settled dialogs add
 no idle frame:
@@ -177,13 +177,13 @@ The select/combobox gallery combines two unstyled contracts: a standalone Select
 20,000-option editable Combobox. It demonstrates caller-owned parts, preview-versus-commit
 behavior, committed-label restoration, stable IDs, disabled choices, normal text editing and IME
 ownership, never-key overflow placement, owner-tree listbox accessibility, visible-only rows, and
-CPU/draw/shaping telemetry. Settled open controls and closed popups add no idle frame:
+CPU/draw/shaping telemetry. Settled open controls and closed popovers add no idle frame:
 
 ```console
 cargo run --release --example comboboxes
 ```
 
-The free-form autocomplete gallery styles only application-owned input, popup, and option parts.
+The free-form autocomplete gallery styles only application-owned input, popover, and option parts.
 Its 20,000-item suggestion panel is a never-key native child that can cross the window edge while
 keyboard and IME focus stay in the owner input. Escape preserves arbitrary text, Return commits
 only an active row, visible-only rows and owner-tree accessibility proxies remain bounded, and both
@@ -277,7 +277,7 @@ native child from its superview. A one-second settle period is followed by a two
 The in-process result requires at least 45 presented resize frames per second, at most 35% of one
 application-thread CPU core, 10 ms p95 and 25 ms maximum application-thread frame work, no more
 than 96 visible or 256 retained text areas/layouts, 32 retained text renderers, eight draw calls,
-two simultaneous popup windows, the resource-growth ceilings above, and zero extra idle frames.
+two simultaneous popover windows, the resource-growth ceilings above, and zero extra idle frames.
 The wrapper independently limits all process threads to 35% CPU over the complete run, peak RSS to
 192 MiB, and peak physical footprint to 320 MiB. A documented reference machine can override the
 wrapper limits with
@@ -286,8 +286,8 @@ wrapper limits with
 
 Like the scroll gate, this requires a real logged-in macOS WindowServer and is intentionally not a
 headless CI timing assertion. Its schema-11 result records every constraint, mouse assertion,
-popup lifecycle, cadence, and current-memory sample; the watchdog names the exact stalled native
-phase. Direct AppKit/Winit responder delivery closes each scripted popup too quickly for this to be
+popover lifecycle, cadence, and current-memory sample; the watchdog names the exact stalled native
+phase. Direct AppKit/Winit responder delivery closes each scripted popover too quickly for this to be
 a visual QA recording. It emits `QUICKGUI_ACCEPTANCE_RESULT`,
 `QUICKGUI_LIFECYCLE_RESULT`, and `QUICKGUI_ACCEPTANCE_PROCESS_RESULT` JSON records so a release
 job or local harness can archive exact evidence.

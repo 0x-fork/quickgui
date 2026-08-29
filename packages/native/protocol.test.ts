@@ -28,8 +28,8 @@ describe("binary mutation protocol", () => {
     expect(() => batch.setProperty(1, PropertyCode.Width, Number.NaN)).toThrow("finite");
   });
 
-  test("encodes native input, Markdown, and virtual-list additions under protocol v4", () => {
-    expect(PROTOCOL_VERSION).toBe(4);
+  test("encodes native controls and retained popovers under protocol v5", () => {
+    expect(PROTOCOL_VERSION).toBe(5);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -40,7 +40,15 @@ describe("binary mutation protocol", () => {
     batch.createElement(3, NativeNodeTag.VirtualList);
     batch.setProperty(3, PropertyCode.EstimatedItemHeight, 180);
     batch.setProperty(3, PropertyCode.FollowMode, "tail");
-    expect(batch.mutationCount).toBe(9);
+    batch.createElement(4, NativeNodeTag.View);
+    batch.setProperty(4, PropertyCode.AnchorTarget, "1");
+    batch.setProperty(4, PropertyCode.AnchorPlacement, "bottom-start");
+    batch.setProperty(4, PropertyCode.AnchorGap, 8);
+    batch.setProperty(4, PropertyCode.ViewportMargin, 12);
+    batch.setProperty(4, PropertyCode.DismissOnEscape, false);
+    batch.setProperty(4, PropertyCode.DismissOnPointerOutside, true);
+    batch.setProperty(4, PropertyCode.DismissListener, true);
+    expect(batch.mutationCount).toBe(17);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 });

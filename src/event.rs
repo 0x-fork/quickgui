@@ -60,7 +60,10 @@ pub enum Event {
     Rotation(RotationEvent),
     /// A native smart-magnify gesture, normally a two-finger double tap on macOS.
     SmartMagnify(SmartMagnifyEvent),
-    /// One raw platform touch contact, including direct and indirect touch surfaces.
+    /// One raw direct-touch contact in window coordinates.
+    ///
+    /// Indirect devices such as macOS trackpads are exposed through scroll and gesture events
+    /// because their contacts have no corresponding position in the window.
     Touch(TouchEvent),
     KeyDown {
         /// Normalized command identity, independent from Caps Lock and text composition.
@@ -827,7 +830,7 @@ pub enum TouchPhase {
     Cancelled,
 }
 
-/// One fixed-size raw touch sample in logical top-left window coordinates.
+/// One fixed-size direct-touch sample in logical top-left window coordinates.
 ///
 /// QuickGUI hit-tests a contact only at [`TouchPhase::Started`] and captures the nearest listening
 /// element for the rest of that contact. This is distinct from mouse pointer capture and supports
@@ -984,8 +987,8 @@ pub struct EventContext {
     pub(crate) assets: Assets,
     pub(crate) window: Option<WindowHandle>,
     pub(crate) parent_window: Option<WindowHandle>,
-    pub(crate) popup_owner_window: Option<WindowHandle>,
-    pub(crate) popup_root_window: Option<WindowHandle>,
+    pub(crate) popover_owner_window: Option<WindowHandle>,
+    pub(crate) popover_root_window: Option<WindowHandle>,
     pub(crate) pointer_position: Option<Point>,
     pub(crate) invalidate: bool,
     pub(crate) exit: bool,
@@ -1016,8 +1019,8 @@ pub struct EventContext {
 pub(crate) struct EventWindowContext {
     pub(crate) window: Option<WindowHandle>,
     pub(crate) parent: Option<WindowHandle>,
-    pub(crate) popup_owner: Option<WindowHandle>,
-    pub(crate) popup_root: Option<WindowHandle>,
+    pub(crate) popover_owner: Option<WindowHandle>,
+    pub(crate) popover_root: Option<WindowHandle>,
     pub(crate) pointer_position: Option<Point>,
 }
 
@@ -1040,8 +1043,8 @@ impl EventContext {
             assets,
             window: window_context.window,
             parent_window: window_context.parent,
-            popup_owner_window: window_context.popup_owner,
-            popup_root_window: window_context.popup_root,
+            popover_owner_window: window_context.popover_owner,
+            popover_root_window: window_context.popover_root,
             pointer_position: window_context.pointer_position,
             invalidate: false,
             exit: false,
@@ -1276,13 +1279,13 @@ impl EventContext {
         handle
     }
 
-    /// Open a parent-owned native popup anchored to the latest retained bounds of an element.
+    /// Open a parent-owned native popover anchored to the latest retained bounds of an element.
     ///
-    /// Unlike an in-window overlay, this popup owns a separate native window and WGPU surface, so
+    /// Unlike an in-window overlay, this popover owns a separate native window and WGPU surface, so
     /// it may extend beyond the parent window while the platform constrains it to the display work
     /// area. The anchor is resolved after the listener returns and before any invalidated rebuild;
     /// no geometry observer, polling task, or hard-coded duplicate rectangle is required.
-    pub fn open_anchored_popup<V: View>(
+    pub fn open_system_popover<V: View>(
         &mut self,
         anchor: impl Into<ElementId>,
         view: V,
@@ -1291,11 +1294,11 @@ impl EventContext {
         if self.window.is_none() {
             return Err(WindowCommandError::Unavailable);
         }
-        if options.kind != crate::WindowKind::AnchoredPopup || options.popup.is_none() {
-            return Err(WindowCommandError::InvalidPopupConfiguration);
+        if options.kind != crate::WindowKind::SystemPopover || options.popover.is_none() {
+            return Err(WindowCommandError::InvalidPopoverConfiguration);
         }
         let mut request = WindowRequest::with_parent(view, options, self.window);
-        request.popup_anchor_element = Some(anchor.into());
+        request.popover_anchor_element = Some(anchor.into());
         let handle = request.handle;
         self.open_windows.push(request);
         Ok(handle)
@@ -1980,16 +1983,16 @@ impl EventContext {
         self.close_current_window = true;
     }
 
-    /// Close the complete anchored-popup chain containing the current window.
+    /// Close the complete system-popover chain containing the current window.
     ///
-    /// Closing the first popup lets the runtime tear down every descendant child-first and gives
-    /// native keyboard focus back to the nearest non-popup owner. Outside an anchored popup this
+    /// Closing the first popover lets the runtime tear down every descendant child-first and gives
+    /// native keyboard focus back to the nearest non-popover owner. Outside a system popover this
     /// is a no-op and returns `false`.
-    pub fn close_popup_chain(&mut self) -> bool {
-        let Some(root) = self.popup_root_window else {
+    pub fn close_popover_chain(&mut self) -> bool {
+        let Some(root) = self.popover_root_window else {
             return false;
         };
-        if let Some(owner) = self.popup_owner_window
+        if let Some(owner) = self.popover_owner_window
             && !self.focus_windows.contains(&owner)
         {
             self.focus_windows.push(owner);
@@ -2119,34 +2122,34 @@ impl EventContext {
         self.parent_window
     }
 
-    /// Dispatch a typed action to the nearest non-popup owner of this anchored popup chain.
+    /// Dispatch a typed action to the nearest non-popover owner of this system popover chain.
     ///
     /// This differs from [`Self::dispatch_action_to_parent`] for nested menus: a submenu's direct
-    /// parent is another popup window, while commands should reach the application window that
-    /// opened the popup chain.
-    pub fn dispatch_action_to_popup_owner<A: Action>(&mut self, action: A) -> bool {
-        let Some(owner) = self.popup_owner_window else {
+    /// parent is another popover window, while commands should reach the application window that
+    /// opened the popover chain.
+    pub fn dispatch_action_to_popover_owner<A: Action>(&mut self, action: A) -> bool {
+        let Some(owner) = self.popover_owner_window else {
             return false;
         };
         self.dispatch_action_to_window(owner, action)
     }
 
-    /// Dispatch a previously type-erased action to the nearest non-popup owner.
-    pub fn dispatch_any_action_to_popup_owner(&mut self, action: AnyAction) -> bool {
-        let Some(owner) = self.popup_owner_window else {
+    /// Dispatch a previously type-erased action to the nearest non-popover owner.
+    pub fn dispatch_any_action_to_popover_owner(&mut self, action: AnyAction) -> bool {
+        let Some(owner) = self.popover_owner_window else {
             return false;
         };
         self.dispatch_any_action_to_window(owner, action)
     }
 
-    /// The nearest non-popup owner of the current anchored popup chain, when one exists.
-    pub const fn popup_owner_window_handle(&self) -> Option<WindowHandle> {
-        self.popup_owner_window
+    /// The nearest non-popover owner of the current system popover chain, when one exists.
+    pub const fn popover_owner_window_handle(&self) -> Option<WindowHandle> {
+        self.popover_owner_window
     }
 
-    /// The first anchored popup below the non-popup owner of the current popup chain.
-    pub const fn popup_root_window_handle(&self) -> Option<WindowHandle> {
-        self.popup_root_window
+    /// The first system popover below the non-popover owner of the current popover chain.
+    pub const fn popover_root_window_handle(&self) -> Option<WindowHandle> {
+        self.popover_root_window
     }
 
     /// Replace the application's native menu declaration.
@@ -2241,35 +2244,35 @@ mod tests {
     }
 
     #[test]
-    fn closing_popup_chain_restores_the_non_popup_owner_focus_once() {
+    fn closing_popover_chain_restores_the_non_popover_owner_focus_once() {
         let owner = WindowHandle::next();
         let root = WindowHandle::next();
         let child = WindowHandle::next();
         let mut cx = EventContext {
             window: Some(child),
-            popup_owner_window: Some(owner),
-            popup_root_window: Some(root),
+            popover_owner_window: Some(owner),
+            popover_root_window: Some(root),
             ..EventContext::default()
         };
 
-        assert!(cx.close_popup_chain());
-        assert!(cx.close_popup_chain());
+        assert!(cx.close_popover_chain());
+        assert!(cx.close_popover_chain());
         assert_eq!(cx.focus_windows, [owner]);
         assert_eq!(cx.close_windows, [root, root]);
         assert!(!cx.close_current_window);
 
         let mut root_context = EventContext {
             window: Some(root),
-            popup_owner_window: Some(owner),
-            popup_root_window: Some(root),
+            popover_owner_window: Some(owner),
+            popover_root_window: Some(root),
             ..EventContext::default()
         };
-        assert!(root_context.close_popup_chain());
+        assert!(root_context.close_popover_chain());
         assert_eq!(root_context.focus_windows, [owner]);
         assert!(root_context.close_current_window);
 
         let mut ordinary_window = EventContext::default();
-        assert!(!ordinary_window.close_popup_chain());
+        assert!(!ordinary_window.close_popover_chain());
         assert!(ordinary_window.focus_windows.is_empty());
     }
 

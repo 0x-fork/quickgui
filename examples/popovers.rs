@@ -27,9 +27,9 @@ struct GalleryPalette {
     border: Color,
     foreground: Color,
     muted: Color,
-    popup: Color,
-    popup_border: Color,
-    popup_shadow: BoxShadow,
+    popover: Color,
+    popover_border: Color,
+    popover_shadow: BoxShadow,
 }
 
 impl GalleryPalette {
@@ -41,9 +41,9 @@ impl GalleryPalette {
                 border: Color::rgb8(210, 214, 222),
                 foreground: Color::rgb8(30, 34, 41),
                 muted: Color::rgb8(92, 99, 112),
-                popup: Color::rgb8(255, 255, 255),
-                popup_border: Color::rgb8(205, 208, 216),
-                popup_shadow: BoxShadow::new(0.0, 10.0, Color::rgba8(0, 0, 0, 48))
+                popover: Color::rgb8(255, 255, 255),
+                popover_border: Color::rgb8(205, 208, 216),
+                popover_shadow: BoxShadow::new(0.0, 10.0, Color::rgba8(0, 0, 0, 48))
                     .blur_radius(32.0)
                     .spread_radius(-8.0),
             }
@@ -54,9 +54,9 @@ impl GalleryPalette {
                 border: Color::rgb8(55, 61, 72),
                 foreground: Color::rgb8(235, 238, 244),
                 muted: Color::rgb8(157, 166, 183),
-                popup: Color::rgb8(31, 34, 40),
-                popup_border: Color::rgb8(76, 82, 94),
-                popup_shadow: BoxShadow::new(0.0, 10.0, Color::rgba8(0, 0, 0, 100))
+                popover: Color::rgb8(31, 34, 40),
+                popover_border: Color::rgb8(76, 82, 94),
+                popover_shadow: BoxShadow::new(0.0, 10.0, Color::rgba8(0, 0, 0, 100))
                     .blur_radius(32.0)
                     .spread_radius(-8.0),
             }
@@ -244,7 +244,7 @@ impl View for PopoverGallery {
             );
 
         if account.is_open() {
-            let mut popup = gallery_popup(account.popup_part(div()), 180.0, palette)
+            let mut popover = gallery_popover(account.popover_part(div()), 180.0, palette)
                 .w(306.0)
                 .gap_1()
                 .on_dismiss(dismiss_account)
@@ -284,7 +284,7 @@ impl View for PopoverGallery {
                         .accessibility_label("Keyboard shortcut options"),
                 );
             if nested.is_open() {
-                let nested_popup = gallery_popup(nested.popup_part(div()), 210.0, palette)
+                let nested_popover = gallery_popover(nested.popover_part(div()), 210.0, palette)
                     .gap_2()
                     .on_dismiss(dismiss_nested)
                     .child(nested.title_part(text("Keyboard shortcut").font_semibold()))
@@ -300,13 +300,13 @@ impl View for PopoverGallery {
                         popover_item("shortcut", "Use ⌘⇧P", shortcut)
                             .accessibility_description("Set the keyboard shortcut"),
                     );
-                popup = popup.child(nested.positioner_part(div().child(nested_popup)));
+                popover = popover.child(nested.positioner_part(div().child(nested_popover)));
             }
-            root = root.child(account.positioner_part(div().child(popup)));
+            root = root.child(account.positioner_part(div().child(popover)));
         }
 
         if actions.is_open() {
-            let popup = gallery_popup(actions.popup_part(div()), 224.0, palette)
+            let popover = gallery_popover(actions.popover_part(div()), 224.0, palette)
                 .gap_1()
                 .on_dismiss(dismiss_actions)
                 .accessibility_label("Document actions")
@@ -318,7 +318,7 @@ impl View for PopoverGallery {
                     popover_item("archive", "Archive", archive)
                         .accessibility_role(AccessibilityRole::MenuItem),
                 );
-            root = root.child(actions.positioner_part(div().child(popup)));
+            root = root.child(actions.positioner_part(div().child(popover)));
         }
 
         root
@@ -339,16 +339,16 @@ fn gallery_trigger(trigger: Element, label: &'static str) -> Element {
         .child(text(label).font_medium())
 }
 
-fn gallery_popup(popup: Element, minimum_width: f32, palette: GalleryPalette) -> Element {
-    popup
+fn gallery_popover(popover: Element, minimum_width: f32, palette: GalleryPalette) -> Element {
+    popover
         .min_w(minimum_width)
         .flex_col()
         .p_2()
         .rounded_lg()
-        .border(1.0, palette.popup_border)
-        .bg(palette.popup)
+        .border(1.0, palette.popover_border)
+        .bg(palette.popover)
         .text_color(palette.foreground)
-        .shadow(palette.popup_shadow)
+        .shadow(palette.popover_shadow)
 }
 
 fn popover_item(

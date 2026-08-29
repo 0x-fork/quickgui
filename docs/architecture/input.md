@@ -246,7 +246,7 @@ polling task, or display-rate animation.
 
 `Popover` pairs two caller-owned stable IDs with one application-owned open boolean. Its unstyled
 trigger has exact expanded, controls, and has-popup accessibility state. A separate caller-owned
-positioner is the existing portal overlay configured for anchor fitting; the caller-owned popup
+positioner is the existing portal overlay configured for anchor fitting; the caller-owned popover
 retains topmost independently configurable Escape/outside-press dismissal, pointer blocking,
 visible title/description relationships, and trigger focus restoration. A merged unstyled surface
 is available when independent positioner presentation is unnecessary. Closed content is unmounted
@@ -254,28 +254,28 @@ rather than retained in a hidden component store.
 
 Opening focus uses the runtime's existing one-rebuild pending focus request. A listener can set the
 controlled value and call `focus_surface` in the same event; an optional declared initial target or
-the popup root is resolved after mounting and then discarded. Nested popups derive dismissal order
-from paint order, so no independent global stack or listener monitor is necessary. A settled popup
+the popover root is resolved after mounting and then discarded. Nested popovers derive dismissal order
+from paint order, so no independent global stack or listener monitor is necessary. A settled popover
 owns no timer, frame request, polling task, or idle deadline.
 
-That retained overlay is physically window-bounded. `AnchoredPopover` is the overflow host for
+That retained overlay is physically window-bounded. `SystemPopover` is the overflow host for
 menus, selects, and other dropdowns: it resolves the trigger ID from retained geometry at the
 event boundary and opens a parent-owned child window with its own WGPU surface. On macOS collision
 constraints use the display work area, not the parent viewport. The lookup is event-driven and
 installs no per-element geometry observer.
 
-`PopupMenu` composes its bounded model into that child using ordinary elements. One root keeps
+`PopoverMenu` composes its bounded model into that child using ordinary elements. One root keeps
 semantic focus and projects the highlighted derived row as its active descendant. Keymap actions
 handle directional/boundary movement, activation, submenu open, and close; one raw-key listener
 performs bounded alphanumeric prefix navigation. Pointer hover updates the same highlighted index,
 so input methods cannot diverge. Toggle and radio preview state is local to the open model while
-the original concrete action reaches the non-popup owner window's existing focused path.
+the original concrete action reaches the non-popover owner window's existing focused path.
 
-The event context resolves direct parent, popup root, and nearest non-popup owner from retained
+The event context resolves direct parent, popover root, and nearest non-popover owner from retained
 window ownership. Targeted actions queue only the `(WindowHandle, AnyAction)` pair until the current
-callback releases its view borrow. A nested submenu therefore bypasses intermediate popup views
-without a command bridge. Closing the popup root reuses child-first teardown for the entire menu
-chain. Both targeted delivery queues and popup nesting are hard bounded; clean menus retain no
+callback releases its view borrow. A nested submenu therefore bypasses intermediate popover views
+without a command bridge. Closing the popover root reuses child-first teardown for the entire menu
+chain. Both targeted delivery queues and popover nesting are hard bounded; clean menus retain no
 deadline, task, polling source, or animation frame.
 
 ## Tooltips and context surfaces
@@ -341,16 +341,19 @@ another listener can stop propagation, and a higher pointer-blocking overlay pre
 click-through. Default wheel scrolling is a separate decision and can be prevented without
 stopping ancestor callbacks.
 
-The Winit content view opts into AppKit's direct and indirect
+The Winit content view opts into AppKit's direct
 [`allowedTouchTypes`](https://developer.apple.com/documentation/appkit/nsview/allowedtouchtypes),
 excludes resting contacts, and queries only the phase-specific set delivered by each responder
-callback. One contact ID is derived from [`NSTouch.identity`](https://developer.apple.com/documentation/appkit/nstouch)
-and is retained only through that contact's lifetime. QuickGUI hit-tests `Started` once and stores at
-most 32 `TouchId -> target/last-sample` captures per window. Move and terminal events reuse the
-target; focus loss removes captures one at a time while dispatching synthetic cancellation, without
+callback. Indirect trackpad contacts expose device-normalized coordinates rather than a screen or
+view location, so they remain on the native scroll and gesture paths and never enter window
+hit-testing. One direct-contact ID is derived from
+[`NSTouch.identity`](https://developer.apple.com/documentation/appkit/nstouch) and is retained only
+through that contact's lifetime. QuickGUI hit-tests `Started` once and stores at most 32
+`TouchId -> target/last-sample` captures per window. Move and terminal events reuse the target;
+focus loss removes captures one at a time while dispatching synthetic cancellation, without
 building a temporary contact list. Native coordinates become bounded top-left logical points, and
-optional platform force becomes finite normalized scalar data. macOS `NSTouch` supplies no force in
-this bridge.
+optional platform force becomes finite normalized scalar data. macOS `NSTouch` supplies no force
+in this bridge.
 
 Windows without an explicit wheel listener still aggregate platform deltas once at the frame
 boundary and move retained scroll offsets without rebuilding layout. Listener declarations retain

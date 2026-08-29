@@ -19,7 +19,8 @@ export type NativeEventType =
   | "mouseenter"
   | "mouseleave"
   | "input"
-  | "submit";
+  | "submit"
+  | "dismiss";
 export type NativeEventListener = (event: QuickGuiEvent) => void;
 
 export interface NativeNodeHost {
@@ -161,6 +162,8 @@ export function setNativeEventListener(
     setNativeProperty(node, PropertyCode.InputListener, node.listeners.has("input"));
   } else if (type === "submit") {
     setNativeProperty(node, PropertyCode.SubmitListener, node.listeners.has("submit"));
+  } else if (type === "dismiss") {
+    setNativeProperty(node, PropertyCode.DismissListener, node.listeners.has("dismiss"));
   } else {
     const listensForHover = node.listeners.has("mouseenter") || node.listeners.has("mouseleave");
     setNativeProperty(node, PropertyCode.HoverListener, listensForHover);

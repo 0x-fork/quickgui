@@ -174,7 +174,7 @@ Window creation also retains a native role, restore geometry, initial visibility
 capabilities:
 
 ```rust
-use quickgui::{AnchoredPopover, Rect, Size, WindowBounds, WindowKind, WindowOptions};
+use quickgui::{SystemPopover, Rect, Size, WindowBounds, WindowKind, WindowOptions};
 
 let dialog = cx.open_window(
     ConfirmDelete::new(),
@@ -185,7 +185,7 @@ let dialog = cx.open_window(
         .resizable(false),
 );
 
-let menu = AnchoredPopover::new(244.0, 178.0)
+let menu = SystemPopover::new(244.0, 178.0)
     .gap(6.0)
     .open(cx, "actions-trigger", "Actions", ActionsMenu)?;
 
@@ -218,7 +218,7 @@ let state = cx.window_state();
 
 `WindowState::minimum_size` reports the effective inner-size constraint. Normal windows default to
 `320 x 240`; `WindowOptions::without_minimum_size` and `App::without_minimum_size` opt out, while
-anchored popups are unconstrained by default. Runtime set/clear commands are validated through the
+system popovers are unconstrained by default. Runtime set/clear commands are validated through the
 same finite 32,768-point dimension bound as resize commands. Raising a minimum above the current
 window requests one constrained native resize; subsequent OS resize events follow the ordinary
 damage path rather than a framework correction loop. Explicit programmatic bounds remain the
@@ -280,24 +280,24 @@ actually changed, coalesces into one redraw, and adds no animation, timer, or id
 
 Every `open_window` call makes the delivering window the new window's retained parent. Closing a
 parent closes its descendants child-first and cancels their foreground tasks. On macOS, `Dialog`
-is an AppKit sheet, `Floating` uses the floating level, and both `PopUp` and `AnchoredPopup` are
-true nonactivating `NSPanel` subclasses at the transient popup-menu level. `PopupOptions` uses the
+is an AppKit sheet, `Floating` uses the floating level, and both `Popover` and `SystemPopover` are
+true nonactivating `NSPanel` subclasses at the transient popover-menu level. `PopoverOptions` uses the
 parent content's logical top-left coordinate space and supports nine anchor points, nine gravity
 directions, offsets, and independently selectable flip/slide/resize work-area constraints.
 
-An anchored popup with `grab: true` becomes key without activating the application and closes on
+A system popover with `grab: true` becomes key without activating the application and closes on
 Escape or a mouse press outside it. The first grab lazily installs one shared local/global AppKit
 event-monitor pair; nested grabs are capped at 32, use only the top entry, and remove the pair when
-the stack empties. Passive popups install no monitor. AppKit child-window ownership keeps a visible
+the stack empties. Passive popovers install no monitor. AppKit child-window ownership keeps a visible
 panel attached to parent movement, and all placement and dismissal is event-driven—there is no
-popup timer, polling pass, or idle frame. Non-macOS backends use a parent-owned borderless Winit
-fallback until their compositor-native popup paths land. See
-`cargo run --release --example anchored_popup`.
+popover timer, polling pass, or idle frame. Non-macOS backends use a parent-owned borderless Winit
+fallback until their compositor-native popover paths land. See
+`cargo run --release --example system_popover`.
 
-Every anchored popup event context identifies both its direct parent and the nearest non-popup
+Every system popover event context identifies both its direct parent and the nearest non-popover
 owner. `dispatch_action_to_parent` is appropriate for an ordinary child view;
-`dispatch_action_to_popup_owner` crosses an arbitrarily nested popup chain and invokes the owner's
-ordinary focused typed-action path. `close_popup_chain` targets the first popup below that owner,
+`dispatch_action_to_popover_owner` crosses an arbitrarily nested popover chain and invokes the owner's
+ordinary focused typed-action path. `close_popover_chain` targets the first popover below that owner,
 so normal child-first teardown closes all submenu descendants without a parallel component stack.
 Cross-window action retention is capped per event and per effect cycle; closed targets are ignored
 safely.

@@ -882,8 +882,9 @@ pub enum TouchPhase {
 /// ## Platform-specific
 ///
 /// - **Web:** Doesn't take into account CSS [`border`], [`padding`], or [`transform`].
-/// - **macOS:** Includes direct and indirect `NSTouch` contacts. Pressure is unavailable and the
-///   touch identity is stable only for the contact lifetime.
+/// - **macOS:** Includes direct `NSTouch` contacts. Indirect trackpad contacts have no window
+///   position and are exposed through gesture and scroll events instead. Pressure is unavailable,
+///   and the touch identity is stable only for the contact lifetime.
 ///
 /// [`border`]: https://developer.mozilla.org/en-US/docs/Web/CSS/border
 /// [`padding`]: https://developer.mozilla.org/en-US/docs/Web/CSS/padding

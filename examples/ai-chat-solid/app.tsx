@@ -5,6 +5,7 @@ import {
   createRenderer,
   Input,
   Markdown,
+  SystemPopover,
   Text,
   View,
   VirtualList,
@@ -70,6 +71,7 @@ const [activeConversationId, setActiveConversationId] = createSignal(
   initialHistory.activeConversationId,
 );
 const [activeRequest, setActiveRequest] = createSignal<ActiveChatRequest>();
+const [settingsOpen, setSettingsOpen] = createSignal(false);
 let nextConversationId =
   Math.max(...initialHistory.conversations.map((conversation) => conversation.id)) + 1;
 let nextMessageId =
@@ -78,7 +80,6 @@ let nextMessageId =
       conversation.messages.map((message) => message.id),
     ),
   ) + 1;
-let settingsWindow: Window | undefined;
 let providerSettingsButton: NativeNode | undefined;
 let composer: NativeNode | undefined;
 let historyWriteTimer: ReturnType<typeof setTimeout> | undefined;
@@ -365,26 +366,18 @@ async function sendMessage(submittedValue?: string): Promise<void> {
   }
 }
 
-function openProviderSettings(anchor = providerSettingsButton): void {
-  if (settingsWindow && !settingsWindow.closed) return;
-  if (!anchor) return;
-  const window = new Window({
-    title: "DeepSeek settings",
-    anchor,
-    width: 460,
-    height: 310,
-    placement: "bottom-end",
-    gap: 8,
-    renderer: createRenderer(() => <ProviderSettings />),
-  });
-  settingsWindow = window;
-  window.onClose(() => {
-    if (settingsWindow === window) settingsWindow = undefined;
-  });
+function openProviderSettings(): void {
+  if (!providerSettingsButton) return;
+  setSettingsOpen(true);
+  flush();
+}
+
+function closeProviderSettings(): void {
+  providerSettingsButton?.focus();
+  setSettingsOpen(false);
 }
 
 function ProviderSettings() {
-  const window = Window.getCurrentWindow();
   const [value, setValue] = createSignal(apiKey());
   const [revealed, setRevealed] = createSignal(false);
   const [errorMessage, setErrorMessage] = createSignal("");
@@ -399,8 +392,8 @@ function ProviderSettings() {
     try {
       await saveDeepSeekApiKey(nextValue);
       setApiKey(nextValue);
+      closeProviderSettings();
       flush();
-      window.close();
     } catch (error) {
       setSaving(false);
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -415,8 +408,8 @@ function ProviderSettings() {
     try {
       await deleteDeepSeekApiKey();
       setApiKey("");
+      closeProviderSettings();
       flush();
-      window.close();
     } catch (error) {
       setSaving(false);
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -511,7 +504,7 @@ function ProviderSettings() {
           </Button>
         ) : null}
         <Button
-          onClick={() => window.close()}
+          onClick={closeProviderSettings}
           disabled={saving()}
           style={secondaryButtonStyle}
         >
@@ -797,15 +790,28 @@ function Chat() {
               DeepSeek · native streaming Markdown
             </Text>
           </View>
-          <Button
-            ref={(node) => {
-              providerSettingsButton = node;
-            }}
-            onClick={(event) => openProviderSettings(event.currentTarget)}
-            style={{ ...secondaryButtonStyle, appRegion: "no-drag" }}
+          <SystemPopover.Root
+            open={settingsOpen()}
+            onOpenChange={(open) => setSettingsOpen(open)}
           >
-            {apiKey() ? "Provider settings" : "Set API key"}
-          </Button>
+            <SystemPopover.Trigger
+              ref={(node) => {
+                providerSettingsButton = node;
+              }}
+              style={{ ...secondaryButtonStyle, appRegion: "no-drag" }}
+            >
+              {apiKey() ? "Provider settings" : "Set API key"}
+            </SystemPopover.Trigger>
+            <SystemPopover.Content
+              width={460}
+              height={310}
+              placement="bottom-end"
+              gap={8}
+              viewportMargin={12}
+            >
+              <ProviderSettings />
+            </SystemPopover.Content>
+          </SystemPopover.Root>
         </View>
 
         <VirtualList

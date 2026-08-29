@@ -52,8 +52,8 @@ and one effect cycle at most 1,024; titles and logical geometry are validated be
 queue.
 
 On macOS, dialog children are presented with `beginSheet`, floating windows use
-`NSFloatingWindowLevel`, and transient popups use `NSPopUpMenuWindowLevel` plus auxiliary-space and
-hide-on-deactivate behavior. `PopUp` and `AnchoredPopup` allocate Winit's real `NSPanel` subclass
+`NSFloatingWindowLevel`, and transient popovers use `NSPopUpMenuWindowLevel` plus auxiliary-space and
+hide-on-deactivate behavior. `Popover` and `SystemPopover` allocate Winit's real `NSPanel` subclass
 with the nonactivating style rather than changing an existing `NSWindow` object's class. QuickGUI
 backports Winit's upstream panel allocation change in the versioned `quickgui-winit` support crate.
 The matching `quickgui-accesskit-winit` adapter links to that same crate, so accessibility and the

@@ -1,19 +1,19 @@
 # Context menus
 
-[Documentation index](README.md) · [Popovers and popup menus](popovers.md) · [Component roadmap](component-roadmap.md)
+[Documentation index](README.md) · [Popovers and popover menus](popovers.md) · [Component roadmap](component-roadmap.md)
 
-QuickGUI separates the context-menu trigger, retained menu model, native popup host, and visual
+QuickGUI separates the context-menu trigger, retained menu model, native popover host, and visual
 presentation:
 
 - `ContextMenuState` is application-owned and retains only the current direct child handle;
-- `PopupMenu` owns the validated items, keyboard navigation, typeahead, toggles, and submenus;
-- `ContextMenuLayout` owns structural popup and row measurements, never appearance;
-- the application supplies the target, popup root, and every rendered row;
+- `PopoverMenu` owns the validated items, keyboard navigation, typeahead, toggles, and submenus;
+- `ContextMenuLayout` owns structural popover and row measurements, never appearance;
+- the application supplies the target, popover root, and every rendered row;
 - the root menu opens at the exact secondary-click point in a separate WGPU child surface, so it
   may extend beyond the owner window while native work-area constraints flip and slide it;
-- typed item actions are delivered to the nearest non-popup owner before the popup chain closes.
+- typed item actions are delivered to the nearest non-popover owner before the popover chain closes.
 
-Bind `popup_menu_key_bindings()` once on the application, retain one state value, then attach the
+Bind `popover_menu_key_bindings()` once on the application, retain one state value, then attach the
 behavior to any caller-owned element:
 
 ```rust
@@ -58,16 +58,16 @@ root.
 
 Closed state owns no window, renderer, timer, task, observer, event monitor, or scheduler source.
 An open root owns one child surface; each open submenu owns one additional child surface, bounded
-by `MAX_POPUP_MENU_DEPTH`. Pointer hover owns at most one cancellable exact deadline per open menu
+by `MAX_POPOVER_MENU_DEPTH`. Pointer hover owns at most one cancellable exact deadline per open menu
 level while submenu intent is pending. Replacing the hovered row, leaving before open, entering the
-existing child, closing the child, or tearing down the popup cancels that deadline. A settled menu
+existing child, closing the child, or tearing down the popover cancels that deadline. A settled menu
 has no deadline, animation frame, or polling source. Menu item count, nesting, label bytes,
-aggregate text, and typeahead are bounded by the `PopupMenu` constants. Typeahead expiration is
+aggregate text, and typeahead are bounded by the `PopoverMenu` constants. Typeahead expiration is
 checked on the next key and schedules no timer.
 
 Large searchable datasets belong in a virtualized select, autocomplete, or command palette rather
 than a thousands-of-rows context menu. `ContextMenuLayout` clamps native dimensions to the window
-limits, while ordinary menu rows remain finite under the popup-menu model bounds.
+limits, while ordinary menu rows remain finite under the popover-menu model bounds.
 
 ## Submenu pointer behavior
 
@@ -80,7 +80,7 @@ the replacement. The near edge is derived from actual placement, so the same beh
 work-area fitting flips a submenu to the left.
 
 This coordination uses one root motion listener and row hover transitions, not one motion listener
-or timer per row. `PopupMenu::element_with_submenus_and_hover` exposes the appearance-free hover
+or timer per row. `PopoverMenu::element_with_submenus_and_hover` exposes the appearance-free hover
 hook for another native host; `ContextMenuState` supplies the native menu-aim policy by default.
 
 Keyboard/click/hover submenu opening, nested native focus transfer, descendant-aware outside
@@ -88,12 +88,12 @@ clicks, nested command dispatch, point placement, close synchronization, accessi
 and edge constraints are implemented. The self-driving macOS gate now exercises eight submenu
 command closes, four owner-press dismissals, and four native Escape dismissals with a submenu open,
 requiring exact focus recovery, no accidental command, complete child teardown, and zero extra idle
-frames. A final cooperative application-deactivation cycle requires both popup windows to close
+frames. A final cooperative application-deactivation cycle requires both popover windows to close
 while the owner remains non-key and unfocused. The resource phase additionally completes 128 real
 root-plus-submenu command lifecycles at a reported 50 ms inter-cycle cadence. Sampling after cycles
 32 and 128 on the current reference run showed 1.109 MiB positive RSS growth and no positive
 physical-footprint growth, below the enforced 16 MiB and 24 MiB budgets, with no more than two live
-popup windows and zero extra idle frames. These direct responder interactions are intentionally
+popover windows and zero extra idle frames. These direct responder interactions are intentionally
 too short-lived for visual inspection. Remaining acceptance work is live VoiceOver confirmation
 of the implemented group/separator roles and relationships, focus announcements, and multi-monitor
 mixed-scale and nested-submenu placement.

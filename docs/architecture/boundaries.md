@@ -3,12 +3,12 @@
 [Architecture index](README.md) · [Documentation](../README.md)
 
 This milestone establishes the performance architecture, ordered overlays, bounded delayed
-tooltips, cursor-anchored context surfaces, macOS anchored/nonactivating popup panels, native child
+tooltips, cursor-anchored context surfaces, macOS anchored/nonactivating popover panels, native child
 composition, hybrid AccessKit/AppKit accessibility, semantic focus, and production-oriented
 single-line and multiline editing paths, typed actions, focus scopes, contextual keymaps, native macOS application
 menus, event-driven macOS keyboard-layout command translation, bounded static/asynchronous/animated raster images, retained SVG icons, retained paths and
 custom canvas painting, retained custom shaders, retained CSS Grid, static and controlled editable styled text, structured forms, typed entity events, application globals, cancellable foreground tasks, analytic CSS-ordered box shadows, and a compile-time opt-in bounded retained-tree inspector. A complete
-GPUI-equivalent desktop toolkit still needs compositor-native non-macOS popup/menu projection,
+GPUI-equivalent desktop toolkit still needs compositor-native non-macOS popover/menu projection,
 cross-window native drag promotion outside macOS, and broader platform acceptance. Those features
 should extend the retained tree and narrow renderer rather than bypass its scheduling and cache
 invariants. Stylus/tablet axes are deliberately not treated as a parity or release requirement;
@@ -25,10 +25,10 @@ Window-bounded popovers are controlled pairs above the same retained overlay pat
 surfaces. Their descriptor copies stable trigger/content IDs, placement, semantic kind, and visual
 tokens; application state decides whether content is mounted. Anchor placement, topmost dismissal,
 pointer blocking, and focus restoration remain `UiTree` responsibilities. The component adds no
-parallel popup registry, observer, timer, next-frame task, or native window, and closed content
+parallel popover registry, observer, timer, next-frame task, or native window, and closed content
 retains no overlay or accessibility node.
 
-Overflow-capable `AnchoredPopover` resolves one stable trigger ID through that same retained
+Overflow-capable `SystemPopover` resolves one stable trigger ID through that same retained
 geometry, then creates a parent-owned native child with an independent WGPU surface. On macOS the
 child is an `NSPanel` constrained to the display work area rather than the parent viewport. Grab
 and native key-window eligibility are independent policies: menu/select children grab and own key
@@ -39,11 +39,11 @@ children share the bounded process monitor pair. High-level menu, select, and au
 dropdowns use this host so crossing a parent edge is an explicit guarantee rather than an
 accidental clip.
 
-`PopupMenu` now supplies the unstyled behavior layer above that host. It validates the complete
+`PopoverMenu` now supplies the unstyled behavior layer above that host. It validates the complete
 bounded submenu tree before retention, derives row identities from the caller's menu ID, and uses
 one composite focus root with active-descendant semantics. Pointer, keyboard, typeahead, and typed
-commands reuse ordinary retained listeners and action dispatch. Nested popup commands target the
-nearest non-popup owner directly, and chain close reuses parent-child window teardown; neither path
+commands reuse ordinary retained listeners and action dispatch. Nested popover commands target the
+nearest non-popover owner directly, and chain close reuses parent-child window teardown; neither path
 introduces a callback registry, serialized command format, timer, observer, or idle frame.
 
 Standalone `SelectState`, `AutocompleteState`, and `ComboboxState` share bounded `PickerItem`

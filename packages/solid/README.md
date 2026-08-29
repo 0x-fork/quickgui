@@ -1,7 +1,8 @@
 # @quickgui/solid
 
 Solid 2 renderer for QuickGUI. It exports unstyled `View`, `Text`, `Button`, `Input`, `TextArea`,
-retained core `Markdown`, variable-height `VirtualList` host components, and `createRenderer`.
+retained core `Markdown`, variable-height `VirtualList`, compound in-window `Popover` and
+native-window `SystemPopover` parts, and `createRenderer`.
 Import native application/window APIs from `@quickgui/native` and reactive primitives from
 `solid-js` itself.
 
@@ -38,6 +39,8 @@ The [alert-dialog example](../../examples/alert-dialog-solid/app.tsx) demonstrat
 warning, and critical native alerts with optional window ownership and semantic button roles.
 The [file-dialog example](../../examples/file-dialog-solid/app.tsx) demonstrates native open-file,
 open-folder, and save-destination panels with explicit cancellation results.
+The [popover example](../../examples/popover-solid/app.tsx) compares the shared
+`Root`/`Trigger`/`Content` JSX API of `SystemPopover` and the retained in-window `Popover`.
 The [system API example](../../examples/system-api-solid/app.tsx) demonstrates core-owned shell,
 clipboard, display, notification, menu, tray, shortcut, single-instance, deep-link, secure-storage,
 autostart, power, and updater services through the Solid binding.

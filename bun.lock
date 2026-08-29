@@ -45,6 +45,17 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/popover-solid": {
+      "name": "quickgui-solid-popover-example",
+      "dependencies": {
+        "@quickgui/native": "workspace:*",
+        "@quickgui/solid": "workspace:*",
+        "solid-js": "2.0.0-rc.3",
+      },
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/solid": {
       "name": "quickgui-solid-example",
       "dependencies": {

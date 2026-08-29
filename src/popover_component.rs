@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::{
-    AccessibilityPopup, AccessibilityRole, AnchorPlacement, Color, Element, ElementId,
+    AccessibilityPopover, AccessibilityRole, AnchorPlacement, Color, Element, ElementId,
     EventContext, FocusHandle, MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION, Point,
-    PopupAnchor, PopupConstraintAdjustment, PopupGravity, PopupOptions, Rect, Size, View,
+    PopoverAnchor, PopoverConstraintAdjustment, PopoverGravity, PopoverOptions, Rect, Size, View,
     WindowBackgroundAppearance, WindowCommandError, WindowHandle, WindowOptions, button, div,
 };
 
@@ -42,13 +42,13 @@ impl PopoverKind {
         }
     }
 
-    const fn accessibility_popup(self) -> AccessibilityPopup {
+    const fn accessibility_popover(self) -> AccessibilityPopover {
         match self {
-            Self::Dialog => AccessibilityPopup::Dialog,
-            Self::Menu => AccessibilityPopup::Menu,
-            Self::ListBox => AccessibilityPopup::ListBox,
-            Self::Tree => AccessibilityPopup::Tree,
-            Self::Grid => AccessibilityPopup::Grid,
+            Self::Dialog => AccessibilityPopover::Dialog,
+            Self::Menu => AccessibilityPopover::Menu,
+            Self::ListBox => AccessibilityPopover::ListBox,
+            Self::Tree => AccessibilityPopover::Tree,
+            Self::Grid => AccessibilityPopover::Grid,
         }
     }
 }
@@ -58,7 +58,7 @@ impl PopoverKind {
 /// The application owns `open`, every visual declaration, and the listener that changes state.
 /// QuickGUI owns stable part identities, anchored portal geometry, topmost Escape/outside-press
 /// dismissal, click-through prevention, focus movement/restoration, and accessibility relations.
-/// Mount either [`Self::positioner_part`] plus [`Self::popup_part`], or the merged
+/// Mount either [`Self::positioner_part`] plus [`Self::popover_part`], or the merged
 /// [`Self::surface_part`], only while [`Self::is_open`] is true.
 ///
 /// The descriptor retains no allocation, component store, observer, task, timer, animation, or
@@ -126,7 +126,7 @@ impl Popover {
         self
     }
 
-    /// Prefer a mounted popup descendant instead of the popup root when opening.
+    /// Prefer a mounted popover descendant instead of the popover root when opening.
     pub fn initial_focus(mut self, focus: impl Into<ElementId>) -> Self {
         self.initial_focus = Some(FocusHandle::new(focus));
         self
@@ -150,12 +150,12 @@ impl Popover {
         self.trigger_id
     }
 
-    /// Stable popup identity retained under the existing `surface` name.
+    /// Stable popover identity retained under the existing `surface` name.
     pub const fn surface_id(self) -> ElementId {
         self.surface_id
     }
 
-    pub const fn popup_id(self) -> ElementId {
+    pub const fn popover_id(self) -> ElementId {
         self.surface_id
     }
 
@@ -187,16 +187,16 @@ impl Popover {
         FocusHandle::new(self.surface_id)
     }
 
-    pub fn popup_focus(self) -> FocusHandle {
+    pub fn popover_focus(self) -> FocusHandle {
         self.surface_focus()
     }
 
-    /// Move focus to the declared initial target, or the popup root, in the same controlled update.
+    /// Move focus to the declared initial target, or the popover root, in the same controlled update.
     pub fn focus_surface(self, cx: &mut EventContext) {
-        cx.focus(self.initial_focus.unwrap_or_else(|| self.popup_focus()));
+        cx.focus(self.initial_focus.unwrap_or_else(|| self.popover_focus()));
     }
 
-    /// Return focus to the paired trigger after an explicit action closes the popup.
+    /// Return focus to the paired trigger after an explicit action closes the popover.
     ///
     /// Escape and outside-press dismissal already restore this handle automatically.
     pub fn focus_trigger(self, cx: &mut EventContext) {
@@ -213,7 +213,7 @@ impl Popover {
             .app_region_no_drag()
             .cursor_default()
             .accessibility_expanded(self.open)
-            .accessibility_has_popup(self.kind.accessibility_popup());
+            .accessibility_has_popover(self.kind.accessibility_popover());
         if self.open {
             trigger.accessibility_controls(self.surface_id)
         } else {
@@ -226,7 +226,7 @@ impl Popover {
         self.trigger_part(button())
     }
 
-    /// Decorate the caller-owned portal/positioner without adding popup appearance.
+    /// Decorate the caller-owned portal/positioner without adding popover appearance.
     ///
     /// QuickGUI's retained overlay node is itself the portal, so this part combines the Base
     /// UI-style Portal and Positioner boundary without introducing a full-window wrapper that
@@ -241,15 +241,15 @@ impl Popover {
             .cursor_default()
     }
 
-    /// Decorate an application-owned popup without adding layout or appearance.
+    /// Decorate an application-owned popover without adding layout or appearance.
     ///
-    /// The popup emits [`crate::Event::Dismiss`] under [`Self::surface_id`] for every enabled
+    /// The popover emits [`crate::Event::Dismiss`] under [`Self::surface_id`] for every enabled
     /// dismissal path. Mounted title/description parts are related without copying their text.
-    pub fn popup_part(self, popup: Element) -> Element {
-        let mut popup = popup
+    pub fn popover_part(self, popover: Element) -> Element {
+        let mut popover = popover
             .id(self.surface_id)
             .restore_focus_to(self.trigger_focus())
-            .track_focus(self.popup_focus())
+            .track_focus(self.popover_focus())
             .accessibility_role(self.kind.accessibility_role())
             .accessibility_labelled_by(self.title_id())
             .accessibility_described_by(self.description_id())
@@ -257,27 +257,27 @@ impl Popover {
             .app_region_no_drag()
             .cursor_default();
         if self.dismiss_on_escape {
-            popup = popup.dismiss_on_escape();
+            popover = popover.dismiss_on_escape();
         }
         if self.dismiss_on_pointer_outside {
-            popup = popup.dismiss_on_pointer_outside();
+            popover = popover.dismiss_on_pointer_outside();
         }
-        popup
+        popover
     }
 
-    /// Decorate one caller-owned element as both positioner and popup.
+    /// Decorate one caller-owned element as both positioner and popover.
     ///
     /// This compact form has the same unstyled contract as composing [`Self::positioner_part`]
-    /// around [`Self::popup_part`]. Use separate parts when the application needs to animate or
-    /// size the positioner independently from popup presentation.
+    /// around [`Self::popover_part`]. Use separate parts when the application needs to animate or
+    /// size the positioner independently from popover presentation.
     pub fn surface_part(self, surface: Element) -> Element {
-        self.popup_part(surface)
+        self.popover_part(surface)
             .anchor_to(self.trigger_id, self.placement)
             .anchor_gap(self.anchor_gap)
             .viewport_margin(self.viewport_margin)
     }
 
-    /// Create an unstyled merged positioner/popup root.
+    /// Create an unstyled merged positioner/popover root.
     pub fn surface(self) -> Element {
         self.surface_part(div())
     }
@@ -294,12 +294,12 @@ impl Popover {
             .accessibility_hidden(true)
     }
 
-    /// Assign the stable mounted label target used by the popup.
+    /// Assign the stable mounted label target used by the popover.
     pub fn title_part(self, title: Element) -> Element {
         title.id(self.title_id())
     }
 
-    /// Assign the stable mounted description target used by the popup.
+    /// Assign the stable mounted description target used by the popover.
     pub fn description_part(self, description: Element) -> Element {
         description.id(self.description_id())
     }
@@ -333,28 +333,31 @@ fn derived_popover_id(parent: ElementId, avoid: ElementId, tag: u64) -> ElementI
     unreachable!("five distinct candidates cannot all match four reserved popover IDs")
 }
 
-/// An unstyled parent-owned popup window that may extend beyond its parent window.
+/// An unstyled parent-owned popover window that may extend beyond its parent window.
 ///
 /// [`Popover`] uses the parent window's existing overlay plane and is therefore physically
-/// bounded by that WGPU surface. `AnchoredPopover` instead opens a borderless native child window
+/// bounded by that WGPU surface. `SystemPopover` instead opens a borderless native child window
 /// with its own WGPU surface. On macOS this is an `NSPanel` ordered above its parent; placement is
 /// resolved against the display work area, not the parent content rectangle.
 ///
-/// Popup size is explicit, matching the platform popup contract. The trigger rectangle itself is
-/// resolved from retained element geometry by [`EventContext::open_anchored_popup`], so callers do
+/// Popover size is explicit, matching the platform popover contract. The trigger rectangle itself is
+/// resolved from retained element geometry by [`EventContext::open_system_popover`], so callers do
 /// not duplicate coordinates or install a layout observer.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AnchoredPopover {
+pub struct SystemPopover {
     size: Size,
     placement: AnchorPlacement,
     gap: f32,
+    viewport_margin: f32,
     offset: Point,
-    constraints: PopupConstraintAdjustment,
+    constraints: PopoverConstraintAdjustment,
+    dismiss_on_escape: bool,
+    dismiss_on_pointer_outside: bool,
     grab: bool,
     accepts_key_focus: bool,
 }
 
-impl AnchoredPopover {
+impl SystemPopover {
     pub fn new(width: f32, height: f32) -> Self {
         Self {
             size: Size::new(
@@ -362,9 +365,12 @@ impl AnchoredPopover {
                 finite_clamped(height, 1.0, MAX_WINDOW_LOGICAL_DIMENSION, 180.0),
             ),
             placement: AnchorPlacement::BottomStart,
-            gap: 0.0,
+            gap: DEFAULT_POPOVER_ANCHOR_GAP,
+            viewport_margin: DEFAULT_POPOVER_VIEWPORT_MARGIN,
             offset: Point::ZERO,
-            constraints: PopupConstraintAdjustment::FIT,
+            constraints: PopoverConstraintAdjustment::FIT,
+            dismiss_on_escape: true,
+            dismiss_on_pointer_outside: true,
             grab: true,
             accepts_key_focus: true,
         }
@@ -381,6 +387,27 @@ impl AnchoredPopover {
 
     pub fn gap(mut self, gap: f32) -> Self {
         self.gap = finite_clamped(gap, 0.0, 512.0, 0.0);
+        self
+    }
+
+    /// Set the collision margin inside the display work area.
+    pub fn viewport_margin(mut self, margin: f32) -> Self {
+        self.viewport_margin = finite_clamped(
+            margin,
+            0.0,
+            MAX_POPOVER_VIEWPORT_MARGIN,
+            DEFAULT_POPOVER_VIEWPORT_MARGIN,
+        );
+        self
+    }
+
+    pub const fn dismiss_on_escape(mut self, dismiss: bool) -> Self {
+        self.dismiss_on_escape = dismiss;
+        self
+    }
+
+    pub const fn dismiss_on_pointer_outside(mut self, dismiss: bool) -> Self {
+        self.dismiss_on_pointer_outside = dismiss;
         self
     }
 
@@ -402,7 +429,7 @@ impl AnchoredPopover {
         self
     }
 
-    pub const fn constraint_adjustment(mut self, constraints: PopupConstraintAdjustment) -> Self {
+    pub const fn constraint_adjustment(mut self, constraints: PopoverConstraintAdjustment) -> Self {
         self.constraints = constraints;
         self
     }
@@ -412,6 +439,8 @@ impl AnchoredPopover {
     /// Passive tooltips and preview surfaces use `grab(false)` and own no event monitor.
     pub const fn grab(mut self, grab: bool) -> Self {
         self.grab = grab;
+        self.dismiss_on_escape = grab;
+        self.dismiss_on_pointer_outside = grab;
         if grab {
             self.accepts_key_focus = true;
         }
@@ -426,12 +455,14 @@ impl AnchoredPopover {
         self.accepts_key_focus = accepts_key_focus;
         if !accepts_key_focus {
             self.grab = false;
+            self.dismiss_on_escape = false;
+            self.dismiss_on_pointer_outside = false;
         }
         self
     }
 
-    pub fn popup_options(self) -> PopupOptions {
-        let (anchor, gravity) = native_popup_placement(self.placement);
+    pub fn popover_options(self) -> PopoverOptions {
+        let (anchor, gravity) = native_popover_placement(self.placement);
         let mut offset = self.offset;
         match self.placement {
             AnchorPlacement::TopStart | AnchorPlacement::Top | AnchorPlacement::TopEnd => {
@@ -447,13 +478,16 @@ impl AnchoredPopover {
                 offset.x += self.gap;
             }
         }
-        PopupOptions::new(Rect::ZERO)
+        PopoverOptions::new(Rect::ZERO)
             .anchor(anchor)
             .gravity(gravity)
             .constraint_adjustment(self.constraints)
             .offset(offset.x, offset.y)
             .grab(self.grab)
             .accepts_key_focus(self.accepts_key_focus)
+            .viewport_margin(self.viewport_margin)
+            .dismiss_on_escape(self.dismiss_on_escape)
+            .dismiss_on_pointer_outside(self.dismiss_on_pointer_outside)
     }
 
     /// Build transparent, borderless window options without choosing application presentation.
@@ -462,7 +496,7 @@ impl AnchoredPopover {
             .size(self.size.width, self.size.height)
             .background(Color::TRANSPARENT)
             .window_background(WindowBackgroundAppearance::Transparent)
-            .anchored_popup(self.popup_options())
+            .system_popover(self.popover_options())
     }
 
     /// Open the overflow-capable child using the latest retained bounds of `anchor`.
@@ -473,30 +507,30 @@ impl AnchoredPopover {
         title: impl Into<String>,
         view: V,
     ) -> Result<WindowHandle, WindowCommandError> {
-        cx.open_anchored_popup(anchor, view, self.window_options(title))
+        cx.open_system_popover(anchor, view, self.window_options(title))
     }
 }
 
-impl Default for AnchoredPopover {
+impl Default for SystemPopover {
     fn default() -> Self {
         Self::new(240.0, 180.0)
     }
 }
 
-fn native_popup_placement(placement: AnchorPlacement) -> (PopupAnchor, PopupGravity) {
+fn native_popover_placement(placement: AnchorPlacement) -> (PopoverAnchor, PopoverGravity) {
     match placement {
-        AnchorPlacement::TopStart => (PopupAnchor::TopLeft, PopupGravity::TopRight),
-        AnchorPlacement::Top => (PopupAnchor::Top, PopupGravity::Top),
-        AnchorPlacement::TopEnd => (PopupAnchor::TopRight, PopupGravity::TopLeft),
-        AnchorPlacement::BottomStart => (PopupAnchor::BottomLeft, PopupGravity::BottomRight),
-        AnchorPlacement::Bottom => (PopupAnchor::Bottom, PopupGravity::Bottom),
-        AnchorPlacement::BottomEnd => (PopupAnchor::BottomRight, PopupGravity::BottomLeft),
-        AnchorPlacement::LeftStart => (PopupAnchor::TopLeft, PopupGravity::BottomLeft),
-        AnchorPlacement::Left => (PopupAnchor::Left, PopupGravity::Left),
-        AnchorPlacement::LeftEnd => (PopupAnchor::BottomLeft, PopupGravity::TopLeft),
-        AnchorPlacement::RightStart => (PopupAnchor::TopRight, PopupGravity::BottomRight),
-        AnchorPlacement::Right => (PopupAnchor::Right, PopupGravity::Right),
-        AnchorPlacement::RightEnd => (PopupAnchor::BottomRight, PopupGravity::TopRight),
+        AnchorPlacement::TopStart => (PopoverAnchor::TopLeft, PopoverGravity::TopRight),
+        AnchorPlacement::Top => (PopoverAnchor::Top, PopoverGravity::Top),
+        AnchorPlacement::TopEnd => (PopoverAnchor::TopRight, PopoverGravity::TopLeft),
+        AnchorPlacement::BottomStart => (PopoverAnchor::BottomLeft, PopoverGravity::BottomRight),
+        AnchorPlacement::Bottom => (PopoverAnchor::Bottom, PopoverGravity::Bottom),
+        AnchorPlacement::BottomEnd => (PopoverAnchor::BottomRight, PopoverGravity::BottomLeft),
+        AnchorPlacement::LeftStart => (PopoverAnchor::TopLeft, PopoverGravity::BottomLeft),
+        AnchorPlacement::Left => (PopoverAnchor::Left, PopoverGravity::Left),
+        AnchorPlacement::LeftEnd => (PopoverAnchor::BottomLeft, PopoverGravity::TopLeft),
+        AnchorPlacement::RightStart => (PopoverAnchor::TopRight, PopoverGravity::BottomRight),
+        AnchorPlacement::Right => (PopoverAnchor::Right, PopoverGravity::Right),
+        AnchorPlacement::RightEnd => (PopoverAnchor::BottomRight, PopoverGravity::TopRight),
     }
 }
 
@@ -526,8 +560,8 @@ mod tests {
         assert_eq!(closed_trigger.accessibility.expanded, Some(false));
         assert_eq!(closed_trigger.accessibility.relations.controls(), None);
         assert_eq!(
-            closed_trigger.accessibility.has_popup,
-            Some(AccessibilityPopup::Menu)
+            closed_trigger.accessibility.has_popover,
+            Some(AccessibilityPopover::Menu)
         );
         assert_eq!(closed_trigger.app_region, Some(AppRegion::NoDrag));
         assert_eq!(closed_trigger.cursor_style, Some(crate::CursorStyle::Arrow));
@@ -591,26 +625,26 @@ mod tests {
         assert_eq!(anchor.gap, 12.0);
         assert_eq!(anchor.viewport_margin, 20.0);
 
-        let popup = popover.popup_part(crate::div());
-        assert_eq!(popup.explicit_id, Some("surface".into()));
-        assert_eq!(popup.accessibility.role, AccessibilityRole::ListBox);
-        assert!(!popup.portal);
-        assert!(!popup.dismiss_policy.on_escape());
-        assert!(popup.dismiss_policy.on_pointer_outside());
-        assert!(popup.blocks_pointer);
-        assert_eq!(popup.restore_focus, Some(popover.trigger_focus()));
+        let surface = popover.popover_part(crate::div());
+        assert_eq!(surface.explicit_id, Some("surface".into()));
+        assert_eq!(surface.accessibility.role, AccessibilityRole::ListBox);
+        assert!(!surface.portal);
+        assert!(!surface.dismiss_policy.on_escape());
+        assert!(surface.dismiss_policy.on_pointer_outside());
+        assert!(surface.blocks_pointer);
+        assert_eq!(surface.restore_focus, Some(popover.trigger_focus()));
         assert_eq!(
-            popup.accessibility.relations.labelled_by(),
+            surface.accessibility.relations.labelled_by(),
             Some(popover.title_id())
         );
         assert_eq!(
-            popup.accessibility.relations.described_by(),
+            surface.accessibility.relations.described_by(),
             Some(popover.description_id())
         );
-        assert_eq!(popup.visual.background, None);
-        assert_eq!(popup.visual.border_color, None);
-        assert_eq!(popup.visual.shadows, None);
-        assert_eq!(popup.visual.radius, 0.0);
+        assert_eq!(surface.visual.background, None);
+        assert_eq!(surface.visual.border_color, None);
+        assert_eq!(surface.visual.shadows, None);
+        assert_eq!(surface.visual.radius, 0.0);
 
         let title = popover.title_part(crate::text("Visible title"));
         let description = popover.description_part(crate::text("Visible description"));
@@ -641,9 +675,9 @@ mod tests {
         assert_eq!(anchor.gap, 0.0);
         assert_eq!(anchor.viewport_margin, DEFAULT_POPOVER_VIEWPORT_MARGIN);
 
-        let popup = popover.popup_part(crate::div());
-        assert!(popup.dismiss_policy.is_empty());
-        assert!(popup.blocks_pointer);
+        let popover = popover.popover_part(crate::div());
+        assert!(popover.dismiss_policy.is_empty());
+        assert!(popover.blocks_pointer);
     }
 
     #[test]
@@ -670,60 +704,67 @@ mod tests {
     }
 
     #[test]
-    fn anchored_descriptor_maps_placement_and_builds_a_transparent_popup_host() {
-        let descriptor = AnchoredPopover::new(320.0, 200.0)
+    fn system_descriptor_maps_placement_and_builds_a_transparent_popover_host() {
+        let descriptor = SystemPopover::new(320.0, 200.0)
             .placement(AnchorPlacement::TopEnd)
             .gap(8.0)
+            .viewport_margin(12.0)
             .offset(3.0, 4.0)
-            .grab(false);
+            .dismiss_on_escape(false);
         assert_eq!(descriptor.size(), Size::new(320.0, 200.0));
 
-        let popup = descriptor.popup_options();
-        assert_eq!(popup.anchor_rect, Rect::ZERO);
-        assert_eq!(popup.anchor, PopupAnchor::TopRight);
-        assert_eq!(popup.gravity, PopupGravity::TopLeft);
-        assert_eq!(popup.offset, Point::new(3.0, -4.0));
-        assert_eq!(popup.constraint_adjustment, PopupConstraintAdjustment::FIT);
-        assert!(!popup.grab);
-        assert!(popup.accepts_key_focus);
+        let popover = descriptor.popover_options();
+        assert_eq!(popover.anchor_rect, Rect::ZERO);
+        assert_eq!(popover.anchor, PopoverAnchor::TopRight);
+        assert_eq!(popover.gravity, PopoverGravity::TopLeft);
+        assert_eq!(popover.offset, Point::new(3.0, -4.0));
+        assert_eq!(
+            popover.constraint_adjustment,
+            PopoverConstraintAdjustment::FIT
+        );
+        assert_eq!(popover.viewport_margin, 12.0);
+        assert!(!popover.dismiss_on_escape);
+        assert!(popover.dismiss_on_pointer_outside);
+        assert!(popover.grab);
+        assert!(popover.accepts_key_focus);
 
-        let options = descriptor.window_options("Unstyled popup");
-        assert_eq!(options.kind, WindowKind::AnchoredPopup);
+        let options = descriptor.window_options("Unstyled popover");
+        assert_eq!(options.kind, WindowKind::SystemPopover);
         assert_eq!(options.size, Size::new(320.0, 200.0));
         assert_eq!(options.background, Color::TRANSPARENT);
         assert_eq!(
             options.window_background,
             WindowBackgroundAppearance::Transparent
         );
-        assert!(!options.focus);
-        assert_eq!(options.popup, Some(popup));
+        assert!(options.focus);
+        assert_eq!(options.popover, Some(popover));
 
-        let never_key = descriptor.accepts_key_focus(false).popup_options();
+        let never_key = descriptor.accepts_key_focus(false).popover_options();
         assert!(!never_key.grab);
         assert!(!never_key.accepts_key_focus);
     }
 
     #[derive(Default)]
-    struct AnchoredLauncher {
-        popup: Option<WindowHandle>,
+    struct SystemPopoverLauncher {
+        popover: Option<WindowHandle>,
     }
 
-    struct AnchoredSurface;
+    struct SystemPopoverSurface;
 
-    impl View for AnchoredSurface {
+    impl View for SystemPopoverSurface {
         fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             div().size_full()
         }
     }
 
-    impl View for AnchoredLauncher {
+    impl View for SystemPopoverLauncher {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let open = cx.listener("anchor", |view, cx| {
-                view.popup = Some(
-                    AnchoredPopover::new(180.0, 120.0)
+                view.popover = Some(
+                    SystemPopover::new(180.0, 120.0)
                         .gap(6.0)
-                        .open(cx, "anchor", "Anchored surface", AnchoredSurface)
-                        .expect("a mounted window can open an anchored popup"),
+                        .open(cx, "anchor", "System popover", SystemPopoverSurface)
+                        .expect("a mounted window can open a system popover"),
                 );
             });
             div().size_full().relative().child(
@@ -740,9 +781,9 @@ mod tests {
     }
 
     #[test]
-    fn anchored_popup_uses_retained_trigger_bounds_and_may_cross_the_parent_edge() {
+    fn system_popover_uses_retained_trigger_bounds_and_may_cross_the_parent_edge() {
         let parent_bounds = Rect::new(100.0, 100.0, 320.0, 240.0);
-        let (mut cx, launcher) = App::new(AnchoredLauncher::default())
+        let (mut cx, launcher) = App::new(SystemPopoverLauncher::default())
             .config(
                 AppConfig::new("Anchor parent")
                     .window_bounds(WindowBounds::Windowed(parent_bounds))
@@ -753,25 +794,25 @@ mod tests {
         let parent = launcher.window_handle();
 
         cx.click(parent, "anchor").unwrap();
-        let popup = cx
-            .read(launcher, |view| view.popup)
+        let popover = cx
+            .read(launcher, |view| view.popover)
             .unwrap()
-            .expect("listener retained the popup handle");
-        let popup_state = cx.window_state(popup).unwrap();
-        let popup_bounds = popup_state.bounds.bounds();
+            .expect("listener retained the popover handle");
+        let popover_state = cx.window_state(popover).unwrap();
+        let popover_bounds = popover_state.bounds.bounds();
 
-        assert_eq!(popup_state.kind, WindowKind::AnchoredPopup);
-        assert_eq!(popup_bounds, Rect::new(380.0, 316.0, 180.0, 120.0));
-        assert!(popup_bounds.right() > parent_bounds.right());
-        assert!(popup_bounds.bottom() > parent_bounds.bottom());
+        assert_eq!(popover_state.kind, WindowKind::SystemPopover);
+        assert_eq!(popover_bounds, Rect::new(380.0, 316.0, 180.0, 120.0));
+        assert!(popover_bounds.right() > parent_bounds.right());
+        assert!(popover_bounds.bottom() > parent_bounds.bottom());
         assert_eq!(
-            popup_bounds.intersection(cx.primary_display().unwrap().visible_bounds()),
-            Some(popup_bounds)
+            popover_bounds.intersection(cx.primary_display().unwrap().visible_bounds()),
+            Some(popover_bounds)
         );
 
-        let renders = cx.render_count(popup).unwrap();
+        let renders = cx.render_count(popover).unwrap();
         cx.run_until_idle().unwrap();
-        assert_eq!(cx.render_count(popup).unwrap(), renders);
+        assert_eq!(cx.render_count(popover).unwrap(), renders);
     }
 
     #[derive(Default)]
@@ -815,7 +856,7 @@ mod tests {
                     popover.positioner_part(
                         crate::div().child(
                             popover
-                                .popup_part(crate::div())
+                                .popover_part(crate::div())
                                 .accessibility_label("Actions")
                                 .child(
                                     crate::button()
@@ -848,8 +889,8 @@ mod tests {
                 Popover::new("trigger", "surface", true).positioner_id(),
             )
             .unwrap();
-        let popup_bounds = cx.element_bounds(window, "surface").unwrap();
-        assert_eq!(positioner_bounds, popup_bounds);
+        let popover_bounds = cx.element_bounds(window, "surface").unwrap();
+        assert_eq!(positioner_bounds, popover_bounds);
         assert_eq!(positioner_bounds.x, DEFAULT_POPOVER_VIEWPORT_MARGIN);
         assert!(positioner_bounds.x > trigger_bounds.x);
         assert_eq!(

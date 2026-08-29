@@ -54,8 +54,8 @@ use winit::{
 
 use crate::{
     ElementId, ExternalDragOperation, ExternalDragPayload, ExternalDragText, ExternalDragUrl,
-    MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_URL_BYTES, MAX_GRABBING_POPUPS,
-    MAX_SYSTEM_WINDOW_TABS, Point, PopupOptions, Rect, Size, WindowHandle, WindowKind,
+    MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_URL_BYTES, MAX_GRABBING_POPOVERS,
+    MAX_SYSTEM_WINDOW_TABS, Point, PopoverOptions, Rect, Size, WindowHandle, WindowKind,
     WindowTabState,
     native_view::NativeViewPlacement,
     platform::{
@@ -1094,36 +1094,66 @@ impl Drop for MacExternalDragMonitor {
     }
 }
 
-struct PopupWatch {
+struct PopoverWatch {
     handle: WindowHandle,
     window: Retained<NSWindow>,
+    anchor_window: Retained<NSWindow>,
+    anchor_screen_rect: NSRect,
 }
 
 #[derive(Default)]
-struct PopupMonitorState {
-    watches: Vec<PopupWatch>,
+struct PopoverMonitorState {
+    watches: Vec<PopoverWatch>,
     dismiss_pending: bool,
 }
 
-impl PopupMonitorState {
-    fn request_top_dismiss(&mut self, event_window: Option<&NSWindow>) -> Option<WindowHandle> {
+impl PopoverMonitorState {
+    fn request_top_dismiss(&mut self, event: &NSEvent) -> Option<(WindowHandle, bool)> {
         let watch = self.watches.last()?;
-        let inside =
-            event_window.is_some_and(|window| popup_window_contains(&watch.window, window));
+        let event_window = MainThreadMarker::new().and_then(|mtm| unsafe { event.window(mtm) });
+        let inside = event_window
+            .as_ref()
+            .is_some_and(|window| popover_window_contains(&watch.window, window.as_ref()));
         if inside || self.dismiss_pending {
             return None;
         }
+        let same_window = event_window
+            .as_ref()
+            .is_some_and(|window| std::ptr::eq(watch.anchor_window.as_ref(), window.as_ref()));
+        let window_point = unsafe { event.locationInWindow() };
+        let screen_point = event_window.as_ref().map_or(window_point, |window| unsafe {
+            window.convertPointToScreen(window_point)
+        });
+        let consume_anchor_press = should_consume_popover_anchor_press(
+            unsafe { event.r#type() },
+            same_window,
+            watch.anchor_screen_rect,
+            screen_point,
+        );
         self.dismiss_pending = true;
-        Some(watch.handle)
+        Some((watch.handle, consume_anchor_press))
     }
 }
 
-fn popup_window_contains(root: &NSWindow, candidate: &NSWindow) -> bool {
+fn should_consume_popover_anchor_press(
+    event_type: NSEventType,
+    same_window: bool,
+    anchor_rect: NSRect,
+    point: NSPoint,
+) -> bool {
+    event_type == NSEventType::LeftMouseDown
+        && same_window
+        && point.x.is_finite()
+        && point.y.is_finite()
+        && !point_outside_ns_rect(point, anchor_rect)
+}
+
+fn popover_window_contains(root: &NSWindow, candidate: &NSWindow) -> bool {
     if std::ptr::eq(root, candidate) {
         return true;
     }
     let mut parent = unsafe { candidate.parentWindow() };
-    for _ in 0..MAX_GRABBING_POPUPS {
+    for _ in 0..MAX_GRABBING_POPOVERS {
         let Some(window) = parent else {
             return false;
         };
@@ -1135,35 +1165,25 @@ fn popup_window_contains(root: &NSWindow, candidate: &NSWindow) -> bool {
     false
 }
 
-/// Return whether AppKit's key window is this window or one of its attached descendants.
-pub(crate) fn window_contains_key_window(window: &Arc<Window>) -> Result<bool, String> {
-    let root = appkit_window(window)?;
-    let mtm = MainThreadMarker::new().ok_or_else(|| {
-        "key-window ancestry must be queried on the AppKit main thread".to_owned()
-    })?;
-    Ok(NSApplication::sharedApplication(mtm)
-        .keyWindow()
-        .is_some_and(|key| popup_window_contains(&root, &key)))
-}
-
-/// One lazy pair of AppKit event monitors services every nested grabbing popup.
+/// One lazy local AppKit event monitor services every nested grabbing popover.
 ///
-/// The monitors are absent while no popup owns a grab, so this path adds no idle mouse-event work
-/// to ordinary windows. Entries are bounded and the topmost popup alone owns dismissal semantics.
-pub(crate) struct MacPopupMonitor {
+/// The monitor is absent while no popover owns a grab, so this path adds no idle mouse-event work
+/// to ordinary windows. Entries are bounded and the topmost popover alone owns dismissal semantics.
+/// Cross-application dismissal is deliberately handled after `NSApplication` has resigned active;
+/// closing from a global mouse monitor can race AppKit's activation handoff and return key appearance
+/// to the owner window.
+pub(crate) struct MacPopoverMonitor {
     proxy: EventLoopProxy<RuntimeEvent>,
-    state: Rc<RefCell<PopupMonitorState>>,
+    state: Rc<RefCell<PopoverMonitorState>>,
     local_monitor: Option<Retained<AnyObject>>,
-    global_monitor: Option<Retained<AnyObject>>,
 }
 
-impl MacPopupMonitor {
+impl MacPopoverMonitor {
     pub(crate) fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Self {
         Self {
             proxy,
-            state: Rc::new(RefCell::new(PopupMonitorState::default())),
+            state: Rc::new(RefCell::new(PopoverMonitorState::default())),
             local_monitor: None,
-            global_monitor: None,
         }
     }
 
@@ -1172,7 +1192,7 @@ impl MacPopupMonitor {
             return Ok(());
         }
         MainThreadMarker::new().ok_or_else(|| {
-            "popup event monitoring must be installed on the AppKit main thread".to_owned()
+            "popover event monitoring must be installed on the AppKit main thread".to_owned()
         })?;
         let mask =
             NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown | NSEventMask::OtherMouseDown;
@@ -1180,39 +1200,29 @@ impl MacPopupMonitor {
         let local_state = Rc::clone(&self.state);
         let local_proxy = self.proxy.clone();
         let local_block = RcBlock::new(move |event: NonNull<NSEvent>| {
-            let event_window =
-                MainThreadMarker::new().and_then(|mtm| unsafe { event.as_ref().window(mtm) });
             let dismiss = local_state
                 .borrow_mut()
-                .request_top_dismiss(event_window.as_deref());
-            if let Some(handle) = dismiss {
-                let _ = local_proxy.send_event(RuntimeEvent::PopupDismissRequested(handle));
+                .request_top_dismiss(unsafe { event.as_ref() });
+            if let Some((handle, consume_anchor_press)) = dismiss {
+                let _ =
+                    local_proxy.send_event(RuntimeEvent::PopoverPointerDismissRequested(handle));
+                if consume_anchor_press {
+                    // The active anchor is a close affordance. Consume its mouse-down so the
+                    // owner cannot receive a later click and reopen after dismissal state lands.
+                    return std::ptr::null_mut();
+                }
             }
             event.as_ptr()
         });
         self.local_monitor = Some(
             unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(mask, &local_block) }
-                .ok_or_else(|| "could not install the AppKit popup event monitor".to_owned())?,
+                .ok_or_else(|| "could not install the AppKit popover event monitor".to_owned())?,
         );
-
-        let global_state = Rc::clone(&self.state);
-        let global_proxy = self.proxy.clone();
-        let global_block = RcBlock::new(move |_event: NonNull<NSEvent>| {
-            let dismiss = global_state.borrow_mut().request_top_dismiss(None);
-            if let Some(handle) = dismiss {
-                let _ = global_proxy.send_event(RuntimeEvent::PopupDismissRequested(handle));
-            }
-        });
-        self.global_monitor =
-            unsafe { NSEvent::addGlobalMonitorForEventsMatchingMask_handler(mask, &global_block) };
         Ok(())
     }
 
     fn uninstall(&mut self) {
         if let Some(monitor) = self.local_monitor.take() {
-            unsafe { NSEvent::removeMonitor(&monitor) };
-        }
-        if let Some(monitor) = self.global_monitor.take() {
             unsafe { NSEvent::removeMonitor(&monitor) };
         }
     }
@@ -1221,17 +1231,37 @@ impl MacPopupMonitor {
         &mut self,
         handle: WindowHandle,
         window: &Arc<Window>,
+        anchor_window: &Arc<Window>,
+        anchor_rect: Rect,
     ) -> Result<(), String> {
         let window = appkit_window(window)?;
+        let anchor_view = appkit_view(anchor_window)?;
+        let anchor_window = anchor_view
+            .window()
+            .ok_or_else(|| "the popover anchor view is not attached to a window".to_owned())?;
+        let parent_content = anchor_window.contentRectForFrameRect(anchor_window.frame());
+        let anchor_screen_rect = NSRect::new(
+            NSPoint::new(
+                parent_content.origin.x + f64::from(anchor_rect.x),
+                parent_content.origin.y + parent_content.size.height
+                    - f64::from(anchor_rect.bottom()),
+            ),
+            NSSize::new(f64::from(anchor_rect.width), f64::from(anchor_rect.height)),
+        );
         {
             let mut state = self.state.borrow_mut();
             state.watches.retain(|watch| watch.handle != handle);
-            if state.watches.len() == MAX_GRABBING_POPUPS {
+            if state.watches.len() == MAX_GRABBING_POPOVERS {
                 return Err(format!(
-                    "an application cannot retain more than {MAX_GRABBING_POPUPS} grabbing popups"
+                    "an application cannot retain more than {MAX_GRABBING_POPOVERS} grabbing popovers"
                 ));
             }
-            state.watches.push(PopupWatch { handle, window });
+            state.watches.push(PopoverWatch {
+                handle,
+                window,
+                anchor_window,
+                anchor_screen_rect,
+            });
             state.dismiss_pending = false;
         }
         if let Err(error) = self.install() {
@@ -1261,7 +1291,7 @@ impl MacPopupMonitor {
     }
 }
 
-impl Drop for MacPopupMonitor {
+impl Drop for MacPopoverMonitor {
     fn drop(&mut self) {
         self.uninstall();
     }
@@ -1512,7 +1542,7 @@ pub(crate) fn set_window_movable(window: &Arc<Window>, movable: bool) -> Result<
     Ok(())
 }
 
-fn appkit_window(window: &Arc<Window>) -> Result<Retained<NSWindow>, String> {
+fn appkit_view(window: &Arc<Window>) -> Result<Retained<NSView>, String> {
     MainThreadMarker::new().ok_or_else(|| {
         "native window state must be changed on the AppKit main thread".to_owned()
     })?;
@@ -1522,9 +1552,13 @@ fn appkit_window(window: &Arc<Window>) -> Result<Retained<NSWindow>, String> {
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
         return Err("the active window does not expose an AppKit view".to_owned());
     };
-    let view = unsafe { handle.ns_view.as_ptr().cast::<NSView>().as_ref() }
-        .ok_or_else(|| "the AppKit content view pointer is null".to_owned())?;
-    view.window()
+    unsafe { Retained::retain(handle.ns_view.as_ptr().cast::<NSView>()) }
+        .ok_or_else(|| "the AppKit content view pointer is null".to_owned())
+}
+
+fn appkit_window(window: &Arc<Window>) -> Result<Retained<NSWindow>, String> {
+    appkit_view(window)?
+        .window()
         .ok_or_else(|| "the AppKit content view is not attached to a window".to_owned())
 }
 
@@ -1912,14 +1946,14 @@ fn appkit_main_screen_height(
     Ok((screens.clone(), primary.frame().size.height as f32))
 }
 
-/// Resolve and apply parent-relative popup geometry while both native windows remain hidden.
-pub(crate) fn position_anchored_popup(
+/// Resolve and apply parent-relative popover geometry while both native windows remain hidden.
+pub(crate) fn position_system_popover(
     window: &Arc<Window>,
     parent: &Arc<Window>,
-    options: &PopupOptions,
+    options: &PopoverOptions,
 ) -> Result<Rect, String> {
     let mtm = MainThreadMarker::new()
-        .ok_or_else(|| "popup placement must be resolved on the AppKit main thread".to_owned())?;
+        .ok_or_else(|| "popover placement must be resolved on the AppKit main thread".to_owned())?;
     let child = appkit_window(window)?;
     let parent = appkit_window(parent)?;
     let (screens, main_screen_height) = appkit_main_screen_height(mtm)?;
@@ -1944,10 +1978,10 @@ pub(crate) fn position_anchored_popup(
         .map(|screen| screen.retain())
         .or_else(|| parent.screen())
         .or_else(|| NSScreen::mainScreen(mtm))
-        .ok_or_else(|| "AppKit could not resolve the popup's target screen".to_owned())?;
+        .ok_or_else(|| "AppKit could not resolve the popover's target screen".to_owned())?;
     let visible = top_left_screen_rect(screen.visibleFrame(), main_screen_height);
     if visible.is_empty() {
-        return Err("AppKit reported an empty popup work area".to_owned());
+        return Err("AppKit reported an empty popover work area".to_owned());
     }
 
     let child_content = child.contentRectForFrameRect(child.frame());
@@ -1955,7 +1989,7 @@ pub(crate) fn position_anchored_popup(
         child_content.size.width as f32,
         child_content.size.height as f32,
     );
-    let resolved = crate::popup::place_popup(anchor_rect, size, visible, options);
+    let resolved = crate::popover::place_popover(anchor_rect, size, visible, options);
     let content_frame = NSRect::new(
         NSPoint::new(
             resolved.x as f64,
@@ -1994,18 +2028,18 @@ pub(crate) fn configure_window_kind(
     focus: bool,
     accepts_key_focus: bool,
 ) -> Result<(), String> {
-    if matches!(kind, WindowKind::PopUp | WindowKind::AnchoredPopup)
+    if matches!(kind, WindowKind::Popover | WindowKind::SystemPopover)
         && !window.set_panel_can_become_key_window(accepts_key_focus)
     {
-        return Err("a popup panel did not expose key-window policy".to_owned());
+        return Err("a popover panel did not expose key-window policy".to_owned());
     }
     let window = appkit_window(window)?;
     match kind {
         WindowKind::Normal | WindowKind::Dialog => window.setLevel(NSNormalWindowLevel),
         WindowKind::Floating => window.setLevel(NSFloatingWindowLevel),
-        WindowKind::PopUp | WindowKind::AnchoredPopup => unsafe {
+        WindowKind::Popover | WindowKind::SystemPopover => unsafe {
             if !window.isKindOfClass(NSPanel::class()) {
-                return Err("a popup was not allocated as an AppKit NSPanel".to_owned());
+                return Err("a popover was not allocated as an AppKit NSPanel".to_owned());
             }
             let panel: Retained<NSPanel> = Retained::cast(window.clone());
             panel.setFloatingPanel(true);
@@ -2033,7 +2067,7 @@ pub(crate) fn present_window_relation(
         return Ok(false);
     };
     let child = appkit_window(window)?;
-    if kind == WindowKind::AnchoredPopup {
+    if kind == WindowKind::SystemPopover {
         let parent = appkit_window(parent)?;
         if let Some(previous) = unsafe { child.parentWindow() }
             && Retained::as_ptr(&previous) != Retained::as_ptr(&parent)
@@ -2060,13 +2094,13 @@ pub(crate) fn present_window_relation(
     Ok(true)
 }
 
-/// End an AppKit sheet before its Winit window and parent relationship are released.
+/// End an AppKit parent-owned presentation before hiding or releasing the Winit window.
 pub(crate) fn dismiss_window_relation(
     window: &Arc<Window>,
     kind: WindowKind,
 ) -> Result<(), String> {
     let child = appkit_window(window)?;
-    if kind == WindowKind::AnchoredPopup {
+    if kind == WindowKind::SystemPopover {
         if let Some(parent) = unsafe { child.parentWindow() } {
             unsafe { parent.removeChildWindow(&child) };
         }
@@ -3078,6 +3112,37 @@ mod tests {
         assert!(!point_outside_ns_rect(NSPoint::new(90.0, 80.0), bounds));
         assert!(point_outside_ns_rect(NSPoint::new(9.9, 50.0), bounds));
         assert!(point_outside_ns_rect(NSPoint::new(50.0, 80.1), bounds));
+    }
+
+    #[test]
+    fn system_popover_consumes_only_a_left_press_inside_its_own_anchor() {
+        let anchor = NSRect::new(NSPoint::new(20.0, 30.0), NSSize::new(80.0, 40.0));
+        let inside = NSPoint::new(99.9, 69.9);
+
+        assert!(should_consume_popover_anchor_press(
+            NSEventType::LeftMouseDown,
+            true,
+            anchor,
+            inside,
+        ));
+        assert!(!should_consume_popover_anchor_press(
+            NSEventType::RightMouseDown,
+            true,
+            anchor,
+            inside,
+        ));
+        assert!(!should_consume_popover_anchor_press(
+            NSEventType::LeftMouseDown,
+            false,
+            anchor,
+            inside,
+        ));
+        assert!(!should_consume_popover_anchor_press(
+            NSEventType::LeftMouseDown,
+            true,
+            anchor,
+            NSPoint::new(100.1, 70.1),
+        ));
     }
 
     #[test]

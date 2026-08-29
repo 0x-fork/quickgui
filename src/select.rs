@@ -5,16 +5,16 @@ use std::{
 };
 
 use crate::{
-    AccessibilityPopup, AccessibilityRole, AnchorPlacement, ComboboxConfirm, ComboboxFirst,
+    AccessibilityPopover, AccessibilityRole, AnchorPlacement, ComboboxConfirm, ComboboxFirst,
     ComboboxLast, ComboboxNext, ComboboxPageDown, ComboboxPageUp, ComboboxPrevious, Element,
     ElementId, EventContext, FocusHandle, Key, MAX_VALIDATION_MESSAGE_BYTES, Modifiers,
     PickerError, PickerItem, View, ViewContext, VirtualList, WindowHandle, div,
     picker::collect_picker_items,
 };
 
-/// Maximum option rows mounted by one standalone select popup before virtual scrolling takes over.
+/// Maximum option rows mounted by one standalone select popover before virtual scrolling takes over.
 pub const MAX_SELECT_VISIBLE_ROWS: usize = 64;
-/// Maximum UTF-8 bytes retained by one select popup's incremental typeahead buffer.
+/// Maximum UTF-8 bytes retained by one select popover's incremental typeahead buffer.
 pub const MAX_SELECT_TYPEAHEAD_BYTES: usize = 256;
 /// Select typeahead expires when the next key arrives after this interval; no timer is scheduled.
 pub const SELECT_TYPEAHEAD_TIMEOUT: Duration = Duration::from_millis(500);
@@ -23,11 +23,11 @@ const SELECT_KEY_CONTEXT: &str = "Select";
 const SELECT_SURFACE_ID_TAG: u64 = 0x99f6_4cc3_13aa_0c81;
 const SELECT_OPTION_ID_TAG: u64 = 0x6fe3_f490_a3b8_b271;
 
-/// Structural geometry for the separate native popup surface used by [`SelectState`].
+/// Structural geometry for the separate native popover surface used by [`SelectState`].
 ///
 /// It intentionally contains no color, typography, border, radius, shadow, or animation tokens.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SelectPopupLayout {
+pub struct SelectPopoverLayout {
     pub width: f32,
     pub row_height: f32,
     pub max_visible_rows: usize,
@@ -35,7 +35,7 @@ pub struct SelectPopupLayout {
     pub anchor_gap: f32,
 }
 
-impl SelectPopupLayout {
+impl SelectPopoverLayout {
     pub fn new(width: f32, row_height: f32) -> Self {
         Self {
             width: finite_clamped(width, 1.0, 4_096.0, 240.0),
@@ -79,18 +79,18 @@ impl SelectPopupLayout {
         self
     }
 
-    fn popup_height(self, option_count: usize) -> f32 {
+    fn popover_height(self, option_count: usize) -> f32 {
         option_count.min(self.max_visible_rows).max(1) as f32 * self.row_height
     }
 }
 
-impl Default for SelectPopupLayout {
+impl Default for SelectPopoverLayout {
     fn default() -> Self {
         Self::new(240.0, 36.0)
     }
 }
 
-/// State supplied to the caller-owned popup-root renderer.
+/// State supplied to the caller-owned popover-root renderer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SelectListState {
     pub option_count: usize,
@@ -116,13 +116,13 @@ pub struct SelectOptionState {
 pub struct SelectState<T> {
     items: Arc<[PickerItem<T>]>,
     selected_source: Option<usize>,
-    popup: Option<WindowHandle>,
+    popover: Option<WindowHandle>,
     source_revision: u64,
     disabled: bool,
     invalid: bool,
     validation_message: Option<Arc<str>>,
     validation_message_truncated: bool,
-    layout: SelectPopupLayout,
+    layout: SelectPopoverLayout,
 }
 
 impl<T> fmt::Debug for SelectState<T> {
@@ -131,7 +131,7 @@ impl<T> fmt::Debug for SelectState<T> {
             .debug_struct("SelectState")
             .field("items", &self.items.len())
             .field("selected_source", &self.selected_source)
-            .field("popup", &self.popup)
+            .field("popover", &self.popover)
             .field("source_revision", &self.source_revision)
             .field("disabled", &self.disabled)
             .field("invalid", &self.invalid)
@@ -150,26 +150,26 @@ impl<T> SelectState<T> {
         Ok(Self {
             items: Arc::from(collect_picker_items(items)?),
             selected_source: None,
-            popup: None,
+            popover: None,
             source_revision: 1,
             disabled: false,
             invalid: false,
             validation_message: None,
             validation_message_truncated: false,
-            layout: SelectPopupLayout::default(),
+            layout: SelectPopoverLayout::default(),
         })
     }
 
-    pub fn with_layout(mut self, layout: SelectPopupLayout) -> Self {
+    pub fn with_layout(mut self, layout: SelectPopoverLayout) -> Self {
         self.layout = layout.sanitized();
         self
     }
 
-    pub fn layout(&self) -> SelectPopupLayout {
+    pub fn layout(&self) -> SelectPopoverLayout {
         self.layout
     }
 
-    pub fn set_layout(&mut self, layout: SelectPopupLayout) -> bool {
+    pub fn set_layout(&mut self, layout: SelectPopoverLayout) -> bool {
         let layout = layout.sanitized();
         if self.layout == layout {
             return false;
@@ -194,12 +194,12 @@ impl<T> SelectState<T> {
         self.selected_item().map(PickerItem::value)
     }
 
-    pub const fn popup_window(&self) -> Option<WindowHandle> {
-        self.popup
+    pub const fn popover_window(&self) -> Option<WindowHandle> {
+        self.popover
     }
 
     pub const fn is_open(&self) -> bool {
-        self.popup.is_some()
+        self.popover.is_some()
     }
 
     pub const fn is_disabled(&self) -> bool {
@@ -264,7 +264,7 @@ impl<T> SelectState<T> {
         self.selected_source.take().is_some()
     }
 
-    /// Change disabled state and synchronously request closure of an open native popup.
+    /// Change disabled state and synchronously request closure of an open native popover.
     pub fn set_disabled(&mut self, disabled: bool, cx: &mut EventContext) -> bool {
         if self.disabled == disabled {
             return false;
@@ -307,10 +307,10 @@ impl<T> SelectState<T> {
     }
 
     pub fn close(&mut self, cx: &mut EventContext) -> bool {
-        let Some(popup) = self.popup.take() else {
+        let Some(popover) = self.popover.take() else {
             return false;
         };
-        cx.close_window_handle(popup);
+        cx.close_window_handle(popover);
         true
     }
 
@@ -340,7 +340,7 @@ impl<T> SelectState<T> {
             .focusable()
             .accessibility_role(AccessibilityRole::ComboBox)
             .accessibility_label(label.into())
-            .accessibility_has_popup(AccessibilityPopup::ListBox)
+            .accessibility_has_popover(AccessibilityPopover::ListBox)
             .accessibility_expanded(self.is_open())
             .disabled(self.disabled)
             .invalid(self.invalid)
@@ -357,37 +357,37 @@ impl<T> SelectState<T> {
         trigger
     }
 
-    /// Build the complete unstyled select interaction from caller-owned trigger, popup, and rows.
+    /// Build the complete unstyled select interaction from caller-owned trigger, popover, and rows.
     #[allow(clippy::too_many_arguments)]
-    pub fn element<V, PopupRoot, RenderOption, Change>(
+    pub fn element<V, PopoverRoot, RenderOption, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         access: fn(&mut V) -> &mut SelectState<T>,
         trigger: Element,
-        popup_root: PopupRoot,
+        popover_root: PopoverRoot,
         render_option: RenderOption,
         change: Change,
     ) -> Element
     where
         V: 'static,
         T: Clone + 'static,
-        PopupRoot: Fn(SelectListState) -> Element + Clone + 'static,
+        PopoverRoot: Fn(SelectListState) -> Element + Clone + 'static,
         RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
         Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
     {
         let id = id.into();
         let label = label.into();
         let renderers = SelectRenderers {
-            popup_root,
+            popover_root,
             render_option,
         };
 
         cx.on_any_child_window_closed(move |view, closed, cx| {
             let state = access(view);
-            if state.popup == Some(closed) {
-                state.popup = None;
+            if state.popover == Some(closed) {
+                state.popover = None;
                 cx.focus(FocusHandle::new(id));
                 cx.invalidate();
             }
@@ -401,7 +401,7 @@ impl<T> SelectState<T> {
             }
             let value = {
                 let state = access(view);
-                if state.popup != Some(action.popup)
+                if state.popover != Some(action.popover)
                     || state.source_revision != action.source_revision
                 {
                     return;
@@ -413,7 +413,7 @@ impl<T> SelectState<T> {
                     .map(|item| item.value().clone());
                 if value.is_some() {
                     state.selected_source = Some(action.source_index);
-                    state.popup = None;
+                    state.popover = None;
                 }
                 value
             };
@@ -427,7 +427,7 @@ impl<T> SelectState<T> {
         let click_renderers = renderers.clone();
         let click_label = label.clone();
         let click = cx.listener(id, move |view, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -440,7 +440,7 @@ impl<T> SelectState<T> {
         let previous_renderers = renderers.clone();
         let previous_label = label.clone();
         let previous = cx.action_listener(id, move |view, _: &ComboboxPrevious, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -452,7 +452,7 @@ impl<T> SelectState<T> {
         let next_renderers = renderers.clone();
         let next_label = label.clone();
         let next = cx.action_listener(id, move |view, _: &ComboboxNext, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -464,7 +464,7 @@ impl<T> SelectState<T> {
         let page_up_renderers = renderers.clone();
         let page_up_label = label.clone();
         let page_up = cx.action_listener(id, move |view, _: &ComboboxPageUp, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -476,7 +476,7 @@ impl<T> SelectState<T> {
         let page_down_renderers = renderers.clone();
         let page_down_label = label.clone();
         let page_down = cx.action_listener(id, move |view, _: &ComboboxPageDown, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -488,7 +488,7 @@ impl<T> SelectState<T> {
         let first_renderers = renderers.clone();
         let first_label = label.clone();
         let first = cx.action_listener(id, move |view, _: &ComboboxFirst, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -500,7 +500,7 @@ impl<T> SelectState<T> {
         let last_renderers = renderers.clone();
         let last_label = label.clone();
         let last = cx.action_listener(id, move |view, _: &ComboboxLast, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -512,7 +512,7 @@ impl<T> SelectState<T> {
         let confirm_renderers = renderers;
         let confirm_label = label.clone();
         let confirm = cx.action_listener(id, move |view, _: &ComboboxConfirm, cx| {
-            open_select_popup(
+            open_select_popover(
                 view,
                 cx,
                 id,
@@ -537,36 +537,36 @@ impl<T> SelectState<T> {
 }
 
 #[derive(Clone)]
-struct SelectRenderers<PopupRoot, RenderOption> {
-    popup_root: PopupRoot,
+struct SelectRenderers<PopoverRoot, RenderOption> {
+    popover_root: PopoverRoot,
     render_option: RenderOption,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct SelectCommit {
     control: ElementId,
-    popup: WindowHandle,
+    popover: WindowHandle,
     source_revision: u64,
     source_index: usize,
 }
 
 #[allow(clippy::too_many_arguments)]
-fn open_select_popup<V, T, PopupRoot, RenderOption>(
+fn open_select_popover<V, T, PopoverRoot, RenderOption>(
     view: &mut V,
     cx: &mut EventContext,
     id: ElementId,
     label: Arc<str>,
     access: fn(&mut V) -> &mut SelectState<T>,
-    renderers: SelectRenderers<PopupRoot, RenderOption>,
+    renderers: SelectRenderers<PopoverRoot, RenderOption>,
 ) where
     V: 'static,
     T: Clone + 'static,
-    PopupRoot: Fn(SelectListState) -> Element + Clone + 'static,
+    PopoverRoot: Fn(SelectListState) -> Element + Clone + 'static,
     RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
 {
     let (items, selected_source, source_revision, layout) = {
         let state = access(view);
-        if state.disabled || state.popup.is_some() {
+        if state.disabled || state.popover.is_some() {
             return;
         }
         (
@@ -576,7 +576,7 @@ fn open_select_popup<V, T, PopupRoot, RenderOption>(
             state.layout,
         )
     };
-    let popup = SelectPopupView::new(
+    let popover = SelectPopoverView::new(
         id,
         label,
         items,
@@ -585,18 +585,18 @@ fn open_select_popup<V, T, PopupRoot, RenderOption>(
         layout,
         renderers,
     );
-    let option_count = popup.items.len();
-    let result = crate::AnchoredPopover::new(layout.width, layout.popup_height(option_count))
+    let option_count = popover.items.len();
+    let result = crate::SystemPopover::new(layout.width, layout.popover_height(option_count))
         .placement(layout.placement)
         .gap(layout.anchor_gap)
-        .open(cx, id, "Select", popup);
+        .open(cx, id, "Select", popover);
     if let Ok(handle) = result {
-        access(view).popup = Some(handle);
+        access(view).popover = Some(handle);
         cx.invalidate();
     }
 }
 
-struct SelectPopupView<T, PopupRoot, RenderOption> {
+struct SelectPopoverView<T, PopoverRoot, RenderOption> {
     control: ElementId,
     label: Arc<str>,
     items: Arc<[PickerItem<T>]>,
@@ -604,27 +604,27 @@ struct SelectPopupView<T, PopupRoot, RenderOption> {
     source_revision: u64,
     active: Option<usize>,
     list: VirtualList,
-    layout: SelectPopupLayout,
-    renderers: SelectRenderers<PopupRoot, RenderOption>,
+    layout: SelectPopoverLayout,
+    renderers: SelectRenderers<PopoverRoot, RenderOption>,
     typeahead: String,
     typeahead_at: Option<Instant>,
 }
 
-impl<T, PopupRoot, RenderOption> SelectPopupView<T, PopupRoot, RenderOption> {
+impl<T, PopoverRoot, RenderOption> SelectPopoverView<T, PopoverRoot, RenderOption> {
     fn new(
         control: ElementId,
         label: Arc<str>,
         items: Arc<[PickerItem<T>]>,
         selected_source: Option<usize>,
         source_revision: u64,
-        layout: SelectPopupLayout,
-        renderers: SelectRenderers<PopupRoot, RenderOption>,
+        layout: SelectPopoverLayout,
+        renderers: SelectRenderers<PopoverRoot, RenderOption>,
     ) -> Self {
         let active = selected_source
             .filter(|index| items.get(*index).is_some_and(|item| !item.is_disabled()))
             .or_else(|| items.iter().position(|item| !item.is_disabled()));
         let mut list = VirtualList::new(items.len(), layout.row_height).with_overscan(1);
-        list.set_viewport_height(layout.popup_height(items.len()));
+        list.set_viewport_height(layout.popover_height(items.len()));
         if let Some(active) = active {
             list.scroll_to_reveal(active);
         }
@@ -772,18 +772,18 @@ impl<T, PopupRoot, RenderOption> SelectPopupView<T, PopupRoot, RenderOption> {
         let Some(source_index) = self.active else {
             return false;
         };
-        let Some(popup) = cx.window_handle() else {
+        let Some(popover) = cx.window_handle() else {
             return false;
         };
-        if !cx.dispatch_action_to_popup_owner(SelectCommit {
+        if !cx.dispatch_action_to_popover_owner(SelectCommit {
             control: self.control,
-            popup,
+            popover,
             source_revision: self.source_revision,
             source_index,
         }) {
             return false;
         }
-        cx.close_popup_chain()
+        cx.close_popover_chain()
     }
 
     fn surface_id(&self) -> ElementId {
@@ -795,10 +795,10 @@ impl<T, PopupRoot, RenderOption> SelectPopupView<T, PopupRoot, RenderOption> {
     }
 }
 
-impl<T, PopupRoot, RenderOption> View for SelectPopupView<T, PopupRoot, RenderOption>
+impl<T, PopoverRoot, RenderOption> View for SelectPopoverView<T, PopoverRoot, RenderOption>
 where
     T: Clone + 'static,
-    PopupRoot: Fn(SelectListState) -> Element + Clone + 'static,
+    PopoverRoot: Fn(SelectListState) -> Element + Clone + 'static,
     RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
 {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl crate::IntoElement {
@@ -838,7 +838,7 @@ where
         });
         let key_down = cx.key_down_listener(surface_id, |view, event, cx| {
             if event.key == Key::Escape {
-                cx.close_popup_chain();
+                cx.close_popover_chain();
                 cx.prevent_default();
                 cx.stop_propagation();
                 return;
@@ -860,7 +860,7 @@ where
         });
 
         self.list
-            .set_viewport_height(self.layout.popup_height(self.items.len()));
+            .set_viewport_height(self.layout.popover_height(self.items.len()));
         if let Some(active) = self.active {
             self.list.scroll_to_reveal(active);
         }
@@ -919,7 +919,7 @@ where
             .overflow_hidden()
             .virtual_scroll(&self.list)
             .children(rows);
-        let mut root = (self.renderers.popup_root)(list_state)
+        let mut root = (self.renderers.popover_root)(list_state)
             .id(surface_id)
             .track_focus(FocusHandle::new(surface_id))
             .auto_focus()
@@ -1040,7 +1040,7 @@ mod tests {
         ]
     }
 
-    fn popup_root(_state: SelectListState) -> Element {
+    fn popover_root(_state: SelectListState) -> Element {
         div().bg(Color::BLACK)
     }
 
@@ -1088,8 +1088,8 @@ mod tests {
         let trigger = state.trigger_part("select", "Theme", div());
         assert_eq!(trigger.accessibility.role, AccessibilityRole::ComboBox);
         assert_eq!(
-            trigger.accessibility.has_popup,
-            Some(AccessibilityPopup::ListBox)
+            trigger.accessibility.has_popover,
+            Some(AccessibilityPopover::ListBox)
         );
         assert!(trigger.focusable);
         assert_eq!(trigger.visual.background, None);
@@ -1120,7 +1120,7 @@ mod tests {
             Self {
                 select: SelectState::new(options())
                     .unwrap()
-                    .with_layout(SelectPopupLayout::new(220.0, 32.0).max_visible_rows(2)),
+                    .with_layout(SelectPopoverLayout::new(220.0, 32.0).max_visible_rows(2)),
                 value: None,
             }
         }
@@ -1140,7 +1140,7 @@ mod tests {
                 "Theme",
                 Self::select,
                 div().child("Choose"),
-                popup_root,
+                popover_root,
                 option_row,
                 |view, value, _cx| view.value = Some(value),
             )
@@ -1148,36 +1148,36 @@ mod tests {
     }
 
     #[test]
-    fn native_popup_commits_through_owner_and_close_lifecycle_clears_state() {
+    fn native_popover_commits_through_owner_and_close_lifecycle_clears_state() {
         let (mut cx, owner) = App::new(SelectOwner::default())
             .bind_keys(select_key_bindings())
             .into_test_context()
             .unwrap();
         cx.click(owner.window_handle(), "select").unwrap();
-        let popup = cx
-            .read(owner, |view| view.select.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.select.popover_window().unwrap())
             .unwrap();
         assert_eq!(
-            cx.window_state(popup).unwrap().kind,
-            crate::WindowKind::AnchoredPopup
+            cx.window_state(popover).unwrap().kind,
+            crate::WindowKind::SystemPopover
         );
 
-        cx.simulate_keystrokes(popup, "down enter").unwrap();
-        assert!(!cx.is_window_open(popup));
+        cx.simulate_keystrokes(popover, "down enter").unwrap();
+        assert!(!cx.is_window_open(popover));
         assert_eq!(cx.read(owner, |view| view.value).unwrap(), Some("beta"));
         assert_eq!(
-            cx.read(owner, |view| view.select.popup_window()).unwrap(),
+            cx.read(owner, |view| view.select.popover_window()).unwrap(),
             None
         );
 
         cx.click(owner.window_handle(), "select").unwrap();
-        let popup = cx
-            .read(owner, |view| view.select.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.select.popover_window().unwrap())
             .unwrap();
-        cx.update(owner, |_view, cx| cx.close_window_handle(popup))
+        cx.update(owner, |_view, cx| cx.close_window_handle(popover))
             .unwrap();
         assert_eq!(
-            cx.read(owner, |view| view.select.popup_window()).unwrap(),
+            cx.read(owner, |view| view.select.popover_window()).unwrap(),
             None
         );
         let renders = cx.render_count(owner.window_handle()).unwrap();
@@ -1186,61 +1186,61 @@ mod tests {
     }
 
     #[test]
-    fn popup_typeahead_is_bounded_cycles_and_skips_disabled_options() {
+    fn popover_typeahead_is_bounded_cycles_and_skips_disabled_options() {
         let renderers = SelectRenderers {
-            popup_root,
+            popover_root,
             render_option: option_row,
         };
-        let mut popup = SelectPopupView::new(
+        let mut popover = SelectPopoverView::new(
             "select".into(),
             Arc::from("Theme"),
             Arc::from(options()),
             None,
             1,
-            SelectPopupLayout::default(),
+            SelectPopoverLayout::default(),
             renderers,
         );
         let now = Instant::now();
-        assert!(popup.typeahead("b", now));
-        assert_eq!(popup.active, Some(2));
-        assert!(popup.typeahead("b", now + Duration::from_millis(10)));
-        assert_eq!(popup.active, Some(3));
-        popup.typeahead(&"z".repeat(MAX_SELECT_TYPEAHEAD_BYTES * 2), now);
-        assert!(popup.typeahead.len() <= MAX_SELECT_TYPEAHEAD_BYTES);
+        assert!(popover.typeahead("b", now));
+        assert_eq!(popover.active, Some(2));
+        assert!(popover.typeahead("b", now + Duration::from_millis(10)));
+        assert_eq!(popover.active, Some(3));
+        popover.typeahead(&"z".repeat(MAX_SELECT_TYPEAHEAD_BYTES * 2), now);
+        assert!(popover.typeahead.len() <= MAX_SELECT_TYPEAHEAD_BYTES);
     }
 
     #[test]
-    fn child_popup_options_remain_visible_only_for_large_sources() {
+    fn child_popover_options_remain_visible_only_for_large_sources() {
         let items = Arc::from(
             collect_picker_items(
                 (0..20_000).map(|index| PickerItem::new(format!("Option {index}"), index)),
             )
             .unwrap(),
         );
-        let popup = SelectPopupView::new(
+        let popover = SelectPopoverView::new(
             "large-select".into(),
             Arc::from("Large"),
             items,
             Some(19_999),
             1,
-            SelectPopupLayout::new(240.0, 32.0).max_visible_rows(5),
+            SelectPopoverLayout::new(240.0, 32.0).max_visible_rows(5),
             SelectRenderers {
-                popup_root,
+                popover_root,
                 render_option: |_item: &PickerItem<usize>, _state: SelectOptionState| div(),
             },
         );
-        assert!(popup.list.visible_rows().len() <= 7);
-        assert_eq!(popup.active, Some(19_999));
+        assert!(popover.list.visible_rows().len() <= 7);
+        assert_eq!(popover.active, Some(19_999));
     }
 
     #[test]
-    fn child_window_config_is_a_real_overflow_capable_popup() {
+    fn child_window_config_is_a_real_overflow_capable_popover() {
         let mut state = SelectState::new(options()).unwrap();
         let mut cx = EventContext::default();
-        state.popup = Some(WindowHandle::next());
+        state.popover = Some(WindowHandle::next());
         assert!(state.close(&mut cx));
         assert_eq!(cx.close_windows.len(), 1);
-        let options = crate::AnchoredPopover::new(240.0, 120.0).window_options("Select");
-        assert_eq!(options.kind, crate::WindowKind::AnchoredPopup);
+        let options = crate::SystemPopover::new(240.0, 120.0).window_options("Select");
+        assert_eq!(options.kind, crate::WindowKind::SystemPopover);
     }
 }

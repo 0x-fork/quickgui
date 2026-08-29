@@ -1,11 +1,12 @@
 use std::{rc::Rc, time::Duration};
 
 use crate::{
-    AccessibilityPopup, AnchorPlacement, AnchoredPopover, AsyncViewContext, Color,
-    ContextMenuEvent, Element, ElementId, EventContext, MAX_WINDOW_LOGICAL_COORDINATE,
-    MAX_WINDOW_LOGICAL_DIMENSION, MouseExitEvent, MouseMoveEvent, Point, PopupConstraintAdjustment,
-    PopupMenu, PopupMenuItem, PopupMenuItemKind, PopupMenuItemState, PopupOptions, Rect, Size,
-    Task, View, ViewContext, WindowBackgroundAppearance, WindowHandle, WindowOptions,
+    AccessibilityPopover, AnchorPlacement, AsyncViewContext, Color, ContextMenuEvent, Element,
+    ElementId, EventContext, MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION,
+    MouseExitEvent, MouseMoveEvent, Point, PopoverConstraintAdjustment, PopoverMenu,
+    PopoverMenuItem, PopoverMenuItemKind, PopoverMenuItemState, PopoverOptions, Rect, Size,
+    SystemPopover, Task, View, ViewContext, WindowBackgroundAppearance, WindowHandle,
+    WindowOptions,
 };
 
 const CONTEXT_MENU_SURFACE_ID_TAG: u64 = 0xa255_e4af_3580_dd21;
@@ -25,7 +26,7 @@ pub const CONTEXT_MENU_SUBMENU_AIM_DELAY: Duration = Duration::from_millis(300);
 /// Structural geometry for an unstyled cursor-point context menu.
 ///
 /// Colors, borders, radii, shadows, icons, typography, and row contents remain entirely
-/// application-owned. QuickGUI uses these measurements only to size the separate native popup
+/// application-owned. QuickGUI uses these measurements only to size the separate native popover
 /// surface and to keep caller-rendered rows consistent with that surface.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ContextMenuLayout {
@@ -36,7 +37,7 @@ pub struct ContextMenuLayout {
     vertical_padding: f32,
     submenu_gap: f32,
     offset: Point,
-    constraints: PopupConstraintAdjustment,
+    constraints: PopoverConstraintAdjustment,
 }
 
 impl ContextMenuLayout {
@@ -49,7 +50,7 @@ impl ContextMenuLayout {
             vertical_padding: DEFAULT_VERTICAL_PADDING,
             submenu_gap: DEFAULT_SUBMENU_GAP,
             offset: Point::ZERO,
-            constraints: PopupConstraintAdjustment::FIT,
+            constraints: PopoverConstraintAdjustment::FIT,
         }
     }
 
@@ -81,7 +82,7 @@ impl ContextMenuLayout {
         self.offset
     }
 
-    pub const fn constraints(self) -> PopupConstraintAdjustment {
+    pub const fn constraints(self) -> PopoverConstraintAdjustment {
         self.constraints
     }
 
@@ -148,23 +149,23 @@ impl ContextMenuLayout {
         self
     }
 
-    pub const fn constraint_adjustment(mut self, constraints: PopupConstraintAdjustment) -> Self {
+    pub const fn constraint_adjustment(mut self, constraints: PopoverConstraintAdjustment) -> Self {
         self.constraints = constraints;
         self
     }
 
-    pub const fn row_height(self, kind: PopupMenuItemKind) -> f32 {
+    pub const fn row_height(self, kind: PopoverMenuItemKind) -> f32 {
         match kind {
-            PopupMenuItemKind::Separator => self.separator_height,
-            PopupMenuItemKind::GroupLabel => self.group_label_height,
-            PopupMenuItemKind::Action
-            | PopupMenuItemKind::Checkbox
-            | PopupMenuItemKind::Radio
-            | PopupMenuItemKind::Submenu => self.item_height,
+            PopoverMenuItemKind::Separator => self.separator_height,
+            PopoverMenuItemKind::GroupLabel => self.group_label_height,
+            PopoverMenuItemKind::Action
+            | PopoverMenuItemKind::Checkbox
+            | PopoverMenuItemKind::Radio
+            | PopoverMenuItemKind::Submenu => self.item_height,
         }
     }
 
-    pub fn popup_size(self, menu: &PopupMenu) -> Size {
+    pub fn popover_size(self, menu: &PopoverMenu) -> Size {
         let height = menu
             .items()
             .iter()
@@ -187,24 +188,24 @@ impl Default for ContextMenuLayout {
 /// Application-owned lifecycle state for an unstyled cursor-point context menu.
 ///
 /// Closed state owns no native window, renderer, timer, task, observer, or scheduler source. An
-/// open state owns exactly one direct child popup handle; nested submenu handles are owned by their
-/// immediate popup parent and are torn down child-first with the root.
+/// open state owns exactly one direct child popover handle; nested submenu handles are owned by their
+/// immediate popover parent and are torn down child-first with the root.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ContextMenuState {
-    popup: Option<WindowHandle>,
+    popover: Option<WindowHandle>,
 }
 
 impl ContextMenuState {
     pub const fn new() -> Self {
-        Self { popup: None }
+        Self { popover: None }
     }
 
-    pub const fn popup_window(self) -> Option<WindowHandle> {
-        self.popup
+    pub const fn popover_window(self) -> Option<WindowHandle> {
+        self.popover
     }
 
     pub const fn is_open(self) -> bool {
-        self.popup.is_some()
+        self.popover.is_some()
     }
 
     /// Decorate a caller-owned target with context-menu semantics without changing appearance,
@@ -212,13 +213,13 @@ impl ContextMenuState {
     pub fn target_part(self, id: impl Into<ElementId>, target: Element) -> Element {
         target
             .id(id)
-            .accessibility_has_popup(AccessibilityPopup::Menu)
+            .accessibility_has_popover(AccessibilityPopover::Menu)
             .accessibility_expanded(self.is_open())
     }
 
-    /// Attach a complete cursor-point popup-menu interaction to a caller-owned target.
+    /// Attach a complete cursor-point popover-menu interaction to a caller-owned target.
     ///
-    /// `build_menu` runs only on a secondary click and may return `None` to suppress the popup.
+    /// `build_menu` runs only on a secondary click and may return `None` to suppress the popover.
     /// `render_root` and `render_item` own all appearance. The framework owns only bounded model
     /// behavior, structural geometry, point placement, separate-surface lifetime, keyboard focus,
     /// dismissal, submenu parenting, and exact native-close synchronization.
@@ -236,14 +237,14 @@ impl ContextMenuState {
     ) -> Element
     where
         V: 'static,
-        BuildMenu: Fn(&mut V, &ContextMenuEvent) -> Option<PopupMenu> + 'static,
+        BuildMenu: Fn(&mut V, &ContextMenuEvent) -> Option<PopoverMenu> + 'static,
         RenderRoot: Fn() -> Element + 'static,
-        RenderItem: Fn(&PopupMenuItem, PopupMenuItemState) -> Element + 'static,
+        RenderItem: Fn(&PopoverMenuItem, PopoverMenuItemState) -> Element + 'static,
     {
         let id = id.into();
         cx.on_any_child_window_closed(move |view, closed, cx| {
-            if access(view).popup == Some(closed) {
-                access(view).popup = None;
+            if access(view).popover == Some(closed) {
+                access(view).popover = None;
                 cx.invalidate();
             }
         });
@@ -255,23 +256,23 @@ impl ContextMenuState {
         let menu_id = context_menu_surface_id(id);
         let open = cx.context_menu_listener(id, move |view, event, cx| {
             let menu = build_menu(view, event);
-            if let Some(previous) = access(view).popup.take() {
+            if let Some(previous) = access(view).popover.take() {
                 cx.close_window_handle(previous);
             }
             let Some(menu) = menu else {
                 cx.invalidate();
                 return;
             };
-            let size = layout.popup_size(&menu);
-            let popup = ContextMenuPopupView::new(
+            let size = layout.popover_size(&menu);
+            let popover = ContextMenuPopoverView::new(
                 menu,
                 menu_id,
                 layout,
                 Rc::clone(&open_root_renderer),
                 Rc::clone(&open_item_renderer),
             );
-            let handle = cx.open_window(popup, root_window_options(layout, event.position, size));
-            access(view).popup = Some(handle);
+            let handle = cx.open_window(popover, root_window_options(layout, event.position, size));
+            access(view).popover = Some(handle);
             cx.invalidate();
         });
 
@@ -280,16 +281,16 @@ impl ContextMenuState {
 
     /// Close the current root context-menu surface synchronously from application state.
     pub fn close(&mut self, cx: &mut EventContext) -> bool {
-        let Some(popup) = self.popup.take() else {
+        let Some(popover) = self.popover.take() else {
             return false;
         };
-        cx.close_window_handle(popup);
+        cx.close_window_handle(popover);
         true
     }
 }
 
 type ContextMenuRootRenderer = Rc<dyn Fn() -> Element>;
-type ContextMenuItemRenderer = Rc<dyn Fn(&PopupMenuItem, PopupMenuItemState) -> Element>;
+type ContextMenuItemRenderer = Rc<dyn Fn(&PopoverMenuItem, PopoverMenuItemState) -> Element>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PendingHoverKind {
@@ -309,8 +310,8 @@ enum SubmenuSurfaceSignal {
     Entered { window: WindowHandle },
 }
 
-struct ContextMenuPopupView {
-    menu: PopupMenu,
+struct ContextMenuPopoverView {
+    menu: PopoverMenu,
     menu_id: ElementId,
     layout: ContextMenuLayout,
     render_root: ContextMenuRootRenderer,
@@ -329,9 +330,9 @@ struct ContextMenuPopupView {
     reported_bounds: Option<Rect>,
 }
 
-impl ContextMenuPopupView {
+impl ContextMenuPopoverView {
     fn new(
-        menu: PopupMenu,
+        menu: PopoverMenu,
         menu_id: ElementId,
         layout: ContextMenuLayout,
         render_root: ContextMenuRootRenderer,
@@ -341,7 +342,7 @@ impl ContextMenuPopupView {
     }
 
     fn submenu(
-        menu: PopupMenu,
+        menu: PopoverMenu,
         menu_id: ElementId,
         layout: ContextMenuLayout,
         render_root: ContextMenuRootRenderer,
@@ -351,7 +352,7 @@ impl ContextMenuPopupView {
     }
 
     fn with_parent_reporting(
-        menu: PopupMenu,
+        menu: PopoverMenu,
         menu_id: ElementId,
         layout: ContextMenuLayout,
         render_root: ContextMenuRootRenderer,
@@ -379,7 +380,7 @@ impl ContextMenuPopupView {
         }
     }
 
-    fn menu(view: &mut Self) -> &mut PopupMenu {
+    fn menu(view: &mut Self) -> &mut PopoverMenu {
         &mut view.menu
     }
 
@@ -451,29 +452,29 @@ impl ContextMenuPopupView {
         &mut self,
         index: usize,
         anchor: ElementId,
-        menu: PopupMenu,
+        menu: PopoverMenu,
         cx: &mut EventContext,
     ) {
         if self.submenu.is_some() && self.submenu_anchor == Some(index) {
             return;
         }
         self.close_submenu(cx);
-        let size = self.layout.popup_size(&menu);
-        let popup = ContextMenuPopupView::submenu(
+        let size = self.layout.popover_size(&menu);
+        let popover = ContextMenuPopoverView::submenu(
             menu,
             self.menu_id,
             self.layout,
             Rc::clone(&self.render_root),
             Rc::clone(&self.render_item),
         );
-        let handle = AnchoredPopover::new(size.width, size.height)
+        let handle = SystemPopover::new(size.width, size.height)
             .placement(AnchorPlacement::RightStart)
             .gap(self.layout.submenu_gap)
             .constraint_adjustment(self.layout.constraints)
             // The root owns key-focus dismissal and the one AppKit event monitor. Attached
             // descendants stay inside that chain without multiplying native monitoring work.
             .grab(false)
-            .open(cx, anchor, "Context submenu", popup)
+            .open(cx, anchor, "Context submenu", popover)
             .ok();
         self.submenu = handle;
         self.submenu_anchor = handle.map(|_| index);
@@ -488,7 +489,7 @@ impl ContextMenuPopupView {
             .menu
             .items()
             .get(index)
-            .and_then(PopupMenuItem::submenu_menu)
+            .and_then(PopoverMenuItem::submenu_menu)
             .cloned();
         if let Some(menu) = submenu {
             if let Some(anchor) = self.menu.item_element_id(self.menu_id, index) {
@@ -630,7 +631,7 @@ impl ContextMenuPopupView {
     }
 }
 
-impl View for ContextMenuPopupView {
+impl View for ContextMenuPopoverView {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl crate::IntoElement {
         let bounds = cx.window_state().bounds.bounds();
         self.window_bounds = bounds;
@@ -680,7 +681,7 @@ impl View for ContextMenuPopupView {
                         .flex_none()
                 },
                 |_view, cx| {
-                    cx.close_popup_chain();
+                    cx.close_popover_chain();
                 },
                 move |view, anchor, menu, cx| {
                     view.cancel_pending_hover();
@@ -701,8 +702,8 @@ fn root_window_options(layout: ContextMenuLayout, position: Point, size: Size) -
         .size(size.width, size.height)
         .background(Color::TRANSPARENT)
         .window_background(WindowBackgroundAppearance::Transparent)
-        .anchored_popup(
-            PopupOptions::new(Rect::new(position.x, position.y, 0.0, 0.0))
+        .system_popover(
+            PopoverOptions::new(Rect::new(position.x, position.y, 0.0, 0.0))
                 .constraint_adjustment(layout.constraints)
                 .offset(layout.offset.x, layout.offset.y),
         )
@@ -787,7 +788,7 @@ mod tests {
     use super::*;
     use crate::{
         App, Color, IntoElement, Modifiers, TestAppContext, View, WindowKind, div,
-        popup_menu_key_bindings, text,
+        popover_menu_key_bindings, text,
     };
 
     #[derive(Clone, Debug, Eq, PartialEq)]
@@ -796,21 +797,21 @@ mod tests {
         More,
     }
 
-    fn menu() -> PopupMenu {
-        PopupMenu::new([
-            PopupMenuItem::group_label("File"),
-            PopupMenuItem::action("open", "Open", Command::Open),
-            PopupMenuItem::separator(),
-            PopupMenuItem::action("more", "More", Command::More),
+    fn menu() -> PopoverMenu {
+        PopoverMenu::new([
+            PopoverMenuItem::group_label("File"),
+            PopoverMenuItem::action("open", "Open", Command::Open),
+            PopoverMenuItem::separator(),
+            PopoverMenuItem::action("more", "More", Command::More),
         ])
         .unwrap()
     }
 
-    fn popup_root() -> Element {
+    fn popover_root() -> Element {
         div().bg(Color::BLACK)
     }
 
-    fn popup_item(item: &PopupMenuItem, state: PopupMenuItemState) -> Element {
+    fn popover_item(item: &PopoverMenuItem, state: PopoverMenuItemState) -> Element {
         div()
             .child(text(item.label().clone()))
             .opacity(if state.highlighted { 1.0 } else { 0.8 })
@@ -824,13 +825,13 @@ mod tests {
             .vertical_padding(5.0);
         assert_eq!(layout.width(), 224.0);
         assert_eq!(layout.item_height(), 36.0);
-        assert_eq!(layout.row_height(PopupMenuItemKind::Separator), 7.0);
-        assert_eq!(layout.row_height(PopupMenuItemKind::GroupLabel), 19.0);
-        assert_eq!(layout.popup_size(&menu()), Size::new(224.0, 108.0));
+        assert_eq!(layout.row_height(PopoverMenuItemKind::Separator), 7.0);
+        assert_eq!(layout.row_height(PopoverMenuItemKind::GroupLabel), 19.0);
+        assert_eq!(layout.popover_size(&menu()), Size::new(224.0, 108.0));
     }
 
     #[test]
-    fn submenu_corridor_tracks_real_right_and_left_popup_edges() {
+    fn submenu_corridor_tracks_real_right_and_left_popover_edges() {
         let right = Rect::new(100.0, 20.0, 80.0, 100.0);
         assert!(submenu_corridor_contains(
             Point::new(20.0, 60.0),
@@ -866,8 +867,8 @@ mod tests {
         let state = ContextMenuState::new();
         let target = state.target_part("target", div());
         assert_eq!(
-            target.accessibility.has_popup,
-            Some(AccessibilityPopup::Menu)
+            target.accessibility.has_popover,
+            Some(AccessibilityPopover::Menu)
         );
         assert_eq!(target.accessibility.expanded, Some(false));
         assert_eq!(target.visual.background, None);
@@ -908,8 +909,8 @@ mod tests {
                     view.opened_at = Some(event.position);
                     Some(menu())
                 },
-                popup_root,
-                popup_item,
+                popover_root,
+                popover_item,
             );
             div()
                 .focus_scope(cx.focus_handle("owner"))
@@ -921,7 +922,7 @@ mod tests {
     #[test]
     fn secondary_click_opens_at_the_pointer_and_commands_close_exactly() {
         let (mut cx, owner) = App::new(Owner::default())
-            .bind_keys(popup_menu_key_bindings())
+            .bind_keys(popover_menu_key_bindings())
             .into_test_context()
             .unwrap();
         let owner_window = owner.window_handle();
@@ -929,38 +930,38 @@ mod tests {
         cx.simulate_context_menu(owner_window, "target", point, Modifiers::SHIFT)
             .unwrap();
 
-        let popup = cx
-            .read(owner, |view| view.context_menu.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.context_menu.popover_window().unwrap())
             .unwrap();
-        let state = cx.window_state(popup).unwrap();
-        assert_eq!(state.kind, WindowKind::AnchoredPopup);
+        let state = cx.window_state(popover).unwrap();
+        assert_eq!(state.kind, WindowKind::SystemPopover);
         assert_eq!(state.viewport_size, Size::new(220.0, 100.0));
         assert_eq!(cx.read(owner, |view| view.opened_at).unwrap(), Some(point));
 
         let open = menu()
             .item_element_id(context_menu_surface_id("target".into()), 1)
             .unwrap();
-        cx.click(popup, open).unwrap();
+        cx.click(popover, open).unwrap();
         assert_eq!(
             cx.read(owner, |view| view.received.clone()).unwrap(),
             Some(Command::Open)
         );
-        assert!(!cx.is_window_open(popup));
+        assert!(!cx.is_window_open(popover));
         assert_eq!(
-            cx.read(owner, |view| view.context_menu.popup_window())
+            cx.read(owner, |view| view.context_menu.popover_window())
                 .unwrap(),
             None
         );
 
         cx.simulate_context_menu(owner_window, "target", point, Modifiers::empty())
             .unwrap();
-        let popup = cx
-            .read(owner, |view| view.context_menu.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.context_menu.popover_window().unwrap())
             .unwrap();
-        cx.update(owner, |_view, cx| cx.close_window_handle(popup))
+        cx.update(owner, |_view, cx| cx.close_window_handle(popover))
             .unwrap();
         assert_eq!(
-            cx.read(owner, |view| view.context_menu.popup_window())
+            cx.read(owner, |view| view.context_menu.popover_window())
                 .unwrap(),
             None
         );
@@ -991,8 +992,8 @@ mod tests {
                     div().size(100.0, 100.0),
                     ContextMenuLayout::default(),
                     |view, _event| view.enabled.then(menu),
-                    popup_root,
-                    popup_item,
+                    popover_root,
+                    popover_item,
                 )
             }
         }
@@ -1005,8 +1006,8 @@ mod tests {
         let window = owner.window_handle();
         cx.simulate_context_menu(window, "conditional", Point::ZERO, Modifiers::empty())
             .unwrap();
-        let popup = cx
-            .read(owner, |view| view.state.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.state.popover_window().unwrap())
             .unwrap();
         cx.update(owner, |view, cx| {
             view.enabled = false;
@@ -1015,23 +1016,23 @@ mod tests {
         .unwrap();
         cx.simulate_context_menu(window, "conditional", Point::ZERO, Modifiers::empty())
             .unwrap();
-        assert!(!cx.is_window_open(popup));
+        assert!(!cx.is_window_open(popover));
         assert_eq!(
-            cx.read(owner, |view| view.state.popup_window()).unwrap(),
+            cx.read(owner, |view| view.state.popover_window()).unwrap(),
             None
         );
     }
 
-    fn hover_menu() -> PopupMenu {
-        let child = PopupMenu::new([
-            PopupMenuItem::action("child-one", "Child one", Command::Open),
-            PopupMenuItem::action("child-two", "Child two", Command::Open),
-            PopupMenuItem::action("child-three", "Child three", Command::Open),
+    fn hover_menu() -> PopoverMenu {
+        let child = PopoverMenu::new([
+            PopoverMenuItem::action("child-one", "Child one", Command::Open),
+            PopoverMenuItem::action("child-two", "Child two", Command::Open),
+            PopoverMenuItem::action("child-three", "Child three", Command::Open),
         ])
         .unwrap();
-        PopupMenu::new([
-            PopupMenuItem::submenu("more", "More", child),
-            PopupMenuItem::action("ordinary", "Ordinary", Command::More),
+        PopoverMenu::new([
+            PopoverMenuItem::submenu("more", "More", child),
+            PopoverMenuItem::action("ordinary", "Ordinary", Command::More),
         ])
         .unwrap()
     }
@@ -1056,8 +1057,8 @@ mod tests {
                 div().size(320.0, 180.0),
                 ContextMenuLayout::new(220.0, 32.0),
                 |_view, _event| Some(hover_menu()),
-                popup_root,
-                popup_item,
+                popover_root,
+                popover_item,
             )
         }
     }
@@ -1073,18 +1074,18 @@ mod tests {
             Modifiers::empty(),
         )
         .unwrap();
-        let popup = cx
-            .read(owner, |view| view.state.popup_window().unwrap())
+        let popover = cx
+            .read(owner, |view| view.state.popover_window().unwrap())
             .unwrap();
-        let popup_view = cx.typed_window::<ContextMenuPopupView>(popup).unwrap();
-        assert_eq!(cx.popup_grabs_focus(popup).unwrap(), Some(true));
+        let popover_view = cx.typed_window::<ContextMenuPopoverView>(popover).unwrap();
+        assert_eq!(cx.popover_grabs_focus(popover).unwrap(), Some(true));
 
-        cx.visual(popup)
+        cx.visual(popover)
             .unwrap()
             .move_pointer(Point::new(10.0, 16.0))
             .unwrap();
         assert_eq!(
-            cx.read(popup_view, |view| view.pending_hover).unwrap(),
+            cx.read(popover_view, |view| view.pending_hover).unwrap(),
             Some(PendingHover {
                 index: 0,
                 kind: PendingHoverKind::Open,
@@ -1092,25 +1093,25 @@ mod tests {
         );
         cx.advance_time(CONTEXT_MENU_SUBMENU_HOVER_DELAY - Duration::from_millis(1))
             .unwrap();
-        assert_eq!(cx.read(popup_view, |view| view.submenu).unwrap(), None);
+        assert_eq!(cx.read(popover_view, |view| view.submenu).unwrap(), None);
         cx.advance_time(Duration::from_millis(1)).unwrap();
 
-        let child = cx.read(popup_view, |view| view.submenu.unwrap()).unwrap();
+        let child = cx.read(popover_view, |view| view.submenu.unwrap()).unwrap();
         assert!(cx.is_window_open(child));
-        assert_eq!(cx.popup_grabs_focus(child).unwrap(), Some(false));
+        assert_eq!(cx.popover_grabs_focus(child).unwrap(), Some(false));
         let child_bounds = cx.window_state(child).unwrap().bounds.bounds();
         assert_eq!(
-            cx.read(popup_view, |view| view.submenu_bounds).unwrap(),
+            cx.read(popover_view, |view| view.submenu_bounds).unwrap(),
             Some(child_bounds)
         );
 
-        let parent_bounds = cx.window_state(popup).unwrap().bounds.bounds();
+        let parent_bounds = cx.window_state(popover).unwrap().bounds.bounds();
         let opens_right = child_bounds.x + child_bounds.width * 0.5
             >= parent_bounds.x + parent_bounds.width * 0.5;
         let ordinary_id = hover_menu()
             .item_element_id(context_menu_surface_id("hover-target".into()), 1)
             .unwrap();
-        let ordinary_bounds = cx.element_bounds(popup, ordinary_id).unwrap();
+        let ordinary_bounds = cx.element_bounds(popover, ordinary_id).unwrap();
         let corridor_point = Point::new(
             if opens_right {
                 ordinary_bounds.right() - 1.0
@@ -1120,7 +1121,7 @@ mod tests {
             ordinary_bounds.y + ordinary_bounds.height * 0.5,
         );
         let (corridor_origin, reported_child_bounds) = cx
-            .read(popup_view, |view| {
+            .read(popover_view, |view| {
                 (view.corridor_origin.unwrap(), view.submenu_bounds.unwrap())
             })
             .unwrap();
@@ -1136,12 +1137,12 @@ mod tests {
             ),
             "origin={corridor_origin:?} pointer={global_corridor_point:?} child={reported_child_bounds:?} parent={parent_bounds:?}",
         );
-        cx.visual(popup)
+        cx.visual(popover)
             .unwrap()
             .move_pointer(corridor_point)
             .unwrap();
         assert_eq!(
-            cx.read(popup_view, |view| view.pending_hover).unwrap(),
+            cx.read(popover_view, |view| view.pending_hover).unwrap(),
             Some(PendingHover {
                 index: 1,
                 kind: PendingHoverKind::Switch,
@@ -1150,7 +1151,7 @@ mod tests {
         cx.advance_time(CONTEXT_MENU_SUBMENU_AIM_DELAY - Duration::from_millis(1))
             .unwrap();
         assert_eq!(
-            cx.read(popup_view, |view| view.submenu).unwrap(),
+            cx.read(popover_view, |view| view.submenu).unwrap(),
             Some(child)
         );
 
@@ -1159,28 +1160,28 @@ mod tests {
             .move_pointer(Point::new(10.0, 16.0))
             .unwrap();
         assert_eq!(
-            cx.read(popup_view, |view| view.pending_hover).unwrap(),
+            cx.read(popover_view, |view| view.pending_hover).unwrap(),
             None
         );
         cx.advance_time(Duration::from_millis(1)).unwrap();
         assert_eq!(
-            cx.read(popup_view, |view| view.submenu).unwrap(),
+            cx.read(popover_view, |view| view.submenu).unwrap(),
             Some(child)
         );
 
-        cx.visual(popup)
+        cx.visual(popover)
             .unwrap()
             .move_pointer(Point::new(10.0, 16.0))
             .unwrap();
-        cx.visual(popup)
+        cx.visual(popover)
             .unwrap()
             .move_pointer(corridor_point)
             .unwrap();
         cx.advance_time(CONTEXT_MENU_SUBMENU_AIM_DELAY).unwrap();
         assert!(!cx.is_window_open(child));
-        assert_eq!(cx.read(popup_view, |view| view.submenu).unwrap(), None);
+        assert_eq!(cx.read(popover_view, |view| view.submenu).unwrap(), None);
         assert_eq!(
-            cx.read(popup_view, |view| view.menu.active_index())
+            cx.read(popover_view, |view| view.menu.active_index())
                 .unwrap(),
             Some(1)
         );
@@ -1188,18 +1189,21 @@ mod tests {
         let more_id = hover_menu()
             .item_element_id(context_menu_surface_id("hover-target".into()), 0)
             .unwrap();
-        let more_bounds = cx.element_bounds(popup, more_id).unwrap();
+        let more_bounds = cx.element_bounds(popover, more_id).unwrap();
         let more_point = Point::new(
             more_bounds.x + 10.0,
             more_bounds.y + more_bounds.height * 0.5,
         );
-        cx.visual(popup).unwrap().move_pointer(more_point).unwrap();
+        cx.visual(popover)
+            .unwrap()
+            .move_pointer(more_point)
+            .unwrap();
         assert!(
-            cx.read(popup_view, |view| view.pending_hover.is_some())
+            cx.read(popover_view, |view| view.pending_hover.is_some())
                 .unwrap()
         );
         cx.simulate_mouse_exit(
-            popup,
+            popover,
             context_menu_surface_id("hover-target".into()),
             MouseExitEvent {
                 position: more_point,
@@ -1209,14 +1213,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            cx.read(popup_view, |view| view.pending_hover).unwrap(),
+            cx.read(popover_view, |view| view.pending_hover).unwrap(),
             None
         );
         cx.advance_time(CONTEXT_MENU_SUBMENU_HOVER_DELAY).unwrap();
-        assert_eq!(cx.read(popup_view, |view| view.submenu).unwrap(), None);
+        assert_eq!(cx.read(popover_view, |view| view.submenu).unwrap(), None);
 
-        let renders = cx.render_count(popup).unwrap();
+        let renders = cx.render_count(popover).unwrap();
         cx.run_until_idle().unwrap();
-        assert_eq!(cx.render_count(popup).unwrap(), renders);
+        assert_eq!(cx.render_count(popover).unwrap(), renders);
     }
 }

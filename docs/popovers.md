@@ -1,4 +1,4 @@
-# Popovers and anchored popup windows
+# Popover and SystemPopover
 
 [Documentation index](README.md)
 
@@ -12,11 +12,11 @@ QuickGUI exposes two deliberately different hosts:
 
 - `Popover` is a lightweight controlled overlay inside the current window. It can escape ancestor
   clips, but it cannot paint outside that window's WGPU surface.
-- `AnchoredPopover` opens a parent-owned borderless native child window with its own WGPU surface.
+- `SystemPopover` opens a parent-owned borderless native child window with its own WGPU surface.
   On macOS it can cross the parent edge and is constrained against the display work area instead.
 
-There is no silent downgrade from the overflow-capable host to a parent-clamped overlay. Popup
-menus, context menus, selects, and other dropdown components use the anchored native host on
+There is no silent downgrade from the overflow-capable host to a parent-clamped overlay. Popover
+menus, context menus, selects, and other dropdown components use the `SystemPopover` host on
 macOS. Use the in-window host only when staying inside the current window is the desired behavior.
 
 The application owns an in-window popover's open boolean. The framework owns geometry, topmost
@@ -49,13 +49,13 @@ let mut root = div().child(
 );
 
 if popover.is_open() {
-    let popup = popover
-        .popup_part(
+    let popover = popover
+        .popover_part(
             div()
                 .w(280.0)
                 .p_3()
                 .rounded_lg()
-                .bg(app_colors.popup),
+                .bg(app_colors.popover),
         )
         .on_dismiss(dismiss)
         .children([
@@ -64,21 +64,21 @@ if popover.is_open() {
         ]);
     root = root.child(
         popover
-            .positioner_part(div().child(popup)),
+            .positioner_part(div().child(popover)),
     );
 }
 ```
 
-Mount the positioner/popup only while the controlled value is open. This removes closed content
+Mount the positioner/popover only while the controlled value is open. This removes closed content
 from layout, hit testing, focus traversal, accessibility, and retained overlay state instead of
 hiding a second framework-owned copy.
 
-## Trigger, positioner, and popup contract
+## Trigger, positioner, and popover contract
 
 `trigger_part(element)` decorates a caller-owned root with stable button semantics, focus,
 hidden-inset drag exclusion, desktop-arrow cursor behavior, controlled `expanded` state, and the
 exact `has-popup` kind. While content is mounted it also exposes a native `controls` relationship
-to the popup; a closed trigger never publishes a dangling AccessKit node reference. `trigger()` is
+to the popover; a closed trigger never publishes a dangling AccessKit node reference. `trigger()` is
 an unstyled shorthand that chooses `button()` as the root.
 
 `positioner_part(element)` combines the portal and positioner boundary. A retained QuickGUI
@@ -88,11 +88,11 @@ only create an incorrect pointer blocker. The positioner owns only structural ge
 - bottom-start placement with flip-before-shift viewport fitting;
 - a six-point trigger gap and eight-point viewport collision margin by default;
 - stable positioner identity and exact retained trigger anchoring; and
-- no colors, size, padding, typography, shadow, transition, or popup semantics.
+- no colors, size, padding, typography, shadow, transition, or popover semantics.
 
-`popup_part(element)` decorates the application-presented content root with:
+`popover_part(element)` decorates the application-presented content root with:
 
-- exact stable popup ID and role;
+- exact stable popover ID and role;
 - Escape and outside-primary-press dismissal;
 - pointer blocking inside the surface and no click-through on the dismissing press;
 - focus restoration to the paired trigger;
@@ -100,39 +100,41 @@ only create an incorrect pointer blocker. The positioner owns only structural ge
 - a focusable content root for same-turn opening focus; and
 - mounted title/description relationships without copying visible text.
 
-The popup emits `Event::Dismiss(surface_id)` even without a typed listener. Use
+The popover emits `Event::Dismiss(surface_id)` even without a typed listener. Use
 `cx.dismiss_listener(...)` for the usual local callback or handle that event in `View::event`.
 `dismiss_on_escape(false)` and `dismiss_on_pointer_outside(false)` configure those paths
-independently while the popup continues to block click-through.
+independently while the popover continues to block click-through.
 
 Opening focus is explicit because applications may prefer the surface root, a search field, or a
 specific menu item. Declare `.initial_focus(id)` when appropriate; `focus_surface(cx)` targets it
-and otherwise targets the popup root through QuickGUI's existing one-rebuild deferred focus
-request. Calling it in the same listener that mounts the popup needs no next-frame task. Escape and
+and otherwise targets the popover root through QuickGUI's existing one-rebuild deferred focus
+request. Calling it in the same listener that mounts the popover needs no next-frame task. Escape and
 outside dismissal restore trigger focus automatically; call `focus_trigger(cx)` when a content
-action closes the controlled popup directly.
+action closes the controlled popover directly.
 
 `title_part`, `description_part`, and `close_part` decorate application-owned visible parts with
 stable relationships and behavior but no presentation. `backdrop_part` supplies an optional
 full-viewport, accessibility-hidden pointer layer for a caller-painted backdrop. For compact
-composition, `surface_part(element)` and `surface()` merge positioner and popup behavior onto one
+composition, `surface_part(element)` and `surface()` merge positioner and popover behavior onto one
 unstyled root. Separate parts are preferable when the application sizes or animates the
 positioner independently.
 
-## Overflow-capable anchored popovers
+## SystemPopover
 
-`AnchoredPopover` takes an explicit child-surface size and resolves the trigger's latest retained
+`SystemPopover` takes an explicit child-surface size and resolves the trigger's latest retained
 bounds by stable element ID at the event boundary:
 
 ```rust
-use quickgui::AnchoredPopover;
+use quickgui::SystemPopover;
 
 let open = cx.listener("actions-trigger", |view, cx| {
     if let Some(previous) = view.actions.take() {
         cx.close_window_handle(previous);
+        cx.invalidate();
+        return;
     }
     view.actions = Some(
-        AnchoredPopover::new(244.0, 178.0)
+        SystemPopover::new(244.0, 178.0)
             .gap(6.0)
             .open(cx, "actions-trigger", "Actions", ActionsMenu)
             .expect("the trigger is mounted in this window"),
@@ -164,25 +166,27 @@ The trigger rectangle is not copied into application state and no layout observe
 The child view owns its presentation, so the host is fully unstyled. `placement`, `gap`, `offset`,
 `constraint_adjustment`, and `grab` configure structural behavior. The default `FIT` constraints
 flip and slide without shrinking; resize constraints remain opt-in through
-`PopupConstraintAdjustment`.
+`PopoverConstraintAdjustment`.
 
-On macOS this host is a transparent nonactivating `NSPanel` at popup-menu level, attached to its
+On macOS this host is a transparent nonactivating `NSPanel` at popover-menu level, attached to its
 parent with `addChildWindow`. Placement is resolved once before creation and again before the first
 visible frame, using the `NSScreen.visibleFrame` that contains the anchor. A menu-style grab closes
 on Escape or outside press; passive `grab(false)` surfaces open without taking key focus and
-install no event monitor. An interactive passive child may subsequently receive AppKit key focus.
-When it belongs to a grabbing popup chain, attached descendants count as inside for both focus and
-outside-click dismissal, so moving focus between menu levels does not close their root. The popup
+install no event monitor. When the outside press lands on the active anchor itself, AppKit consumes
+that press after requesting dismissal, so a controlled trigger closes instead of receiving a later
+click that reopens the popover. An interactive passive child may subsequently receive AppKit key focus.
+When it belongs to a grabbing popover chain, attached descendants count as inside for both focus and
+outside-click dismissal, so moving focus between menu levels does not close their root. The popover
 may therefore extend beyond the parent while still avoiding the menu bar, Dock, and physical
 display edge.
 
-Popup size is explicit in this first contract, matching the underlying platform popup API. A
+Popover size is explicit in this first contract, matching the underlying platform popover API. A
 future intrinsic measure-first convenience must preserve the same hidden-first-frame and bounded
 resource behavior rather than briefly showing a guessed rectangle.
 
-## Unstyled popup menus
+## Unstyled popover menus
 
-`PopupMenu` is the retained behavior model that composes with `AnchoredPopover`; it is deliberately
+`PopoverMenu` is the retained behavior model that composes with `SystemPopover`; it is deliberately
 separate from the native application-menu type named `Menu`. Items retain stable IDs and typed
 actions, while `element` and `element_with_submenus` decorate caller-owned roots and rows with menu
 roles, active-descendant focus, pointer behavior, keyboard bindings, and typeahead.
@@ -191,13 +195,13 @@ changing the model or row presentation. These APIs add no background, border, pa
 indicator, icon, or animation.
 
 ```rust
-use quickgui::{PopupMenu, PopupMenuItem};
+use quickgui::{PopoverMenu, PopoverMenuItem};
 
-let menu = PopupMenu::new([
-    PopupMenuItem::group_label("File"),
-    PopupMenuItem::action("open", "Open…", OpenFile).shortcut("⌘O"),
-    PopupMenuItem::separator(),
-    PopupMenuItem::checkbox_with("sidebar", "Show sidebar", sidebar, SetSidebar),
+let menu = PopoverMenu::new([
+    PopoverMenuItem::group_label("File"),
+    PopoverMenuItem::action("open", "Open…", OpenFile).shortcut("⌘O"),
+    PopoverMenuItem::separator(),
+    PopoverMenuItem::checkbox_with("sidebar", "Show sidebar", sidebar, SetSidebar),
 ])?;
 ```
 
@@ -225,19 +229,19 @@ idle task.
 Up/Down, Home/End, Enter/Space, Left/Right, Escape, pointer hover, and alphanumeric text navigation
 share the ordinary key/action/listener system. Focus loops by default. Checkbox and radio items
 remain open by default; ordinary command items close by default. A caller can override either
-policy. Submenu activation returns another already-validated `PopupMenu` plus the exact derived row
-anchor, so the caller opens a right-start `AnchoredPopover` without copying geometry.
+policy. Submenu activation returns another already-validated `PopoverMenu` plus the exact derived row
+anchor, so the caller opens a right-start `SystemPopover` without copying geometry.
 
-Commands from a popup or any nested submenu preserve their original concrete `AnyAction` payload
-and dispatch to the nearest non-popup owner window's focused action path. No callback registry or
-serialization bridge is involved. `cx.close_popup_chain()` closes the first popup and lets normal
+Commands from a popover or any nested submenu preserve their original concrete `AnyAction` payload
+and dispatch to the nearest non-popover owner window's focused action path. No callback registry or
+serialization bridge is involved. `cx.close_popover_chain()` closes the first popover and lets normal
 parent ownership tear down all descendants child-first after a command.
 
 One menu tree retains at most 2,048 entries, eight levels, 16 KiB per label/shortcut/search label,
 4 MiB total text, and a 256-byte typeahead prefix. Typeahead expiry is checked only on the next key;
 there is no timer, task, observer, polling pass, or idle redraw. The cursor-point context adapter
 uses one cancellable exact timer per menu level only while hover intent or a diagonal safe corridor
-is pending, then returns to sleep. The styled `anchored_popup` and `tooltips_context_menu` examples
+is pending, then returns to sleep. The styled `system_popover` and `tooltips_context_menu` examples
 are executable composition references.
 
 ## Roles, placement, and nesting
@@ -249,32 +253,32 @@ custom controls can be composed inside the surface.
 
 Use `.placement(...)` to choose a preferred side/alignment. `.anchor_gap(...)` and
 `.viewport_margin(...)` configure finite, bounded positioner geometry. Minimum width, padding,
-border, radius, shadow, typography, and all other presentation belong on the caller's popup
+border, radius, shadow, typography, and all other presentation belong on the caller's popover
 element.
 
 Nested in-window popovers use the same API. Because dismissal regions are ordered by actual overlay
 paint order, Escape or an outside press dismisses only the topmost nested surface first. Nested
-native popup panels use their bounded platform grab stack; menu commands can explicitly close the
-complete chain with `close_popup_chain`. No second component-owned popup registry is retained.
+native popover panels use their bounded platform grab stack; menu commands can explicitly close the
+complete chain with `close_popover_chain`. No second component-owned popover registry is retained.
 
 ## Resource behavior
 
 A `Popover` descriptor is `Copy` and contains two declared IDs, controlled state, semantic kind,
 bounded structural placement, dismissal policy, and optional initial focus. Derived part IDs are
 computed without allocation. It owns no `Rc`, appearance token, component store, observer, task,
-timer, animation loop, or native window. Closed content is unmounted; an open, settled popup adds
-no deadline or idle frame. A mounted popup uses the existing one fixed relation table for its
+timer, animation loop, or native window. Closed content is unmounted; an open, settled popover adds
+no deadline or idle frame. A mounted popover uses the existing one fixed relation table for its
 optional title/description targets; native relationships are projected only when an accessibility
 update is requested.
 
-`AnchoredPopover` is also a copied descriptor and adds no observer, task, timer, or idle deadline.
+`SystemPopover` is also a copied descriptor and adds no observer, task, timer, or idle deadline.
 While open, its child owns one native window and one WGPU surface but shares the application's GPU
-device, queue, fonts, assets, and bounded caches. A passive popup adds no native mouse monitor;
-menu-style popups share the runtime's single bounded monitor pair.
+device, queue, fonts, assets, and bounded caches. A passive popover adds no native mouse monitor;
+menu-style popovers share the runtime's single bounded monitor pair.
 
 Run the caller-styled edge placement, nesting, focus, menu-role, and parts gallery with:
 
 ```console
 cargo run --release --example popovers
-cargo run --release --example anchored_popup
+cargo run --release --example system_popover
 ```

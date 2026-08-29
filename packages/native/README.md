@@ -8,7 +8,7 @@ retains a JavaScript node tree, sends bounded binary mutation batches to Rust, a
 native events to independent `Window` trees. Native input nodes route
 controlled value payloads, including masked password fields, and native Markdown nodes retain
 QuickGUI core parser/render state across mutations. `new Window({ anchor: node, ... })` creates a display-aware,
-parent-owned native popup. Every window receives a renderer adapter through
+parent-owned native popover. Every window receives a renderer adapter through
 `new Window({ renderer, ... })`, owns the returned cleanup function, and disposes it when the
 window closes. Its initial renderer batch is committed before the native window opens, preserving
 one content-complete first-frame boundary. The `Dialog` namespace exposes `showAlertDialog`, `showOpenDialog`, and

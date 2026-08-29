@@ -99,44 +99,36 @@ impl AppRunner {
         Ok(handle)
     }
 
-    /// Queue a native popup anchored to one currently mounted element in a parent window.
+    /// Queue a native popover anchored to one currently mounted element in a parent window.
     ///
-    /// Embedding runtimes call this after their host-language event callback returns. The latest
-    /// retained element bounds are captured synchronously, so the popup keeps the same
-    /// display-aware flip/slide behavior as [`EventContext::open_anchored_popup`] without a
-    /// parallel geometry observer in the embedding layer.
-    pub fn open_anchored_popup<V: View>(
+    /// Embedding runtimes may call this before the parent's first presented frame. Resolution is
+    /// queued with the child request and occurs at the window-creation boundary, after every
+    /// earlier parent request has completed retained layout. This preserves the same display-aware
+    /// behavior as [`EventContext::open_system_popover`] without polling or a geometry observer.
+    pub fn open_system_popover<V: View>(
         &mut self,
         parent: WindowHandle,
         anchor: ElementId,
         view: V,
-        mut options: WindowOptions,
+        options: WindowOptions,
     ) -> Result<WindowHandle, AppError> {
         if !matches!(self.status, AppRunStatus::Continue) {
             return Err(AppError::Window(
-                "cannot open a popup after the application event loop exited".to_owned(),
+                "cannot open a popover after the application event loop exited".to_owned(),
             ));
         }
         validate_window_options(&options).map_err(|error| AppError::Window(error.to_string()))?;
-        if options.kind != WindowKind::AnchoredPopup || options.popup.is_none() {
+        if options.kind != WindowKind::SystemPopover || options.popover.is_none() {
             return Err(AppError::Window(
-                WindowCommandError::InvalidPopupConfiguration.to_string(),
+                WindowCommandError::InvalidPopoverConfiguration.to_string(),
             ));
         }
-        let bounds = self
-            .runtime
-            .element_bounds_external(parent, anchor)
-            .ok_or_else(|| {
-                AppError::Window(format!(
-                    "anchored popup trigger {anchor:?} is not mounted in its parent window"
-                ))
-            })?;
-        options.popup.as_mut().expect("validated popup").anchor_rect = bounds;
         self.runtime
             .event_proxy
             .send_event(RuntimeEvent::ExternalCommandsReady)
             .map_err(|_| AppError::Window("application event loop is closed".to_owned()))?;
-        let request = WindowRequest::with_parent(view, options, Some(parent));
+        let mut request = WindowRequest::with_parent(view, options, Some(parent));
+        request.popover_anchor_element = Some(anchor);
         let handle = request.handle;
         self.runtime.pending_windows.push_back(request);
         Ok(handle)
@@ -770,8 +762,8 @@ impl<V: View> App<V> {
         self
     }
 
-    pub fn anchored_popup(mut self, popup: crate::PopupOptions) -> Self {
-        self.config = self.config.anchored_popup(popup);
+    pub fn system_popover(mut self, popover: crate::PopoverOptions) -> Self {
+        self.config = self.config.system_popover(popover);
         self
     }
 

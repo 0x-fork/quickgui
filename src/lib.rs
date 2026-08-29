@@ -59,9 +59,9 @@ mod path;
 mod path_renderer;
 mod picker;
 mod platform;
+mod popover;
 mod popover_component;
-mod popup;
-mod popup_menu;
+mod popover_menu;
 mod renderer;
 mod runtime;
 mod scene;
@@ -100,7 +100,7 @@ pub use assets::{
     MAX_CUSTOM_FONT_FACES_PER_FILE, MAX_CUSTOM_FONT_TOTAL_BYTES, MAX_CUSTOM_FONTS,
 };
 pub use autocomplete::{
-    AutocompleteListState, AutocompleteOptionState, AutocompletePopupLayout,
+    AutocompleteListState, AutocompleteOptionState, AutocompletePopoverLayout,
     AutocompleteSelectionBehavior, AutocompleteState, MAX_AUTOCOMPLETE_VALUE_BYTES,
     MAX_AUTOCOMPLETE_VISIBLE_ROWS,
 };
@@ -118,7 +118,7 @@ pub use combobox::{
     ComboboxPrevious, combobox_key_bindings, select_key_bindings,
 };
 pub use constrained_combobox::{
-    ComboboxListState, ComboboxOptionState, ComboboxPopupLayout, ComboboxState,
+    ComboboxListState, ComboboxOptionState, ComboboxPopoverLayout, ComboboxState,
     MAX_COMBOBOX_VISIBLE_ROWS,
 };
 pub use context_menu::{
@@ -144,7 +144,7 @@ pub use display::{
 #[cfg(target_os = "macos")]
 pub use element::native_view;
 pub use element::{
-    AccessibilityAutoComplete, AccessibilityPopup, AccessibilityRole, AccessibilitySortDirection,
+    AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AccessibilitySortDirection,
     AnchorPlacement, AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack,
     IntoElement, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
     MAX_CONTAINER_QUERY_DEPTH, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
@@ -249,17 +249,18 @@ pub use platform::{
     PlatformError, PlatformResponse, PromptButton, PromptLevel, SavePathOptions, SavePathResponse,
     ShellResponse, SystemNotification, SystemNotificationAction, SystemNotificationResponse,
 };
-pub use popover_component::{AnchoredPopover, Popover, PopoverKind};
-pub use popup::{
-    MAX_GRABBING_POPUPS, PopupAnchor, PopupConstraintAdjustment, PopupGravity, PopupOptions,
+pub use popover::{
+    MAX_GRABBING_POPOVERS, PopoverAnchor, PopoverConstraintAdjustment, PopoverGravity,
+    PopoverOptions,
 };
-pub use popup_menu::{
-    MAX_POPUP_MENU_DEPTH, MAX_POPUP_MENU_ITEM_TEXT_BYTES, MAX_POPUP_MENU_ITEMS,
-    MAX_POPUP_MENU_TEXT_BYTES, MAX_POPUP_MENU_TYPEAHEAD_BYTES, POPUP_MENU_KEY_CONTEXT,
-    POPUP_MENU_TYPEAHEAD_TIMEOUT, PopupMenu, PopupMenuActivate, PopupMenuActivation,
-    PopupMenuClose, PopupMenuError, PopupMenuFirst, PopupMenuItem, PopupMenuItemKind,
-    PopupMenuItemState, PopupMenuLast, PopupMenuNext, PopupMenuOpenSubmenu, PopupMenuPrevious,
-    popup_menu_key_bindings,
+pub use popover_component::{Popover, PopoverKind, SystemPopover};
+pub use popover_menu::{
+    MAX_POPOVER_MENU_DEPTH, MAX_POPOVER_MENU_ITEM_TEXT_BYTES, MAX_POPOVER_MENU_ITEMS,
+    MAX_POPOVER_MENU_TEXT_BYTES, MAX_POPOVER_MENU_TYPEAHEAD_BYTES, POPOVER_MENU_KEY_CONTEXT,
+    POPOVER_MENU_TYPEAHEAD_TIMEOUT, PopoverMenu, PopoverMenuActivate, PopoverMenuActivation,
+    PopoverMenuClose, PopoverMenuError, PopoverMenuFirst, PopoverMenuItem, PopoverMenuItemKind,
+    PopoverMenuItemState, PopoverMenuLast, PopoverMenuNext, PopoverMenuOpenSubmenu,
+    PopoverMenuPrevious, popover_menu_key_bindings,
 };
 pub use quickgui_system::{
     AutoStart, AutoStartMode, AutoStartOptions, ProtocolRegistration, ProtocolRegistrationOptions,
@@ -314,7 +315,7 @@ pub use scene::{
 };
 pub use select::{
     MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VISIBLE_ROWS, SELECT_TYPEAHEAD_TIMEOUT, SelectListState,
-    SelectOptionState, SelectPopupLayout, SelectState,
+    SelectOptionState, SelectPopoverLayout, SelectState,
 };
 pub use selection_control::{
     Checkbox, Radio, RadioGroup, Switch, checkbox, radio, radio_group, switch,

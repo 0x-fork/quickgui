@@ -7,7 +7,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    AccessibilityAutoComplete, AccessibilityPopup, AccessibilityRole, AccessibilitySortDirection,
+    AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AccessibilitySortDirection,
     AppRegion, Color, CursorStyle, Element, ElementId, FrameMetrics, Point, Rect, Scene,
     ScenePlane, Size, ToggleState, Vector,
     element::ElementKind,
@@ -149,7 +149,7 @@ pub struct InspectorAccessibility {
     pub labelled_by: Option<ElementId>,
     pub described_by: Option<ElementId>,
     pub described_by_secondary: Option<ElementId>,
-    pub has_popup: Option<AccessibilityPopup>,
+    pub has_popover: Option<AccessibilityPopover>,
     pub auto_complete: Option<AccessibilityAutoComplete>,
     pub modal: bool,
     pub required: bool,
@@ -713,12 +713,12 @@ impl InspectorState {
                 || accessibility.active_descendant.is_some()
                 || accessibility.labelled_by.is_some()
                 || accessibility.described_by.is_some()
-                || accessibility.has_popup.is_some()
+                || accessibility.has_popover.is_some()
                 || accessibility.auto_complete.is_some()
             {
                 lines.push(format!(
-                    "a11y relation: popup={:?} autocomplete={:?} controls={:?} active={:?} labelled_by={:?} described_by={:?}",
-                    accessibility.has_popup,
+                    "a11y relation: popover={:?} autocomplete={:?} controls={:?} active={:?} labelled_by={:?} described_by={:?}",
+                    accessibility.has_popover,
                     accessibility.auto_complete,
                     accessibility.controls.map(ElementId::as_u64),
                     accessibility.active_descendant.map(ElementId::as_u64),
@@ -824,7 +824,7 @@ pub(crate) fn inspector_accessibility(element: &Element) -> InspectorAccessibili
         labelled_by: element.accessibility.relations.labelled_by(),
         described_by: element.accessibility.relations.described_by(),
         described_by_secondary: element.accessibility.relations.described_by_secondary(),
-        has_popup: element.accessibility.has_popup,
+        has_popover: element.accessibility.has_popover,
         auto_complete: element.accessibility.auto_complete,
         modal: element.accessibility.modal,
         required: element.accessibility.required,
@@ -1019,7 +1019,10 @@ mod tests {
         let accessibility = inspector_accessibility(&popover);
         assert_eq!(accessibility.expanded, Some(true));
         assert_eq!(accessibility.controls, Some("surface".into()));
-        assert_eq!(accessibility.has_popup, Some(AccessibilityPopup::Dialog));
+        assert_eq!(
+            accessibility.has_popover,
+            Some(AccessibilityPopover::Dialog)
+        );
 
         let group = inspector_accessibility(
             &crate::div()

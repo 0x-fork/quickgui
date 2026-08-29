@@ -17,10 +17,10 @@ use napi::{
 };
 use napi_derive::napi;
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, AnchoredPopover, AppConfig, AppRegion, AppRunStatus,
-    AppRunner, AppRunnerWaker, Application as QuickGuiApplication, Color, CursorStyle, Element,
-    ElementId, FollowMode, FontWeight, IntoElement, ListAlignment, ListState, Markdown,
-    MarkdownStyle, QuitMode, TextAlign, TitleBarStyle, View, ViewContext,
+    AccessibilityRole, AnchorPlacement, AppConfig, AppRegion, AppRunStatus, AppRunner,
+    AppRunnerWaker, Application as QuickGuiApplication, Color, CursorStyle, Element, ElementId,
+    FollowMode, FontWeight, IntoElement, ListAlignment, ListState, Markdown, MarkdownStyle,
+    Popover, QuitMode, SystemPopover, TextAlign, TitleBarStyle, View, ViewContext,
     WindowBackgroundAppearance, WindowHandle, button, div, text, text_area, text_input,
 };
 
@@ -38,7 +38,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 4;
+const PROTOCOL_VERSION: u16 = 5;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -132,7 +132,14 @@ mod property {
     pub const OVERSCAN: u16 = 78;
     pub const LIST_ALIGNMENT: u16 = 79;
     pub const FOLLOW_MODE: u16 = 80;
-    pub const LAST: u16 = FOLLOW_MODE;
+    pub const ANCHOR_TARGET: u16 = 81;
+    pub const ANCHOR_PLACEMENT: u16 = 82;
+    pub const ANCHOR_GAP: u16 = 83;
+    pub const VIEWPORT_MARGIN: u16 = 84;
+    pub const DISMISS_ON_ESCAPE: u16 = 85;
+    pub const DISMISS_ON_POINTER_OUTSIDE: u16 = 86;
+    pub const DISMISS_LISTENER: u16 = 87;
+    pub const LAST: u16 = DISMISS_LISTENER;
 }
 
 #[derive(Clone, Default)]
@@ -149,12 +156,15 @@ pub struct NativeWindowOptions {
     pub traffic_light_y: Option<f64>,
     pub transparent: Option<bool>,
     pub blur: Option<bool>,
-    pub popup_placement: Option<String>,
-    pub popup_gap: Option<f64>,
-    pub popup_offset_x: Option<f64>,
-    pub popup_offset_y: Option<f64>,
-    pub popup_grab: Option<bool>,
-    pub popup_accepts_key_focus: Option<bool>,
+    pub popover_placement: Option<String>,
+    pub popover_gap: Option<f64>,
+    pub popover_offset_x: Option<f64>,
+    pub popover_offset_y: Option<f64>,
+    pub popover_viewport_margin: Option<f64>,
+    pub popover_dismiss_on_escape: Option<bool>,
+    pub popover_dismiss_on_pointer_outside: Option<bool>,
+    pub popover_grab: Option<bool>,
+    pub popover_accepts_key_focus: Option<bool>,
 }
 
 #[derive(Clone)]
@@ -215,7 +225,7 @@ enum HostCommand {
         initial_batch: Vec<u8>,
         reply: Arc<SyncReply<u32>>,
     },
-    CreateAnchoredWindow {
+    CreateSystemPopover {
         app: u32,
         parent: u32,
         anchor: u32,
@@ -1293,6 +1303,51 @@ fn build_element(
 
     element = apply_properties(element, node);
 
+    if let Some(anchor_id) = node
+        .string(property::ANCHOR_TARGET)
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|anchor_id| *anchor_id != id && tree.nodes.contains_key(anchor_id))
+    {
+        let dismiss_on_escape = node.boolean(property::DISMISS_ON_ESCAPE).unwrap_or(true);
+        let dismiss_on_pointer_outside = node
+            .boolean(property::DISMISS_ON_POINTER_OUTSIDE)
+            .unwrap_or(true);
+        let mut popover = Popover::new(ElementId::new(anchor_id as u64), element_id, true)
+            .placement(
+                node.string(property::ANCHOR_PLACEMENT)
+                    .and_then(parse_anchor_placement)
+                    .unwrap_or_default(),
+            )
+            .dismiss_on_escape(dismiss_on_escape)
+            .dismiss_on_pointer_outside(dismiss_on_pointer_outside);
+        if let Some(gap) = node.number(property::ANCHOR_GAP) {
+            popover = popover.anchor_gap(gap);
+        }
+        if let Some(margin) = node.number(property::VIEWPORT_MARGIN) {
+            popover = popover.viewport_margin(margin);
+        }
+        element = popover.surface_part(element);
+
+        if node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
+            && (dismiss_on_escape || dismiss_on_pointer_outside)
+        {
+            let events = Rc::clone(events);
+            let listener = cx.dismiss_listener(element_id, move |_view, cx| {
+                enqueue_event(
+                    &events,
+                    QueuedEvent {
+                        kind: "dismiss",
+                        window,
+                        target: id,
+                        value: None,
+                    },
+                );
+                cx.invalidate();
+            });
+            element = element.on_dismiss(listener);
+        }
+    }
+
     if node.boolean(property::CLICK_LISTENER).unwrap_or(false) {
         let events = Rc::clone(events);
         let listener = cx.listener(element_id, move |_view, cx| {
@@ -1887,7 +1942,7 @@ impl NativeRuntime {
         Ok(id)
     }
 
-    fn create_anchored_window(
+    fn create_system_popover(
         &mut self,
         parent: u32,
         anchor: u32,
@@ -1907,18 +1962,18 @@ impl NativeRuntime {
                 .ok_or_else(|| format!("unknown QuickGUI parent window {parent}"))?;
             if !parent_window.tree.borrow().nodes.contains_key(&anchor) {
                 return Err(format!(
-                    "anchored popup trigger node {anchor} is not mounted in parent window {parent}"
+                    "system popover anchor node {anchor} is not mounted in parent window {parent}"
                 ));
             }
             parent_window
                 .handle
-                .ok_or_else(|| "an anchored popup requires a running parent window".to_owned())?
+                .ok_or_else(|| "a system popover requires a running parent window".to_owned())?
         };
         let id = self.next_window_id.max(1);
         self.next_window_id = id
             .checked_add(1)
             .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?;
-        let config = anchored_window_config(&options)?;
+        let config = system_popover_config(&options)?;
         let mut window = NativeWindowRuntime {
             config,
             tree: Rc::new(RefCell::new(native_tree_from_initial_batch(initial_batch)?)),
@@ -1929,9 +1984,9 @@ impl NativeRuntime {
         let runner = self
             .runner
             .as_mut()
-            .ok_or_else(|| "an anchored popup requires a running application".to_owned())?;
+            .ok_or_else(|| "a system popover requires a running application".to_owned())?;
         let handle = runner
-            .open_anchored_popup(
+            .open_system_popover(
                 parent_handle,
                 ElementId::new(anchor as u64),
                 window.view(id, &self.events, &self.handles),
@@ -2479,37 +2534,52 @@ fn window_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig
     Ok(config)
 }
 
-fn anchored_window_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig, String> {
-    let placement = match options.popup_placement.as_deref() {
-        Some("top-start") => AnchorPlacement::TopStart,
-        Some("top") => AnchorPlacement::Top,
-        Some("top-end") => AnchorPlacement::TopEnd,
-        Some("bottom-start") | None => AnchorPlacement::BottomStart,
-        Some("bottom") => AnchorPlacement::Bottom,
-        Some("bottom-end") => AnchorPlacement::BottomEnd,
-        Some("left-start") => AnchorPlacement::LeftStart,
-        Some("left") => AnchorPlacement::Left,
-        Some("left-end") => AnchorPlacement::LeftEnd,
-        Some("right-start") => AnchorPlacement::RightStart,
-        Some("right") => AnchorPlacement::Right,
-        Some("right-end") => AnchorPlacement::RightEnd,
-        Some(value) => return Err(format!("unknown popup placement `{value}`")),
+fn parse_anchor_placement(value: &str) -> Option<AnchorPlacement> {
+    match value {
+        "top-start" => Some(AnchorPlacement::TopStart),
+        "top" => Some(AnchorPlacement::Top),
+        "top-end" => Some(AnchorPlacement::TopEnd),
+        "bottom-start" => Some(AnchorPlacement::BottomStart),
+        "bottom" => Some(AnchorPlacement::Bottom),
+        "bottom-end" => Some(AnchorPlacement::BottomEnd),
+        "left-start" => Some(AnchorPlacement::LeftStart),
+        "left" => Some(AnchorPlacement::Left),
+        "left-end" => Some(AnchorPlacement::LeftEnd),
+        "right-start" => Some(AnchorPlacement::RightStart),
+        "right" => Some(AnchorPlacement::Right),
+        "right-end" => Some(AnchorPlacement::RightEnd),
+        _ => None,
+    }
+}
+
+fn system_popover_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig, String> {
+    let placement = match options.popover_placement.as_deref() {
+        Some(value) => parse_anchor_placement(value)
+            .ok_or_else(|| format!("unknown popover placement `{value}`"))?,
+        None => AnchorPlacement::BottomStart,
     };
-    let mut popover = AnchoredPopover::new(
+    let mut popover = SystemPopover::new(
         finite_dimension(options.width, 420.0),
         finite_dimension(options.height, 300.0),
     )
     .placement(placement)
-    .gap(finite_number(options.popup_gap).unwrap_or(0.0))
+    .gap(finite_number(options.popover_gap).unwrap_or(6.0))
     .offset(
-        finite_number(options.popup_offset_x).unwrap_or(0.0),
-        finite_number(options.popup_offset_y).unwrap_or(0.0),
-    );
-    if let Some(grab) = options.popup_grab {
+        finite_number(options.popover_offset_x).unwrap_or(0.0),
+        finite_number(options.popover_offset_y).unwrap_or(0.0),
+    )
+    .viewport_margin(finite_number(options.popover_viewport_margin).unwrap_or(8.0));
+    if let Some(grab) = options.popover_grab {
         popover = popover.grab(grab);
     }
-    if let Some(accepts_key_focus) = options.popup_accepts_key_focus {
+    if let Some(accepts_key_focus) = options.popover_accepts_key_focus {
         popover = popover.accepts_key_focus(accepts_key_focus);
+    }
+    if let Some(dismiss_on_escape) = options.popover_dismiss_on_escape {
+        popover = popover.dismiss_on_escape(dismiss_on_escape);
+    }
+    if let Some(dismiss_on_pointer_outside) = options.popover_dismiss_on_pointer_outside {
+        popover = popover.dismiss_on_pointer_outside(dismiss_on_pointer_outside);
     }
     Ok(popover.window_options(
         options
@@ -2574,7 +2644,7 @@ pub fn create_window(
 }
 
 #[napi]
-pub fn create_anchored_window(
+pub fn create_system_popover(
     app: u32,
     parent: u32,
     anchor: u32,
@@ -2582,7 +2652,7 @@ pub fn create_anchored_window(
     initial_batch: Option<Buffer>,
 ) -> Result<u32> {
     with_app_mut(app, |runtime| {
-        runtime.create_anchored_window(
+        runtime.create_system_popover(
             parent,
             anchor,
             options.unwrap_or_default(),
@@ -2721,7 +2791,7 @@ pub fn create_hosted_window(
 }
 
 #[napi]
-pub fn create_hosted_anchored_window(
+pub fn create_hosted_system_popover(
     app: u32,
     parent: u32,
     anchor: u32,
@@ -2729,7 +2799,7 @@ pub fn create_hosted_anchored_window(
     initial_batch: Option<Buffer>,
 ) -> Result<u32> {
     let reply = Arc::new(SyncReply::new());
-    HOST.enqueue(HostCommand::CreateAnchoredWindow {
+    HOST.enqueue(HostCommand::CreateSystemPopover {
         app,
         parent,
         anchor,
@@ -2956,7 +3026,7 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                         |runtime| runtime.create_window(options, &initial_batch),
                     ));
                 }
-                HostCommand::CreateAnchoredWindow {
+                HostCommand::CreateSystemPopover {
                     app,
                     parent,
                     anchor,
@@ -2969,7 +3039,7 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                         runtime.as_mut(),
                         app,
                         |runtime| {
-                            runtime.create_anchored_window(parent, anchor, options, &initial_batch)
+                            runtime.create_system_popover(parent, anchor, options, &initial_batch)
                         },
                     ));
                 }
@@ -3328,6 +3398,71 @@ mod tests {
         assert_eq!(event.window, 3);
         assert_eq!(event.target, input_id);
         assert_eq!(event.value.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn retained_popover_uses_core_placement_dismissal_and_focus_restoration() {
+        let trigger_id = 20;
+        let popover_id = 21;
+        let mut tree = NativeTree::default();
+
+        let mut trigger = NativeNode::new(NodeTag::Button);
+        trigger.parent = Some(ROOT_NODE);
+        trigger.set_property(property::WIDTH, Some(PropertyValue::Number(120.0)));
+        trigger.set_property(property::HEIGHT, Some(PropertyValue::Number(40.0)));
+        tree.nodes.insert(trigger_id, trigger);
+
+        let mut popover = NativeNode::new(NodeTag::View);
+        popover.parent = Some(ROOT_NODE);
+        popover.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+        popover.set_property(property::HEIGHT, Some(PropertyValue::Number(100.0)));
+        popover.set_property(
+            property::ANCHOR_TARGET,
+            Some(PropertyValue::String(Arc::from(trigger_id.to_string()))),
+        );
+        popover.set_property(
+            property::ANCHOR_PLACEMENT,
+            Some(PropertyValue::String(Arc::from("bottom-start"))),
+        );
+        popover.set_property(property::ANCHOR_GAP, Some(PropertyValue::Number(6.0)));
+        popover.set_property(property::VIEWPORT_MARGIN, Some(PropertyValue::Number(12.0)));
+        popover.set_property(property::DISMISS_LISTENER, Some(PropertyValue::Bool(true)));
+        tree.nodes.insert(popover_id, popover);
+        tree.nodes
+            .get_mut(&ROOT_NODE)
+            .unwrap()
+            .children
+            .extend([trigger_id, popover_id]);
+
+        let events = Rc::new(RefCell::new(VecDeque::new()));
+        let view = NativeView {
+            window: 5,
+            handles: None,
+            tree: Rc::new(RefCell::new(tree)),
+            events: Rc::clone(&events),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
+        };
+        let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+        let window = view.window_handle();
+        let trigger_element = ElementId::new(trigger_id as u64);
+        let popover_element = ElementId::new(popover_id as u64);
+
+        let trigger_bounds = cx.element_bounds(window, trigger_element).unwrap();
+        let popover_bounds = cx.element_bounds(window, popover_element).unwrap();
+        assert_eq!(popover_bounds.x, 12.0);
+        assert_eq!(popover_bounds.y, trigger_bounds.bottom() + 6.0);
+        assert_eq!(popover_bounds.width, 200.0);
+        assert_eq!(popover_bounds.height, 100.0);
+
+        cx.focus(window, popover_element).unwrap();
+        cx.simulate_keystrokes(window, "escape").unwrap();
+
+        assert_eq!(cx.focused(window).unwrap(), Some(trigger_element));
+        let event = events.borrow_mut().pop_front().unwrap();
+        assert_eq!(event.kind, "dismiss");
+        assert_eq!(event.window, 5);
+        assert_eq!(event.target, popover_id);
     }
 
     #[test]

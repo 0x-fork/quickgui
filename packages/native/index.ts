@@ -155,7 +155,7 @@ import type {
 
 export type WindowCloseListener = (window: Window) => void;
 export type WindowRenderer = (window: Window) => () => void;
-export type PopupPlacement =
+export type PopoverPlacement =
   | "top-start"
   | "top"
   | "top-end"
@@ -181,11 +181,14 @@ export interface WindowOptions {
   trafficLightPosition?: { x: number; y: number };
   transparent?: boolean;
   blur?: boolean;
-  /** Open this window as a native child popup anchored to the mounted node. */
+  /** Open this window as a system popover anchored to the mounted node. */
   anchor?: NativeNode;
-  placement?: PopupPlacement;
+  placement?: PopoverPlacement;
   gap?: number;
   offset?: { x: number; y: number };
+  viewportMargin?: number;
+  dismissOnEscape?: boolean;
+  dismissOnPointerOutside?: boolean;
   grab?: boolean;
   acceptsKeyFocus?: boolean;
 }
@@ -738,22 +741,31 @@ export class Window {
     }
     if (options.transparent !== undefined) nativeOptions.transparent = options.transparent;
     if (options.blur !== undefined) nativeOptions.blur = options.blur;
-    if (options.placement !== undefined) nativeOptions.popupPlacement = options.placement;
-    if (options.gap !== undefined) nativeOptions.popupGap = options.gap;
+    if (options.placement !== undefined) nativeOptions.popoverPlacement = options.placement;
+    if (options.gap !== undefined) nativeOptions.popoverGap = options.gap;
     if (options.offset !== undefined) {
-      nativeOptions.popupOffsetX = options.offset.x;
-      nativeOptions.popupOffsetY = options.offset.y;
+      nativeOptions.popoverOffsetX = options.offset.x;
+      nativeOptions.popoverOffsetY = options.offset.y;
     }
-    if (options.grab !== undefined) nativeOptions.popupGrab = options.grab;
+    if (options.viewportMargin !== undefined) {
+      nativeOptions.popoverViewportMargin = options.viewportMargin;
+    }
+    if (options.dismissOnEscape !== undefined) {
+      nativeOptions.popoverDismissOnEscape = options.dismissOnEscape;
+    }
+    if (options.dismissOnPointerOutside !== undefined) {
+      nativeOptions.popoverDismissOnPointerOutside = options.dismissOnPointerOutside;
+    }
+    if (options.grab !== undefined) nativeOptions.popoverGrab = options.grab;
     if (options.acceptsKeyFocus !== undefined) {
-      nativeOptions.popupAcceptsKeyFocus = options.acceptsKeyFocus;
+      nativeOptions.popoverAcceptsKeyFocus = options.acceptsKeyFocus;
     }
     const parent = options.anchor?.host;
     if (
       options.anchor &&
       (!parent || parent.closed || !options.anchor.materialized)
     ) {
-      throw new Error("an anchored Window requires a mounted node in an open parent Window");
+      throw new Error("a system popover requires a mounted node in an open parent Window");
     }
     parent?.flush();
     this.app = app;
@@ -770,14 +782,14 @@ export class Window {
       const initialBatch = this.#takePendingBatch();
       if (options.anchor) {
         this.nativeId = hostedRuntime
-          ? binding.createHostedAnchoredWindow(
+          ? binding.createHostedSystemPopover(
               app.nativeId,
               parent!.nativeId,
               options.anchor.id,
               nativeOptions,
               initialBatch,
             )
-          : binding.createAnchoredWindow(
+          : binding.createSystemPopover(
               app.nativeId,
               parent!.nativeId,
               options.anchor.id,

@@ -703,18 +703,18 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { abortAppHost, applyBatch, applyHostedBatch, checkForUpdate, closeHostedWindow, closeWindow, createAnchoredWindow, createApp, createHostedAnchoredWindow, createHostedApp, createHostedWindow, createWindow, defaultUpdateTarget, deleteSecureStorage, destroyApp, destroyHostedApp, disableAutoStart, dismissHostedNotification, dismissNotification, enableAutoStart, exitApp, exitHostedApp, focusHostedNode, focusNode, getDisplays, getHostedDisplays, getHostedKeyboardLayout, getHostedWindowState, getKeyboardLayout, getSecureStorage, getWindowState, isAppReady, isAutoStartEnabled, isAutoStartSupported, isHostedAppReady, isProtocolRegistered, isSecureStorageSupported, performGlobalShortcutAction, performHostedGlobalShortcutAction, performHostedShellAction, performHostedWindowAction, performShellAction, performWindowAction, prepareApp, prepareHostedApp, protocolVersion, pumpApp, readClipboard, readHostedClipboard, registerProtocol, releaseHostedSingleInstanceLock, releaseSingleInstanceLock, removeHostedTrayIcon, removeTrayIcon, requestHostedSingleInstanceLock, requestSingleInstanceLock, runAppHost, setApplicationMenu, setHostedApplicationMenu, setHostedTrayIcon, setSecureStorage, setTrayIcon, showAlertDialog, showHostedAlertDialog, showHostedNotification, showHostedOpenDialog, showHostedSaveDialog, showHostedTrayMenu, showNotification, showOpenDialog, showSaveDialog, showTrayMenu, stageUpdate, startApp, startHostedApp, supportsDynamicProtocolRegistration, takeEvents, unregisterProtocol, verifyUpdate, waitForHostedEvents, writeClipboard, writeHostedClipboard } = nativeBinding
+const { abortAppHost, applyBatch, applyHostedBatch, checkForUpdate, closeHostedWindow, closeWindow, createApp, createHostedApp, createHostedSystemPopover, createHostedWindow, createSystemPopover, createWindow, defaultUpdateTarget, deleteSecureStorage, destroyApp, destroyHostedApp, disableAutoStart, dismissHostedNotification, dismissNotification, enableAutoStart, exitApp, exitHostedApp, focusHostedNode, focusNode, getDisplays, getHostedDisplays, getHostedKeyboardLayout, getHostedWindowState, getKeyboardLayout, getSecureStorage, getWindowState, isAppReady, isAutoStartEnabled, isAutoStartSupported, isHostedAppReady, isProtocolRegistered, isSecureStorageSupported, performGlobalShortcutAction, performHostedGlobalShortcutAction, performHostedShellAction, performHostedWindowAction, performShellAction, performWindowAction, prepareApp, prepareHostedApp, protocolVersion, pumpApp, readClipboard, readHostedClipboard, registerProtocol, releaseHostedSingleInstanceLock, releaseSingleInstanceLock, removeHostedTrayIcon, removeTrayIcon, requestHostedSingleInstanceLock, requestSingleInstanceLock, runAppHost, setApplicationMenu, setHostedApplicationMenu, setHostedTrayIcon, setSecureStorage, setTrayIcon, showAlertDialog, showHostedAlertDialog, showHostedNotification, showHostedOpenDialog, showHostedSaveDialog, showHostedTrayMenu, showNotification, showOpenDialog, showSaveDialog, showTrayMenu, stageUpdate, startApp, startHostedApp, supportsDynamicProtocolRegistration, takeEvents, unregisterProtocol, verifyUpdate, waitForHostedEvents, writeClipboard, writeHostedClipboard } = nativeBinding
 export { abortAppHost }
 export { applyBatch }
 export { applyHostedBatch }
 export { checkForUpdate }
 export { closeHostedWindow }
 export { closeWindow }
-export { createAnchoredWindow }
 export { createApp }
-export { createHostedAnchoredWindow }
 export { createHostedApp }
+export { createHostedSystemPopover }
 export { createHostedWindow }
+export { createSystemPopover }
 export { createWindow }
 export { defaultUpdateTarget }
 export { deleteSecureStorage }

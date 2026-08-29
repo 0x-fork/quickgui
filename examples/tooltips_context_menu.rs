@@ -2,14 +2,14 @@ use std::{sync::Arc, time::Duration};
 
 use quickgui::{
     AnchorPlacement, Animation, AnimationExt as _, AnimationPhase, App, Color, ContextMenuLayout,
-    ContextMenuState, Element, PopupMenu, PopupMenuItem, PopupMenuItemKind, PopupMenuItemState,
-    TitleBarStyle, Tooltip, View, ViewContext, button, div, ease_out_quint,
-    popup_menu_key_bindings, text,
+    ContextMenuState, Element, PopoverMenu, PopoverMenuItem, PopoverMenuItemKind,
+    PopoverMenuItemState, TitleBarStyle, Tooltip, View, ViewContext, button, div, ease_out_quint,
+    popover_menu_key_bindings, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
     App::new(TooltipContextDemo::default())
-        .bind_keys(popup_menu_key_bindings())
+        .bind_keys(popover_menu_key_bindings())
         .title("QuickGUI — Tooltips and context menus")
         .size(840.0, 580.0)
         .title_bar_style(TitleBarStyle::HiddenInset)
@@ -48,30 +48,30 @@ impl TooltipContextDemo {
         self.status = Some(Arc::from(format!("Context action: {action}")));
     }
 
-    fn menu() -> PopupMenu {
-        let more = PopupMenu::new([
-            PopupMenuItem::action("copy-path", "Copy Path", ContextCommand::CopyPath),
-            PopupMenuItem::action("inspect", "Inspect", ContextCommand::Inspect),
+    fn menu() -> PopoverMenu {
+        let more = PopoverMenu::new([
+            PopoverMenuItem::action("copy-path", "Copy Path", ContextCommand::CopyPath),
+            PopoverMenuItem::action("inspect", "Inspect", ContextCommand::Inspect),
         ])
         .expect("the static context submenu is valid");
-        PopupMenu::new([
-            PopupMenuItem::group_label("File"),
-            PopupMenuItem::action("open", "Open", ContextCommand::Open).shortcut("⌘O"),
-            PopupMenuItem::action("duplicate", "Duplicate", ContextCommand::Duplicate)
+        PopoverMenu::new([
+            PopoverMenuItem::group_label("File"),
+            PopoverMenuItem::action("open", "Open", ContextCommand::Open).shortcut("⌘O"),
+            PopoverMenuItem::action("duplicate", "Duplicate", ContextCommand::Duplicate)
                 .shortcut("⌘D"),
-            PopupMenuItem::separator(),
-            PopupMenuItem::action("reveal", "Reveal in Finder", ContextCommand::Reveal),
-            PopupMenuItem::submenu("more", "More", more),
+            PopoverMenuItem::separator(),
+            PopoverMenuItem::action("reveal", "Reveal in Finder", ContextCommand::Reveal),
+            PopoverMenuItem::submenu("more", "More", more),
         ])
         .expect("the static context menu is valid")
     }
 
-    fn menu_item(item: &PopupMenuItem, state: PopupMenuItemState) -> Element {
+    fn menu_item(item: &PopoverMenuItem, state: PopoverMenuItemState) -> Element {
         match item.kind() {
-            PopupMenuItemKind::Separator => div()
+            PopoverMenuItemKind::Separator => div()
                 .px_2()
                 .child(div().mt(4.0).h(1.0).bg(Color::rgb8(74, 81, 96))),
-            PopupMenuItemKind::GroupLabel => div().px_3().flex_row().items_center().child(
+            PopoverMenuItemKind::GroupLabel => div().px_3().flex_row().items_center().child(
                 text(item.label().clone())
                     .text_xs()
                     .text_color(Color::rgb8(145, 154, 172)),
@@ -139,7 +139,7 @@ impl View for TooltipContextDemo {
                 .child(
                     text(self.status.clone().unwrap_or_else(|| {
                         Arc::from(
-                            "Hover More for delayed native submenu aim; popups fit the display",
+                            "Hover More for delayed native submenu aim; popovers fit the display",
                         )
                     }))
                     .text_sm()

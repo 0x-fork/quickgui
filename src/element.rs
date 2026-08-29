@@ -441,12 +441,12 @@ pub(crate) enum AccessibilityOrientation {
     Vertical,
 }
 
-/// Kind of popup exposed by a trigger to assistive technology.
+/// Kind of popover exposed by a trigger to assistive technology.
 ///
 /// This mirrors the finite ARIA/AccessKit `has-popup` vocabulary. It describes the controlled
 /// surface without imposing a visual component implementation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AccessibilityPopup {
+pub enum AccessibilityPopover {
     Menu,
     ListBox,
     Tree,
@@ -925,7 +925,7 @@ pub(crate) struct AccessibilityStyle {
     pub toggled: Option<ToggleState>,
     pub expanded: Option<bool>,
     pub relations: AccessibilityRelationsStyle,
-    pub has_popup: Option<AccessibilityPopup>,
+    pub has_popover: Option<AccessibilityPopover>,
     pub auto_complete: Option<AccessibilityAutoComplete>,
     pub collection: AccessibilityCollectionStyle,
     pub modal: bool,
@@ -3360,9 +3360,9 @@ impl Element {
         self
     }
 
-    /// Describe the kind of popup opened by this control.
-    pub fn accessibility_has_popup(mut self, popup: AccessibilityPopup) -> Self {
-        self.accessibility.has_popup = Some(popup);
+    /// Describe the kind of popover opened by this control.
+    pub fn accessibility_has_popover(mut self, popover: AccessibilityPopover) -> Self {
+        self.accessibility.has_popover = Some(popover);
         self
     }
 

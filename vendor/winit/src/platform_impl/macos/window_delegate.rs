@@ -209,6 +209,21 @@ declare_class!(
         #[method(windowDidBecomeKey:)]
         fn window_did_become_key(&self, _: Option<&AnyObject>) {
             trace_scope!("windowDidBecomeKey:");
+
+            // AppKit can report `windowDidBecomeKey:` for the previous key window while a
+            // nonactivating panel is open even though that window never actually became key. If
+            // the false transition is allowed to stand, a later application handoff can briefly
+            // reactivate the owner (and may leave it unable to become key normally). Balance the
+            // spurious notification before it reaches Winit's focus state.
+            //
+            // Calling `resignKeyWindow` directly is normally discouraged, but here it only
+            // corrects an already-inconsistent AppKit notification; this is the same workaround
+            // used by GPUI's macOS window backend.
+            if !self.window().isKeyWindow() {
+                unsafe { self.window().resignKeyWindow() };
+                return;
+            }
+
             // TODO: center the cursor if the window had mouse grab when it
             // lost focus
             self.queue_event(WindowEvent::Focused(true));

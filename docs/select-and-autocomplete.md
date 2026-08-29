@@ -5,14 +5,14 @@
 QuickGUI has three deliberately separate layers:
 
 - `SelectState<T>` is the standalone unstyled non-editable select. Its caller-owned listbox opens
-  in an overflow-capable anchored native child window, so it can extend beyond the owner window.
+  in an overflow-capable `SystemPopover` child window, so it can extend beyond the owner window.
 - `AutocompleteState<T>` is the standalone unstyled free-form input described by
   [Base UI's Autocomplete contract](https://base-ui.com/react/components/autocomplete). Suggestions
   are optional: arbitrary text remains valid, while committing a row may complete the input or
   report an action without changing it.
 - `ComboboxState<T>` is the standalone unstyled constrained editable control. Typed text is only
   a query; the committed value is always one declared enabled item. It uses the same never-key
-  overflow host and caller-owned input/popup/row contract without conflating that value model with
+  overflow host and caller-owned input/popover/row contract without conflating that value model with
   Select or free-form Autocomplete.
 
 The application owns committed values, source replacement, and every visual property. Install the
@@ -32,7 +32,7 @@ Retain `SelectState<T>` in the application view. Give options stable IDs wheneve
 be reordered or replaced:
 
 ```rust
-use quickgui::{PickerItem, SelectPopupLayout, SelectState};
+use quickgui::{PickerItem, SelectPopoverLayout, SelectState};
 
 struct Settings {
     theme: SelectState<&'static str>,
@@ -49,11 +49,11 @@ let mut theme = SelectState::new([
     PickerItem::new("Light", "light").id("light"),
     PickerItem::new("Dark", "dark").id("dark"),
 ])?
-.with_layout(SelectPopupLayout::new(280.0, 36.0).max_visible_rows(8));
+.with_layout(SelectPopoverLayout::new(280.0, 36.0).max_visible_rows(8));
 theme.select_id("system");
 ```
 
-`element` decorates three caller-owned parts: one trigger, one popup-root factory, and one option
+`element` decorates three caller-owned parts: one trigger, one popover-root factory, and one option
 factory. QuickGUI adds behavior and structural geometry only:
 
 ```rust
@@ -68,7 +68,7 @@ self.theme.element(
     "Editor theme",
     Self::theme,
     quickgui::div().child(selected),                 // application-styled trigger
-    |_list| quickgui::div(),                         // application-styled popup root
+    |_list| quickgui::div(),                         // application-styled popover root
     |item, state| {                                  // application-styled option
         quickgui::div()
             .opacity(if state.disabled { 0.45 } else { 1.0 })
@@ -81,24 +81,24 @@ self.theme.element(
 )
 ```
 
-The popup is a transparent parent-owned `AnchoredPopover`/`NSPanel` with its own WGPU surface.
+The popover is a transparent parent-owned `SystemPopover`/`NSPanel` with its own WGPU surface.
 Up/Down, page and boundary navigation change only the active preview. Return, Space, or an option
 click commits one enabled value. Incremental typeahead cycles matching labels. Escape, an outside
 press, or programmatic child closure cancels and restores trigger focus; owner teardown closes the
-child first. The runtime's declarative child-close listener clears the exact popup handle even if
+child first. The runtime's declarative child-close listener clears the exact popover handle even if
 a child opens and closes in one event turn; there is no polling or stale `is_open` guess.
 
 `set_items(items, cx)` validates the complete replacement before mutation, preserves a selected
 stable ID across reorder, and closes an obsolete open snapshot. A failed replacement changes
-nothing. `set_disabled(disabled, cx)` likewise closes an open popup when disabling the control.
+nothing. `set_disabled(disabled, cx)` likewise closes an open popover when disabling the control.
 
 ## Standalone unstyled free-form autocomplete
 
-Retain `AutocompleteState<T>` beside the caller-owned callbacks. The input, popup root, and every
+Retain `AutocompleteState<T>` beside the caller-owned callbacks. The input, popover root, and every
 suggestion row are ordinary application-styled elements:
 
 ```rust
-use quickgui::{AutocompletePopupLayout, AutocompleteState, PickerItem};
+use quickgui::{AutocompletePopoverLayout, AutocompleteState, PickerItem};
 
 struct Search {
     symbols: AutocompleteState<u64>,
@@ -114,11 +114,11 @@ let symbols = AutocompleteState::new([
     PickerItem::new("open_file", 1).id("open-file"),
     PickerItem::new("open_project", 2).id("open-project"),
 ])?
-.with_layout(AutocompletePopupLayout::new(360.0, 36.0).max_visible_rows(8));
+.with_layout(AutocompletePopoverLayout::new(360.0, 36.0).max_visible_rows(8));
 ```
 
 During rendering, pass a `text_input` containing the state's controlled value plus caller-owned
-popup and row factories:
+popover and row factories:
 
 ```rust
 let input = quickgui::text_input(self.symbols.value().clone())
@@ -173,13 +173,13 @@ Retain `ComboboxState<T>` when editing should search declared values but arbitra
 become the value. Initial selection can be set before a runtime context exists:
 
 ```rust
-use quickgui::{ComboboxPopupLayout, ComboboxState, PickerItem};
+use quickgui::{ComboboxPopoverLayout, ComboboxState, PickerItem};
 
 let symbols = ComboboxState::new([
     PickerItem::new("open_file", 1).id("open-file"),
     PickerItem::new("open_project", 2).id("open-project"),
 ])?
-.with_layout(ComboboxPopupLayout::new(360.0, 36.0).max_visible_rows(8))
+.with_layout(ComboboxPopoverLayout::new(360.0, 36.0).max_visible_rows(8))
 .with_selected_id("open-file");
 ```
 
@@ -216,7 +216,7 @@ self.symbol.element(
 
 Typing updates a bounded query and opens a never-key native child that can cross the owner edge.
 Left/Right, Home/End, deletion, selection, clipboard, undo, and IME input remain normal owner text
-editor operations; only popup navigation keys are contextual actions. Return or a row click can
+editor operations; only popover navigation keys are contextual actions. Return or a row click can
 commit only an enabled declared option. Return with no active option propagates to the ordinary
 input/form path. Escape, Tab, an owner-window outside press, owner focus loss, or native child
 closure restores the last committed label; arbitrary edit text is never silently accepted.
@@ -230,7 +230,7 @@ failed replacement changes neither source nor selection.
 
 ## Accessibility and forms
 
-The standalone select trigger projects ComboBox role, expanded state, ListBox popup intent, disabled and
+The standalone select trigger projects ComboBox role, expanded state, ListBox popover intent, disabled and
 invalid state, and its committed label. The native child root projects ListBox role and a mounted
 active descendant; every visible option exposes its logical position, selected state, disabled
 state, and stable derived ID. Focus moves to the child listbox while open and returns to the trigger

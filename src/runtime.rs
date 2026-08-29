@@ -124,16 +124,16 @@ use crate::event::{ExternalDragEndEvent, ExternalDragOperation};
 use crate::macos::{
     MacExternalDragMonitor, MacExternalDragSession, MacFirstFrameGuard, MacMouseDownEvent,
     MacNativeDropHost, MacNativeDropOffer, MacNativeDropPayload, MacNativeDropPending,
-    MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPopupMonitor,
+    MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPopoverMonitor,
     MacTypedDragPayload, MacTypedDragRegistry, MacWindowTabAction, capture_left_mouse_down,
     configure_document_window, configure_gpu_window_resize, configure_window_kind,
     current_pointer_position, dismiss_window_relation, is_window_fullscreen, is_window_maximized,
-    perform_window_close, perform_window_drag, perform_window_tab_action, position_anchored_popup,
+    perform_window_close, perform_window_drag, perform_window_tab_action, position_system_popover,
     position_traffic_lights, present_native_open_panel, present_native_prompt,
     present_native_save_panel, present_window_relation, set_window_document_edited,
     set_window_movable, set_window_represented_file, set_window_tabbing_identifier,
     set_window_visibility, shell_open_path, shell_open_url, shell_reveal_path, shell_trash_path,
-    show_character_palette, start_external_drag, window_contains_key_window, window_tab_state,
+    show_character_palette, start_external_drag, window_tab_state,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_application::MacApplicationHost;
@@ -155,7 +155,9 @@ pub(crate) enum RuntimeEvent {
     #[cfg(target_os = "macos")]
     NativeDropChanged(WindowHandle),
     #[cfg(target_os = "macos")]
-    PopupDismissRequested(WindowHandle),
+    ApplicationDeactivated,
+    #[cfg(target_os = "macos")]
+    PopoverPointerDismissRequested(WindowHandle),
     #[cfg(any(
         target_os = "macos",
         target_os = "windows",
@@ -315,9 +317,9 @@ pub enum WindowKind {
     #[default]
     Normal,
     /// A high-level utility or notification window.
-    PopUp,
-    /// A transient native popup positioned relative to its parent window's content.
-    AnchoredPopup,
+    Popover,
+    /// A transient native popover positioned relative to its parent window's content.
+    SystemPopover,
     /// A utility window that stays above ordinary application windows.
     Floating,
     /// A parent-owned modal sheet on macOS.
@@ -427,10 +429,10 @@ pub enum WindowCommandError {
     InvalidTabIndex,
     #[error("a hidden titlebar cannot expose or reposition native traffic-light buttons")]
     HiddenTitleBarTrafficLights,
-    #[error("anchored popups require one finite parent-relative popup configuration")]
-    InvalidPopupConfiguration,
-    #[error("an anchored popup must be opened from an existing parent window")]
-    PopupParentRequired,
+    #[error("system popovers require one finite parent-relative popover configuration")]
+    InvalidPopoverConfiguration,
+    #[error("a system popover must be opened from an existing parent window")]
+    PopoverParentRequired,
 }
 
 /// Constant-size snapshot of one native system window-tab group.
@@ -510,8 +512,8 @@ pub struct AppConfig {
     pub preferred_appearance: Option<WindowAppearance>,
     pub title_bar_style: TitleBarStyle,
     pub kind: WindowKind,
-    /// Parent-relative native placement when `kind` is [`WindowKind::AnchoredPopup`].
-    pub popup: Option<crate::PopupOptions>,
+    /// Parent-relative native placement when `kind` is [`WindowKind::SystemPopover`].
+    pub popover: Option<crate::PopoverOptions>,
     pub focus: bool,
     pub show: bool,
     pub is_movable: bool,
@@ -547,7 +549,7 @@ impl Default for AppConfig {
             preferred_appearance: None,
             title_bar_style: TitleBarStyle::Default,
             kind: WindowKind::Normal,
-            popup: None,
+            popover: None,
             focus: true,
             show: true,
             is_movable: true,
@@ -726,21 +728,21 @@ impl AppConfig {
 
     pub fn window_kind(mut self, kind: WindowKind) -> Self {
         self.kind = kind;
-        if kind != WindowKind::AnchoredPopup {
-            self.popup = None;
+        if kind != WindowKind::SystemPopover {
+            self.popover = None;
         }
         self
     }
 
-    /// Configure a borderless parent-anchored native popup.
+    /// Configure a borderless native `SystemPopover`.
     ///
     /// Menu-style grabs focus the panel and dismiss on Escape or an outside mouse press.
-    /// Non-grabbing popups install no event monitor; `PopupOptions::accepts_key_focus` independently
+    /// Non-grabbing popovers install no event monitor; `PopoverOptions::accepts_key_focus` independently
     /// decides whether pointer interaction may make the panel key.
-    pub fn anchored_popup(mut self, popup: crate::PopupOptions) -> Self {
-        self.kind = WindowKind::AnchoredPopup;
-        self.focus = popup.grab;
-        self.popup = Some(popup);
+    pub fn system_popover(mut self, popover: crate::PopoverOptions) -> Self {
+        self.kind = WindowKind::SystemPopover;
+        self.focus = popover.grab;
+        self.popover = Some(popover);
         self.minimum_size = None;
         self.title_bar_style = TitleBarStyle::Hidden;
         self.traffic_light_position = None;
@@ -882,15 +884,15 @@ fn validate_window_options(options: &WindowOptions) -> Result<(), WindowCommandE
     {
         return Err(WindowCommandError::HiddenTitleBarTrafficLights);
     }
-    match (options.kind, options.popup.as_ref()) {
-        (WindowKind::AnchoredPopup, Some(popup))
-            if popup.is_valid(MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION)
+    match (options.kind, options.popover.as_ref()) {
+        (WindowKind::SystemPopover, Some(popover))
+            if popover.is_valid(MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION)
                 && !matches!(
                     options.window_bounds,
                     Some(WindowBounds::Maximized(_) | WindowBounds::Fullscreen(_))
                 ) => {}
-        (WindowKind::AnchoredPopup, _) | (_, Some(_)) => {
-            return Err(WindowCommandError::InvalidPopupConfiguration);
+        (WindowKind::SystemPopover, _) | (_, Some(_)) => {
+            return Err(WindowCommandError::InvalidPopoverConfiguration);
         }
         (_, None) => {}
     }
@@ -995,7 +997,7 @@ pub(crate) struct WindowRequest {
     pub(crate) options: WindowOptions,
     pub(crate) parent: Option<WindowHandle>,
     /// Resolve this anchor from the parent window's retained layout at the event boundary.
-    pub(crate) popup_anchor_element: Option<ElementId>,
+    pub(crate) popover_anchor_element: Option<ElementId>,
 }
 
 impl WindowRequest {
@@ -1022,7 +1024,7 @@ impl WindowRequest {
             view: Box::new(ViewAdapter(view)),
             options,
             parent,
-            popup_anchor_element: None,
+            popover_anchor_element: None,
         }
     }
 }
@@ -1033,7 +1035,7 @@ impl fmt::Debug for WindowRequest {
             .debug_struct("WindowRequest")
             .field("handle", &self.handle)
             .field("parent", &self.parent)
-            .field("popup_anchor_element", &self.popup_anchor_element)
+            .field("popover_anchor_element", &self.popover_anchor_element)
             .field("options", &self.options)
             .finish_non_exhaustive()
     }
@@ -2974,7 +2976,7 @@ pub use test_context::{
 };
 
 #[derive(Clone, Copy)]
-struct PopupWindowContext {
+struct PopoverWindowContext {
     owner: WindowHandle,
     root: WindowHandle,
 }
@@ -3519,7 +3521,7 @@ struct Runtime {
     #[cfg(target_os = "macos")]
     native_drag_registry: MacTypedDragRegistry,
     #[cfg(target_os = "macos")]
-    popup_monitor: MacPopupMonitor,
+    popover_monitor: MacPopoverMonitor,
     #[cfg(any(
         target_os = "macos",
         target_os = "windows",
@@ -3701,7 +3703,7 @@ impl Runtime {
             #[cfg(target_os = "macos")]
             native_drag_registry: MacTypedDragRegistry::new(),
             #[cfg(target_os = "macos")]
-            popup_monitor: MacPopupMonitor::new(event_proxy.clone()),
+            popover_monitor: MacPopoverMonitor::new(event_proxy.clone()),
             #[cfg(any(
                 target_os = "macos",
                 target_os = "windows",
@@ -3749,7 +3751,7 @@ impl Runtime {
 
     fn event_context(&self) -> EventContext {
         let parent = self.window.as_ref().and_then(|window| window.parent);
-        let popup_context = self.current_popup_context();
+        let popover_context = self.current_popover_context();
         EventContext::with_runtime(
             self.globals.clone(),
             self.foreground_tasks.clone(),
@@ -3760,8 +3762,8 @@ impl Runtime {
             crate::event::EventWindowContext {
                 window: self.current_handle(),
                 parent,
-                popup_owner: popup_context.map(|context| context.owner),
-                popup_root: popup_context.map(|context| context.root),
+                popover_owner: popover_context.map(|context| context.owner),
+                popover_root: popover_context.map(|context| context.root),
                 pointer_position: self.window.as_ref().and_then(|window| window.pointer),
             },
         )
@@ -3790,19 +3792,6 @@ impl Runtime {
             entry.state.window.request_redraw();
         }
         true
-    }
-
-    fn element_bounds_external(&self, handle: WindowHandle, element: ElementId) -> Option<Rect> {
-        if self.current_handle() == Some(handle) {
-            return self
-                .window
-                .as_ref()
-                .and_then(|window| window.ui.element_bounds(element));
-        }
-        let window_id = self.window_handles.get(&handle)?;
-        self.windows
-            .get(window_id)
-            .and_then(|entry| entry.state.ui.element_bounds(element))
     }
 
     fn focus_external(&mut self, handle: WindowHandle, element: ElementId) -> bool {
@@ -3854,8 +3843,8 @@ impl Runtime {
         true
     }
 
-    fn current_popup_context(&self) -> Option<PopupWindowContext> {
-        if self.config.kind != WindowKind::AnchoredPopup {
+    fn current_popover_context(&self) -> Option<PopoverWindowContext> {
+        if self.config.kind != WindowKind::SystemPopover {
             return None;
         }
         let mut root = self.current_handle()?;
@@ -3863,8 +3852,8 @@ impl Runtime {
         loop {
             let window_id = *self.window_handles.get(&ancestor)?;
             let entry = self.windows.get(&window_id)?;
-            if entry.config.kind != WindowKind::AnchoredPopup {
-                return Some(PopupWindowContext {
+            if entry.config.kind != WindowKind::SystemPopover {
+                return Some(PopoverWindowContext {
                     owner: ancestor,
                     root,
                 });
@@ -3874,21 +3863,7 @@ impl Runtime {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    fn current_grabbing_popup_root(&self) -> Option<(WindowHandle, Arc<Window>)> {
-        let context = self.current_popup_context()?;
-        if context.root == self.current_handle()? {
-            if !window_is_grabbing_popup(&self.config) {
-                return None;
-            }
-            return Some((context.root, self.window.as_ref()?.window.clone()));
-        }
-        let window_id = *self.window_handles.get(&context.root)?;
-        let entry = self.windows.get(&window_id)?;
-        window_is_grabbing_popup(&entry.config).then(|| (context.root, entry.state.window.clone()))
-    }
-
-    fn current_never_key_popup_children(&self) -> Vec<WindowHandle> {
+    fn current_never_key_popover_children(&self) -> Vec<WindowHandle> {
         let Some(owner) = self.current_handle() else {
             return Vec::new();
         };
@@ -3897,10 +3872,37 @@ impl Runtime {
             .filter_map(|entry| {
                 (entry.state.visible
                     && entry.state.parent == Some(owner)
-                    && window_is_never_key_popup(&entry.config))
+                    && window_is_never_key_popover(&entry.config))
                 .then_some(entry.handle)
             })
             .collect()
+    }
+
+    #[cfg(target_os = "macos")]
+    fn popovers_to_close_after_application_deactivation(&self) -> Vec<WindowHandle> {
+        let candidates = self
+            .windows
+            .values()
+            .filter_map(|entry| {
+                (entry.state.visible
+                    && window_dismisses_system_popover_on_pointer_outside(&entry.config))
+                .then_some(entry.handle)
+            })
+            .collect::<Vec<_>>();
+
+        // One close request tears down its whole child tree. Keep only the highest dismissible
+        // ancestor so nested system popovers cannot produce duplicate close callbacks.
+        let mut roots = candidates
+            .iter()
+            .copied()
+            .filter(|handle| {
+                !candidates.iter().copied().any(|ancestor| {
+                    ancestor != *handle && self.window_is_ancestor(ancestor, *handle)
+                })
+            })
+            .collect::<Vec<_>>();
+        roots.sort_unstable();
+        roots
     }
 
     fn fail(&mut self, event_loop: &ActiveEventLoop, error: AppError) {
@@ -4571,8 +4573,10 @@ impl Runtime {
                 WindowCommand::SetVisible(_, visible) => {
                     if state.visible != visible {
                         #[cfg(target_os = "macos")]
-                        if !visible && window_is_grabbing_popup(&entry.config) {
-                            self.popup_monitor.unwatch(handle);
+                        if !visible
+                            && window_dismisses_system_popover_on_pointer_outside(&entry.config)
+                        {
+                            self.popover_monitor.unwatch(handle);
                         }
                         #[cfg(target_os = "macos")]
                         if state.relation_presented && !visible {
@@ -4585,12 +4589,12 @@ impl Runtime {
                         }
                         #[cfg(target_os = "macos")]
                         if visible && !state.relation_presented {
-                            if let Some(popup) = entry.config.popup.as_ref()
+                            if let Some(popover) = entry.config.popover.as_ref()
                                 && let Some(parent) = parent_window.as_ref()
                                 && let Err(error) =
-                                    position_anchored_popup(&state.window, parent, popup)
+                                    position_system_popover(&state.window, parent, popover)
                             {
-                                tracing::warn!(%error, "could not restore anchored popup placement");
+                                tracing::warn!(%error, "could not restore system popover placement");
                             }
                             match present_window_relation(
                                 &state.window,
@@ -4605,10 +4609,17 @@ impl Runtime {
                         }
                         #[cfg(target_os = "macos")]
                         if visible
-                            && window_is_grabbing_popup(&entry.config)
-                            && let Err(error) = self.popup_monitor.watch(handle, &state.window)
+                            && window_dismisses_system_popover_on_pointer_outside(&entry.config)
+                            && let Some(popover) = entry.config.popover.as_ref()
+                            && let Some(parent) = parent_window.as_ref()
+                            && let Err(error) = self.popover_monitor.watch(
+                                handle,
+                                &state.window,
+                                parent,
+                                popover.anchor_rect,
+                            )
                         {
-                            tracing::warn!(%error, "could not restore native popup grab");
+                            tracing::warn!(%error, "could not restore native popover grab");
                         }
                         #[cfg(target_os = "macos")]
                         if let Err(error) =
@@ -4950,7 +4961,7 @@ impl Runtime {
             ))]
             self.active_platform_dialogs.remove(&Some(handle));
             #[cfg(target_os = "macos")]
-            self.popup_monitor.unwatch(handle);
+            self.popover_monitor.unwatch(handle);
             if let Some(entry) = self.windows.remove(&window_id) {
                 #[cfg(target_os = "macos")]
                 let native_tabbing = entry.config.tabbing_identifier.is_some();
@@ -5058,17 +5069,21 @@ impl Runtime {
                 // Window targeting must use the work area that exists at the placement boundary.
                 // On macOS, adding a command-line application's Dock presence can resize a
                 // left/right Dock after `resumed` without a screen-parameters notification. One
-                // bounded refresh per non-popup creation batch keeps default centering current;
-                // anchored-popup churn, the idle path, and ordinary frames perform no monitor
+                // bounded refresh per non-popover creation batch keeps default centering current;
+                // system-popover churn, the idle path, and ordinary frames perform no monitor
                 // query.
                 if self
                     .pending_windows
                     .iter()
-                    .any(|request| request.options.kind != WindowKind::AnchoredPopup)
+                    .any(|request| request.options.kind != WindowKind::SystemPopover)
                 {
                     self.refresh_displays(event_loop);
                 }
-                while let Some(request) = self.pending_windows.pop_front() {
+                while let Some(mut request) = self.pending_windows.pop_front() {
+                    if let Err(error) = self.resolve_pending_system_popover_anchor(&mut request) {
+                        self.fail(event_loop, error);
+                        return;
+                    }
                     self.create_window(event_loop, request);
                     if self.fatal_error.is_some() {
                         return;
@@ -5121,10 +5136,10 @@ impl Runtime {
                     #[cfg(target_os = "macos")]
                     if matches!(
                         entry.config.kind,
-                        WindowKind::PopUp | WindowKind::AnchoredPopup
+                        WindowKind::Popover | WindowKind::SystemPopover
                     ) {
                         if let Err(error) = set_window_visibility(&entry.state.window, true, true) {
-                            tracing::warn!(%error, "could not focus native popup without activation");
+                            tracing::warn!(%error, "could not focus native popover without activation");
                         }
                     } else {
                         entry.state.window.focus_window();
@@ -5177,6 +5192,33 @@ impl Runtime {
                 "window lifecycle exceeded {MAX_WINDOW_LIFECYCLE_TURNS} effect turns"
             )),
         );
+    }
+
+    fn resolve_pending_system_popover_anchor(
+        &self,
+        request: &mut WindowRequest,
+    ) -> Result<(), AppError> {
+        let Some(anchor) = request.popover_anchor_element.take() else {
+            return Ok(());
+        };
+        let parent = request.parent.ok_or_else(|| {
+            AppError::Window(WindowCommandError::PopoverParentRequired.to_string())
+        })?;
+        let bounds = self
+            .window_handles
+            .get(&parent)
+            .and_then(|window_id| self.windows.get(window_id))
+            .and_then(|entry| entry.state.ui.element_bounds(anchor))
+            .ok_or_else(|| {
+                AppError::Window(format!(
+                    "system popover anchor {anchor:?} is not mounted in its parent window"
+                ))
+            })?;
+        let popover = request.options.popover.as_mut().ok_or_else(|| {
+            AppError::Window(WindowCommandError::InvalidPopoverConfiguration.to_string())
+        })?;
+        popover.anchor_rect = bounds;
+        Ok(())
     }
 
     fn process_targeted_actions(&mut self, event_loop: &ActiveEventLoop) -> bool {
@@ -5347,7 +5389,7 @@ impl Runtime {
         }
         self.targeted_actions.extend(cx.targeted_actions.drain(..));
         for request in &mut cx.open_windows {
-            let Some(anchor) = request.popup_anchor_element.take() else {
+            let Some(anchor) = request.popover_anchor_element.take() else {
                 continue;
             };
             let Some(bounds) = self
@@ -5358,19 +5400,19 @@ impl Runtime {
                 self.fail(
                     event_loop,
                     AppError::View(format!(
-                        "anchored popup trigger {anchor:?} is not mounted in its parent window"
+                        "system popover anchor {anchor:?} is not mounted in its parent window"
                     )),
                 );
                 return false;
             };
-            let Some(popup) = request.options.popup.as_mut() else {
+            let Some(popover) = request.options.popover.as_mut() else {
                 self.fail(
                     event_loop,
-                    AppError::Window(WindowCommandError::InvalidPopupConfiguration.to_string()),
+                    AppError::Window(WindowCommandError::InvalidPopoverConfiguration.to_string()),
                 );
                 return false;
             };
-            popup.anchor_rect = bounds;
+            popover.anchor_rect = bounds;
         }
         self.pending_windows.extend(cx.open_windows.drain(..));
         if cx.close_current_window
@@ -7886,7 +7928,7 @@ impl Runtime {
             view,
             options,
             parent,
-            popup_anchor_element: _,
+            popover_anchor_element: _,
         } = request;
         if let Err(error) = validate_window_options(&options) {
             self.fail(event_loop, AppError::Window(error.to_string()));
@@ -7924,10 +7966,10 @@ impl Runtime {
             .and_then(|parent| self.window_handles.get(&parent).copied())
             .and_then(|window_id| self.windows.get(&window_id))
             .map(|entry| entry.state.window.clone());
-        if self.config.kind == WindowKind::AnchoredPopup && parent_window.is_none() {
+        if self.config.kind == WindowKind::SystemPopover && parent_window.is_none() {
             self.fail(
                 event_loop,
-                AppError::Window(WindowCommandError::PopupParentRequired.to_string()),
+                AppError::Window(WindowCommandError::PopoverParentRequired.to_string()),
             );
             return;
         }
@@ -7948,7 +7990,7 @@ impl Runtime {
             .with_theme(self.config.preferred_appearance.map(to_winit_theme))
             .with_enabled_buttons(window_buttons(&self.config))
             .with_window_level(match self.config.kind {
-                WindowKind::Floating | WindowKind::PopUp | WindowKind::AnchoredPopup => {
+                WindowKind::Floating | WindowKind::Popover | WindowKind::SystemPopover => {
                     WindowLevel::AlwaysOnTop
                 }
                 WindowKind::Normal | WindowKind::Dialog => WindowLevel::Normal,
@@ -7958,7 +8000,7 @@ impl Runtime {
                 restore_rect.height as f64,
             ));
         if (self.config.window_bounds.is_some() || self.config.display_id.is_some())
-            && self.config.kind != WindowKind::AnchoredPopup
+            && self.config.kind != WindowKind::SystemPopover
         {
             attributes = attributes.with_position(LogicalPosition::new(
                 restore_rect.x as f64,
@@ -8000,12 +8042,12 @@ impl Runtime {
         #[cfg(target_os = "macos")]
         if matches!(
             self.config.kind,
-            WindowKind::PopUp | WindowKind::AnchoredPopup
+            WindowKind::Popover | WindowKind::SystemPopover
         ) {
             attributes = attributes.with_panel(true);
         }
         #[cfg(target_os = "macos")]
-        if self.config.kind == WindowKind::AnchoredPopup {
+        if self.config.kind == WindowKind::SystemPopover {
             attributes = attributes
                 .with_titlebar_transparent(true)
                 .with_title_hidden(true)
@@ -8014,11 +8056,13 @@ impl Runtime {
                 .with_fullsize_content_view(true);
         }
         #[cfg(not(target_os = "macos"))]
-        if let (Some(popup), Some(parent)) = (self.config.popup.as_ref(), parent_window.as_ref()) {
-            let local = crate::popup::unconstrained_popup_rect(
-                popup.anchor_rect,
+        if let (Some(popover), Some(parent)) =
+            (self.config.popover.as_ref(), parent_window.as_ref())
+        {
+            let local = crate::popover::unconstrained_popover_rect(
+                popover.anchor_rect,
                 Size::new(restore_rect.width, restore_rect.height),
-                popup,
+                popover,
             );
             if let Ok(parent_position) = parent.inner_position() {
                 let scale = sane_scale_factor(parent.scale_factor());
@@ -8051,7 +8095,7 @@ impl Runtime {
         // concrete `NSScreen` for a windowed request. Re-apply explicit global placement while the
         // window is still hidden so a selected secondary display is authoritative on first frame.
         if (self.config.window_bounds.is_some() || self.config.display_id.is_some())
-            && self.config.kind != WindowKind::AnchoredPopup
+            && self.config.kind != WindowKind::SystemPopover
             && !matches!(requested_bounds, Some(WindowBounds::Fullscreen(_)))
         {
             window.set_outer_position(LogicalPosition::new(
@@ -8076,9 +8120,9 @@ impl Runtime {
             self.config.kind,
             self.config.focus,
             self.config
-                .popup
+                .popover
                 .as_ref()
-                .is_none_or(|popup| popup.accepts_key_focus),
+                .is_none_or(|popover| popover.accepts_key_focus),
         ) {
             self.fail(event_loop, AppError::Platform(error));
             return;
@@ -8107,13 +8151,13 @@ impl Runtime {
             return;
         }
         #[cfg(target_os = "macos")]
-        if let Some(popup) = self.config.popup.as_ref()
-            && let Err(error) = position_anchored_popup(
+        if let Some(popover) = self.config.popover.as_ref()
+            && let Err(error) = position_system_popover(
                 &window,
                 parent_window
                     .as_ref()
-                    .expect("anchored popup parent checked above"),
-                popup,
+                    .expect("system popover parent checked above"),
+                popover,
             )
         {
             self.fail(event_loop, AppError::Platform(error));
@@ -8395,7 +8439,7 @@ impl Runtime {
                 return;
             }
 
-            if self.config.kind != WindowKind::AnchoredPopup {
+            if self.config.kind != WindowKind::SystemPopover {
                 // GPU initialization gives AppKit and the Dock a complete launch turn while this
                 // window remains hidden. Re-read the bounded snapshot now so every ordinary
                 // window uses the work area that exists at its actual presentation boundary.
@@ -8428,14 +8472,14 @@ impl Runtime {
 
         if self.config.show {
             #[cfg(target_os = "macos")]
-            if let Some(popup) = self.config.popup.as_ref()
+            if let Some(popover) = self.config.popover.as_ref()
                 && let Some(state) = self.window.as_ref()
-                && let Err(error) = position_anchored_popup(
+                && let Err(error) = position_system_popover(
                     &state.window,
                     parent_window
                         .as_ref()
-                        .expect("anchored popup parent checked above"),
-                    popup,
+                        .expect("system popover parent checked above"),
+                    popover,
                 )
             {
                 self.fail(event_loop, AppError::Platform(error));
@@ -8461,9 +8505,13 @@ impl Runtime {
             #[cfg(not(target_os = "macos"))]
             let relation_presented = false;
             #[cfg(target_os = "macos")]
-            if window_is_grabbing_popup(&self.config)
+            if window_dismisses_system_popover_on_pointer_outside(&self.config)
+                && let Some(popover) = self.config.popover.as_ref()
+                && let Some(parent) = parent_window.as_ref()
                 && let Some(state) = self.window.as_ref()
-                && let Err(error) = self.popup_monitor.watch(handle, &state.window)
+                && let Err(error) =
+                    self.popover_monitor
+                        .watch(handle, &state.window, parent, popover.anchor_rect)
             {
                 self.fail(event_loop, AppError::Platform(error));
                 self.deactivate_window();
@@ -8473,7 +8521,7 @@ impl Runtime {
             if let Some(state) = self.window.as_ref()
                 && let Err(error) = set_window_visibility(&state.window, true, self.config.focus)
             {
-                self.popup_monitor.unwatch(handle);
+                self.popover_monitor.unwatch(handle);
                 self.fail(event_loop, AppError::Platform(error));
                 self.deactivate_window();
                 return;
@@ -9739,7 +9787,9 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         return;
                     }
                     if event.state == ElementState::Pressed {
-                        if key == Key::Escape && window_is_grabbing_popup(&self.config) {
+                        if key == Key::Escape
+                            && window_dismisses_system_popover_on_escape(&self.config)
+                        {
                             if let Some(handle) = self.current_handle() {
                                 self.close_requests.push(handle);
                             }
@@ -9840,28 +9890,17 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 WindowEvent::Ime(Ime::Enabled) => {}
                 WindowEvent::Focused(focused) => {
                     let was_focused = self.window.as_ref().is_some_and(|state| state.focused);
-                    let never_key_popups_to_close = if !focused && was_focused {
-                        self.current_never_key_popup_children()
+                    let never_key_popovers_to_close = if !focused && was_focused {
+                        self.current_never_key_popover_children()
                     } else {
                         Vec::new()
                     };
-                    #[cfg(target_os = "macos")]
-                    let popup_root_to_close = (!focused && was_focused)
-                        .then(|| self.current_grabbing_popup_root())
-                        .flatten()
-                        .and_then(|(root, window)| match window_contains_key_window(&window) {
-                            Ok(true) => None,
-                            Ok(false) => Some(root),
-                            Err(error) => {
-                                tracing::warn!(%error, "could not inspect popup-chain key focus");
-                                Some(root)
-                            }
-                        });
                     #[cfg(not(target_os = "macos"))]
-                    let popup_root_to_close =
-                        (!focused && was_focused && window_is_grabbing_popup(&self.config))
-                            .then(|| self.current_handle())
-                            .flatten();
+                    let popover_root_to_close = (!focused
+                        && was_focused
+                        && window_dismisses_system_popover_on_pointer_outside(&self.config))
+                    .then(|| self.current_handle())
+                    .flatten();
                     if let Some(state) = &mut self.window {
                         state.focused = focused;
                     }
@@ -9869,10 +9908,11 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                         self.note_window_focused(window_id);
                     }
                     if !focused {
-                        if let Some(root) = popup_root_to_close {
+                        #[cfg(not(target_os = "macos"))]
+                        if let Some(root) = popover_root_to_close {
                             self.close_requests.push(root);
                         }
-                        self.close_requests.extend(never_key_popups_to_close);
+                        self.close_requests.extend(never_key_popovers_to_close);
                         let cancelled = self.window.as_mut().and_then(|state| {
                             let capture = state.pointer_capture.take();
                             let internal_drag = state.drag_session.take().is_some();
@@ -9990,6 +10030,13 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             return;
         }
         #[cfg(target_os = "macos")]
+        if matches!(&event, RuntimeEvent::ApplicationDeactivated) {
+            let popovers = self.popovers_to_close_after_application_deactivation();
+            self.close_requests.extend(popovers);
+            self.process_window_commands(event_loop);
+            return;
+        }
+        #[cfg(target_os = "macos")]
         if matches!(&event, RuntimeEvent::KeyboardLayoutChanged) {
             if self.refresh_keyboard_layout() {
                 self.invoke_keyboard_layout_change(event_loop);
@@ -10034,13 +10081,14 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             return;
         }
         #[cfg(target_os = "macos")]
-        if let RuntimeEvent::PopupDismissRequested(handle) = &event {
+        if let RuntimeEvent::PopoverPointerDismissRequested(handle) = &event {
             let should_close = self
                 .window_handles
                 .get(handle)
                 .and_then(|window_id| self.windows.get(window_id))
                 .is_some_and(|entry| {
-                    entry.state.visible && window_is_grabbing_popup(&entry.config)
+                    entry.state.visible
+                        && window_dismisses_system_popover_on_pointer_outside(&entry.config)
                 });
             if should_close {
                 self.close_requests.push(*handle);
@@ -10097,7 +10145,11 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             #[cfg(target_os = "macos")]
             RuntimeEvent::NativeDropChanged(handle) => self.window_handles.get(handle).copied(),
             #[cfg(target_os = "macos")]
-            RuntimeEvent::PopupDismissRequested(_) => unreachable!("handled before routing"),
+            RuntimeEvent::ApplicationDeactivated => unreachable!("handled before routing"),
+            #[cfg(target_os = "macos")]
+            RuntimeEvent::PopoverPointerDismissRequested(_) => {
+                unreachable!("handled before routing")
+            }
             #[cfg(any(
                 target_os = "macos",
                 target_os = "windows",
@@ -10216,7 +10268,11 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 }
             }
             #[cfg(target_os = "macos")]
-            RuntimeEvent::PopupDismissRequested(_) => unreachable!("handled before routing"),
+            RuntimeEvent::ApplicationDeactivated => unreachable!("handled before routing"),
+            #[cfg(target_os = "macos")]
+            RuntimeEvent::PopoverPointerDismissRequested(_) => {
+                unreachable!("handled before routing")
+            }
             #[cfg(any(
                 target_os = "macos",
                 target_os = "windows",
@@ -10668,17 +10724,28 @@ fn window_buttons(config: &AppConfig) -> WindowButtons {
     buttons
 }
 
-fn window_is_grabbing_popup(config: &AppConfig) -> bool {
-    config.kind == WindowKind::AnchoredPopup
-        && config.popup.as_ref().is_some_and(|popup| popup.grab)
+fn window_dismisses_system_popover_on_escape(config: &AppConfig) -> bool {
+    config.kind == WindowKind::SystemPopover
+        && config
+            .popover
+            .as_ref()
+            .is_some_and(|popover| popover.dismiss_on_escape)
 }
 
-fn window_is_never_key_popup(config: &AppConfig) -> bool {
-    config.kind == WindowKind::AnchoredPopup
+fn window_dismisses_system_popover_on_pointer_outside(config: &AppConfig) -> bool {
+    config.kind == WindowKind::SystemPopover
         && config
-            .popup
+            .popover
             .as_ref()
-            .is_some_and(|popup| !popup.accepts_key_focus)
+            .is_some_and(|popover| popover.dismiss_on_pointer_outside)
+}
+
+fn window_is_never_key_popover(config: &AppConfig) -> bool {
+    config.kind == WindowKind::SystemPopover
+        && config
+            .popover
+            .as_ref()
+            .is_some_and(|popover| !popover.accepts_key_focus)
 }
 
 #[cfg(target_os = "macos")]
@@ -11144,14 +11211,14 @@ mod tests {
     }
 
     #[test]
-    fn anchored_popup_builder_selects_bounded_native_menu_defaults() {
-        let popup = crate::PopupOptions::new(Rect::new(24.0, 40.0, 120.0, 32.0));
+    fn system_popover_builder_selects_bounded_native_menu_defaults() {
+        let popover = crate::PopoverOptions::new(Rect::new(24.0, 40.0, 120.0, 32.0));
         let options = WindowOptions::new("Menu")
             .size(240.0, 180.0)
-            .anchored_popup(popup.clone());
+            .system_popover(popover.clone());
 
-        assert_eq!(options.kind, WindowKind::AnchoredPopup);
-        assert_eq!(options.popup, Some(popup));
+        assert_eq!(options.kind, WindowKind::SystemPopover);
+        assert_eq!(options.popover, Some(popover));
         assert_eq!(options.title_bar_style, TitleBarStyle::Hidden);
         assert!(options.focus);
         assert!(!options.is_movable);
@@ -11160,14 +11227,24 @@ mod tests {
         assert!(options.minimum_size.is_none());
         assert_eq!(validate_window_options(&options), Ok(()));
 
-        let never_key_popup = crate::PopupOptions::new(Rect::ZERO)
+        let never_key_popover = crate::PopoverOptions::new(Rect::ZERO)
             .grab(false)
             .accepts_key_focus(false);
-        let never_key = WindowOptions::new("Suggestions").anchored_popup(never_key_popup);
+        let never_key = WindowOptions::new("Suggestions").system_popover(never_key_popover);
         assert!(!never_key.focus);
-        assert!(window_is_never_key_popup(&never_key));
-        assert!(!window_is_grabbing_popup(&never_key));
+        assert!(window_is_never_key_popover(&never_key));
+        assert!(!never_key.popover.as_ref().unwrap().grab);
         assert_eq!(validate_window_options(&never_key), Ok(()));
+
+        let escape_only = WindowOptions::new("Escape only").system_popover(
+            crate::PopoverOptions::new(Rect::ZERO)
+                .dismiss_on_escape(true)
+                .dismiss_on_pointer_outside(false),
+        );
+        assert!(window_dismisses_system_popover_on_escape(&escape_only));
+        assert!(!window_dismisses_system_popover_on_pointer_outside(
+            &escape_only
+        ));
     }
 
     #[test]
@@ -11198,15 +11275,15 @@ mod tests {
         );
         assert_eq!(
             validate_window_options(
-                &WindowOptions::new("Missing popup").window_kind(WindowKind::AnchoredPopup),
+                &WindowOptions::new("Missing popover").window_kind(WindowKind::SystemPopover),
             ),
-            Err(WindowCommandError::InvalidPopupConfiguration)
+            Err(WindowCommandError::InvalidPopoverConfiguration)
         );
         assert_eq!(
-            validate_window_options(&WindowOptions::new("Invalid popup").anchored_popup(
-                crate::PopupOptions::new(Rect::new(f32::INFINITY, 0.0, 0.0, 0.0)),
+            validate_window_options(&WindowOptions::new("Invalid popover").system_popover(
+                crate::PopoverOptions::new(Rect::new(f32::INFINITY, 0.0, 0.0, 0.0)),
             ),),
-            Err(WindowCommandError::InvalidPopupConfiguration)
+            Err(WindowCommandError::InvalidPopoverConfiguration)
         );
     }
 

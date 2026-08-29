@@ -70,7 +70,7 @@ pipeline and Glyphon's device cache for its shader, layouts, sampler, and format
 pipelines. Surface configuration, uniforms, upload buffers, glyph atlases, text-layout state, and
 bounded asset caches remain per-window, so one window's working set or resize cannot invalidate
 another. Path, image, SVG, and application-shader renderers are created only when a scene first
-uses that primitive family; an ordinary shape-and-text popup never compiles or allocates those four
+uses that primitive family; an ordinary shape-and-text popover never compiles or allocates those four
 unused paths:
 
 1. Shapes use six shader-generated vertices and one declaration-ordered instance stream. Quads carry logical bounds, fill, inside border, radius, and clip. Drop and inset shadows carry the element box, translated/spread subject box, color, blur radius, and clip. Rounded-corner antialiasing and Gaussian-CDF shadow falloff are analytic in WGSL, so shadows allocate no blur textures or retained cache entries. Outer shadows, the element quad, and inset shadows preserve CSS paint order while every non-empty stacking layer remains one draw call.

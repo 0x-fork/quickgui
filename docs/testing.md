@@ -153,13 +153,13 @@ interaction cycles require owner focus restoration and complete child-window tea
 dismissal route may deliver the menu command. A further 128 root-plus-submenu command cycles run at
 a declared 50 ms inter-cycle cadence. Current RSS and physical footprint are sampled after cycles
 32 and 128, positive growth is limited to 16 MiB and 24 MiB respectively, and every cycle must leave
-zero popup windows. A final cooperative activation handoff to Finder requires
+zero popover windows. A final cooperative activation handoff to Finder requires
 application-deactivation teardown with no owner focus reclamation. The gate also checks cache and
 draw-call bounds, idle frames, whole-process CPU, peak RSS, and owned graphics footprint. These
 timing and compositor checks complement rather than replace `cargo test`; neither belongs in
-headless hosted CI. Popup input is delivered directly through live AppKit/Winit responders and each
+headless hosted CI. Popover input is delivered directly through live AppKit/Winit responders and each
 surface is closed before it remains visibly composited, so this proves native lifecycle and event
-routing but is not a human-visible popup QA recording. Because the second gate posts real AppKit
+routing but is not a human-visible popover QA recording. Because the second gate posts real AppKit
 pointer events, changes the key window, and ends by yielding foreground activation to Finder, do
 not use the mouse or keyboard while it runs.
 

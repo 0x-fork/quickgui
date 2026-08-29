@@ -90,7 +90,7 @@ Start at the [documentation index](docs/README.md).
 - [Text, editing, and forms](docs/text-and-forms.md)
 - [Selection controls](docs/selection-controls.md)
 - [Tabs](docs/tabs.md)
-- [Popovers and popup menus](docs/popovers.md)
+- [Popovers and popover menus](docs/popovers.md)
 - [Select and autocomplete](docs/select-and-autocomplete.md)
 - [Dialogs](docs/dialogs.md)
 - [Unstyled component roadmap](docs/component-roadmap.md)
@@ -140,6 +140,14 @@ cd examples/file-dialog-solid
 bun run dev
 ```
 
+The Solid popover example compares the shared compound JSX API of a native `SystemPopover` and a
+retained in-window `Popover`:
+
+```console
+cd examples/popover-solid
+bun run dev
+```
+
 This creates and runs the platform-native development host while loading `app.tsx` from disk (an
 `.app` bundle on macOS). Rust framework examples remain available directly through Cargo:
 
@@ -154,7 +162,7 @@ cargo run --release --example styled_text
 cargo run --release --example selection_controls
 cargo run --release --example tabs
 cargo run --release --example popovers
-cargo run --release --example anchored_popup
+cargo run --release --example system_popover
 cargo run --release --example comboboxes
 cargo run --release --example autocomplete
 cargo run --release --example dialogs
@@ -169,9 +177,9 @@ cargo run --example hacker_news
 The stress example mounts only the visible slice of a 100,000-row list and includes live CPU/render
 telemetry. On macOS, `scripts/macos-performance-gate.sh` gates bidirectional scrolling and
 `scripts/macos-acceptance-gate.sh` gates native resize, wrapped and ellipsized text, embedded
-`NSView` lifecycle, context-menu interaction and a 128-cycle popup memory plateau, idle behavior,
+`NSView` lifecycle, context-menu interaction and a 128-cycle popover memory plateau, idle behavior,
 whole-process CPU, peak RSS, and process-owned graphics footprint against a real WindowServer. The
-scripted popups are lifecycle evidence, not a human-visible visual recording.
+scripted popovers are lifecycle evidence, not a human-visible visual recording.
 `scripts/macos-display-acceptance-gate.sh` separately opens hidden, non-key windows on every active
 display and requires exact first-render centering plus settled retained/AppKit screen identity,
 scale, native-frame origin, work-area agreement, and full native-frame containment. Its report

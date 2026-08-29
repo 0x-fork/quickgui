@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -95,6 +95,13 @@ export const enum PropertyCode {
   Overscan = 78,
   ListAlignment = 79,
   FollowMode = 80,
+  AnchorTarget = 81,
+  AnchorPlacement = 82,
+  AnchorGap = 83,
+  ViewportMargin = 84,
+  DismissOnEscape = 85,
+  DismissOnPointerOutside = 86,
+  DismissListener = 87,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

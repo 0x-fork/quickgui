@@ -21,9 +21,9 @@ mod app {
     use quickgui::{
         App, AsyncContextError, AsyncViewContext, CONTEXT_MENU_SUBMENU_HOVER_DELAY, Color,
         ContextMenuLayout, ContextMenuState, ElementId, Event, EventContext, FocusHandle,
-        FrameMetrics, IntoElement, MouseButton, PopupMenu, PopupMenuItem, PopupMenuItemState, Size,
-        View, ViewContext, WindowKind, WindowState, div, native_view, popup_menu_key_bindings,
-        text,
+        FrameMetrics, IntoElement, MouseButton, PopoverMenu, PopoverMenuItem, PopoverMenuItemState,
+        Size, View, ViewContext, WindowKind, WindowState, div, native_view,
+        popover_menu_key_bindings, text,
     };
     use serde::Serialize;
 
@@ -53,7 +53,9 @@ mod app {
     const CONTEXT_MENU_CYCLES: usize = 8;
     const CONTEXT_MENU_OUTSIDE_DISMISS_CYCLES: usize = 4;
     const CONTEXT_MENU_ESCAPE_DISMISS_CYCLES: usize = 4;
-    const CONTEXT_MENU_DEACTIVATION_DISMISS_CYCLES: usize = 1;
+    // App activation handoff bugs are timing-sensitive. Exercise enough independent handoffs that
+    // a global mouse-monitor or window-focus race cannot pass this gate by winning once.
+    const CONTEXT_MENU_DEACTIVATION_DISMISS_CYCLES: usize = 8;
     const CONTEXT_MENU_SOAK_CYCLES: usize = 128;
     const CONTEXT_MENU_SOAK_BASELINE_CYCLE: usize = 32;
     const CONTEXT_MENU_SOAK_REOPEN_DELAY: Duration = Duration::from_millis(50);
@@ -118,7 +120,7 @@ mod app {
         let callback_lifecycle = Arc::clone(&lifecycle);
 
         App::new(MacAcceptanceView::new(field, Arc::clone(&failed)))
-            .bind_keys(popup_menu_key_bindings())
+            .bind_keys(popover_menu_key_bindings())
             .title("QuickGUI — macOS 0.1 acceptance")
             .size(900.0, 640.0)
             .position(80.0, 80.0)
@@ -127,7 +129,7 @@ mod app {
                 // SAFETY: QuickGUI invokes lifecycle callbacks on AppKit's application thread.
                 let detached = unsafe { callback_field.superview().is_none() };
                 if !detached {
-                    // Child popup teardown is an application-wide close event too. The native
+                    // Child popover teardown is an application-wide close event too. The native
                     // field must remain attached until the owner window itself is destroyed.
                     return;
                 }
@@ -579,7 +581,7 @@ mod app {
         }
 
         fn schedule_context_interaction(&mut self, cx: &ViewContext<'_, Self>) {
-            if self.context_menu.popup_window().is_none() {
+            if self.context_menu.popover_window().is_none() {
                 return;
             }
             self.context_activation_scheduled = true;
@@ -590,7 +592,7 @@ mod app {
                     task_cx.sleep(Duration::from_millis(10)).await?;
                     let root_result = task_cx
                         .update(|_this, _cx| {
-                            post_popup_pointer("Context menu", 16.0, 20.0, true)
+                            post_popover_pointer("Context menu", 16.0, 20.0, true)
                         })
                         .await?;
                     if let Err(error) = root_result {
@@ -605,14 +607,14 @@ mod app {
                     task_cx.sleep(Duration::from_millis(20)).await?;
                     let mut result = task_cx
                         .update(|_this, _cx| {
-                            post_popup_pointer("Context submenu", 16.0, 20.0, true)
+                            post_popover_pointer("Context submenu", 16.0, 20.0, true)
                         })
                         .await?;
                     if result.is_err() {
                         task_cx.sleep(Duration::from_millis(100)).await?;
                         result = task_cx
                             .update(|_this, _cx| {
-                                post_popup_pointer("Context submenu", 16.0, 20.0, true)
+                                post_popover_pointer("Context submenu", 16.0, 20.0, true)
                             })
                             .await?;
                     }
@@ -630,7 +632,7 @@ mod app {
                 task_cx.sleep(Duration::from_millis(50)).await?;
                 task_cx
                     .update(|this, cx| {
-                        if let Err(error) = post_popup_pointer("Context menu", 16.0, 20.0, false) {
+                        if let Err(error) = post_popover_pointer("Context menu", 16.0, 20.0, false) {
                             this.probe.fail_command(error);
                         }
                         cx.invalidate();
@@ -642,7 +644,7 @@ mod app {
                 let activate = interaction.requires_action();
                 let mut result = task_cx
                     .update(move |_this, _cx| {
-                        post_popup_pointer("Context submenu", 16.0, 20.0, activate)
+                        post_popover_pointer("Context submenu", 16.0, 20.0, activate)
                     })
                     .await?;
                 if result.is_err() {
@@ -651,7 +653,7 @@ mod app {
                     task_cx.sleep(Duration::from_millis(400)).await?;
                     result = task_cx
                         .update(move |_this, _cx| {
-                            post_popup_pointer("Context submenu", 16.0, 20.0, activate)
+                            post_popover_pointer("Context submenu", 16.0, 20.0, activate)
                         })
                         .await?;
                 }
@@ -708,7 +710,7 @@ mod app {
                             task_cx.sleep(Duration::from_millis(50)).await?;
                             task_cx
                                 .update(|this, cx| {
-                                    if let Err(error) = send_escape_to_key_popup() {
+                                    if let Err(error) = send_escape_to_key_popover() {
                                         this.probe.fail_command(error);
                                     }
                                     cx.invalidate();
@@ -725,30 +727,49 @@ mod app {
                                     cx.invalidate();
                                 })
                                 .await?;
-                            // One exact deadline lets AppKit emit the focus transition and Winit
-                            // serialize popup teardown. This is deliberately not a polling loop.
-                            task_cx.sleep(Duration::from_millis(750)).await?;
-                            task_cx
-                                .update(|this, cx| {
-                                    let inactive = match acceptance_application_is_active() {
-                                        Ok(active) => !active,
-                                        Err(error) => {
-                                            this.probe.fail_command(error);
-                                            false
+                            // Observe a complete stability window rather than one lucky instant.
+                            // Nonactivating-panel focus restoration can arrive more than a second
+                            // after Finder initially wins the activation handoff.
+                            let mut inactive_throughout = true;
+                            let mut teardown = false;
+                            for sample in 1..=6 {
+                                task_cx.sleep(Duration::from_millis(250)).await?;
+                                let observation = task_cx
+                                    .update(move |this, cx| {
+                                        let inactive = match acceptance_application_is_active() {
+                                            Ok(active) => !active,
+                                            Err(error) => {
+                                                this.probe.fail_command(error);
+                                                false
+                                            }
+                                        };
+                                        let popover = this.popover_observation();
+                                        let teardown = !this.context_menu.is_open()
+                                            && popover.window_count() == 0
+                                            && !popover.owner_key;
+                                        if !inactive {
+                                            this.probe.fail_command(format!(
+                                                "application reactivated during deactivation stability sample {sample}"
+                                            ));
                                         }
-                                    };
-                                    let popup = this.popup_observation();
-                                    let teardown = !this.context_menu.is_open()
-                                        && popup.window_count() == 0
-                                        && !popup.owner_key;
+                                        cx.invalidate();
+                                        (inactive, teardown)
+                                    })
+                                    .await?;
+                                inactive_throughout &= observation.0;
+                                teardown = observation.1;
+                            }
+                            task_cx
+                                .update(move |this, cx| {
+                                    let popover = this.popover_observation();
                                     this.context_inactive_teardown_observed |=
-                                        inactive && teardown;
-                                    if !inactive || !teardown {
+                                        inactive_throughout && teardown;
+                                    if !inactive_throughout || !teardown {
                                         this.probe.fail_command(format!(
-                                            "application deactivation observed inactive={inactive} context_open={} owner_key={} popup_windows={}",
+                                            "application deactivation observed inactive_throughout={inactive_throughout} context_open={} owner_key={} popover_windows={}",
                                             this.context_menu.is_open(),
-                                            popup.owner_key,
-                                            popup.window_count(),
+                                            popover.owner_key,
+                                            popover.window_count(),
                                         ));
                                     }
                                     cx.invalidate();
@@ -815,6 +836,11 @@ mod app {
                 }
                 task_cx
                     .update(move |this, cx| {
+                        if interaction == ContextInteraction::DeactivationDismiss
+                            && let Err(error) = activate_acceptance_application()
+                        {
+                            this.probe.fail_command(error);
+                        }
                         if let Err(error) = post_mouse_action(
                             &this.field,
                             MouseScriptAction::RightDownTarget,
@@ -845,9 +871,9 @@ mod app {
             }
         }
 
-        fn popup_observation(&self) -> PopupObservation {
+        fn popover_observation(&self) -> PopoverObservation {
             let Some(owner) = self.field.window() else {
-                return PopupObservation::default();
+                return PopoverObservation::default();
             };
             let owner_key = owner.isKeyWindow();
             let framework_first_responder = owner
@@ -868,7 +894,7 @@ mod app {
                     _ => {}
                 }
             }
-            PopupObservation {
+            PopoverObservation {
                 owner_key,
                 framework_first_responder,
                 root_windows,
@@ -1097,9 +1123,9 @@ mod app {
         Ok(())
     }
 
-    fn post_popup_pointer(title: &str, x: f64, y: f64, click: bool) -> Result<(), String> {
+    fn post_popover_pointer(title: &str, x: f64, y: f64, click: bool) -> Result<(), String> {
         let mtm = MainThreadMarker::new()
-            .ok_or_else(|| "popup acceptance action left the AppKit thread".to_owned())?;
+            .ok_or_else(|| "popover acceptance action left the AppKit thread".to_owned())?;
         let application = NSApplication::sharedApplication(mtm);
         let mut windows = Vec::new();
         for window in application.windows().iter_retained() {
@@ -1130,24 +1156,24 @@ mod app {
         post_pointer_to_window(target, title, x, y, click)
     }
 
-    fn send_escape_to_key_popup() -> Result<(), String> {
+    fn send_escape_to_key_popover() -> Result<(), String> {
         const MACOS_ESCAPE_KEY_CODE: u16 = 53;
 
         let mtm = MainThreadMarker::new()
-            .ok_or_else(|| "popup Escape acceptance action left the AppKit thread".to_owned())?;
+            .ok_or_else(|| "popover Escape acceptance action left the AppKit thread".to_owned())?;
         let application = NSApplication::sharedApplication(mtm);
         let window = application
             .keyWindow()
-            .ok_or_else(|| "no AppKit key window received popup Escape".to_owned())?;
+            .ok_or_else(|| "no AppKit key window received popover Escape".to_owned())?;
         let title = window.title().to_string();
         if title != "Context menu" && title != "Context submenu" {
             return Err(format!(
-                "popup Escape key window was {title:?}, expected the context-menu chain"
+                "popover Escape key window was {title:?}, expected the context-menu chain"
             ));
         }
         let content = window
             .contentView()
-            .ok_or_else(|| format!("popup Escape key window {title:?} has no content view"))?;
+            .ok_or_else(|| format!("popover Escape key window {title:?} has no content view"))?;
         let characters = NSString::from_str("\u{1b}");
         // SAFETY: This is a retained, window-local keyboard event delivered synchronously to the
         // live Winit content responder on AppKit's application thread. Key code 53 is the stable
@@ -1166,8 +1192,8 @@ mod app {
                 MACOS_ESCAPE_KEY_CODE,
             )
         }
-        .ok_or_else(|| format!("AppKit refused Escape for popup window {title:?}"))?;
-        // Calling the responder is deterministic for nonactivating popup panels while preserving
+        .ok_or_else(|| format!("AppKit refused Escape for popover window {title:?}"))?;
+        // Calling the responder is deterministic for nonactivating popover panels while preserving
         // Winit's production `keyDown:` translation and QuickGUI's normal KeyboardInput route.
         unsafe { content.keyDown(&event) };
         Ok(())
@@ -1200,6 +1226,29 @@ mod app {
         };
         if !activated {
             return Err("Finder rejected the cooperative activation handoff".to_owned());
+        }
+        Ok(())
+    }
+
+    fn activate_acceptance_application() -> Result<(), String> {
+        let mtm = MainThreadMarker::new().ok_or_else(|| {
+            "application activation acceptance action left the AppKit thread".to_owned()
+        })?;
+        let application = NSApplication::sharedApplication(mtm);
+        // SAFETY: Application activation state is queried on AppKit's main thread.
+        if unsafe { application.isActive() } {
+            return Ok(());
+        }
+        // SAFETY: The current process application is retained and activated from its AppKit
+        // thread. This explicit reset starts the next independent handoff cycle.
+        let activated = unsafe {
+            NSRunningApplication::currentApplication()
+                .activateWithOptions(NSApplicationActivationOptions(0))
+        };
+        if !activated {
+            return Err(
+                "the acceptance application could not begin its next activation cycle".to_owned(),
+            );
         }
         Ok(())
     }
@@ -1241,7 +1290,7 @@ mod app {
     ) -> Result<(), String> {
         let content = window
             .contentView()
-            .ok_or_else(|| format!("popup window {title:?} has no content view"))?;
+            .ok_or_else(|| format!("popover window {title:?} has no content view"))?;
         let location = NSPoint::new(x, content.bounds().size.height - y);
         let events: &[(NSEventType, isize, f32, isize)] = if click {
             &[
@@ -1269,17 +1318,16 @@ mod app {
                 )
             }
             .ok_or_else(|| {
-                format!("AppKit refused {event_type:?} for popup window {title:?}")
+                format!("AppKit refused {event_type:?} for popover window {title:?}")
             })?;
-            // Nonactivating popup panels are not reliably selected by the application's shared
-            // event queue. Invoke the live Winit content responder exactly as AppKit would so all
-            // three events reach one retained popup even while key-window state is transitioning.
+            // Invoke the live Winit content responder exactly as AppKit would so all three events
+            // reach one retained popover while key-window state is transitioning.
             unsafe {
                 match event_type {
                     NSEventType::MouseMoved => content.mouseMoved(&event),
                     NSEventType::LeftMouseDown => content.mouseDown(&event),
                     NSEventType::LeftMouseUp => content.mouseUp(&event),
-                    _ => unreachable!("popup acceptance uses only move and primary click events"),
+                    _ => unreachable!("popover acceptance uses only move and primary click events"),
                 }
             }
         }
@@ -1437,7 +1485,7 @@ mod app {
                 cx.mouse_down_listener("acceptance-mouse-target", |this, _event, cx| {
                     this.mouse.push_trace("target-down-right-stop");
                     // The earlier outside-click probe intentionally blurs retained focus. Give
-                    // every context-menu cycle an exact owner focus to preserve so the popup gate
+                    // every context-menu cycle an exact owner focus to preserve so the popover gate
                     // cannot pass by merely returning native key-window focus.
                     cx.focus(FocusHandle::new(FRAMEWORK_FOCUS_ID));
                     cx.stop_propagation();
@@ -1484,10 +1532,10 @@ mod app {
             let observation = self.native_observation(self.probe.observes_document_chrome());
             let window_state = cx.window_state();
             let framework_focus_active = cx.is_focused(cx.focus_handle(FRAMEWORK_FOCUS_ID));
-            let popup = if self.probe.observes_context_menu() {
-                self.popup_observation()
+            let popover = if self.probe.observes_context_menu() {
+                self.popover_observation()
             } else {
-                PopupObservation::default()
+                PopoverObservation::default()
             };
             let action = self.probe.observe(
                 ProbeObservation {
@@ -1498,7 +1546,7 @@ mod app {
                     native: observation,
                     window_state,
                     framework_focus_active,
-                    popup,
+                    popover,
                     context_menu_open_observed: self.context_open_observed,
                     context_submenu_hover_observed: self.context_submenu_hover_observed,
                     context_action_received: self.context_action_received,
@@ -1570,14 +1618,14 @@ mod app {
                 mouse_target,
                 ContextMenuLayout::new(176.0, 32.0).vertical_padding(4.0),
                 |_view, _event| {
-                    let submenu = PopupMenu::new([PopupMenuItem::action(
+                    let submenu = PopoverMenu::new([PopoverMenuItem::action(
                         "accept-context-command",
                         "Accept context command",
                         ContextAcceptanceCommand,
                     )])
                     .expect("the static acceptance context submenu is valid");
                     Some(
-                        PopupMenu::new([PopupMenuItem::submenu(
+                        PopoverMenu::new([PopoverMenuItem::submenu(
                             "accept-context-submenu",
                             "Hover submenu",
                             submenu,
@@ -1592,7 +1640,7 @@ mod app {
                         .bg(Color::rgb8(27, 31, 40))
                         .border(1.0, Color::rgb8(81, 91, 112))
                 },
-                |item, state: PopupMenuItemState| {
+                |item, state: PopoverMenuItemState| {
                     div()
                         .w_full()
                         .px_2()
@@ -1684,14 +1732,14 @@ mod app {
     }
 
     #[derive(Clone, Copy, Default)]
-    struct PopupObservation {
+    struct PopoverObservation {
         owner_key: bool,
         framework_first_responder: bool,
         root_windows: usize,
         submenu_windows: usize,
     }
 
-    impl PopupObservation {
+    impl PopoverObservation {
         const fn window_count(self) -> usize {
             self.root_windows.saturating_add(self.submenu_windows)
         }
@@ -1749,7 +1797,7 @@ mod app {
         native: NativeObservation,
         window_state: WindowState,
         framework_focus_active: bool,
-        popup: PopupObservation,
+        popover: PopoverObservation,
         context_menu_open_observed: bool,
         context_submenu_hover_observed: bool,
         context_action_received: bool,
@@ -1871,7 +1919,7 @@ mod app {
         context_menu_deactivation_dismiss_cycles_completed: usize,
         context_menu_deactivation_no_focus_steal_cycles: usize,
         context_menu_deactivation_teardown_cycles: usize,
-        max_context_popup_windows: usize,
+        max_context_popover_windows: usize,
         initial_native_mount: bool,
         native_detach_observed: bool,
         native_remount_observed: bool,
@@ -1979,8 +2027,8 @@ mod app {
             interaction: ContextInteraction,
             samples: ResizeSamples,
         },
-        PopupSoakSettling {
-            stage: PopupSoakSampleStage,
+        PopoverSoakSettling {
+            stage: PopoverSoakSampleStage,
             deadline: Instant,
             samples: ResizeSamples,
         },
@@ -2018,7 +2066,7 @@ mod app {
     }
 
     #[derive(Clone, Copy, Debug)]
-    enum PopupSoakSampleStage {
+    enum PopoverSoakSampleStage {
         Baseline,
         Final,
     }
@@ -2100,7 +2148,7 @@ mod app {
         menu_closed: bool,
         owner_window_focused: bool,
         framework_focus_active: bool,
-        popup: PopupObservation,
+        popover: PopoverObservation,
         inactive_teardown_observed: bool,
     }
 
@@ -2115,7 +2163,7 @@ mod app {
             menu_closed,
             owner_window_focused,
             framework_focus_active,
-            popup,
+            popover,
             inactive_teardown_observed,
         } = observation;
         let action_matches = match interaction {
@@ -2134,13 +2182,13 @@ mod app {
         };
         let native_focus_matches = match interaction {
             ContextInteraction::DeactivationDismiss => {
-                !owner_window_focused && !popup.owner_key && popup.framework_first_responder
+                !owner_window_focused && !popover.owner_key && popover.framework_first_responder
             }
-            ContextInteraction::SoakCommand => popup.framework_first_responder,
+            ContextInteraction::SoakCommand => popover.framework_first_responder,
             ContextInteraction::Command
             | ContextInteraction::OutsideDismiss
             | ContextInteraction::EscapeDismiss => {
-                owner_window_focused && popup.owner_key && popup.framework_first_responder
+                owner_window_focused && popover.owner_key && popover.framework_first_responder
             }
         };
         menu_open_observed
@@ -2150,7 +2198,7 @@ mod app {
             && menu_closed
             && framework_focus_active
             && native_focus_matches
-            && popup.window_count() == 0
+            && popover.window_count() == 0
     }
 
     impl ProbePhase {
@@ -2186,9 +2234,9 @@ mod app {
                         "context-menu-application-deactivation"
                     }
                 },
-                Self::PopupSoakSettling { stage, .. } => match stage {
-                    PopupSoakSampleStage::Baseline => "context-menu-soak-baseline",
-                    PopupSoakSampleStage::Final => "context-menu-soak-final",
+                Self::PopoverSoakSettling { stage, .. } => match stage {
+                    PopoverSoakSampleStage::Baseline => "context-menu-soak-baseline",
+                    PopoverSoakSampleStage::Final => "context-menu-soak-final",
                 },
                 Self::Settling { .. } => "settling",
                 Self::Idle { .. } => "idle",
@@ -2256,11 +2304,11 @@ mod app {
         context_menu_deactivation_dismiss_cycles_completed: usize,
         context_menu_deactivation_no_focus_steal_cycles: usize,
         context_menu_deactivation_teardown_cycles: usize,
-        max_context_popup_windows: usize,
+        max_context_popover_windows: usize,
         last_context_owner_window_focused: bool,
         last_context_framework_focus_active: bool,
         last_context_inactive_teardown_observed: bool,
-        last_context_popup: PopupObservation,
+        last_context_popover: PopoverObservation,
         window_commands_completed: usize,
         command_failures: Vec<String>,
     }
@@ -2309,11 +2357,11 @@ mod app {
                 context_menu_deactivation_dismiss_cycles_completed: 0,
                 context_menu_deactivation_no_focus_steal_cycles: 0,
                 context_menu_deactivation_teardown_cycles: 0,
-                max_context_popup_windows: 0,
+                max_context_popover_windows: 0,
                 last_context_owner_window_focused: false,
                 last_context_framework_focus_active: false,
                 last_context_inactive_teardown_observed: false,
-                last_context_popup: PopupObservation::default(),
+                last_context_popover: PopoverObservation::default(),
                 window_commands_completed: 0,
                 command_failures: Vec::new(),
             }
@@ -2332,7 +2380,7 @@ mod app {
                 native,
                 window_state,
                 framework_focus_active,
-                popup,
+                popover,
                 context_menu_open_observed,
                 context_submenu_hover_observed,
                 context_action_received,
@@ -2354,13 +2402,13 @@ mod app {
             self.context_submenu_hover_observed |= context_submenu_hover_observed;
             self.context_menu_action_received |= context_action_received;
             self.context_menu_close_observed |= context_menu_closed;
-            self.max_context_popup_windows =
-                self.max_context_popup_windows.max(popup.window_count());
+            self.max_context_popover_windows =
+                self.max_context_popover_windows.max(popover.window_count());
             if matches!(self.phase, ProbePhase::ContextMenu { .. }) {
                 self.last_context_owner_window_focused = window_state.focused;
                 self.last_context_framework_focus_active = framework_focus_active;
                 self.last_context_inactive_teardown_observed = context_inactive_teardown_observed;
-                self.last_context_popup = popup;
+                self.last_context_popover = popover;
             }
 
             if metrics.frame_number == 0 || metrics.frame_number == self.last_frame {
@@ -2372,7 +2420,7 @@ mod app {
                     | ProbePhase::MousePriming { .. }
                     | ProbePhase::Mouse { .. } => ProbeAction::Observe,
                     ProbePhase::ContextMenu { .. } => ProbeAction::Observe,
-                    ProbePhase::PopupSoakSettling { deadline, .. }
+                    ProbePhase::PopoverSoakSettling { deadline, .. }
                     | ProbePhase::Settling { deadline, .. }
                     | ProbePhase::Idle { deadline, .. } => ProbeAction::Wait(deadline),
                     ProbePhase::Finished => ProbeAction::Exit,
@@ -2665,7 +2713,7 @@ mod app {
                             menu_closed: context_menu_closed,
                             owner_window_focused: window_state.focused,
                             framework_focus_active,
-                            popup,
+                            popover,
                             inactive_teardown_observed: context_inactive_teardown_observed,
                         },
                     ) {
@@ -2765,8 +2813,8 @@ mod app {
                                     let deadline = now
                                         .checked_add(CONTEXT_MENU_SOAK_SETTLE_DURATION)
                                         .unwrap_or(now);
-                                    self.phase = ProbePhase::PopupSoakSettling {
-                                        stage: PopupSoakSampleStage::Baseline,
+                                    self.phase = ProbePhase::PopoverSoakSettling {
+                                        stage: PopoverSoakSampleStage::Baseline,
                                         deadline,
                                         samples,
                                     };
@@ -2784,8 +2832,8 @@ mod app {
                                     let deadline = now
                                         .checked_add(CONTEXT_MENU_SOAK_SETTLE_DURATION)
                                         .unwrap_or(now);
-                                    self.phase = ProbePhase::PopupSoakSettling {
-                                        stage: PopupSoakSampleStage::Final,
+                                    self.phase = ProbePhase::PopoverSoakSettling {
+                                        stage: PopoverSoakSampleStage::Final,
                                         deadline,
                                         samples,
                                     };
@@ -2827,13 +2875,13 @@ mod app {
                         ProbeAction::Observe
                     }
                 }
-                ProbePhase::PopupSoakSettling {
+                ProbePhase::PopoverSoakSettling {
                     stage,
                     deadline,
                     samples,
                 } => {
                     if now < deadline {
-                        self.phase = ProbePhase::PopupSoakSettling {
+                        self.phase = ProbePhase::PopoverSoakSettling {
                             stage,
                             deadline,
                             samples,
@@ -2848,7 +2896,7 @@ mod app {
                             }
                         };
                         match stage {
-                            PopupSoakSampleStage::Baseline => {
+                            PopoverSoakSampleStage::Baseline => {
                                 self.context_menu_soak_baseline_memory = Some(memory);
                                 let interaction = ContextInteraction::SoakCommand;
                                 let cycle = self.context_menu_soak_cycles_completed;
@@ -2858,7 +2906,7 @@ mod app {
                                 };
                                 ProbeAction::ReopenContext { interaction, cycle }
                             }
-                            PopupSoakSampleStage::Final => {
+                            PopoverSoakSampleStage::Final => {
                                 self.context_menu_soak_final_memory = Some(memory);
                                 let interaction = ContextInteraction::DeactivationDismiss;
                                 self.phase = ProbePhase::ContextMenu {
@@ -3046,7 +3094,7 @@ mod app {
                     .context_menu_deactivation_no_focus_steal_cycles,
                 context_menu_deactivation_teardown_cycles: self
                     .context_menu_deactivation_teardown_cycles,
-                max_context_popup_windows: self.max_context_popup_windows,
+                max_context_popover_windows: self.max_context_popover_windows,
                 initial_native_mount: self.initial_native_mount,
                 native_detach_observed: self.native_detach_observed,
                 native_remount_observed: self.native_remount_observed,
@@ -3088,7 +3136,7 @@ mod app {
             self.failed.store(true, Ordering::Relaxed);
             self.phase = ProbePhase::Finished;
             emit_line(&format!(
-                "QUICKGUI_ACCEPTANCE_ERROR timeout_seconds={} phase={phase} window_commands_completed={} context_menu_open={} context_activation_scheduled={} context_menu_cycles_completed={} context_menu_outside_dismiss_cycles_completed={} context_menu_escape_dismiss_cycles_completed={} context_menu_soak_cycles_completed={} context_menu_deactivation_dismiss_cycles_completed={} context_menu_open_observed={} context_submenu_hover_observed={} context_menu_action_received={} context_menu_close_observed={} inactive_teardown_observed={} owner_window_focused={} framework_focus_active={} owner_key={} framework_first_responder={} context_popup_windows={} max_context_popup_windows={} native_mouse_actions={} mouse_trace={:?} failures={:?}",
+                "QUICKGUI_ACCEPTANCE_ERROR timeout_seconds={} phase={phase} window_commands_completed={} context_menu_open={} context_activation_scheduled={} context_menu_cycles_completed={} context_menu_outside_dismiss_cycles_completed={} context_menu_escape_dismiss_cycles_completed={} context_menu_soak_cycles_completed={} context_menu_deactivation_dismiss_cycles_completed={} context_menu_open_observed={} context_submenu_hover_observed={} context_menu_action_received={} context_menu_close_observed={} inactive_teardown_observed={} owner_window_focused={} framework_focus_active={} owner_key={} framework_first_responder={} context_popover_windows={} max_context_popover_windows={} native_mouse_actions={} mouse_trace={:?} failures={:?}",
                 WATCHDOG_DURATION.as_secs(),
                 self.window_commands_completed,
                 context_menu_open,
@@ -3105,10 +3153,10 @@ mod app {
                 self.last_context_inactive_teardown_observed,
                 self.last_context_owner_window_focused,
                 self.last_context_framework_focus_active,
-                self.last_context_popup.owner_key,
-                self.last_context_popup.framework_first_responder,
-                self.last_context_popup.window_count(),
-                self.max_context_popup_windows,
+                self.last_context_popover.owner_key,
+                self.last_context_popover.framework_first_responder,
+                self.last_context_popover.window_count(),
+                self.max_context_popover_windows,
                 mouse.native_actions_scheduled,
                 mouse.dispatch_trace,
                 self.command_failures,
@@ -3510,10 +3558,10 @@ mod app {
                 ));
             }
         }
-        if report.max_context_popup_windows < 1 || report.max_context_popup_windows > 2 {
+        if report.max_context_popover_windows < 1 || report.max_context_popover_windows > 2 {
             report.failures.push(format!(
-                "max_context_popup_windows was {}, expected 1..=2",
-                report.max_context_popup_windows
+                "max_context_popover_windows was {}, expected 1..=2",
+                report.max_context_popover_windows
             ));
         }
         for (name, passed) in [
@@ -3736,7 +3784,7 @@ mod app {
 
         #[test]
         fn context_cycle_requires_interaction_specific_focus_and_complete_native_teardown() {
-            let restored = PopupObservation {
+            let restored = PopoverObservation {
                 owner_key: true,
                 framework_first_responder: true,
                 root_windows: 0,
@@ -3749,7 +3797,7 @@ mod app {
                 menu_closed: true,
                 owner_window_focused: true,
                 framework_focus_active: true,
-                popup: restored,
+                popover: restored,
                 inactive_teardown_observed: false,
             };
             assert!(context_cycle_complete(
@@ -3759,7 +3807,7 @@ mod app {
             assert!(!context_cycle_complete(
                 ContextInteraction::Command,
                 ContextCycleObservation {
-                    popup: PopupObservation {
+                    popover: PopoverObservation {
                         root_windows: 1,
                         ..restored
                     },
@@ -3770,7 +3818,7 @@ mod app {
                 ContextInteraction::SoakCommand,
                 ContextCycleObservation {
                     owner_window_focused: false,
-                    popup: PopupObservation {
+                    popover: PopoverObservation {
                         owner_key: false,
                         ..restored
                     },
@@ -3794,7 +3842,7 @@ mod app {
             assert!(!context_cycle_complete(
                 ContextInteraction::Command,
                 ContextCycleObservation {
-                    popup: PopupObservation {
+                    popover: PopoverObservation {
                         owner_key: false,
                         ..restored
                     },
@@ -3829,7 +3877,7 @@ mod app {
                     action_received: false,
                     inactive_teardown_observed: true,
                     owner_window_focused: false,
-                    popup: PopupObservation {
+                    popover: PopoverObservation {
                         owner_key: false,
                         ..restored
                     },
@@ -3841,7 +3889,7 @@ mod app {
                 ContextCycleObservation {
                     action_received: false,
                     owner_window_focused: false,
-                    popup: PopupObservation {
+                    popover: PopoverObservation {
                         owner_key: false,
                         ..restored
                     },

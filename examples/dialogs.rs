@@ -56,7 +56,7 @@ impl View for DialogGallery {
             dialog.focus_initial(cx);
             cx.invalidate();
         });
-        let dismiss_dialog = cx.dismiss_listener(dialog.popup_id(), |view, cx| {
+        let dismiss_dialog = cx.dismiss_listener(dialog.popover_id(), |view, cx| {
             view.dialog_open = false;
             view.alert_open = false;
             view.status = Arc::from("Dialog dismissed");
@@ -79,7 +79,7 @@ impl View for DialogGallery {
             alert.focus_initial(cx);
             cx.invalidate();
         });
-        let dismiss_alert = cx.dismiss_listener(alert.popup_id(), |view, cx| {
+        let dismiss_alert = cx.dismiss_listener(alert.popover_id(), |view, cx| {
             view.alert_open = false;
             view.status = Arc::from("Delete cancelled with Escape");
             cx.invalidate();
@@ -151,8 +151,8 @@ impl View for DialogGallery {
             );
 
         if self.dialog_open {
-            let popup = dialog
-                .popup_part(
+            let popover = dialog
+                .popover_part(
                     div()
                         .relative()
                         .w(460.0)
@@ -227,13 +227,13 @@ impl View for DialogGallery {
                 dialog
                     .root_part(div().p_6().flex_row().items_center().justify_center())
                     .child(dialog.backdrop_part(div().bg(colors.backdrop)))
-                    .child(popup),
+                    .child(popover),
             );
         }
 
         if self.alert_open {
-            let popup = alert
-                .popup_part(
+            let popover = alert
+                .popover_part(
                     div()
                         .relative()
                         .w(400.0)
@@ -276,7 +276,7 @@ impl View for DialogGallery {
                     .root_part(div().p_6().flex_row().items_center().justify_center())
                     .z_index(1)
                     .child(alert.backdrop_part(div().bg(colors.backdrop_strong)))
-                    .child(popup),
+                    .child(popover),
             );
         }
 

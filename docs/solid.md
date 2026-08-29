@@ -5,8 +5,8 @@ QuickGUI includes an experimental Bun host split into two unstyled packages:
 - `@quickgui/native` owns the N-API boundary, application loop, per-window retained trees, binary
   mutation batches, window-routed event queue, and renderer-owned `Window` lifecycle.
 - `@quickgui/solid` owns Solid 2 JSX compilation, fine-grained reactive updates, and the host
-  components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, and `VirtualList`, plus the
-  `createRenderer` adapter passed to a native `Window`.
+  components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `VirtualList`, and
+  `Popover`/`SystemPopover`, plus the `createRenderer` adapter passed to a native `Window`.
 
 The renderer does not use a webview or virtual DOM. Solid updates the affected retained native
 nodes, and one binary batch crosses N-API before QuickGUI invalidates the WGPU window.
@@ -25,8 +25,8 @@ process only after its first native window is ready. The CLI owns the Solid comp
 applications do not need a Bun preload or a special start command.
 
 ```tsx
-import { app, Dialog, type NativeNode, Window } from "@quickgui/native";
-import { Button, Text, View, createRenderer } from "@quickgui/solid";
+import { app, Dialog, Window } from "@quickgui/native";
+import { Button, Popover, SystemPopover, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
 function Counter() {
@@ -151,31 +151,56 @@ Filter-extension enforcement differs between native backends, so validate the re
 The runnable version, including directory selection, is in
 [`examples/file-dialog-solid`](../examples/file-dialog-solid).
 
-Pass a mounted node as `anchor` to create a parent-owned native popup surface. Placement is resolved
-against the display work area, so the popup can extend beyond its parent window and flips or slides
-back on screen when needed:
+`SystemPopover` uses compound `Root`, `Trigger`, and `Content` parts. `Root` is a logical coordinator
+that renders no native element, `Trigger` stays in the owner window, and only `Content` mounts
+through a separate Solid renderer in the native child window. Unmounting the content or root
+disposes that renderer and closes the window. Placement resolves against the display work area, so
+the surface can extend beyond its owner and flips or slides back on screen when needed:
 
 ```tsx
-let trigger: NativeNode | undefined;
+const [systemOpen, setSystemOpen] = createSignal(false);
 
-<Button ref={(node) => { trigger = node; }} onClick={() => {
-  if (!trigger) return;
-  new Window({
-    title: "Provider settings",
-    anchor: trigger,
-    width: 420,
-    height: 280,
-    placement: "bottom-end",
-    gap: 8,
-    renderer: createRenderer(() => {
-      const window = Window.getCurrentWindow();
-      return <ProviderSettings close={() => window.close()} />;
-    }),
-  });
-}}>
-  Provider settings
-</Button>
+<SystemPopover.Root open={systemOpen()} onOpenChange={setSystemOpen}>
+  <SystemPopover.Trigger>Provider settings</SystemPopover.Trigger>
+  <SystemPopover.Content
+    width={420}
+    height={280}
+    placement="bottom-end"
+    gap={8}
+    viewportMargin={12}
+  >
+    <ProviderSettings close={() => setSystemOpen(false)} />
+  </SystemPopover.Content>
+</SystemPopover.Root>
 ```
+
+Pressing an open `SystemPopover.Trigger` dismisses the active native popover and consumes that anchor
+press. The trigger does not receive a later click against already-dismissed controlled state, so the
+compound state settles closed instead of immediately reopening it.
+
+For a normal popover inside the current window, use the same compound parts under `Popover.Root`.
+It uses QuickGUI core's retained overlay plane and remains physically bounded by the owner window.
+An enabled Escape or outside press invokes `onOpenChange(false, details)` on either root:
+
+```tsx
+const [open, setOpen] = createSignal(false);
+
+<Popover.Root open={open()} onOpenChange={setOpen}>
+  <Popover.Trigger>Toggle details</Popover.Trigger>
+  <Popover.Content
+    width={320}
+    height={180}
+    placement="bottom-start"
+    gap={8}
+    viewportMargin={12}
+  >
+    <ProviderDetails />
+  </Popover.Content>
+</Popover.Root>
+```
+
+The runnable [`popover-solid` example](../examples/popover-solid) places `SystemPopover` and
+`Popover` side by side so their renderer ownership and window-edge behavior are visible.
 
 All Solid host components are intentionally unstyled. Their `style` prop uses web-shaped names
 for the currently bridged QuickGUI layout, text, paint, overflow, cursor, positioning, and
@@ -203,19 +228,20 @@ heights, preserves the scroll anchor, and can follow an appended chat tail:
 The runnable source and CLI configuration are in
 [`examples/solid`](../examples/solid).
 
-The [Solid AI chat example](../examples/ai-chat-solid) adds Vercel AI SDK/DeepSeek streaming, an
-anchored provider-settings popup with a revealable password field, controlled input, cancellation,
-paced updates, and core Markdown rendering.
+The [Solid AI chat example](../examples/ai-chat-solid) adds Vercel AI SDK/DeepSeek streaming, a
+`SystemPopover` provider-settings surface with a revealable password field, controlled input,
+cancellation, paced updates, and core Markdown rendering.
 
 ## Current boundary
 
-This vertical slice supports dynamically created independent and anchored native windows,
-native alert and file dialogs with optional window ownership, retained view/text/button/input/Markdown nodes,
-variable-height virtual lists, password inputs, reactive properties and text,
-click/hover/input/submit events, web-shaped Flexbox styling, hidden-inset titlebars, traffic-light
-positioning, a stable real-`.app` development host, and self-contained production packaging on the
-current macOS target. It is not yet the full Rust API surface:
-declarative popup parts, menus, native child views, accessibility actions, every native binary
-target, and dedicated JavaScript performance gates still need bindings and acceptance.
+This vertical slice supports dynamically created independent native windows, controlled system
+and retained in-window popovers, native alert and file dialogs with optional window
+ownership, retained view/text/button/input/Markdown nodes, variable-height virtual lists, password
+inputs, reactive properties and text, click/hover/input/submit/dismiss events, web-shaped Flexbox
+styling, hidden-inset titlebars, traffic-light positioning, a stable real-`.app` development host,
+and self-contained production packaging on the
+current macOS target. It is not yet the full Rust API surface: additional popover parts such as
+backdrops and arrows, menus, native child views, accessibility actions, every native binary target,
+and dedicated JavaScript performance gates still need bindings and acceptance.
 
 Return to the [documentation index](README.md).

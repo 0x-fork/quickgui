@@ -53,7 +53,7 @@ The right-side panel reports:
 - retained and parent IDs, element kind, hierarchy depth, and whether the ID was explicit;
 - layout bounds, effective clip, portal state, scene plane, z-index, and source order;
 - exact hit-region flags, cursor, app region, and focus/focus-path state;
-- accessibility role, disabled/selected/checked-mixed/expanded/invalid state, popup kind and
+- accessibility role, disabled/selected/checked-mixed/expanded/invalid state, popover kind and
   controlled target, autocomplete mode, active descendant, table row/column counts and indices,
   tree level/set position, sort direction, and bounded label/value/description/validation text;
 - previous completed-frame CPU/wall metrics, draw counts, and bounded cache sizes;

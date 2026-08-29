@@ -6,6 +6,8 @@ import {
   Button,
   Input,
   Markdown,
+  Popover,
+  SystemPopover,
   Text,
   View,
   VirtualList,
@@ -22,6 +24,13 @@ describe("Solid universal host", () => {
     expect("app" in solid).toBe(false);
     expect("Window" in solid).toBe(false);
     expect("Dialog" in solid).toBe(false);
+  });
+
+  test("exports only the Content compound part", () => {
+    expect(Popover.Content).toBe(solid.PopoverContent);
+    expect(SystemPopover.Content).toBe(solid.SystemPopoverContent);
+    expect(Object.keys(Popover)).toEqual(["Root", "Trigger", "Content"]);
+    expect(Object.keys(SystemPopover)).toEqual(["Root", "Trigger", "Content"]);
   });
 
   test("retains an unattached native tree without crossing N-API", () => {
@@ -196,5 +205,150 @@ describe("Solid universal host", () => {
     expect(list.properties.get(PropertyCode.ListAlignment)).toBe("bottom");
     expect(list.properties.get(PropertyCode.FollowMode)).toBe("tail");
     expect(list.children).toHaveLength(1);
+  });
+
+  test("coordinates Popover compound parts without exposing the native anchor", async () => {
+    await app.whenReady();
+    const [open, setOpen] = createSignal(false);
+    const changes: Array<{ open: boolean; reason: string }> = [];
+    const window = new Window({
+      title: "Popover compound parts",
+      renderer: createRenderer(() =>
+        createComponent(Popover.Root, {
+          get open() {
+            return open();
+          },
+          dismissOnEscape: false,
+          onOpenChange(nextOpen, details) {
+            changes.push({ open: nextOpen, reason: details.reason });
+            setOpen(nextOpen);
+          },
+          get children() {
+            return [
+              createComponent(Popover.Trigger, { children: "Open" }),
+              createComponent(Popover.Content, {
+                width: 240,
+                height: 120,
+                placement: "bottom-end",
+                gap: 8,
+                viewportMargin: 12,
+                children: createComponent(Text, { children: "Popover" }),
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const trigger = window.root.children[0]!;
+    expect(window.root.children).toEqual([trigger]);
+
+    window._dispatchEvent("click", trigger.id);
+
+    const popover = window.root.children[1]!;
+    expect(open()).toBe(true);
+    expect(popover.properties.get(PropertyCode.AnchorTarget)).toBe(String(trigger.id));
+    expect(popover.properties.get(PropertyCode.AnchorPlacement)).toBe("bottom-end");
+    expect(popover.properties.get(PropertyCode.AnchorGap)).toBe(8);
+    expect(popover.properties.get(PropertyCode.ViewportMargin)).toBe(12);
+    expect(popover.properties.get(PropertyCode.DismissOnEscape)).toBe(false);
+    expect(popover.properties.get(PropertyCode.DismissOnPointerOutside)).toBe(true);
+    expect(popover.properties.get(PropertyCode.DismissListener)).toBe(true);
+    expect(popover.children[0]?.children[0]?.text).toBe("Popover");
+    expect(changes).toEqual([{ open: true, reason: "trigger-press" }]);
+
+    popover.listeners.get("dismiss")!(new QuickGuiEvent("dismiss", popover));
+    expect(open()).toBe(false);
+    expect(window.root.children).toEqual([trigger]);
+    expect(changes).toEqual([
+      { open: true, reason: "trigger-press" },
+      { open: false, reason: "dismiss" },
+    ]);
+    window.close();
+  });
+
+  test("mounts SystemPopover.Content into a separately disposed renderer", async () => {
+    await app.whenReady();
+    const [open, setOpen] = createSignal(false);
+    const changes: Array<{ open: boolean; reason: string }> = [];
+    const owner = new Window({
+      title: "System popover owner",
+      renderer: createRenderer(() =>
+        createComponent(SystemPopover.Root, {
+          get open() {
+            return open();
+          },
+          onOpenChange(nextOpen, details) {
+            changes.push({ open: nextOpen, reason: details.reason });
+            setOpen(nextOpen);
+          },
+          get children() {
+            return [
+              createComponent(SystemPopover.Trigger, { children: "Open" }),
+              createComponent(SystemPopover.Content, {
+                width: 260,
+                height: 140,
+                placement: "bottom-start",
+                gap: 8,
+                viewportMargin: 12,
+                children: createComponent(Text, { children: "Separate root" }),
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const trigger = owner.root.children[0]!;
+    expect(trigger.materialized).toBe(true);
+    expect(trigger.host).toBe(owner);
+    expect(owner.nodes.has(trigger.id)).toBe(true);
+    expect(owner.root.children).toEqual([trigger]);
+
+    owner._dispatchEvent("click", trigger.id);
+    await Promise.resolve();
+
+    const systemWindow = [...app.windows.values()].find((window) => window !== owner);
+    expect(open()).toBe(true);
+    expect(systemWindow).toBeDefined();
+    expect(systemWindow!.root.children).toHaveLength(1);
+    const surface = systemWindow!.root.children[0]!;
+    expect(surface.properties.get(PropertyCode.Width)).toBe(260);
+    expect(surface.properties.get(PropertyCode.Height)).toBe(140);
+    expect(surface.properties.has(PropertyCode.AnchorTarget)).toBe(false);
+    expect(surface.children[0]?.children[0]?.text).toBe("Separate root");
+    expect(changes).toEqual([{ open: true, reason: "trigger-press" }]);
+
+    systemWindow!.close();
+    await Promise.resolve();
+    expect(open()).toBe(false);
+    expect(systemWindow!.closed).toBe(true);
+    expect(systemWindow!.root.children).toHaveLength(0);
+    expect(changes).toEqual([
+      { open: true, reason: "trigger-press" },
+      { open: false, reason: "dismiss" },
+    ]);
+
+    owner._dispatchEvent("click", trigger.id);
+    await Promise.resolve();
+    const reopened = [...app.windows.values()].find((window) => window !== owner);
+    expect(open()).toBe(true);
+    expect(reopened).toBeDefined();
+
+    // AppKit consumes a press on the active SystemPopover anchor before JavaScript dispatch. A
+    // native close still settles the controlled JSX lifecycle normally.
+    reopened!.close();
+    await Promise.resolve();
+    expect(open()).toBe(false);
+    expect(changes.at(-1)).toEqual({ open: false, reason: "dismiss" });
+    expect([...app.windows.values()]).toEqual([owner]);
+
+    owner._dispatchEvent("click", trigger.id);
+    await Promise.resolve();
+    const ownedPopover = [...app.windows.values()].find((window) => window !== owner);
+    expect(ownedPopover).toBeDefined();
+    owner.close();
+    expect(ownedPopover!.closed).toBe(true);
+    expect([...app.windows.values()]).toEqual([]);
   });
 });

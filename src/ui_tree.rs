@@ -8,7 +8,7 @@ use std::{
 
 use accesskit::{
     Action, Affine, AutoComplete as NativeAccessibilityAutoComplete,
-    HasPopup as AccessibilityHasPopup, Invalid as AccessibilityInvalid, Live,
+    HasPopup as AccessibilityHasPopover, Invalid as AccessibilityInvalid, Live,
     Node as AccessibilityNode, NodeId as AccessibilityNodeId,
     Orientation as NativeAccessibilityOrientation, Rect as AccessibilityRect, Role,
     SortDirection as NativeAccessibilitySortDirection, TextPosition, TextSelection,
@@ -23,7 +23,7 @@ use thiserror::Error;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    AccessibilityAutoComplete, AccessibilityPopup, AccessibilityRole, AccessibilitySortDirection,
+    AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AccessibilitySortDirection,
     AnchorPlacement, AnimatedImage, AppRegion, BoxShadow, Canvas, Color, CursorStyle,
     CustomShaderPrimitive, DispatchPhase, Element, ElementId, ImagePrimitive, Insets, Interpolate,
     KeyContext, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
@@ -8622,13 +8622,13 @@ fn build_accessibility_nodes(
     {
         node.push_described_by(accessibility_id(target));
     }
-    if let Some(popup) = element.accessibility.has_popup {
-        node.set_has_popup(match popup {
-            AccessibilityPopup::Menu => AccessibilityHasPopup::Menu,
-            AccessibilityPopup::ListBox => AccessibilityHasPopup::Listbox,
-            AccessibilityPopup::Tree => AccessibilityHasPopup::Tree,
-            AccessibilityPopup::Grid => AccessibilityHasPopup::Grid,
-            AccessibilityPopup::Dialog => AccessibilityHasPopup::Dialog,
+    if let Some(popover) = element.accessibility.has_popover {
+        node.set_has_popup(match popover {
+            AccessibilityPopover::Menu => AccessibilityHasPopover::Menu,
+            AccessibilityPopover::ListBox => AccessibilityHasPopover::Listbox,
+            AccessibilityPopover::Tree => AccessibilityHasPopover::Tree,
+            AccessibilityPopover::Grid => AccessibilityHasPopover::Grid,
+            AccessibilityPopover::Dialog => AccessibilityHasPopover::Dialog,
         });
     }
     if let Some(behavior) = element.accessibility.auto_complete {
@@ -10992,7 +10992,7 @@ mod tests {
     }
 
     #[test]
-    fn popover_trigger_projects_expansion_popup_kind_and_mounted_control_relation() {
+    fn popover_trigger_projects_expansion_popover_kind_and_mounted_control_relation() {
         let trigger_id = ElementId::new(51);
         let surface_id = ElementId::new(52);
         let popover =
@@ -11001,7 +11001,7 @@ mod tests {
             div()
                 .child(popover.trigger().child("Open details"))
                 .child(
-                    popover.positioner_part(div().child(popover.popup_part(div()).children([
+                    popover.positioner_part(div().child(popover.popover_part(div()).children([
                         popover.title_part(text("Details")),
                         popover.description_part(text("More information about this item.")),
                     ]))),
@@ -11024,14 +11024,17 @@ mod tests {
         let trigger = node(trigger_id);
         assert_eq!(trigger.role(), Role::Button);
         assert_eq!(trigger.is_expanded(), Some(true));
-        assert_eq!(trigger.has_popup(), Some(AccessibilityHasPopup::Dialog));
+        assert_eq!(trigger.has_popup(), Some(AccessibilityHasPopover::Dialog));
         assert_eq!(trigger.controls(), &[accessibility_id(surface_id)]);
-        let popup = node(surface_id);
-        assert_eq!(popup.role(), Role::Dialog);
-        assert!(popup.supports_action(Action::Focus));
-        assert_eq!(popup.labelled_by(), &[accessibility_id(popover.title_id())]);
+        let popover_node = node(surface_id);
+        assert_eq!(popover_node.role(), Role::Dialog);
+        assert!(popover_node.supports_action(Action::Focus));
         assert_eq!(
-            popup.described_by(),
+            popover_node.labelled_by(),
+            &[accessibility_id(popover.title_id())]
+        );
+        assert_eq!(
+            popover_node.described_by(),
             &[accessibility_id(popover.description_id())]
         );
     }
@@ -11041,7 +11044,7 @@ mod tests {
         let dialog = crate::Dialog::alert("delete-dialog", true);
         let root = dialog.root_part(div()).children([
             dialog.backdrop_part(div()),
-            dialog.popup_part(div()).children([
+            dialog.popover_part(div()).children([
                 dialog.title_part(text("Delete file?")),
                 dialog.description_part(text("This cannot be undone.")),
             ]),
@@ -11061,12 +11064,15 @@ mod tests {
                 .expect("dialog accessibility node")
         };
 
-        let popup = node(dialog.popup_id());
-        assert_eq!(popup.role(), Role::AlertDialog);
-        assert!(popup.is_modal());
-        assert_eq!(popup.labelled_by(), &[accessibility_id(dialog.title_id())]);
+        let popover = node(dialog.popover_id());
+        assert_eq!(popover.role(), Role::AlertDialog);
+        assert!(popover.is_modal());
         assert_eq!(
-            popup.described_by(),
+            popover.labelled_by(),
+            &[accessibility_id(dialog.title_id())]
+        );
+        assert_eq!(
+            popover.described_by(),
             &[accessibility_id(dialog.description_id())]
         );
         assert_eq!(node(dialog.title_id()).label(), Some("Delete file?"));
@@ -11088,7 +11094,7 @@ mod tests {
                 .accessibility_role(AccessibilityRole::EditableComboBox)
                 .accessibility_label("Fruit")
                 .accessibility_expanded(true)
-                .accessibility_has_popup(AccessibilityPopup::ListBox)
+                .accessibility_has_popover(AccessibilityPopover::ListBox)
                 .accessibility_auto_complete(AccessibilityAutoComplete::List)
                 .accessibility_controls(listbox_id)
                 .accessibility_active_descendant(option_id),
@@ -11111,7 +11117,7 @@ mod tests {
                 .accessibility_label("Letter")
                 .accessibility_value("Gamma")
                 .accessibility_expanded(false)
-                .accessibility_has_popup(AccessibilityPopup::ListBox)
+                .accessibility_has_popover(AccessibilityPopover::ListBox)
                 .child("Gamma"),
         ]);
         let mut tree = UiTree::new();
@@ -11136,7 +11142,7 @@ mod tests {
             Some(NativeAccessibilityAutoComplete::List)
         );
         assert_eq!(editable.is_expanded(), Some(true));
-        assert_eq!(editable.has_popup(), Some(AccessibilityHasPopup::Listbox));
+        assert_eq!(editable.has_popup(), Some(AccessibilityHasPopover::Listbox));
         assert_eq!(editable.controls(), &[accessibility_id(listbox_id)]);
         assert_eq!(
             editable.active_descendant(),

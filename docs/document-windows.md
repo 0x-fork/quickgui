@@ -81,7 +81,7 @@ changed.
 ## AppKit ownership
 
 Every window without a tabbing identifier is explicitly `Disallowed`; opting one window in cannot
-silently group utility, dialog, popup, or ordinary application windows. QuickGUI captures
+silently group utility, dialog, popover, or ordinary application windows. QuickGUI captures
 AppKit's process-wide automatic-tabbing policy when the first opted-in window appears, enables it
 for the lifetime of opted-in windows, and restores the exact prior value after the last one closes
 or the runtime exits.

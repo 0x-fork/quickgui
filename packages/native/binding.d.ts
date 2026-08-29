@@ -12,15 +12,15 @@ export declare function closeHostedWindow(app: number, window: number): boolean
 
 export declare function closeWindow(app: number, window: number): boolean
 
-export declare function createAnchoredWindow(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
-
 export declare function createApp(): number
-
-export declare function createHostedAnchoredWindow(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
 export declare function createHostedApp(): number
 
+export declare function createHostedSystemPopover(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
+
 export declare function createHostedWindow(app: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
+
+export declare function createSystemPopover(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
 export declare function createWindow(app: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
@@ -236,12 +236,15 @@ export interface NativeWindowOptions {
   trafficLightY?: number
   transparent?: boolean
   blur?: boolean
-  popupPlacement?: string
-  popupGap?: number
-  popupOffsetX?: number
-  popupOffsetY?: number
-  popupGrab?: boolean
-  popupAcceptsKeyFocus?: boolean
+  popoverPlacement?: string
+  popoverGap?: number
+  popoverOffsetX?: number
+  popoverOffsetY?: number
+  popoverViewportMargin?: number
+  popoverDismissOnEscape?: boolean
+  popoverDismissOnPointerOutside?: boolean
+  popoverGrab?: boolean
+  popoverAcceptsKeyFocus?: boolean
 }
 
 export interface NativeWindowState {

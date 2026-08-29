@@ -5,35 +5,35 @@
 ## macOS window chrome
 
 `WindowKind::Dialog` is parent-modal and is presented as an AppKit sheet only after its hidden GPU
-frame is complete. `Floating` uses its native elevated level. `PopUp` and `AnchoredPopup` are
+frame is complete. `Floating` uses its native elevated level. `Popover` and `SystemPopover` are
 nonactivating panels, remain transient across spaces, and hide on application deactivation. Each
 kind uses the same retained view, input, accessibility, scheduling, and bounded renderer ownership
 as a normal window.
 
 Anchored placement converts a validated parent-content rectangle into AppKit's global screen space
 before GPU initialization, selects the visible work area containing the anchor, then deterministically
-flips, slides, or resizes according to `PopupConstraintAdjustment`. It resolves again immediately
+flips, slides, or resizes according to `PopoverConstraintAdjustment`. It resolves again immediately
 before first presentation, so hidden first-frame preparation cannot flash on the wrong display.
 The panel is attached with `addChildWindow`, and hiding or closing removes that native relation.
-Menu-style grabs share one lazy local/global mouse-monitor pair across at most 32 nested popups;
+Menu-style grabs share one lazy local/global mouse-monitor pair across at most 32 nested popovers;
 only the top entry can request dismissal, duplicate requests coalesce, and removing the last entry
 removes both monitors. Escape and focus loss use the normal serialized Winit event path. Passive
-panels retain no monitor, timer, thread, or redraw source. An explicit `close_popup_chain()` closes
+panels retain no monitor, timer, thread, or redraw source. An explicit `close_popover_chain()` closes
 the root and all descendants child-first and returns native keyboard focus to the nearest
-non-popup owner; outside-click and application-deactivation dismissal do not steal focus back from
+non-popover owner; outside-click and application-deactivation dismissal do not steal focus back from
 another window. The live acceptance gate repeats a real root-menu/submenu activation eight times
 and then dismisses four more open root/submenu chains from real owner-window presses plus four from
-native Escape key events delivered through the key popup's AppKit/Winit responder. It requires
-owner key-window, Winit first-responder, retained-focus, and zero-popup teardown state after every
+native Escape key events delivered through the key popover's AppKit/Winit responder. It requires
+owner key-window, Winit first-responder, retained-focus, and zero-popover teardown state after every
 active-application cycle, and requires both dismissal routes not to deliver a menu command. The
 gate next sustains 128 complete root-plus-submenu command lifecycles at an explicit 50 ms
 inter-cycle cadence. It samples current process RSS and physical footprint after cycle 32 and cycle
 128, requires positive growth to stay within 16 MiB and 24 MiB respectively, and requires no more
-than two popup windows at once. A final cooperative activation handoff to Finder verifies that
+than two popover windows at once. A final cooperative activation handoff to Finder verifies that
 application deactivation tears down the complete native chain while leaving the owner non-key and
 unfocused; it deliberately queues no focus restoration that could steal activation back. The run
 then finishes with zero extra idle frames. Those scripted surfaces are deliberately too short-lived
-to serve as human-visible popup QA; they prove native creation, routing, and teardown instead.
+to serve as human-visible popover QA; they prove native creation, routing, and teardown instead.
 
 `TitleBarStyle::HiddenInset` keeps AppKit's standard window controls while making the titlebar
 transparent and extending the Winit content view through it. Traffic-light coordinates are logical

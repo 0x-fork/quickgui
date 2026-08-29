@@ -160,9 +160,9 @@ impl View for GestureDemo {
             .gap_5()
             .bg(Color::rgb8(14, 17, 23))
             .text_color(Color::rgb8(237, 240, 246))
-            .child(text("Native trackpad input").text_2xl().font_bold())
+            .child(text("Native gesture input").text_2xl().font_bold())
             .child(
-                text("Scroll to zoom, pinch, rotate, two-finger double-tap, Force Touch, or place raw touch contacts inside the pad. Input is delivered from the native event loop only; idle windows install no monitor and render no frames.")
+                text("Scroll to zoom, pinch, rotate, two-finger double-tap, or Force Touch. Direct-touch hardware can also place raw contacts inside the pad. Input is delivered from the native event loop only; idle windows install no monitor and render no frames.")
                     .max_w(720.0)
                     .wrap()
                     .text_sm()

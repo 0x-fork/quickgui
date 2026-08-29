@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, AutocompleteOptionState, AutocompletePopupLayout, AutocompleteSelectionBehavior,
+    App, AutocompleteOptionState, AutocompletePopoverLayout, AutocompleteSelectionBehavior,
     AutocompleteState, Color, HighlightStyle, IntoElement, PickerItem, StyledText, TitleBarStyle,
     View, ViewContext, combobox_key_bindings, div, text, text_input,
 };
@@ -40,7 +40,7 @@ impl AutocompleteGallery {
         });
         let mut symbols = AutocompleteState::new(items)
             .expect("autocomplete source is bounded")
-            .with_layout(AutocompletePopupLayout::new(460.0, 44.0).max_visible_rows(7));
+            .with_layout(AutocompletePopoverLayout::new(460.0, 44.0).max_visible_rows(7));
         symbols.set_selection_behavior(AutocompleteSelectionBehavior::CompleteInput);
         Self {
             symbols,
@@ -226,7 +226,7 @@ impl View for AutocompleteGallery {
                             .gap_3()
                             .child(text("20,000 local suggestions").font_semibold())
                             .child(
-                                text("The application styles the input, popup, and rows. QuickGUI owns free-form value behavior, bounded fuzzy results, native placement beyond the window edge, keyboard and pointer interaction, and the owner-tree accessibility proxy.")
+                                text("The application styles the input, popover, and rows. QuickGUI owns free-form value behavior, bounded fuzzy results, native placement beyond the window edge, keyboard and pointer interaction, and the owner-tree accessibility proxy.")
                                     .wrap()
                                     .text_sm()
                                     .text_color(muted),

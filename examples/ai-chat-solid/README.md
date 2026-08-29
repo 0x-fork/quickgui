@@ -8,7 +8,7 @@ cd examples/ai-chat-solid
 bun run dev
 ```
 
-Set `DEEPSEEK_API_KEY` before launching, or enter the key in the anchored Provider settings popup.
+Set `DEEPSEEK_API_KEY` before launching, or enter the key in the `SystemPopover` Provider settings.
 The field is masked by default and has an explicit Reveal/Hide control. On macOS, keys entered in the
 UI are stored in Keychain and never written into chat data. The sidebar keeps up to 100 conversations,
 restores the active conversation, and keeps a separate draft for every chat in the platform's local

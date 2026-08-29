@@ -111,6 +111,6 @@ Run the caller-styled gallery with:
 cargo run --release --example tabs
 ```
 
-The gallery is one ordinary in-window view—no popup or native child surface. It demonstrates
+The gallery is one ordinary in-window view—no popover or native child surface. It demonstrates
 horizontal manual activation, vertical automatic activation, disabled-item skipping, looping,
 retained and unmounted panels, application-owned indicators, and wrapped content.

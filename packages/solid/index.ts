@@ -1,10 +1,24 @@
 import { createRenderer as createUniversalRenderer } from "@solidjs/universal";
-import { flush as flushSolid, type Element as SolidElement } from "solid-js";
+import {
+  createContext,
+  createSignal,
+  flush as flushSolid,
+  getOwner,
+  omit,
+  onCleanup,
+  runWithOwner,
+  Show,
+  type Element as SolidElement,
+  useContext,
+} from "solid-js";
 import {
   type NativeElementName,
   type NativeEventListener,
+  type PopoverPlacement,
   NativeNode,
   PropertyCode,
+  QuickGuiEvent,
+  Window,
   cleanupNativeNodes,
   createNativeElement,
   createNativeSentinel,
@@ -108,6 +122,11 @@ const properties: Record<string, PropertyEntry> = {
   overscan: { code: PropertyCode.Overscan },
   listAlignment: { code: PropertyCode.ListAlignment },
   followMode: { code: PropertyCode.FollowMode },
+  anchorPlacement: { code: PropertyCode.AnchorPlacement },
+  anchorGap: { code: PropertyCode.AnchorGap },
+  viewportMargin: { code: PropertyCode.ViewportMargin },
+  dismissOnEscape: { code: PropertyCode.DismissOnEscape },
+  dismissOnPointerOutside: { code: PropertyCode.DismissOnPointerOutside },
 };
 
 const colorProperties = new Set([
@@ -125,6 +144,16 @@ function setProperty(node: NativeNode, name: string, value: PropertyInput, previ
   if (name === "children" || name === "ref" || name === "key") return;
   if (name === "style") {
     setStyle(node, value, previous);
+    return;
+  }
+  if (name === "anchor") {
+    if (value === null || value === undefined || value === false) {
+      setNativeProperty(node, PropertyCode.AnchorTarget, null);
+    } else if (value instanceof NativeNode) {
+      setNativeProperty(node, PropertyCode.AnchorTarget, String(value.id));
+    } else {
+      throw new TypeError("QuickGUI popover anchor must be a NativeNode");
+    }
     return;
   }
   const event = eventName(name);
@@ -200,8 +229,13 @@ function setFlex(node: NativeNode, value: PropertyInput): void {
 }
 
 function normalizeValue(value: PropertyInput, code: PropertyCode): boolean | number | string | null {
-  if (value === null || value === undefined || value === false) {
-    return code === PropertyCode.Disabled ? false : null;
+  if (value === null || value === undefined) return null;
+  if (value === false) {
+    return code === PropertyCode.Disabled ||
+      code === PropertyCode.DismissOnEscape ||
+      code === PropertyCode.DismissOnPointerOutside
+      ? false
+      : null;
   }
   if (colorProperties.has(code)) return parseColor(value as number | string);
   if (typeof value === "number" || typeof value === "boolean") return value;
@@ -228,7 +262,9 @@ function isLengthProperty(code: PropertyCode): boolean {
     code === PropertyCode.BorderRadius ||
     code === PropertyCode.FontSize ||
     code === PropertyCode.LineHeight ||
-    (code >= PropertyCode.Top && code <= PropertyCode.Left)
+    (code >= PropertyCode.Top && code <= PropertyCode.Left) ||
+    code === PropertyCode.AnchorGap ||
+    code === PropertyCode.ViewportMargin
   );
 }
 
@@ -238,6 +274,7 @@ function eventName(name: string):
   | "mouseleave"
   | "input"
   | "submit"
+  | "dismiss"
   | undefined {
   switch (name.toLowerCase()) {
     case "onclick":
@@ -254,6 +291,9 @@ function eventName(name: string):
       return "input";
     case "onsubmit":
       return "submit";
+    case "ondismiss":
+    case "on:dismiss":
+      return "dismiss";
     default:
       return undefined;
   }
@@ -349,6 +389,250 @@ export function VirtualList(props: JSX.VirtualListProps): NativeNode {
   universal.spread(node, props);
   return node;
 }
+
+export type PopoverOpenChangeReason = "trigger-press" | "dismiss";
+
+export interface PopoverOpenChangeDetails {
+  reason: PopoverOpenChangeReason;
+  event: QuickGuiEvent;
+}
+
+type PopoverSurface = "popover" | "system-popover";
+
+interface PopoverContextValue {
+  surface: PopoverSurface;
+  open: () => boolean;
+  anchor: () => NativeNode | undefined;
+  dismissOnEscape: () => boolean;
+  dismissOnPointerOutside: () => boolean;
+  registerTrigger: (node: NativeNode) => void;
+  unregisterTrigger: (node: NativeNode) => void;
+  toggleFromTrigger: (node: NativeNode, event: QuickGuiEvent) => void;
+  dismiss: (event: QuickGuiEvent) => void;
+}
+
+const PopoverContext = createContext<PopoverContextValue>();
+
+function createPopoverRoot(
+  surface: PopoverSurface,
+  props: JSX.PopoverRootProps,
+): NativeNode {
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(props.defaultOpen ?? false);
+  const [anchor, setAnchor] = createSignal<NativeNode>();
+  const triggers = new Set<NativeNode>();
+  const open = () => props.open ?? uncontrolledOpen();
+
+  const changeOpen = (
+    nextOpen: boolean,
+    reason: PopoverOpenChangeReason,
+    event: QuickGuiEvent,
+  ) => {
+    if (props.open === undefined) setUncontrolledOpen(nextOpen);
+    props.onOpenChange?.(nextOpen, { reason, event });
+  };
+
+  const context: PopoverContextValue = {
+    surface,
+    open,
+    anchor,
+    dismissOnEscape: () => props.dismissOnEscape ?? true,
+    dismissOnPointerOutside: () => props.dismissOnPointerOutside ?? true,
+    registerTrigger(node) {
+      triggers.add(node);
+      if (!anchor()) setAnchor(node);
+    },
+    unregisterTrigger(node) {
+      triggers.delete(node);
+      if (anchor() === node) setAnchor(triggers.values().next().value);
+    },
+    toggleFromTrigger(node, event) {
+      setAnchor(node);
+      changeOpen(!open(), "trigger-press", event);
+    },
+    dismiss(event) {
+      changeOpen(false, "dismiss", event);
+    },
+  };
+
+  return PopoverContext({
+    value: context,
+    get children() {
+      return props.children as SolidElement;
+    },
+  }) as unknown as NativeNode;
+}
+
+/** Logical root for an in-window popover. It does not create a native element. */
+export function PopoverRoot(props: JSX.PopoverRootProps): NativeNode {
+  return createPopoverRoot("popover", props);
+}
+
+/** Logical root for a native-window popover. It does not create a native window by itself. */
+export function SystemPopoverRoot(props: JSX.PopoverRootProps): NativeNode {
+  return createPopoverRoot("system-popover", props);
+}
+
+/** Trigger button shared by in-window and system popover roots. */
+export function PopoverTrigger(props: JSX.PopoverTriggerProps): NativeNode {
+  const context = useContext(PopoverContext);
+  let trigger: NativeNode | undefined;
+  const forwarded = universal.mergeProps(props, {
+    ref: [
+      (node: NativeNode) => {
+        trigger = node;
+        context.registerTrigger(node);
+      },
+      props.ref,
+    ].filter((value): value is (node: NativeNode) => void => typeof value === "function"),
+    onClick(event: QuickGuiEvent) {
+      props.onClick?.(event);
+      if (!event.defaultPrevented && trigger) context.toggleFromTrigger(trigger, event);
+    },
+  }) as JSX.PopoverTriggerProps;
+  const node = universal.createElement("button");
+  universal.spread(node, forwarded);
+  onCleanup(() => {
+    if (trigger) context.unregisterTrigger(trigger);
+  });
+  return node;
+}
+
+function requirePopoverSurface(expected: PopoverSurface, component: string): PopoverContextValue {
+  const context = useContext(PopoverContext);
+  if (context.surface !== expected) {
+    const root = expected === "popover" ? "Popover.Root" : "SystemPopover.Root";
+    throw new TypeError(`${component} must be used inside <${root}>`);
+  }
+  return context;
+}
+
+function createInWindowPopoverContent(
+  props: JSX.PopoverContentProps,
+  context: PopoverContextValue,
+  anchor: NativeNode,
+): NativeNode {
+  const surface = omit(props, "placement", "gap", "viewportMargin") as JSX.NativeProps;
+  const node = universal.createElement("view");
+  const forwarded = universal.mergeProps(surface, {
+    anchor,
+    get anchorPlacement() {
+      return props.placement ?? "bottom-start";
+    },
+    get anchorGap() {
+      return props.gap ?? 6;
+    },
+    get viewportMargin() {
+      return props.viewportMargin ?? 8;
+    },
+    get dismissOnEscape() {
+      return context.dismissOnEscape();
+    },
+    get dismissOnPointerOutside() {
+      return context.dismissOnPointerOutside();
+    },
+    onDismiss(event: QuickGuiEvent) {
+      context.dismiss(event);
+    },
+  }) as object;
+  universal.spread(node, forwarded);
+  return node;
+}
+
+/** Popover content rendered in the current window's retained overlay plane. */
+export function PopoverContent(props: JSX.PopoverContentProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Content");
+  return Show({
+    keyed: true,
+    get when() {
+      return context.open() ? context.anchor() : undefined;
+    },
+    children: (anchor) => createInWindowPopoverContent(props, context, anchor),
+  }) as unknown as NativeNode;
+}
+
+function createSystemPopoverContent(
+  props: JSX.PopoverContentProps,
+  context: PopoverContextValue,
+  anchor: NativeNode,
+): NativeNode {
+  const owner = getOwner();
+  const placeholder = createNativeSentinel();
+  const surface = omit(props, "placement", "gap", "viewportMargin") as JSX.NativeProps;
+  let systemWindow: Window | undefined;
+  let disposing = false;
+
+  // Initial JSX is rendered before its owner Window has a native handle. The microtask also makes
+  // later mounts use the same lifecycle path instead of special-casing initial render.
+  queueMicrotask(() => {
+    if (disposing) return;
+    systemWindow = new Window({
+      title: "QuickGUI System Popover",
+      anchor,
+      width: props.width,
+      height: props.height,
+      placement: props.placement ?? "bottom-start",
+      gap: props.gap ?? 6,
+      viewportMargin: props.viewportMargin ?? 8,
+      dismissOnEscape: context.dismissOnEscape(),
+      dismissOnPointerOutside: context.dismissOnPointerOutside(),
+      renderer: (window) =>
+        runWithOwner(owner, () =>
+          createRenderer(() => {
+            const node = universal.createElement("view");
+            universal.spread(node, surface);
+            return node;
+          })(window),
+        ),
+    });
+    systemWindow.onClose(() => {
+      systemWindow = undefined;
+      if (disposing) return;
+      // Leave the native close/disposal stack before controlled state unmounts this portal.
+      queueMicrotask(() => {
+        if (disposing) return;
+        try {
+          context.dismiss(new QuickGuiEvent("dismiss", placeholder));
+        } finally {
+          flushSolid();
+        }
+      });
+    });
+  });
+
+  onCleanup(() => {
+    disposing = true;
+    systemWindow?.close();
+    systemWindow = undefined;
+  });
+
+  return placeholder;
+}
+
+/** Popover content rendered through a separate Solid renderer in a native child window. */
+export function SystemPopoverContent(props: JSX.PopoverContentProps): NativeNode {
+  const context = requirePopoverSurface("system-popover", "SystemPopover.Content");
+  return Show({
+    keyed: true,
+    get when() {
+      return context.open() ? context.anchor() : undefined;
+    },
+    children: (anchor) => createSystemPopoverContent(props, context, anchor),
+  }) as unknown as NativeNode;
+}
+
+/** Base-UI-shaped compound parts for an in-window retained popover. */
+export const Popover = Object.assign(PopoverRoot, {
+  Root: PopoverRoot,
+  Trigger: PopoverTrigger,
+  Content: PopoverContent,
+});
+
+/** Compound popover parts whose content uses a native child window. */
+export const SystemPopover = Object.assign(SystemPopoverRoot, {
+  Root: SystemPopoverRoot,
+  Trigger: PopoverTrigger,
+  Content: SystemPopoverContent,
+});
 
 export function createRenderer(code: () => JSX.Element): WindowRenderer {
   return (window) => {
@@ -497,6 +781,25 @@ export namespace JSX {
     overscan?: number;
     listAlignment?: "top" | "bottom";
     followMode?: "normal" | "tail";
+  }
+
+  export interface PopoverRootProps {
+    children?: unknown;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, details: PopoverOpenChangeDetails) => void;
+    dismissOnEscape?: boolean;
+    dismissOnPointerOutside?: boolean;
+  }
+
+  export interface PopoverTriggerProps extends NativeProps {}
+
+  export interface PopoverContentProps extends NativeProps {
+    width: number;
+    height: number;
+    placement?: PopoverPlacement;
+    gap?: number;
+    viewportMargin?: number;
   }
 
   export interface IntrinsicElements {

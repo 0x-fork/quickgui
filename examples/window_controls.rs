@@ -37,7 +37,7 @@ impl WindowLauncher {
             .window_kind(kind)
             .show(!delayed_show)
             .background(Color::rgb8(17, 20, 26));
-        if matches!(kind, WindowKind::Floating | WindowKind::PopUp) {
+        if matches!(kind, WindowKind::Floating | WindowKind::Popover) {
             options = options.title_bar_style(TitleBarStyle::Hidden);
         }
         let handle = cx.open_window(
@@ -85,8 +85,8 @@ impl View for WindowLauncher {
         let open_floating = cx.listener("open-floating", |this, cx| {
             this.open(WindowKind::Floating, false, cx)
         });
-        let open_popup = cx.listener("open-popup", |this, cx| {
-            this.open(WindowKind::PopUp, false, cx)
+        let open_popover = cx.listener("open-popover", |this, cx| {
+            this.open(WindowKind::Popover, false, cx)
         });
         let open_dialog = cx.listener("open-dialog", |this, cx| {
             this.open(WindowKind::Dialog, false, cx)
@@ -166,7 +166,7 @@ impl View for WindowLauncher {
                         card()
                             .child(text("Open a parent-owned window").font_semibold())
                             .child(
-                                text("Dialog becomes an AppKit sheet. Floating and PopUp use elevated native levels; the hidden window proves first-frame preparation and one-shot timer wakeup.")
+                                text("Dialog becomes an AppKit sheet. Floating and Popover use elevated native levels; the hidden window proves first-frame preparation and one-shot timer wakeup.")
                                     .wrap()
                                     .text_sm()
                                     .text_color(Color::rgb8(157, 167, 185)),
@@ -178,7 +178,7 @@ impl View for WindowLauncher {
                                     .gap_2()
                                     .child(Self::control("Normal").on_click(open_normal))
                                     .child(Self::control("Floating").on_click(open_floating))
-                                    .child(Self::control("PopUp").on_click(open_popup))
+                                    .child(Self::control("Popover").on_click(open_popover))
                                     .child(Self::control("Dialog sheet").on_click(open_dialog))
                                     .child(Self::control("Hidden → show").on_click(open_hidden)),
                             ),
@@ -471,8 +471,8 @@ impl View for ControlledWindow {
 fn kind_label(kind: WindowKind) -> &'static str {
     match kind {
         WindowKind::Normal => "Normal",
-        WindowKind::PopUp => "PopUp",
-        WindowKind::AnchoredPopup => "AnchoredPopup",
+        WindowKind::Popover => "Popover",
+        WindowKind::SystemPopover => "SystemPopover",
         WindowKind::Floating => "Floating",
         WindowKind::Dialog => "Dialog",
     }

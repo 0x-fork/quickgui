@@ -59,11 +59,11 @@ geometry for restoration code without mutating a native window.
 The runtime retains at most 64 descriptions and 4 KiB per display name. Public snapshots contain
 Rust values and `Arc` storage, not `NSScreen`, Core Foundation UUID, or video-mode objects. macOS
 refreshes the snapshot from `NSApplicationDidChangeScreenParametersNotification`, application
-activation, and once immediately before each non-popup native window-creation batch. Every ordinary
+activation, and once immediately before each non-popover native window-creation batch. Every ordinary
 window performs one final refresh after its hidden first Metal presentation and before it is shown.
 That boundary handles a left/right Dock whose reserved width changes when a
 command-line app receives its Dock presence, and reconciles only automatic `.display(id)` centering;
-explicit global bounds remain untouched. Anchored-popup churn performs no monitor query. Unchanged
+explicit global bounds remain untouched. System-popover churn performs no monitor query. Unchanged
 snapshots do not invalidate a view. There is no monitor query in `about_to_wait`, no timer, no idle
 frame, and no display polling thread.
 

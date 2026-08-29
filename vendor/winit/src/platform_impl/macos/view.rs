@@ -8,8 +8,8 @@ use objc2::runtime::{AnyObject, Sel};
 use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClass};
 use objc2_app_kit::{
     NSApplication, NSCursor, NSEvent, NSEventPhase, NSEventType, NSResponder, NSTextInputClient,
-    NSTouchPhase, NSTouchTypeMask, NSTrackingRectTag, NSView, NSViewFrameDidChangeNotification,
-    NSWindow,
+    NSTouchPhase, NSTouchType, NSTouchTypeMask, NSTrackingRectTag, NSView,
+    NSViewFrameDidChangeNotification, NSWindow,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSAttributedString, NSAttributedStringKey, NSCopying,
@@ -843,10 +843,12 @@ impl WinitView {
         });
         let this: Retained<Self> = unsafe { msg_send_id![super(this), init] };
 
-        // AppKit delivers no raw touches unless the content view opts into their device types.
-        // Keep resting contacts excluded so a stationary finger creates neither events nor work.
+        // A window-positioned `WindowEvent::Touch` can represent only direct contacts. AppKit's
+        // indirect trackpad touches have device-normalized coordinates and explicitly have no
+        // corresponding screen or view location; routing one through AppKit's view-coordinate
+        // APIs asserts. Keep those contacts on the gesture/scroll paths instead.
         unsafe {
-            this.setAllowedTouchTypes(NSTouchTypeMask::Direct | NSTouchTypeMask::Indirect);
+            this.setAllowedTouchTypes(NSTouchTypeMask::Direct);
             this.setWantsRestingTouches(false);
         }
 
@@ -885,9 +887,14 @@ impl WinitView {
     }
 
     fn queue_touches(&self, event: &NSEvent, native_phase: NSTouchPhase, phase: TouchPhase) {
-        let touches = unsafe { event.touchesMatchingPhase_inView(native_phase, Some(self)) };
+        // Query without converting into view coordinates first. This keeps the callback safe even
+        // if AppKit unexpectedly includes an indirect contact despite `allowedTouchTypes`.
+        let touches = unsafe { event.touchesMatchingPhase_inView(native_phase, None) };
         let scale_factor = self.scale_factor();
         for touch in touches.iter() {
+            if !touch_supports_view_location(unsafe { touch.r#type() }) {
+                continue;
+            }
             let identity = unsafe { touch.identity() };
             let id = Retained::as_ptr(&identity) as usize as u64;
             let point = unsafe { touch.locationInView(Some(self)) };
@@ -1152,6 +1159,10 @@ impl WinitView {
     }
 }
 
+fn touch_supports_view_location(touch_type: NSTouchType) -> bool {
+    touch_type == NSTouchType::Direct
+}
+
 /// Get the mouse button from the NSEvent.
 fn mouse_button(event: &NSEvent) -> MouseButton {
     match unsafe { event.r#type() } {
@@ -1215,5 +1226,16 @@ fn replace_event(event: &NSEvent, option_as_alt: OptionAsAlt) -> Retained<NSEven
         }
     } else {
         event.copy()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn indirect_trackpad_touches_are_not_window_positioned() {
+        assert!(touch_supports_view_location(NSTouchType::Direct));
+        assert!(!touch_supports_view_location(NSTouchType::Indirect));
     }
 }
