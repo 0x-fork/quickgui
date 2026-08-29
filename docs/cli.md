@@ -39,7 +39,8 @@ configured TS/TSX application Worker. Ordinary source edits therefore follow thi
 There is no soft in-isolate reload. If the new source cannot compile or exits before a window is
 ready, the candidate is discarded and the last working app stays open. The generated `.app` is
 self-contained and also works when launched directly; use `quickgui dev` when the CLI should own
-watching and candidate-first process replacement.
+watching and candidate-first process replacement. Quitting the active app also stops the watcher;
+an older app terminated as part of a successful reload does not.
 
 AppKit/Winit permanently owns the process main thread. Bun timers, fetch, streaming, and other
 application work run on the Worker's normal event loop. Bounded command/event queues and a Winit

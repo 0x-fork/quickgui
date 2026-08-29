@@ -17,6 +17,36 @@ export interface DevOptions {
 
 type AppProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
 
+interface ExitingProcess {
+  readonly exited: Promise<number>;
+}
+
+/** @internal */
+export class ActiveProcessMonitor<T extends ExitingProcess> {
+  #active: T | undefined;
+  #closed = false;
+  #onExit: (status: number) => void;
+
+  constructor(onExit: (status: number) => void) {
+    this.#onExit = onExit;
+  }
+
+  get active(): T | undefined {
+    return this.#active;
+  }
+
+  activate(child: T): void {
+    this.#active = child;
+    void child.exited.then((status) => {
+      if (!this.#closed && this.#active === child) this.#onExit(status);
+    });
+  }
+
+  close(): void {
+    this.#closed = true;
+  }
+}
+
 export async function runDev(options: DevOptions): Promise<number> {
   const projectRoot = resolve(options.project);
   const target = options.target ?? hostTarget();
@@ -39,8 +69,12 @@ export async function runDev(options: DevOptions): Promise<number> {
   }
 
   const abortController = new AbortController();
-  let currentProcess: AppProcess | undefined;
   let stopping = false;
+  const processes = new ActiveProcessMonitor<AppProcess>((status) => {
+    if (stopping || abortController.signal.aborted) return;
+    console.log(`[quickgui] App exited (status ${status}); stopping watcher`);
+    abortController.abort();
+  });
   let reloadQueued = false;
   let reloadPromise: Promise<void> | undefined;
   let changedPath: string | undefined;
@@ -59,8 +93,8 @@ export async function runDev(options: DevOptions): Promise<number> {
         await stopApplication(candidate);
         return;
       }
-      const previous = currentProcess;
-      currentProcess = candidate;
+      const previous = processes.active;
+      processes.activate(candidate);
       config = nextConfig;
       build = nextBuild;
       if (previous) await stopApplication(previous);
@@ -107,20 +141,22 @@ export async function runDev(options: DevOptions): Promise<number> {
 
   try {
     try {
-      currentProcess = await launchApplication(build, config, abortController.signal);
-      console.log(`[quickgui] App ready (pid ${currentProcess.pid}); watching for changes`);
+      const child = await launchApplication(build, config, abortController.signal);
+      processes.activate(child);
+      console.log(`[quickgui] App ready (pid ${child.pid}); watching for changes`);
     } catch (error) {
       console.error(`[quickgui] App failed to start; watching for changes.\n${errorMessage(error)}`);
     }
 
-    await waitForShutdown();
+    await waitForShutdown(abortController);
   } finally {
     stopping = true;
+    processes.close();
     abortController.abort();
     if (debounce) clearTimeout(debounce);
     watcher.close();
     if (reloadPromise) await reloadPromise;
-    if (currentProcess) await stopApplication(currentProcess);
+    if (processes.active) await stopApplication(processes.active);
   }
   return 0;
 }
@@ -227,14 +263,17 @@ function isReadyMessage(value: unknown): value is { type: "quickgui-ready" } {
   );
 }
 
-async function waitForShutdown(): Promise<void> {
+async function waitForShutdown(abortController: AbortController): Promise<void> {
+  if (abortController.signal.aborted) return;
   await new Promise<void>((resolvePromise) => {
+    const requestShutdown = (): void => abortController.abort();
     const finish = (): void => {
-      process.off("SIGINT", finish);
-      process.off("SIGTERM", finish);
+      process.off("SIGINT", requestShutdown);
+      process.off("SIGTERM", requestShutdown);
       resolvePromise();
     };
-    process.once("SIGINT", finish);
-    process.once("SIGTERM", finish);
+    process.once("SIGINT", requestShutdown);
+    process.once("SIGTERM", requestShutdown);
+    abortController.signal.addEventListener("abort", finish, { once: true });
   });
 }

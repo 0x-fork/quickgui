@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { parseCliArgs } from "./args.ts";
 import { macInfoPlist, nativeExports } from "./build.ts";
 import { resolveConfig } from "./config.ts";
+import { ActiveProcessMonitor } from "./dev.ts";
 import { initProject } from "./init.ts";
 import { hostTarget, parseTarget } from "./targets.ts";
 
@@ -51,6 +52,32 @@ describe("CLI arguments", () => {
     );
     expect(() => parseTarget("plan9-x64")).toThrow("Unsupported target");
   });
+});
+
+test("dev process monitoring ignores replaced and cleanup exits", async () => {
+  const first = Promise.withResolvers<number>();
+  const second = Promise.withResolvers<number>();
+  const cleanup = Promise.withResolvers<number>();
+  const statuses: number[] = [];
+  const monitor = new ActiveProcessMonitor<{ exited: Promise<number> }>((status) => {
+    statuses.push(status);
+  });
+
+  monitor.activate({ exited: first.promise });
+  monitor.activate({ exited: second.promise });
+  first.resolve(0);
+  await first.promise;
+  expect(statuses).toEqual([]);
+
+  second.resolve(7);
+  await second.promise;
+  expect(statuses).toEqual([7]);
+
+  monitor.close();
+  monitor.activate({ exited: cleanup.promise });
+  cleanup.resolve(0);
+  await cleanup.promise;
+  expect(statuses).toEqual([7]);
 });
 
 describe("project configuration", () => {
