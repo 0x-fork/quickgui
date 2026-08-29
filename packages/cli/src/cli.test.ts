@@ -62,12 +62,14 @@ describe("project configuration", () => {
         identifier: "com.example.great-app",
         entry: "ui/main.tsx",
         resources: ["assets"],
+        protocols: ["QuickGUI", "quickgui+preview", "quickgui"],
       },
       root,
     );
     expect(config.executableName).toBe("My-Great-App");
     expect(config.entry).toBe(join(root, "ui/main.tsx"));
     expect(config.resources).toEqual([join(root, "assets")]);
+    expect(config.protocols).toEqual(["quickgui", "quickgui+preview"]);
     expect(config.macos.minimumSystemVersion).toBe("13.0");
   });
 
@@ -75,6 +77,15 @@ describe("project configuration", () => {
     expect(() =>
       resolveConfig({ name: "Bad", identifier: "not a reverse dns identifier" }, temporaryRoot()),
     ).toThrow("Invalid application identifier");
+  });
+
+  test("rejects an invalid URL scheme", () => {
+    expect(() =>
+      resolveConfig(
+        { name: "Bad", identifier: "com.example.bad", protocols: ["1bad"] },
+        temporaryRoot(),
+      ),
+    ).toThrow("Invalid URL scheme");
   });
 });
 
@@ -88,21 +99,25 @@ test("macOS metadata is escaped and complete", () => {
     buildVersion: "7",
     minimumSystemVersion: "13.0",
     category: "public.app-category.developer-tools",
+    urlSchemes: ["a-and-b", "a+b"],
     iconFile: "AppIcon.icns",
   });
   expect(plist).toContain("<string>A &amp; B</string>");
   expect(plist).toContain("<string>A &lt; B</string>");
   expect(plist).toContain("<key>CFBundleExecutable</key>");
   expect(plist).toContain("<string>AppIcon.icns</string>");
+  expect(plist).toContain("<key>CFBundleURLTypes</key>");
+  expect(plist).toContain("<string>a+b</string>");
 });
 
-test("standalone native shim exports native dialog entrypoints", () => {
-  expect(nativeExports).toContain("showDialog");
-  expect(nativeExports).toContain("showHostedDialog");
-  expect(nativeExports).toContain("showOpenDialog");
-  expect(nativeExports).toContain("showHostedOpenDialog");
-  expect(nativeExports).toContain("showSaveDialog");
-  expect(nativeExports).toContain("showHostedSaveDialog");
+test("standalone native shim exports every generated native function", () => {
+  const declarations = readFileSync(join(import.meta.dir, "../../native/binding.d.ts"), "utf8");
+  const generated = [...declarations.matchAll(/export declare function (\w+)/g)]
+    .map((match) => match[1])
+    .filter((name): name is string => name !== undefined)
+    .sort();
+  const shimExports: string[] = [...nativeExports];
+  expect(shimExports.sort()).toEqual(generated);
 });
 
 test("project initialization renders a complete Solid scaffold", async () => {

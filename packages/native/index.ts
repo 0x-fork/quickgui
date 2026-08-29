@@ -17,8 +17,67 @@ import {
   ROOT_NODE_ID,
   type NativePropertyValue,
 } from "./protocol.ts";
+import {
+  NativeNode,
+  QuickGuiEvent,
+  cleanupNativeNodes,
+  createNativeElement,
+  createNativeSentinel,
+  createNativeText,
+  getNativeFirstChild,
+  getNativeNextSibling,
+  getNativeParent,
+  insertNativeNode,
+  isNativeText,
+  parseColor,
+  removeNativeNode,
+  replaceNativeText,
+  setNativeEventListener,
+  setNativeProperty,
+  type ColorValue,
+  type NativeElementName,
+  type NativeEventListener,
+  type NativeEventType,
+} from "./native-tree.ts";
+import {
+  configureSystemContext,
+  dispatchSystemEvent,
+  getNativeWindowState,
+  onNativeWindowStateChange,
+  performNativeWindowAction,
+  rejectPendingSystemRequests,
+  removeNativeWindowStateListeners,
+} from "./system.ts";
+import {
+  type SecondInstanceEvent,
+  urlsFromArguments,
+} from "./single-instance.ts";
 
 export { PropertyCode } from "./protocol.ts";
+export {
+  NativeNode,
+  QuickGuiEvent,
+  cleanupNativeNodes,
+  createNativeElement,
+  createNativeSentinel,
+  createNativeText,
+  getNativeFirstChild,
+  getNativeNextSibling,
+  getNativeParent,
+  insertNativeNode,
+  isNativeText,
+  parseColor,
+  removeNativeNode,
+  replaceNativeText,
+  setNativeEventListener,
+  setNativeProperty,
+} from "./native-tree.ts";
+export type {
+  ColorValue,
+  NativeElementName,
+  NativeEventListener,
+  NativeEventType,
+} from "./native-tree.ts";
 export type {
   AlertDialogButton,
   AlertDialogButtonRole,
@@ -31,24 +90,69 @@ export type {
   SaveDialogOptions,
   SaveDialogResult,
 } from "./dialog.ts";
+export {
+  Appearance,
+  Clipboard,
+  GlobalShortcut,
+  Keyboard,
+  Menu,
+  Notifications,
+  PowerMonitor,
+  Screen,
+  Shell,
+  Tray,
+  TrayIcon,
+} from "./system.ts";
+export { AutoStart, SecureStorage, Updater } from "./integrations.ts";
+export { DeepLink } from "./single-instance.ts";
+export type { SecondInstanceEvent } from "./single-instance.ts";
+export type {
+  AutoStartMode,
+  AutoStartOptions,
+  AvailableUpdate,
+  ProtocolRegistrationOptions,
+  UpdateClientOptions,
+} from "./integrations.ts";
+export type {
+  AppearanceMode,
+  AppearancePreference,
+  ClipboardEntry,
+  ClipboardFilesEntry,
+  ClipboardImageEntry,
+  ClipboardItem,
+  ClipboardTextEntry,
+  Display,
+  GlobalShortcutListener,
+  KeyboardLayout,
+  MenuActionItem,
+  MenuDefinition,
+  MenuItem,
+  MenuRole,
+  MenuSeparatorItem,
+  MenuServicesItem,
+  MenuSubmenuItem,
+  NotificationAction,
+  NotificationOptions,
+  NotificationResponse,
+  PowerEvent,
+  Rectangle,
+  TrayEvent,
+  TrayEventType,
+  TrayIconOptions,
+  TrayIconSource,
+  TrayMenuActionItem,
+  TrayMenuItem,
+  TrayMenuSeparatorItem,
+  TrayMenuSubmenuItem,
+  WindowState,
+} from "./system.ts";
+import type {
+  AppearancePreference,
+  KeyboardLayout,
+  NotificationResponse,
+  WindowState,
+} from "./system.ts";
 
-export type ColorValue = number | string;
-export type NativeElementName =
-  | "view"
-  | "div"
-  | "text"
-  | "button"
-  | "input"
-  | "textarea"
-  | "markdown"
-  | "virtual-list";
-export type NativeEventType =
-  | "click"
-  | "mouseenter"
-  | "mouseleave"
-  | "input"
-  | "submit";
-export type NativeEventListener = (event: QuickGuiEvent) => void;
 export type WindowCloseListener = (window: Window) => void;
 export type PopupPlacement =
   | "top-start"
@@ -89,7 +193,16 @@ export interface RunOptions {
   sliceMs?: number;
 }
 
-type DialogEventKind = "dialog" | "open-dialog" | "save-dialog";
+export interface AppEventMap {
+  openUrls: readonly string[];
+  reopen: { hasVisibleWindows: boolean };
+  systemWake: undefined;
+  keyboardLayoutChange: KeyboardLayout;
+  notificationResponse: NotificationResponse;
+  secondInstance: SecondInstanceEvent;
+}
+
+type DialogEventKind = "alert-dialog" | "open-dialog" | "save-dialog";
 
 type PendingDialog = {
   kind: DialogEventKind;
@@ -98,68 +211,36 @@ type PendingDialog = {
   reject: (reason: Error) => void;
 };
 
-let nextNodeId = 1;
 let activeApp: App | undefined;
 const hostedRuntime = process.env.QUICKGUI_APP_WORKER === "1";
+
+configureSystemContext(
+  () => {
+    const app = activeApp;
+    if (!app) throw new Error("create a QuickGUI App before using a native system API");
+    app.start();
+    return { appId: app.nativeId, hosted: hostedRuntime };
+  },
+  (window) => {
+    const app = window?.app ?? activeApp;
+    if (!app) throw new Error("create a QuickGUI App before using a native window API");
+    const resolved = window ?? app.windows.values().next().value;
+    if (!resolved || resolved.closed || app.windows.get(resolved.nativeId) !== resolved) {
+      throw new Error("a native window API requires an open QuickGUI Window");
+    }
+    app.start();
+    return {
+      context: { appId: app.nativeId, hosted: hostedRuntime },
+      window: resolved,
+    };
+  },
+);
 
 const nativeProtocolVersion = binding.protocolVersion();
 if (nativeProtocolVersion !== PROTOCOL_VERSION) {
   throw new Error(
     `QuickGUI native protocol mismatch: JavaScript uses ${PROTOCOL_VERSION}, binding uses ${nativeProtocolVersion}. Reinstall or rebuild @quickgui/native.`,
   );
-}
-
-export class NativeNode {
-  readonly id: number;
-  readonly tag: NativeNodeTag;
-  text: string;
-  parent: NativeNode | undefined;
-  readonly children: NativeNode[] = [];
-  readonly properties = new Map<PropertyCode, NativePropertyValue>();
-  readonly colorProperties = new Set<PropertyCode>();
-  readonly listeners = new Map<NativeEventType, NativeEventListener>();
-  host: Window | undefined;
-  materialized = false;
-
-  constructor(tag: NativeNodeTag, text = "", id = allocateNodeId()) {
-    this.id = id;
-    this.tag = tag;
-    this.text = text;
-  }
-
-  /** Focus this mounted node, matching the web `HTMLElement.focus()` shape. */
-  focus(): boolean {
-    const host = this.host;
-    if (!host || host.closed) return false;
-    host.flush();
-    return hostedRuntime
-      ? binding.focusHostedNode(host.app.nativeId, host.nativeId, this.id)
-      : binding.focusNode(host.app.nativeId, host.nativeId, this.id);
-  }
-}
-
-export class QuickGuiEvent {
-  readonly type: NativeEventType;
-  readonly target: NativeNode;
-  currentTarget: NativeNode;
-  defaultPrevented = false;
-  propagationStopped = false;
-  readonly value: string | undefined;
-
-  constructor(type: NativeEventType, target: NativeNode, value?: string) {
-    this.type = type;
-    this.target = target;
-    this.currentTarget = target;
-    this.value = value;
-  }
-
-  preventDefault(): void {
-    this.defaultPrevented = true;
-  }
-
-  stopPropagation(): void {
-    this.propagationStopped = true;
-  }
 }
 
 export class App {
@@ -170,6 +251,11 @@ export class App {
   #destroyed = false;
   #nextDialogRequest = 1;
   readonly #pendingDialogs = new Map<number, PendingDialog>();
+  #singleInstanceIdentifier: string | undefined;
+  readonly #appEventListeners = new Map<
+    keyof AppEventMap,
+    Set<(payload: unknown) => void>
+  >();
 
   constructor() {
     if (activeApp) {
@@ -211,13 +297,16 @@ export class App {
   #dispatchNativeEvents(events: binding.NativeEvent[]): void {
     for (const event of events) {
       if (
-        event.kind === "dialog" ||
+        event.kind === "alert-dialog" ||
         event.kind === "open-dialog" ||
         event.kind === "save-dialog"
       ) {
         this.#dispatchDialog(event);
         continue;
       }
+      const systemEvent = dispatchSystemEvent(event, (id) => this.windows.get(id));
+      const appEvent = this.#dispatchAppEvent(event);
+      if (systemEvent || appEvent) continue;
       const window = this.windows.get(event.window);
       if (!window) continue;
       if (event.kind === "close") {
@@ -226,6 +315,21 @@ export class App {
         window._dispatchEvent(event.kind as NativeEventType, event.target, event.value);
       }
     }
+  }
+
+  on<K extends keyof AppEventMap>(
+    type: K,
+    listener: (payload: AppEventMap[K]) => void,
+  ): () => void {
+    this.#assertAlive();
+    const listeners = this.#appEventListeners.get(type) ?? new Set();
+    const wrapped = (payload: unknown) => listener(payload as AppEventMap[K]);
+    listeners.add(wrapped);
+    this.#appEventListeners.set(type, listeners);
+    return () => {
+      listeners.delete(wrapped);
+      if (listeners.size === 0) this.#appEventListeners.delete(type);
+    };
   }
 
   async run(options: RunOptions = {}): Promise<number> {
@@ -251,18 +355,123 @@ export class App {
       }
     } finally {
       this.#running = false;
+      this.releaseSingleInstanceLock();
     }
+  }
+
+  async requestSingleInstanceLock(identifier: string): Promise<boolean> {
+    this.#assertAlive();
+    if (this.#singleInstanceIdentifier) {
+      if (this.#singleInstanceIdentifier !== identifier) {
+        throw new Error("this QuickGUI app already owns a different single-instance lock");
+      }
+      return true;
+    }
+    this.start();
+    const acquired = hostedRuntime
+      ? binding.requestHostedSingleInstanceLock(this.nativeId, identifier)
+      : binding.requestSingleInstanceLock(this.nativeId, identifier);
+    if (acquired) this.#singleInstanceIdentifier = identifier;
+    return acquired;
+  }
+
+  releaseSingleInstanceLock(): void {
+    if (!this.#singleInstanceIdentifier || this.#destroyed) return;
+    if (hostedRuntime) binding.releaseHostedSingleInstanceLock(this.nativeId);
+    else binding.releaseSingleInstanceLock(this.nativeId);
+    this.#singleInstanceIdentifier = undefined;
+  }
+
+  /** Request an orderly native shutdown. Returns false after shutdown already began. */
+  quit(): boolean {
+    this.#assertAlive();
+    this.start();
+    return hostedRuntime
+      ? binding.exitHostedApp(this.nativeId)
+      : binding.exitApp(this.nativeId);
   }
 
   destroy(): void {
     if (this.#destroyed) return;
-    this.#rejectDialogs(undefined, new Error("the QuickGUI app was destroyed"));
+    const error = new Error("the QuickGUI app was destroyed");
+    this.#rejectDialogs(undefined, error);
+    rejectPendingSystemRequests(error);
+    this.releaseSingleInstanceLock();
     if (hostedRuntime) binding.destroyHostedApp(this.nativeId);
     else binding.destroyApp(this.nativeId);
     this.#destroyed = true;
+    this.#appEventListeners.clear();
     if (activeApp === this) activeApp = undefined;
     for (const window of this.windows.values()) window._didDestroy();
     this.windows.clear();
+  }
+
+  #dispatchAppEvent(event: binding.NativeEvent): boolean {
+    let type: keyof AppEventMap;
+    let payload: AppEventMap[keyof AppEventMap];
+    if (event.kind === "open-urls") {
+      type = "openUrls";
+      try {
+        const parsed: unknown = JSON.parse(event.value ?? "[]");
+        payload = Array.isArray(parsed) && parsed.every((url) => typeof url === "string") ? parsed : [];
+      } catch {
+        payload = [];
+      }
+    } else if (event.kind === "reopen") {
+      type = "reopen";
+      payload = { hasVisibleWindows: event.value === "true" };
+    } else if (event.kind === "system-wake") {
+      type = "systemWake";
+      payload = undefined;
+    } else if (event.kind === "keyboard-layout-change") {
+      type = "keyboardLayoutChange";
+      const layout = hostedRuntime
+        ? binding.getHostedKeyboardLayout(this.nativeId)
+        : binding.getKeyboardLayout(this.nativeId);
+      payload = { id: layout.id, name: layout.name };
+    } else if (event.kind === "notification-response") {
+      type = "notificationResponse";
+      try {
+        const parsed = JSON.parse(event.value ?? "{}") as {
+          tag?: unknown;
+          actionId?: unknown;
+        };
+        if (typeof parsed.tag !== "string") return true;
+        const response: NotificationResponse = { tag: parsed.tag };
+        if (typeof parsed.actionId === "string") response.actionId = parsed.actionId;
+        payload = response;
+      } catch {
+        return true;
+      }
+    } else if (event.kind === "second-instance") {
+      type = "secondInstance";
+      try {
+        const parsed = JSON.parse(event.value ?? "{}") as {
+          argv?: unknown;
+          cwd?: unknown;
+        };
+        if (
+          !Array.isArray(parsed.argv) ||
+          !parsed.argv.every((argument) => typeof argument === "string") ||
+          typeof parsed.cwd !== "string"
+        ) {
+          return true;
+        }
+        payload = { argv: parsed.argv, cwd: parsed.cwd };
+        const urls = urlsFromArguments(parsed.argv);
+        if (urls.length > 0) this.#emitAppEvent("openUrls", urls);
+      } catch {
+        return true;
+      }
+    } else {
+      return false;
+    }
+    this.#emitAppEvent(type, payload);
+    return true;
+  }
+
+  #emitAppEvent<K extends keyof AppEventMap>(type: K, payload: AppEventMap[K]): void {
+    for (const listener of this.#appEventListeners.get(type) ?? []) listener(payload);
   }
 
   _registerWindow(window: Window): void {
@@ -290,12 +499,12 @@ export class App {
       const nativeOptions = normalizeAlertDialogOptions(options);
       return this.#requestDialog(
         window,
-        "dialog",
+        "alert-dialog",
         (request) => {
           if (hostedRuntime) {
-            binding.showHostedDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showHostedAlertDialog(this.nativeId, window?.nativeId, request, nativeOptions);
           } else {
-            binding.showDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showAlertDialog(this.nativeId, window?.nativeId, request, nativeOptions);
           }
         },
         (event) => {
@@ -522,6 +731,71 @@ export class Window {
     this.app._closeWindow(this);
   }
 
+  getState(): WindowState {
+    return getNativeWindowState(this);
+  }
+
+  onStateChange(listener: (state: WindowState) => void): () => void {
+    if (this.#closed) return () => {};
+    return onNativeWindowStateChange(this, listener);
+  }
+
+  setTitle(title: string): void {
+    performNativeWindowAction(this, "set-title", title);
+  }
+
+  minimize(): void {
+    performNativeWindowAction(this, "minimize");
+  }
+
+  maximize(): void {
+    performNativeWindowAction(this, "maximize");
+  }
+
+  restore(): void {
+    performNativeWindowAction(this, "restore");
+  }
+
+  setFullscreen(fullscreen: boolean): void {
+    performNativeWindowAction(this, "set-fullscreen", String(fullscreen));
+  }
+
+  show(): void {
+    performNativeWindowAction(this, "set-visible", "true");
+  }
+
+  hide(): void {
+    performNativeWindowAction(this, "set-visible", "false");
+  }
+
+  focus(): void {
+    performNativeWindowAction(this, "focus");
+  }
+
+  requestAttention(): void {
+    performNativeWindowAction(this, "request-attention");
+  }
+
+  setRepresentedFile(path?: string): void {
+    performNativeWindowAction(this, "set-represented-file", path ?? "");
+  }
+
+  setDocumentEdited(edited: boolean): void {
+    performNativeWindowAction(this, "set-document-edited", String(edited));
+  }
+
+  setAppearance(appearance: AppearancePreference): void {
+    performNativeWindowAction(this, "set-appearance", appearance);
+  }
+
+  _focusNode(node: NativeNode): boolean {
+    if (this.#closed || node.host !== this) return false;
+    this.flush();
+    return hostedRuntime
+      ? binding.focusHostedNode(this.app.nativeId, this.nativeId, node.id)
+      : binding.focusNode(this.app.nativeId, this.nativeId, node.id);
+  }
+
   flush(): number | undefined {
     if (this.#closed) return undefined;
     this.#flushScheduled = false;
@@ -559,6 +833,7 @@ export class Window {
     this.#mountDisposers.clear();
     for (const dispose of disposers) dispose();
     this.#batch = new MutationBatch();
+    removeNativeWindowStateListeners(this);
     for (const listener of this.#closeListeners) listener(this);
     this.#closeListeners.clear();
     this.nodes.clear();
@@ -684,218 +959,4 @@ export const Dialog = Object.freeze({
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
-}
-
-export function createNativeElement(name: NativeElementName): NativeNode {
-  const tag =
-    name === "button"
-      ? NativeNodeTag.Button
-      : name === "input" || name === "textarea"
-        ? NativeNodeTag.Input
-        : name === "markdown"
-          ? NativeNodeTag.Markdown
-          : name === "virtual-list"
-            ? NativeNodeTag.VirtualList
-            : NativeNodeTag.View;
-  const node = new NativeNode(tag);
-  if (name === "textarea") setNativeProperty(node, PropertyCode.Multiline, true);
-  return node;
-}
-
-export function createNativeText(value: string): NativeNode {
-  return new NativeNode(NativeNodeTag.Text, value);
-}
-
-export function createNativeSentinel(): NativeNode {
-  return new NativeNode(NativeNodeTag.Sentinel);
-}
-
-export function replaceNativeText(node: NativeNode, value: string): void {
-  if (node.tag !== NativeNodeTag.Text) throw new TypeError("replaceText expects a text node");
-  if (node.text === value) return;
-  node.text = value;
-  if (node.materialized) node.host?._enqueueText(node);
-}
-
-export function setNativeProperty(
-  node: NativeNode,
-  property: PropertyCode,
-  value: NativePropertyValue,
-  options: { color?: boolean } = {},
-): void {
-  const normalized = value ?? null;
-  if (normalized === null) {
-    if (!node.properties.delete(property)) return;
-    node.colorProperties.delete(property);
-  } else {
-    const previous = node.properties.get(property);
-    if (Object.is(previous, normalized) && node.colorProperties.has(property) === !!options.color) {
-      return;
-    }
-    node.properties.set(property, normalized);
-    if (options.color) node.colorProperties.add(property);
-    else node.colorProperties.delete(property);
-  }
-  if (node.materialized) {
-    node.host?._enqueueProperty(node, property, normalized, !!options.color);
-  }
-}
-
-export function setNativeEventListener(
-  node: NativeNode,
-  type: NativeEventType,
-  listener: NativeEventListener | undefined,
-): void {
-  if (listener) node.listeners.set(type, listener);
-  else node.listeners.delete(type);
-  if (type === "click") {
-    setNativeProperty(node, PropertyCode.ClickListener, node.listeners.has("click"));
-  } else if (type === "input") {
-    setNativeProperty(node, PropertyCode.InputListener, node.listeners.has("input"));
-  } else if (type === "submit") {
-    setNativeProperty(node, PropertyCode.SubmitListener, node.listeners.has("submit"));
-  } else {
-    const listensForHover = node.listeners.has("mouseenter") || node.listeners.has("mouseleave");
-    setNativeProperty(node, PropertyCode.HoverListener, listensForHover);
-  }
-}
-
-export function insertNativeNode(parent: NativeNode, node: NativeNode, anchor?: NativeNode): void {
-  if (anchor && anchor.parent !== parent) throw new Error("anchor is not a child of parent");
-  if (node === parent) throw new Error("a native node cannot contain itself");
-  if (anchor === node && node.parent === parent) return;
-
-  if (node.parent) {
-    const previousIndex = node.parent.children.indexOf(node);
-    if (previousIndex >= 0) node.parent.children.splice(previousIndex, 1);
-  }
-  const index = anchor ? parent.children.indexOf(anchor) : parent.children.length;
-  parent.children.splice(index, 0, node);
-  node.parent = parent;
-
-  if (parent.host) {
-    materialize(node, parent.host);
-    parent.host._enqueueInsert(parent, node, anchor);
-  }
-}
-
-export function removeNativeNode(parent: NativeNode, node: NativeNode): void {
-  if (node.parent !== parent) return;
-  const index = parent.children.indexOf(node);
-  if (index >= 0) parent.children.splice(index, 1);
-  node.parent = undefined;
-  if (node.materialized && parent.host) parent.host._enqueueRemove(parent, node);
-  dematerialize(node);
-}
-
-export function cleanupNativeNodes(parent: NativeNode, nodes: readonly NativeNode[]): void {
-  const attached = nodes.filter((node) => node.parent === parent);
-  if (attached.length === 0) return;
-  for (const node of attached) {
-    const index = parent.children.indexOf(node);
-    if (index >= 0) parent.children.splice(index, 1);
-    node.parent = undefined;
-  }
-  if (parent.host) parent.host._enqueueCleanup(parent, attached);
-  for (const node of attached) dematerialize(node);
-}
-
-export function getNativeParent(node: NativeNode): NativeNode | undefined {
-  return node.parent;
-}
-
-export function getNativeFirstChild(node: NativeNode): NativeNode | undefined {
-  return node.children[0];
-}
-
-export function getNativeNextSibling(node: NativeNode): NativeNode | undefined {
-  if (!node.parent) return undefined;
-  const index = node.parent.children.indexOf(node);
-  return index < 0 ? undefined : node.parent.children[index + 1];
-}
-
-export function isNativeText(node: NativeNode): boolean {
-  return node.tag === NativeNodeTag.Text;
-}
-
-export function parseColor(value: ColorValue): number {
-  if (typeof value === "number") return value >>> 0;
-  const color = value.trim().toLowerCase();
-  if (color === "transparent") return 0;
-  if (color === "black") return packColor(0, 0, 0, 255);
-  if (color === "white") return packColor(255, 255, 255, 255);
-  if (color.startsWith("#")) {
-    const hex = color.slice(1);
-    if (hex.length === 3 || hex.length === 4) {
-      const [r = "0", g = "0", b = "0", a = "f"] = hex;
-      return packColor(
-        Number.parseInt(r + r, 16),
-        Number.parseInt(g + g, 16),
-        Number.parseInt(b + b, 16),
-        Number.parseInt(a + a, 16),
-      );
-    }
-    if (hex.length === 6 || hex.length === 8) {
-      return packColor(
-        Number.parseInt(hex.slice(0, 2), 16),
-        Number.parseInt(hex.slice(2, 4), 16),
-        Number.parseInt(hex.slice(4, 6), 16),
-        hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) : 255,
-      );
-    }
-  }
-  const rgb = color.match(/^rgba?\(([^)]+)\)$/);
-  if (rgb) {
-    const parts = rgb[1]?.split(",").map((part) => part.trim()) ?? [];
-    if (parts.length === 3 || parts.length === 4) {
-      return packColor(
-        Number(parts[0]),
-        Number(parts[1]),
-        Number(parts[2]),
-        parts[3] === undefined ? 255 : Math.round(Number(parts[3]) * 255),
-      );
-    }
-  }
-  throw new TypeError(`unsupported QuickGUI color \`${value}\``);
-}
-
-function packColor(r: number, g: number, b: number, a: number): number {
-  const component = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
-  return (
-    component(r) |
-    (component(g) << 8) |
-    (component(b) << 16) |
-    (component(a) << 24)
-  ) >>> 0;
-}
-
-function allocateNodeId(): number {
-  if (nextNodeId >= 0xffff_ffff) throw new Error("QuickGUI native node id space exhausted");
-  return nextNodeId++;
-}
-
-function materialize(node: NativeNode, host: Window): void {
-  if (node.materialized) {
-    if (node.host !== host) throw new Error("a native node cannot move between QuickGUI windows");
-    return;
-  }
-  node.host = host;
-  node.materialized = true;
-  host.nodes.set(node.id, node);
-  host._enqueueCreate(node);
-  for (const [property, value] of node.properties) {
-    host._enqueueProperty(node, property, value, node.colorProperties.has(property));
-  }
-  for (const child of node.children) {
-    materialize(child, host);
-    host._enqueueInsert(node, child);
-  }
-}
-
-function dematerialize(node: NativeNode): void {
-  const host = node.host;
-  if (host) host.nodes.delete(node.id);
-  node.materialized = false;
-  node.host = undefined;
-  for (const child of node.children) dematerialize(child);
 }

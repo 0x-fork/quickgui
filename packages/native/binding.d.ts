@@ -6,6 +6,8 @@ export declare function applyBatch(app: number, window: number, batch: Buffer): 
 
 export declare function applyHostedBatch(app: number, window: number, batch: Buffer): number
 
+export declare function checkForUpdate(endpoint: string, options: NativeUpdateClientOptions): Promise<NativeAvailableUpdate | undefined>
+
 export declare function closeHostedWindow(app: number, window: number): boolean
 
 export declare function closeWindow(app: number, window: number): boolean
@@ -22,17 +24,86 @@ export declare function createHostedWindow(app: number, options?: NativeWindowOp
 
 export declare function createWindow(app: number, options?: NativeWindowOptions | undefined | null): number
 
+export declare function defaultUpdateTarget(): string
+
+export declare function deleteSecureStorage(service: string, account: string): Promise<boolean>
+
 export declare function destroyApp(app: number): boolean
 
 export declare function destroyHostedApp(app: number): boolean
+
+export declare function disableAutoStart(options: NativeAutoStartOptions): Promise<void>
+
+export declare function dismissHostedNotification(app: number, tag: string): void
+
+export declare function dismissNotification(app: number, tag: string): void
+
+export declare function enableAutoStart(options: NativeAutoStartOptions): Promise<void>
+
+export declare function exitApp(app: number): boolean
+
+export declare function exitHostedApp(app: number): boolean
 
 export declare function focusHostedNode(app: number, window: number, node: number): boolean
 
 export declare function focusNode(app: number, window: number, node: number): boolean
 
+export declare function getDisplays(app: number): Array<NativeDisplay>
+
+export declare function getHostedDisplays(app: number): Array<NativeDisplay>
+
+export declare function getHostedKeyboardLayout(app: number): NativeKeyboardLayout
+
+export declare function getHostedWindowState(app: number, window: number): NativeWindowState
+
+export declare function getKeyboardLayout(app: number): NativeKeyboardLayout
+
+export declare function getSecureStorage(service: string, account: string): Promise<Buffer | undefined>
+
+export declare function getWindowState(app: number, window: number): NativeWindowState
+
 export interface HostedAppUpdate {
   events: Array<NativeEvent>
   exitCode?: number
+}
+
+export declare function isAutoStartEnabled(options: NativeAutoStartOptions): Promise<boolean>
+
+export declare function isAutoStartSupported(): boolean
+
+export declare function isProtocolRegistered(options: NativeProtocolRegistrationOptions): Promise<boolean>
+
+export declare function isSecureStorageSupported(): boolean
+
+export interface NativeAutoStartOptions {
+  appName: string
+  executable?: string
+  arguments?: Array<string>
+  mode?: string
+  bundleIdentifier?: string
+}
+
+export interface NativeAvailableUpdate {
+  version: string
+  currentVersion: string
+  target: string
+  url: string
+  signature: string
+  notes?: string
+  publishedAt?: string
+}
+
+export interface NativeClipboardEntry {
+  kind: string
+  text?: string
+  metadata?: string
+  format?: string
+  data?: Buffer
+  paths?: Array<string>
+}
+
+export interface NativeClipboardItem {
+  entries: Array<NativeClipboardEntry>
 }
 
 export interface NativeDialogButton {
@@ -45,6 +116,17 @@ export interface NativeDialogOptions {
   message: string
   detail?: string
   buttons: Array<NativeDialogButton>
+}
+
+export interface NativeDisplay {
+  id: string
+  uuid?: string
+  name: string
+  bounds: NativeRect
+  workArea: NativeRect
+  scaleFactor: number
+  refreshRate?: number
+  primary: boolean
 }
 
 export interface NativeEvent {
@@ -61,6 +143,23 @@ export interface NativeFileDialogFilter {
   extensions: Array<string>
 }
 
+export interface NativeKeyboardLayout {
+  id: string
+  name: string
+}
+
+export interface NativeNotificationAction {
+  id: string
+  label: string
+}
+
+export interface NativeNotificationOptions {
+  tag: string
+  title: string
+  body: string
+  actions: Array<NativeNotificationAction>
+}
+
 export interface NativeOpenDialogOptions {
   files: boolean
   directories: boolean
@@ -73,6 +172,21 @@ export interface NativeOpenDialogOptions {
   showsHiddenFiles: boolean
 }
 
+export interface NativeProtocolRegistrationOptions {
+  scheme: string
+  appName: string
+  appId: string
+  executable?: string
+  arguments?: Array<string>
+}
+
+export interface NativeRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface NativeSaveDialogOptions {
   directory: string
   title?: string
@@ -80,6 +194,30 @@ export interface NativeSaveDialogOptions {
   prompt?: string
   filters: Array<NativeFileDialogFilter>
   showsHiddenFiles: boolean
+}
+
+export interface NativeTrayIconOptions {
+  id: number
+  /** Encoded image bytes, or raw RGBA8 when width and height are both supplied. */
+  iconData?: Buffer
+  /** Image path used when iconData is omitted. */
+  iconPath?: string
+  width?: number
+  height?: number
+  tooltip?: string
+  title?: string
+  iconIsTemplate?: boolean
+  menuOnLeftClick?: boolean
+  visible?: boolean
+  /** Bounded JSON encoding of the declarative tray menu. */
+  menu: string
+}
+
+export interface NativeUpdateClientOptions {
+  currentVersion: string
+  publicKey: string
+  target?: string
+  maximumDownloadBytes?: number
 }
 
 export interface NativeWindowOptions {
@@ -102,29 +240,110 @@ export interface NativeWindowOptions {
   popupAcceptsKeyFocus?: boolean
 }
 
+export interface NativeWindowState {
+  displayId?: string
+  x: number
+  y: number
+  width: number
+  height: number
+  scaleFactor: number
+  appearance: string
+  focused: boolean
+  visible: boolean
+  minimized: boolean
+  maximized: boolean
+  fullscreen: boolean
+  occluded: boolean
+  movable: boolean
+  resizable: boolean
+  minimizable: boolean
+  representedFile: boolean
+  documentEdited: boolean
+}
+
+export declare function performGlobalShortcutAction(app: number, request: number, action: string, registration?: number | undefined | null, accelerator?: string | undefined | null): void
+
+export declare function performHostedGlobalShortcutAction(app: number, request: number, action: string, registration?: number | undefined | null, accelerator?: string | undefined | null): void
+
+export declare function performHostedShellAction(app: number, request: number, action: string, value: string): void
+
+export declare function performHostedWindowAction(app: number, window: number, action: string, value?: string | undefined | null): void
+
+export declare function performShellAction(app: number, request: number, action: string, value: string): void
+
+export declare function performWindowAction(app: number, window: number, action: string, value?: string | undefined | null): void
+
 export declare function protocolVersion(): number
 
 /** Return `-1` while running or the non-negative native exit code after termination. */
 export declare function pumpApp(app: number, timeoutMs?: number | undefined | null): number
 
+export declare function readClipboard(app: number): NativeClipboardItem | null
+
+export declare function readHostedClipboard(app: number): NativeClipboardItem | null
+
+export declare function registerProtocol(options: NativeProtocolRegistrationOptions): Promise<void>
+
+export declare function releaseHostedSingleInstanceLock(app: number): boolean
+
+export declare function releaseSingleInstanceLock(app: number): boolean
+
+export declare function removeHostedTrayIcon(app: number, request: number, id: number): void
+
+export declare function removeTrayIcon(app: number, request: number, id: number): void
+
+export declare function requestHostedSingleInstanceLock(app: number, identifier: string): boolean
+
+export declare function requestSingleInstanceLock(app: number, identifier: string): boolean
+
 export declare function runAppHost(onReady?: (() => void) | undefined | null): number
 
-export declare function showDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): void
+export declare function setApplicationMenu(app: number, menu: string): void
 
-export declare function showHostedDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): void
+export declare function setHostedApplicationMenu(app: number, menu: string): void
+
+export declare function setHostedTrayIcon(app: number, request: number, options: NativeTrayIconOptions): void
+
+export declare function setSecureStorage(service: string, account: string, secret: Buffer): Promise<void>
+
+export declare function setTrayIcon(app: number, request: number, options: NativeTrayIconOptions): void
+
+export declare function showAlertDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): void
+
+export declare function showHostedAlertDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): void
+
+export declare function showHostedNotification(app: number, options: NativeNotificationOptions): void
 
 export declare function showHostedOpenDialog(app: number, window: number | undefined | null, request: number, options: NativeOpenDialogOptions): void
 
 export declare function showHostedSaveDialog(app: number, window: number | undefined | null, request: number, options: NativeSaveDialogOptions): void
 
+export declare function showHostedTrayMenu(app: number, request: number, id: number): void
+
+export declare function showNotification(app: number, options: NativeNotificationOptions): void
+
 export declare function showOpenDialog(app: number, window: number | undefined | null, request: number, options: NativeOpenDialogOptions): void
 
 export declare function showSaveDialog(app: number, window: number | undefined | null, request: number, options: NativeSaveDialogOptions): void
+
+export declare function showTrayMenu(app: number, request: number, id: number): void
+
+export declare function stageUpdate(update: NativeAvailableUpdate, destinationDirectory: string, options: NativeUpdateClientOptions): Promise<string>
 
 export declare function startApp(app: number): void
 
 export declare function startHostedApp(app: number): void
 
+export declare function supportsDynamicProtocolRegistration(): boolean
+
 export declare function takeEvents(app: number): Array<NativeEvent>
 
+export declare function unregisterProtocol(options: NativeProtocolRegistrationOptions): Promise<boolean>
+
+export declare function verifyUpdate(path: string, signature: string, options: NativeUpdateClientOptions): Promise<void>
+
 export declare function waitForHostedEvents(app: number): Promise<HostedAppUpdate>
+
+export declare function writeClipboard(app: number, item: NativeClipboardItem): void
+
+export declare function writeHostedClipboard(app: number, item: NativeClipboardItem): void

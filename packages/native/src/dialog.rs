@@ -109,8 +109,8 @@ impl PendingDialog {
     pub(crate) fn poll(&mut self, context: &mut Context<'_>) -> Poll<NativeEvent> {
         let (kind, value, paths, error) = match &mut self.response {
             PendingDialogResponse::Alert(response) => match Pin::new(response).poll(context) {
-                Poll::Ready(Ok(index)) => ("dialog", Some(index.to_string()), None, None),
-                Poll::Ready(Err(error)) => ("dialog", None, None, Some(error.to_string())),
+                Poll::Ready(Ok(index)) => ("alert-dialog", Some(index.to_string()), None, None),
+                Poll::Ready(Err(error)) => ("alert-dialog", None, None, Some(error.to_string())),
                 Poll::Pending => return Poll::Pending,
             },
             PendingDialogResponse::Open(response) => match Pin::new(response).poll(context) {

@@ -51,11 +51,16 @@ export default defineConfig({
   entry: "src/app.tsx",
   version: "0.1.0",
   resources: ["assets"],
+  protocols: ["my-app"],
   macos: {
     icon: "assets/AppIcon.icns",
     minimumSystemVersion: "13.0",
   },
 });
 ```
+
+`protocols` is written into a signed macOS app's `CFBundleURLTypes`. On Windows and Linux, register
+the same scheme at runtime with `DeepLink.register(...)`; macOS registration is intentionally
+declarative because Launch Services reads it from the application bundle.
 
 See the [CLI guide](../../docs/cli.md) for every command and option.

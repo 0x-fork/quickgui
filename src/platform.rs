@@ -463,6 +463,8 @@ pub struct PlatformResponse<T> {
 pub type PathPromptResponse = PlatformResponse<Option<Vec<PathBuf>>>;
 /// Future returned by a native save panel.
 pub type SavePathResponse = PlatformResponse<Option<PathBuf>>;
+/// Future returned after the operating system accepts or rejects one shell integration request.
+pub type ShellResponse = PlatformResponse<()>;
 
 impl<T> Future for PlatformResponse<T> {
     type Output = Result<T, PlatformError>;
@@ -572,7 +574,7 @@ impl<T> fmt::Debug for PlatformResponder<T> {
     }
 }
 
-fn response_channel<T>() -> (PlatformResponder<T>, PlatformResponse<T>) {
+pub(crate) fn response_channel<T>() -> (PlatformResponder<T>, PlatformResponse<T>) {
     let state = Rc::new(PlatformResponseState::default());
     (
         PlatformResponder {
@@ -614,9 +616,22 @@ pub(crate) enum PlatformRequest {
     },
     ShowSystemNotification(SystemNotification),
     DismissSystemNotification(Arc<str>),
-    OpenUrl(Arc<str>),
-    OpenPath(PathBuf),
-    RevealPath(PathBuf),
+    OpenUrl {
+        url: Arc<str>,
+        responder: Option<PlatformResponder<()>>,
+    },
+    OpenPath {
+        path: PathBuf,
+        responder: Option<PlatformResponder<()>>,
+    },
+    RevealPath {
+        path: PathBuf,
+        responder: Option<PlatformResponder<()>>,
+    },
+    TrashPath {
+        path: PathBuf,
+        responder: Option<PlatformResponder<()>>,
+    },
 }
 
 impl PlatformRequest {
@@ -727,7 +742,25 @@ impl PlatformRequest {
     pub(crate) fn open_url(url: impl Into<Arc<str>>) -> Result<Self, PlatformError> {
         let url = url.into();
         validate_url(&url)?;
-        Ok(Self::OpenUrl(url))
+        Ok(Self::OpenUrl {
+            url,
+            responder: None,
+        })
+    }
+
+    pub(crate) fn open_url_response(
+        url: impl Into<Arc<str>>,
+    ) -> Result<(Self, ShellResponse), PlatformError> {
+        let url = url.into();
+        validate_url(&url)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::OpenUrl {
+                url,
+                responder: Some(responder),
+            },
+            response,
+        ))
     }
 
     pub(crate) fn show_system_notification(
@@ -748,13 +781,64 @@ impl PlatformRequest {
     pub(crate) fn open_path(path: impl Into<PathBuf>) -> Result<Self, PlatformError> {
         let path = path.into();
         validate_path(&path)?;
-        Ok(Self::OpenPath(path))
+        Ok(Self::OpenPath {
+            path,
+            responder: None,
+        })
+    }
+
+    pub(crate) fn open_path_response(
+        path: impl Into<PathBuf>,
+    ) -> Result<(Self, ShellResponse), PlatformError> {
+        let path = path.into();
+        validate_path(&path)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::OpenPath {
+                path,
+                responder: Some(responder),
+            },
+            response,
+        ))
     }
 
     pub(crate) fn reveal_path(path: impl Into<PathBuf>) -> Result<Self, PlatformError> {
         let path = path.into();
         validate_path(&path)?;
-        Ok(Self::RevealPath(path))
+        Ok(Self::RevealPath {
+            path,
+            responder: None,
+        })
+    }
+
+    pub(crate) fn reveal_path_response(
+        path: impl Into<PathBuf>,
+    ) -> Result<(Self, ShellResponse), PlatformError> {
+        let path = path.into();
+        validate_path(&path)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::RevealPath {
+                path,
+                responder: Some(responder),
+            },
+            response,
+        ))
+    }
+
+    pub(crate) fn trash_path_response(
+        path: impl Into<PathBuf>,
+    ) -> Result<(Self, ShellResponse), PlatformError> {
+        let path = path.into();
+        validate_path(&path)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::TrashPath {
+                path,
+                responder: Some(responder),
+            },
+            response,
+        ))
     }
 
     pub(crate) fn window(&self) -> Option<WindowHandle> {
@@ -764,9 +848,10 @@ impl PlatformRequest {
             | Self::SavePath { window, .. } => *window,
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
-            | Self::OpenUrl(_)
-            | Self::OpenPath(_)
-            | Self::RevealPath(_) => None,
+            | Self::OpenUrl { .. }
+            | Self::OpenPath { .. }
+            | Self::RevealPath { .. }
+            | Self::TrashPath { .. } => None,
         }
     }
 
@@ -775,11 +860,13 @@ impl PlatformRequest {
             Self::Prompt { responder, .. } => responder.is_cancelled(),
             Self::OpenPaths { responder, .. } => responder.is_cancelled(),
             Self::SavePath { responder, .. } => responder.is_cancelled(),
-            Self::ShowSystemNotification(_)
-            | Self::DismissSystemNotification(_)
-            | Self::OpenUrl(_)
-            | Self::OpenPath(_)
-            | Self::RevealPath(_) => false,
+            Self::OpenUrl { responder, .. }
+            | Self::OpenPath { responder, .. }
+            | Self::RevealPath { responder, .. }
+            | Self::TrashPath { responder, .. } => responder
+                .as_ref()
+                .is_some_and(PlatformResponder::is_cancelled),
+            Self::ShowSystemNotification(_) | Self::DismissSystemNotification(_) => false,
         }
     }
 
@@ -796,9 +883,10 @@ impl PlatformRequest {
             Self::SavePath { responder, .. } => responder.bind_cancellation(proxy, owner, id),
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
-            | Self::OpenUrl(_)
-            | Self::OpenPath(_)
-            | Self::RevealPath(_) => false,
+            | Self::OpenUrl { .. }
+            | Self::OpenPath { .. }
+            | Self::RevealPath { .. }
+            | Self::TrashPath { .. } => false,
         }
     }
 
@@ -807,11 +895,15 @@ impl PlatformRequest {
             Self::Prompt { responder, .. } => responder.complete(Err(error)),
             Self::OpenPaths { responder, .. } => responder.complete(Err(error)),
             Self::SavePath { responder, .. } => responder.complete(Err(error)),
-            Self::ShowSystemNotification(_)
-            | Self::DismissSystemNotification(_)
-            | Self::OpenUrl(_)
-            | Self::OpenPath(_)
-            | Self::RevealPath(_) => {}
+            Self::OpenUrl { responder, .. }
+            | Self::OpenPath { responder, .. }
+            | Self::RevealPath { responder, .. }
+            | Self::TrashPath { responder, .. } => {
+                if let Some(responder) = responder {
+                    responder.complete(Err(error));
+                }
+            }
+            Self::ShowSystemNotification(_) | Self::DismissSystemNotification(_) => {}
         }
     }
 }

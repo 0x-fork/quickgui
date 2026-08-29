@@ -11,6 +11,11 @@
   "files": [
     "index.ts",
     "dialog.ts",
+    "integrations.ts",
+    "native-tree.ts",
+    "single-instance.ts",
+    "system.ts",
+    "tray.ts",
     "host.ts",
     "protocol.ts",
     "scripts",

@@ -24,7 +24,8 @@ use objc2::{
 use objc2_app_kit::{
     NSApplication, NSApplicationDidBecomeActiveNotification,
     NSApplicationDidChangeScreenParametersNotification, NSWorkspace,
-    NSWorkspaceDidWakeNotification,
+    NSWorkspaceDidWakeNotification, NSWorkspaceSessionDidBecomeActiveNotification,
+    NSWorkspaceSessionDidResignActiveNotification, NSWorkspaceWillSleepNotification,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSBundle, NSError, NSNotification, NSNotificationCenter, NSObject,
@@ -40,7 +41,7 @@ use objc2_user_notifications::{
 use winit::event_loop::EventLoopProxy;
 
 use crate::{
-    OpenUrls, SystemNotification, SystemNotificationAction, SystemNotificationResponse,
+    OpenUrls, PowerEvent, SystemNotification, SystemNotificationAction, SystemNotificationResponse,
     platform::{
         MAX_OPEN_URLS, MAX_OPEN_URLS_TOTAL_BYTES, MAX_PENDING_SYSTEM_NOTIFICATIONS,
         MAX_PLATFORM_TEXT_BYTES, MAX_PLATFORM_URL_BYTES, MAX_SYSTEM_NOTIFICATION_ACTION_BYTES,
@@ -268,6 +269,34 @@ declare_class!(
         #[method(quickGuiSystemDidWake:)]
         fn system_did_wake(&self, _notification: &NSNotification) {
             let _ = self.ivars().proxy.send_event(RuntimeEvent::SystemWake);
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::Power(PowerEvent::Resume));
+        }
+
+        #[method(quickGuiSystemWillSleep:)]
+        fn system_will_sleep(&self, _notification: &NSNotification) {
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::Power(PowerEvent::Suspend));
+        }
+
+        #[method(quickGuiSessionDidResignActive:)]
+        fn session_did_resign_active(&self, _notification: &NSNotification) {
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::Power(PowerEvent::LockScreen));
+        }
+
+        #[method(quickGuiSessionDidBecomeActive:)]
+        fn session_did_become_active(&self, _notification: &NSNotification) {
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::Power(PowerEvent::UnlockScreen));
         }
 
         #[method(quickGuiDisplaysDidChange:)]
@@ -600,7 +629,7 @@ impl MacApplicationHost {
         proxy: EventLoopProxy<RuntimeEvent>,
         observe_open_urls: bool,
         observe_reopen: bool,
-        observe_system_wake: bool,
+        observe_power_events: bool,
         observe_notification_responses: bool,
     ) -> Result<Self, String> {
         let mtm = MainThreadMarker::new().ok_or_else(|| {
@@ -647,13 +676,31 @@ impl MacApplicationHost {
             );
         }
 
-        let workspace_notifications = if observe_system_wake {
+        let workspace_notifications = if observe_power_events {
             unsafe {
                 let center = NSWorkspace::sharedWorkspace().notificationCenter();
                 center.addObserver_selector_name_object(
                     application_observer.as_ref(),
                     sel!(quickGuiSystemDidWake:),
                     Some(NSWorkspaceDidWakeNotification),
+                    None,
+                );
+                center.addObserver_selector_name_object(
+                    application_observer.as_ref(),
+                    sel!(quickGuiSystemWillSleep:),
+                    Some(NSWorkspaceWillSleepNotification),
+                    None,
+                );
+                center.addObserver_selector_name_object(
+                    application_observer.as_ref(),
+                    sel!(quickGuiSessionDidResignActive:),
+                    Some(NSWorkspaceSessionDidResignActiveNotification),
+                    None,
+                );
+                center.addObserver_selector_name_object(
+                    application_observer.as_ref(),
+                    sel!(quickGuiSessionDidBecomeActive:),
+                    Some(NSWorkspaceSessionDidBecomeActiveNotification),
                     None,
                 );
                 Some(center)

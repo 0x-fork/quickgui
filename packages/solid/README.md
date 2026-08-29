@@ -30,3 +30,6 @@ The [alert-dialog example](../../examples/alert-dialog-solid/app.tsx) demonstrat
 warning, and critical native alerts with optional window ownership and semantic button roles.
 The [file-dialog example](../../examples/file-dialog-solid/app.tsx) demonstrates native open-file,
 open-folder, and save-destination panels with explicit cancellation results.
+The [system API example](../../examples/system-api-solid/app.tsx) demonstrates core-owned shell,
+clipboard, display, notification, menu, tray, shortcut, single-instance, deep-link, secure-storage,
+autostart, power, and updater services through the Solid binding.

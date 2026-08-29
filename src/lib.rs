@@ -247,7 +247,7 @@ pub use platform::{
     MAX_SYSTEM_NOTIFICATION_CATEGORIES, MAX_SYSTEM_NOTIFICATION_TAG_BYTES,
     MAX_SYSTEM_NOTIFICATION_TITLE_BYTES, OpenUrls, PathPromptOptions, PathPromptResponse,
     PlatformError, PlatformResponse, PromptButton, PromptLevel, SavePathOptions, SavePathResponse,
-    SystemNotification, SystemNotificationAction, SystemNotificationResponse,
+    ShellResponse, SystemNotification, SystemNotificationAction, SystemNotificationResponse,
 };
 pub use popover_component::{AnchoredPopover, Popover, PopoverKind};
 pub use popup::{
@@ -261,22 +261,48 @@ pub use popup_menu::{
     PopupMenuItemState, PopupMenuLast, PopupMenuNext, PopupMenuOpenSubmenu, PopupMenuPrevious,
     popup_menu_key_bindings,
 };
+pub use quickgui_system::{
+    AutoStart, AutoStartMode, AutoStartOptions, ProtocolRegistration, ProtocolRegistrationOptions,
+    SecureStorage, SystemIntegrationError,
+};
+#[cfg(feature = "updater")]
+pub use quickgui_system::{
+    AvailableUpdate, DEFAULT_MAX_UPDATE_BYTES, MAX_UPDATE_MANIFEST_BYTES,
+    MAX_UPDATE_SIGNATURE_BYTES, UpdateClient, default_update_target,
+};
 pub use runtime::{
     App, AppConfig, AppError, ClickListener, ContextMenuListener, DismissListener, Drag,
-    DragListener, DropListener, FormInvalidListener, FormSubmitListener, HoverListener,
-    InputListener, KeyDownListener, KeyUpListener, MAX_ACTION_LISTENERS_PER_WINDOW,
-    MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW, MAX_KEY_LISTENERS_PER_WINDOW,
-    MAX_MOUSE_LISTENERS_PER_WINDOW, MAX_PENDING_WINDOW_COMMANDS, MAX_SYSTEM_WINDOW_TABS,
-    MAX_WINDOW_COMMANDS_PER_EVENT, MAX_WINDOW_DOCUMENT_PATH_BYTES, MAX_WINDOW_LOGICAL_COORDINATE,
-    MAX_WINDOW_LOGICAL_DIMENSION, MAX_WINDOW_TABBING_IDENTIFIER_BYTES, MAX_WINDOW_TITLE_BYTES,
-    MouseDownListener, MouseExitListener, MouseMoveListener, MousePressureListener,
-    MouseUpListener, PerformanceProfile, PinchListener, PointerListener, QuitMode,
-    RotationListener, ScrollWheelListener, SmartMagnifyListener, SubmitListener, TitleBarStyle,
-    TouchListener, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
-    WindowCommandError, WindowHandle, WindowKind, WindowOptions, WindowState, WindowTabState,
+    DragListener, DropListener, FormInvalidListener, FormSubmitListener, GlobalShortcutEvent,
+    HoverListener, InputListener, KeyDownListener, KeyUpListener, MAX_ACTION_LISTENERS_PER_WINDOW,
+    MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW, MAX_GLOBAL_SHORTCUT_ACCELERATOR_BYTES,
+    MAX_GLOBAL_SHORTCUTS, MAX_KEY_LISTENERS_PER_WINDOW, MAX_MOUSE_LISTENERS_PER_WINDOW,
+    MAX_PENDING_WINDOW_COMMANDS, MAX_SYSTEM_WINDOW_TABS, MAX_TRAY_ENCODED_ICON_BYTES,
+    MAX_TRAY_ICON_DIMENSION, MAX_TRAY_ICONS, MAX_TRAY_MENU_DEPTH, MAX_TRAY_MENU_ITEMS,
+    MAX_TRAY_TEXT_BYTES, MAX_WINDOW_COMMANDS_PER_EVENT, MAX_WINDOW_DOCUMENT_PATH_BYTES,
+    MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION,
+    MAX_WINDOW_TABBING_IDENTIFIER_BYTES, MAX_WINDOW_TITLE_BYTES, MouseDownListener,
+    MouseExitListener, MouseMoveListener, MousePressureListener, MouseUpListener,
+    PerformanceProfile, PinchListener, PointerListener, PowerEvent, QuitMode, RotationListener,
+    ScrollWheelListener, SmartMagnifyListener, SubmitListener, TitleBarStyle, TouchListener,
+    TrayEvent, TrayEventKind, TrayIconImage, TrayIconOptions, TrayMenuItem, TrayMouseButton, View,
+    ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowCommandError,
+    WindowHandle, WindowKind, WindowOptions, WindowState, WindowTabState,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime::{AppRunStatus, AppRunner, AppRunnerWaker};
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+pub use runtime::{
+    MAX_SECOND_INSTANCE_ARGUMENTS, MAX_SECOND_INSTANCE_MESSAGE_BYTES,
+    MAX_SINGLE_INSTANCE_IDENTIFIER_BYTES, SecondInstanceEvent, SingleInstanceError,
+};
 #[cfg(any(test, feature = "test-support"))]
 pub use runtime::{
     MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,

@@ -13,7 +13,15 @@ parent-owned native popup. Its public lifecycle remains `new App()`, `new Window
 `showSaveDialog`; each accepts an optional leading `Window`, matching Electron's parented and
 application-modal call shapes. Alert dialogs resolve with a button index, while file dialogs use
 Electron-shaped result objects. The file-dialog backend uses QuickGUI's AppKit panels on macOS and
-`rfd` on Windows and Linux.
+`rfd` on Windows and Linux. The portable alert backend supports up to three uniquely labelled
+buttons. Linux file dialogs prefer XDG Desktop Portals (with RFD's Zenity fallback), while Linux
+alert dialogs require Zenity because the portal API has no standardized message-dialog surface.
+
+System services are core-first and re-exported by both JavaScript packages: `App` lifecycle and
+single-instance locking, `Appearance`, `AutoStart`, `Clipboard`, `DeepLink`, `GlobalShortcut`,
+`Keyboard`, `Menu`, `Notifications`, `PowerMonitor`, `Screen`, `SecureStorage`, `Shell`, `Tray`,
+`Updater`, and imperative `Window` controls. The updater discovers and stages signed artifacts;
+package-format-specific installation remains the application's responsibility.
 
 Most applications should use [`@quickgui/solid`](../solid/README.md). The native package is the
 renderer-neutral layer for additional JavaScript reconcilers.

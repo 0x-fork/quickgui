@@ -25,6 +25,8 @@ use quickgui::{
 };
 
 mod dialog;
+mod integrations;
+mod system;
 
 pub use dialog::{
     NativeDialogButton, NativeDialogOptions, NativeFileDialogFilter, NativeOpenDialogOptions,
@@ -235,7 +237,7 @@ enum HostCommand {
         node: u32,
         reply: Arc<SyncReply<bool>>,
     },
-    ShowDialog {
+    ShowAlertDialog {
         app: u32,
         window: Option<u32>,
         request: u32,
@@ -255,6 +257,11 @@ enum HostCommand {
         request: u32,
         options: NativeSaveDialogOptions,
         reply: Arc<SyncReply<()>>,
+    },
+    System {
+        app: u32,
+        command: system::SystemCommand,
+        reply: Arc<SyncReply<system::SystemCommandResult>>,
     },
     StartApp {
         app: u32,
@@ -1110,6 +1117,9 @@ struct NativeView {
     lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NativeMenuAction(u32);
+
 impl View for NativeView {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
         let tree = self.tree.borrow();
@@ -1144,7 +1154,23 @@ impl View for NativeView {
                 )
             }));
         }
-        root
+        let events = Rc::clone(&self.events);
+        let window = self.window;
+        let menu_action = cx.action_listener(
+            ElementId::new(ROOT_ELEMENT_ID),
+            move |_view, action: &NativeMenuAction, _cx| {
+                enqueue_event(
+                    &events,
+                    QueuedEvent {
+                        kind: "menu-action",
+                        window,
+                        target: action.0,
+                        value: None,
+                    },
+                );
+            },
+        );
+        root.on_action(menu_action)
     }
 }
 
@@ -1764,6 +1790,10 @@ struct NativeRuntime {
     handles: Rc<RefCell<HashMap<WindowHandle, u32>>>,
     closed_windows: Rc<RefCell<Vec<u32>>>,
     pending_dialogs: Vec<PendingDialog>,
+    pending_shell: Vec<system::PendingShell>,
+    pending_global_shortcuts: Vec<system::PendingGlobalShortcut>,
+    pending_tray: Vec<system::PendingTray>,
+    system_observation: system::SystemObservation,
     runner: Option<AppRunner>,
 }
 
@@ -1777,6 +1807,10 @@ impl NativeRuntime {
             handles: Rc::new(RefCell::new(HashMap::with_capacity(2))),
             closed_windows: Rc::new(RefCell::new(Vec::with_capacity(2))),
             pending_dialogs: Vec::with_capacity(2),
+            pending_shell: Vec::with_capacity(2),
+            pending_global_shortcuts: Vec::with_capacity(2),
+            pending_tray: Vec::with_capacity(2),
+            system_observation: system::SystemObservation::default(),
             runner: None,
         }
     }
@@ -1889,10 +1923,169 @@ impl NativeRuntime {
         let handles = Rc::clone(&self.handles);
         let callback_handles = Rc::clone(&self.handles);
         let callback_events = Rc::clone(&self.events);
+        let open_url_events = Rc::clone(&self.events);
+        let reopen_events = Rc::clone(&self.events);
+        let wake_events = Rc::clone(&self.events);
+        let keyboard_events = Rc::clone(&self.events);
+        let notification_events = Rc::clone(&self.events);
+        let global_shortcut_events = Rc::clone(&self.events);
+        let second_instance_events = Rc::clone(&self.events);
+        let power_events = Rc::clone(&self.events);
+        let tray_events = Rc::clone(&self.events);
         let closed_windows = Rc::clone(&self.closed_windows);
         let mut runner = QuickGuiApp::new(root_view)
             .config(root_config)
             .quit_mode(QuitMode::LastWindowClosed)
+            .on_open_urls(move |urls, _cx| {
+                let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())
+                    .ok()
+                    .map(Arc::<str>::from);
+                enqueue_event(
+                    &open_url_events,
+                    QueuedEvent {
+                        kind: "open-urls",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value,
+                    },
+                );
+            })
+            .on_reopen(move |has_visible_windows, _cx| {
+                enqueue_event(
+                    &reopen_events,
+                    QueuedEvent {
+                        kind: "reopen",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: Some(Arc::from(if has_visible_windows {
+                            "true"
+                        } else {
+                            "false"
+                        })),
+                    },
+                );
+            })
+            .on_system_wake(move |_cx| {
+                enqueue_event(
+                    &wake_events,
+                    QueuedEvent {
+                        kind: "system-wake",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: None,
+                    },
+                );
+            })
+            .on_keyboard_layout_change(move |_layout, _cx| {
+                enqueue_event(
+                    &keyboard_events,
+                    QueuedEvent {
+                        kind: "keyboard-layout-change",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: None,
+                    },
+                );
+            })
+            .on_system_notification_response(move |response, _cx| {
+                let value = serde_json::json!({
+                    "tag": response.tag.as_ref(),
+                    "actionId": response.action_id.as_deref(),
+                })
+                .to_string();
+                enqueue_event(
+                    &notification_events,
+                    QueuedEvent {
+                        kind: "notification-response",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: Some(Arc::from(value)),
+                    },
+                );
+            })
+            .on_global_shortcut(move |shortcut, _cx| {
+                enqueue_event(
+                    &global_shortcut_events,
+                    QueuedEvent {
+                        kind: "global-shortcut",
+                        window: 0,
+                        target: shortcut.registration_id,
+                        value: None,
+                    },
+                );
+            })
+            .on_second_instance(move |instance, _cx| {
+                let value = serde_json::json!({
+                    "argv": instance
+                        .argv()
+                        .iter()
+                        .map(AsRef::as_ref)
+                        .collect::<Vec<&str>>(),
+                    "cwd": instance.cwd().to_string_lossy(),
+                })
+                .to_string();
+                enqueue_event(
+                    &second_instance_events,
+                    QueuedEvent {
+                        kind: "second-instance",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: Some(Arc::from(value)),
+                    },
+                );
+            })
+            .on_power_event(move |event, _cx| {
+                let value: Arc<str> = Arc::from(match event {
+                    quickgui::PowerEvent::Suspend => "suspend",
+                    quickgui::PowerEvent::Resume => "resume",
+                    quickgui::PowerEvent::LockScreen => "lock-screen",
+                    quickgui::PowerEvent::UnlockScreen => "unlock-screen",
+                });
+                enqueue_event(
+                    &power_events,
+                    QueuedEvent {
+                        kind: "power-event",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: Some(value),
+                    },
+                );
+            })
+            .on_tray_event(move |event, _cx| {
+                let kind = match event.kind {
+                    quickgui::TrayEventKind::Click => "click",
+                    quickgui::TrayEventKind::DoubleClick => "double-click",
+                    quickgui::TrayEventKind::Enter => "enter",
+                    quickgui::TrayEventKind::Move => "move",
+                    quickgui::TrayEventKind::Leave => "leave",
+                    quickgui::TrayEventKind::MenuItem => "menu-item",
+                    quickgui::TrayEventKind::Scroll => "scroll",
+                };
+                let button = event.button.map(|button| match button {
+                    quickgui::TrayMouseButton::Left => "left",
+                    quickgui::TrayMouseButton::Right => "right",
+                    quickgui::TrayMouseButton::Middle => "middle",
+                });
+                let value = serde_json::json!({
+                    "kind": kind,
+                    "menuItemId": event.menu_item_id,
+                    "button": button,
+                    "position": event.position.map(|(x, y)| serde_json::json!({ "x": x, "y": y })),
+                    "pressed": event.pressed,
+                    "scrollDelta": event.scroll_delta,
+                    "horizontal": event.horizontal,
+                })
+                .to_string();
+                enqueue_event(
+                    &tray_events,
+                    QueuedEvent {
+                        kind: "tray-event",
+                        window: 0,
+                        target: event.tray_id,
+                        value: Some(Arc::from(value)),
+                    },
+                );
+            })
             .on_window_closed(move |handle, _cx| {
                 let Some(window) = callback_handles.borrow_mut().remove(&handle) else {
                     return;
@@ -2009,7 +2202,7 @@ impl NativeRuntime {
         Ok(runner.focus_element(handle, ElementId::new(node as u64)))
     }
 
-    fn show_dialog(
+    fn show_alert_dialog(
         &mut self,
         window: Option<u32>,
         request: u32,
@@ -2124,8 +2317,14 @@ impl NativeRuntime {
     }
 
     fn drain_events(&mut self) -> Vec<NativeEvent> {
-        let mut events =
-            Vec::with_capacity(self.events.borrow().len() + self.pending_dialogs.len());
+        self.observe_system_state();
+        let mut events = Vec::with_capacity(
+            self.events.borrow().len()
+                + self.pending_dialogs.len()
+                + self.pending_shell.len()
+                + self.pending_global_shortcuts.len()
+                + self.pending_tray.len(),
+        );
         let waker = Waker::noop();
         let mut context = Context::from_waker(waker);
         let mut still_pending = Vec::with_capacity(self.pending_dialogs.len());
@@ -2136,6 +2335,30 @@ impl NativeRuntime {
             }
         }
         self.pending_dialogs = still_pending;
+        let mut still_pending = Vec::with_capacity(self.pending_shell.len());
+        for mut request in std::mem::take(&mut self.pending_shell) {
+            match request.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(request),
+            }
+        }
+        self.pending_shell = still_pending;
+        let mut still_pending = Vec::with_capacity(self.pending_global_shortcuts.len());
+        for mut request in std::mem::take(&mut self.pending_global_shortcuts) {
+            match request.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(request),
+            }
+        }
+        self.pending_global_shortcuts = still_pending;
+        let mut still_pending = Vec::with_capacity(self.pending_tray.len());
+        for mut request in std::mem::take(&mut self.pending_tray) {
+            match request.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(request),
+            }
+        }
+        self.pending_tray = still_pending;
         events.extend(self.events.borrow_mut().drain(..).map(|event| NativeEvent {
             kind: event.kind.to_owned(),
             window: event.window,
@@ -2305,13 +2528,15 @@ pub fn focus_node(app: u32, window: u32, node: u32) -> Result<bool> {
 }
 
 #[napi]
-pub fn show_dialog(
+pub fn show_alert_dialog(
     app: u32,
     window: Option<u32>,
     request: u32,
     options: NativeDialogOptions,
 ) -> Result<()> {
-    with_app_mut(app, |runtime| runtime.show_dialog(window, request, options))
+    with_app_mut(app, |runtime| {
+        runtime.show_alert_dialog(window, request, options)
+    })
 }
 
 #[napi]
@@ -2462,14 +2687,14 @@ pub fn focus_hosted_node(app: u32, window: u32, node: u32) -> Result<bool> {
 }
 
 #[napi]
-pub fn show_hosted_dialog(
+pub fn show_hosted_alert_dialog(
     app: u32,
     window: Option<u32>,
     request: u32,
     options: NativeDialogOptions,
 ) -> Result<()> {
     let reply = Arc::new(SyncReply::new());
-    HOST.enqueue(HostCommand::ShowDialog {
+    HOST.enqueue(HostCommand::ShowAlertDialog {
         app,
         window,
         request,
@@ -2658,7 +2883,7 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                         |runtime| runtime.focus_node(window, node),
                     ));
                 }
-                HostCommand::ShowDialog {
+                HostCommand::ShowAlertDialog {
                     app,
                     window,
                     request,
@@ -2669,7 +2894,7 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                         active_app,
                         runtime.as_mut(),
                         app,
-                        |runtime| runtime.show_dialog(window, request, options),
+                        |runtime| runtime.show_alert_dialog(window, request, options),
                     ));
                 }
                 HostCommand::ShowOpenDialog {
@@ -2698,6 +2923,18 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
                         runtime.as_mut(),
                         app,
                         |runtime| runtime.show_save_dialog(window, request, options),
+                    ));
+                }
+                HostCommand::System {
+                    app,
+                    command,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| runtime.execute_system_command(command),
                     ));
                 }
                 HostCommand::StartApp { app, reply } => {

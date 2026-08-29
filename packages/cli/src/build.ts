@@ -40,6 +40,7 @@ export const nativeExports = [
   "abortAppHost",
   "applyBatch",
   "applyHostedBatch",
+  "checkForUpdate",
   "closeWindow",
   "closeHostedWindow",
   "createApp",
@@ -50,21 +51,70 @@ export const nativeExports = [
   "createWindow",
   "destroyApp",
   "destroyHostedApp",
+  "disableAutoStart",
+  "dismissHostedNotification",
+  "dismissNotification",
+  "defaultUpdateTarget",
+  "deleteSecureStorage",
+  "enableAutoStart",
+  "exitApp",
+  "exitHostedApp",
   "focusNode",
   "focusHostedNode",
+  "getDisplays",
+  "getHostedDisplays",
+  "getHostedKeyboardLayout",
+  "getHostedWindowState",
+  "getKeyboardLayout",
+  "getSecureStorage",
+  "getWindowState",
+  "isAutoStartEnabled",
+  "isAutoStartSupported",
+  "isProtocolRegistered",
+  "isSecureStorageSupported",
+  "performGlobalShortcutAction",
+  "performHostedGlobalShortcutAction",
+  "performHostedShellAction",
+  "performHostedWindowAction",
+  "performShellAction",
+  "performWindowAction",
   "protocolVersion",
   "pumpApp",
+  "readClipboard",
+  "readHostedClipboard",
+  "registerProtocol",
+  "releaseHostedSingleInstanceLock",
+  "releaseSingleInstanceLock",
+  "removeHostedTrayIcon",
+  "removeTrayIcon",
+  "requestHostedSingleInstanceLock",
+  "requestSingleInstanceLock",
   "runAppHost",
-  "showDialog",
-  "showHostedDialog",
+  "setApplicationMenu",
+  "setHostedApplicationMenu",
+  "setHostedTrayIcon",
+  "setSecureStorage",
+  "setTrayIcon",
+  "showAlertDialog",
+  "showHostedAlertDialog",
+  "showHostedNotification",
   "showHostedOpenDialog",
   "showHostedSaveDialog",
+  "showHostedTrayMenu",
   "showOpenDialog",
   "showSaveDialog",
+  "showTrayMenu",
+  "showNotification",
   "startApp",
   "startHostedApp",
+  "stageUpdate",
+  "supportsDynamicProtocolRegistration",
   "takeEvents",
   "waitForHostedEvents",
+  "unregisterProtocol",
+  "verifyUpdate",
+  "writeClipboard",
+  "writeHostedClipboard",
 ] as const;
 
 const nativeBindingShimSuffix = ".quickgui-binding-shim.js";
@@ -149,6 +199,7 @@ async function buildMacApp(
       buildVersion: config.buildVersion,
       minimumSystemVersion: config.macos.minimumSystemVersion,
       category: config.macos.category,
+      urlSchemes: config.protocols,
       ...(iconFile ? { iconFile } : {}),
     }),
   );
@@ -430,12 +481,30 @@ interface MacInfoPlistOptions {
   buildVersion: string;
   minimumSystemVersion: string;
   category: string;
+  urlSchemes?: readonly string[];
   iconFile?: string;
 }
 
 export function macInfoPlist(options: MacInfoPlistOptions): string {
   const icon = options.iconFile
     ? `\n  <key>CFBundleIconFile</key>\n  <string>${xml(options.iconFile)}</string>`
+    : "";
+  const urlTypes = options.urlSchemes?.length
+    ? `
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>CFBundleURLName</key>
+      <string>${xml(options.identifier)}</string>
+      <key>CFBundleURLSchemes</key>
+      <array>${options.urlSchemes
+        .map((scheme) => `\n        <string>${xml(scheme)}</string>`)
+        .join("")}
+      </array>
+    </dict>
+  </array>`
     : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -458,7 +527,7 @@ export function macInfoPlist(options: MacInfoPlistOptions): string {
   <key>CFBundleShortVersionString</key>
   <string>${xml(options.version)}</string>
   <key>CFBundleVersion</key>
-  <string>${xml(options.buildVersion)}</string>
+  <string>${xml(options.buildVersion)}</string>${urlTypes}
   <key>LSApplicationCategoryType</key>
   <string>${xml(options.category)}</string>
   <key>LSMinimumSystemVersion</key>

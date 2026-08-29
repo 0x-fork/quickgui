@@ -42,8 +42,8 @@ use objc2_app_kit::{
     NSWindowOrderingMode, NSWindowStyleMask, NSWindowTabGroup, NSWindowTabbingMode, NSWorkspace,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSArray, NSCopying, NSObject, NSPoint, NSRange, NSRect, NSSize, NSString,
-    NSStringEncodingConversionOptions, NSURL, NSUTF8StringEncoding, NSUUID,
+    MainThreadMarker, NSArray, NSCopying, NSFileManager, NSObject, NSPoint, NSRange, NSRect,
+    NSSize, NSString, NSStringEncodingConversionOptions, NSURL, NSUTF8StringEncoding, NSUUID,
 };
 use winit::{
     event_loop::EventLoopProxy,
@@ -1869,6 +1869,17 @@ pub(crate) fn shell_reveal_path(path: &Path) -> Result<(), String> {
         NSWorkspace::sharedWorkspace().activateFileViewerSelectingURLs(&urls);
     }
     Ok(())
+}
+
+pub(crate) fn shell_trash_path(path: &Path) -> Result<(), String> {
+    MainThreadMarker::new()
+        .ok_or_else(|| "trash actions must run on the AppKit main thread".to_owned())?;
+    let url = native_file_url(path, false)?;
+    unsafe {
+        NSFileManager::defaultManager()
+            .trashItemAtURL_resultingItemURL_error(&url, None)
+            .map_err(|error| error.localizedDescription().to_string())
+    }
 }
 
 /// Route the default Cmd-W fallback through AppKit so Winit emits `CloseRequested` normally.

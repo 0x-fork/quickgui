@@ -58,7 +58,7 @@ use crate::{
     MAX_GLOBAL_OBSERVER_DELIVERIES_PER_TURN, MAX_GLOBAL_SUBSCRIPTIONS_PER_WINDOW,
     MAX_OBSERVED_ENTITIES_PER_WINDOW, MAX_OBSERVED_GLOBALS_PER_WINDOW, MAX_PENDING_ENTITY_EVENTS,
     MAX_PENDING_GLOBAL_NOTIFICATIONS, Menu, OpenUrls, OsAction, Point, Rect, Scene, Size,
-    SystemNotificationResponse, Vector,
+    SystemNotification, SystemNotificationResponse, Vector,
     action::{ActionListenerBinding, ActionListenerKey},
     background::{
         BackgroundCompletion, BackgroundTaskError, BackgroundTaskPoolHandle, TaskSpawnError,
@@ -89,7 +89,7 @@ use crate::{
     metrics::{FrameMetrics, FrameTimer, MetricsTracker},
     platform::{
         PathPromptOptions, PathPromptResponse, PlatformError, PlatformRequest, PlatformResponse,
-        PromptButton, PromptLevel, SavePathOptions, SavePathResponse,
+        PromptButton, PromptLevel, SavePathOptions, SavePathResponse, ShellResponse,
     },
     renderer::{
         GpuContext, GpuRenderer, RenderOutcome, SharedFontSystem, create_shared_font_system,
@@ -132,7 +132,7 @@ use crate::macos::{
     position_traffic_lights, present_native_open_panel, present_native_prompt,
     present_native_save_panel, present_window_relation, set_window_document_edited,
     set_window_movable, set_window_represented_file, set_window_tabbing_identifier,
-    set_window_visibility, shell_open_path, shell_open_url, shell_reveal_path,
+    set_window_visibility, shell_open_path, shell_open_url, shell_reveal_path, shell_trash_path,
     show_character_palette, start_external_drag, window_contains_key_window, window_tab_state,
 };
 #[cfg(target_os = "macos")]
@@ -185,8 +185,21 @@ pub(crate) enum RuntimeEvent {
         granted: bool,
         error: Option<Arc<str>>,
     },
-    #[cfg(target_os = "macos")]
     SystemNotificationResponse(SystemNotificationResponse),
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    GlobalShortcut(u32),
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    SecondInstance(SecondInstanceEvent),
+    Power(PowerEvent),
+    Tray(TrayEvent),
 }
 
 impl From<AccessibilityEvent> for RuntimeEvent {
@@ -2875,352 +2888,16 @@ impl AppRunnerWaker {
     }
 }
 
-/// A QuickGUI application whose native event loop is advanced by an external runtime.
-///
-/// Create and pump this value on the platform application thread. Each call still dispatches
-/// redraw and lifecycle callbacks synchronously inside Winit, which is required for correct macOS
-/// resize behavior. A blocking [`App::run`] remains the simplest choice for ordinary Rust apps.
-#[cfg(not(target_arch = "wasm32"))]
-pub struct AppRunner {
-    event_loop: EventLoop<RuntimeEvent>,
-    runtime: Runtime,
-    root_window: WindowHandle,
-    status: AppRunStatus,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl AppRunner {
-    /// Advance native events until a redraw completes, the timeout elapses, or the app exits.
-    ///
-    /// `None` may block indefinitely. External runtimes can pair it with [`Self::waker`] so their
-    /// command producer interrupts the blocked pump without periodic polling.
-    pub fn pump(&mut self, timeout: Option<Duration>) -> Result<AppRunStatus, AppError> {
-        if matches!(self.status, AppRunStatus::Exited(_)) {
-            return Ok(self.status);
-        }
-        let status = self.event_loop.pump_app_events(timeout, &mut self.runtime);
-        if let Some(error) = self.runtime.fatal_error.take() {
-            self.status = AppRunStatus::Exited(1);
-            return Err(error);
-        }
-        self.status = match status {
-            PumpStatus::Continue => AppRunStatus::Continue,
-            PumpStatus::Exit(code) => AppRunStatus::Exited(code),
-        };
-        Ok(self.status)
-    }
-
-    /// Return a thread-safe handle that interrupts a blocking [`Self::pump`] call.
-    pub fn waker(&self) -> AppRunnerWaker {
-        AppRunnerWaker {
-            proxy: self.runtime.event_proxy.clone(),
-        }
-    }
-
-    /// Stable handle of the initial application window.
-    pub const fn root_window(&self) -> WindowHandle {
-        self.root_window
-    }
-
-    /// Queue a new top-level window from an embedding runtime.
-    ///
-    /// The handle is stable immediately. The platform window is created during the next event
-    /// loop turn, so callers can finish installing retained state before pumping again.
-    pub fn open_window<V: View>(
-        &mut self,
-        view: V,
-        options: WindowOptions,
-    ) -> Result<WindowHandle, AppError> {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return Err(AppError::Window(
-                "cannot open a window after the application event loop exited".to_owned(),
-            ));
-        }
-        validate_window_options(&options).map_err(|error| AppError::Window(error.to_string()))?;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| AppError::Window("application event loop is closed".to_owned()))?;
-        let request = WindowRequest::new(view, options);
-        let handle = request.handle;
-        self.runtime.pending_windows.push_back(request);
-        Ok(handle)
-    }
-
-    /// Queue a native popup anchored to one currently mounted element in a parent window.
-    ///
-    /// Embedding runtimes call this after their host-language event callback returns. The latest
-    /// retained element bounds are captured synchronously, so the popup keeps the same
-    /// display-aware flip/slide behavior as [`EventContext::open_anchored_popup`] without a
-    /// parallel geometry observer in the embedding layer.
-    pub fn open_anchored_popup<V: View>(
-        &mut self,
-        parent: WindowHandle,
-        anchor: ElementId,
-        view: V,
-        mut options: WindowOptions,
-    ) -> Result<WindowHandle, AppError> {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return Err(AppError::Window(
-                "cannot open a popup after the application event loop exited".to_owned(),
-            ));
-        }
-        validate_window_options(&options).map_err(|error| AppError::Window(error.to_string()))?;
-        if options.kind != WindowKind::AnchoredPopup || options.popup.is_none() {
-            return Err(AppError::Window(
-                WindowCommandError::InvalidPopupConfiguration.to_string(),
-            ));
-        }
-        let bounds = self
-            .runtime
-            .element_bounds_external(parent, anchor)
-            .ok_or_else(|| {
-                AppError::Window(format!(
-                    "anchored popup trigger {anchor:?} is not mounted in its parent window"
-                ))
-            })?;
-        options.popup.as_mut().expect("validated popup").anchor_rect = bounds;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| AppError::Window("application event loop is closed".to_owned()))?;
-        let request = WindowRequest::with_parent(view, options, Some(parent));
-        let handle = request.handle;
-        self.runtime.pending_windows.push_back(request);
-        Ok(handle)
-    }
-
-    /// Mark one externally owned view dirty and request at most one native redraw.
-    ///
-    /// A window queued for creation also returns `true`: its first render will read the newest
-    /// retained state without scheduling a redundant frame.
-    pub fn invalidate_window(&mut self, handle: WindowHandle) -> bool {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return false;
-        }
-        if self
-            .runtime
-            .pending_windows
-            .iter()
-            .any(|request| request.handle == handle)
-        {
-            return true;
-        }
-        self.runtime.invalidate_external(handle)
-    }
-
-    /// Focus one mounted element from an embedding runtime.
-    ///
-    /// This is the imperative counterpart to [`crate::Element::auto_focus`]. It is intended for
-    /// host bindings that expose web-like `element.focus()` behavior after an external event has
-    /// returned to the host language. The request is applied synchronously and schedules at most
-    /// one redraw when focus changes.
-    pub fn focus_element(&mut self, handle: WindowHandle, element: ElementId) -> bool {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return false;
-        }
-        self.runtime.focus_external(handle, element)
-    }
-
-    /// Present a platform-native prompt owned by one mounted window.
-    ///
-    /// This is the embedding-runtime counterpart to [`EventContext::prompt`]. The returned
-    /// future remains on the platform thread and resolves after the operating system closes the
-    /// prompt; no redraw polling is introduced while it is visible.
-    pub fn prompt(
-        &mut self,
-        window: WindowHandle,
-        level: PromptLevel,
-        message: impl Into<Arc<str>>,
-        detail: Option<&str>,
-        buttons: &[PromptButton],
-    ) -> Result<PlatformResponse<usize>, PlatformError> {
-        if !matches!(self.status, AppRunStatus::Continue)
-            || !self.runtime.window_handles.contains_key(&window)
-        {
-            return Err(PlatformError::Unavailable);
-        }
-        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
-            return Err(PlatformError::PendingQueueFull);
-        }
-        let (request, response) =
-            PlatformRequest::prompt(window, level, message, detail.map(Arc::from), buttons)?;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| PlatformError::Unavailable)?;
-        self.runtime.platform_requests.push_back(request);
-        Ok(response)
-    }
-
-    /// Present an application-modal native prompt without attaching it to a window.
-    pub fn prompt_application(
-        &mut self,
-        level: PromptLevel,
-        message: impl Into<Arc<str>>,
-        detail: Option<&str>,
-        buttons: &[PromptButton],
-    ) -> Result<PlatformResponse<usize>, PlatformError> {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return Err(PlatformError::Unavailable);
-        }
-        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
-            return Err(PlatformError::PendingQueueFull);
-        }
-        let (request, response) =
-            PlatformRequest::application_prompt(level, message, detail.map(Arc::from), buttons)?;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| PlatformError::Unavailable)?;
-        self.runtime.platform_requests.push_back(request);
-        Ok(response)
-    }
-
-    /// Present a platform-native open panel owned by one mounted window.
-    ///
-    /// `Ok(None)` means the user cancelled. The returned future stays on the platform thread and
-    /// resolves after the operating system closes the panel.
-    pub fn prompt_for_paths(
-        &mut self,
-        window: WindowHandle,
-        options: PathPromptOptions,
-    ) -> Result<PathPromptResponse, PlatformError> {
-        if !matches!(self.status, AppRunStatus::Continue)
-            || !self.runtime.window_handles.contains_key(&window)
-        {
-            return Err(PlatformError::Unavailable);
-        }
-        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
-            return Err(PlatformError::PendingQueueFull);
-        }
-        let (request, response) = PlatformRequest::open_paths(window, options)?;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| PlatformError::Unavailable)?;
-        self.runtime.platform_requests.push_back(request);
-        Ok(response)
-    }
-
-    /// Present an application-modal native open panel without attaching it to a window.
-    pub fn prompt_for_paths_application(
-        &mut self,
-        options: PathPromptOptions,
-    ) -> Result<PathPromptResponse, PlatformError> {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return Err(PlatformError::Unavailable);
-        }
-        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
-            return Err(PlatformError::PendingQueueFull);
-        }
-        let (request, response) = PlatformRequest::application_open_paths(options)?;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| PlatformError::Unavailable)?;
-        self.runtime.platform_requests.push_back(request);
-        Ok(response)
-    }
-
-    /// Present a platform-native save panel owned by one mounted window.
-    ///
-    /// `Ok(None)` means the user cancelled. The returned future stays on the platform thread and
-    /// resolves after the operating system closes the panel.
-    pub fn prompt_for_new_path(
-        &mut self,
-        window: WindowHandle,
-        options: SavePathOptions,
-    ) -> Result<SavePathResponse, PlatformError> {
-        if !matches!(self.status, AppRunStatus::Continue)
-            || !self.runtime.window_handles.contains_key(&window)
-        {
-            return Err(PlatformError::Unavailable);
-        }
-        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
-            return Err(PlatformError::PendingQueueFull);
-        }
-        let (request, response) = PlatformRequest::save_path(window, options)?;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| PlatformError::Unavailable)?;
-        self.runtime.platform_requests.push_back(request);
-        Ok(response)
-    }
-
-    /// Present an application-modal native save panel without attaching it to a window.
-    pub fn prompt_for_new_path_application(
-        &mut self,
-        options: SavePathOptions,
-    ) -> Result<SavePathResponse, PlatformError> {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return Err(PlatformError::Unavailable);
-        }
-        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
-            return Err(PlatformError::PendingQueueFull);
-        }
-        let (request, response) = PlatformRequest::application_save_path(options)?;
-        self.runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .map_err(|_| PlatformError::Unavailable)?;
-        self.runtime.platform_requests.push_back(request);
-        Ok(response)
-    }
-
-    /// Close a queued or mounted window.
-    ///
-    /// Returns `false` when the handle is unknown or the application already exited.
-    pub fn close_window(&mut self, handle: WindowHandle) -> bool {
-        if !matches!(self.status, AppRunStatus::Continue) {
-            return false;
-        }
-        let pending = self
-            .runtime
-            .pending_windows
-            .iter()
-            .position(|request| request.handle == handle);
-        let mounted = self.runtime.window_handles.contains_key(&handle)
-            || self.runtime.current_handle() == Some(handle);
-        if pending.is_none() && !mounted {
-            return false;
-        }
-        if self
-            .runtime
-            .event_proxy
-            .send_event(RuntimeEvent::ExternalCommandsReady)
-            .is_err()
-        {
-            return false;
-        }
-        if let Some(index) = pending {
-            self.runtime.pending_windows.remove(index);
-        } else if !self.runtime.close_requests.contains(&handle) {
-            self.runtime.close_requests.push(handle);
-        }
-        true
-    }
-
-    /// Mark the root view dirty and request exactly one native redraw.
-    ///
-    /// Returns `false` only after exit or before the first pump has mounted the root window. State
-    /// installed before that first pump is naturally read by the initial render.
-    pub fn invalidate_root(&mut self) -> bool {
-        self.invalidate_window(self.root_window)
-    }
-
-    pub const fn status(&self) -> AppRunStatus {
-        self.status
-    }
-}
-
 type OpenUrlsCallback = Box<dyn FnMut(OpenUrls, &mut EventContext)>;
 type ReopenCallback = Box<dyn FnMut(bool, &mut EventContext)>;
 type SystemWakeCallback = Box<dyn FnMut(&mut EventContext)>;
 type KeyboardLayoutCallback = Box<dyn FnMut(&KeyboardLayout, &mut EventContext)>;
 type SystemNotificationResponseCallback =
     Box<dyn FnMut(SystemNotificationResponse, &mut EventContext)>;
+type GlobalShortcutCallback = Box<dyn FnMut(GlobalShortcutEvent, &mut EventContext)>;
+type SecondInstanceCallback = Box<dyn FnMut(SecondInstanceEvent, &mut EventContext)>;
+type PowerEventCallback = Box<dyn FnMut(PowerEvent, &mut EventContext)>;
+type TrayEventCallback = Box<dyn FnMut(TrayEvent, &mut EventContext)>;
 type WindowClosedCallback = Box<dyn FnMut(WindowHandle, &mut EventContext)>;
 
 #[derive(Default)]
@@ -3230,418 +2907,56 @@ struct ApplicationCallbacks {
     system_wake: Option<SystemWakeCallback>,
     keyboard_layout: Option<KeyboardLayoutCallback>,
     system_notification_response: Option<SystemNotificationResponseCallback>,
+    global_shortcut: Option<GlobalShortcutCallback>,
+    second_instance: Option<SecondInstanceCallback>,
+    power_event: Option<PowerEventCallback>,
+    tray_event: Option<TrayEventCallback>,
     window_closed: Option<WindowClosedCallback>,
 }
 
-/// Configures and runs one retained QuickGUI view.
-pub struct App<V> {
-    view: V,
-    config: AppConfig,
-    keymap: Keymap,
-    menus: Vec<Menu>,
-    globals: GlobalStore,
-    assets: Assets,
-    fonts: Vec<FontSource>,
-    application_callbacks: ApplicationCallbacks,
-    quit_mode: QuitMode,
-}
-
-impl<V: View> App<V> {
-    pub fn new(view: V) -> Self {
-        Self {
-            view,
-            config: AppConfig::default(),
-            keymap: Keymap::default(),
-            menus: Vec::new(),
-            globals: GlobalStore::default(),
-            assets: Assets::default(),
-            fonts: Vec::new(),
-            application_callbacks: ApplicationCallbacks::default(),
-            quit_mode: QuitMode::Default,
-        }
-    }
-
-    /// Configure when closing the final window terminates the application.
-    pub fn quit_mode(mut self, mode: QuitMode) -> Self {
-        self.quit_mode = mode;
-        self
-    }
-
-    /// GPUI-compatible alias for [`Self::quit_mode`].
-    pub fn with_quit_mode(self, mode: QuitMode) -> Self {
-        self.quit_mode(mode)
-    }
-
-    pub fn config(mut self, config: AppConfig) -> Self {
-        self.config = config;
-        self
-    }
-
-    /// Install the immutable application asset source used by every window and background image
-    /// resource. Later registration replaces the previous source.
-    pub fn with_assets(mut self, source: impl crate::AssetSource) -> Self {
-        self.assets = Assets::new(source);
-        self
-    }
-
-    /// Install an already shared application asset handle.
-    pub fn assets(mut self, assets: Assets) -> Self {
-        self.assets = assets;
-        self
-    }
-
-    /// Register one custom OpenType font file or one path in the application asset source.
-    ///
-    /// `include_bytes!("Inter.ttf")` remains zero-copy. String values resolve through
-    /// [`Self::with_assets`] once during startup. Counts, individual bytes, aggregate bytes, and
-    /// collection faces are validated before any native window or renderer is created.
-    pub fn font(mut self, font: impl Into<FontSource>) -> Self {
-        self.fonts.push(font.into());
-        self
-    }
-
-    /// Register custom fonts in declaration order.
-    pub fn fonts(mut self, fonts: impl IntoIterator<Item = impl Into<FontSource>>) -> Self {
-        self.fonts.extend(fonts.into_iter().map(Into::into));
-        self
-    }
-
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.config.title = title.into();
-        self
-    }
-
-    pub fn size(mut self, width: f32, height: f32) -> Self {
-        self.config = self.config.size(width, height);
-        self
-    }
-
-    pub fn window_bounds(mut self, bounds: WindowBounds) -> Self {
-        self.config = self.config.window_bounds(bounds);
-        self
-    }
-
-    pub fn position(mut self, x: f32, y: f32) -> Self {
-        self.config = self.config.position(x, y);
-        self
-    }
-
-    /// Select the display used for automatic root-window placement and fullscreen creation.
-    pub fn display(mut self, display: DisplayId) -> Self {
-        self.config.display_id = Some(display);
-        self
-    }
-
-    pub fn without_display(mut self) -> Self {
-        self.config.display_id = None;
-        self
-    }
-
-    pub fn maximized(mut self, maximized: bool) -> Self {
-        self.config = self.config.maximized(maximized);
-        self
-    }
-
-    pub fn fullscreen(mut self, fullscreen: bool) -> Self {
-        self.config = self.config.fullscreen(fullscreen);
-        self
-    }
-
-    pub fn minimum_size(mut self, width: f32, height: f32) -> Self {
-        self.config = self.config.minimum_size(width, height);
-        self
-    }
-
-    pub fn without_minimum_size(mut self) -> Self {
-        self.config = self.config.without_minimum_size();
-        self
-    }
-
-    /// Represent a file in the root window's native document chrome.
-    pub fn represented_file(mut self, path: impl Into<PathBuf>) -> Self {
-        self.config.represented_file = Some(path.into());
-        self
-    }
-
-    /// GPUI-compatible alias for [`Self::represented_file`].
-    pub fn document_path(self, path: impl Into<PathBuf>) -> Self {
-        self.represented_file(path)
-    }
-
-    pub fn without_represented_file(mut self) -> Self {
-        self.config.represented_file = None;
-        self
-    }
-
-    /// Set the root window's initial native unsaved-document indication.
-    pub fn document_edited(mut self, edited: bool) -> Self {
-        self.config.document_edited = edited;
-        self
-    }
-
-    /// Opt the root window into native system tabbing.
-    pub fn tabbing_identifier(mut self, identifier: impl Into<String>) -> Self {
-        self.config.tabbing_identifier = Some(identifier.into());
-        self
-    }
-
-    pub fn without_tabbing_identifier(mut self) -> Self {
-        self.config.tabbing_identifier = None;
-        self
-    }
-
-    pub fn performance_profile(mut self, profile: PerformanceProfile) -> Self {
-        self.config.performance_profile = profile;
-        self
-    }
-
-    /// Force the initial native light/dark appearance for the root window.
-    pub fn window_appearance(mut self, appearance: WindowAppearance) -> Self {
-        self.config.preferred_appearance = Some(appearance);
-        self
-    }
-
-    /// Let the root window follow the operating system appearance.
-    pub fn follow_system_appearance(mut self) -> Self {
-        self.config.preferred_appearance = None;
-        self
-    }
-
-    /// Configure how the native compositor treats transparent root-window pixels.
-    pub fn window_background(mut self, appearance: WindowBackgroundAppearance) -> Self {
-        self.config.window_background = appearance;
-        self
-    }
-
-    pub fn title_bar_style(mut self, style: TitleBarStyle) -> Self {
-        self.config.title_bar_style = style;
-        self
-    }
-
-    pub fn window_kind(mut self, kind: WindowKind) -> Self {
-        self.config = self.config.window_kind(kind);
-        self
-    }
-
-    pub fn anchored_popup(mut self, popup: crate::PopupOptions) -> Self {
-        self.config = self.config.anchored_popup(popup);
-        self
-    }
-
-    pub fn focus(mut self, focus: bool) -> Self {
-        self.config.focus = focus;
-        self
-    }
-
-    pub fn show(mut self, show: bool) -> Self {
-        self.config.show = show;
-        self
-    }
-
-    pub fn movable(mut self, movable: bool) -> Self {
-        self.config.is_movable = movable;
-        self
-    }
-
-    pub fn resizable(mut self, resizable: bool) -> Self {
-        self.config.is_resizable = resizable;
-        self
-    }
-
-    pub fn minimizable(mut self, minimizable: bool) -> Self {
-        self.config.is_minimizable = minimizable;
-        self
-    }
-
-    /// Position the macOS close button in logical points from the window's top-left.
-    pub fn traffic_light_position(mut self, x: f32, y: f32) -> Self {
-        self.config.traffic_light_position = Some(Point::new(x, y));
-        self
-    }
-
-    pub fn without_traffic_light_position(mut self) -> Self {
-        self.config.traffic_light_position = None;
-        self
-    }
-
-    pub fn reduce_motion(mut self, reduce_motion: bool) -> Self {
-        self.config.reduce_motion = reduce_motion;
-        self
-    }
-
-    /// Open or suppress the retained-tree inspector for the root window.
-    #[cfg(feature = "inspector")]
-    pub fn inspector(mut self, inspector: bool) -> Self {
-        self.config.inspector = inspector;
-        self
-    }
-
-    /// Add application key bindings. Later bindings take precedence at equal context depth.
-    pub fn bind_keys(mut self, bindings: impl IntoIterator<Item = KeyBinding>) -> Self {
-        self.keymap.add_bindings(bindings);
-        self
-    }
-
-    /// Replace the complete application keymap.
-    pub fn keymap(mut self, keymap: Keymap) -> Self {
-        self.keymap = keymap;
-        self
-    }
-
-    /// Append one declarative application menu.
-    pub fn menu(mut self, menu: Menu) -> Self {
-        self.menus.push(menu);
-        self
-    }
-
-    /// Replace the complete declarative application menu set.
-    pub fn menus(mut self, menus: impl IntoIterator<Item = Menu>) -> Self {
-        self.menus = menus.into_iter().collect();
-        self
-    }
-
-    /// Install or replace one main-thread application-global value before launch.
-    ///
-    /// Every native window opened by this application reads the same typed store. Values are
-    /// dropped with the runtime after the final window closes.
-    pub fn global<G: Global>(self, global: G) -> Self {
-        self.globals.set(global);
-        self
-    }
-
-    /// Handle URLs supplied by the operating system, including `file:` URLs.
-    ///
-    /// The callback is application-wide and receives a context without a current window. It can
-    /// update globals/entities or open a new top-level window. Subsequent registration replaces
-    /// the previous callback.
-    pub fn on_open_urls(
-        mut self,
-        callback: impl FnMut(OpenUrls, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.open_urls = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle a Dock/Finder request to reopen an already-running macOS application.
-    pub fn on_reopen(mut self, callback: impl FnMut(bool, &mut EventContext) + 'static) -> Self {
-        self.application_callbacks.reopen = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle the operating system waking from sleep.
-    pub fn on_system_wake(mut self, callback: impl FnMut(&mut EventContext) + 'static) -> Self {
-        self.application_callbacks.system_wake = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle a native keyboard-layout change after QuickGUI installs the new command map.
-    ///
-    /// The callback is notification-driven and application-wide. Views that only need to render
-    /// the layout name should prefer [`ViewContext::keyboard_layout`], which invalidates only the
-    /// views that read it.
-    pub fn on_keyboard_layout_change(
-        mut self,
-        callback: impl FnMut(&KeyboardLayout, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.keyboard_layout = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle activation of a delivered system notification or one of its action buttons.
-    pub fn on_system_notification_response(
-        mut self,
-        callback: impl FnMut(SystemNotificationResponse, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.system_notification_response = Some(Box::new(callback));
-        self
-    }
-
-    /// Run after a native window and its owned resources have been removed from the application.
-    ///
-    /// Owned child windows close first. The callback has no current window, so opening a window
-    /// creates a new top-level window. Subsequent registration replaces the previous callback.
-    pub fn on_window_closed(
-        mut self,
-        callback: impl FnMut(WindowHandle, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.window_closed = Some(Box::new(callback));
-        self
-    }
-
-    /// Convert this application into an externally pumped native event loop.
-    ///
-    /// This is intended for embedders which already own a language runtime on the platform main
-    /// thread. It preserves QuickGUI's damage-driven scheduling: the caller chooses only the
-    /// maximum time before control is yielded back to that runtime.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn into_runner(self) -> Result<AppRunner, AppError> {
-        let event_loop = EventLoop::with_user_event().build()?;
-        event_loop.set_control_flow(ControlFlow::Wait);
-        let initial_window = WindowRequest::new(self.view, self.config);
-        let root_window = initial_window.handle;
-        let runtime = Runtime::new(
-            RuntimeStartup {
-                initial_window,
-                globals: self.globals,
-                keymap: self.keymap,
-                menus: self.menus,
-                assets: self.assets,
-                fonts: self.fonts,
-                application_callbacks: self.application_callbacks,
-                quit_mode: self.quit_mode,
-            },
-            event_loop.create_proxy(),
-        )?;
-        Ok(AppRunner {
-            event_loop,
-            runtime,
-            root_window,
-            status: AppRunStatus::Continue,
-        })
-    }
-
-    pub fn run(self) -> Result<(), AppError> {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let AppRunner {
-                event_loop,
-                mut runtime,
-                ..
-            } = self.into_runner()?;
-            event_loop.run_app(&mut runtime)?;
-            return match runtime.fatal_error.take() {
-                Some(error) => Err(error),
-                None => Ok(()),
-            };
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            let event_loop = EventLoop::with_user_event().build()?;
-            event_loop.set_control_flow(ControlFlow::Wait);
-            let mut runtime = Runtime::new(
-                RuntimeStartup {
-                    initial_window: WindowRequest::new(self.view, self.config),
-                    globals: self.globals,
-                    keymap: self.keymap,
-                    menus: self.menus,
-                    assets: self.assets,
-                    fonts: self.fonts,
-                    application_callbacks: self.application_callbacks,
-                    quit_mode: self.quit_mode,
-                },
-                event_loop.create_proxy(),
-            )?;
-            event_loop.run_app(&mut runtime)?;
-            match runtime.fatal_error.take() {
-                Some(error) => Err(error),
-                None => Ok(()),
-            }
-        }
-    }
-}
-
+mod application;
+mod external;
+pub use application::App;
+#[cfg(not(target_arch = "wasm32"))]
+pub use application::AppRunner;
+mod global_shortcut;
 mod platform_dialog;
+mod power_monitor;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+mod single_instance;
+mod tray;
+#[cfg(target_os = "windows")]
+mod windows_menu;
+pub use global_shortcut::{
+    GlobalShortcutEvent, MAX_GLOBAL_SHORTCUT_ACCELERATOR_BYTES, MAX_GLOBAL_SHORTCUTS,
+};
+pub use power_monitor::PowerEvent;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+pub use single_instance::{
+    MAX_SECOND_INSTANCE_ARGUMENTS, MAX_SECOND_INSTANCE_MESSAGE_BYTES,
+    MAX_SINGLE_INSTANCE_IDENTIFIER_BYTES, SecondInstanceEvent, SingleInstanceError,
+};
+pub use tray::{
+    MAX_TRAY_ENCODED_ICON_BYTES, MAX_TRAY_ICON_DIMENSION, MAX_TRAY_ICONS, MAX_TRAY_MENU_DEPTH,
+    MAX_TRAY_MENU_ITEMS, MAX_TRAY_TEXT_BYTES, TrayEvent, TrayEventKind, TrayIconImage,
+    TrayIconOptions, TrayMenuItem, TrayMouseButton,
+};
 #[cfg(any(test, feature = "test-support"))]
 mod test_context;
 #[cfg(any(test, feature = "test-support"))]
@@ -4165,7 +3480,24 @@ struct Runtime {
     focus_requests: Vec<WindowHandle>,
     invalidate_requests: Vec<WindowHandle>,
     window_commands: Vec<WindowCommand>,
+    external_menus: Option<Vec<Menu>>,
     platform_requests: VecDeque<PlatformRequest>,
+    pending_global_shortcut_commands: VecDeque<global_shortcut::GlobalShortcutCommand>,
+    pending_tray_commands: VecDeque<tray::TrayCommand>,
+    global_shortcut_state: global_shortcut::GlobalShortcutState,
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    global_shortcuts: HashMap<u32, global_shortcut::RegisteredGlobalShortcut>,
+    tray_icons: HashMap<u32, tray::NativeTrayIcon>,
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    single_instance: Option<single_instance::SingleInstanceGuard>,
     image_workers: ImageWorkerPoolHandle,
     background_tasks: BackgroundTaskPoolHandle,
     foreground_tasks: ForegroundTaskSpawner,
@@ -4195,6 +3527,10 @@ struct Runtime {
     tabbing_window_count: usize,
     #[cfg(target_os = "macos")]
     mac_application_host: MacApplicationHost,
+    #[cfg(target_os = "windows")]
+    _windows_power_monitor: Option<power_monitor::WindowsPowerMonitor>,
+    #[cfg(target_os = "linux")]
+    _linux_power_monitor: Option<power_monitor::LinuxPowerMonitor>,
     application_callbacks: ApplicationCallbacks,
     quit_mode: QuitMode,
     exit_requested: bool,
@@ -4203,11 +3539,13 @@ struct Runtime {
     // while every inactive window remains independently retained in `windows`.
     config: AppConfig,
     keymap: Keymap,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     menus: Vec<Menu>,
     menu_actions: Vec<MenuAction>,
     #[cfg(target_os = "macos")]
     menu_host: Option<MacMenuHost>,
+    #[cfg(target_os = "windows")]
+    windows_menu_host: Option<windows_menu::WindowsMenuHost>,
     pending_input: Option<PendingInput>,
     window: Option<RuntimeWindow>,
     modifiers: Modifiers,
@@ -4274,12 +3612,32 @@ impl Runtime {
         let background_tasks = BackgroundTaskPoolHandle::new(event_proxy.clone());
         let foreground_tasks = ForegroundTaskSpawner::new(event_proxy.clone());
         let animation_epoch = Instant::now();
+        #[cfg(target_os = "windows")]
+        let windows_power_monitor = application_callbacks
+            .power_event
+            .is_some()
+            .then(|| power_monitor::WindowsPowerMonitor::start(event_proxy.clone()))
+            .transpose()
+            .map_err(AppError::Platform)?;
+        #[cfg(target_os = "linux")]
+        let linux_power_monitor = if application_callbacks.power_event.is_some() {
+            match power_monitor::LinuxPowerMonitor::start(event_proxy.clone()) {
+                Ok(monitor) => Some(monitor),
+                Err(error) => {
+                    tracing::warn!(%error, "Linux power monitoring is unavailable");
+                    None
+                }
+            }
+        } else {
+            None
+        };
         #[cfg(target_os = "macos")]
         let mac_application_host = MacApplicationHost::new(
             event_proxy.clone(),
             application_callbacks.open_urls.is_some(),
             application_callbacks.reopen.is_some(),
-            application_callbacks.system_wake.is_some(),
+            application_callbacks.system_wake.is_some()
+                || application_callbacks.power_event.is_some(),
             application_callbacks.system_notification_response.is_some(),
         )
         .map_err(AppError::Platform)?;
@@ -4299,7 +3657,27 @@ impl Runtime {
             focus_requests: Vec::new(),
             invalidate_requests: Vec::new(),
             window_commands: Vec::with_capacity(8),
+            external_menus: None,
             platform_requests: VecDeque::with_capacity(8),
+            pending_global_shortcut_commands: VecDeque::with_capacity(4),
+            pending_tray_commands: VecDeque::with_capacity(4),
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            global_shortcut_state: global_shortcut::GlobalShortcutState::Pending,
+            #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+            global_shortcut_state: global_shortcut::GlobalShortcutState::Unavailable,
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            global_shortcuts: HashMap::new(),
+            tray_icons: HashMap::new(),
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
+            single_instance: None,
             image_workers,
             background_tasks,
             foreground_tasks,
@@ -4329,16 +3707,22 @@ impl Runtime {
             tabbing_window_count: 0,
             #[cfg(target_os = "macos")]
             mac_application_host,
+            #[cfg(target_os = "windows")]
+            _windows_power_monitor: windows_power_monitor,
+            #[cfg(target_os = "linux")]
+            _linux_power_monitor: linux_power_monitor,
             application_callbacks,
             quit_mode,
             exit_requested: false,
             config: AppConfig::default(),
             keymap,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             menus,
             menu_actions,
             #[cfg(target_os = "macos")]
             menu_host: None,
+            #[cfg(target_os = "windows")]
+            windows_menu_host: None,
             pending_input: None,
             window: None,
             modifiers: Modifiers::default(),
@@ -5434,7 +4818,6 @@ impl Runtime {
         self.apply_application_context(event_loop, context);
     }
 
-    #[cfg(target_os = "macos")]
     fn invoke_system_notification_response(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -5694,6 +5077,15 @@ impl Runtime {
             }
 
             self.process_queued_window_commands(event_loop);
+
+            self.process_global_shortcut_commands();
+            self.process_tray_commands();
+
+            if let Some(menus) = self.external_menus.take()
+                && !self.replace_menus(event_loop, menus)
+            {
+                return;
+            }
 
             for handle in std::mem::take(&mut self.invalidate_requests) {
                 let Some(window_id) = self.window_handles.get(&handle).copied() else {
@@ -6128,7 +5520,7 @@ impl Runtime {
     }
 
     fn replace_menus(&mut self, event_loop: &ActiveEventLoop, menus: Vec<Menu>) -> bool {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let _ = event_loop;
         let menu_actions = collect_menu_actions(&menus);
         #[cfg(target_os = "macos")]
@@ -6139,6 +5531,18 @@ impl Runtime {
                 return false;
             }
         };
+        #[cfg(target_os = "windows")]
+        let next_host = if menus.is_empty() {
+            None
+        } else {
+            match windows_menu::WindowsMenuHost::new(&menus, self.event_proxy.clone()) {
+                Ok(host) => Some(host),
+                Err(error) => {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return false;
+                }
+            }
+        };
 
         self.menu_actions = menu_actions;
         #[cfg(target_os = "macos")]
@@ -6147,7 +5551,28 @@ impl Runtime {
             self.menu_host = next_host;
             self.sync_native_menu_state();
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            // Dropping the old host detaches its menu before the replacement attaches.
+            self.windows_menu_host.take();
+            if let Some(next_host) = &next_host {
+                for entry in self.windows.values() {
+                    if let Err(error) = next_host.attach(&entry.state.window) {
+                        self.fail(event_loop, AppError::Platform(error));
+                        return false;
+                    }
+                }
+                if let Some(window) = &self.window
+                    && let Err(error) = next_host.attach(&window.window)
+                {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return false;
+                }
+            }
+            self.menus = menus;
+            self.windows_menu_host = next_host;
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let _ = menus;
         true
     }
@@ -8691,6 +8116,26 @@ impl Runtime {
                 }
             };
         }
+        #[cfg(target_os = "windows")]
+        {
+            if self.windows_menu_host.is_none() && !self.menus.is_empty() {
+                self.windows_menu_host =
+                    match windows_menu::WindowsMenuHost::new(&self.menus, self.event_proxy.clone())
+                    {
+                        Ok(host) => Some(host),
+                        Err(error) => {
+                            self.fail(event_loop, AppError::Platform(error));
+                            return;
+                        }
+                    };
+            }
+            if let Some(host) = &self.windows_menu_host
+                && let Err(error) = host.attach(&window)
+            {
+                self.fail(event_loop, AppError::Platform(error));
+                return;
+            }
+        }
         let accessibility = AccessibilityAdapter::with_event_loop_proxy(
             event_loop,
             &window,
@@ -9095,6 +8540,8 @@ impl Runtime {
 
 impl Drop for Runtime {
     fn drop(&mut self) {
+        global_shortcut::clear_global_shortcut_handler_proxy();
+        tray::clear_tray_handler_proxy();
         #[cfg(target_os = "macos")]
         for (_, dialog) in self.active_platform_dialogs.drain() {
             dialog.native.cancel();
@@ -9119,6 +8566,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         }
 
         event_loop.set_control_flow(ControlFlow::Wait);
+        self.initialize_global_shortcuts();
         self.refresh_displays(event_loop);
         self.process_window_commands(event_loop);
     }
@@ -10540,9 +9988,34 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 .complete_system_notification_authorization(*granted, error.clone());
             return;
         }
-        #[cfg(target_os = "macos")]
         if let RuntimeEvent::SystemNotificationResponse(response) = &event {
             self.invoke_system_notification_response(event_loop, response.clone());
+            return;
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+        if let RuntimeEvent::GlobalShortcut(hotkey_id) = &event {
+            self.invoke_global_shortcut(event_loop, *hotkey_id);
+            return;
+        }
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
+        if let RuntimeEvent::SecondInstance(second_instance) = &event {
+            self.invoke_second_instance(event_loop, second_instance.clone());
+            return;
+        }
+        if let RuntimeEvent::Power(power_event) = &event {
+            self.invoke_power_event(event_loop, *power_event);
+            return;
+        }
+        if let RuntimeEvent::Tray(tray_event) = &event {
+            self.invoke_tray_event(event_loop, tray_event.clone());
             return;
         }
         #[cfg(target_os = "macos")]
@@ -10622,14 +10095,30 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             RuntimeEvent::PlatformDialogClosed(_, _) => unreachable!("handled before routing"),
             #[cfg(target_os = "macos")]
             RuntimeEvent::PlatformDialogCancelled(_, _) => unreachable!("handled before routing"),
+            RuntimeEvent::SystemNotificationResponse(_) => {
+                unreachable!("handled before window routing")
+            }
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            RuntimeEvent::GlobalShortcut(_) => unreachable!("handled before window routing"),
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
+            RuntimeEvent::SecondInstance(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::Power(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::Tray(_) => unreachable!("handled before window routing"),
             #[cfg(target_os = "macos")]
             RuntimeEvent::OpenUrls(_)
             | RuntimeEvent::Reopen { .. }
             | RuntimeEvent::SystemWake
             | RuntimeEvent::DisplaysChanged
             | RuntimeEvent::KeyboardLayoutChanged
-            | RuntimeEvent::SystemNotificationAuthorization { .. }
-            | RuntimeEvent::SystemNotificationResponse(_) => {
+            | RuntimeEvent::SystemNotificationAuthorization { .. } => {
                 unreachable!("handled before window routing")
             }
             RuntimeEvent::MenuWillOpen | RuntimeEvent::MenuAction(_) => self.active_window,
@@ -10727,14 +10216,30 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             RuntimeEvent::PlatformDialogCancelled(_, _) => {
                 unreachable!("handled before routing")
             }
+            RuntimeEvent::SystemNotificationResponse(_) => {
+                unreachable!("handled before window routing")
+            }
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            RuntimeEvent::GlobalShortcut(_) => unreachable!("handled before window routing"),
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
+            RuntimeEvent::SecondInstance(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::Power(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::Tray(_) => unreachable!("handled before window routing"),
             #[cfg(target_os = "macos")]
             RuntimeEvent::OpenUrls(_)
             | RuntimeEvent::Reopen { .. }
             | RuntimeEvent::SystemWake
             | RuntimeEvent::DisplaysChanged
             | RuntimeEvent::KeyboardLayoutChanged
-            | RuntimeEvent::SystemNotificationAuthorization { .. }
-            | RuntimeEvent::SystemNotificationResponse(_) => {
+            | RuntimeEvent::SystemNotificationAuthorization { .. } => {
                 unreachable!("handled before window routing")
             }
             RuntimeEvent::Accessibility(event) => match event.window_event {

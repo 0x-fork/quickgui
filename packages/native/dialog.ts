@@ -14,7 +14,10 @@ export interface AlertDialogOptions {
   level?: AlertDialogLevel;
   message: string;
   detail?: string;
-  /** Defaults to one system-styled OK button. */
+  /**
+   * Defaults to one system-styled OK button. macOS accepts up to 16 buttons; the portable
+   * Windows/Linux/BSD backend accepts up to three uniquely labelled buttons.
+   */
   buttons?: readonly (string | AlertDialogButton)[];
 }
 
@@ -37,7 +40,10 @@ export interface OpenDialogOptions {
   filters?: readonly FileDialogFilter[];
   /** Custom open-button text. Currently supported by the macOS backend. */
   buttonLabel?: string;
-  /** Defaults to `["openFile"]`. */
+  /**
+   * Defaults to `["openFile"]`. `showHiddenFiles` can currently be forced only on macOS;
+   * Windows/Linux otherwise follow the user's file-picker preference.
+   */
   properties?: readonly OpenDialogProperty[];
 }
 

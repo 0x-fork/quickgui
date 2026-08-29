@@ -32,6 +32,8 @@ export interface QuickGuiConfig {
   outDir?: string;
   target?: QuickGuiTarget;
   resources?: string[];
+  /** Custom URL schemes. Packaged macOS apps declare these in their signed Info.plist. */
+  protocols?: string[];
   macos?: MacOSConfig;
   windows?: WindowsConfig;
 }
@@ -46,6 +48,7 @@ export interface ResolvedQuickGuiConfig {
   outDir: string;
   target?: QuickGuiTarget;
   resources: string[];
+  protocols: string[];
   macos: Required<Pick<MacOSConfig, "minimumSystemVersion" | "category">> & MacOSConfig;
   windows: Required<Pick<WindowsConfig, "hideConsole">> & WindowsConfig;
   projectRoot: string;
@@ -95,6 +98,7 @@ export function resolveConfig(
   const resources = stringArray(input.resources, "resources").map((path) =>
     resolveRelative(projectRoot, path),
   );
+  const protocols = protocolArray(input.protocols);
   const macos = objectOrEmpty(input.macos, "macos");
   const windows = objectOrEmpty(input.windows, "windows");
   const icon = optionalString(macos.icon, "macos.icon", 1_024);
@@ -111,6 +115,7 @@ export function resolveConfig(
     outDir,
     ...(target ? { target } : {}),
     resources,
+    protocols,
     macos: {
       minimumSystemVersion:
         optionalString(macos.minimumSystemVersion, "macos.minimumSystemVersion", 32) ?? "13.0",
@@ -139,6 +144,22 @@ export function resolveConfig(
     projectRoot: resolve(projectRoot),
     configPath: resolve(configPath),
   };
+}
+
+function protocolArray(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 64) {
+    throw new CliError("`protocols` must be an array with at most 64 URL schemes");
+  }
+  const protocols = value.map((item, index) =>
+    requiredString(item, `protocols[${index}]`, 64).toLowerCase(),
+  );
+  for (const protocol of protocols) {
+    if (!/^[a-z][a-z0-9+.-]*$/.test(protocol)) {
+      throw new CliError(`Invalid URL scheme \`${protocol}\` in \`protocols\``);
+    }
+  }
+  return [...new Set(protocols)];
 }
 
 function executableName(name: string): string {

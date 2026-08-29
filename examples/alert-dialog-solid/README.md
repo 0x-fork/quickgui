@@ -11,4 +11,4 @@ bun run dev
 `Dialog.showAlertDialog(options)` presents an application-modal alert. Pass a `Window` first to
 attach it as a native sheet: `Dialog.showAlertDialog(window, options)`. The promise resolves with
 the zero-based index of the selected button. Button roles give the platform its default and cancel
-keyboard behavior. Native alert dialogs are currently available on the macOS target.
+keyboard behavior. Native alert dialogs are available on macOS, Windows, and Linux.
