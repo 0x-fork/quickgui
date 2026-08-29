@@ -235,7 +235,7 @@ impl Drop for ForegroundTaskFinishGuard {
 pub(crate) type QueuedViewUpdate = Box<dyn FnOnce(&mut dyn Any, &mut EventContext)>;
 
 struct ForegroundTaskMetadata {
-    window: WindowHandle,
+    window: Option<WindowHandle>,
     abort: Arc<AbortState>,
     updates: VecDeque<QueuedViewUpdate>,
     timers: HashSet<ForegroundTimerId>,
@@ -251,7 +251,7 @@ struct ForegroundTaskRegistry {
     next_task: u64,
     next_timer: u64,
     tasks: HashMap<ForegroundTaskId, ForegroundTaskMetadata>,
-    tasks_per_window: HashMap<WindowHandle, usize>,
+    tasks_per_window: HashMap<Option<WindowHandle>, usize>,
     timer_deadlines: BTreeSet<(Instant, ForegroundTimerId)>,
     timers: HashMap<ForegroundTimerId, ForegroundTimerEntry>,
     shutting_down: bool,
@@ -260,8 +260,9 @@ struct ForegroundTaskRegistry {
 impl ForegroundTaskRegistry {
     fn reserve(
         &mut self,
-        window: WindowHandle,
+        window: impl Into<Option<WindowHandle>>,
     ) -> Result<(ForegroundTaskId, Arc<AbortState>), ForegroundTaskSpawnError> {
+        let window = window.into();
         if self.shutting_down {
             return Err(ForegroundTaskSpawnError::Unavailable);
         }
@@ -313,7 +314,7 @@ impl ForegroundTaskRegistry {
         let tasks = self
             .tasks
             .iter()
-            .filter_map(|(task, metadata)| (metadata.window == window).then_some(*task))
+            .filter_map(|(task, metadata)| (metadata.window == Some(window)).then_some(*task))
             .collect::<Vec<_>>();
         for task in tasks {
             self.remove_task(task, true);
@@ -346,7 +347,8 @@ impl ForegroundTaskRegistry {
         }
     }
 
-    fn owns(&self, task: ForegroundTaskId, window: WindowHandle) -> bool {
+    fn owns(&self, task: ForegroundTaskId, window: impl Into<Option<WindowHandle>>) -> bool {
+        let window = window.into();
         self.tasks
             .get(&task)
             .is_some_and(|metadata| metadata.window == window && !metadata.abort.is_aborted())
@@ -466,7 +468,7 @@ impl ForegroundTaskRegistry {
 
 pub(crate) struct ScheduledForegroundTask {
     pub(crate) task: ForegroundTaskId,
-    pub(crate) window: WindowHandle,
+    pub(crate) window: Option<WindowHandle>,
     pub(crate) runnable: async_task::Runnable,
 }
 
@@ -672,7 +674,51 @@ impl ForegroundTaskSpawner {
         let (runnable, task) = async_task::spawn_local(managed, move |runnable| {
             ready.schedule(ScheduledForegroundTask {
                 task: task_id,
-                window,
+                window: Some(window),
+                runnable,
+            });
+        });
+        runnable.schedule();
+        Ok(Task {
+            inner: Some(task),
+            abort,
+            not_send: PhantomData,
+        })
+    }
+
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    pub(crate) fn spawn_application<Fut, R>(
+        &self,
+        future: Fut,
+    ) -> Result<Task<R>, ForegroundTaskSpawnError>
+    where
+        Fut: Future<Output = R> + 'static,
+        R: 'static,
+    {
+        if self.ready.closed.load(Ordering::Acquire) {
+            return Err(ForegroundTaskSpawnError::Unavailable);
+        }
+        let (task_id, abort) = self.registry.borrow_mut().reserve(None)?;
+        let managed = ManagedFuture {
+            future: Box::pin(future),
+            abort: abort.clone(),
+            _finish: ForegroundTaskFinishGuard {
+                task: task_id,
+                registry: Rc::downgrade(&self.registry),
+            },
+        };
+        let ready = self.ready.clone();
+        let (runnable, task) = async_task::spawn_local(managed, move |runnable| {
+            ready.schedule(ScheduledForegroundTask {
+                task: task_id,
+                window: None,
                 runnable,
             });
         });
@@ -688,7 +734,11 @@ impl ForegroundTaskSpawner {
         self.ready.take_batch()
     }
 
-    pub(crate) fn owns(&self, task: ForegroundTaskId, window: WindowHandle) -> bool {
+    pub(crate) fn owns(
+        &self,
+        task: ForegroundTaskId,
+        window: impl Into<Option<WindowHandle>>,
+    ) -> bool {
         self.registry.borrow().owns(task, window)
     }
 

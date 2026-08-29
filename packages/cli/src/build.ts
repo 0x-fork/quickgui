@@ -36,7 +36,7 @@ export interface BuildResult {
   mode: BuildMode;
 }
 
-const nativeExports = [
+export const nativeExports = [
   "abortAppHost",
   "applyBatch",
   "applyHostedBatch",
@@ -55,6 +55,12 @@ const nativeExports = [
   "protocolVersion",
   "pumpApp",
   "runAppHost",
+  "showDialog",
+  "showHostedDialog",
+  "showHostedOpenDialog",
+  "showHostedSaveDialog",
+  "showOpenDialog",
+  "showSaveDialog",
   "startApp",
   "startHostedApp",
   "takeEvents",

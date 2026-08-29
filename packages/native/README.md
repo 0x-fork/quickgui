@@ -9,7 +9,11 @@ native events to independent `Window` trees. Native input nodes route
 controlled value payloads, including masked password fields, and native Markdown nodes retain
 QuickGUI core parser/render state across mutations. `new Window({ anchor: node, ... })` creates a display-aware,
 parent-owned native popup. Its public lifecycle remains `new App()`, `new Window(options)`, and
-`window.close()`.
+`window.close()`. The `Dialog` namespace exposes `showAlertDialog`, `showOpenDialog`, and
+`showSaveDialog`; each accepts an optional leading `Window`, matching Electron's parented and
+application-modal call shapes. Alert dialogs resolve with a button index, while file dialogs use
+Electron-shaped result objects. The file-dialog backend uses QuickGUI's AppKit panels on macOS and
+`rfd` on Windows and Linux.
 
 Most applications should use [`@quickgui/solid`](../solid/README.md). The native package is the
 renderer-neutral layer for additional JavaScript reconcilers.
@@ -21,8 +25,10 @@ bun run build:native
 bun test packages/native
 ```
 
-The current binary target is macOS. The source protocol is versioned and malformed batches are
-rejected transactionally before the committed retained tree changes.
+The native package declares macOS, Windows, and Linux targets. A source checkout only needs the
+host `.node` build for development; release packaging must supply the target-specific addons used
+by the CLI. The source protocol is versioned and malformed batches are rejected transactionally
+before the committed retained tree changes.
 
 On macOS, the build script detects a selected beta Xcode and prefers `/Applications/Xcode.app`
 when it is available. Set `QUICKGUI_ALLOW_BETA_XCODE=1` to opt out of that fallback.

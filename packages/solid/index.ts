@@ -23,8 +23,23 @@ import {
   setNativeProperty,
 } from "@quickgui/native";
 
-export { App, NativeNode, Window } from "@quickgui/native";
-export type { PopupPlacement, QuickGuiEvent, RunOptions, WindowOptions } from "@quickgui/native";
+export { App, Dialog, NativeNode, Window } from "@quickgui/native";
+export type {
+  AlertDialogButton,
+  AlertDialogButtonRole,
+  AlertDialogLevel,
+  AlertDialogOptions,
+  FileDialogFilter,
+  OpenDialogOptions,
+  OpenDialogProperty,
+  OpenDialogResult,
+  PopupPlacement,
+  QuickGuiEvent,
+  RunOptions,
+  SaveDialogOptions,
+  SaveDialogResult,
+  WindowOptions,
+} from "@quickgui/native";
 
 type PropertyInput = unknown;
 type PropertyEntry = {

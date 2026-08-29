@@ -126,8 +126,22 @@ cd examples/ai-chat-solid
 bun run dev
 ```
 
-This creates and runs a real development `.app` on macOS while loading `app.tsx` from disk. Rust
-framework examples remain available directly through Cargo:
+The Solid alert-dialog example presents native alerts with optional window ownership:
+
+```console
+cd examples/alert-dialog-solid
+bun run dev
+```
+
+The separate file-dialog example uses native open and save panels with Electron-shaped results:
+
+```console
+cd examples/file-dialog-solid
+bun run dev
+```
+
+This creates and runs the platform-native development host while loading `app.tsx` from disk (an
+`.app` bundle on macOS). Rust framework examples remain available directly through Cargo:
 
 ```console
 cargo run --release --example gesture_input

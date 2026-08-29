@@ -2,7 +2,8 @@
 
 Solid 2 renderer for QuickGUI. It exports unstyled `View`, `Text`, `Button`, `Input`, `TextArea`,
 retained core `Markdown`, and variable-height `VirtualList` host components, plus `App`, `Window`,
-and `render`. Import reactive primitives from `solid-js` itself.
+the native `Dialog` namespace, and `render`. Import reactive primitives from `solid-js`
+itself.
 
 Run applications through the QuickGUI CLI:
 
@@ -25,3 +26,7 @@ See the [Solid renderer guide](../../docs/solid.md) and the
 [runnable example](../../examples/solid/app.tsx). The
 [AI chat example](../../examples/ai-chat-solid/app.tsx) demonstrates controlled input and live
 streaming Markdown over a tail-following virtual transcript with the Vercel AI SDK and DeepSeek.
+The [alert-dialog example](../../examples/alert-dialog-solid/app.tsx) demonstrates information,
+warning, and critical native alerts with optional window ownership and semantic button roles.
+The [file-dialog example](../../examples/file-dialog-solid/app.tsx) demonstrates native open-file,
+open-folder, and save-destination panels with explicit cancellation results.

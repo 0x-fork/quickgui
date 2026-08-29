@@ -35,11 +35,51 @@ export interface HostedAppUpdate {
   exitCode?: number
 }
 
+export interface NativeDialogButton {
+  label: string
+  role?: string
+}
+
+export interface NativeDialogOptions {
+  level?: string
+  message: string
+  detail?: string
+  buttons: Array<NativeDialogButton>
+}
+
 export interface NativeEvent {
   kind: string
   window: number
   target: number
   value?: string
+  paths?: Array<string>
+  error?: string
+}
+
+export interface NativeFileDialogFilter {
+  name: string
+  extensions: Array<string>
+}
+
+export interface NativeOpenDialogOptions {
+  files: boolean
+  directories: boolean
+  multiple: boolean
+  title?: string
+  prompt?: string
+  directory?: string
+  suggestedName?: string
+  filters: Array<NativeFileDialogFilter>
+  showsHiddenFiles: boolean
+}
+
+export interface NativeSaveDialogOptions {
+  directory: string
+  title?: string
+  suggestedName?: string
+  prompt?: string
+  filters: Array<NativeFileDialogFilter>
+  showsHiddenFiles: boolean
 }
 
 export interface NativeWindowOptions {
@@ -68,6 +108,18 @@ export declare function protocolVersion(): number
 export declare function pumpApp(app: number, timeoutMs?: number | undefined | null): number
 
 export declare function runAppHost(onReady?: (() => void) | undefined | null): number
+
+export declare function showDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): void
+
+export declare function showHostedDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): void
+
+export declare function showHostedOpenDialog(app: number, window: number | undefined | null, request: number, options: NativeOpenDialogOptions): void
+
+export declare function showHostedSaveDialog(app: number, window: number | undefined | null, request: number, options: NativeSaveDialogOptions): void
+
+export declare function showOpenDialog(app: number, window: number | undefined | null, request: number, options: NativeOpenDialogOptions): void
+
+export declare function showSaveDialog(app: number, window: number | undefined | null, request: number, options: NativeSaveDialogOptions): void
 
 export declare function startApp(app: number): void
 

@@ -1,5 +1,15 @@
 import * as binding from "./binding.js";
 import {
+  type AlertDialogOptions,
+  type OpenDialogOptions,
+  type OpenDialogResult,
+  type SaveDialogOptions,
+  type SaveDialogResult,
+  normalizeAlertDialogOptions,
+  normalizeOpenDialogOptions,
+  normalizeSaveDialogOptions,
+} from "./dialog.ts";
+import {
   MutationBatch,
   NativeNodeTag,
   PropertyCode,
@@ -9,6 +19,18 @@ import {
 } from "./protocol.ts";
 
 export { PropertyCode } from "./protocol.ts";
+export type {
+  AlertDialogButton,
+  AlertDialogButtonRole,
+  AlertDialogLevel,
+  AlertDialogOptions,
+  FileDialogFilter,
+  OpenDialogOptions,
+  OpenDialogProperty,
+  OpenDialogResult,
+  SaveDialogOptions,
+  SaveDialogResult,
+} from "./dialog.ts";
 
 export type ColorValue = number | string;
 export type NativeElementName =
@@ -66,6 +88,15 @@ export interface RunOptions {
   /** Pump interval used only when running a source file outside the QuickGUI CLI host. */
   sliceMs?: number;
 }
+
+type DialogEventKind = "dialog" | "open-dialog" | "save-dialog";
+
+type PendingDialog = {
+  kind: DialogEventKind;
+  window: Window | undefined;
+  complete: (event: binding.NativeEvent) => void;
+  reject: (reason: Error) => void;
+};
 
 let nextNodeId = 1;
 let activeApp: App | undefined;
@@ -137,6 +168,8 @@ export class App {
   #started = false;
   #running = false;
   #destroyed = false;
+  #nextDialogRequest = 1;
+  readonly #pendingDialogs = new Map<number, PendingDialog>();
 
   constructor() {
     if (activeApp) {
@@ -177,6 +210,14 @@ export class App {
 
   #dispatchNativeEvents(events: binding.NativeEvent[]): void {
     for (const event of events) {
+      if (
+        event.kind === "dialog" ||
+        event.kind === "open-dialog" ||
+        event.kind === "save-dialog"
+      ) {
+        this.#dispatchDialog(event);
+        continue;
+      }
       const window = this.windows.get(event.window);
       if (!window) continue;
       if (event.kind === "close") {
@@ -215,6 +256,7 @@ export class App {
 
   destroy(): void {
     if (this.#destroyed) return;
+    this.#rejectDialogs(undefined, new Error("the QuickGUI app was destroyed"));
     if (hostedRuntime) binding.destroyHostedApp(this.nativeId);
     else binding.destroyApp(this.nativeId);
     this.#destroyed = true;
@@ -239,7 +281,153 @@ export class App {
   _didCloseWindow(window: Window): void {
     if (this.windows.get(window.nativeId) !== window) return;
     this.windows.delete(window.nativeId);
+    this.#rejectDialogs(window, new Error("the native dialog's owner window closed"));
     window._didClose();
+  }
+
+  _showAlertDialog(window: Window | undefined, options: AlertDialogOptions): Promise<number> {
+    try {
+      const nativeOptions = normalizeAlertDialogOptions(options);
+      return this.#requestDialog(
+        window,
+        "dialog",
+        (request) => {
+          if (hostedRuntime) {
+            binding.showHostedDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+          } else {
+            binding.showDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+          }
+        },
+        (event) => {
+          const response = Number(event.value);
+          if (!Number.isSafeInteger(response) || response < 0) {
+            throw new Error("the native dialog returned an invalid button index");
+          }
+          return response;
+        },
+      );
+    } catch (error) {
+      return Promise.reject(asError(error));
+    }
+  }
+
+  _showOpenDialog(
+    window: Window | undefined,
+    options: OpenDialogOptions,
+  ): Promise<OpenDialogResult> {
+    try {
+      const nativeOptions = normalizeOpenDialogOptions(options);
+      return this.#requestDialog(
+        window,
+        "open-dialog",
+        (request) => {
+          if (hostedRuntime) {
+            binding.showHostedOpenDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+          } else {
+            binding.showOpenDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+          }
+        },
+        (event) => ({
+          canceled: event.paths === undefined,
+          filePaths: event.paths ?? [],
+        }),
+      );
+    } catch (error) {
+      return Promise.reject(asError(error));
+    }
+  }
+
+  _showSaveDialog(
+    window: Window | undefined,
+    options: SaveDialogOptions,
+  ): Promise<SaveDialogResult> {
+    try {
+      const nativeOptions = normalizeSaveDialogOptions(options);
+      return this.#requestDialog(
+        window,
+        "save-dialog",
+        (request) => {
+          if (hostedRuntime) {
+            binding.showHostedSaveDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+          } else {
+            binding.showSaveDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+          }
+        },
+        (event) =>
+          event.value === undefined
+            ? { canceled: true }
+            : { canceled: false, filePath: event.value },
+      );
+    } catch (error) {
+      return Promise.reject(asError(error));
+    }
+  }
+
+  #requestDialog<T>(
+    window: Window | undefined,
+    kind: DialogEventKind,
+    invoke: (request: number) => void,
+    result: (event: binding.NativeEvent) => T,
+  ): Promise<T> {
+    this.#assertAlive();
+    if (window && (window.closed || this.windows.get(window.nativeId) !== window)) {
+      return Promise.reject(new Error("the native dialog parent must be an open window"));
+    }
+    const request = this.#allocateDialogRequest();
+    return new Promise<T>((resolve, reject) => {
+      this.#pendingDialogs.set(request, {
+        kind,
+        window,
+        complete: (event) => resolve(result(event)),
+        reject,
+      });
+      try {
+        invoke(request);
+      } catch (error) {
+        this.#pendingDialogs.delete(request);
+        reject(asError(error));
+      }
+    });
+  }
+
+  #dispatchDialog(event: binding.NativeEvent): void {
+    const pending = this.#pendingDialogs.get(event.target);
+    if (!pending) return;
+    this.#pendingDialogs.delete(event.target);
+    if ((pending.window?.nativeId ?? 0) !== event.window) {
+      pending.reject(new Error("the native dialog response had the wrong owner window"));
+      return;
+    }
+    if (pending.kind !== event.kind) {
+      pending.reject(new Error("the native dialog response had the wrong response type"));
+      return;
+    }
+    if (event.error !== undefined) {
+      pending.reject(new Error(event.error));
+      return;
+    }
+    try {
+      pending.complete(event);
+    } catch (error) {
+      pending.reject(asError(error));
+    }
+  }
+
+  #allocateDialogRequest(): number {
+    for (let attempt = 0; attempt <= this.#pendingDialogs.size; attempt += 1) {
+      const request = this.#nextDialogRequest;
+      this.#nextDialogRequest = request >= 0xffff_ffff ? 1 : request + 1;
+      if (!this.#pendingDialogs.has(request)) return request;
+    }
+    throw new Error("the native dialog request id space is exhausted");
+  }
+
+  #rejectDialogs(window: Window | undefined, error: Error): void {
+    for (const [request, pending] of this.#pendingDialogs) {
+      if (window && pending.window !== window) continue;
+      this.#pendingDialogs.delete(request);
+      pending.reject(error);
+    }
   }
 
   #assertAlive(): void {
@@ -442,6 +630,60 @@ export class Window {
       if (!this.#closed) this.flush();
     });
   }
+}
+
+function showAlertDialog(options: AlertDialogOptions): Promise<number>;
+function showAlertDialog(window: Window, options: AlertDialogOptions): Promise<number>;
+function showAlertDialog(
+  windowOrOptions: Window | AlertDialogOptions,
+  maybeOptions?: AlertDialogOptions,
+): Promise<number> {
+  const hasWindow = windowOrOptions instanceof Window;
+  const window = hasWindow ? windowOrOptions : undefined;
+  const options = hasWindow ? maybeOptions : (windowOrOptions as AlertDialogOptions);
+  if (!options) return Promise.reject(new TypeError("showAlertDialog requires options"));
+  const app = window?.app ?? activeApp;
+  if (!app) return Promise.reject(new Error("create a QuickGUI App before showing a dialog"));
+  return app._showAlertDialog(window, options);
+}
+
+function showOpenDialog(options?: OpenDialogOptions): Promise<OpenDialogResult>;
+function showOpenDialog(window: Window, options?: OpenDialogOptions): Promise<OpenDialogResult>;
+function showOpenDialog(
+  windowOrOptions: Window | OpenDialogOptions = {},
+  maybeOptions: OpenDialogOptions = {},
+): Promise<OpenDialogResult> {
+  const hasWindow = windowOrOptions instanceof Window;
+  const window = hasWindow ? windowOrOptions : undefined;
+  const options = hasWindow ? maybeOptions : (windowOrOptions as OpenDialogOptions);
+  const app = window?.app ?? activeApp;
+  if (!app) return Promise.reject(new Error("create a QuickGUI App before showing a dialog"));
+  return app._showOpenDialog(window, options);
+}
+
+function showSaveDialog(options?: SaveDialogOptions): Promise<SaveDialogResult>;
+function showSaveDialog(window: Window, options?: SaveDialogOptions): Promise<SaveDialogResult>;
+function showSaveDialog(
+  windowOrOptions: Window | SaveDialogOptions = {},
+  maybeOptions: SaveDialogOptions = {},
+): Promise<SaveDialogResult> {
+  const hasWindow = windowOrOptions instanceof Window;
+  const window = hasWindow ? windowOrOptions : undefined;
+  const options = hasWindow ? maybeOptions : (windowOrOptions as SaveDialogOptions);
+  const app = window?.app ?? activeApp;
+  if (!app) return Promise.reject(new Error("create a QuickGUI App before showing a dialog"));
+  return app._showSaveDialog(window, options);
+}
+
+/** Platform-native dialogs. Pass a Window first to attach the dialog; omit it for app-modal UI. */
+export const Dialog = Object.freeze({
+  showAlertDialog,
+  showOpenDialog,
+  showSaveDialog,
+});
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 export function createNativeElement(name: NativeElementName): NativeNode {

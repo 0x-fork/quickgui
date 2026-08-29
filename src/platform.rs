@@ -40,6 +40,12 @@ pub const MAX_PLATFORM_URL_BYTES: usize = 16 * 1024;
 pub const MAX_SELECTED_PATHS: usize = 4_096;
 /// Maximum aggregate filesystem bytes copied out of one native open panel.
 pub const MAX_SELECTED_PATHS_TOTAL_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum named filters accepted by one native file dialog.
+pub const MAX_FILE_DIALOG_FILTERS: usize = 64;
+/// Maximum extensions retained across all filters in one native file dialog.
+pub const MAX_FILE_DIALOG_FILTER_EXTENSIONS: usize = 256;
+/// Maximum aggregate UTF-8 bytes retained by file-dialog filter names and extensions.
+pub const MAX_FILE_DIALOG_FILTER_BYTES: usize = 64 * 1024;
 /// Maximum URLs accepted from one native application-open callback.
 pub const MAX_OPEN_URLS: usize = 256;
 /// Maximum aggregate UTF-8 bytes retained by one native application-open callback.
@@ -79,7 +85,7 @@ pub enum PlatformError {
         "one effect cycle cannot retain more than {MAX_PENDING_PLATFORM_REQUESTS} platform operations"
     )]
     PendingQueueFull,
-    #[error("the window already owns an active native dialog")]
+    #[error("the application or a related window already owns an active native dialog")]
     DialogBusy,
     #[error("the application already owns {MAX_ACTIVE_PLATFORM_DIALOGS} active native dialogs")]
     TooManyDialogs,
@@ -119,6 +125,8 @@ pub enum PlatformError {
     InvalidNotificationAction,
     #[error("an open panel must allow files, directories, or both")]
     InvalidPathSelection,
+    #[error("native file-dialog filters are invalid or exceed their count or byte limits")]
+    InvalidFileDialogFilter,
     #[error("the native path selection exceeded QuickGUI's bounded result size")]
     SelectionTooLarge,
     #[error("native platform operation failed: {0}")]
@@ -272,14 +280,37 @@ impl From<String> for PromptButton {
     }
 }
 
+/// One named native file-dialog filter. Extensions omit the leading dot; `*` matches all files.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileDialogFilter {
+    pub name: Arc<str>,
+    pub extensions: Vec<Arc<str>>,
+}
+
+impl FileDialogFilter {
+    pub fn new<I, S>(name: impl Into<Arc<str>>, extensions: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Arc<str>>,
+    {
+        Self {
+            name: name.into(),
+            extensions: extensions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 /// Options for a native open panel.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathPromptOptions {
     pub files: bool,
     pub directories: bool,
     pub multiple: bool,
+    pub title: Option<Arc<str>>,
     pub prompt: Option<Arc<str>>,
     pub directory: Option<PathBuf>,
+    pub suggested_name: Option<Arc<str>>,
+    pub filters: Vec<FileDialogFilter>,
     pub shows_hidden_files: bool,
 }
 
@@ -289,8 +320,11 @@ impl Default for PathPromptOptions {
             files: true,
             directories: false,
             multiple: false,
+            title: None,
             prompt: None,
             directory: None,
+            suggested_name: None,
+            filters: Vec::new(),
             shows_hidden_files: false,
         }
     }
@@ -316,6 +350,11 @@ impl PathPromptOptions {
         self
     }
 
+    pub fn title(mut self, title: impl Into<Arc<str>>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+
     pub fn prompt(mut self, prompt: impl Into<Arc<str>>) -> Self {
         self.prompt = Some(prompt.into());
         self
@@ -323,6 +362,16 @@ impl PathPromptOptions {
 
     pub fn directory(mut self, directory: impl Into<PathBuf>) -> Self {
         self.directory = Some(directory.into());
+        self
+    }
+
+    pub fn suggested_name(mut self, suggested_name: impl Into<Arc<str>>) -> Self {
+        self.suggested_name = Some(suggested_name.into());
+        self
+    }
+
+    pub fn filters(mut self, filters: impl IntoIterator<Item = FileDialogFilter>) -> Self {
+        self.filters = filters.into_iter().collect();
         self
     }
 
@@ -336,8 +385,10 @@ impl PathPromptOptions {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SavePathOptions {
     pub directory: PathBuf,
+    pub title: Option<Arc<str>>,
     pub suggested_name: Option<Arc<str>>,
     pub prompt: Option<Arc<str>>,
+    pub filters: Vec<FileDialogFilter>,
     pub shows_hidden_files: bool,
 }
 
@@ -345,10 +396,17 @@ impl SavePathOptions {
     pub fn new(directory: impl Into<PathBuf>) -> Self {
         Self {
             directory: directory.into(),
+            title: None,
             suggested_name: None,
             prompt: None,
+            filters: Vec::new(),
             shows_hidden_files: false,
         }
+    }
+
+    pub fn title(mut self, title: impl Into<Arc<str>>) -> Self {
+        self.title = Some(title.into());
+        self
     }
 
     pub fn suggested_name(mut self, suggested_name: impl Into<Arc<str>>) -> Self {
@@ -358,6 +416,11 @@ impl SavePathOptions {
 
     pub fn prompt(mut self, prompt: impl Into<Arc<str>>) -> Self {
         self.prompt = Some(prompt.into());
+        self
+    }
+
+    pub fn filters(mut self, filters: impl IntoIterator<Item = FileDialogFilter>) -> Self {
+        self.filters = filters.into_iter().collect();
         self
     }
 
@@ -452,7 +515,7 @@ pub(crate) struct PlatformResponder<T> {
 #[cfg(target_os = "macos")]
 struct PlatformCancellation {
     proxy: EventLoopProxy<RuntimeEvent>,
-    owner: WindowHandle,
+    owner: Option<WindowHandle>,
     id: PlatformDialogId,
 }
 
@@ -490,7 +553,7 @@ impl<T> PlatformResponder<T> {
     fn bind_cancellation(
         &self,
         proxy: EventLoopProxy<RuntimeEvent>,
-        owner: WindowHandle,
+        owner: Option<WindowHandle>,
         id: PlatformDialogId,
     ) -> bool {
         if self.is_cancelled() {
@@ -532,7 +595,7 @@ impl PlatformDialogId {
 #[derive(Debug)]
 pub(crate) enum PlatformRequest {
     Prompt {
-        window: WindowHandle,
+        window: Option<WindowHandle>,
         level: PromptLevel,
         message: Arc<str>,
         detail: Option<Arc<str>>,
@@ -540,12 +603,12 @@ pub(crate) enum PlatformRequest {
         responder: PlatformResponder<usize>,
     },
     OpenPaths {
-        window: WindowHandle,
+        window: Option<WindowHandle>,
         options: PathPromptOptions,
         responder: PlatformResponder<Option<Vec<PathBuf>>>,
     },
     SavePath {
-        window: WindowHandle,
+        window: Option<WindowHandle>,
         options: SavePathOptions,
         responder: PlatformResponder<Option<PathBuf>>,
     },
@@ -559,6 +622,25 @@ pub(crate) enum PlatformRequest {
 impl PlatformRequest {
     pub(crate) fn prompt(
         window: WindowHandle,
+        level: PromptLevel,
+        message: impl Into<Arc<str>>,
+        detail: Option<Arc<str>>,
+        buttons: &[PromptButton],
+    ) -> Result<(Self, PlatformResponse<usize>), PlatformError> {
+        Self::prompt_with_owner(Some(window), level, message, detail, buttons)
+    }
+
+    pub(crate) fn application_prompt(
+        level: PromptLevel,
+        message: impl Into<Arc<str>>,
+        detail: Option<Arc<str>>,
+        buttons: &[PromptButton],
+    ) -> Result<(Self, PlatformResponse<usize>), PlatformError> {
+        Self::prompt_with_owner(None, level, message, detail, buttons)
+    }
+
+    fn prompt_with_owner(
+        window: Option<WindowHandle>,
         level: PromptLevel,
         message: impl Into<Arc<str>>,
         detail: Option<Arc<str>>,
@@ -588,6 +670,19 @@ impl PlatformRequest {
         window: WindowHandle,
         options: PathPromptOptions,
     ) -> Result<(Self, PathPromptResponse), PlatformError> {
+        Self::open_paths_with_owner(Some(window), options)
+    }
+
+    pub(crate) fn application_open_paths(
+        options: PathPromptOptions,
+    ) -> Result<(Self, PathPromptResponse), PlatformError> {
+        Self::open_paths_with_owner(None, options)
+    }
+
+    fn open_paths_with_owner(
+        window: Option<WindowHandle>,
+        options: PathPromptOptions,
+    ) -> Result<(Self, PathPromptResponse), PlatformError> {
         validate_path_prompt_options(&options)?;
         let (responder, response) = response_channel();
         Ok((
@@ -602,6 +697,19 @@ impl PlatformRequest {
 
     pub(crate) fn save_path(
         window: WindowHandle,
+        options: SavePathOptions,
+    ) -> Result<(Self, PlatformResponse<Option<PathBuf>>), PlatformError> {
+        Self::save_path_with_owner(Some(window), options)
+    }
+
+    pub(crate) fn application_save_path(
+        options: SavePathOptions,
+    ) -> Result<(Self, PlatformResponse<Option<PathBuf>>), PlatformError> {
+        Self::save_path_with_owner(None, options)
+    }
+
+    fn save_path_with_owner(
+        window: Option<WindowHandle>,
         options: SavePathOptions,
     ) -> Result<(Self, PlatformResponse<Option<PathBuf>>), PlatformError> {
         validate_save_path_options(&options)?;
@@ -653,7 +761,7 @@ impl PlatformRequest {
         match self {
             Self::Prompt { window, .. }
             | Self::OpenPaths { window, .. }
-            | Self::SavePath { window, .. } => Some(*window),
+            | Self::SavePath { window, .. } => *window,
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
             | Self::OpenUrl(_)
@@ -679,7 +787,7 @@ impl PlatformRequest {
     pub(crate) fn bind_cancellation(
         &self,
         proxy: EventLoopProxy<RuntimeEvent>,
-        owner: WindowHandle,
+        owner: Option<WindowHandle>,
         id: PlatformDialogId,
     ) -> bool {
         match self {
@@ -740,24 +848,66 @@ fn validate_path_prompt_options(options: &PathPromptOptions) -> Result<(), Platf
     if !options.files && !options.directories {
         return Err(PlatformError::InvalidPathSelection);
     }
+    if let Some(title) = &options.title {
+        validate_optional_text(title)?;
+    }
     if let Some(prompt) = &options.prompt {
         validate_optional_text(prompt)?;
     }
     if let Some(directory) = &options.directory {
         validate_path(directory)?;
     }
+    if let Some(name) = &options.suggested_name {
+        validate_optional_text(name)?;
+    }
+    validate_file_dialog_filters(&options.filters)?;
     Ok(())
 }
 
 fn validate_save_path_options(options: &SavePathOptions) -> Result<(), PlatformError> {
     validate_path(&options.directory)?;
+    if let Some(title) = &options.title {
+        validate_optional_text(title)?;
+    }
     if let Some(name) = &options.suggested_name {
         validate_optional_text(name)?;
     }
     if let Some(prompt) = &options.prompt {
         validate_optional_text(prompt)?;
     }
+    validate_file_dialog_filters(&options.filters)?;
     Ok(())
+}
+
+fn validate_file_dialog_filters(filters: &[FileDialogFilter]) -> Result<(), PlatformError> {
+    if filters.len() > MAX_FILE_DIALOG_FILTERS {
+        return Err(PlatformError::InvalidFileDialogFilter);
+    }
+    let mut extension_count = 0_usize;
+    let mut total_bytes = 0_usize;
+    for filter in filters {
+        if filter.name.is_empty() || filter.name.contains('\0') || filter.extensions.is_empty() {
+            return Err(PlatformError::InvalidFileDialogFilter);
+        }
+        total_bytes = total_bytes.saturating_add(filter.name.len());
+        extension_count = extension_count.saturating_add(filter.extensions.len());
+        for extension in &filter.extensions {
+            if extension.is_empty()
+                || extension.contains(['\0', '/', '\\'])
+                || extension.starts_with('.')
+            {
+                return Err(PlatformError::InvalidFileDialogFilter);
+            }
+            total_bytes = total_bytes.saturating_add(extension.len());
+        }
+    }
+    if extension_count > MAX_FILE_DIALOG_FILTER_EXTENSIONS
+        || total_bytes > MAX_FILE_DIALOG_FILTER_BYTES
+    {
+        Err(PlatformError::InvalidFileDialogFilter)
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_path(path: &Path) -> Result<(), PlatformError> {
@@ -909,6 +1059,16 @@ mod tests {
             ),
             Err(PlatformError::InvalidButton)
         ));
+
+        let (request, response) = PlatformRequest::application_prompt(
+            PromptLevel::Info,
+            "Message",
+            None,
+            &[PromptButton::ok("OK")],
+        )
+        .unwrap();
+        assert_eq!(request.window(), None);
+        drop(response);
     }
 
     #[test]
@@ -917,14 +1077,20 @@ mod tests {
             .files(false)
             .directories(true)
             .multiple(true)
+            .title("Open content")
             .prompt("Choose")
             .directory("/tmp")
+            .suggested_name("notes.md")
+            .filters([FileDialogFilter::new("Markdown", ["md"])])
             .shows_hidden_files(true);
         assert!(!options.files);
         assert!(options.directories);
         assert!(options.multiple);
+        assert_eq!(options.title.as_deref(), Some("Open content"));
         assert_eq!(options.prompt.as_deref(), Some("Choose"));
         assert_eq!(options.directory.as_deref(), Some(Path::new("/tmp")));
+        assert_eq!(options.suggested_name.as_deref(), Some("notes.md"));
+        assert_eq!(options.filters[0].extensions[0].as_ref(), "md");
         assert!(options.shows_hidden_files);
 
         let invalid = PathPromptOptions::new().files(false);
@@ -932,6 +1098,23 @@ mod tests {
             PlatformRequest::open_paths(WindowHandle::next(), invalid).unwrap_err(),
             PlatformError::InvalidPathSelection
         );
+
+        let invalid_filter =
+            PathPromptOptions::new().filters([FileDialogFilter::new("Images", [".png"])]);
+        assert_eq!(
+            PlatformRequest::open_paths(WindowHandle::next(), invalid_filter).unwrap_err(),
+            PlatformError::InvalidFileDialogFilter
+        );
+
+        let (request, response) =
+            PlatformRequest::application_open_paths(PathPromptOptions::new()).unwrap();
+        assert_eq!(request.window(), None);
+        drop(response);
+
+        let (request, response) =
+            PlatformRequest::application_save_path(SavePathOptions::new("/tmp")).unwrap();
+        assert_eq!(request.window(), None);
+        drop(response);
     }
 
     #[test]

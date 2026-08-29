@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { parseCliArgs } from "./args.ts";
-import { macInfoPlist } from "./build.ts";
+import { macInfoPlist, nativeExports } from "./build.ts";
 import { resolveConfig } from "./config.ts";
 import { initProject } from "./init.ts";
 import { hostTarget, parseTarget } from "./targets.ts";
@@ -94,6 +94,15 @@ test("macOS metadata is escaped and complete", () => {
   expect(plist).toContain("<string>A &lt; B</string>");
   expect(plist).toContain("<key>CFBundleExecutable</key>");
   expect(plist).toContain("<string>AppIcon.icns</string>");
+});
+
+test("standalone native shim exports native dialog entrypoints", () => {
+  expect(nativeExports).toContain("showDialog");
+  expect(nativeExports).toContain("showHostedDialog");
+  expect(nativeExports).toContain("showOpenDialog");
+  expect(nativeExports).toContain("showHostedOpenDialog");
+  expect(nativeExports).toContain("showSaveDialog");
+  expect(nativeExports).toContain("showHostedSaveDialog");
 });
 
 test("project initialization renders a complete Solid scaffold", async () => {

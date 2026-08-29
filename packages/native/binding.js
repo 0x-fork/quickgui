@@ -703,7 +703,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { abortAppHost, applyBatch, applyHostedBatch, closeHostedWindow, closeWindow, createAnchoredWindow, createApp, createHostedAnchoredWindow, createHostedApp, createHostedWindow, createWindow, destroyApp, destroyHostedApp, focusHostedNode, focusNode, protocolVersion, pumpApp, runAppHost, startApp, startHostedApp, takeEvents, waitForHostedEvents } = nativeBinding
+const { abortAppHost, applyBatch, applyHostedBatch, closeHostedWindow, closeWindow, createAnchoredWindow, createApp, createHostedAnchoredWindow, createHostedApp, createHostedWindow, createWindow, destroyApp, destroyHostedApp, focusHostedNode, focusNode, protocolVersion, pumpApp, runAppHost, showDialog, showHostedDialog, showHostedOpenDialog, showHostedSaveDialog, showOpenDialog, showSaveDialog, startApp, startHostedApp, takeEvents, waitForHostedEvents } = nativeBinding
 export { abortAppHost }
 export { applyBatch }
 export { applyHostedBatch }
@@ -722,6 +722,12 @@ export { focusNode }
 export { protocolVersion }
 export { pumpApp }
 export { runAppHost }
+export { showDialog }
+export { showHostedDialog }
+export { showHostedOpenDialog }
+export { showHostedSaveDialog }
+export { showOpenDialog }
+export { showSaveDialog }
 export { startApp }
 export { startHostedApp }
 export { takeEvents }

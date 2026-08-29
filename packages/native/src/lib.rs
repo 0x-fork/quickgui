@@ -7,6 +7,7 @@ use std::{
         Arc, Condvar, LazyLock, Mutex,
         atomic::{AtomicU32, Ordering},
     },
+    task::{Context, Poll, Waker},
     time::Duration,
 };
 
@@ -18,9 +19,20 @@ use napi_derive::napi;
 use quickgui::{
     AccessibilityRole, AnchorPlacement, AnchoredPopover, App as QuickGuiApp, AppConfig, AppRegion,
     AppRunStatus, AppRunner, AppRunnerWaker, Color, CursorStyle, Element, ElementId, FollowMode,
-    FontWeight, IntoElement, ListAlignment, ListState, Markdown, MarkdownStyle, QuitMode, TextAlign,
-    TitleBarStyle, View, ViewContext, WindowBackgroundAppearance, WindowHandle, button, div, text,
-    text_area, text_input,
+    FontWeight, IntoElement, ListAlignment, ListState, Markdown, MarkdownStyle, QuitMode,
+    TextAlign, TitleBarStyle, View, ViewContext, WindowBackgroundAppearance, WindowHandle, button,
+    div, text, text_area, text_input,
+};
+
+mod dialog;
+
+pub use dialog::{
+    NativeDialogButton, NativeDialogOptions, NativeFileDialogFilter, NativeOpenDialogOptions,
+    NativeSaveDialogOptions,
+};
+use dialog::{
+    PendingDialog, native_dialog_configuration, native_open_dialog_options,
+    native_save_dialog_options,
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
@@ -150,6 +162,8 @@ pub struct NativeEvent {
     pub window: u32,
     pub target: u32,
     pub value: Option<String>,
+    pub paths: Option<Vec<String>>,
+    pub error: Option<String>,
 }
 
 #[derive(Clone)]
@@ -220,6 +234,27 @@ enum HostCommand {
         window: u32,
         node: u32,
         reply: Arc<SyncReply<bool>>,
+    },
+    ShowDialog {
+        app: u32,
+        window: Option<u32>,
+        request: u32,
+        options: NativeDialogOptions,
+        reply: Arc<SyncReply<()>>,
+    },
+    ShowOpenDialog {
+        app: u32,
+        window: Option<u32>,
+        request: u32,
+        options: NativeOpenDialogOptions,
+        reply: Arc<SyncReply<()>>,
+    },
+    ShowSaveDialog {
+        app: u32,
+        window: Option<u32>,
+        request: u32,
+        options: NativeSaveDialogOptions,
+        reply: Arc<SyncReply<()>>,
     },
     StartApp {
         app: u32,
@@ -1004,10 +1039,7 @@ impl NativeListConfig {
             .number(property::ESTIMATED_ITEM_HEIGHT)
             .unwrap_or(160.0)
             .clamp(1.0, 1_048_576.0);
-        let overscan = node
-            .number(property::OVERSCAN)
-            .unwrap_or(2.0)
-            .max(0.0) as usize;
+        let overscan = node.number(property::OVERSCAN).unwrap_or(2.0).max(0.0) as usize;
         let alignment = match node.string(property::LIST_ALIGNMENT) {
             Some("bottom") => ListAlignment::Bottom,
             _ => ListAlignment::Top,
@@ -1059,8 +1091,8 @@ impl NativeListState {
         if self.children == node.children {
             return;
         }
-        let stable_prefix = self.children.starts_with(&node.children)
-            || node.children.starts_with(&self.children);
+        let stable_prefix =
+            self.children.starts_with(&node.children) || node.children.starts_with(&self.children);
         if stable_prefix {
             self.list.set_item_count(node.children.len());
         } else {
@@ -1299,16 +1331,7 @@ fn build_element(
         NodeTag::Text | NodeTag::Sentinel | NodeTag::Input | NodeTag::Markdown => {}
         NodeTag::Root | NodeTag::View | NodeTag::Button => {
             element = element.children(node.children.iter().filter_map(|child| {
-                build_element(
-                    *child,
-                    window,
-                    tree,
-                    events,
-                    markdown,
-                    lists,
-                    cx,
-                    depth + 1,
-                )
+                build_element(*child, window, tree, events, markdown, lists, cx, depth + 1)
             }));
         }
     }
@@ -1740,6 +1763,7 @@ struct NativeRuntime {
     events: EventQueue,
     handles: Rc<RefCell<HashMap<WindowHandle, u32>>>,
     closed_windows: Rc<RefCell<Vec<u32>>>,
+    pending_dialogs: Vec<PendingDialog>,
     runner: Option<AppRunner>,
 }
 
@@ -1752,6 +1776,7 @@ impl NativeRuntime {
             events: Rc::new(RefCell::new(VecDeque::with_capacity(32))),
             handles: Rc::new(RefCell::new(HashMap::with_capacity(2))),
             closed_windows: Rc::new(RefCell::new(Vec::with_capacity(2))),
+            pending_dialogs: Vec::with_capacity(2),
             runner: None,
         }
     }
@@ -1951,11 +1976,7 @@ impl NativeRuntime {
         true
     }
 
-    fn apply_batch(
-        &mut self,
-        window: u32,
-        batch: &[u8],
-    ) -> std::result::Result<u32, String> {
+    fn apply_batch(&mut self, window: u32, batch: &[u8]) -> std::result::Result<u32, String> {
         let mutations = decode_batch(batch).map_err(|error| error.to_string())?;
         self.sync_closed_windows();
         let native_window = self
@@ -1988,6 +2009,109 @@ impl NativeRuntime {
         Ok(runner.focus_element(handle, ElementId::new(node as u64)))
     }
 
+    fn show_dialog(
+        &mut self,
+        window: Option<u32>,
+        request: u32,
+        options: NativeDialogOptions,
+    ) -> std::result::Result<(), String> {
+        let handle = self.dialog_handle(window, request)?;
+        let (level, buttons) = native_dialog_configuration(&options)?;
+        let runner = self
+            .runner
+            .as_mut()
+            .ok_or_else(|| "a native dialog requires a running application".to_owned())?;
+        let response = match handle {
+            Some(handle) => runner.prompt(
+                handle,
+                level,
+                options.message,
+                options.detail.as_deref(),
+                &buttons,
+            ),
+            None => runner.prompt_application(
+                level,
+                options.message,
+                options.detail.as_deref(),
+                &buttons,
+            ),
+        }
+        .map_err(|error| error.to_string())?;
+        self.pending_dialogs
+            .push(PendingDialog::alert(window, request, response));
+        Ok(())
+    }
+
+    fn show_open_dialog(
+        &mut self,
+        window: Option<u32>,
+        request: u32,
+        options: NativeOpenDialogOptions,
+    ) -> std::result::Result<(), String> {
+        let handle = self.dialog_handle(window, request)?;
+        let native_options = native_open_dialog_options(options);
+        let runner = self
+            .runner
+            .as_mut()
+            .ok_or_else(|| "a native file dialog requires a running application".to_owned())?;
+        let response = match handle {
+            Some(handle) => runner.prompt_for_paths(handle, native_options),
+            None => runner.prompt_for_paths_application(native_options),
+        }
+        .map_err(|error| error.to_string())?;
+        self.pending_dialogs
+            .push(PendingDialog::open(window, request, response));
+        Ok(())
+    }
+
+    fn show_save_dialog(
+        &mut self,
+        window: Option<u32>,
+        request: u32,
+        options: NativeSaveDialogOptions,
+    ) -> std::result::Result<(), String> {
+        let handle = self.dialog_handle(window, request)?;
+        let native_options = native_save_dialog_options(options);
+        let runner = self
+            .runner
+            .as_mut()
+            .ok_or_else(|| "a native file dialog requires a running application".to_owned())?;
+        let response = match handle {
+            Some(handle) => runner.prompt_for_new_path(handle, native_options),
+            None => runner.prompt_for_new_path_application(native_options),
+        }
+        .map_err(|error| error.to_string())?;
+        self.pending_dialogs
+            .push(PendingDialog::save(window, request, response));
+        Ok(())
+    }
+
+    fn dialog_handle(
+        &mut self,
+        window: Option<u32>,
+        request: u32,
+    ) -> std::result::Result<Option<WindowHandle>, String> {
+        self.sync_closed_windows();
+        if request == 0
+            || self
+                .pending_dialogs
+                .iter()
+                .any(|dialog| dialog.request() == request)
+        {
+            return Err("native dialog request ids must be nonzero and unique".to_owned());
+        }
+        window
+            .map(|window| {
+                self.windows
+                    .get(&window)
+                    .ok_or_else(|| format!("unknown QuickGUI window {window}"))?
+                    .handle
+                    .map(Some)
+                    .ok_or_else(|| "a native dialog requires a running window".to_owned())
+            })
+            .unwrap_or(Ok(None))
+    }
+
     fn sync_closed_windows(&mut self) {
         let closed = std::mem::take(&mut *self.closed_windows.borrow_mut());
         if closed.is_empty() {
@@ -2000,16 +2124,27 @@ impl NativeRuntime {
     }
 
     fn drain_events(&mut self) -> Vec<NativeEvent> {
-        self.events
-            .borrow_mut()
-            .drain(..)
-            .map(|event| NativeEvent {
-                kind: event.kind.to_owned(),
-                window: event.window,
-                target: event.target,
-                value: event.value.map(|value| value.to_string()),
-            })
-            .collect()
+        let mut events =
+            Vec::with_capacity(self.events.borrow().len() + self.pending_dialogs.len());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let mut still_pending = Vec::with_capacity(self.pending_dialogs.len());
+        for mut dialog in std::mem::take(&mut self.pending_dialogs) {
+            match dialog.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(dialog),
+            }
+        }
+        self.pending_dialogs = still_pending;
+        events.extend(self.events.borrow_mut().drain(..).map(|event| NativeEvent {
+            kind: event.kind.to_owned(),
+            window: event.window,
+            target: event.target,
+            value: event.value.map(|value| value.to_string()),
+            paths: None,
+            error: None,
+        }));
+        events
     }
 }
 
@@ -2055,9 +2190,7 @@ fn window_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig
     Ok(config)
 }
 
-fn anchored_window_config(
-    options: &NativeWindowOptions,
-) -> std::result::Result<AppConfig, String> {
+fn anchored_window_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig, String> {
     let placement = match options.popup_placement.as_deref() {
         Some("top-start") => AnchorPlacement::TopStart,
         Some("top") => AnchorPlacement::Top,
@@ -2172,6 +2305,40 @@ pub fn focus_node(app: u32, window: u32, node: u32) -> Result<bool> {
 }
 
 #[napi]
+pub fn show_dialog(
+    app: u32,
+    window: Option<u32>,
+    request: u32,
+    options: NativeDialogOptions,
+) -> Result<()> {
+    with_app_mut(app, |runtime| runtime.show_dialog(window, request, options))
+}
+
+#[napi]
+pub fn show_open_dialog(
+    app: u32,
+    window: Option<u32>,
+    request: u32,
+    options: NativeOpenDialogOptions,
+) -> Result<()> {
+    with_app_mut(app, |runtime| {
+        runtime.show_open_dialog(window, request, options)
+    })
+}
+
+#[napi]
+pub fn show_save_dialog(
+    app: u32,
+    window: Option<u32>,
+    request: u32,
+    options: NativeSaveDialogOptions,
+) -> Result<()> {
+    with_app_mut(app, |runtime| {
+        runtime.show_save_dialog(window, request, options)
+    })
+}
+
+#[napi]
 pub fn start_app(app: u32) -> Result<()> {
     with_app_mut(app, NativeRuntime::start)
 }
@@ -2223,10 +2390,7 @@ pub fn create_hosted_app() -> Result<u32> {
 }
 
 #[napi]
-pub fn create_hosted_window(
-    app: u32,
-    options: Option<NativeWindowOptions>,
-) -> Result<u32> {
+pub fn create_hosted_window(app: u32, options: Option<NativeWindowOptions>) -> Result<u32> {
     let reply = Arc::new(SyncReply::new());
     HOST.enqueue(HostCommand::CreateWindow {
         app,
@@ -2298,6 +2462,63 @@ pub fn focus_hosted_node(app: u32, window: u32, node: u32) -> Result<bool> {
 }
 
 #[napi]
+pub fn show_hosted_dialog(
+    app: u32,
+    window: Option<u32>,
+    request: u32,
+    options: NativeDialogOptions,
+) -> Result<()> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::ShowDialog {
+        app,
+        window,
+        request,
+        options,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn show_hosted_open_dialog(
+    app: u32,
+    window: Option<u32>,
+    request: u32,
+    options: NativeOpenDialogOptions,
+) -> Result<()> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::ShowOpenDialog {
+        app,
+        window,
+        request,
+        options,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn show_hosted_save_dialog(
+    app: u32,
+    window: Option<u32>,
+    request: u32,
+    options: NativeSaveDialogOptions,
+) -> Result<()> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::ShowSaveDialog {
+        app,
+        window,
+        request,
+        options,
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[napi]
 pub fn start_hosted_app(app: u32) -> Result<()> {
     let reply = Arc::new(SyncReply::new());
     HOST.enqueue(HostCommand::StartApp {
@@ -2358,9 +2579,7 @@ pub fn run_app_host(on_ready: Option<Function<'_, (), ()>>) -> Result<i32> {
     result.map_err(Error::from_reason)
 }
 
-fn run_app_host_loop(
-    on_ready: Option<&Function<'_, (), ()>>,
-) -> std::result::Result<i32, String> {
+fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Result<i32, String> {
     let mut active_app = None;
     let mut runtime: Option<NativeRuntime> = None;
     let mut ready_reported = false;
@@ -2418,11 +2637,7 @@ fn run_app_host_loop(
                         runtime.apply_batch(window, &batch)
                     })?;
                 }
-                HostCommand::CloseWindow {
-                    app,
-                    window,
-                    reply,
-                } => {
+                HostCommand::CloseWindow { app, window, reply } => {
                     reply.complete(with_hosted_runtime(
                         active_app,
                         runtime.as_mut(),
@@ -2441,6 +2656,48 @@ fn run_app_host_loop(
                         runtime.as_mut(),
                         app,
                         |runtime| runtime.focus_node(window, node),
+                    ));
+                }
+                HostCommand::ShowDialog {
+                    app,
+                    window,
+                    request,
+                    options,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| runtime.show_dialog(window, request, options),
+                    ));
+                }
+                HostCommand::ShowOpenDialog {
+                    app,
+                    window,
+                    request,
+                    options,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| runtime.show_open_dialog(window, request, options),
+                    ));
+                }
+                HostCommand::ShowSaveDialog {
+                    app,
+                    window,
+                    request,
+                    options,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| runtime.show_save_dialog(window, request, options),
                     ));
                 }
                 HostCommand::StartApp { app, reply } => {
@@ -2638,7 +2895,6 @@ mod tests {
         let error = decode_batch(b"not a batch").unwrap_err();
         assert!(error.to_string().contains("magic"));
     }
-
     #[test]
     fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value() {
         let input_id = 7;

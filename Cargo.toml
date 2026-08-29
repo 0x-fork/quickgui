@@ -57,7 +57,11 @@ wgpu = { version = "30.0.1", default-features = false, features = ["metal"] }
 arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+rfd = { version = "0.17.2", default-features = false }
 wgpu = { version = "30.0.1", default-features = false, features = ["dx12"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal", "wayland"] }
 
 [target.'cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))'.dependencies]
 wgpu = { version = "30.0.1", default-features = false, features = ["gles", "vulkan"] }

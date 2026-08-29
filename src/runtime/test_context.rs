@@ -2273,7 +2273,7 @@ impl TestAppContext {
                 drop(runnable);
                 continue;
             }
-            if !self.windows.contains_key(&window) {
+            if window.is_some_and(|window| !self.windows.contains_key(&window)) {
                 self.foreground_tasks.cancel_task(task);
                 drop(runnable);
                 continue;
@@ -2283,7 +2283,9 @@ impl TestAppContext {
                 return Err(TestAppError::ForegroundTaskPanicked);
             }
             let mut updates = self.foreground_tasks.take_updates(task);
+            debug_assert!(window.is_some() || updates.is_empty());
             while let Some(update) = updates.pop_front() {
+                let window = window.expect("view updates require a window-owned task");
                 let mut cx = self.event_context(Some(window));
                 update(self.window_mut(window)?.view.as_any_mut(), &mut cx);
                 self.apply_context(Some(window), cx)?;

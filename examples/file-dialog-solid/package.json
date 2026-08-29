@@ -1,0 +1,16 @@
+{
+  "name": "quickgui-solid-file-dialog-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "quickgui dev",
+    "build": "quickgui build"
+  },
+  "dependencies": {
+    "@quickgui/solid": "workspace:*",
+    "solid-js": "2.0.0-rc.3"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "workspace:*"
+  }
+}

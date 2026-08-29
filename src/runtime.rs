@@ -40,7 +40,15 @@ use winit::{
 #[cfg(not(target_os = "macos"))]
 use winit::{dpi::PhysicalPosition, raw_window_handle::HasWindowHandle};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
 use crate::platform::PlatformDialogId;
 use crate::{
     Action, ActionListener, AnyAction, AssetError, Assets, Color, CursorStyle, Display, DisplayId,
@@ -79,7 +87,10 @@ use crate::{
     keyboard::KeyboardState,
     menu::{MenuAction, collect_menu_actions},
     metrics::{FrameMetrics, FrameTimer, MetricsTracker},
-    platform::{PlatformError, PlatformRequest},
+    platform::{
+        PathPromptOptions, PathPromptResponse, PlatformError, PlatformRequest, PlatformResponse,
+        PromptButton, PromptLevel, SavePathOptions, SavePathResponse,
+    },
     renderer::{
         GpuContext, GpuRenderer, RenderOutcome, SharedFontSystem, create_shared_font_system,
     },
@@ -145,10 +156,18 @@ pub(crate) enum RuntimeEvent {
     NativeDropChanged(WindowHandle),
     #[cfg(target_os = "macos")]
     PopupDismissRequested(WindowHandle),
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    PlatformDialogClosed(Option<WindowHandle>, PlatformDialogId),
     #[cfg(target_os = "macos")]
-    PlatformDialogClosed(WindowHandle, PlatformDialogId),
-    #[cfg(target_os = "macos")]
-    PlatformDialogCancelled(WindowHandle, PlatformDialogId),
+    PlatformDialogCancelled(Option<WindowHandle>, PlatformDialogId),
     #[cfg(target_os = "macos")]
     OpenUrls(OpenUrls),
     #[cfg(target_os = "macos")]
@@ -3003,6 +3022,153 @@ impl AppRunner {
         self.runtime.focus_external(handle, element)
     }
 
+    /// Present a platform-native prompt owned by one mounted window.
+    ///
+    /// This is the embedding-runtime counterpart to [`EventContext::prompt`]. The returned
+    /// future remains on the platform thread and resolves after the operating system closes the
+    /// prompt; no redraw polling is introduced while it is visible.
+    pub fn prompt(
+        &mut self,
+        window: WindowHandle,
+        level: PromptLevel,
+        message: impl Into<Arc<str>>,
+        detail: Option<&str>,
+        buttons: &[PromptButton],
+    ) -> Result<PlatformResponse<usize>, PlatformError> {
+        if !matches!(self.status, AppRunStatus::Continue)
+            || !self.runtime.window_handles.contains_key(&window)
+        {
+            return Err(PlatformError::Unavailable);
+        }
+        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
+            return Err(PlatformError::PendingQueueFull);
+        }
+        let (request, response) =
+            PlatformRequest::prompt(window, level, message, detail.map(Arc::from), buttons)?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| PlatformError::Unavailable)?;
+        self.runtime.platform_requests.push_back(request);
+        Ok(response)
+    }
+
+    /// Present an application-modal native prompt without attaching it to a window.
+    pub fn prompt_application(
+        &mut self,
+        level: PromptLevel,
+        message: impl Into<Arc<str>>,
+        detail: Option<&str>,
+        buttons: &[PromptButton],
+    ) -> Result<PlatformResponse<usize>, PlatformError> {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return Err(PlatformError::Unavailable);
+        }
+        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
+            return Err(PlatformError::PendingQueueFull);
+        }
+        let (request, response) =
+            PlatformRequest::application_prompt(level, message, detail.map(Arc::from), buttons)?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| PlatformError::Unavailable)?;
+        self.runtime.platform_requests.push_back(request);
+        Ok(response)
+    }
+
+    /// Present a platform-native open panel owned by one mounted window.
+    ///
+    /// `Ok(None)` means the user cancelled. The returned future stays on the platform thread and
+    /// resolves after the operating system closes the panel.
+    pub fn prompt_for_paths(
+        &mut self,
+        window: WindowHandle,
+        options: PathPromptOptions,
+    ) -> Result<PathPromptResponse, PlatformError> {
+        if !matches!(self.status, AppRunStatus::Continue)
+            || !self.runtime.window_handles.contains_key(&window)
+        {
+            return Err(PlatformError::Unavailable);
+        }
+        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
+            return Err(PlatformError::PendingQueueFull);
+        }
+        let (request, response) = PlatformRequest::open_paths(window, options)?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| PlatformError::Unavailable)?;
+        self.runtime.platform_requests.push_back(request);
+        Ok(response)
+    }
+
+    /// Present an application-modal native open panel without attaching it to a window.
+    pub fn prompt_for_paths_application(
+        &mut self,
+        options: PathPromptOptions,
+    ) -> Result<PathPromptResponse, PlatformError> {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return Err(PlatformError::Unavailable);
+        }
+        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
+            return Err(PlatformError::PendingQueueFull);
+        }
+        let (request, response) = PlatformRequest::application_open_paths(options)?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| PlatformError::Unavailable)?;
+        self.runtime.platform_requests.push_back(request);
+        Ok(response)
+    }
+
+    /// Present a platform-native save panel owned by one mounted window.
+    ///
+    /// `Ok(None)` means the user cancelled. The returned future stays on the platform thread and
+    /// resolves after the operating system closes the panel.
+    pub fn prompt_for_new_path(
+        &mut self,
+        window: WindowHandle,
+        options: SavePathOptions,
+    ) -> Result<SavePathResponse, PlatformError> {
+        if !matches!(self.status, AppRunStatus::Continue)
+            || !self.runtime.window_handles.contains_key(&window)
+        {
+            return Err(PlatformError::Unavailable);
+        }
+        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
+            return Err(PlatformError::PendingQueueFull);
+        }
+        let (request, response) = PlatformRequest::save_path(window, options)?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| PlatformError::Unavailable)?;
+        self.runtime.platform_requests.push_back(request);
+        Ok(response)
+    }
+
+    /// Present an application-modal native save panel without attaching it to a window.
+    pub fn prompt_for_new_path_application(
+        &mut self,
+        options: SavePathOptions,
+    ) -> Result<SavePathResponse, PlatformError> {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return Err(PlatformError::Unavailable);
+        }
+        if self.runtime.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS {
+            return Err(PlatformError::PendingQueueFull);
+        }
+        let (request, response) = PlatformRequest::application_save_path(options)?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| PlatformError::Unavailable)?;
+        self.runtime.platform_requests.push_back(request);
+        Ok(response)
+    }
+
     /// Close a queued or mounted window.
     ///
     /// Returns `false` when the handle is unknown or the application already exited.
@@ -3475,6 +3641,7 @@ impl<V: View> App<V> {
     }
 }
 
+mod platform_dialog;
 #[cfg(any(test, feature = "test-support"))]
 mod test_context;
 #[cfg(any(test, feature = "test-support"))]
@@ -4012,8 +4179,16 @@ struct Runtime {
     native_drag_registry: MacTypedDragRegistry,
     #[cfg(target_os = "macos")]
     popup_monitor: MacPopupMonitor,
-    #[cfg(target_os = "macos")]
-    active_platform_dialogs: HashMap<WindowHandle, ActivePlatformDialog>,
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    active_platform_dialogs: HashMap<Option<WindowHandle>, platform_dialog::ActivePlatformDialog>,
     #[cfg(target_os = "macos")]
     automatic_tabbing_baseline: Option<bool>,
     #[cfg(target_os = "macos")]
@@ -4052,13 +4227,6 @@ struct RuntimeStartup {
     fonts: Vec<FontSource>,
     application_callbacks: ApplicationCallbacks,
     quit_mode: QuitMode,
-}
-
-#[cfg(target_os = "macos")]
-struct ActivePlatformDialog {
-    id: PlatformDialogId,
-    open: Arc<AtomicBool>,
-    native: MacPlatformDialog,
 }
 
 #[derive(Clone, Debug)]
@@ -4145,7 +4313,15 @@ impl Runtime {
             native_drag_registry: MacTypedDragRegistry::new(),
             #[cfg(target_os = "macos")]
             popup_monitor: MacPopupMonitor::new(event_proxy.clone()),
-            #[cfg(target_os = "macos")]
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
             active_platform_dialogs: HashMap::new(),
             #[cfg(target_os = "macos")]
             automatic_tabbing_baseline: None,
@@ -5213,162 +5389,6 @@ impl Runtime {
         }
     }
 
-    fn process_platform_requests(&mut self) {
-        #[cfg(target_os = "macos")]
-        self.active_platform_dialogs.retain(|handle, dialog| {
-            self.window_handles.contains_key(handle) && dialog.open.load(Ordering::Acquire)
-        });
-
-        while let Some(request) = self.platform_requests.pop_front() {
-            if request.response_cancelled() {
-                continue;
-            }
-            #[cfg(target_os = "macos")]
-            self.process_macos_platform_request(request);
-            #[cfg(not(target_os = "macos"))]
-            request.complete_error(PlatformError::Unsupported);
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    fn process_macos_platform_request(&mut self, request: PlatformRequest) {
-        match request {
-            PlatformRequest::ShowSystemNotification(notification) => {
-                self.mac_application_host
-                    .show_system_notification(notification);
-            }
-            PlatformRequest::DismissSystemNotification(tag) => {
-                self.mac_application_host.dismiss_system_notification(&tag);
-            }
-            PlatformRequest::OpenUrl(url) => {
-                if let Err(error) = shell_open_url(&url) {
-                    tracing::warn!(%error, url = %url, "could not open URL with NSWorkspace");
-                }
-            }
-            PlatformRequest::OpenPath(path) => {
-                if let Err(error) = shell_open_path(&path) {
-                    tracing::warn!(%error, path = %path.display(), "could not open path with NSWorkspace");
-                }
-            }
-            PlatformRequest::RevealPath(path) => {
-                if let Err(error) = shell_reveal_path(&path) {
-                    tracing::warn!(%error, path = %path.display(), "could not reveal path with NSWorkspace");
-                }
-            }
-            request => {
-                let Some(owner) = request.window() else {
-                    return;
-                };
-                let Some(window_id) = self.window_handles.get(&owner).copied() else {
-                    request.complete_error(PlatformError::Unavailable);
-                    return;
-                };
-                let Some(native_window) = self
-                    .windows
-                    .get(&window_id)
-                    .map(|entry| entry.state.window.clone())
-                else {
-                    request.complete_error(PlatformError::Unavailable);
-                    return;
-                };
-                if self
-                    .active_platform_dialogs
-                    .keys()
-                    .any(|candidate| self.windows_share_parent_chain(owner, *candidate))
-                {
-                    request.complete_error(PlatformError::DialogBusy);
-                    return;
-                }
-                if self.active_platform_dialogs.len() == crate::MAX_ACTIVE_PLATFORM_DIALOGS {
-                    request.complete_error(PlatformError::TooManyDialogs);
-                    return;
-                }
-
-                let id = PlatformDialogId::next();
-                let open = Arc::new(AtomicBool::new(true));
-                if !request.bind_cancellation(self.event_proxy.clone(), owner, id) {
-                    return;
-                }
-                let context = MacPlatformDialogContext::new(
-                    owner,
-                    id,
-                    open.clone(),
-                    self.event_proxy.clone(),
-                );
-                let native = match request {
-                    PlatformRequest::Prompt {
-                        level,
-                        message,
-                        detail,
-                        buttons,
-                        responder,
-                        ..
-                    } => {
-                        let completion = responder.clone();
-                        match present_native_prompt(
-                            &native_window,
-                            context,
-                            level,
-                            &message,
-                            detail.as_deref(),
-                            &buttons,
-                            completion,
-                        ) {
-                            Ok(native) => native,
-                            Err(error) => {
-                                responder.complete(Err(PlatformError::Platform(error.into())));
-                                return;
-                            }
-                        }
-                    }
-                    PlatformRequest::OpenPaths {
-                        options, responder, ..
-                    } => {
-                        let completion = responder.clone();
-                        match present_native_open_panel(
-                            &native_window,
-                            context,
-                            &options,
-                            completion,
-                        ) {
-                            Ok(native) => native,
-                            Err(error) => {
-                                responder.complete(Err(PlatformError::Platform(error.into())));
-                                return;
-                            }
-                        }
-                    }
-                    PlatformRequest::SavePath {
-                        options, responder, ..
-                    } => {
-                        let completion = responder.clone();
-                        match present_native_save_panel(
-                            &native_window,
-                            context,
-                            &options,
-                            completion,
-                        ) {
-                            Ok(native) => native,
-                            Err(error) => {
-                                responder.complete(Err(PlatformError::Platform(error.into())));
-                                return;
-                            }
-                        }
-                    }
-                    PlatformRequest::ShowSystemNotification(_)
-                    | PlatformRequest::DismissSystemNotification(_)
-                    | PlatformRequest::OpenUrl(_)
-                    | PlatformRequest::OpenPath(_)
-                    | PlatformRequest::RevealPath(_) => {
-                        unreachable!("application-wide platform actions returned above")
-                    }
-                };
-                self.active_platform_dialogs
-                    .insert(owner, ActivePlatformDialog { id, open, native });
-            }
-        }
-    }
-
     #[cfg(target_os = "macos")]
     fn invoke_open_urls(&mut self, event_loop: &ActiveEventLoop, urls: OpenUrls) {
         let Some(mut callback) = self.application_callbacks.open_urls.take() else {
@@ -5441,12 +5461,28 @@ impl Runtime {
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
     fn windows_share_parent_chain(&self, first: WindowHandle, second: WindowHandle) -> bool {
         self.window_is_ancestor(first, second) || self.window_is_ancestor(second, first)
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
     fn window_is_ancestor(&self, ancestor: WindowHandle, mut window: WindowHandle) -> bool {
         for _ in 0..=self.windows.len() {
             if ancestor == window {
@@ -5505,9 +5541,18 @@ impl Runtime {
                 .and_then(|entry| entry.state.parent);
             self.foreground_tasks.cancel_window(handle);
             #[cfg(target_os = "macos")]
-            if let Some(dialog) = self.active_platform_dialogs.remove(&handle) {
+            if let Some(dialog) = self.active_platform_dialogs.remove(&Some(handle)) {
                 dialog.native.cancel();
             }
+            #[cfg(any(
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
+            self.active_platform_dialogs.remove(&Some(handle));
             #[cfg(target_os = "macos")]
             self.popup_monitor.unwatch(handle);
             if let Some(entry) = self.windows.remove(&window_id) {
@@ -9006,15 +9051,17 @@ impl Runtime {
                 drop(runnable);
                 continue;
             }
-            let Some(window_id) = self.window_handles.get(&owner).copied() else {
-                self.foreground_tasks.cancel_task(task);
-                drop(runnable);
-                continue;
-            };
-            if !self.activate_window(window_id) {
-                self.foreground_tasks.cancel_task(task);
-                drop(runnable);
-                continue;
+            if let Some(owner) = owner {
+                let Some(window_id) = self.window_handles.get(&owner).copied() else {
+                    self.foreground_tasks.cancel_task(task);
+                    drop(runnable);
+                    continue;
+                };
+                if !self.activate_window(window_id) {
+                    self.foreground_tasks.cancel_task(task);
+                    drop(runnable);
+                    continue;
+                }
             }
 
             let poll = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runnable.run()));
@@ -9025,6 +9072,7 @@ impl Runtime {
 
             let mut continue_running = true;
             let mut updates = self.foreground_tasks.take_updates(task);
+            debug_assert!(owner.is_some() || updates.is_empty());
             while let Some(update) = updates.pop_front() {
                 let mut cx = self.event_context();
                 if let Some(window) = &mut self.window {
@@ -9051,6 +9099,15 @@ impl Drop for Runtime {
         for (_, dialog) in self.active_platform_dialogs.drain() {
             dialog.native.cancel();
         }
+        #[cfg(any(
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
+        self.active_platform_dialogs.clear();
         self.foreground_tasks.shutdown();
     }
 }
@@ -10503,7 +10560,15 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             }
             return;
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
         if let RuntimeEvent::PlatformDialogClosed(owner, id) = &event {
             if self
                 .active_platform_dialogs
@@ -10545,7 +10610,15 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             RuntimeEvent::NativeDropChanged(handle) => self.window_handles.get(handle).copied(),
             #[cfg(target_os = "macos")]
             RuntimeEvent::PopupDismissRequested(_) => unreachable!("handled before routing"),
-            #[cfg(target_os = "macos")]
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
             RuntimeEvent::PlatformDialogClosed(_, _) => unreachable!("handled before routing"),
             #[cfg(target_os = "macos")]
             RuntimeEvent::PlatformDialogCancelled(_, _) => unreachable!("handled before routing"),
@@ -10640,7 +10713,15 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             }
             #[cfg(target_os = "macos")]
             RuntimeEvent::PopupDismissRequested(_) => unreachable!("handled before routing"),
-            #[cfg(target_os = "macos")]
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
             RuntimeEvent::PlatformDialogClosed(_, _) => unreachable!("handled before routing"),
             #[cfg(target_os = "macos")]
             RuntimeEvent::PlatformDialogCancelled(_, _) => {
