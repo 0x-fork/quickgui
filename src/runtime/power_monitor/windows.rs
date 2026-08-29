@@ -1,7 +1,7 @@
 use std::{
     mem,
     ptr::{null, null_mut},
-    sync::mpsc,
+    sync::{OnceLock, mpsc},
     thread::{self, JoinHandle},
 };
 
@@ -16,10 +16,10 @@ use windows_sys::Win32::{
     },
     UI::WindowsAndMessaging::{
         CREATESTRUCTW, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-        GWLP_USERDATA, GetMessageW, HWND_MESSAGE, MSG, PBT_APMRESUMEAUTOMATIC,
+        GWLP_USERDATA, GetMessageW, MSG, PBT_APMPOWERSTATUSCHANGE, PBT_APMRESUMEAUTOMATIC,
         PBT_APMRESUMESUSPEND, PBT_APMSUSPEND, PostMessageW, PostQuitMessage, RegisterClassW,
         SetWindowLongPtrW, TranslateMessage, WM_CLOSE, WM_DESTROY, WM_NCCREATE, WM_POWERBROADCAST,
-        WM_WTSSESSION_CHANGE, WNDCLASSW, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK,
+        WM_QUERYENDSESSION, WM_WTSSESSION_CHANGE, WNDCLASSW, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK,
     },
 };
 use winit::event_loop::EventLoopProxy;
@@ -50,10 +50,13 @@ const WINDOW_CLASS: &[u16] = &[
     0,
 ];
 
+static WINDOW_CLASS_REGISTRATION: OnceLock<Result<(), String>> = OnceLock::new();
+
 struct WindowState {
     proxy: EventLoopProxy<RuntimeEvent>,
     suspended: bool,
     locked: bool,
+    power_source: quickgui_system::PowerSource,
 }
 
 pub(crate) struct WindowsPowerMonitor {
@@ -104,24 +107,37 @@ fn run_message_window(
 ) {
     unsafe {
         let instance = GetModuleHandleW(null());
-        let class = WNDCLASSW {
-            lpfnWndProc: Some(window_proc),
-            hInstance: instance,
-            lpszClassName: WINDOW_CLASS.as_ptr(),
-            ..mem::zeroed()
-        };
-        if RegisterClassW(&class) == 0 {
-            let _ = ready.send(Err(
-                "could not register the Windows power-monitor class".to_owned()
-            ));
+        let registration = WINDOW_CLASS_REGISTRATION.get_or_init(|| {
+            let class = WNDCLASSW {
+                lpfnWndProc: Some(window_proc),
+                hInstance: instance,
+                lpszClassName: WINDOW_CLASS.as_ptr(),
+                ..mem::zeroed()
+            };
+            if RegisterClassW(&class) == 0 {
+                Err(format!(
+                    "could not register the Windows power-monitor class: {}",
+                    std::io::Error::last_os_error()
+                ))
+            } else {
+                Ok(())
+            }
+        });
+        if let Err(error) = registration {
+            let _ = ready.send(Err(error.clone()));
             return;
         }
         let state = Box::new(WindowState {
             proxy,
             suspended: false,
             locked: false,
+            power_source: quickgui_system::PowerMonitor::snapshot()
+                .map(|snapshot| snapshot.source())
+                .unwrap_or(quickgui_system::PowerSource::Unknown),
         });
         let state = Box::into_raw(state);
+        // This must be an invisible top-level window. `HWND_MESSAGE` windows do not receive the
+        // WM_POWERBROADCAST and WM_QUERYENDSESSION broadcasts this monitor exists to observe.
         let window = CreateWindowExW(
             0,
             WINDOW_CLASS.as_ptr(),
@@ -131,7 +147,7 @@ fn run_message_window(
             0,
             0,
             0,
-            HWND_MESSAGE,
+            null_mut(),
             null_mut(),
             instance,
             state.cast(),
@@ -185,6 +201,14 @@ unsafe extern "system" fn window_proc(
         WM_POWERBROADCAST => {
             if let Some(state) = state {
                 let event = match wparam as u32 {
+                    PBT_APMPOWERSTATUSCHANGE => quickgui_system::PowerMonitor::snapshot()
+                        .ok()
+                        .map(|snapshot| snapshot.source())
+                        .filter(|source| *source != state.power_source)
+                        .map(|source| {
+                            state.power_source = source;
+                            PowerEvent::PowerSourceChanged(source)
+                        }),
                     PBT_APMSUSPEND if !state.suspended => {
                         state.suspended = true;
                         Some(PowerEvent::Suspend)
@@ -198,6 +222,14 @@ unsafe extern "system" fn window_proc(
                 if let Some(event) = event {
                     let _ = state.proxy.send_event(RuntimeEvent::Power(event));
                 }
+            }
+            1
+        }
+        WM_QUERYENDSESSION => {
+            if let Some(state) = state {
+                let _ = state
+                    .proxy
+                    .send_event(RuntimeEvent::Power(PowerEvent::ShutdownRequested));
             }
             1
         }

@@ -16,6 +16,16 @@ pub enum PowerEvent {
     Resume,
     LockScreen,
     UnlockScreen,
+    /// The login or desktop environment is preparing to shut down or restart the machine.
+    ShutdownRequested,
+    /// The system changed between AC, battery, or an indeterminate power source.
+    PowerSourceChanged(PowerSource),
+    /// The operating system reported a new coarse thermal-pressure state.
+    ThermalStateChanged(ThermalState),
+    /// The operating system enabled or disabled its energy-saving mode.
+    LowPowerModeChanged(bool),
+    /// The operating system advertised a new CPU speed ceiling in percent.
+    CpuSpeedLimitChanged(u8),
 }
 
 impl Runtime {

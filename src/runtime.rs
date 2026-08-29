@@ -23,9 +23,11 @@ use accesskit_winit::{
 };
 use thiserror::Error;
 #[cfg(target_os = "macos")]
-use winit::platform::macos::{ActiveEventLoopExtMacOS, WindowAttributesExtMacOS};
+use winit::platform::macos::{ActiveEventLoopExtMacOS, WindowAttributesExtMacOS, WindowExtMacOS};
 #[cfg(not(target_arch = "wasm32"))]
 use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
+#[cfg(target_os = "windows")]
+use winit::platform::windows::{WindowAttributesExtWindows, WindowExtWindows};
 use winit::{
     application::ApplicationHandler,
     dpi::{LogicalPosition, LogicalSize, PhysicalSize},
@@ -33,8 +35,8 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::ModifiersState,
     window::{
-        CursorIcon, Fullscreen, Theme, UserAttentionType, Window, WindowButtons, WindowId,
-        WindowLevel,
+        CursorGrabMode as WinitCursorGrabMode, CursorIcon, Fullscreen, Icon, Theme,
+        UserAttentionType, Window, WindowButtons, WindowId, WindowLevel as WinitWindowLevel,
     },
 };
 #[cfg(not(target_os = "macos"))]
@@ -51,14 +53,18 @@ use winit::{dpi::PhysicalPosition, raw_window_handle::HasWindowHandle};
 ))]
 use crate::platform::PlatformDialogId;
 use crate::{
-    Action, ActionListener, AnyAction, AssetError, Assets, Color, CursorStyle, Display, DisplayId,
-    Displays, Element, ElementId, Entity, EntityId, EventEmitter, FocusHandle, FontSource, Global,
+    AboutPanelOptions, Action, ActionListener, AnyAction, AppInfo, AppPaths, AssetError, Assets,
+    Color, ColorScheme, CursorStyle, Display, DisplayId, Displays, Element, ElementId, Entity,
+    EntityId, EventEmitter, FileIconResponse, FileIconSize, FocusHandle, FontSource, Global, Image,
     IntoElement, KeyBinding, KeyboardLayout, Keymap, Keystroke,
     MAX_ENTITY_EVENT_DELIVERIES_PER_TURN, MAX_ENTITY_SUBSCRIPTIONS_PER_WINDOW,
     MAX_GLOBAL_OBSERVER_DELIVERIES_PER_TURN, MAX_GLOBAL_SUBSCRIPTIONS_PER_WINDOW,
     MAX_OBSERVED_ENTITIES_PER_WINDOW, MAX_OBSERVED_GLOBALS_PER_WINDOW, MAX_PENDING_ENTITY_EVENTS,
-    MAX_PENDING_GLOBAL_NOTIFICATIONS, Menu, OpenUrls, OsAction, Point, Rect, Scene, Size,
-    SystemNotification, SystemNotificationResponse, Vector,
+    MAX_PENDING_GLOBAL_NOTIFICATIONS, MAX_TASKBAR_OVERLAY_DESCRIPTION_BYTES, Menu,
+    NotificationPermissionResponse, NotificationPermissionStatus, OpenUrls, OsAction, Point,
+    PowerSource, Rect, RelaunchOptions, RelaunchRequest, RelaunchedProcess, Scene, Size,
+    SystemInfo, SystemNotification, SystemNotificationResponse, SystemPreferences, ThermalState,
+    UserTask, Vector,
     action::{ActionListenerBinding, ActionListenerKey},
     background::{
         BackgroundCompletion, BackgroundTaskError, BackgroundTaskPoolHandle, TaskSpawnError,
@@ -70,13 +76,13 @@ use crate::{
     entity::{EntityEvent, Subscription, SubscriptionState},
     event::{
         ContextMenuEvent, DragOrigin, DragStartEvent, DropEvent, DroppedFiles, Event, EventContext,
-        ExternalDragPayload, ExternalDragText, ExternalDragUrl, FileDragPaths, FormSubmitEvent,
-        GesturePhase, Key, KeyDownEvent, KeyUpEvent, MAX_ACTIVE_TOUCHES_PER_WINDOW,
-        MAX_DROPPED_FILES, MAX_PINCH_DELTA_PER_EVENT, MAX_ROTATION_DEGREES_PER_EVENT, Modifiers,
-        MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MousePressureEvent,
-        MouseUpEvent, PinchEvent, PointerEvent, PointerPhase, PressureStage, RotationEvent,
-        ScrollDelta, ScrollWheelEvent, SmartMagnifyEvent, TouchEvent, TouchId, TouchPhase,
-        ValidationReport,
+        EventRuntimeContext, ExternalDragPayload, ExternalDragText, ExternalDragUrl, FileDragPaths,
+        FormSubmitEvent, GesturePhase, Key, KeyDownEvent, KeyUpEvent,
+        MAX_ACTIVE_TOUCHES_PER_WINDOW, MAX_DROPPED_FILES, MAX_PINCH_DELTA_PER_EVENT,
+        MAX_ROTATION_DEGREES_PER_EVENT, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent,
+        MouseMoveEvent, MousePressureEvent, MouseUpEvent, PinchEvent, PointerEvent, PointerPhase,
+        PressureStage, RotationEvent, ScrollDelta, ScrollWheelEvent, SmartMagnifyEvent, TouchEvent,
+        TouchId, TouchPhase, ValidationReport,
     },
     foreground::{
         AsyncViewContext, ForegroundTaskSpawnError, ForegroundTaskSpawner, ScheduledForegroundTask,
@@ -85,7 +91,7 @@ use crate::{
     global::GlobalStore,
     image_resource::{ImageAssetCache, ImageLoadCompletion, ImageWorkerPoolHandle},
     keyboard::KeyboardState,
-    menu::{MenuAction, collect_menu_actions},
+    menu::{MenuAction, collect_menu_actions, validate_menus},
     metrics::{FrameMetrics, FrameTimer, MetricsTracker},
     platform::{
         PathPromptOptions, PathPromptResponse, PlatformError, PlatformRequest, PlatformResponse,
@@ -127,13 +133,15 @@ use crate::macos::{
     MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPopoverMonitor,
     MacTypedDragPayload, MacTypedDragRegistry, MacWindowTabAction, capture_left_mouse_down,
     configure_document_window, configure_gpu_window_resize, configure_window_kind,
-    current_pointer_position, dismiss_window_relation, is_window_fullscreen, is_window_maximized,
-    perform_window_close, perform_window_drag, perform_window_tab_action, position_system_popover,
+    current_cursor_screen_position as macos_cursor_screen_position, current_pointer_position,
+    dismiss_window_relation, is_window_fullscreen, is_window_maximized, perform_window_close,
+    perform_window_drag, perform_window_tab_action, position_system_popover,
     position_traffic_lights, present_native_open_panel, present_native_prompt,
     present_native_save_panel, present_window_relation, set_window_document_edited,
-    set_window_movable, set_window_represented_file, set_window_tabbing_identifier,
-    set_window_visibility, shell_open_path, shell_open_url, shell_reveal_path, shell_trash_path,
-    show_character_palette, start_external_drag, window_tab_state,
+    set_window_focusable, set_window_movable, set_window_opacity, set_window_represented_file,
+    set_window_tabbing_identifier, set_window_visibility, set_window_visible_on_all_workspaces,
+    shell_open_path, shell_open_url, shell_reveal_path, shell_trash_path, show_character_palette,
+    start_external_drag, window_tab_state,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_application::MacApplicationHost;
@@ -148,6 +156,12 @@ pub(crate) enum RuntimeEvent {
     ForegroundTasksReady,
     MenuWillOpen,
     MenuAction(usize),
+    #[cfg(target_os = "macos")]
+    DockMenuAction(usize),
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    NativePopupMenuAction(u64, usize),
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    NativePopupMenuClosed(u64),
     #[cfg(target_os = "macos")]
     ExternalDragBoundary(WindowHandle, Point),
     #[cfg(target_os = "macos")]
@@ -170,12 +184,14 @@ pub(crate) enum RuntimeEvent {
     PlatformDialogClosed(Option<WindowHandle>, PlatformDialogId),
     #[cfg(target_os = "macos")]
     PlatformDialogCancelled(Option<WindowHandle>, PlatformDialogId),
-    #[cfg(target_os = "macos")]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     OpenUrls(OpenUrls),
     #[cfg(target_os = "macos")]
     Reopen {
         has_visible_windows: bool,
     },
+    #[cfg(target_os = "macos")]
+    QuitRequested,
     #[cfg(target_os = "macos")]
     SystemWake,
     #[cfg(target_os = "macos")]
@@ -187,6 +203,8 @@ pub(crate) enum RuntimeEvent {
         granted: bool,
         error: Option<Arc<str>>,
     },
+    #[cfg(target_os = "macos")]
+    SystemNotificationPermissionStatus(NotificationPermissionStatus),
     SystemNotificationResponse(SystemNotificationResponse),
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     GlobalShortcut(u32),
@@ -200,6 +218,7 @@ pub(crate) enum RuntimeEvent {
         target_os = "netbsd"
     ))]
     SecondInstance(SecondInstanceEvent),
+    SystemPreferencesChanged(SystemPreferences),
     Power(PowerEvent),
     Tray(TrayEvent),
 }
@@ -223,6 +242,21 @@ pub enum QuitMode {
     LastWindowClosed,
     /// Stay in the event loop until [`EventContext::exit`] or the operating system quits the app.
     Explicit,
+}
+
+/// Source of one application-level quit request.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum QuitReason {
+    Explicit,
+    Relaunch,
+    LastWindowClosed,
+    OperatingSystem,
+}
+
+/// Immutable input delivered to the preventable before-quit and will-quit callbacks.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct QuitRequest {
+    pub reason: QuitReason,
 }
 
 impl QuitMode {
@@ -326,6 +360,59 @@ pub enum WindowKind {
     Dialog,
 }
 
+/// Requested native stacking level independent from a window's ownership role.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum WindowLevel {
+    AlwaysOnBottom,
+    #[default]
+    Normal,
+    AlwaysOnTop,
+}
+
+/// Native taskbar progress presentation for one window.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum TaskbarProgressState {
+    /// Remove progress from the taskbar button.
+    #[default]
+    None,
+    Normal,
+    Indeterminate,
+    Paused,
+    Error,
+}
+
+/// Native pointer confinement policy for one window.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum CursorGrabMode {
+    /// Let the pointer move without confinement.
+    #[default]
+    None,
+    /// Keep the pointer inside the window when the backend supports confinement.
+    Confined,
+    /// Lock the pointer to the window while continuing to report relative movement.
+    Locked,
+}
+
+impl CursorGrabMode {
+    const fn to_winit(self) -> WinitCursorGrabMode {
+        match self {
+            Self::None => WinitCursorGrabMode::None,
+            Self::Confined => WinitCursorGrabMode::Confined,
+            Self::Locked => WinitCursorGrabMode::Locked,
+        }
+    }
+}
+
+impl WindowLevel {
+    const fn to_winit(self) -> WinitWindowLevel {
+        match self {
+            Self::AlwaysOnBottom => WinitWindowLevel::AlwaysOnBottom,
+            Self::Normal => WinitWindowLevel::Normal,
+            Self::AlwaysOnTop => WinitWindowLevel::AlwaysOnTop,
+        }
+    }
+}
+
 /// Persistable window state together with its windowed restore geometry.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum WindowBounds {
@@ -363,10 +450,14 @@ pub struct WindowState {
     pub viewport_size: Size,
     /// Effective native minimum inner size, or `None` when unconstrained.
     pub minimum_size: Option<Size>,
+    /// Effective native maximum inner size, or `None` when unconstrained.
+    pub maximum_size: Option<Size>,
     pub scale_factor: f32,
     pub appearance: WindowAppearance,
     pub background_appearance: WindowBackgroundAppearance,
     pub focused: bool,
+    /// Whether the native window is permitted to receive keyboard focus.
+    pub focusable: bool,
     pub visible: bool,
     pub minimized: bool,
     pub maximized: bool,
@@ -375,6 +466,31 @@ pub struct WindowState {
     pub movable: bool,
     pub resizable: bool,
     pub minimizable: bool,
+    pub maximizable: bool,
+    pub closable: bool,
+    pub decorated: bool,
+    pub shadow: bool,
+    pub content_protected: bool,
+    pub window_level: WindowLevel,
+    /// Whether this window is omitted from the taskbar on supported platforms.
+    pub skip_taskbar: bool,
+    /// Whether this window follows the user across virtual desktops/spaces.
+    pub visible_on_all_workspaces: bool,
+    /// Whole-window native alpha in the inclusive `0.0..=1.0` range.
+    pub opacity: f32,
+    /// Whether an explicit native window icon is installed.
+    pub has_icon: bool,
+    /// Retained taskbar progress mode and bounded completion value.
+    pub taskbar_progress_state: TaskbarProgressState,
+    pub taskbar_progress: f32,
+    /// Whether a Windows taskbar overlay icon is installed.
+    pub has_taskbar_overlay_icon: bool,
+    pub cursor_visible: bool,
+    pub cursor_grab: CursorGrabMode,
+    /// Whether the native window participates in pointer hit testing.
+    pub cursor_hit_test: bool,
+    /// Last known pointer position in logical window coordinates.
+    pub cursor_position: Option<Point>,
     /// Whether the native titlebar currently represents a document file.
     pub represented_file: bool,
     /// Whether native chrome indicates that the represented document has unsaved changes.
@@ -406,6 +522,10 @@ pub const MAX_WINDOW_COMMANDS_PER_EVENT: usize = 256;
 pub const MAX_PENDING_WINDOW_COMMANDS: usize = 1_024;
 /// Maximum declarative child-window close callbacks retained by one parent window.
 pub const MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW: usize = 256;
+/// Maximum handles returned by one immutable application-window registry snapshot.
+pub const MAX_APPLICATION_WINDOWS: usize = 4_096;
+/// Maximum selected native popup menus retained until their callback is routed.
+pub const MAX_PENDING_NATIVE_POPUP_MENUS: usize = 16;
 
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum WindowCommandError {
@@ -433,6 +553,18 @@ pub enum WindowCommandError {
     InvalidPopoverConfiguration,
     #[error("a system popover must be opened from an existing parent window")]
     PopoverParentRequired,
+    #[error("minimum window size cannot exceed maximum window size")]
+    InvalidSizeConstraints,
+    #[error("window opacity must be finite and between 0.0 and 1.0")]
+    InvalidOpacity,
+    #[error("taskbar progress must be finite and between 0.0 and 1.0")]
+    InvalidTaskbarProgress,
+    #[error(
+        "a taskbar overlay description must be NUL-free and at most {MAX_TASKBAR_OVERLAY_DESCRIPTION_BYTES} UTF-8 bytes"
+    )]
+    InvalidTaskbarOverlayDescription,
+    #[error("the per-window native menu declaration is invalid")]
+    InvalidMenus,
 }
 
 /// Constant-size snapshot of one native system window-tab group.
@@ -485,6 +617,52 @@ impl WindowHandle {
     pub(crate) fn next() -> Self {
         Self(NEXT_WINDOW_HANDLE.fetch_add(1, Ordering::Relaxed).max(1))
     }
+
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    pub const fn from_u64(value: u64) -> Option<Self> {
+        if value == 0 { None } else { Some(Self(value)) }
+    }
+}
+
+/// Immutable bounded application-wide window lookup captured at one core event boundary.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct WindowRegistry {
+    handles: Arc<[WindowHandle]>,
+    active_window: Option<WindowHandle>,
+    truncated: bool,
+}
+
+impl WindowRegistry {
+    pub(crate) fn new(
+        handles: impl Into<Arc<[WindowHandle]>>,
+        active_window: Option<WindowHandle>,
+        truncated: bool,
+    ) -> Self {
+        Self {
+            handles: handles.into(),
+            active_window,
+            truncated,
+        }
+    }
+
+    pub fn windows(&self) -> &[WindowHandle] {
+        &self.handles
+    }
+
+    pub const fn active_window(&self) -> Option<WindowHandle> {
+        self.active_window
+    }
+
+    pub fn contains(&self, handle: WindowHandle) -> bool {
+        self.handles.binary_search(&handle).is_ok()
+    }
+
+    pub const fn is_truncated(&self) -> bool {
+        self.truncated
+    }
 }
 
 /// Window and renderer defaults used by [`App`].
@@ -498,6 +676,7 @@ pub struct AppConfig {
     /// A disconnected or unknown display falls back to the current primary display.
     pub display_id: Option<DisplayId>,
     pub minimum_size: Option<Size>,
+    pub maximum_size: Option<Size>,
     /// File represented by native document chrome, if any.
     pub represented_file: Option<PathBuf>,
     /// Initial unsaved-document indication in native chrome.
@@ -515,10 +694,44 @@ pub struct AppConfig {
     /// Parent-relative native placement when `kind` is [`WindowKind::SystemPopover`].
     pub popover: Option<crate::PopoverOptions>,
     pub focus: bool,
+    /// Whether the window may receive native keyboard focus after creation.
+    pub focusable: bool,
     pub show: bool,
     pub is_movable: bool,
     pub is_resizable: bool,
     pub is_minimizable: bool,
+    pub is_maximizable: bool,
+    pub is_closable: bool,
+    /// Whether native border and titlebar decorations are present.
+    pub decorated: bool,
+    /// Requested native shadow. Some platforms always draw decorated-window shadows.
+    pub shadow: bool,
+    /// Prevent supported desktop capture APIs from reading this window's contents.
+    pub content_protected: bool,
+    /// Explicit stacking override. `None` derives a role-appropriate level from [`Self::kind`].
+    pub window_level: Option<WindowLevel>,
+    /// Hide the per-window taskbar entry where the platform exposes one.
+    pub skip_taskbar: bool,
+    /// Keep the window visible on every virtual desktop/space where supported.
+    pub visible_on_all_workspaces: bool,
+    /// Whole-window native alpha.
+    pub opacity: f32,
+    /// Native window icon. macOS uses an application icon rather than per-window icons.
+    pub icon: Option<Image>,
+    /// Initial Windows taskbar progress and overlay state.
+    pub taskbar_progress_state: TaskbarProgressState,
+    pub taskbar_progress: f32,
+    pub taskbar_overlay_icon: Option<Image>,
+    pub taskbar_overlay_description: Option<String>,
+    /// Initial pointer visibility and confinement policy.
+    pub cursor_visible: bool,
+    pub cursor_grab: CursorGrabMode,
+    /// Whether pointer events hit this native window.
+    pub cursor_hit_test: bool,
+    /// Optional initial logical pointer position relative to the window.
+    pub cursor_position: Option<Point>,
+    /// Per-window native menus. `None` inherits the application's current menu declaration.
+    pub window_menus: Option<Vec<Menu>>,
     /// Top-left position of the macOS close button, in logical points from the window's top-left.
     pub traffic_light_position: Option<Point>,
     /// Logical pixels represented by one platform line-wheel unit.
@@ -540,6 +753,7 @@ impl Default for AppConfig {
             window_bounds: None,
             display_id: None,
             minimum_size: Some(Size::new(320.0, 240.0)),
+            maximum_size: None,
             represented_file: None,
             document_edited: false,
             tabbing_identifier: None,
@@ -551,10 +765,30 @@ impl Default for AppConfig {
             kind: WindowKind::Normal,
             popover: None,
             focus: true,
+            focusable: true,
             show: true,
             is_movable: true,
             is_resizable: true,
             is_minimizable: true,
+            is_maximizable: true,
+            is_closable: true,
+            decorated: true,
+            shadow: true,
+            content_protected: false,
+            window_level: None,
+            skip_taskbar: false,
+            visible_on_all_workspaces: false,
+            opacity: 1.0,
+            icon: None,
+            taskbar_progress_state: TaskbarProgressState::None,
+            taskbar_progress: 0.0,
+            taskbar_overlay_icon: None,
+            taskbar_overlay_description: None,
+            cursor_visible: true,
+            cursor_grab: CursorGrabMode::None,
+            cursor_hit_test: true,
+            cursor_position: None,
+            window_menus: None,
             traffic_light_position: None,
             line_scroll_pixels: 40.0,
             key_sequence_timeout: Duration::from_secs(1),
@@ -662,6 +896,16 @@ impl AppConfig {
         self
     }
 
+    pub fn maximum_size(mut self, width: f32, height: f32) -> Self {
+        self.maximum_size = Some(Size::new(width, height));
+        self
+    }
+
+    pub fn without_maximum_size(mut self) -> Self {
+        self.maximum_size = None;
+        self
+    }
+
     /// Represent a file in native document chrome.
     pub fn represented_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.represented_file = Some(path.into());
@@ -675,6 +919,18 @@ impl AppConfig {
 
     pub fn without_represented_file(mut self) -> Self {
         self.represented_file = None;
+        self
+    }
+
+    /// Override the application's native menus for this window.
+    pub fn window_menus(mut self, menus: impl IntoIterator<Item = Menu>) -> Self {
+        self.window_menus = Some(menus.into_iter().collect());
+        self
+    }
+
+    /// Inherit the application's native menus, including later app-wide replacements.
+    pub fn use_application_menus(mut self) -> Self {
+        self.window_menus = None;
         self
     }
 
@@ -723,6 +979,7 @@ impl AppConfig {
 
     pub fn title_bar_style(mut self, style: TitleBarStyle) -> Self {
         self.title_bar_style = style;
+        self.decorated = style != TitleBarStyle::Hidden;
         self
     }
 
@@ -742,18 +999,32 @@ impl AppConfig {
     pub fn system_popover(mut self, popover: crate::PopoverOptions) -> Self {
         self.kind = WindowKind::SystemPopover;
         self.focus = popover.grab;
+        self.focusable = popover.accepts_key_focus;
         self.popover = Some(popover);
         self.minimum_size = None;
+        self.maximum_size = None;
         self.title_bar_style = TitleBarStyle::Hidden;
+        self.decorated = false;
         self.traffic_light_position = None;
         self.is_movable = false;
         self.is_resizable = false;
         self.is_minimizable = false;
+        self.is_maximizable = false;
+        self.is_closable = false;
         self
     }
 
     pub fn focus(mut self, focus: bool) -> Self {
         self.focus = focus;
+        self
+    }
+
+    /// Allow or prevent this window from receiving native keyboard focus.
+    pub fn focusable(mut self, focusable: bool) -> Self {
+        self.focusable = focusable;
+        if !focusable {
+            self.focus = false;
+        }
         self
     }
 
@@ -775,6 +1046,132 @@ impl AppConfig {
     pub fn minimizable(mut self, minimizable: bool) -> Self {
         self.is_minimizable = minimizable;
         self
+    }
+
+    pub fn maximizable(mut self, maximizable: bool) -> Self {
+        self.is_maximizable = maximizable;
+        self
+    }
+
+    pub fn closable(mut self, closable: bool) -> Self {
+        self.is_closable = closable;
+        self
+    }
+
+    pub fn decorations(mut self, decorated: bool) -> Self {
+        self.decorated = decorated;
+        if !decorated {
+            self.title_bar_style = TitleBarStyle::Hidden;
+            self.traffic_light_position = None;
+        } else if self.title_bar_style == TitleBarStyle::Hidden {
+            self.title_bar_style = TitleBarStyle::Default;
+        }
+        self
+    }
+
+    pub fn shadow(mut self, shadow: bool) -> Self {
+        self.shadow = shadow;
+        self
+    }
+
+    pub fn content_protected(mut self, protected: bool) -> Self {
+        self.content_protected = protected;
+        self
+    }
+
+    pub fn window_level(mut self, level: WindowLevel) -> Self {
+        self.window_level = Some(level);
+        self
+    }
+
+    pub fn automatic_window_level(mut self) -> Self {
+        self.window_level = None;
+        self
+    }
+
+    pub fn skip_taskbar(mut self, skip: bool) -> Self {
+        self.skip_taskbar = skip;
+        self
+    }
+
+    pub fn visible_on_all_workspaces(mut self, visible: bool) -> Self {
+        self.visible_on_all_workspaces = visible;
+        self
+    }
+
+    /// Set whole-window native opacity. Invalid values are rejected when the window is opened.
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.opacity = opacity;
+        self
+    }
+
+    pub fn icon(mut self, icon: Image) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    pub fn without_icon(mut self) -> Self {
+        self.icon = None;
+        self
+    }
+
+    pub fn taskbar_progress(mut self, state: TaskbarProgressState, progress: f32) -> Self {
+        self.taskbar_progress_state = state;
+        self.taskbar_progress = progress;
+        self
+    }
+
+    pub fn taskbar_overlay_icon(mut self, icon: Image, description: impl Into<String>) -> Self {
+        self.taskbar_overlay_icon = Some(icon);
+        self.taskbar_overlay_description = Some(description.into());
+        self
+    }
+
+    pub fn without_taskbar_overlay_icon(mut self) -> Self {
+        self.taskbar_overlay_icon = None;
+        self.taskbar_overlay_description = None;
+        self
+    }
+
+    pub fn cursor_visible(mut self, visible: bool) -> Self {
+        self.cursor_visible = visible;
+        self
+    }
+
+    pub fn cursor_grab(mut self, mode: CursorGrabMode) -> Self {
+        self.cursor_grab = mode;
+        self
+    }
+
+    pub fn cursor_hit_test(mut self, hit_test: bool) -> Self {
+        self.cursor_hit_test = hit_test;
+        self
+    }
+
+    pub fn cursor_position(mut self, position: Point) -> Self {
+        self.cursor_position = Some(position);
+        self
+    }
+
+    pub fn without_cursor_position(mut self) -> Self {
+        self.cursor_position = None;
+        self
+    }
+
+    pub fn always_on_top(self, always_on_top: bool) -> Self {
+        self.window_level(if always_on_top {
+            WindowLevel::AlwaysOnTop
+        } else {
+            WindowLevel::Normal
+        })
+    }
+
+    pub fn always_on_bottom(self, always_on_bottom: bool) -> Self {
+        self.window_level(if always_on_bottom {
+            WindowLevel::AlwaysOnBottom
+        } else {
+            WindowLevel::Normal
+        })
     }
 
     /// Position the macOS traffic lights in logical points from the window's top-left.
@@ -874,11 +1271,28 @@ fn validate_window_options(options: &WindowOptions) -> Result<(), WindowCommandE
     if let Some(minimum) = options.minimum_size {
         validate_window_size(minimum)?;
     }
+    if let Some(maximum) = options.maximum_size {
+        validate_window_size(maximum)?;
+    }
+    validate_window_opacity(options.opacity)?;
+    validate_taskbar_progress(options.taskbar_progress)?;
+    validate_taskbar_overlay_description(options.taskbar_overlay_description.as_deref())?;
+    if let Some(position) = options.cursor_position {
+        validate_window_position(position)?;
+    }
+    if let (Some(minimum), Some(maximum)) = (options.minimum_size, options.maximum_size)
+        && (minimum.width > maximum.width || minimum.height > maximum.height)
+    {
+        return Err(WindowCommandError::InvalidSizeConstraints);
+    }
     if let Some(path) = options.represented_file.as_deref() {
         validate_window_document_path(path)?;
     }
     if let Some(identifier) = options.tabbing_identifier.as_deref() {
         validate_window_tabbing_identifier(identifier)?;
+    }
+    if let Some(menus) = options.window_menus.as_deref() {
+        validate_menus(menus).map_err(|_| WindowCommandError::InvalidMenus)?;
     }
     if options.title_bar_style == TitleBarStyle::Hidden && options.traffic_light_position.is_some()
     {
@@ -887,6 +1301,15 @@ fn validate_window_options(options: &WindowOptions) -> Result<(), WindowCommandE
     match (options.kind, options.popover.as_ref()) {
         (WindowKind::SystemPopover, Some(popover))
             if popover.is_valid(MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION)
+                && !options.decorated
+                && options.title_bar_style == TitleBarStyle::Hidden
+                && options.minimum_size.is_none()
+                && options.maximum_size.is_none()
+                && !options.is_movable
+                && !options.is_resizable
+                && !options.is_minimizable
+                && !options.is_maximizable
+                && !options.is_closable
                 && !matches!(
                     options.window_bounds,
                     Some(WindowBounds::Maximized(_) | WindowBounds::Fullscreen(_))
@@ -897,6 +1320,35 @@ fn validate_window_options(options: &WindowOptions) -> Result<(), WindowCommandE
         (_, None) => {}
     }
     Ok(())
+}
+
+pub(crate) fn validate_window_opacity(opacity: f32) -> Result<(), WindowCommandError> {
+    if opacity.is_finite() && (0.0..=1.0).contains(&opacity) {
+        Ok(())
+    } else {
+        Err(WindowCommandError::InvalidOpacity)
+    }
+}
+
+pub(crate) fn validate_taskbar_progress(progress: f32) -> Result<(), WindowCommandError> {
+    if progress.is_finite() && (0.0..=1.0).contains(&progress) {
+        Ok(())
+    } else {
+        Err(WindowCommandError::InvalidTaskbarProgress)
+    }
+}
+
+pub(crate) fn validate_taskbar_overlay_description(
+    description: Option<&str>,
+) -> Result<(), WindowCommandError> {
+    if description.is_some_and(|description| {
+        description.len() > crate::MAX_TASKBAR_OVERLAY_DESCRIPTION_BYTES
+            || description.as_bytes().contains(&0)
+    }) {
+        Err(WindowCommandError::InvalidTaskbarOverlayDescription)
+    } else {
+        Ok(())
+    }
 }
 
 /// A retained application view. It is only rendered after explicit invalidation or OS damage.
@@ -922,6 +1374,10 @@ trait AnyView {
         displays: &Displays,
         keyboard_layout: &KeyboardLayout,
         assets: &Assets,
+        app_info: Option<&AppInfo>,
+        app_paths: Option<&AppPaths>,
+        system_info: &SystemInfo,
+        system_preferences: &SystemPreferences,
         background_tasks: Option<&BackgroundTaskPoolHandle>,
         foreground_tasks: &ForegroundTaskSpawner,
         globals: &GlobalStore,
@@ -953,6 +1409,10 @@ impl<V: View> AnyView for ViewAdapter<V> {
         displays: &Displays,
         keyboard_layout: &KeyboardLayout,
         assets: &Assets,
+        app_info: Option<&AppInfo>,
+        app_paths: Option<&AppPaths>,
+        system_info: &SystemInfo,
+        system_preferences: &SystemPreferences,
         background_tasks: Option<&BackgroundTaskPoolHandle>,
         foreground_tasks: &ForegroundTaskSpawner,
         globals: &GlobalStore,
@@ -971,6 +1431,10 @@ impl<V: View> AnyView for ViewAdapter<V> {
             displays,
             keyboard_layout,
             assets,
+            app_info,
+            app_paths,
+            system_info,
+            system_preferences,
             background_tasks,
             foreground_tasks,
             globals,
@@ -1068,7 +1532,25 @@ pub(crate) enum WindowCommand {
     SetMovable(WindowHandle, bool),
     SetResizable(WindowHandle, bool),
     SetMinimumSize(WindowHandle, Option<Size>),
+    SetMaximumSize(WindowHandle, Option<Size>),
     SetMinimizable(WindowHandle, bool),
+    SetMaximizable(WindowHandle, bool),
+    SetClosable(WindowHandle, bool),
+    SetDecorated(WindowHandle, bool),
+    SetShadow(WindowHandle, bool),
+    SetContentProtected(WindowHandle, bool),
+    SetWindowLevel(WindowHandle, Option<WindowLevel>),
+    SetFocusable(WindowHandle, bool),
+    SetSkipTaskbar(WindowHandle, bool),
+    SetVisibleOnAllWorkspaces(WindowHandle, bool),
+    SetOpacity(WindowHandle, f32),
+    SetIcon(WindowHandle, Option<Image>),
+    SetTaskbarProgress(WindowHandle, TaskbarProgressState, f32),
+    SetTaskbarOverlayIcon(WindowHandle, Option<Image>, Option<String>),
+    SetCursorVisible(WindowHandle, bool),
+    SetCursorGrab(WindowHandle, CursorGrabMode),
+    SetCursorHitTest(WindowHandle, bool),
+    SetCursorPosition(WindowHandle, Point),
     SetAppearance(WindowHandle, Option<WindowAppearance>),
     SetBackgroundAppearance(WindowHandle, WindowBackgroundAppearance),
     #[cfg(feature = "inspector")]
@@ -1105,7 +1587,25 @@ impl WindowCommand {
             | Self::SetMovable(handle, _)
             | Self::SetResizable(handle, _)
             | Self::SetMinimumSize(handle, _)
+            | Self::SetMaximumSize(handle, _)
             | Self::SetMinimizable(handle, _)
+            | Self::SetMaximizable(handle, _)
+            | Self::SetClosable(handle, _)
+            | Self::SetDecorated(handle, _)
+            | Self::SetShadow(handle, _)
+            | Self::SetContentProtected(handle, _)
+            | Self::SetWindowLevel(handle, _)
+            | Self::SetFocusable(handle, _)
+            | Self::SetSkipTaskbar(handle, _)
+            | Self::SetVisibleOnAllWorkspaces(handle, _)
+            | Self::SetOpacity(handle, _)
+            | Self::SetIcon(handle, _)
+            | Self::SetTaskbarProgress(handle, _, _)
+            | Self::SetTaskbarOverlayIcon(handle, _, _)
+            | Self::SetCursorVisible(handle, _)
+            | Self::SetCursorGrab(handle, _)
+            | Self::SetCursorHitTest(handle, _)
+            | Self::SetCursorPosition(handle, _)
             | Self::SetAppearance(handle, _)
             | Self::SetBackgroundAppearance(handle, _)
             | Self::RequestAttention(handle) => *handle,
@@ -1130,6 +1630,10 @@ pub struct ViewContext<'a, V> {
     displays: &'a Displays,
     keyboard_layout: &'a KeyboardLayout,
     assets: &'a Assets,
+    app_info: Option<&'a AppInfo>,
+    app_paths: Option<&'a AppPaths>,
+    system_info: &'a SystemInfo,
+    system_preferences: &'a SystemPreferences,
     background_tasks: Option<&'a BackgroundTaskPoolHandle>,
     foreground_tasks: &'a ForegroundTaskSpawner,
     globals: &'a GlobalStore,
@@ -1215,6 +1719,27 @@ impl<V: 'static> ViewContext<'_, V> {
     /// GPUI-shaped alias for [`Self::assets`].
     pub fn asset_source(&self) -> &Assets {
         self.assets()
+    }
+
+    /// Immutable package identity supplied before application startup.
+    pub fn app_info(&self) -> Option<&AppInfo> {
+        self.app_info
+    }
+
+    /// Standard application paths resolved once during startup.
+    pub fn app_paths(&self) -> Option<&AppPaths> {
+        self.app_paths
+    }
+
+    /// Immutable operating-system and preferred-language snapshot captured at startup.
+    pub fn system_info(&self) -> &SystemInfo {
+        self.system_info
+    }
+
+    /// Read and observe the current system appearance and accessibility preferences.
+    pub fn system_preferences(&mut self) -> SystemPreferences {
+        self.listeners.observes_system_preferences = true;
+        *self.system_preferences
     }
 
     /// Read and observe the effective native light/dark appearance for this window.
@@ -2243,6 +2768,7 @@ struct ListenerRegistry {
     observes_viewport: bool,
     observes_displays: bool,
     observes_keyboard_layout: bool,
+    observes_system_preferences: bool,
     entity_events: HashMap<(EntityId, TypeId), Vec<EntityEventSubscription>>,
     entity_subscription_count: usize,
     global_observers: Vec<GlobalObserverSubscription>,
@@ -2450,6 +2976,7 @@ impl ListenerRegistry {
         self.observes_viewport = false;
         self.observes_displays = false;
         self.observes_keyboard_layout = false;
+        self.observes_system_preferences = false;
         self.child_window_closed.clear();
         self.any_child_window_closed.clear();
         self.prune_entity_event_subscriptions();
@@ -2911,6 +3438,7 @@ type SecondInstanceCallback = Box<dyn FnMut(SecondInstanceEvent, &mut EventConte
 type PowerEventCallback = Box<dyn FnMut(PowerEvent, &mut EventContext)>;
 type TrayEventCallback = Box<dyn FnMut(TrayEvent, &mut EventContext)>;
 type WindowClosedCallback = Box<dyn FnMut(WindowHandle, &mut EventContext)>;
+type QuitCallback = Box<dyn FnMut(QuitRequest, &mut EventContext)>;
 
 #[derive(Default)]
 struct ApplicationCallbacks {
@@ -2924,14 +3452,19 @@ struct ApplicationCallbacks {
     power_event: Option<PowerEventCallback>,
     tray_event: Option<TrayEventCallback>,
     window_closed: Option<WindowClosedCallback>,
+    before_quit: Option<QuitCallback>,
+    will_quit: Option<QuitCallback>,
 }
 
 mod application;
+#[cfg(not(target_arch = "wasm32"))]
+mod deep_link;
 mod external;
 #[cfg(not(target_arch = "wasm32"))]
 pub use application::AppRunner;
 pub use application::{App, Application};
 mod global_shortcut;
+mod integration;
 mod platform_dialog;
 mod power_monitor;
 #[cfg(any(
@@ -2947,9 +3480,69 @@ mod single_instance;
 mod tray;
 #[cfg(target_os = "windows")]
 mod windows_menu;
+#[cfg(target_os = "windows")]
+mod windows_shell;
+#[cfg(target_os = "windows")]
+mod windows_window;
+
+#[cfg(target_os = "windows")]
+pub(crate) fn validate_windows_notification_app_info(
+    app_info: Option<&AppInfo>,
+) -> Result<(), PlatformError> {
+    let app_id = app_info.map(AppInfo::identifier).ok_or_else(|| {
+        PlatformError::Platform(
+            "Windows system notifications require AppInfo with an application identifier".into(),
+        )
+    })?;
+    windows_shell::validate_app_id(app_id)
+}
+
+#[cfg(target_os = "windows")]
+use windows_window::{
+    current_cursor_screen_position as windows_cursor_screen_position, set_window_focusable,
+    set_window_opacity,
+};
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn set_window_focusable(_window: &Arc<Window>, _focusable: bool) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn set_window_opacity(_window: &Arc<Window>, _opacity: f32) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_window_visible_on_all_workspaces(
+    _window: &Arc<Window>,
+    _visible: bool,
+) -> Result<(), String> {
+    Ok(())
+}
+
+pub(crate) fn cursor_screen_position(displays: &Displays) -> Result<Point, PlatformError> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = displays;
+        macos_cursor_screen_position().ok_or(PlatformError::Unavailable)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_cursor_screen_position(displays)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = displays;
+        Err(PlatformError::Unsupported)
+    }
+}
+#[cfg(not(target_arch = "wasm32"))]
+pub use deep_link::MAX_DEEP_LINK_ARGUMENTS;
 pub use global_shortcut::{
     GlobalShortcutEvent, MAX_GLOBAL_SHORTCUT_ACCELERATOR_BYTES, MAX_GLOBAL_SHORTCUTS,
 };
+pub use integration::DesktopIntegrationSupport;
 pub use power_monitor::PowerEvent;
 #[cfg(any(
     target_os = "macos",
@@ -3001,6 +3594,12 @@ struct RuntimeWindow {
     native_drop_host: MacNativeDropHost,
     #[cfg(target_os = "macos")]
     first_frame_guard: Option<MacFirstFrameGuard>,
+    #[cfg(target_os = "windows")]
+    window_menu_host: Option<windows_menu::WindowsMenuHost>,
+    #[cfg(target_os = "windows")]
+    taskbar_state_applied: bool,
+    #[cfg(target_os = "windows")]
+    taskbar_apply_attempts: u8,
     ui: UiTree,
     #[cfg(feature = "inspector")]
     inspector: Option<InspectorState>,
@@ -3487,6 +4086,7 @@ struct Runtime {
     targeted_actions: VecDeque<(WindowHandle, AnyAction)>,
     windows: HashMap<WindowId, WindowEntry>,
     window_handles: HashMap<WindowHandle, WindowId>,
+    window_registry_cache: RefCell<WindowRegistryCache>,
     current_window: Option<(WindowId, WindowHandle)>,
     active_window: Option<WindowId>,
     focus_history: Vec<WindowId>,
@@ -3495,6 +4095,9 @@ struct Runtime {
     invalidate_requests: Vec<WindowHandle>,
     window_commands: Vec<WindowCommand>,
     external_menus: Option<Vec<Menu>>,
+    pending_initial_open_urls: Option<OpenUrls>,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pending_native_popup_menus: HashMap<u64, PendingNativePopupMenu>,
     platform_requests: VecDeque<PlatformRequest>,
     pending_global_shortcut_commands: VecDeque<global_shortcut::GlobalShortcutCommand>,
     pending_tray_commands: VecDeque<tray::TrayCommand>,
@@ -3515,6 +4118,10 @@ struct Runtime {
     image_workers: ImageWorkerPoolHandle,
     background_tasks: BackgroundTaskPoolHandle,
     foreground_tasks: ForegroundTaskSpawner,
+    app_info: Option<AppInfo>,
+    app_paths: Option<AppPaths>,
+    system_info: SystemInfo,
+    system_preferences: SystemPreferences,
     globals: GlobalStore,
     assets: Assets,
     font_system: SharedFontSystem,
@@ -3540,7 +4147,9 @@ struct Runtime {
     #[cfg(target_os = "macos")]
     tabbing_window_count: usize,
     #[cfg(target_os = "macos")]
-    mac_application_host: MacApplicationHost,
+    mac_application_host: Option<MacApplicationHost>,
+    #[cfg(target_os = "macos")]
+    native_termination_pending: bool,
     #[cfg(target_os = "windows")]
     _windows_power_monitor: Option<power_monitor::WindowsPowerMonitor>,
     #[cfg(target_os = "linux")]
@@ -3550,14 +4159,26 @@ struct Runtime {
     ready: bool,
     opened_window: bool,
     exit_requested: bool,
+    pending_quit: Option<QuitReason>,
+    quit_phase_active: bool,
+    last_window_quit_prevented: bool,
+    relaunch_request: Option<RelaunchRequest>,
+    process_services_finalized: bool,
     // The following four fields are the currently activated window. Event delivery is serialized
     // by Winit, so moving one entry into this slot keeps the mature single-window hot path narrow
     // while every inactive window remains independently retained in `windows`.
     config: AppConfig,
     keymap: Keymap,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
     menus: Vec<Menu>,
     menu_actions: Vec<MenuAction>,
+    #[cfg(target_os = "macos")]
+    dock_menu: Option<Menu>,
+    #[cfg(target_os = "macos")]
+    dock_menu_actions: Vec<MenuAction>,
+    #[cfg(target_os = "macos")]
+    dock_badge: Option<Arc<str>>,
+    #[cfg(target_os = "macos")]
+    dock_icon: Option<Image>,
     #[cfg(target_os = "macos")]
     menu_host: Option<MacMenuHost>,
     #[cfg(target_os = "windows")]
@@ -3574,6 +4195,8 @@ struct Runtime {
 
 struct RuntimeStartup {
     initial_window: Option<WindowRequest>,
+    app_info: Option<AppInfo>,
+    app_paths: Option<AppPaths>,
     globals: GlobalStore,
     keymap: Keymap,
     menus: Vec<Menu>,
@@ -3581,6 +4204,18 @@ struct RuntimeStartup {
     fonts: Vec<FontSource>,
     application_callbacks: ApplicationCallbacks,
     quit_mode: QuitMode,
+}
+
+#[derive(Default)]
+struct WindowRegistryCache {
+    handles: Arc<[WindowHandle]>,
+    truncated: bool,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+struct PendingNativePopupMenu {
+    window: WindowHandle,
+    actions: Vec<MenuAction>,
 }
 
 #[derive(Clone, Debug)]
@@ -3610,6 +4245,8 @@ impl Runtime {
     ) -> Result<Self, AppError> {
         let RuntimeStartup {
             initial_window,
+            app_info,
+            mut app_paths,
             globals,
             mut keymap,
             menus,
@@ -3618,9 +4255,34 @@ impl Runtime {
             application_callbacks,
             quit_mode,
         } = startup;
+        if app_paths.is_none()
+            && let Some(info) = &app_info
+        {
+            app_paths = Some(
+                info.paths()
+                    .map_err(|error| AppError::Platform(error.to_string()))?,
+            );
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(info) = &app_info
+            && let Err(error) = windows_shell::set_current_app_id(info.identifier())
+        {
+            tracing::warn!(%error, "could not apply AppInfo as the Windows application identity");
+        }
+        let system_info = SystemInfo::current();
+        let system_preferences = SystemPreferences::snapshot().unwrap_or_default();
+        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
+        let pending_initial_open_urls = application_callbacks
+            .open_urls
+            .is_some()
+            .then(deep_link::initial_open_urls)
+            .flatten();
+        #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
+        let pending_initial_open_urls = None;
         let font_system = create_shared_font_system(&assets, &fonts)?;
         let keyboard = KeyboardState::native();
         keymap.set_key_equivalents(keyboard.key_equivalents());
+        validate_menus(&menus).map_err(|error| AppError::Platform(error.to_string()))?;
         let menu_actions = collect_menu_actions(&menus);
         let mut pending_windows = VecDeque::with_capacity(2);
         pending_windows.extend(initial_window);
@@ -3652,6 +4314,8 @@ impl Runtime {
             event_proxy.clone(),
             application_callbacks.open_urls.is_some(),
             application_callbacks.reopen.is_some(),
+            application_callbacks.before_quit.is_some()
+                || application_callbacks.will_quit.is_some(),
             application_callbacks.system_wake.is_some()
                 || application_callbacks.power_event.is_some(),
             application_callbacks.system_notification_response.is_some(),
@@ -3666,6 +4330,7 @@ impl Runtime {
             targeted_actions: VecDeque::with_capacity(8),
             windows: HashMap::new(),
             window_handles: HashMap::new(),
+            window_registry_cache: RefCell::new(WindowRegistryCache::default()),
             current_window: None,
             active_window: None,
             focus_history: Vec::new(),
@@ -3674,6 +4339,9 @@ impl Runtime {
             invalidate_requests: Vec::new(),
             window_commands: Vec::with_capacity(8),
             external_menus: None,
+            pending_initial_open_urls,
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            pending_native_popup_menus: HashMap::new(),
             platform_requests: VecDeque::with_capacity(8),
             pending_global_shortcut_commands: VecDeque::with_capacity(4),
             pending_tray_commands: VecDeque::with_capacity(4),
@@ -3697,6 +4365,10 @@ impl Runtime {
             image_workers,
             background_tasks,
             foreground_tasks,
+            app_info,
+            app_paths,
+            system_info,
+            system_preferences,
             globals,
             assets,
             font_system,
@@ -3722,7 +4394,9 @@ impl Runtime {
             #[cfg(target_os = "macos")]
             tabbing_window_count: 0,
             #[cfg(target_os = "macos")]
-            mac_application_host,
+            mac_application_host: Some(mac_application_host),
+            #[cfg(target_os = "macos")]
+            native_termination_pending: false,
             #[cfg(target_os = "windows")]
             _windows_power_monitor: windows_power_monitor,
             #[cfg(target_os = "linux")]
@@ -3732,11 +4406,23 @@ impl Runtime {
             ready: false,
             opened_window: false,
             exit_requested: false,
+            pending_quit: None,
+            quit_phase_active: false,
+            last_window_quit_prevented: false,
+            relaunch_request: None,
+            process_services_finalized: false,
             config: AppConfig::default(),
             keymap,
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
             menus,
             menu_actions,
+            #[cfg(target_os = "macos")]
+            dock_menu: None,
+            #[cfg(target_os = "macos")]
+            dock_menu_actions: Vec::new(),
+            #[cfg(target_os = "macos")]
+            dock_badge: None,
+            #[cfg(target_os = "macos")]
+            dock_icon: None,
             #[cfg(target_os = "macos")]
             menu_host: None,
             #[cfg(target_os = "windows")]
@@ -3755,21 +4441,26 @@ impl Runtime {
     fn event_context(&self) -> EventContext {
         let parent = self.window.as_ref().and_then(|window| window.parent);
         let popover_context = self.current_popover_context();
-        EventContext::with_runtime(
-            self.globals.clone(),
-            self.foreground_tasks.clone(),
-            self.clipboard.clone(),
-            self.displays.clone(),
-            self.keyboard.layout().clone(),
-            self.assets.clone(),
-            crate::event::EventWindowContext {
+        EventContext::with_runtime(EventRuntimeContext {
+            globals: self.globals.clone(),
+            foreground_tasks: self.foreground_tasks.clone(),
+            clipboard: self.clipboard.clone(),
+            displays: self.displays.clone(),
+            keyboard_layout: self.keyboard.layout().clone(),
+            assets: self.assets.clone(),
+            app_info: self.app_info.clone(),
+            app_paths: self.app_paths.clone(),
+            system_info: self.system_info.clone(),
+            system_preferences: self.system_preferences,
+            window_registry: self.window_registry(),
+            window: crate::event::EventWindowContext {
                 window: self.current_handle(),
                 parent,
                 popover_owner: popover_context.map(|context| context.owner),
                 popover_root: popover_context.map(|context| context.root),
                 pointer_position: self.window.as_ref().and_then(|window| window.pointer),
             },
-        )
+        })
     }
 
     fn invalidate_external(&mut self, handle: WindowHandle) -> bool {
@@ -3951,52 +4642,77 @@ impl Runtime {
         self.current_window.map(|(_, handle)| handle)
     }
 
+    fn active_window_handle(&self) -> Option<WindowHandle> {
+        let active = self.active_window?;
+        if self.current_window.is_some_and(|(id, _)| id == active) {
+            return self.current_handle();
+        }
+        self.windows.get(&active).map(|entry| entry.handle)
+    }
+
+    fn window_registry(&self) -> WindowRegistry {
+        let total = self.window_handles.len() + self.pending_windows.len();
+        let mut cache = self.window_registry_cache.borrow_mut();
+        let cache_matches = total <= MAX_APPLICATION_WINDOWS
+            && cache.handles.len() == total
+            && self
+                .window_handles
+                .keys()
+                .all(|handle| cache.handles.binary_search(handle).is_ok())
+            && self
+                .pending_windows
+                .iter()
+                .all(|request| cache.handles.binary_search(&request.handle).is_ok());
+        if !cache_matches {
+            let mut handles = Vec::with_capacity(total.min(MAX_APPLICATION_WINDOWS));
+            handles.extend(
+                self.window_handles
+                    .keys()
+                    .copied()
+                    .take(MAX_APPLICATION_WINDOWS),
+            );
+            handles.extend(
+                self.pending_windows
+                    .iter()
+                    .take(MAX_APPLICATION_WINDOWS.saturating_sub(handles.len()))
+                    .map(|request| request.handle),
+            );
+            handles.sort_unstable();
+            handles.dedup();
+            handles.truncate(MAX_APPLICATION_WINDOWS);
+            cache.handles = handles.into();
+            cache.truncated = total > MAX_APPLICATION_WINDOWS;
+        } else {
+            cache.truncated = false;
+        }
+        let active_window = self.active_window_handle();
+        if let Some(active) = active_window
+            && cache.handles.binary_search(&active).is_err()
+        {
+            cache.truncated = true;
+            let mut handles = cache.handles.to_vec();
+            if let Some(last) = handles.last_mut() {
+                *last = active;
+                handles.sort_unstable();
+                cache.handles = handles.into();
+            }
+        }
+        WindowRegistry::new(cache.handles.clone(), active_window, cache.truncated)
+    }
+
+    fn window_state_for(&self, handle: WindowHandle) -> Option<WindowState> {
+        if self.current_handle() == Some(handle) {
+            return self.current_window_state();
+        }
+        let window_id = self.window_handles.get(&handle)?;
+        let entry = self.windows.get(window_id)?;
+        Some(runtime_window_state(handle, &entry.config, &entry.state))
+    }
+
     fn current_window_state(&self) -> Option<WindowState> {
         let handle = self.current_handle()?;
         let state = self.window.as_ref()?;
-        let platform_content_attached = runtime_window_content_attached(state);
-        let fullscreen = runtime_window_is_fullscreen(state);
-        let maximized = !fullscreen && runtime_window_is_maximized(state, &self.config);
-        let minimized = platform_content_attached && state.window.is_minimized().unwrap_or(false);
-        let current_bounds = Rect::new(
-            state.logical_position.x,
-            state.logical_position.y,
-            state.logical_size.width,
-            state.logical_size.height,
-        );
-        let bounds = if fullscreen {
-            WindowBounds::Fullscreen(state.restore_bounds)
-        } else if maximized {
-            WindowBounds::Maximized(state.restore_bounds)
-        } else {
-            WindowBounds::Windowed(current_bounds)
-        };
-        Some(WindowState {
-            handle,
-            display_id: state.display_id,
-            kind: self.config.kind,
-            bounds,
-            viewport_size: state.logical_size,
-            minimum_size: self.config.minimum_size,
-            scale_factor: state.scale_factor,
-            appearance: state.appearance,
-            background_appearance: self.config.window_background,
-            focused: state.focused,
-            visible: state.visible,
-            minimized,
-            maximized,
-            fullscreen,
-            occluded: state.occluded,
-            movable: self.config.is_movable,
-            resizable: self.config.is_resizable,
-            minimizable: self.config.is_minimizable,
-            represented_file: self.config.represented_file.is_some(),
-            document_edited: self.config.document_edited,
-            native_tabbing: self.config.tabbing_identifier.is_some(),
-            native_tabs: state.native_tabs,
-            #[cfg(feature = "inspector")]
-            inspector_active: state.inspector.is_some(),
-        })
+        Some(runtime_window_state(handle, &self.config, state))
     }
 
     #[cfg(target_os = "macos")]
@@ -4140,6 +4856,41 @@ impl Runtime {
             if state.visible && state.scheduler.invalidate() {
                 state.window.request_redraw();
             }
+        }
+        true
+    }
+
+    fn refresh_system_preferences(&mut self, preferences: SystemPreferences) -> bool {
+        if self.system_preferences == preferences {
+            return false;
+        }
+        self.system_preferences = preferences;
+        let now = Instant::now();
+
+        let refresh_window =
+            |state: &mut RuntimeWindow, config: &AppConfig, preferences: SystemPreferences| {
+                let reduce_motion = config.reduce_motion
+                    || preferences.reduce_motion().is_some_and(|enabled| enabled);
+                if state.reduce_motion != reduce_motion {
+                    state.reduce_motion = reduce_motion;
+                    state.ui.set_reduce_motion(reduce_motion);
+                    state
+                        .ui
+                        .set_animations_enabled(!state.occluded && !reduce_motion, now);
+                }
+                if state.listeners.observes_system_preferences {
+                    state.view_dirty = true;
+                    if state.visible && state.scheduler.invalidate() {
+                        state.window.request_redraw();
+                    }
+                }
+            };
+
+        for entry in self.windows.values_mut() {
+            refresh_window(&mut entry.state, &entry.config, preferences);
+        }
+        if let Some(state) = &mut self.window {
+            refresh_window(state, &self.config, preferences);
         }
         true
     }
@@ -4549,7 +5300,10 @@ impl Runtime {
                         apply_window_bounds(state, WindowBounds::Windowed(state.restore_bounds));
                         state_changed = true;
                         force_redraw = true;
-                    } else if !runtime_window_is_fullscreen(state) && entry.config.is_resizable {
+                    } else if !runtime_window_is_fullscreen(state)
+                        && entry.config.is_resizable
+                        && entry.config.is_maximizable
+                    {
                         let bounds = Rect::new(
                             state.logical_position.x,
                             state.logical_position.y,
@@ -4625,17 +5379,27 @@ impl Runtime {
                             tracing::warn!(%error, "could not restore native popover grab");
                         }
                         #[cfg(target_os = "macos")]
-                        if let Err(error) =
-                            set_window_visibility(&state.window, visible, entry.config.focus)
-                        {
+                        if let Err(error) = set_window_visibility(
+                            &state.window,
+                            visible,
+                            entry.config.focus && entry.config.focusable,
+                        ) {
                             tracing::warn!(%error, "could not change native window visibility");
                         }
                         #[cfg(not(target_os = "macos"))]
                         state.window.set_visible(visible);
                         state.visible = visible;
                         if visible {
+                            #[cfg(target_os = "windows")]
+                            {
+                                // Explorer creates the taskbar button asynchronously after the
+                                // HWND becomes visible. The first redraw retries both retained
+                                // taskbar properties at that native boundary.
+                                state.taskbar_state_applied = false;
+                                state.taskbar_apply_attempts = 0;
+                            }
                             #[cfg(not(target_os = "macos"))]
-                            if entry.config.focus {
+                            if entry.config.focus && entry.config.focusable {
                                 state.window.focus_window();
                             }
                             force_redraw = true;
@@ -4677,8 +5441,59 @@ impl Runtime {
                                 state.restore_bounds.width.max(minimum.width);
                             state.restore_bounds.height =
                                 state.restore_bounds.height.max(minimum.height);
-                            let constrained =
-                                constrained_window_size(state.logical_size, Some(minimum));
+                            let constrained = constrained_window_size(
+                                state.logical_size,
+                                Some(minimum),
+                                entry.config.maximum_size,
+                            );
+                            if constrained != state.logical_size
+                                && !runtime_window_is_fullscreen(state)
+                                && !runtime_window_is_maximized(state, &entry.config)
+                            {
+                                if let Some(physical) =
+                                    state.window.request_inner_size(LogicalSize::new(
+                                        constrained.width as f64,
+                                        constrained.height as f64,
+                                    ))
+                                {
+                                    state.renderer.resize(physical.width, physical.height);
+                                    state.logical_size =
+                                        logical_window_size(physical, state.scale_factor);
+                                }
+                                state.layout_dirty = true;
+                                state.view_dirty |= state.listeners.observes_viewport;
+                                force_redraw = true;
+                            }
+                        }
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetMaximumSize(_, maximum) => {
+                    let compatible = match (entry.config.minimum_size, maximum) {
+                        (Some(minimum), Some(maximum)) => {
+                            minimum.width <= maximum.width && minimum.height <= maximum.height
+                        }
+                        _ => true,
+                    };
+                    if !compatible {
+                        tracing::warn!(
+                            "ignored a maximum window size smaller than the current minimum size"
+                        );
+                    } else if entry.config.maximum_size != maximum {
+                        entry.config.maximum_size = maximum;
+                        state.window.set_max_inner_size(maximum.map(|maximum| {
+                            LogicalSize::new(maximum.width as f64, maximum.height as f64)
+                        }));
+                        if let Some(maximum) = maximum {
+                            state.restore_bounds.width =
+                                state.restore_bounds.width.min(maximum.width);
+                            state.restore_bounds.height =
+                                state.restore_bounds.height.min(maximum.height);
+                            let constrained = constrained_window_size(
+                                state.logical_size,
+                                entry.config.minimum_size,
+                                Some(maximum),
+                            );
                             if constrained != state.logical_size
                                 && !runtime_window_is_fullscreen(state)
                                 && !runtime_window_is_maximized(state, &entry.config)
@@ -4707,6 +5522,205 @@ impl Runtime {
                         state
                             .window
                             .set_enabled_buttons(window_buttons(&entry.config));
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetMaximizable(_, maximizable) => {
+                    if entry.config.is_maximizable != maximizable {
+                        entry.config.is_maximizable = maximizable;
+                        state
+                            .window
+                            .set_enabled_buttons(window_buttons(&entry.config));
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetClosable(_, closable) => {
+                    if entry.config.is_closable != closable {
+                        entry.config.is_closable = closable;
+                        state
+                            .window
+                            .set_enabled_buttons(window_buttons(&entry.config));
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetDecorated(_, decorated) => {
+                    if entry.config.decorated != decorated {
+                        entry.config.decorated = decorated;
+                        state.window.set_decorations(decorated);
+                        state_changed = true;
+                        force_redraw = true;
+                    }
+                }
+                WindowCommand::SetShadow(_, shadow) => {
+                    if entry.config.shadow != shadow {
+                        entry.config.shadow = shadow;
+                        #[cfg(target_os = "macos")]
+                        state.window.set_has_shadow(shadow);
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetContentProtected(_, protected) => {
+                    if entry.config.content_protected != protected {
+                        entry.config.content_protected = protected;
+                        state.window.set_content_protected(protected);
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetWindowLevel(_, level) => {
+                    if entry.config.window_level != level {
+                        entry.config.window_level = level;
+                        state
+                            .window
+                            .set_window_level(effective_window_level(&entry.config).to_winit());
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetFocusable(_, focusable) => {
+                    if entry.config.focusable != focusable {
+                        entry.config.focusable = focusable;
+                        if !focusable {
+                            entry.config.focus = false;
+                        }
+                        if let Err(error) = set_window_focusable(&state.window, focusable) {
+                            tracing::warn!(%error, "could not change native window focusability");
+                        }
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetSkipTaskbar(_, skip) => {
+                    if entry.config.skip_taskbar != skip {
+                        entry.config.skip_taskbar = skip;
+                        #[cfg(target_os = "windows")]
+                        state.window.set_skip_taskbar(skip);
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetVisibleOnAllWorkspaces(_, visible) => {
+                    if entry.config.visible_on_all_workspaces != visible {
+                        entry.config.visible_on_all_workspaces = visible;
+                        if let Err(error) = set_window_visible_on_all_workspaces(
+                            &state.window,
+                            effective_visible_on_all_workspaces(&entry.config),
+                        ) {
+                            tracing::warn!(%error, "could not change native workspace visibility");
+                        }
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetOpacity(_, opacity) => {
+                    if entry.config.opacity != opacity {
+                        entry.config.opacity = opacity;
+                        if let Err(error) = set_window_opacity(&state.window, opacity) {
+                            tracing::warn!(%error, "could not change native window opacity");
+                        }
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetIcon(_, icon) => {
+                    if entry.config.icon.as_ref().map(Image::id) != icon.as_ref().map(Image::id) {
+                        state
+                            .window
+                            .set_window_icon(icon.as_ref().map(winit_window_icon));
+                        entry.config.icon = icon;
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetTaskbarProgress(_, progress_state, progress) => {
+                    if entry.config.taskbar_progress_state != progress_state
+                        || entry.config.taskbar_progress != progress
+                    {
+                        #[cfg(target_os = "windows")]
+                        {
+                            state.taskbar_state_applied &= windows_window::set_taskbar_progress(
+                                &state.window,
+                                progress_state,
+                                progress,
+                            )
+                            .map_err(|error| {
+                                tracing::warn!(%error, "could not change native taskbar progress");
+                            })
+                            .is_ok();
+                            state.taskbar_apply_attempts = 0;
+                        }
+                        entry.config.taskbar_progress_state = progress_state;
+                        entry.config.taskbar_progress = progress;
+                        state_changed = true;
+                        #[cfg(target_os = "windows")]
+                        {
+                            force_redraw = true;
+                        }
+                    }
+                }
+                WindowCommand::SetTaskbarOverlayIcon(_, icon, description) => {
+                    if entry.config.taskbar_overlay_icon.as_ref().map(Image::id)
+                        != icon.as_ref().map(Image::id)
+                        || entry.config.taskbar_overlay_description != description
+                    {
+                        #[cfg(target_os = "windows")]
+                        {
+                            state.taskbar_state_applied &=
+                                windows_window::set_taskbar_overlay_icon(
+                                    &state.window,
+                                    icon.as_ref(),
+                                    description.as_deref(),
+                                )
+                                .map_err(|error| {
+                                    tracing::warn!(%error, "could not change native taskbar overlay icon");
+                                })
+                                .is_ok();
+                            state.taskbar_apply_attempts = 0;
+                        }
+                        entry.config.taskbar_overlay_icon = icon;
+                        entry.config.taskbar_overlay_description = description;
+                        state_changed = true;
+                        #[cfg(target_os = "windows")]
+                        {
+                            force_redraw = true;
+                        }
+                    }
+                }
+                WindowCommand::SetCursorVisible(_, visible) => {
+                    if entry.config.cursor_visible != visible {
+                        entry.config.cursor_visible = visible;
+                        state.window.set_cursor_visible(visible);
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetCursorGrab(_, mode) => {
+                    if entry.config.cursor_grab != mode {
+                        match state.window.set_cursor_grab(mode.to_winit()) {
+                            Ok(()) => {
+                                entry.config.cursor_grab = mode;
+                                state_changed = true;
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "could not change native cursor confinement");
+                            }
+                        }
+                    }
+                }
+                WindowCommand::SetCursorHitTest(_, hit_test) => {
+                    if entry.config.cursor_hit_test != hit_test {
+                        match state.window.set_cursor_hittest(hit_test) {
+                            Ok(()) => {
+                                entry.config.cursor_hit_test = hit_test;
+                                state_changed = true;
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "could not change native pointer hit testing");
+                            }
+                        }
+                    }
+                }
+                WindowCommand::SetCursorPosition(_, position) => {
+                    if let Err(error) = state.window.set_cursor_position(LogicalPosition::new(
+                        f64::from(position.x),
+                        f64::from(position.y),
+                    )) {
+                        tracing::warn!(%error, "could not change native cursor position");
+                    } else {
+                        entry.config.cursor_position = Some(position);
+                        state.pointer = Some(position);
                         state_changed = true;
                     }
                 }
@@ -4800,7 +5814,6 @@ impl Runtime {
         }
     }
 
-    #[cfg(target_os = "macos")]
     fn invoke_open_urls(&mut self, event_loop: &ActiveEventLoop, urls: OpenUrls) {
         let Some(mut callback) = self.application_callbacks.open_urls.take() else {
             return;
@@ -4951,6 +5964,9 @@ impl Runtime {
                 .map(|entry| (entry.state.parent, entry.state.restore_focus_on_close))
                 .unwrap_or((None, None));
             self.foreground_tasks.cancel_window(handle);
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            self.pending_native_popup_menus
+                .retain(|_, popup| popup.window != handle);
             #[cfg(target_os = "macos")]
             if let Some(dialog) = self.active_platform_dialogs.remove(&Some(handle)) {
                 dialog.native.cancel();
@@ -5061,12 +6077,78 @@ impl Runtime {
         }
     }
 
+    fn invoke_quit_callback(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        request: QuitRequest,
+        before: bool,
+    ) -> bool {
+        let callback = if before {
+            self.application_callbacks.before_quit.take()
+        } else {
+            self.application_callbacks.will_quit.take()
+        };
+        let Some(mut callback) = callback else {
+            return true;
+        };
+        let mut context = self.event_context();
+        self.quit_phase_active = true;
+        callback(request, &mut context);
+        let prevented = context.prevent_quit;
+        if before {
+            self.application_callbacks.before_quit = Some(callback);
+        } else {
+            self.application_callbacks.will_quit = Some(callback);
+        }
+        let _ = self.apply_event_context(event_loop, context, false, false);
+        self.quit_phase_active = false;
+        !prevented && self.fatal_error.is_none()
+    }
+
+    fn process_pending_quit(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(reason) = self.pending_quit.take() else {
+            return;
+        };
+        if self.exit_requested {
+            return;
+        }
+        let request = QuitRequest { reason };
+        let accepted = self.invoke_quit_callback(event_loop, request, true)
+            && self.invoke_quit_callback(event_loop, request, false);
+        if !accepted {
+            if reason == QuitReason::Relaunch {
+                self.relaunch_request = None;
+            }
+            if reason == QuitReason::LastWindowClosed {
+                self.last_window_quit_prevented = true;
+            }
+            #[cfg(target_os = "macos")]
+            if reason == QuitReason::OperatingSystem && self.native_termination_pending {
+                if let Some(host) = self.mac_application_host.as_ref() {
+                    host.reply_to_application_should_terminate(false);
+                }
+                self.native_termination_pending = false;
+            }
+            return;
+        }
+        self.exit_requested = true;
+        self.pending_windows.clear();
+        self.targeted_actions.clear();
+        self.close_requests
+            .extend(self.window_handles.keys().copied());
+    }
+
     fn process_window_commands(&mut self, event_loop: &ActiveEventLoop) {
         debug_assert!(self.current_window.is_none());
         debug_assert!(self.window.is_none());
 
         for _ in 0..MAX_WINDOW_LIFECYCLE_TURNS {
             if !self.process_deferred_effects(event_loop) {
+                return;
+            }
+
+            self.process_pending_quit(event_loop);
+            if self.fatal_error.is_some() {
                 return;
             }
 
@@ -5142,6 +6224,9 @@ impl Runtime {
                     continue;
                 };
                 if let Some(entry) = self.windows.get(&window_id) {
+                    if !entry.config.focusable {
+                        continue;
+                    }
                     #[cfg(target_os = "macos")]
                     if matches!(
                         entry.config.kind,
@@ -5173,6 +6258,14 @@ impl Runtime {
             if self.exit_requested {
                 self.pending_windows.clear();
                 if self.windows.is_empty() {
+                    #[cfg(target_os = "macos")]
+                    if self.native_termination_pending {
+                        if let Some(host) = self.mac_application_host.as_ref() {
+                            host.reply_to_application_should_terminate(true);
+                        }
+                        self.native_termination_pending = false;
+                        return;
+                    }
                     event_loop.exit();
                     return;
                 }
@@ -5189,8 +6282,13 @@ impl Runtime {
                 continue;
             }
 
-            if self.opened_window && self.windows.is_empty() && self.quit_mode.quits_when_empty() {
-                event_loop.exit();
+            if self.opened_window
+                && self.windows.is_empty()
+                && self.quit_mode.quits_when_empty()
+                && !self.last_window_quit_prevented
+            {
+                self.pending_quit = Some(QuitReason::LastWindowClosed);
+                continue;
             }
             return;
         }
@@ -5348,12 +6446,16 @@ impl Runtime {
         force_redraw: bool,
         announce_focus: bool,
     ) -> bool {
-        if cx.exit {
-            self.exit_requested = true;
-            self.pending_windows.clear();
-            self.targeted_actions.clear();
-            self.close_requests
-                .extend(self.window_handles.keys().copied());
+        let relaunch_requested = cx.relaunch.is_some();
+        if let Some(request) = cx.relaunch.take() {
+            self.relaunch_request = Some(request);
+        }
+        if cx.exit && !self.quit_phase_active {
+            self.pending_quit = Some(if relaunch_requested {
+                QuitReason::Relaunch
+            } else {
+                QuitReason::Explicit
+            });
             return false;
         }
         let entity_notifications = std::mem::take(&mut cx.entity_notifications);
@@ -5446,6 +6548,8 @@ impl Runtime {
         let actions = std::mem::take(&mut cx.actions);
         let form_submissions = std::mem::take(&mut cx.form_submissions);
         let menus = cx.menus.take();
+        let window_menus = cx.window_menus.take();
+        let native_popup_menus = std::mem::take(&mut cx.native_popup_menus);
         let mut focus_changed = false;
         if let Some(state) = &mut self.window {
             let previous_focus = state.ui.focused();
@@ -5512,6 +6616,19 @@ impl Runtime {
         {
             return false;
         }
+        if let Some(window_menus) = window_menus
+            && !self.replace_current_window_menus(event_loop, window_menus)
+        {
+            return false;
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        for popup in native_popup_menus {
+            if !self.show_current_native_popup_menu(event_loop, popup) {
+                return false;
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        debug_assert!(native_popup_menus.is_empty());
         for action in actions {
             if self.invoke_action(event_loop, &action).is_none() {
                 return false;
@@ -5525,6 +6642,59 @@ impl Runtime {
         self.invalidate_entity_observers(&entity_notifications, notify_all_entities);
         self.invalidate_global_observers(&global_notifications, notify_all_globals);
         true
+    }
+
+    fn finalize_process_services(&mut self) {
+        if self.process_services_finalized {
+            return;
+        }
+        self.process_services_finalized = true;
+        global_shortcut::clear_global_shortcut_handler_proxy();
+        tray::clear_tray_handler_proxy();
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+        self.global_shortcuts.clear();
+        self.tray_icons.clear();
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
+        {
+            self.single_instance.take();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            self.menu_host.take();
+            self.mac_application_host.take();
+            for (_, dialog) in self.active_platform_dialogs.drain() {
+                dialog.native.cancel();
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            self.windows_menu_host.take();
+            self._windows_power_monitor.take();
+        }
+        #[cfg(target_os = "linux")]
+        {
+            self._linux_power_monitor.take();
+        }
+        #[cfg(any(
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
+        self.active_platform_dialogs.clear();
+        self.foreground_tasks.shutdown();
+        self.background_tasks.shutdown();
+        self.image_workers.shutdown();
     }
 
     /// Returns `None` after exit, otherwise whether a handler consumed the action.
@@ -5583,18 +6753,73 @@ impl Runtime {
         window.ui.action_available(&path, action.type_id())
     }
 
-    fn replace_menus(&mut self, event_loop: &ActiveEventLoop, menus: Vec<Menu>) -> bool {
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        let _ = event_loop;
-        let menu_actions = collect_menu_actions(&menus);
-        #[cfg(target_os = "macos")]
-        let next_host = match MacMenuHost::new(&menus, self.event_proxy.clone()) {
-            Ok(host) => Some(host),
+    #[cfg(target_os = "macos")]
+    fn invoke_dock_menu_action(&mut self, event_loop: &ActiveEventLoop, action_id: usize) {
+        let item = self
+            .dock_menu_actions
+            .get(action_id)
+            .filter(|item| !item.disabled)
+            .map(|item| (item.action.clone(), item.os_action));
+        let Some((action, os_action)) = item else {
+            return;
+        };
+        let target = self
+            .active_window
+            .or_else(|| self.focus_history.last().copied());
+        if let Some(target) = target
+            && !self.activate_window(target)
+        {
+            return;
+        }
+        let handled = action
+            .as_ref()
+            .is_some_and(|action| self.invoke_action(event_loop, action).unwrap_or(true));
+        if !handled && let Some(os_action) = os_action {
+            self.invoke_os_action(event_loop, os_action);
+        }
+        if target.is_some() {
+            self.deactivate_window();
+        }
+        self.process_window_commands(event_loop);
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn active_menu_declaration(&self) -> &[Menu] {
+        let Some(active) = self.active_window else {
+            return &self.menus;
+        };
+        if self.current_window.is_some_and(|(id, _)| id == active) {
+            return self.config.window_menus.as_deref().unwrap_or(&self.menus);
+        }
+        self.windows
+            .get(&active)
+            .and_then(|entry| entry.config.window_menus.as_deref())
+            .unwrap_or(&self.menus)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn install_active_mac_menu(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        let menus = self.active_menu_declaration().to_vec();
+        let host = match MacMenuHost::new(&menus, self.event_proxy.clone()) {
+            Ok(host) => host,
             Err(error) => {
                 self.fail(event_loop, AppError::Platform(error));
                 return false;
             }
         };
+        self.menu_actions = collect_menu_actions(&menus);
+        self.menu_host = Some(host);
+        self.sync_active_native_menu_state();
+        true
+    }
+
+    fn replace_menus(&mut self, event_loop: &ActiveEventLoop, menus: Vec<Menu>) -> bool {
+        if let Err(error) = validate_menus(&menus) {
+            self.fail(event_loop, AppError::Platform(error.to_string()));
+            return false;
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = event_loop;
         #[cfg(target_os = "windows")]
         let next_host = if menus.is_empty() {
             None
@@ -5608,12 +6833,12 @@ impl Runtime {
             }
         };
 
-        self.menu_actions = menu_actions;
+        self.menus = menus;
         #[cfg(target_os = "macos")]
         {
-            self.menus = menus;
-            self.menu_host = next_host;
-            self.sync_native_menu_state();
+            if !self.install_active_mac_menu(event_loop) {
+                return false;
+            }
         }
         #[cfg(target_os = "windows")]
         {
@@ -5621,19 +6846,22 @@ impl Runtime {
             self.windows_menu_host.take();
             if let Some(next_host) = &next_host {
                 for entry in self.windows.values() {
+                    if entry.config.window_menus.is_some() {
+                        continue;
+                    }
                     if let Err(error) = next_host.attach(&entry.state.window) {
                         self.fail(event_loop, AppError::Platform(error));
                         return false;
                     }
                 }
-                if let Some(window) = &self.window
+                if self.config.window_menus.is_none()
+                    && let Some(window) = &self.window
                     && let Err(error) = next_host.attach(&window.window)
                 {
                     self.fail(event_loop, AppError::Platform(error));
                     return false;
                 }
             }
-            self.menus = menus;
             self.windows_menu_host = next_host;
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -5641,27 +6869,229 @@ impl Runtime {
         true
     }
 
-    fn os_action_available(&self, action: OsAction) -> bool {
-        let Some(window) = &self.window else {
+    fn replace_current_window_menus(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        menus: Option<Vec<Menu>>,
+    ) -> bool {
+        if let Some(menus) = menus.as_deref()
+            && let Err(error) = validate_menus(menus)
+        {
+            self.fail(event_loop, AppError::Platform(error.to_string()));
+            return false;
+        }
+        let Some((_window_id, _)) = self.current_window else {
             return false;
         };
-        let input_focused = window.ui.focused_text_input().is_some();
+
+        #[cfg(target_os = "windows")]
+        let next_host = match menus.as_deref() {
+            Some([]) | None => None,
+            Some(menus) => {
+                match windows_menu::WindowsMenuHost::new(menus, self.event_proxy.clone()) {
+                    Ok(host) => Some(host),
+                    Err(error) => {
+                        self.fail(event_loop, AppError::Platform(error));
+                        return false;
+                    }
+                }
+            }
+        };
+
+        #[cfg(target_os = "windows")]
+        {
+            let Some(state) = self.window.as_mut() else {
+                return false;
+            };
+            if self.config.window_menus.is_none()
+                && let Some(host) = &self.windows_menu_host
+                && let Err(error) = host.detach(&state.window)
+            {
+                self.fail(event_loop, AppError::Platform(error));
+                return false;
+            }
+            state.window_menu_host.take();
+            if menus.is_some() {
+                if let Some(host) = &next_host
+                    && let Err(error) = host.attach(&state.window)
+                {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return false;
+                }
+                state.window_menu_host = next_host;
+            } else if let Some(host) = &self.windows_menu_host
+                && let Err(error) = host.attach(&state.window)
+            {
+                self.fail(event_loop, AppError::Platform(error));
+                return false;
+            }
+        }
+
+        self.config.window_menus = menus;
+
+        #[cfg(target_os = "macos")]
+        if self.active_window == Some(_window_id) && !self.install_active_mac_menu(event_loop) {
+            return false;
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = (event_loop, _window_id);
+        true
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn show_current_native_popup_menu(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        request: crate::event::NativePopupMenuRequest,
+    ) -> bool {
+        if self.pending_native_popup_menus.len() == MAX_PENDING_NATIVE_POPUP_MENUS {
+            self.fail(
+                event_loop,
+                AppError::View(format!(
+                    "the application cannot retain more than {MAX_PENDING_NATIVE_POPUP_MENUS} selected native popup menus"
+                )),
+            );
+            return false;
+        }
+        let Some(handle) = self.current_handle() else {
+            return false;
+        };
+        let actions = collect_menu_actions(std::slice::from_ref(&request.menu));
+        static NEXT_POPUP_MENU_ID: AtomicU64 = AtomicU64::new(1);
+        let popup_id = NEXT_POPUP_MENU_ID.fetch_add(1, Ordering::Relaxed).max(1);
+
+        #[cfg(target_os = "macos")]
+        let states = {
+            let contexts = self
+                .window
+                .as_ref()
+                .map(|window| window.ui.key_context_stack())
+                .unwrap_or_default();
+            actions
+                .iter()
+                .map(|item| MacMenuItemState {
+                    disabled: item.disabled,
+                    action_available: item
+                        .action
+                        .as_ref()
+                        .is_some_and(|action| self.action_available(action))
+                        || item
+                            .os_action
+                            .is_some_and(|action| self.os_action_available(action)),
+                    checked: item.checked,
+                    shortcut: item.action.as_ref().and_then(|action| {
+                        self.keymap.shortcut_for_action_value(action, &contexts)
+                    }),
+                })
+                .collect::<Vec<_>>()
+        };
+        #[cfg(target_os = "macos")]
+        let native_focus_active = self
+            .window
+            .as_ref()
+            .and_then(|window| window.native_host.as_ref())
+            .is_some_and(MacNativeHost::native_focus_active);
+
+        self.pending_native_popup_menus.insert(
+            popup_id,
+            PendingNativePopupMenu {
+                window: handle,
+                actions,
+            },
+        );
+
+        #[cfg(target_os = "windows")]
+        tray::install_native_menu_handlers(self.event_proxy.clone());
+        let result = {
+            let Some(window) = self.window.as_ref() else {
+                self.pending_native_popup_menus.remove(&popup_id);
+                return false;
+            };
+            #[cfg(target_os = "macos")]
+            {
+                crate::macos_menu::show_popup_menu(
+                    &request.menu,
+                    popup_id,
+                    &window.window,
+                    request.position,
+                    &states,
+                    native_focus_active,
+                    self.event_proxy.clone(),
+                )
+            }
+            #[cfg(target_os = "windows")]
+            {
+                windows_menu::show_popup_menu(
+                    &request.menu,
+                    popup_id,
+                    &window.window,
+                    request.position,
+                )
+            }
+        };
+        let shown = match result {
+            Ok(shown) => shown,
+            Err(error) => {
+                self.pending_native_popup_menus.remove(&popup_id);
+                self.fail(event_loop, AppError::Platform(error));
+                return false;
+            }
+        };
+        if !shown {
+            self.pending_native_popup_menus.remove(&popup_id);
+            return true;
+        }
+        if self
+            .event_proxy
+            .send_event(RuntimeEvent::NativePopupMenuClosed(popup_id))
+            .is_err()
+        {
+            self.pending_native_popup_menus.remove(&popup_id);
+        }
+        true
+    }
+
+    fn os_action_available(&self, action: OsAction) -> bool {
+        let window = self.window.as_ref();
+        let input_focused = window.is_some_and(|window| window.ui.focused_text_input().is_some());
         match action {
             OsAction::Cut => {
                 input_focused
                     && window
+                        .expect("input focus requires a current window")
                         .ui
                         .selected_input_text()
                         .is_some_and(|selection| !selection.is_empty())
             }
-            OsAction::Copy => window
-                .ui
-                .selected_text()
-                .is_some_and(|selection| !selection.is_empty()),
+            OsAction::Copy => window.is_some_and(|window| {
+                window
+                    .ui
+                    .selected_text()
+                    .is_some_and(|selection| !selection.is_empty())
+            }),
             OsAction::Paste => input_focused,
-            OsAction::SelectAll => input_focused || window.ui.has_selectable_text(),
-            OsAction::Undo => input_focused && window.ui.input_can_undo(),
-            OsAction::Redo => input_focused && window.ui.input_can_redo(),
+            OsAction::SelectAll => {
+                input_focused || window.is_some_and(|window| window.ui.has_selectable_text())
+            }
+            OsAction::Undo => {
+                input_focused && window.is_some_and(|window| window.ui.input_can_undo())
+            }
+            OsAction::Redo => {
+                input_focused && window.is_some_and(|window| window.ui.input_can_redo())
+            }
+            OsAction::About => cfg!(any(target_os = "macos", target_os = "windows")),
+            OsAction::ShowHelp => cfg!(target_os = "macos"),
+            OsAction::HideApplication
+            | OsAction::ShowAllApplications
+            | OsAction::Quit
+            | OsAction::BringAllToFront => !self.window_handles.is_empty(),
+            OsAction::HideOtherApplications => cfg!(target_os = "macos"),
+            OsAction::CloseWindow => window.is_some() && self.config.is_closable,
+            OsAction::MinimizeWindow => window.is_some() && self.config.is_minimizable,
+            OsAction::ZoomWindow => {
+                window.is_some() && self.config.is_resizable && self.config.is_maximizable
+            }
+            OsAction::ToggleFullscreen => window.is_some(),
         }
     }
 
@@ -5769,6 +7199,79 @@ impl Runtime {
                     .unwrap_or_default();
                 self.apply_input_result(event_loop, result, true)
             }
+            OsAction::About => {
+                if !DesktopIntegrationSupport::current().native_about_panel
+                    || self.platform_requests.len() == crate::MAX_PENDING_PLATFORM_REQUESTS
+                {
+                    return false;
+                }
+                let Ok(request) = PlatformRequest::show_about_panel(AboutPanelOptions::default())
+                else {
+                    return false;
+                };
+                self.platform_requests.push_back(request);
+                true
+            }
+            OsAction::HideOtherApplications | OsAction::ShowHelp => false,
+            OsAction::HideApplication | OsAction::ShowAllApplications => {
+                let visible = action == OsAction::ShowAllApplications;
+                let mut handles = self.window_handles.keys().copied().collect::<Vec<_>>();
+                handles.sort_unstable();
+                self.window_commands.extend(
+                    handles
+                        .into_iter()
+                        .map(|handle| WindowCommand::SetVisible(handle, visible)),
+                );
+                true
+            }
+            OsAction::Quit => {
+                self.pending_quit = Some(QuitReason::Explicit);
+                true
+            }
+            OsAction::CloseWindow => {
+                if !self.config.is_closable {
+                    return false;
+                }
+                let Some(handle) = self.current_handle() else {
+                    return false;
+                };
+                self.close_requests.push(handle);
+                true
+            }
+            OsAction::MinimizeWindow => {
+                if !self.config.is_minimizable {
+                    return false;
+                }
+                let Some(handle) = self.current_handle() else {
+                    return false;
+                };
+                self.window_commands.push(WindowCommand::Minimize(handle));
+                true
+            }
+            OsAction::ZoomWindow => {
+                if !self.config.is_resizable || !self.config.is_maximizable {
+                    return false;
+                }
+                let Some(handle) = self.current_handle() else {
+                    return false;
+                };
+                self.window_commands.push(WindowCommand::Zoom(handle));
+                true
+            }
+            OsAction::ToggleFullscreen => {
+                let Some(handle) = self.current_handle() else {
+                    return false;
+                };
+                self.window_commands
+                    .push(WindowCommand::ToggleFullscreen(handle));
+                true
+            }
+            OsAction::BringAllToFront => {
+                let mut handles = self.window_handles.keys().copied().collect::<Vec<_>>();
+                handles.sort_unstable();
+                self.focus_requests.extend(handles);
+                true
+            }
         }
     }
 
@@ -5782,21 +7285,24 @@ impl Runtime {
             .as_ref()
             .map(|window| window.ui.key_context_stack())
             .unwrap_or_default();
-        let states = self
-            .menu_actions
-            .iter()
-            .map(|item| MacMenuItemState {
-                disabled: item.disabled,
-                action_available: self.action_available(&item.action)
-                    || item
-                        .os_action
-                        .is_some_and(|action| self.os_action_available(action)),
-                checked: item.checked,
-                shortcut: self
-                    .keymap
-                    .shortcut_for_action_value(&item.action, &contexts),
-            })
-            .collect::<Vec<_>>();
+        let states =
+            self.menu_actions
+                .iter()
+                .map(|item| MacMenuItemState {
+                    disabled: item.disabled,
+                    action_available: item
+                        .action
+                        .as_ref()
+                        .is_some_and(|action| self.action_available(action))
+                        || item
+                            .os_action
+                            .is_some_and(|action| self.os_action_available(action)),
+                    checked: item.checked,
+                    shortcut: item.action.as_ref().and_then(|action| {
+                        self.keymap.shortcut_for_action_value(action, &contexts)
+                    }),
+                })
+                .collect::<Vec<_>>();
         let native_focus_active = self
             .window
             .as_ref()
@@ -7580,6 +9086,10 @@ impl Runtime {
         let displays = self.displays.clone();
         let keyboard_layout = self.keyboard.layout().clone();
         let assets = self.assets.clone();
+        let app_info = self.app_info.clone();
+        let app_paths = self.app_paths.clone();
+        let system_info = self.system_info.clone();
+        let system_preferences = self.system_preferences;
         let Some(state) = &mut self.window else {
             return;
         };
@@ -7655,6 +9165,10 @@ impl Runtime {
                 &displays,
                 &keyboard_layout,
                 &assets,
+                app_info.as_ref(),
+                app_paths.as_ref(),
+                &system_info,
+                &system_preferences,
                 Some(&background_tasks),
                 &foreground_tasks,
                 &globals,
@@ -7959,18 +9473,34 @@ impl Runtime {
         let selected_monitor = selected_display_id
             .and_then(|id| crate::display::native_monitor(event_loop, id))
             .or_else(|| event_loop.primary_monitor());
-        let restore_rect = requested_bounds
+        let constrained_size = constrained_window_size(
+            self.config.size,
+            self.config.minimum_size,
+            self.config.maximum_size,
+        );
+        let requested_rect = requested_bounds
             .map(WindowBounds::bounds)
             .unwrap_or_else(|| {
                 if self.config.display_id.is_some() {
                     selected_display.as_ref().map_or_else(
-                        || Rect::from_size(self.config.size),
-                        |display| display.centered_bounds(self.config.size),
+                        || Rect::from_size(constrained_size),
+                        |display| display.centered_bounds(constrained_size),
                     )
                 } else {
-                    Rect::from_size(self.config.size)
+                    Rect::from_size(constrained_size)
                 }
             });
+        let constrained_size = constrained_window_size(
+            Size::new(requested_rect.width, requested_rect.height),
+            self.config.minimum_size,
+            self.config.maximum_size,
+        );
+        let restore_rect = Rect::new(
+            requested_rect.x,
+            requested_rect.y,
+            constrained_size.width,
+            constrained_size.height,
+        );
         let parent_window = parent
             .and_then(|parent| self.window_handles.get(&parent).copied())
             .and_then(|window_id| self.windows.get(&window_id))
@@ -7994,20 +9524,22 @@ impl Runtime {
             .with_title(self.config.title.clone())
             .with_visible(false)
             .with_resizable(self.config.is_resizable)
+            .with_decorations(self.config.decorated)
             .with_transparent(self.config.window_background.is_transparent())
             .with_blur(self.config.window_background.is_blurred())
+            .with_content_protected(self.config.content_protected)
             .with_theme(self.config.preferred_appearance.map(to_winit_theme))
             .with_enabled_buttons(window_buttons(&self.config))
-            .with_window_level(match self.config.kind {
-                WindowKind::Floating | WindowKind::Popover | WindowKind::SystemPopover => {
-                    WindowLevel::AlwaysOnTop
-                }
-                WindowKind::Normal | WindowKind::Dialog => WindowLevel::Normal,
-            })
+            .with_window_level(effective_window_level(&self.config).to_winit())
+            .with_window_icon(self.config.icon.as_ref().map(winit_window_icon))
             .with_inner_size(LogicalSize::new(
                 restore_rect.width as f64,
                 restore_rect.height as f64,
             ));
+        #[cfg(target_os = "windows")]
+        {
+            attributes = attributes.with_skip_taskbar(self.config.skip_taskbar);
+        }
         if (self.config.window_bounds.is_some() || self.config.display_id.is_some())
             && self.config.kind != WindowKind::SystemPopover
         {
@@ -8093,6 +9625,16 @@ impl Runtime {
                 minimum.height as f64,
             ));
         }
+        if let Some(maximum) = self.config.maximum_size {
+            attributes = attributes.with_max_inner_size(LogicalSize::new(
+                maximum.width as f64,
+                maximum.height as f64,
+            ));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            attributes = attributes.with_has_shadow(self.config.shadow);
+        }
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
             Err(error) => {
@@ -8117,6 +9659,21 @@ impl Runtime {
         }
         let window_id = window.id();
         window.set_ime_allowed(false);
+        window.set_cursor_visible(self.config.cursor_visible);
+        if let Err(error) = window.set_cursor_grab(self.config.cursor_grab.to_winit()) {
+            tracing::warn!(%error, "could not apply initial cursor confinement");
+        }
+        if let Err(error) = window.set_cursor_hittest(self.config.cursor_hit_test) {
+            tracing::warn!(%error, "could not apply initial native pointer hit testing");
+        }
+        if let Some(position) = self.config.cursor_position
+            && let Err(error) = window.set_cursor_position(LogicalPosition::new(
+                f64::from(position.x),
+                f64::from(position.y),
+            ))
+        {
+            tracing::warn!(%error, "could not apply initial native cursor position");
+        }
         let appearance = self
             .config
             .preferred_appearance
@@ -8135,6 +9692,21 @@ impl Runtime {
         ) {
             self.fail(event_loop, AppError::Platform(error));
             return;
+        }
+        if let Err(error) = set_window_focusable(&window, self.config.focusable) {
+            tracing::warn!(%error, "could not apply native window focusability");
+        }
+        if let Err(error) = set_window_opacity(&window, self.config.opacity) {
+            tracing::warn!(%error, "could not apply native window opacity");
+        }
+        if let Err(error) = set_window_visible_on_all_workspaces(
+            &window,
+            effective_visible_on_all_workspaces(&self.config),
+        ) {
+            tracing::warn!(%error, "could not apply native workspace visibility");
+        }
+        if self.config.window_level.is_some() {
+            window.set_window_level(effective_window_level(&self.config).to_winit());
         }
         #[cfg(target_os = "macos")]
         if (self.config.represented_file.is_some()
@@ -8174,7 +9746,9 @@ impl Runtime {
         }
         #[cfg(target_os = "macos")]
         if self.menu_host.is_none() {
-            self.menu_host = match MacMenuHost::new(&self.menus, self.event_proxy.clone()) {
+            let menus = self.config.window_menus.as_deref().unwrap_or(&self.menus);
+            self.menu_actions = collect_menu_actions(menus);
+            self.menu_host = match MacMenuHost::new(menus, self.event_proxy.clone()) {
                 Ok(host) => Some(host),
                 Err(error) => {
                     self.fail(event_loop, AppError::Platform(error));
@@ -8183,7 +9757,7 @@ impl Runtime {
             };
         }
         #[cfg(target_os = "windows")]
-        {
+        let window_menu_host = {
             if self.windows_menu_host.is_none() && !self.menus.is_empty() {
                 self.windows_menu_host =
                     match windows_menu::WindowsMenuHost::new(&self.menus, self.event_proxy.clone())
@@ -8195,13 +9769,35 @@ impl Runtime {
                         }
                     };
             }
-            if let Some(host) = &self.windows_menu_host
-                && let Err(error) = host.attach(&window)
-            {
-                self.fail(event_loop, AppError::Platform(error));
-                return;
+            if let Some(menus) = self.config.window_menus.as_deref() {
+                let host = if menus.is_empty() {
+                    None
+                } else {
+                    match windows_menu::WindowsMenuHost::new(menus, self.event_proxy.clone()) {
+                        Ok(host) => Some(host),
+                        Err(error) => {
+                            self.fail(event_loop, AppError::Platform(error));
+                            return;
+                        }
+                    }
+                };
+                if let Some(host) = &host
+                    && let Err(error) = host.attach(&window)
+                {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return;
+                }
+                host
+            } else {
+                if let Some(host) = &self.windows_menu_host
+                    && let Err(error) = host.attach(&window)
+                {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return;
+                }
+                None
             }
-        }
+        };
         let accessibility = AccessibilityAdapter::with_event_loop_proxy(
             event_loop,
             &window,
@@ -8312,16 +9908,21 @@ impl Runtime {
         let native_tabs = WindowTabState::default();
         let mut scheduler = FrameScheduler::default();
         scheduler.invalidate();
-        #[cfg(target_os = "macos")]
-        let reduce_motion = self.config.reduce_motion || crate::macos::system_reduce_motion();
-        #[cfg(not(target_os = "macos"))]
-        let reduce_motion = self.config.reduce_motion;
+        let reduce_motion = self.config.reduce_motion
+            || self
+                .system_preferences
+                .reduce_motion()
+                .is_some_and(|enabled| enabled);
         let mut ui = UiTree::new_at(self.animation_epoch);
         ui.set_reduce_motion(reduce_motion);
         ui.set_animations_enabled(!reduce_motion, Instant::now());
         self.current_window = Some((window_id, handle));
         self.window_handles.insert(handle, window_id);
-        if self.active_window.is_none() && self.config.show && self.config.focus {
+        if self.active_window.is_none()
+            && self.config.show
+            && self.config.focus
+            && self.config.focusable
+        {
             self.note_window_focused(window_id);
         }
         self.window = Some(RuntimeWindow {
@@ -8336,6 +9937,12 @@ impl Runtime {
             native_drop_host,
             #[cfg(target_os = "macos")]
             first_frame_guard,
+            #[cfg(target_os = "windows")]
+            window_menu_host,
+            #[cfg(target_os = "windows")]
+            taskbar_state_applied: false,
+            #[cfg(target_os = "windows")]
+            taskbar_apply_attempts: 0,
             ui,
             #[cfg(feature = "inspector")]
             inspector: self
@@ -8529,7 +10136,11 @@ impl Runtime {
             }
             #[cfg(target_os = "macos")]
             if let Some(state) = self.window.as_ref()
-                && let Err(error) = set_window_visibility(&state.window, true, self.config.focus)
+                && let Err(error) = set_window_visibility(
+                    &state.window,
+                    true,
+                    self.config.focus && self.config.focusable,
+                )
             {
                 self.popover_monitor.unwatch(handle);
                 self.fail(event_loop, AppError::Platform(error));
@@ -8542,7 +10153,7 @@ impl Runtime {
                 #[cfg(not(target_os = "macos"))]
                 state.window.set_visible(true);
                 #[cfg(not(target_os = "macos"))]
-                if self.config.focus {
+                if self.config.focus && self.config.focusable {
                     state.window.focus_window();
                 }
                 state.scheduler.invalidate();
@@ -8550,6 +10161,7 @@ impl Runtime {
             }
         }
         self.opened_window = true;
+        self.last_window_quit_prevented = false;
         self.deactivate_window();
     }
 
@@ -8612,22 +10224,7 @@ impl Runtime {
 
 impl Drop for Runtime {
     fn drop(&mut self) {
-        global_shortcut::clear_global_shortcut_handler_proxy();
-        tray::clear_tray_handler_proxy();
-        #[cfg(target_os = "macos")]
-        for (_, dialog) in self.active_platform_dialogs.drain() {
-            dialog.native.cancel();
-        }
-        #[cfg(any(
-            target_os = "windows",
-            target_os = "linux",
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "openbsd",
-            target_os = "netbsd"
-        ))]
-        self.active_platform_dialogs.clear();
-        self.foreground_tasks.shutdown();
+        self.finalize_process_services();
     }
 }
 
@@ -8642,6 +10239,9 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         self.initialize_global_shortcuts();
         self.refresh_displays(event_loop);
         self.process_window_commands(event_loop);
+        if let Some(urls) = self.pending_initial_open_urls.take() {
+            self.invoke_open_urls(event_loop, urls);
+        }
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
@@ -8750,8 +10350,18 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     );
                 }
                 WindowEvent::ThemeChanged(theme) => {
+                    let appearance = map_window_appearance(theme);
+                    let color_scheme = match appearance {
+                        WindowAppearance::Light => ColorScheme::Light,
+                        WindowAppearance::Dark => ColorScheme::Dark,
+                    };
+                    self.refresh_system_preferences(SystemPreferences::snapshot().unwrap_or_else(
+                        |error| {
+                            tracing::warn!(%error, "could not refresh native system colors");
+                            self.system_preferences.with_color_scheme(color_scheme)
+                        },
+                    ));
                     if self.config.preferred_appearance.is_none() {
-                        let appearance = map_window_appearance(theme);
                         let state = self.window.as_mut().expect("window checked above");
                         if state.appearance != appearance {
                             state.appearance = appearance;
@@ -8869,7 +10479,37 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     state.occluded = true;
                     state.ui.set_animations_enabled(false, Instant::now());
                 }
-                WindowEvent::RedrawRequested => self.redraw(event_loop),
+                WindowEvent::RedrawRequested => {
+                    #[cfg(target_os = "windows")]
+                    if let Some(state) = &mut self.window
+                        && state.visible
+                        && !state.taskbar_state_applied
+                        && state.taskbar_apply_attempts < 3
+                    {
+                        state.taskbar_apply_attempts += 1;
+                        let progress = windows_window::set_taskbar_progress(
+                            &state.window,
+                            self.config.taskbar_progress_state,
+                            self.config.taskbar_progress,
+                        );
+                        let overlay = windows_window::set_taskbar_overlay_icon(
+                            &state.window,
+                            self.config.taskbar_overlay_icon.as_ref(),
+                            self.config.taskbar_overlay_description.as_deref(),
+                        );
+                        state.taskbar_state_applied = progress.is_ok() && overlay.is_ok();
+                        if !state.taskbar_state_applied {
+                            if state.taskbar_apply_attempts < 3 {
+                                state.window.request_redraw();
+                            } else {
+                                let error =
+                                    progress.err().or_else(|| overlay.err()).unwrap_or_default();
+                                tracing::warn!(%error, "could not apply retained taskbar state");
+                            }
+                        }
+                    }
+                    self.redraw(event_loop)
+                }
                 WindowEvent::CursorMoved { position, .. } => {
                     let scale = self
                         .window
@@ -9916,6 +11556,10 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     }
                     if focused {
                         self.note_window_focused(window_id);
+                        #[cfg(target_os = "macos")]
+                        if !self.install_active_mac_menu(event_loop) {
+                            return;
+                        }
                     }
                     if !focused {
                         #[cfg(not(target_os = "macos"))]
@@ -9979,10 +11623,12 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                             }
                         }
                     }
-                    #[cfg(target_os = "macos")]
                     if focused {
-                        let reduce_motion =
-                            self.config.reduce_motion || crate::macos::system_reduce_motion();
+                        let reduce_motion = self.config.reduce_motion
+                            || self
+                                .system_preferences
+                                .reduce_motion()
+                                .is_some_and(|enabled| enabled);
                         let state = self.window.as_mut().expect("window checked above");
                         state.reduce_motion = reduce_motion;
                         state.ui.set_reduce_motion(reduce_motion);
@@ -10017,6 +11663,15 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             return;
         }
         #[cfg(target_os = "macos")]
+        if let RuntimeEvent::DockMenuAction(action_id) = &event {
+            self.invoke_dock_menu_action(event_loop, *action_id);
+            return;
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        if let RuntimeEvent::NativePopupMenuClosed(popup_id) = &event {
+            self.pending_native_popup_menus.remove(popup_id);
+            return;
+        }
         if let RuntimeEvent::OpenUrls(urls) = &event {
             self.invoke_open_urls(event_loop, urls.clone());
             return;
@@ -10027,6 +11682,13 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         } = &event
         {
             self.invoke_reopen(event_loop, *has_visible_windows);
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if matches!(&event, RuntimeEvent::QuitRequested) {
+            self.native_termination_pending = true;
+            self.pending_quit = Some(QuitReason::OperatingSystem);
+            self.process_window_commands(event_loop);
             return;
         }
         #[cfg(target_os = "macos")]
@@ -10054,10 +11716,22 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
             }
             return;
         }
+        if let RuntimeEvent::SystemPreferencesChanged(preferences) = &event {
+            self.refresh_system_preferences(*preferences);
+            return;
+        }
         #[cfg(target_os = "macos")]
         if let RuntimeEvent::SystemNotificationAuthorization { granted, error } = &event {
-            self.mac_application_host
-                .complete_system_notification_authorization(*granted, error.clone());
+            if let Some(host) = self.mac_application_host.as_mut() {
+                host.complete_system_notification_authorization(*granted, error.clone());
+            }
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if let RuntimeEvent::SystemNotificationPermissionStatus(status) = &event {
+            if let Some(host) = self.mac_application_host.as_mut() {
+                host.complete_system_notification_permission_status(*status);
+            }
             return;
         }
         if let RuntimeEvent::SystemNotificationResponse(response) = &event {
@@ -10187,18 +11861,34 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 target_os = "netbsd"
             ))]
             RuntimeEvent::SecondInstance(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::SystemPreferencesChanged(_) => {
+                unreachable!("handled before window routing")
+            }
             RuntimeEvent::Power(_) => unreachable!("handled before window routing"),
             RuntimeEvent::Tray(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::OpenUrls(_) => unreachable!("handled before window routing"),
             #[cfg(target_os = "macos")]
-            RuntimeEvent::OpenUrls(_)
-            | RuntimeEvent::Reopen { .. }
+            RuntimeEvent::Reopen { .. }
+            | RuntimeEvent::QuitRequested
             | RuntimeEvent::SystemWake
             | RuntimeEvent::DisplaysChanged
             | RuntimeEvent::KeyboardLayoutChanged
+            | RuntimeEvent::SystemNotificationPermissionStatus(_)
             | RuntimeEvent::SystemNotificationAuthorization { .. } => {
                 unreachable!("handled before window routing")
             }
             RuntimeEvent::MenuWillOpen | RuntimeEvent::MenuAction(_) => self.active_window,
+            #[cfg(target_os = "macos")]
+            RuntimeEvent::DockMenuAction(_) => unreachable!("handled before window routing"),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            RuntimeEvent::NativePopupMenuAction(popup_id, _) => self
+                .pending_native_popup_menus
+                .get(popup_id)
+                .and_then(|popup| self.window_handles.get(&popup.window).copied()),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            RuntimeEvent::NativePopupMenuClosed(_) => {
+                unreachable!("handled before window routing")
+            }
         };
         let Some(target) = target else {
             return;
@@ -10233,14 +11923,24 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 self.sync_native_menu_state();
             }
             RuntimeEvent::MenuAction(action_id) => {
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                {
+                    let menus = self.active_menu_declaration().to_vec();
+                    self.menu_actions = collect_menu_actions(&menus);
+                }
                 let item = self
                     .menu_actions
                     .get(action_id)
                     .filter(|item| !item.disabled)
                     .map(|item| (item.action.clone(), item.os_action));
                 if let Some((action, os_action)) = item {
-                    let Some(handled) = self.invoke_action(event_loop, &action) else {
-                        return;
+                    let handled = if let Some(action) = action {
+                        let Some(handled) = self.invoke_action(event_loop, &action) else {
+                            return;
+                        };
+                        handled
+                    } else {
+                        false
                     };
                     if !handled && let Some(os_action) = os_action {
                         self.invoke_os_action(event_loop, os_action);
@@ -10248,6 +11948,36 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     #[cfg(target_os = "macos")]
                     self.sync_native_menu_state();
                 }
+            }
+            #[cfg(target_os = "macos")]
+            RuntimeEvent::DockMenuAction(_) => unreachable!("handled before window routing"),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            RuntimeEvent::NativePopupMenuAction(popup_id, action_id) => {
+                let item = self
+                    .pending_native_popup_menus
+                    .remove(&popup_id)
+                    .and_then(|popup| popup.actions.into_iter().nth(action_id))
+                    .filter(|item| !item.disabled)
+                    .map(|item| (item.action, item.os_action));
+                if let Some((action, os_action)) = item {
+                    let handled = if let Some(action) = action {
+                        let Some(handled) = self.invoke_action(event_loop, &action) else {
+                            return;
+                        };
+                        handled
+                    } else {
+                        false
+                    };
+                    if !handled && let Some(os_action) = os_action {
+                        self.invoke_os_action(event_loop, os_action);
+                    }
+                    #[cfg(target_os = "macos")]
+                    self.sync_native_menu_state();
+                }
+            }
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            RuntimeEvent::NativePopupMenuClosed(_) => {
+                unreachable!("handled before window routing")
             }
             #[cfg(target_os = "macos")]
             RuntimeEvent::ExternalDragBoundary(_, point) => {
@@ -10312,14 +12042,19 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 target_os = "netbsd"
             ))]
             RuntimeEvent::SecondInstance(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::SystemPreferencesChanged(_) => {
+                unreachable!("handled before window routing")
+            }
             RuntimeEvent::Power(_) => unreachable!("handled before window routing"),
             RuntimeEvent::Tray(_) => unreachable!("handled before window routing"),
+            RuntimeEvent::OpenUrls(_) => unreachable!("handled before window routing"),
             #[cfg(target_os = "macos")]
-            RuntimeEvent::OpenUrls(_)
-            | RuntimeEvent::Reopen { .. }
+            RuntimeEvent::Reopen { .. }
+            | RuntimeEvent::QuitRequested
             | RuntimeEvent::SystemWake
             | RuntimeEvent::DisplaysChanged
             | RuntimeEvent::KeyboardLayoutChanged
+            | RuntimeEvent::SystemNotificationPermissionStatus(_)
             | RuntimeEvent::SystemNotificationAuthorization { .. } => {
                 unreachable!("handled before window routing")
             }
@@ -10609,11 +12344,17 @@ fn set_runtime_window_fullscreen(state: &mut RuntimeWindow, fullscreen: bool) ->
     true
 }
 
-fn constrained_window_size(size: Size, minimum: Option<Size>) -> Size {
-    minimum.map_or(size, |minimum| {
+fn constrained_window_size(size: Size, minimum: Option<Size>, maximum: Option<Size>) -> Size {
+    let size = minimum.map_or(size, |minimum| {
         Size::new(
             size.width.max(minimum.width),
             size.height.max(minimum.height),
+        )
+    });
+    maximum.map_or(size, |maximum| {
+        Size::new(
+            size.width.min(maximum.width),
+            size.height.min(maximum.height),
         )
     })
 }
@@ -10723,15 +12464,106 @@ fn runtime_window_content_attached(state: &RuntimeWindow) -> bool {
     }
 }
 
+fn runtime_window_state(
+    handle: WindowHandle,
+    config: &AppConfig,
+    state: &RuntimeWindow,
+) -> WindowState {
+    let platform_content_attached = runtime_window_content_attached(state);
+    let fullscreen = runtime_window_is_fullscreen(state);
+    let maximized = !fullscreen && runtime_window_is_maximized(state, config);
+    let minimized = platform_content_attached && state.window.is_minimized().unwrap_or(false);
+    let current_bounds = Rect::new(
+        state.logical_position.x,
+        state.logical_position.y,
+        state.logical_size.width,
+        state.logical_size.height,
+    );
+    let bounds = if fullscreen {
+        WindowBounds::Fullscreen(state.restore_bounds)
+    } else if maximized {
+        WindowBounds::Maximized(state.restore_bounds)
+    } else {
+        WindowBounds::Windowed(current_bounds)
+    };
+    WindowState {
+        handle,
+        display_id: state.display_id,
+        kind: config.kind,
+        bounds,
+        viewport_size: state.logical_size,
+        minimum_size: config.minimum_size,
+        maximum_size: config.maximum_size,
+        scale_factor: state.scale_factor,
+        appearance: state.appearance,
+        background_appearance: config.window_background,
+        focused: state.focused,
+        focusable: config.focusable,
+        visible: state.visible,
+        minimized,
+        maximized,
+        fullscreen,
+        occluded: state.occluded,
+        movable: config.is_movable,
+        resizable: config.is_resizable,
+        minimizable: config.is_minimizable,
+        maximizable: config.is_maximizable,
+        closable: config.is_closable,
+        decorated: config.decorated,
+        shadow: config.shadow,
+        content_protected: config.content_protected,
+        window_level: effective_window_level(config),
+        skip_taskbar: config.skip_taskbar,
+        visible_on_all_workspaces: effective_visible_on_all_workspaces(config),
+        opacity: config.opacity,
+        has_icon: config.icon.is_some(),
+        taskbar_progress_state: config.taskbar_progress_state,
+        taskbar_progress: config.taskbar_progress,
+        has_taskbar_overlay_icon: config.taskbar_overlay_icon.is_some(),
+        cursor_visible: config.cursor_visible,
+        cursor_grab: config.cursor_grab,
+        cursor_hit_test: config.cursor_hit_test,
+        cursor_position: state.pointer,
+        represented_file: config.represented_file.is_some(),
+        document_edited: config.document_edited,
+        native_tabbing: config.tabbing_identifier.is_some(),
+        native_tabs: state.native_tabs,
+        #[cfg(feature = "inspector")]
+        inspector_active: state.inspector.is_some(),
+    }
+}
+
 fn window_buttons(config: &AppConfig) -> WindowButtons {
-    let mut buttons = WindowButtons::CLOSE;
+    let mut buttons = WindowButtons::empty();
+    if config.is_closable {
+        buttons |= WindowButtons::CLOSE;
+    }
     if config.is_minimizable {
         buttons |= WindowButtons::MINIMIZE;
     }
-    if config.is_resizable {
+    if config.is_resizable && config.is_maximizable {
         buttons |= WindowButtons::MAXIMIZE;
     }
     buttons
+}
+
+fn effective_window_level(config: &AppConfig) -> WindowLevel {
+    config.window_level.unwrap_or(match config.kind {
+        WindowKind::Floating | WindowKind::Popover | WindowKind::SystemPopover => {
+            WindowLevel::AlwaysOnTop
+        }
+        WindowKind::Normal | WindowKind::Dialog => WindowLevel::Normal,
+    })
+}
+
+fn effective_visible_on_all_workspaces(config: &AppConfig) -> bool {
+    config.visible_on_all_workspaces
+        || matches!(config.kind, WindowKind::Popover | WindowKind::SystemPopover)
+}
+
+fn winit_window_icon(image: &Image) -> Icon {
+    Icon::from_rgba(image.rgba().to_vec(), image.width(), image.height())
+        .expect("QuickGUI Image has already validated its RGBA dimensions")
 }
 
 fn window_dismisses_system_popover_on_escape(config: &AppConfig) -> bool {
@@ -11150,7 +12982,7 @@ mod tests {
     fn minimum_window_size_bounds_runtime_growth_without_rewriting_explicit_geometry() {
         let minimum = Size::new(640.0, 420.0);
         assert_eq!(
-            constrained_window_size(Size::new(320.0, 800.0), Some(minimum)),
+            constrained_window_size(Size::new(320.0, 800.0), Some(minimum), None),
             Size::new(640.0, 800.0)
         );
         assert_eq!(

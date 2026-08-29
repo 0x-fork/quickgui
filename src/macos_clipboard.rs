@@ -1,15 +1,17 @@
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 use objc2::rc::Retained;
 use objc2_app_kit::{
     NSFilenamesPboardType, NSPasteboard, NSPasteboardNameFind, NSPasteboardType,
-    NSPasteboardTypeString,
+    NSPasteboardTypeHTML, NSPasteboardTypeRTF, NSPasteboardTypeString, NSPasteboardTypeURL,
 };
 use objc2_foundation::{NSArray, NSData, NSString};
 
 use crate::{
-    ClipboardEntry, ClipboardError, ClipboardImage, ClipboardImageFormat, ClipboardItem,
-    ClipboardString, ExternalPaths, MAX_CLIPBOARD_IMAGE_BYTES, MAX_CLIPBOARD_METADATA_BYTES,
+    ClipboardBookmark, ClipboardData, ClipboardEntry, ClipboardError, ClipboardImage,
+    ClipboardImageFormat, ClipboardItem, ClipboardString, ExternalPaths,
+    MAX_CLIPBOARD_BOOKMARK_TITLE_BYTES, MAX_CLIPBOARD_BOOKMARK_URL_BYTES, MAX_CLIPBOARD_DATA_BYTES,
+    MAX_CLIPBOARD_ENTRIES, MAX_CLIPBOARD_IMAGE_BYTES, MAX_CLIPBOARD_METADATA_BYTES,
     MAX_CLIPBOARD_PATH_BYTES, MAX_CLIPBOARD_PATHS, MAX_CLIPBOARD_TEXT_BYTES,
     MAX_CLIPBOARD_TOTAL_PATH_BYTES,
 };
@@ -18,6 +20,10 @@ const TEXT_TYPE_NAME: &str = "public.utf8-plain-text";
 const FILENAMES_TYPE_NAME: &str = "NSFilenamesPboardType";
 const TEXT_HASH_TYPE_NAME: &str = "dev.quickgui.clipboard-text-hash";
 const METADATA_TYPE_NAME: &str = "dev.quickgui.clipboard-metadata";
+const HTML_TYPE_NAME: &str = "public.html";
+const RTF_TYPE_NAME: &str = "public.rtf";
+const URL_TYPE_NAME: &str = "public.url";
+const URL_NAME_TYPE_NAME: &str = "public.url-name";
 
 /// Lazily retained AppKit pasteboard and QuickGUI's metadata type identifiers.
 pub(crate) struct MacPasteboard {
@@ -56,33 +62,126 @@ impl MacPasteboard {
     }
 
     pub(crate) fn read(&self) -> Result<Option<ClipboardItem>, ClipboardError> {
+        let native_types = unsafe { self.inner.types() };
+        let declares = |native_type: &NSString| {
+            native_types
+                .as_ref()
+                // SAFETY: `types` is AppKit's NSArray of NSPasteboardType strings and the queried
+                // value is another live NSString-compatible pasteboard type.
+                .is_some_and(|types| unsafe { types.containsObject(native_type) })
+        };
+        let mut entries = Vec::new();
         if let Some(paths) = self.read_paths()? {
-            let mut entries = vec![ClipboardEntry::ExternalPaths(paths)];
-            // A native file copy often carries a convenience string. The file representation is
-            // still useful if that optional companion text is malformed or over the text limit.
-            if let Ok(Some(text)) = self.read_string() {
-                entries.push(ClipboardEntry::String(text));
-            }
-            return ClipboardItem::new(entries).map(Some);
+            entries.push(ClipboardEntry::ExternalPaths(paths));
         }
 
-        if let Some(text) = self.read_string()? {
-            return ClipboardItem::new([text]).map(Some);
+        // A native file copy often carries a convenience string. The file representation remains
+        // useful if that optional companion text is malformed or over the text limit.
+        match self.read_string() {
+            Ok(Some(text)) => entries.push(ClipboardEntry::String(text)),
+            Ok(None) => {}
+            Err(error) if !entries.is_empty() => {
+                tracing::debug!(%error, "ignored invalid companion clipboard text")
+            }
+            Err(error) => return Err(error),
+        }
+
+        if declares(unsafe { NSPasteboardTypeURL })
+            && let Some(bookmark) = self.read_bookmark()?
+        {
+            entries.push(ClipboardEntry::Bookmark(bookmark));
+        }
+
+        for (mime_type, native_type) in [
+            ("text/html", unsafe { NSPasteboardTypeHTML }),
+            ("text/rtf", unsafe { NSPasteboardTypeRTF }),
+        ] {
+            if !declares(native_type) {
+                continue;
+            }
+            if let Some(bytes) = self.read_data(native_type, MAX_CLIPBOARD_DATA_BYTES, |bytes| {
+                ClipboardError::DataTooLarge {
+                    bytes,
+                    maximum: MAX_CLIPBOARD_DATA_BYTES,
+                }
+            })? {
+                entries.push(ClipboardEntry::Data(ClipboardData::new(mime_type, bytes)?));
+            }
         }
 
         for format in ClipboardImageFormat::ALL {
             let data_type = NSString::from_str(format.uniform_type());
+            if !declares(&data_type) {
+                continue;
+            }
             if let Some(bytes) = self.read_data(&data_type, MAX_CLIPBOARD_IMAGE_BYTES, |bytes| {
                 ClipboardError::ImageTooLarge {
                     bytes,
                     maximum: MAX_CLIPBOARD_IMAGE_BYTES,
                 }
-            })? {
+            })? && !bytes.is_empty()
+            {
                 let image = ClipboardImage::new(format, bytes)?;
-                return ClipboardItem::new_image(image).map(Some);
+                entries.push(ClipboardEntry::Image(image));
             }
         }
-        Ok(None)
+
+        if let Some(types) = native_types {
+            for native_type in types.iter() {
+                if entries.len() == MAX_CLIPBOARD_ENTRIES {
+                    break;
+                }
+                let mime_type = native_type.to_string();
+                if is_known_native_type(&mime_type) {
+                    continue;
+                }
+                let Some(bytes) =
+                    self.read_data(native_type, MAX_CLIPBOARD_DATA_BYTES, |bytes| {
+                        ClipboardError::DataTooLarge {
+                            bytes,
+                            maximum: MAX_CLIPBOARD_DATA_BYTES,
+                        }
+                    })?
+                else {
+                    continue;
+                };
+                if let Ok(data) = ClipboardData::new(mime_type, bytes) {
+                    entries.push(ClipboardEntry::Data(data));
+                }
+            }
+        }
+
+        if entries.is_empty() {
+            Ok(None)
+        } else {
+            ClipboardItem::new(entries).map(Some)
+        }
+    }
+
+    fn read_bookmark(&self) -> Result<Option<ClipboardBookmark>, ClipboardError> {
+        let Some(url) = self.read_data(
+            unsafe { NSPasteboardTypeURL },
+            MAX_CLIPBOARD_BOOKMARK_URL_BYTES,
+            |_| ClipboardError::InvalidBookmarkUrl {
+                maximum: MAX_CLIPBOARD_BOOKMARK_URL_BYTES,
+            },
+        )?
+        else {
+            return Ok(None);
+        };
+        let url = String::from_utf8(url).map_err(|_| ClipboardError::InvalidText)?;
+        let title_type = NSString::from_str(URL_NAME_TYPE_NAME);
+        let title = self
+            .read_data(&title_type, MAX_CLIPBOARD_BOOKMARK_TITLE_BYTES, |_| {
+                ClipboardError::InvalidBookmarkTitle {
+                    maximum: MAX_CLIPBOARD_BOOKMARK_TITLE_BYTES,
+                }
+            })?
+            .map(String::from_utf8)
+            .transpose()
+            .map_err(|_| ClipboardError::InvalidText)?
+            .unwrap_or_default();
+        ClipboardBookmark::new(title, url).map(Some)
     }
 
     fn read_paths(&self) -> Result<Option<ExternalPaths>, ClipboardError> {
@@ -199,11 +298,25 @@ impl MacPasteboard {
         let mut strings = Vec::new();
         let mut paths = Vec::new();
         let mut images = Vec::new();
+        let mut data = Vec::new();
+        let mut bookmark = None;
         let mut seen_image_formats = [false; ClipboardImageFormat::ALL.len()];
+        let mut seen_data_types = HashSet::new();
         for entry in item.entries() {
             match entry {
                 ClipboardEntry::String(value) => strings.push(value),
                 ClipboardEntry::ExternalPaths(value) => paths.extend(value.paths()),
+                ClipboardEntry::Bookmark(value) => {
+                    if bookmark.is_none() {
+                        bookmark = Some(value);
+                    }
+                }
+                ClipboardEntry::Data(value) => {
+                    let native_type = native_type_for_mime(value.mime_type());
+                    if seen_data_types.insert(native_type.clone()) {
+                        data.push((native_type, value));
+                    }
+                }
                 ClipboardEntry::Image(value) => {
                     let index = image_format_index(value.format());
                     if !seen_image_formats[index] {
@@ -218,15 +331,19 @@ impl MacPasteboard {
         for string in &strings {
             combined_text.push_str(string.text());
         }
-        if strings.is_empty() && !paths.is_empty() {
-            for (index, path) in paths.iter().enumerate() {
-                if index != 0 {
-                    combined_text.push('\n');
+        if strings.is_empty() {
+            if let Some(bookmark) = bookmark {
+                combined_text.push_str(bookmark.url());
+            } else if !paths.is_empty() {
+                for (index, path) in paths.iter().enumerate() {
+                    if index != 0 {
+                        combined_text.push('\n');
+                    }
+                    combined_text.push_str(path.to_str().expect("ExternalPaths validates UTF-8"));
                 }
-                combined_text.push_str(path.to_str().expect("ExternalPaths validates UTF-8"));
             }
         }
-        let has_text = !strings.is_empty() || !paths.is_empty();
+        let has_text = !strings.is_empty() || bookmark.is_some() || !paths.is_empty();
         let metadata = match strings.as_slice() {
             [string] => string
                 .metadata()
@@ -237,8 +354,10 @@ impl MacPasteboard {
         let mut types = Vec::with_capacity(
             usize::from(!paths.is_empty())
                 + usize::from(has_text)
+                + usize::from(bookmark.is_some()) * 2
                 + usize::from(metadata.is_some()) * 2
-                + images.len(),
+                + images.len()
+                + data.len(),
         );
         if !paths.is_empty() {
             types.push(NSString::from_str(FILENAMES_TYPE_NAME));
@@ -246,12 +365,24 @@ impl MacPasteboard {
         if has_text {
             types.push(NSString::from_str(TEXT_TYPE_NAME));
         }
+        if bookmark.is_some() {
+            types.push(NSString::from_str(URL_TYPE_NAME));
+            types.push(NSString::from_str(URL_NAME_TYPE_NAME));
+        }
         if metadata.is_some() {
             types.push(self.text_hash_type.clone());
             types.push(self.metadata_type.clone());
         }
         for image in &images {
             types.push(NSString::from_str(image.format().uniform_type()));
+        }
+        for (native_type, _) in &data {
+            if !types
+                .iter()
+                .any(|existing| existing.to_string() == *native_type)
+            {
+                types.push(NSString::from_str(native_type));
+            }
         }
 
         let types = NSArray::from_vec(types);
@@ -281,6 +412,15 @@ impl MacPasteboard {
                 "text",
             )?;
         }
+        if let Some(bookmark) = bookmark {
+            self.write_data(
+                bookmark.url().as_bytes(),
+                unsafe { NSPasteboardTypeURL },
+                "bookmark URL",
+            )?;
+            let title_type = NSString::from_str(URL_NAME_TYPE_NAME);
+            self.write_data(bookmark.title().as_bytes(), &title_type, "bookmark title")?;
+        }
         if let Some((hash, metadata)) = metadata {
             self.write_data(&hash.to_be_bytes(), &self.text_hash_type, "text hash")?;
             self.write_data(metadata.as_bytes(), &self.metadata_type, "metadata")?;
@@ -288,6 +428,15 @@ impl MacPasteboard {
         for image in images {
             let data_type = NSString::from_str(image.format().uniform_type());
             self.write_data(image.bytes(), &data_type, "image")?;
+        }
+        for (native_type, value) in data {
+            if ClipboardImageFormat::from_mime_type(value.mime_type())
+                .is_some_and(|format| seen_image_formats[image_format_index(format)])
+            {
+                continue;
+            }
+            let data_type = NSString::from_str(&native_type);
+            self.write_data(value.bytes(), &data_type, "MIME data")?;
         }
         Ok(())
     }
@@ -303,6 +452,30 @@ impl MacPasteboard {
         let written = unsafe { self.inner.setData_forType(Some(&data), data_type) };
         require_written(written, representation)
     }
+}
+
+fn native_type_for_mime(mime_type: &str) -> String {
+    match mime_type {
+        "text/html" => HTML_TYPE_NAME.to_owned(),
+        "text/rtf" | "application/rtf" => RTF_TYPE_NAME.to_owned(),
+        _ => ClipboardImageFormat::from_mime_type(mime_type)
+            .map(|format| format.uniform_type().to_owned())
+            .unwrap_or_else(|| mime_type.to_owned()),
+    }
+}
+
+fn is_known_native_type(native_type: &str) -> bool {
+    native_type == FILENAMES_TYPE_NAME
+        || native_type == TEXT_TYPE_NAME
+        || native_type == TEXT_HASH_TYPE_NAME
+        || native_type == METADATA_TYPE_NAME
+        || native_type == URL_NAME_TYPE_NAME
+        || native_type == HTML_TYPE_NAME
+        || native_type == RTF_TYPE_NAME
+        || native_type == URL_TYPE_NAME
+        || ClipboardImageFormat::ALL
+            .iter()
+            .any(|format| native_type == format.uniform_type())
 }
 
 fn image_format_index(format: ClipboardImageFormat) -> usize {
@@ -362,6 +535,36 @@ mod tests {
             let item = ClipboardItem::new_image(image).unwrap();
             pasteboard.write(&item).unwrap();
             assert_eq!(pasteboard.read().unwrap(), Some(item));
+        });
+    }
+
+    #[test]
+    fn unique_pasteboard_round_trips_rich_and_custom_representations() {
+        autoreleasepool(|_| {
+            let pasteboard = MacPasteboard::unique();
+            let item = ClipboardItem::new([
+                ClipboardEntry::Data(ClipboardData::html("<b>Hello</b>").unwrap()),
+                ClipboardEntry::Data(ClipboardData::rtf(r"{\rtf1 Hello}").unwrap()),
+                ClipboardEntry::Data(
+                    ClipboardData::new("application/vnd.quickgui.test", [4_u8, 5, 6]).unwrap(),
+                ),
+                ClipboardEntry::Bookmark(
+                    ClipboardBookmark::new("QuickGUI", "https://quickgui.dev/").unwrap(),
+                ),
+            ])
+            .unwrap();
+            pasteboard.write(&item).unwrap();
+            let read = pasteboard.read().unwrap().unwrap();
+            assert_eq!(read.html().unwrap(), Some("<b>Hello</b>"));
+            assert_eq!(read.rtf().unwrap(), Some(r"{\rtf1 Hello}"));
+            assert_eq!(
+                read.data("application/vnd.quickgui.test")
+                    .map(ClipboardData::bytes),
+                Some(&[4_u8, 5, 6][..])
+            );
+            assert!(read.bookmarks().any(|bookmark| {
+                bookmark.title() == "QuickGUI" && bookmark.url() == "https://quickgui.dev/"
+            }));
         });
     }
 }

@@ -9,6 +9,14 @@ pub const MAX_CLIPBOARD_ENTRIES: usize = 32;
 pub const MAX_CLIPBOARD_TEXT_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum aggregate metadata bytes retained by one clipboard item.
 pub const MAX_CLIPBOARD_METADATA_BYTES: usize = 256 * 1024;
+/// Maximum UTF-8 bytes retained by one clipboard MIME type.
+pub const MAX_CLIPBOARD_MIME_TYPE_BYTES: usize = 256;
+/// Maximum aggregate arbitrary MIME payload bytes retained by one clipboard item.
+pub const MAX_CLIPBOARD_DATA_BYTES: usize = 64 * 1024 * 1024;
+/// Maximum UTF-8 bytes retained by one native bookmark title.
+pub const MAX_CLIPBOARD_BOOKMARK_TITLE_BYTES: usize = 4 * 1024;
+/// Maximum UTF-8 bytes retained by one native bookmark URL.
+pub const MAX_CLIPBOARD_BOOKMARK_URL_BYTES: usize = 16 * 1024;
 /// Maximum aggregate encoded image bytes retained by one clipboard item.
 pub const MAX_CLIPBOARD_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 /// Maximum decoded RGBA bytes accepted by a non-macOS system clipboard conversion.
@@ -33,6 +41,16 @@ pub enum ClipboardError {
     TextTooLarge { bytes: usize, maximum: usize },
     #[error("clipboard metadata is {bytes} bytes; the maximum is {maximum}")]
     MetadataTooLarge { bytes: usize, maximum: usize },
+    #[error("clipboard MIME types must be bounded printable ASCII type/subtype values")]
+    InvalidMimeType,
+    #[error("clipboard MIME data is {bytes} bytes; the maximum is {maximum}")]
+    DataTooLarge { bytes: usize, maximum: usize },
+    #[error("clipboard bookmark titles must be NUL-free and at most {maximum} UTF-8 bytes")]
+    InvalidBookmarkTitle { maximum: usize },
+    #[error(
+        "clipboard bookmark URLs must be non-empty, NUL-free, and at most {maximum} UTF-8 bytes"
+    )]
+    InvalidBookmarkUrl { maximum: usize },
     #[error("encoded clipboard image data is {bytes} bytes; the maximum is {maximum}")]
     ImageTooLarge { bytes: usize, maximum: usize },
     #[error("decoded clipboard image data is {bytes} bytes; the maximum is {maximum}")]
@@ -230,6 +248,97 @@ impl ClipboardString {
     }
 }
 
+/// One bounded arbitrary clipboard representation identified by a MIME type.
+///
+/// HTML and RTF use the ordinary `text/html` and `text/rtf` types. The platform backend maps
+/// those values to native registered formats while preserving the same core representation.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ClipboardData {
+    mime_type: Arc<str>,
+    bytes: Arc<[u8]>,
+}
+
+impl ClipboardData {
+    pub fn new(
+        mime_type: impl Into<Arc<str>>,
+        bytes: impl Into<Arc<[u8]>>,
+    ) -> Result<Self, ClipboardError> {
+        let mime_type = mime_type.into();
+        validate_mime_type(&mime_type)?;
+        let bytes = bytes.into();
+        if bytes.len() > MAX_CLIPBOARD_DATA_BYTES {
+            return Err(ClipboardError::DataTooLarge {
+                bytes: bytes.len(),
+                maximum: MAX_CLIPBOARD_DATA_BYTES,
+            });
+        }
+        Ok(Self { mime_type, bytes })
+    }
+
+    pub fn utf8(
+        mime_type: impl Into<Arc<str>>,
+        text: impl AsRef<str>,
+    ) -> Result<Self, ClipboardError> {
+        Self::new(mime_type, Arc::<[u8]>::from(text.as_ref().as_bytes()))
+    }
+
+    pub fn html(html: impl AsRef<str>) -> Result<Self, ClipboardError> {
+        Self::utf8("text/html", html)
+    }
+
+    pub fn rtf(rtf: impl AsRef<str>) -> Result<Self, ClipboardError> {
+        Self::utf8("text/rtf", rtf)
+    }
+
+    pub fn mime_type(&self) -> &str {
+        &self.mime_type
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn utf8_text(&self) -> Result<&str, ClipboardError> {
+        std::str::from_utf8(&self.bytes).map_err(|_| ClipboardError::InvalidText)
+    }
+}
+
+/// A native URL bookmark with a user-visible title.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ClipboardBookmark {
+    title: Arc<str>,
+    url: Arc<str>,
+}
+
+impl ClipboardBookmark {
+    pub fn new(
+        title: impl Into<Arc<str>>,
+        url: impl Into<Arc<str>>,
+    ) -> Result<Self, ClipboardError> {
+        let title = title.into();
+        let url = url.into();
+        if title.len() > MAX_CLIPBOARD_BOOKMARK_TITLE_BYTES || title.contains('\0') {
+            return Err(ClipboardError::InvalidBookmarkTitle {
+                maximum: MAX_CLIPBOARD_BOOKMARK_TITLE_BYTES,
+            });
+        }
+        if url.is_empty() || url.len() > MAX_CLIPBOARD_BOOKMARK_URL_BYTES || url.contains('\0') {
+            return Err(ClipboardError::InvalidBookmarkUrl {
+                maximum: MAX_CLIPBOARD_BOOKMARK_URL_BYTES,
+            });
+        }
+        Ok(Self { title, url })
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+
 /// A bounded immutable collection of external file-system paths.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ExternalPaths(Arc<[PathBuf]>);
@@ -289,6 +398,8 @@ impl ExternalPaths {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ClipboardEntry {
     String(ClipboardString),
+    Data(ClipboardData),
+    Bookmark(ClipboardBookmark),
     Image(ClipboardImage),
     ExternalPaths(ExternalPaths),
 }
@@ -302,6 +413,18 @@ impl From<ClipboardString> for ClipboardEntry {
 impl From<ClipboardImage> for ClipboardEntry {
     fn from(value: ClipboardImage) -> Self {
         Self::Image(value)
+    }
+}
+
+impl From<ClipboardData> for ClipboardEntry {
+    fn from(value: ClipboardData) -> Self {
+        Self::Data(value)
+    }
+}
+
+impl From<ClipboardBookmark> for ClipboardEntry {
+    fn from(value: ClipboardBookmark) -> Self {
+        Self::Bookmark(value)
     }
 }
 
@@ -329,6 +452,7 @@ impl ClipboardItem {
         let mut retained = Vec::new();
         let mut text_bytes = 0usize;
         let mut metadata_bytes = 0usize;
+        let mut data_bytes = 0usize;
         let mut image_bytes = 0usize;
         let mut path_count = 0usize;
         let mut path_bytes = 0usize;
@@ -375,6 +499,18 @@ impl ClipboardItem {
                         },
                     )?;
                 }
+                ClipboardEntry::Data(value) => {
+                    data_bytes = checked_total(
+                        data_bytes,
+                        value.bytes.len(),
+                        MAX_CLIPBOARD_DATA_BYTES,
+                        |bytes| ClipboardError::DataTooLarge {
+                            bytes,
+                            maximum: MAX_CLIPBOARD_DATA_BYTES,
+                        },
+                    )?;
+                }
+                ClipboardEntry::Bookmark(_) => {}
                 ClipboardEntry::ExternalPaths(value) => {
                     path_count =
                         checked_total(path_count, value.0.len(), MAX_CLIPBOARD_PATHS, |actual| {
@@ -428,6 +564,25 @@ impl ClipboardItem {
         Self::new([image])
     }
 
+    pub fn new_data(data: ClipboardData) -> Result<Self, ClipboardError> {
+        Self::new([data])
+    }
+
+    pub fn new_html(html: impl AsRef<str>) -> Result<Self, ClipboardError> {
+        Self::new_data(ClipboardData::html(html)?)
+    }
+
+    pub fn new_rtf(rtf: impl AsRef<str>) -> Result<Self, ClipboardError> {
+        Self::new_data(ClipboardData::rtf(rtf)?)
+    }
+
+    pub fn new_bookmark(
+        title: impl Into<Arc<str>>,
+        url: impl Into<Arc<str>>,
+    ) -> Result<Self, ClipboardError> {
+        Self::new([ClipboardBookmark::new(title, url)?])
+    }
+
     pub fn new_paths(paths: ExternalPaths) -> Result<Self, ClipboardError> {
         Self::new([paths])
     }
@@ -447,13 +602,28 @@ impl ClipboardItem {
             .iter()
             .filter_map(|entry| match entry {
                 ClipboardEntry::String(value) => Some(value.text.len()),
-                ClipboardEntry::Image(_) | ClipboardEntry::ExternalPaths(_) => None,
+                ClipboardEntry::Data(_)
+                | ClipboardEntry::Bookmark(_)
+                | ClipboardEntry::Image(_)
+                | ClipboardEntry::ExternalPaths(_) => None,
             })
             .sum();
         let mut answer = String::with_capacity(text_capacity);
         for entry in self.entries.iter() {
             if let ClipboardEntry::String(value) = entry {
                 answer.push_str(value.text());
+            }
+        }
+        if !answer.is_empty() {
+            return Some(answer);
+        }
+
+        for entry in self.entries.iter() {
+            if let ClipboardEntry::Bookmark(bookmark) = entry {
+                if !answer.is_empty() {
+                    answer.push('\n');
+                }
+                answer.push_str(bookmark.url());
             }
         }
         if !answer.is_empty() {
@@ -481,6 +651,46 @@ impl ClipboardItem {
             [ClipboardEntry::String(value)] => value.metadata(),
             _ => None,
         }
+    }
+
+    /// Return the first arbitrary representation matching a MIME type exactly.
+    pub fn data(&self, mime_type: &str) -> Option<&ClipboardData> {
+        self.entries.iter().find_map(|entry| match entry {
+            ClipboardEntry::Data(data) if data.mime_type() == mime_type => Some(data),
+            _ => None,
+        })
+    }
+
+    pub fn html(&self) -> Result<Option<&str>, ClipboardError> {
+        self.data("text/html")
+            .map(ClipboardData::utf8_text)
+            .transpose()
+    }
+
+    pub fn rtf(&self) -> Result<Option<&str>, ClipboardError> {
+        self.data("text/rtf")
+            .map(ClipboardData::utf8_text)
+            .transpose()
+    }
+
+    pub fn bookmarks(&self) -> impl Iterator<Item = &ClipboardBookmark> {
+        self.entries.iter().filter_map(|entry| match entry {
+            ClipboardEntry::Bookmark(bookmark) => Some(bookmark),
+            _ => None,
+        })
+    }
+}
+
+fn validate_mime_type(mime_type: &str) -> Result<(), ClipboardError> {
+    let slash = mime_type.find('/');
+    if mime_type.is_empty()
+        || mime_type.len() > MAX_CLIPBOARD_MIME_TYPE_BYTES
+        || !mime_type.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
+        || slash.is_none_or(|slash| slash == 0 || slash + 1 == mime_type.len())
+    {
+        Err(ClipboardError::InvalidMimeType)
+    } else {
+        Ok(())
     }
 }
 
@@ -534,6 +744,8 @@ pub(crate) enum ClipboardTarget {
     General,
     #[cfg(target_os = "macos")]
     Find,
+    #[cfg(target_os = "linux")]
+    Selection,
 }
 
 #[derive(Clone)]
@@ -612,6 +824,8 @@ struct MemoryClipboard {
     general: Option<ClipboardItem>,
     #[cfg(target_os = "macos")]
     find: Option<ClipboardItem>,
+    #[cfg(target_os = "linux")]
+    selection: Option<ClipboardItem>,
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -621,6 +835,8 @@ impl MemoryClipboard {
             ClipboardTarget::General => self.general.clone(),
             #[cfg(target_os = "macos")]
             ClipboardTarget::Find => self.find.clone(),
+            #[cfg(target_os = "linux")]
+            ClipboardTarget::Selection => self.selection.clone(),
         }
     }
 
@@ -630,6 +846,8 @@ impl MemoryClipboard {
             ClipboardTarget::General => self.general = value,
             #[cfg(target_os = "macos")]
             ClipboardTarget::Find => self.find = value,
+            #[cfg(target_os = "linux")]
+            ClipboardTarget::Selection => self.selection = value,
         }
     }
 }
@@ -679,9 +897,7 @@ struct SystemClipboard {
 #[cfg(not(target_os = "macos"))]
 impl SystemClipboard {
     fn read(&mut self, target: ClipboardTarget) -> Result<Option<ClipboardItem>, ClipboardError> {
-        match target {
-            ClipboardTarget::General => self.read_general(),
-        }
+        self.read_target(target)
     }
 
     fn write(
@@ -689,9 +905,7 @@ impl SystemClipboard {
         target: ClipboardTarget,
         item: ClipboardItem,
     ) -> Result<(), ClipboardError> {
-        match target {
-            ClipboardTarget::General => self.write_general(&item),
-        }
+        self.write_target(target, &item)
     }
 
     fn clipboard(&mut self) -> Result<&mut arboard::Clipboard, ClipboardError> {
@@ -701,61 +915,262 @@ impl SystemClipboard {
         self.general.as_mut().ok_or(ClipboardError::Unavailable)
     }
 
-    fn read_general(&mut self) -> Result<Option<ClipboardItem>, ClipboardError> {
+    fn read_target(
+        &mut self,
+        target: ClipboardTarget,
+    ) -> Result<Option<ClipboardItem>, ClipboardError> {
         let clipboard = self.clipboard()?;
-        match clipboard.get().file_list() {
+        let mut entries = Vec::new();
+        match arboard_file_list(clipboard, target) {
             Ok(paths) if !paths.is_empty() => {
                 let paths = ExternalPaths::new(paths)?;
-                let mut entries = vec![ClipboardEntry::ExternalPaths(paths)];
-                if let Ok(text) = clipboard.get_text()
-                    && let Ok(text) = ClipboardString::new(text)
-                {
-                    entries.push(ClipboardEntry::String(text));
-                }
-                return ClipboardItem::new(entries).map(Some);
+                entries.push(ClipboardEntry::ExternalPaths(paths));
             }
             Ok(_) | Err(arboard::Error::ContentNotAvailable) => {}
             Err(error) => return Err(map_arboard_error(error)),
         }
-        match clipboard.get_text() {
-            Ok(text) => return ClipboardItem::new_string(text).map(Some),
+        match arboard_text(clipboard, target) {
+            Ok(text) => entries.push(ClipboardEntry::String(ClipboardString::new(text)?)),
             Err(arboard::Error::ContentNotAvailable) => {}
             Err(error) => return Err(map_arboard_error(error)),
         }
-        match clipboard.get_image() {
-            Ok(image) => encode_arboard_image(image)
-                .and_then(ClipboardItem::new_image)
-                .map(Some),
-            Err(arboard::Error::ContentNotAvailable) => Ok(None),
-            Err(error) => Err(map_arboard_error(error)),
+        match arboard_html(clipboard, target) {
+            Ok(html) => entries.push(ClipboardEntry::Data(ClipboardData::html(html)?)),
+            Err(arboard::Error::ContentNotAvailable) => {}
+            Err(error) => return Err(map_arboard_error(error)),
+        }
+        match arboard_image(clipboard, target) {
+            Ok(image) => entries.push(ClipboardEntry::Image(encode_arboard_image(image)?)),
+            Err(arboard::Error::ContentNotAvailable) => {}
+            Err(error) => return Err(map_arboard_error(error)),
+        }
+        if entries.is_empty() {
+            Ok(None)
+        } else {
+            ClipboardItem::new(entries).map(Some)
         }
     }
 
-    fn write_general(&mut self, item: &ClipboardItem) -> Result<(), ClipboardError> {
+    fn write_target(
+        &mut self,
+        target: ClipboardTarget,
+        item: &ClipboardItem,
+    ) -> Result<(), ClipboardError> {
         let clipboard = self.clipboard()?;
         if item.is_empty() {
-            return clipboard.clear().map_err(map_arboard_error);
+            return arboard_clear(clipboard, target).map_err(map_arboard_error);
         }
         if let Some(paths) = item.entries().iter().find_map(|entry| match entry {
             ClipboardEntry::ExternalPaths(paths) => Some(paths),
-            ClipboardEntry::String(_) | ClipboardEntry::Image(_) => None,
+            ClipboardEntry::String(_)
+            | ClipboardEntry::Data(_)
+            | ClipboardEntry::Bookmark(_)
+            | ClipboardEntry::Image(_) => None,
         }) {
-            return clipboard
-                .set()
-                .file_list(paths.paths())
+            return arboard_set_file_list(clipboard, target, paths.paths())
                 .map_err(map_arboard_error);
         }
         if let Some(image) = item.entries().iter().find_map(|entry| match entry {
             ClipboardEntry::Image(image) => Some(image),
-            ClipboardEntry::String(_) | ClipboardEntry::ExternalPaths(_) => None,
+            ClipboardEntry::String(_)
+            | ClipboardEntry::Data(_)
+            | ClipboardEntry::Bookmark(_)
+            | ClipboardEntry::ExternalPaths(_) => None,
         }) {
             let image = decode_arboard_image(image)?;
-            return clipboard.set_image(image).map_err(map_arboard_error);
+            return arboard_set_image(clipboard, target, image).map_err(map_arboard_error);
+        }
+        if let Some(html) = item.html()? {
+            return arboard_set_html(clipboard, target, html, item.text().as_deref())
+                .map_err(map_arboard_error);
         }
         if let Some(text) = item.text() {
-            return clipboard.set_text(text).map_err(map_arboard_error);
+            return arboard_set_text(clipboard, target, text).map_err(map_arboard_error);
         }
-        clipboard.clear().map_err(map_arboard_error)
+        arboard_clear(clipboard, target).map_err(map_arboard_error)
+    }
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_file_list(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+) -> Result<Vec<PathBuf>, arboard::Error> {
+    clipboard.get().file_list()
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_file_list(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+) -> Result<Vec<PathBuf>, arboard::Error> {
+    use arboard::GetExtLinux;
+    clipboard
+        .get()
+        .clipboard(arboard_target(target))
+        .file_list()
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_text(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+) -> Result<String, arboard::Error> {
+    clipboard.get_text()
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_text(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+) -> Result<String, arboard::Error> {
+    use arboard::GetExtLinux;
+    clipboard.get().clipboard(arboard_target(target)).text()
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_html(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+) -> Result<String, arboard::Error> {
+    clipboard.get().html()
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_html(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+) -> Result<String, arboard::Error> {
+    use arboard::GetExtLinux;
+    clipboard.get().clipboard(arboard_target(target)).html()
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_image(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+) -> Result<arboard::ImageData<'static>, arboard::Error> {
+    clipboard.get_image()
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_image(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+) -> Result<arboard::ImageData<'static>, arboard::Error> {
+    use arboard::GetExtLinux;
+    clipboard.get().clipboard(arboard_target(target)).image()
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_set_file_list(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+    paths: &[PathBuf],
+) -> Result<(), arboard::Error> {
+    clipboard.set().file_list(paths)
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_set_file_list(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+    paths: &[PathBuf],
+) -> Result<(), arboard::Error> {
+    use arboard::SetExtLinux;
+    clipboard
+        .set()
+        .clipboard(arboard_target(target))
+        .file_list(paths)
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_set_image(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+    image: arboard::ImageData<'static>,
+) -> Result<(), arboard::Error> {
+    clipboard.set_image(image)
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_set_image(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+    image: arboard::ImageData<'static>,
+) -> Result<(), arboard::Error> {
+    use arboard::SetExtLinux;
+    clipboard
+        .set()
+        .clipboard(arboard_target(target))
+        .image(image)
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_set_html(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+    html: &str,
+    text: Option<&str>,
+) -> Result<(), arboard::Error> {
+    clipboard.set_html(html, text)
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_set_html(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+    html: &str,
+    text: Option<&str>,
+) -> Result<(), arboard::Error> {
+    use arboard::SetExtLinux;
+    clipboard
+        .set()
+        .clipboard(arboard_target(target))
+        .html(html, text)
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_set_text(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+    text: String,
+) -> Result<(), arboard::Error> {
+    clipboard.set_text(text)
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_set_text(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+    text: String,
+) -> Result<(), arboard::Error> {
+    use arboard::SetExtLinux;
+    clipboard.set().clipboard(arboard_target(target)).text(text)
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+fn arboard_clear(
+    clipboard: &mut arboard::Clipboard,
+    _target: ClipboardTarget,
+) -> Result<(), arboard::Error> {
+    clipboard.clear()
+}
+
+#[cfg(target_os = "linux")]
+fn arboard_clear(
+    clipboard: &mut arboard::Clipboard,
+    target: ClipboardTarget,
+) -> Result<(), arboard::Error> {
+    use arboard::ClearExtLinux;
+    clipboard.clear_with().clipboard(arboard_target(target))
+}
+
+#[cfg(target_os = "linux")]
+const fn arboard_target(target: ClipboardTarget) -> arboard::LinuxClipboardKind {
+    match target {
+        ClipboardTarget::General => arboard::LinuxClipboardKind::Clipboard,
+        ClipboardTarget::Selection => arboard::LinuxClipboardKind::Primary,
     }
 }
 
@@ -877,6 +1292,50 @@ mod tests {
         assert_eq!(text.metadata_json::<Metadata>().unwrap(), Some(metadata));
         assert_eq!(item.text().as_deref(), Some("hello"));
         assert_eq!(item.metadata(), None);
+    }
+
+    #[test]
+    fn item_preserves_html_rtf_bookmarks_and_arbitrary_mime_data() {
+        let html = ClipboardData::html("<strong>Hello</strong>").unwrap();
+        let rtf = ClipboardData::rtf(r"{\rtf1 Hello}").unwrap();
+        let custom = ClipboardData::new("application/vnd.quickgui.test", [1_u8, 2, 3]).unwrap();
+        let bookmark = ClipboardBookmark::new("QuickGUI", "https://quickgui.dev/").unwrap();
+        let item = ClipboardItem::new([
+            ClipboardEntry::Data(html),
+            ClipboardEntry::Data(rtf),
+            ClipboardEntry::Data(custom.clone()),
+            ClipboardEntry::Bookmark(bookmark.clone()),
+        ])
+        .unwrap();
+
+        assert_eq!(item.html().unwrap(), Some("<strong>Hello</strong>"));
+        assert_eq!(item.rtf().unwrap(), Some(r"{\rtf1 Hello}"));
+        assert_eq!(item.data("application/vnd.quickgui.test"), Some(&custom));
+        assert_eq!(item.bookmarks().collect::<Vec<_>>(), vec![&bookmark]);
+        assert_eq!(item.text().as_deref(), Some("https://quickgui.dev/"));
+    }
+
+    #[test]
+    fn arbitrary_clipboard_data_and_bookmarks_reject_invalid_bounds() {
+        assert_eq!(
+            ClipboardData::new("missing-slash", []).unwrap_err(),
+            ClipboardError::InvalidMimeType
+        );
+        assert_eq!(
+            ClipboardData::new("text/contains space", []).unwrap_err(),
+            ClipboardError::InvalidMimeType
+        );
+        assert!(matches!(
+            ClipboardData::new(
+                "application/octet-stream",
+                vec![0_u8; MAX_CLIPBOARD_DATA_BYTES + 1]
+            ),
+            Err(ClipboardError::DataTooLarge { .. })
+        ));
+        assert!(matches!(
+            ClipboardBookmark::new("Title", ""),
+            Err(ClipboardError::InvalidBookmarkUrl { .. })
+        ));
     }
 
     #[test]

@@ -71,10 +71,6 @@ mod file_dialog;
 
 pub(crate) use file_dialog::{present_native_open_panel, present_native_save_panel};
 
-pub(crate) fn system_reduce_motion() -> bool {
-    unsafe { NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion() }
-}
-
 const NATIVE_DROP_TEXT: u8 = 1 << 0;
 const NATIVE_DROP_URL: u8 = 1 << 1;
 const NATIVE_DROP_TYPED: u8 = 1 << 2;
@@ -1761,7 +1757,7 @@ impl MacPlatformDialog {
     }
 }
 
-fn native_file_url(path: &Path, is_directory: bool) -> Result<Retained<NSURL>, String> {
+pub(crate) fn native_file_url(path: &Path, is_directory: bool) -> Result<Retained<NSURL>, String> {
     let path = CString::new(path.as_os_str().as_bytes())
         .map_err(|_| "a native path cannot contain NUL".to_owned())?;
     let path = NonNull::new(path.as_ptr().cast_mut())
@@ -1946,6 +1942,16 @@ fn appkit_main_screen_height(
     Ok((screens.clone(), primary.frame().size.height as f32))
 }
 
+/// Read the hardware pointer in QuickGUI's top-left global logical desktop coordinates.
+pub(crate) fn current_cursor_screen_position() -> Option<Point> {
+    let mtm = MainThreadMarker::new()?;
+    let (_, main_screen_height) = appkit_main_screen_height(mtm).ok()?;
+    // SAFETY: AppKit's process-wide mouse location is a value-only main-thread query.
+    let point = unsafe { NSEvent::mouseLocation() };
+    let point = Point::new(point.x as f32, main_screen_height - point.y as f32);
+    (point.x.is_finite() && point.y.is_finite()).then_some(point)
+}
+
 /// Resolve and apply parent-relative popover geometry while both native windows remain hidden.
 pub(crate) fn position_system_popover(
     window: &Arc<Window>,
@@ -2018,6 +2024,44 @@ pub(crate) fn set_window_visibility(
     } else {
         window.orderOut(None);
     }
+    Ok(())
+}
+
+/// Change whether one Winit-owned AppKit window may become key.
+pub(crate) fn set_window_focusable(window: &Arc<Window>, focusable: bool) -> Result<(), String> {
+    if window.set_can_become_key_window(focusable) {
+        Ok(())
+    } else {
+        Err("the native window did not expose key-window policy".to_owned())
+    }
+}
+
+/// Apply whole-window alpha without changing the retained GPU scene.
+pub(crate) fn set_window_opacity(window: &Arc<Window>, opacity: f32) -> Result<(), String> {
+    if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
+        return Err("window opacity must be finite and between zero and one".to_owned());
+    }
+    let window = appkit_window(window)?;
+    // SAFETY: QuickGUI owns this live main-thread AppKit window and the bounded scalar carries no
+    // borrowed Objective-C state.
+    unsafe { window.setAlphaValue(f64::from(opacity)) };
+    Ok(())
+}
+
+/// Toggle AppKit's all-spaces collection behavior while preserving role-specific flags.
+pub(crate) fn set_window_visible_on_all_workspaces(
+    window: &Arc<Window>,
+    visible: bool,
+) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    // SAFETY: QuickGUI owns this live main-thread AppKit window for both synchronous calls.
+    let mut behavior = unsafe { window.collectionBehavior() };
+    if visible {
+        behavior |= NSWindowCollectionBehavior::CanJoinAllSpaces;
+    } else {
+        behavior &= !NSWindowCollectionBehavior::CanJoinAllSpaces;
+    }
+    unsafe { window.setCollectionBehavior(behavior) };
     Ok(())
 }
 

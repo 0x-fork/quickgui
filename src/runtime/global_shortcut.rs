@@ -57,6 +57,39 @@ static GLOBAL_SHORTCUT_PROXY: Mutex<Option<EventLoopProxy<RuntimeEvent>>> = Mute
 static INSTALL_GLOBAL_SHORTCUT_HANDLER: Once = Once::new();
 
 impl AppRunner {
+    pub const fn global_shortcuts_supported(&self) -> bool {
+        DesktopIntegrationSupport::current().global_shortcuts
+    }
+
+    /// Whether a completed registration with this application id is currently owned.
+    pub fn is_global_shortcut_registered(&self, registration_id: u32) -> bool {
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+        return self
+            .runtime
+            .global_shortcuts
+            .values()
+            .any(|shortcut| shortcut.registration_id == registration_id);
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        false
+    }
+
+    /// Sorted ids of completed global-shortcut registrations.
+    pub fn global_shortcut_registration_ids(&self) -> Vec<u32> {
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+        {
+            let mut ids = self
+                .runtime
+                .global_shortcuts
+                .values()
+                .map(|shortcut| shortcut.registration_id)
+                .collect::<Vec<_>>();
+            ids.sort_unstable();
+            ids
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        Vec::new()
+    }
+
     /// Register one system-wide keyboard shortcut.
     ///
     /// Accelerator strings use the `global-hotkey` grammar, for example
@@ -178,7 +211,6 @@ impl Runtime {
                 } => {
                     let result = self.register_global_shortcut_now(registration_id, &accelerator);
                     responder.complete(result);
-                    return;
                 }
                 GlobalShortcutCommand::Unregister {
                     registration_id,
@@ -186,12 +218,10 @@ impl Runtime {
                 } => {
                     let result = self.unregister_global_shortcut_now(registration_id);
                     responder.complete(result);
-                    return;
                 }
                 GlobalShortcutCommand::UnregisterAll { responder } => {
                     let result = self.unregister_all_global_shortcuts_now();
                     responder.complete(result);
-                    return;
                 }
             }
         }

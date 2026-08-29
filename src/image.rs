@@ -80,7 +80,7 @@ impl Image {
         })))
     }
 
-    /// Decode PNG, JPEG, WebP, or the first frame of a GIF from memory.
+    /// Decode PNG, JPEG, TIFF, WebP, or the first frame of a GIF from memory.
     ///
     /// Decoding is explicit and synchronous. Applications should perform it away from latency-
     /// sensitive input handling and then publish the resulting cheap-to-clone `Image`.

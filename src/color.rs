@@ -73,6 +73,12 @@ impl Default for Color {
     }
 }
 
+impl From<quickgui_system::SystemColor> for Color {
+    fn from(color: quickgui_system::SystemColor) -> Self {
+        Self::rgba8(color.red, color.green, color.blue, color.alpha)
+    }
+}
+
 fn srgb_to_linear(value: f32) -> f32 {
     if value <= 0.04045 {
         value / 12.92

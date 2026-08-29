@@ -397,12 +397,21 @@ let menus = [
 App::new(view).menus(menus);
 ```
 
-On macOS these are real `NSMenu` trees with native keyboard navigation, nested submenus, checked
-and disabled state, and focus-aware validation. `EventContext::set_menus` replaces labels or state
-after an application mutation without introducing an idle update loop. `MenuItem::os_action`
-first follows AppKit's responder chain for Cut/Copy/Paste/Select All/Undo/Redo, then falls back to
-the same typed action and QuickGUI text input. This lets one Edit menu serve both GPU controls and
-embedded `NSView` children. Opening a menu also cancels an incomplete multi-stroke prefix.
+On macOS and Windows these are native menu trees with keyboard navigation, nested submenus,
+controlled check/radio marks, disabled state, bounded item icons, and focus-aware validation.
+macOS additionally projects system-owned Services, Window, and Help submenus.
+`MenuItem::role` declares standard About/application/window/help/editing commands without an
+application action type. `MenuItem::os_action` first follows the native responder command for
+Cut/Copy/Paste/Select All/Undo/Redo, then falls back to the same typed action and QuickGUI text
+input. This lets one Edit menu serve both GPU controls and embedded native children.
+
+`EventContext::set_menus` and `clear_menus` replace the application declaration after a state
+mutation; `set_window_menus` installs one window-scoped override and `use_application_menus`
+removes it. `AppRunner` can query and replace those declarations directly.
+`show_native_popup_menu` projects the same model at an optional logical window point, and macOS
+Dock menus reuse its typed action registry. Opening a menu cancels an incomplete multi-stroke
+prefix, and no settled menu introduces an idle update loop. See
+[Desktop integrations](desktop-integrations.md) for exact target support.
 
 Overlays use a document-independent GPU plane, so they escape ancestor clipping and can be
 anchored to any stable element ID:

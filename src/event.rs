@@ -10,29 +10,38 @@ use bitflags::bitflags;
 use thiserror::Error;
 
 use crate::{
-    Action, AnyAction, Assets, Display, DisplayId, Displays, ElementId, Entity, EntityId,
-    EventEmitter, FocusHandle, Global, KeyboardLayout, Menu, Point, Size, Vector, View,
-    WindowHandle, WindowOptions,
+    AboutPanelOptions, Action, AnyAction, AppInfo, AppPaths, Assets, CursorGrabMode, Display,
+    DisplayId, Displays, ElementId, Entity, EntityId, EventEmitter, FileIconResponse, FileIconSize,
+    FocusHandle, Global, Image, KeyboardLayout, Menu, Point, RelaunchOptions, RelaunchRequest,
+    Size, SystemInfo, SystemIntegrationError, SystemPreferences, TaskbarProgressState, UserTask,
+    Vector, View, WindowHandle, WindowLevel, WindowOptions, WindowRegistry,
     clipboard::{ClipboardError, ClipboardItem, ClipboardService, ClipboardTarget},
     entity::{EntityEvent, MAX_ENTITY_EVENTS_PER_CALLBACK, MAX_ENTITY_NOTIFICATIONS_PER_EVENT},
     foreground::{AsyncViewContext, ForegroundTaskSpawnError, ForegroundTaskSpawner, Task},
     global::{GlobalStore, MAX_GLOBAL_NOTIFICATIONS_PER_EVENT},
     platform::{
-        PathPromptOptions, PathPromptResponse, PlatformError, PlatformRequest, PlatformResponse,
-        PromptButton, PromptLevel, SavePathOptions, SavePathResponse, SystemNotification,
+        NotificationPermissionResponse, PathPromptOptions, PathPromptResponse, PlatformError,
+        PlatformRequest, PlatformResponse, PromptButton, PromptLevel, SavePathOptions,
+        SavePathResponse, ShellResponse, SystemNotification,
     },
     runtime::{
         MAX_SYSTEM_WINDOW_TABS, WindowAppearance, WindowBackgroundAppearance, WindowCommand,
-        WindowCommandError, WindowRequest, validate_window_bounds, validate_window_document_path,
-        validate_window_position, validate_window_size, validate_window_tabbing_identifier,
-        validate_window_title,
+        WindowCommandError, WindowRequest, validate_taskbar_overlay_description,
+        validate_taskbar_progress, validate_window_bounds, validate_window_document_path,
+        validate_window_opacity, validate_window_position, validate_window_size,
+        validate_window_tabbing_identifier, validate_window_title,
     },
 };
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use crate::menu::validate_menus;
 
 /// Maximum actions one callback may target at another retained window.
 pub const MAX_TARGETED_ACTIONS_PER_EVENT: usize = 256;
 /// Maximum cross-window actions retained across one application effect cycle.
 pub const MAX_PENDING_TARGETED_ACTIONS: usize = 1_024;
+/// Maximum native popup menus one event callback may request.
+pub const MAX_NATIVE_POPUP_MENUS_PER_EVENT: usize = 4;
 
 /// Framework-level input and window events, expressed in logical pixels.
 #[derive(Clone, Debug, PartialEq)]
@@ -980,6 +989,11 @@ bitflags! {
 #[derive(Debug, Default)]
 pub struct EventContext {
     pub(crate) globals: GlobalStore,
+    pub(crate) app_info: Option<AppInfo>,
+    pub(crate) app_paths: Option<AppPaths>,
+    pub(crate) system_info: SystemInfo,
+    pub(crate) system_preferences: SystemPreferences,
+    pub(crate) window_registry: WindowRegistry,
     pub(crate) foreground_tasks: Option<ForegroundTaskSpawner>,
     pub(crate) clipboard: Option<ClipboardService>,
     pub(crate) displays: Displays,
@@ -992,10 +1006,13 @@ pub struct EventContext {
     pub(crate) pointer_position: Option<Point>,
     pub(crate) invalidate: bool,
     pub(crate) exit: bool,
+    pub(crate) relaunch: Option<RelaunchRequest>,
     pub(crate) focus: Option<Option<ElementId>>,
     pub(crate) actions: Vec<AnyAction>,
     pub(crate) targeted_actions: Vec<(WindowHandle, AnyAction)>,
     pub(crate) menus: Option<Vec<Menu>>,
+    pub(crate) window_menus: Option<Option<Vec<Menu>>>,
+    pub(crate) native_popup_menus: Vec<NativePopupMenuRequest>,
     pub(crate) propagate_action: bool,
     pub(crate) stop_event_propagation: bool,
     pub(crate) prevent_default: bool,
@@ -1007,12 +1024,19 @@ pub struct EventContext {
     pub(crate) window_commands: Vec<WindowCommand>,
     pub(crate) platform_requests: Vec<PlatformRequest>,
     pub(crate) prevent_close: bool,
+    pub(crate) prevent_quit: bool,
     pub(crate) form_submissions: Vec<ElementId>,
     pub(crate) entity_notifications: Vec<EntityId>,
     pub(crate) notify_all_entities: bool,
     pub(crate) entity_events: Vec<EntityEvent>,
     pub(crate) global_notifications: Vec<TypeId>,
     pub(crate) notify_all_globals: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct NativePopupMenuRequest {
+    pub(crate) menu: Menu,
+    pub(crate) position: Option<Point>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1024,34 +1048,49 @@ pub(crate) struct EventWindowContext {
     pub(crate) pointer_position: Option<Point>,
 }
 
+pub(crate) struct EventRuntimeContext {
+    pub(crate) globals: GlobalStore,
+    pub(crate) foreground_tasks: ForegroundTaskSpawner,
+    pub(crate) clipboard: ClipboardService,
+    pub(crate) displays: Displays,
+    pub(crate) keyboard_layout: KeyboardLayout,
+    pub(crate) assets: Assets,
+    pub(crate) app_info: Option<AppInfo>,
+    pub(crate) app_paths: Option<AppPaths>,
+    pub(crate) system_info: SystemInfo,
+    pub(crate) system_preferences: SystemPreferences,
+    pub(crate) window_registry: WindowRegistry,
+    pub(crate) window: EventWindowContext,
+}
+
 impl EventContext {
-    pub(crate) fn with_runtime(
-        globals: GlobalStore,
-        foreground_tasks: ForegroundTaskSpawner,
-        clipboard: ClipboardService,
-        displays: Displays,
-        keyboard_layout: KeyboardLayout,
-        assets: Assets,
-        window_context: EventWindowContext,
-    ) -> Self {
+    pub(crate) fn with_runtime(runtime: EventRuntimeContext) -> Self {
         Self {
-            globals,
-            foreground_tasks: Some(foreground_tasks),
-            clipboard: Some(clipboard),
-            displays,
-            keyboard_layout,
-            assets,
-            window: window_context.window,
-            parent_window: window_context.parent,
-            popover_owner_window: window_context.popover_owner,
-            popover_root_window: window_context.popover_root,
-            pointer_position: window_context.pointer_position,
+            globals: runtime.globals,
+            app_info: runtime.app_info,
+            app_paths: runtime.app_paths,
+            system_info: runtime.system_info,
+            system_preferences: runtime.system_preferences,
+            window_registry: runtime.window_registry,
+            foreground_tasks: Some(runtime.foreground_tasks),
+            clipboard: Some(runtime.clipboard),
+            displays: runtime.displays,
+            keyboard_layout: runtime.keyboard_layout,
+            assets: runtime.assets,
+            window: runtime.window.window,
+            parent_window: runtime.window.parent,
+            popover_owner_window: runtime.window.popover_owner,
+            popover_root_window: runtime.window.popover_root,
+            pointer_position: runtime.window.pointer_position,
             invalidate: false,
             exit: false,
+            relaunch: None,
             focus: None,
             actions: Vec::new(),
             targeted_actions: Vec::new(),
             menus: None,
+            window_menus: None,
+            native_popup_menus: Vec::new(),
             propagate_action: false,
             stop_event_propagation: false,
             prevent_default: false,
@@ -1063,6 +1102,7 @@ impl EventContext {
             window_commands: Vec::new(),
             platform_requests: Vec::new(),
             prevent_close: false,
+            prevent_quit: false,
             form_submissions: Vec::new(),
             entity_notifications: Vec::new(),
             notify_all_entities: false,
@@ -1100,6 +1140,44 @@ impl EventContext {
         self.assets()
     }
 
+    /// Immutable package identity supplied before application startup.
+    pub fn app_info(&self) -> Option<&AppInfo> {
+        self.app_info.as_ref()
+    }
+
+    /// Standard application paths resolved once during startup.
+    pub fn app_paths(&self) -> Option<&AppPaths> {
+        self.app_paths.as_ref()
+    }
+
+    /// Immutable operating-system and preferred-language snapshot captured at startup.
+    pub fn system_info(&self) -> &SystemInfo {
+        &self.system_info
+    }
+
+    /// Current bounded system appearance and accessibility-preference snapshot.
+    pub const fn system_preferences(&self) -> SystemPreferences {
+        self.system_preferences
+    }
+
+    /// Bounded immutable lookup of mounted and queued application windows at this event boundary.
+    pub fn window_registry(&self) -> &WindowRegistry {
+        &self.window_registry
+    }
+
+    pub fn windows(&self) -> &[WindowHandle] {
+        self.window_registry.windows()
+    }
+
+    pub const fn active_window(&self) -> Option<WindowHandle> {
+        self.window_registry.active_window()
+    }
+
+    /// Read the hardware pointer in global logical desktop coordinates.
+    pub fn cursor_screen_position(&self) -> Result<Point, PlatformError> {
+        crate::runtime::cursor_screen_position(&self.displays)
+    }
+
     /// Read a bounded item from the operating system's general clipboard.
     ///
     /// The operation is synchronous and belongs on QuickGUI's application thread. macOS checks
@@ -1119,6 +1197,24 @@ impl EventContext {
             .as_ref()
             .ok_or(ClipboardError::Unavailable)?
             .write(ClipboardTarget::General, item)
+    }
+
+    /// Read Linux's primary-selection clipboard, commonly pasted with the middle mouse button.
+    #[cfg(target_os = "linux")]
+    pub fn read_from_selection_clipboard(&self) -> Result<Option<ClipboardItem>, ClipboardError> {
+        self.clipboard
+            .as_ref()
+            .ok_or(ClipboardError::Unavailable)?
+            .read(ClipboardTarget::Selection)
+    }
+
+    /// Replace Linux's primary-selection clipboard. An empty item clears it.
+    #[cfg(target_os = "linux")]
+    pub fn write_to_selection_clipboard(&self, item: ClipboardItem) -> Result<(), ClipboardError> {
+        self.clipboard
+            .as_ref()
+            .ok_or(ClipboardError::Unavailable)?
+            .write(ClipboardTarget::Selection, item)
     }
 
     /// Read macOS's shared Find pasteboard without polling it.
@@ -1269,6 +1365,24 @@ impl EventContext {
         self.exit = true;
     }
 
+    /// Relaunch the current executable after orderly application teardown.
+    ///
+    /// The current arguments and working directory are preserved. Preparing the request happens
+    /// synchronously so an invalid process environment cannot turn into a silent post-exit error.
+    pub fn relaunch(&mut self) -> Result<(), SystemIntegrationError> {
+        self.relaunch_with(RelaunchOptions::default())
+    }
+
+    /// Relaunch with explicit process overrides after orderly application teardown.
+    pub fn relaunch_with(
+        &mut self,
+        options: RelaunchOptions,
+    ) -> Result<(), SystemIntegrationError> {
+        self.relaunch = Some(options.prepare()?);
+        self.exit = true;
+        Ok(())
+    }
+
     /// Create another native window hosting an independently retained view.
     ///
     /// The stable handle is available immediately, before the platform window is mounted.
@@ -1397,23 +1511,18 @@ impl EventContext {
 
     /// Post or replace an operating-system notification.
     ///
-    /// On macOS this requests notification authorization at most once, only after the first post.
     /// The request is rejected before retention if any text or action exceeds its public bound.
+    /// Use [`Self::request_notification_permission`] when the application wants to control the
+    /// authorization prompt instead of relying on the backend's first-post behavior.
     pub fn show_system_notification(
         &mut self,
         notification: SystemNotification,
     ) -> Result<(), PlatformError> {
         self.ensure_platform_capacity()?;
         let request = PlatformRequest::show_system_notification(notification)?;
-        #[cfg(target_os = "macos")]
-        {
-            self.push_platform_request(request)
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = request;
-            Err(PlatformError::Unsupported)
-        }
+        #[cfg(target_os = "windows")]
+        crate::runtime::validate_windows_notification_app_info(self.app_info.as_ref())?;
+        self.push_platform_request(request)
     }
 
     /// Remove a pending or delivered operating-system notification by its stable tag.
@@ -1423,26 +1532,60 @@ impl EventContext {
     ) -> Result<(), PlatformError> {
         self.ensure_platform_capacity()?;
         let request = PlatformRequest::dismiss_system_notification(tag)?;
-        #[cfg(target_os = "macos")]
-        {
-            self.push_platform_request(request)
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = request;
-            Err(PlatformError::Unsupported)
-        }
+        #[cfg(target_os = "windows")]
+        crate::runtime::validate_windows_notification_app_info(self.app_info.as_ref())?;
+        self.push_platform_request(request)
+    }
+
+    /// Query notification authorization without displaying a prompt.
+    pub fn notification_permission_status(
+        &mut self,
+    ) -> Result<NotificationPermissionResponse, PlatformError> {
+        self.ensure_platform_capacity()?;
+        #[cfg(target_os = "windows")]
+        crate::runtime::validate_windows_notification_app_info(self.app_info.as_ref())?;
+        let (request, response) = PlatformRequest::notification_permission_status();
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Explicitly request notification authorization where the operating system requires it.
+    pub fn request_notification_permission(
+        &mut self,
+    ) -> Result<NotificationPermissionResponse, PlatformError> {
+        self.ensure_platform_capacity()?;
+        #[cfg(target_os = "windows")]
+        crate::runtime::validate_windows_notification_app_info(self.app_info.as_ref())?;
+        let (request, response) = PlatformRequest::request_notification_permission();
+        self.push_platform_request(request)?;
+        Ok(response)
     }
 
     /// Ask the operating system to open a URL with its registered application.
     pub fn open_url(&mut self, url: impl Into<Arc<str>>) -> Result<(), PlatformError> {
         self.ensure_platform_capacity()?;
         let request = PlatformRequest::open_url(url)?;
-        #[cfg(target_os = "macos")]
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
         {
             self.push_platform_request(request)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        )))]
         {
             let _ = request;
             Err(PlatformError::Unsupported)
@@ -1453,11 +1596,27 @@ impl EventContext {
     pub fn open_path(&mut self, path: impl Into<PathBuf>) -> Result<(), PlatformError> {
         self.ensure_platform_capacity()?;
         let request = PlatformRequest::open_path(path)?;
-        #[cfg(target_os = "macos")]
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
         {
             self.push_platform_request(request)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        )))]
         {
             let _ = request;
             Err(PlatformError::Unsupported)
@@ -1468,15 +1627,174 @@ impl EventContext {
     pub fn reveal_path(&mut self, path: impl Into<PathBuf>) -> Result<(), PlatformError> {
         self.ensure_platform_capacity()?;
         let request = PlatformRequest::reveal_path(path)?;
-        #[cfg(target_os = "macos")]
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
         {
             self.push_platform_request(request)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        )))]
         {
             let _ = request;
             Err(PlatformError::Unsupported)
         }
+    }
+
+    /// Move a filesystem path to the operating system's trash or recycle bin.
+    pub fn trash_path(&mut self, path: impl Into<PathBuf>) -> Result<(), PlatformError> {
+        self.ensure_platform_capacity()?;
+        let request = PlatformRequest::trash_path(path)?;
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
+        {
+            self.push_platform_request(request)
+        }
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        )))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported)
+        }
+    }
+
+    /// Set the macOS Dock badge label. An empty value clears the badge.
+    pub fn set_dock_badge(&mut self, value: impl Into<Arc<str>>) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().dock_badges {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        let value = value.into();
+        let request = PlatformRequest::set_dock_badge((!value.is_empty()).then_some(value))?;
+        self.push_platform_request(request)
+    }
+
+    pub fn clear_dock_badge(&mut self) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().dock_badges {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::set_dock_badge(None)?)
+    }
+
+    /// Replace the macOS Dock icon for this process.
+    pub fn set_dock_icon(&mut self, icon: Image) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().dock_icons {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::set_dock_icon(Some(icon)))
+    }
+
+    pub fn clear_dock_icon(&mut self) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().dock_icons {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::set_dock_icon(None))
+    }
+
+    /// Replace the macOS Dock context menu.
+    pub fn set_dock_menu(&mut self, menu: Menu) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().dock_menus {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::set_dock_menu(Some(menu))?)
+    }
+
+    pub fn clear_dock_menu(&mut self) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().dock_menus {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::set_dock_menu(None)?)
+    }
+
+    /// Add one path to the operating system's recent-document list.
+    pub fn add_recent_document(&mut self, path: impl Into<PathBuf>) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().recent_documents {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::add_recent_document(path)?)
+    }
+
+    pub fn clear_recent_documents(&mut self) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().recent_documents {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::ClearRecentDocuments)
+    }
+
+    /// Present the operating system's standard About UI.
+    pub fn show_about_panel(&mut self, options: AboutPanelOptions) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().native_about_panel {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::show_about_panel(options)?)
+    }
+
+    /// Resolve the native icon for a filesystem item.
+    pub fn file_icon(
+        &mut self,
+        path: impl Into<PathBuf>,
+        size: FileIconSize,
+    ) -> Result<FileIconResponse, PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().file_icons {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        let (request, response) = PlatformRequest::get_file_icon(path, size)?;
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Replace the complete Windows Jump List user-task section.
+    pub fn set_user_tasks(
+        &mut self,
+        tasks: impl IntoIterator<Item = UserTask>,
+    ) -> Result<ShellResponse, PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().user_tasks {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        let (request, response) = PlatformRequest::set_user_tasks(tasks.into_iter().collect())?;
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    pub fn clear_user_tasks(&mut self) -> Result<ShellResponse, PlatformError> {
+        self.set_user_tasks(std::iter::empty())
     }
 
     pub fn set_window_title(&mut self, title: impl Into<String>) -> Result<(), WindowCommandError> {
@@ -1871,6 +2189,33 @@ impl EventContext {
         self.push_window_command(WindowCommand::SetMinimumSize(handle, None))
     }
 
+    /// Set the current window's maximum logical inner size.
+    pub fn set_window_maximum_size(&mut self, size: Size) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_maximum_size_handle(handle, size)
+    }
+
+    pub fn set_window_maximum_size_handle(
+        &mut self,
+        handle: WindowHandle,
+        size: Size,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_size(size)?;
+        self.push_window_command(WindowCommand::SetMaximumSize(handle, Some(size)))
+    }
+
+    pub fn clear_window_maximum_size(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.clear_window_maximum_size_handle(handle)
+    }
+
+    pub fn clear_window_maximum_size_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetMaximumSize(handle, None))
+    }
+
     pub fn set_window_minimizable(&mut self, minimizable: bool) -> Result<(), WindowCommandError> {
         let handle = self.current_window_handle()?;
         self.set_window_minimizable_handle(handle, minimizable)
@@ -1882,6 +2227,316 @@ impl EventContext {
         minimizable: bool,
     ) -> Result<(), WindowCommandError> {
         self.push_window_command(WindowCommand::SetMinimizable(handle, minimizable))
+    }
+
+    pub fn set_window_maximizable(&mut self, maximizable: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_maximizable_handle(handle, maximizable)
+    }
+
+    pub fn set_window_maximizable_handle(
+        &mut self,
+        handle: WindowHandle,
+        maximizable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetMaximizable(handle, maximizable))
+    }
+
+    pub fn set_window_closable(&mut self, closable: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_closable_handle(handle, closable)
+    }
+
+    pub fn set_window_closable_handle(
+        &mut self,
+        handle: WindowHandle,
+        closable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetClosable(handle, closable))
+    }
+
+    pub fn set_window_decorated(&mut self, decorated: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_decorated_handle(handle, decorated)
+    }
+
+    pub fn set_window_decorated_handle(
+        &mut self,
+        handle: WindowHandle,
+        decorated: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetDecorated(handle, decorated))
+    }
+
+    pub fn set_window_shadow(&mut self, shadow: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_shadow_handle(handle, shadow)
+    }
+
+    pub fn set_window_shadow_handle(
+        &mut self,
+        handle: WindowHandle,
+        shadow: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetShadow(handle, shadow))
+    }
+
+    pub fn set_window_content_protected(
+        &mut self,
+        protected: bool,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_content_protected_handle(handle, protected)
+    }
+
+    pub fn set_window_content_protected_handle(
+        &mut self,
+        handle: WindowHandle,
+        protected: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetContentProtected(handle, protected))
+    }
+
+    pub fn set_window_level(&mut self, level: WindowLevel) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_level_handle(handle, level)
+    }
+
+    pub fn set_window_level_handle(
+        &mut self,
+        handle: WindowHandle,
+        level: WindowLevel,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetWindowLevel(handle, Some(level)))
+    }
+
+    pub fn use_automatic_window_level(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.use_automatic_window_level_handle(handle)
+    }
+
+    pub fn use_automatic_window_level_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetWindowLevel(handle, None))
+    }
+
+    pub fn set_window_always_on_top(
+        &mut self,
+        always_on_top: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.set_window_level(if always_on_top {
+            WindowLevel::AlwaysOnTop
+        } else {
+            WindowLevel::Normal
+        })
+    }
+
+    pub fn set_window_always_on_top_handle(
+        &mut self,
+        handle: WindowHandle,
+        always_on_top: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.set_window_level_handle(
+            handle,
+            if always_on_top {
+                WindowLevel::AlwaysOnTop
+            } else {
+                WindowLevel::Normal
+            },
+        )
+    }
+
+    pub fn set_window_focusable(&mut self, focusable: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_focusable_handle(handle, focusable)
+    }
+
+    pub fn set_window_focusable_handle(
+        &mut self,
+        handle: WindowHandle,
+        focusable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetFocusable(handle, focusable))
+    }
+
+    pub fn set_window_skip_taskbar(&mut self, skip: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_skip_taskbar_handle(handle, skip)
+    }
+
+    pub fn set_window_skip_taskbar_handle(
+        &mut self,
+        handle: WindowHandle,
+        skip: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetSkipTaskbar(handle, skip))
+    }
+
+    pub fn set_window_visible_on_all_workspaces(
+        &mut self,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_visible_on_all_workspaces_handle(handle, visible)
+    }
+
+    pub fn set_window_visible_on_all_workspaces_handle(
+        &mut self,
+        handle: WindowHandle,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetVisibleOnAllWorkspaces(handle, visible))
+    }
+
+    pub fn set_window_opacity(&mut self, opacity: f32) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_opacity_handle(handle, opacity)
+    }
+
+    pub fn set_window_opacity_handle(
+        &mut self,
+        handle: WindowHandle,
+        opacity: f32,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_opacity(opacity)?;
+        self.push_window_command(WindowCommand::SetOpacity(handle, opacity))
+    }
+
+    pub fn set_window_icon(&mut self, icon: Image) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_icon_handle(handle, icon)
+    }
+
+    pub fn set_window_icon_handle(
+        &mut self,
+        handle: WindowHandle,
+        icon: Image,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetIcon(handle, Some(icon)))
+    }
+
+    pub fn clear_window_icon(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.clear_window_icon_handle(handle)
+    }
+
+    pub fn clear_window_icon_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetIcon(handle, None))
+    }
+
+    /// Set the current window's native taskbar progress indicator.
+    pub fn set_taskbar_progress(
+        &mut self,
+        state: TaskbarProgressState,
+        progress: f32,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_taskbar_progress_handle(handle, state, progress)
+    }
+
+    pub fn set_taskbar_progress_handle(
+        &mut self,
+        handle: WindowHandle,
+        state: TaskbarProgressState,
+        progress: f32,
+    ) -> Result<(), WindowCommandError> {
+        validate_taskbar_progress(progress)?;
+        self.push_window_command(WindowCommand::SetTaskbarProgress(handle, state, progress))
+    }
+
+    /// Install a Windows taskbar overlay icon for the current window.
+    pub fn set_taskbar_overlay_icon(
+        &mut self,
+        icon: Image,
+        description: impl Into<String>,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_taskbar_overlay_icon_handle(handle, icon, description)
+    }
+
+    pub fn set_taskbar_overlay_icon_handle(
+        &mut self,
+        handle: WindowHandle,
+        icon: Image,
+        description: impl Into<String>,
+    ) -> Result<(), WindowCommandError> {
+        let description = description.into();
+        validate_taskbar_overlay_description(Some(&description))?;
+        self.push_window_command(WindowCommand::SetTaskbarOverlayIcon(
+            handle,
+            Some(icon),
+            Some(description),
+        ))
+    }
+
+    pub fn clear_taskbar_overlay_icon(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.clear_taskbar_overlay_icon_handle(handle)
+    }
+
+    pub fn clear_taskbar_overlay_icon_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetTaskbarOverlayIcon(handle, None, None))
+    }
+
+    pub fn set_cursor_visible(&mut self, visible: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_cursor_visible_handle(handle, visible)
+    }
+
+    pub fn set_cursor_visible_handle(
+        &mut self,
+        handle: WindowHandle,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetCursorVisible(handle, visible))
+    }
+
+    pub fn set_cursor_grab(&mut self, mode: CursorGrabMode) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_cursor_grab_handle(handle, mode)
+    }
+
+    pub fn set_cursor_grab_handle(
+        &mut self,
+        handle: WindowHandle,
+        mode: CursorGrabMode,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetCursorGrab(handle, mode))
+    }
+
+    pub fn set_cursor_hit_test(&mut self, hit_test: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_cursor_hit_test_handle(handle, hit_test)
+    }
+
+    pub fn set_cursor_hit_test_handle(
+        &mut self,
+        handle: WindowHandle,
+        hit_test: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetCursorHitTest(handle, hit_test))
+    }
+
+    pub fn set_cursor_position(&mut self, position: Point) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_cursor_position_handle(handle, position)
+    }
+
+    pub fn set_cursor_position_handle(
+        &mut self,
+        handle: WindowHandle,
+        position: Point,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_position(position)?;
+        self.push_window_command(WindowCommand::SetCursorPosition(handle, position))
     }
 
     /// Force the current window's native chrome to one light/dark appearance.
@@ -2026,6 +2681,13 @@ impl EventContext {
         self.prevent_close = true;
     }
 
+    /// Cancel the active application before-quit or will-quit phase.
+    ///
+    /// Calling this outside those application callbacks has no effect.
+    pub fn prevent_quit(&mut self) {
+        self.prevent_quit = true;
+    }
+
     /// Move keyboard focus to a stable element handle.
     ///
     /// If the target is introduced by the view invalidation from this same event, QuickGUI keeps
@@ -2161,6 +2823,63 @@ impl EventContext {
         self.menus = Some(menus.into_iter().collect());
     }
 
+    /// Remove every application-wide native menu.
+    pub fn clear_menus(&mut self) {
+        self.menus = Some(Vec::new());
+    }
+
+    /// Replace the current window's native menu declaration.
+    ///
+    /// On macOS this becomes the process menu bar while the window is active. On Windows it is
+    /// attached only to this window. Other desktop targets retain the declaration but may report
+    /// native menu presentation as unsupported.
+    pub fn set_window_menus(&mut self, menus: impl IntoIterator<Item = Menu>) {
+        self.window_menus = Some(Some(menus.into_iter().collect()));
+    }
+
+    /// Keep a window-specific empty native menu instead of inheriting the application menu.
+    pub fn clear_window_menus(&mut self) {
+        self.window_menus = Some(Some(Vec::new()));
+    }
+
+    /// Remove the current window's override and inherit the application's native menus again.
+    pub fn use_application_menus(&mut self) {
+        self.window_menus = Some(None);
+    }
+
+    /// Open a platform-native popup menu owned by the current window.
+    ///
+    /// `position` is in window-local logical pixels from the top-left. `None` uses the current
+    /// native cursor position. Menu actions follow the same focused typed-action and OS-role path
+    /// as application menu items.
+    pub fn show_native_popup_menu(
+        &mut self,
+        menu: Menu,
+        position: Option<Point>,
+    ) -> Result<(), PlatformError> {
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            let _ = (menu, position);
+            return Err(PlatformError::Unsupported);
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            if self.window.is_none() {
+                return Err(PlatformError::Unavailable);
+            }
+            if self.native_popup_menus.len() == MAX_NATIVE_POPUP_MENUS_PER_EVENT {
+                return Err(PlatformError::QueueFull);
+            }
+            if position.is_some_and(|position| validate_window_position(position).is_err()) {
+                return Err(PlatformError::InvalidMenuPosition);
+            }
+            validate_menus(std::slice::from_ref(&menu)).map_err(|_| PlatformError::InvalidMenu)?;
+            self.native_popup_menus
+                .push(NativePopupMenuRequest { menu, position });
+            Ok(())
+        }
+    }
+
     /// Allow the current action to continue bubbling to the next ancestor handler.
     ///
     /// Action handlers consume by default, matching GPUI's command dispatch behavior. For input
@@ -2201,6 +2920,9 @@ mod tests {
     use super::*;
 
     struct SecondaryView;
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct MenuTestAction;
 
     #[derive(Default)]
     struct TestGlobal(u32);
@@ -2245,6 +2967,39 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn native_menu_effects_retain_per_window_and_bounded_popup_intent() {
+        let window = WindowHandle::next();
+        let mut cx = EventContext {
+            window: Some(window),
+            ..EventContext::default()
+        };
+        cx.set_window_menus([Menu::new("Window").item(crate::MenuItem::role(
+            "Minimize",
+            crate::OsAction::MinimizeWindow,
+        ))]);
+        assert!(matches!(cx.window_menus, Some(Some(ref menus)) if menus.len() == 1));
+        cx.use_application_menus();
+        assert!(matches!(cx.window_menus, Some(None)));
+
+        assert_eq!(
+            cx.show_native_popup_menu(Menu::new("Popup"), Some(Point::new(f32::NAN, 1.0))),
+            Err(PlatformError::InvalidMenuPosition)
+        );
+        for index in 0..MAX_NATIVE_POPUP_MENUS_PER_EVENT {
+            cx.show_native_popup_menu(
+                Menu::new("Popup").action(format!("Action {index}"), MenuTestAction),
+                None,
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            cx.show_native_popup_menu(Menu::new("Overflow"), None),
+            Err(PlatformError::QueueFull)
+        );
+    }
+
+    #[test]
     fn closing_popover_chain_restores_the_non_popover_owner_focus_once() {
         let owner = WindowHandle::next();
         let root = WindowHandle::next();
@@ -2275,6 +3030,27 @@ mod tests {
         let mut ordinary_window = EventContext::default();
         assert!(!ordinary_window.close_popover_chain());
         assert!(ordinary_window.focus_windows.is_empty());
+    }
+
+    #[test]
+    fn relaunch_prepares_one_process_request_and_uses_orderly_exit() {
+        let mut cx = EventContext::default();
+        assert!(
+            cx.relaunch_with(RelaunchOptions::new().executable("relative"))
+                .is_err()
+        );
+        assert!(!cx.exit);
+        assert!(cx.relaunch.is_none());
+
+        cx.relaunch_with(
+            RelaunchOptions::new()
+                .executable(std::env::current_exe().unwrap())
+                .without_arguments()
+                .working_directory(std::env::current_dir().unwrap()),
+        )
+        .unwrap();
+        assert!(cx.exit);
+        assert!(cx.relaunch.is_some());
     }
 
     #[test]
@@ -2424,10 +3200,15 @@ mod tests {
         assert!(cx.platform_requests.is_empty());
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn system_notifications_are_app_wide_but_still_bounded() {
-        let mut cx = EventContext::default();
+        let mut cx = EventContext {
+            app_info: Some(
+                AppInfo::new("QuickGUI Test", "1.0.0", "dev.quickgui.test")
+                    .expect("test application identity should be valid"),
+            ),
+            ..EventContext::default()
+        };
         assert_eq!(
             cx.show_system_notification(SystemNotification::new("", "Title", "Body")),
             Err(PlatformError::InvalidNotificationTag)
@@ -2443,7 +3224,17 @@ mod tests {
             .is_ok()
         );
         assert!(cx.dismiss_system_notification("background-job").is_ok());
-        assert_eq!(cx.platform_requests.len(), 2);
+        assert!(cx.notification_permission_status().is_ok());
+        assert!(cx.request_notification_permission().is_ok());
+        assert_eq!(cx.platform_requests.len(), 4);
+        assert!(matches!(
+            cx.platform_requests[2],
+            PlatformRequest::NotificationPermissionStatus { .. }
+        ));
+        assert!(matches!(
+            cx.platform_requests[3],
+            PlatformRequest::RequestNotificationPermission { .. }
+        ));
     }
 
     #[test]

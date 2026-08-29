@@ -49,6 +49,8 @@ mod macos_key_equivalents;
 mod macos_keyboard;
 #[cfg(target_os = "macos")]
 mod macos_menu;
+#[cfg(target_os = "macos")]
+mod macos_shell;
 mod markdown;
 mod menu;
 mod metrics;
@@ -107,9 +109,11 @@ pub use autocomplete::{
 pub use background::{BackgroundTaskError, MAX_PENDING_BACKGROUND_TASKS, TaskSpawnError};
 pub use canvas::Canvas;
 pub use clipboard::{
-    ClipboardEntry, ClipboardError, ClipboardImage, ClipboardImageFormat, ClipboardItem,
-    ClipboardString, ExternalPaths, MAX_CLIPBOARD_DECODED_IMAGE_BYTES, MAX_CLIPBOARD_ENTRIES,
-    MAX_CLIPBOARD_IMAGE_BYTES, MAX_CLIPBOARD_METADATA_BYTES, MAX_CLIPBOARD_PATH_BYTES,
+    ClipboardBookmark, ClipboardData, ClipboardEntry, ClipboardError, ClipboardImage,
+    ClipboardImageFormat, ClipboardItem, ClipboardString, ExternalPaths,
+    MAX_CLIPBOARD_BOOKMARK_TITLE_BYTES, MAX_CLIPBOARD_BOOKMARK_URL_BYTES, MAX_CLIPBOARD_DATA_BYTES,
+    MAX_CLIPBOARD_DECODED_IMAGE_BYTES, MAX_CLIPBOARD_ENTRIES, MAX_CLIPBOARD_IMAGE_BYTES,
+    MAX_CLIPBOARD_METADATA_BYTES, MAX_CLIPBOARD_MIME_TYPE_BYTES, MAX_CLIPBOARD_PATH_BYTES,
     MAX_CLIPBOARD_PATHS, MAX_CLIPBOARD_TEXT_BYTES, MAX_CLIPBOARD_TOTAL_PATH_BYTES,
 };
 pub use color::Color;
@@ -166,13 +170,13 @@ pub use event::{
     MAX_ACTIVE_TOUCHES_PER_WINDOW, MAX_DROPPED_FILES, MAX_EXTERNAL_DRAG_FILES,
     MAX_EXTERNAL_DRAG_PATH_BYTES, MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_TOTAL_PATH_BYTES,
     MAX_EXTERNAL_DRAG_URL_BYTES, MAX_FORM_FIELDS, MAX_FORM_SUBMISSIONS_PER_EVENT,
-    MAX_PENDING_TARGETED_ACTIONS, MAX_PINCH_DELTA_PER_EVENT, MAX_ROTATION_DEGREES_PER_EVENT,
-    MAX_SCROLL_LINES_PER_EVENT, MAX_SCROLL_PIXELS_PER_EVENT, MAX_TARGETED_ACTIONS_PER_EVENT,
-    MAX_TOUCH_COORDINATE, MAX_VALIDATION_ISSUES, MAX_VALIDATION_MESSAGE_BYTES, Modifiers,
-    MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MousePressureEvent, MouseUpEvent,
-    PinchEvent, PointerEvent, PointerPhase, PressureStage, RotationEvent, ScrollDelta,
-    ScrollWheelEvent, SmartMagnifyEvent, TouchEvent, TouchId, TouchPhase, ValidationIssue,
-    ValidationReport,
+    MAX_NATIVE_POPUP_MENUS_PER_EVENT, MAX_PENDING_TARGETED_ACTIONS, MAX_PINCH_DELTA_PER_EVENT,
+    MAX_ROTATION_DEGREES_PER_EVENT, MAX_SCROLL_LINES_PER_EVENT, MAX_SCROLL_PIXELS_PER_EVENT,
+    MAX_TARGETED_ACTIONS_PER_EVENT, MAX_TOUCH_COORDINATE, MAX_VALIDATION_ISSUES,
+    MAX_VALIDATION_MESSAGE_BYTES, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent,
+    MouseMoveEvent, MousePressureEvent, MouseUpEvent, PinchEvent, PointerEvent, PointerPhase,
+    PressureStage, RotationEvent, ScrollDelta, ScrollWheelEvent, SmartMagnifyEvent, TouchEvent,
+    TouchId, TouchPhase, ValidationIssue, ValidationReport,
 };
 pub use field::{Field, FieldState, Fieldset};
 pub use font::{
@@ -219,7 +223,11 @@ pub use markdown::{
     MarkdownBlock, MarkdownInlineRun, MarkdownInlineStyle, MarkdownListItem, MarkdownStyle,
     MarkdownTableAlign, MarkdownUpdate,
 };
-pub use menu::{Menu, MenuItem, OsAction, OsMenu, SystemMenuType};
+pub use menu::{
+    MAX_NATIVE_MENU_DEPTH, MAX_NATIVE_MENU_ITEMS, MAX_NATIVE_MENU_TEXT_BYTES,
+    MAX_NATIVE_MENU_TOTAL_TEXT_BYTES, Menu, MenuError, MenuIcon, MenuItem, MenuItemMark, OsAction,
+    OsMenu, SystemMenuType,
+};
 pub use metrics::{FrameMetrics, RenderStats};
 #[cfg(target_os = "macos")]
 pub use native_view::MacNativeView;
@@ -237,17 +245,24 @@ pub use picker::{
     PickerNext, PickerPageDown, PickerPageUp, PickerPrevious, PickerState, picker_key_bindings,
 };
 pub use platform::{
-    FileDialogFilter, MAX_ACTIVE_PLATFORM_DIALOGS, MAX_FILE_DIALOG_FILTER_BYTES,
-    MAX_FILE_DIALOG_FILTER_EXTENSIONS, MAX_FILE_DIALOG_FILTERS, MAX_OPEN_URLS,
-    MAX_OPEN_URLS_TOTAL_BYTES, MAX_PENDING_PLATFORM_REQUESTS, MAX_PENDING_SYSTEM_NOTIFICATIONS,
-    MAX_PLATFORM_PATH_BYTES, MAX_PLATFORM_REQUESTS_PER_EVENT, MAX_PLATFORM_TEXT_BYTES,
-    MAX_PLATFORM_URL_BYTES, MAX_PROMPT_BUTTON_BYTES, MAX_PROMPT_BUTTONS, MAX_SELECTED_PATHS,
+    AboutPanelOptions, FileDialogFilter, FileIconResponse, FileIconSize,
+    MAX_ABOUT_PANEL_TEXT_BYTES, MAX_ACTIVE_PLATFORM_DIALOGS, MAX_DOCK_BADGE_BYTES,
+    MAX_FILE_DIALOG_FILTER_BYTES, MAX_FILE_DIALOG_FILTER_EXTENSIONS, MAX_FILE_DIALOG_FILTERS,
+    MAX_OPEN_URLS, MAX_OPEN_URLS_TOTAL_BYTES, MAX_PENDING_NOTIFICATION_PERMISSION_REQUESTS,
+    MAX_PENDING_PLATFORM_REQUESTS, MAX_PENDING_SYSTEM_NOTIFICATIONS, MAX_PLATFORM_PATH_BYTES,
+    MAX_PLATFORM_REQUESTS_PER_EVENT, MAX_PLATFORM_TEXT_BYTES, MAX_PLATFORM_URL_BYTES,
+    MAX_PROMPT_BUTTON_BYTES, MAX_PROMPT_BUTTONS, MAX_SELECTED_PATHS,
     MAX_SELECTED_PATHS_TOTAL_BYTES, MAX_SYSTEM_NOTIFICATION_ACTION_BYTES,
-    MAX_SYSTEM_NOTIFICATION_ACTIONS, MAX_SYSTEM_NOTIFICATION_BODY_BYTES,
-    MAX_SYSTEM_NOTIFICATION_CATEGORIES, MAX_SYSTEM_NOTIFICATION_TAG_BYTES,
-    MAX_SYSTEM_NOTIFICATION_TITLE_BYTES, OpenUrls, PathPromptOptions, PathPromptResponse,
-    PlatformError, PlatformResponse, PromptButton, PromptLevel, SavePathOptions, SavePathResponse,
-    ShellResponse, SystemNotification, SystemNotificationAction, SystemNotificationResponse,
+    MAX_SYSTEM_NOTIFICATION_ACTIONS, MAX_SYSTEM_NOTIFICATION_ATTACHMENTS,
+    MAX_SYSTEM_NOTIFICATION_BODY_BYTES, MAX_SYSTEM_NOTIFICATION_CATEGORIES,
+    MAX_SYSTEM_NOTIFICATION_ICON_BYTES, MAX_SYSTEM_NOTIFICATION_OPTION_BYTES,
+    MAX_SYSTEM_NOTIFICATION_REPLY_BYTES, MAX_SYSTEM_NOTIFICATION_TAG_BYTES,
+    MAX_SYSTEM_NOTIFICATION_TITLE_BYTES, MAX_TASKBAR_OVERLAY_DESCRIPTION_BYTES,
+    MAX_USER_TASK_TEXT_BYTES, MAX_USER_TASKS, NotificationPermissionResponse,
+    NotificationPermissionStatus, OpenUrls, PathPromptOptions, PathPromptResponse, PlatformError,
+    PlatformResponse, PromptButton, PromptLevel, SavePathOptions, SavePathResponse, ShellResponse,
+    SystemNotification, SystemNotificationAction, SystemNotificationActionKind,
+    SystemNotificationAttachment, SystemNotificationResponse, SystemNotificationSound, UserTask,
 };
 pub use popover::{
     MAX_GRABBING_POPOVERS, PopoverAnchor, PopoverConstraintAdjustment, PopoverGravity,
@@ -263,31 +278,44 @@ pub use popover_menu::{
     PopoverMenuPrevious, popover_menu_key_bindings,
 };
 pub use quickgui_system::{
-    AutoStart, AutoStartMode, AutoStartOptions, ProtocolRegistration, ProtocolRegistrationOptions,
-    SecureStorage, SystemIntegrationError,
+    AppInfo, AppPaths, AutoStart, AutoStartMode, AutoStartOptions, BatteryState, BatteryStatus,
+    ColorScheme, IdleState, MAX_APP_IDENTIFIER_BYTES, MAX_APP_NAME_BYTES, MAX_APP_VERSION_BYTES,
+    MAX_IDLE_THRESHOLD, MAX_POWER_ASSERTION_REASON_BYTES, MAX_PREFERRED_LANGUAGES,
+    MAX_RELAUNCH_ARGUMENT_BYTES, MAX_RELAUNCH_ARGUMENTS, MAX_RELAUNCH_VALUE_BYTES,
+    MAX_SYSTEM_LOCALE_BYTES, MAX_SYSTEM_LOCALES_TOTAL_BYTES, MAX_SYSTEM_TEXT_BYTES,
+    OperatingSystem, OperatingSystemFamily, PermissionKind, PermissionManager, PermissionStatus,
+    PowerAssertion, PowerAssertionKind, PowerMonitor, PowerSource, PowerState,
+    ProtocolRegistration, ProtocolRegistrationOptions, RelaunchOptions, RelaunchRequest,
+    RelaunchedProcess, SecureStorage, SessionState, SystemBitness, SystemColor, SystemColorRole,
+    SystemInfo, SystemIntegrationError, SystemPreferences, ThermalState,
 };
 #[cfg(feature = "updater")]
 pub use quickgui_system::{
-    AvailableUpdate, DEFAULT_MAX_UPDATE_BYTES, MAX_UPDATE_MANIFEST_BYTES,
-    MAX_UPDATE_SIGNATURE_BYTES, UpdateClient, default_update_target,
+    AvailableUpdate, DEFAULT_MAX_EXPANDED_UPDATE_BYTES, DEFAULT_MAX_UPDATE_BYTES, InstalledUpdate,
+    MAX_UPDATE_ARCHIVE_ENTRIES, MAX_UPDATE_INSTALLER_ARGUMENT_BYTES,
+    MAX_UPDATE_INSTALLER_ARGUMENTS, MAX_UPDATE_MANIFEST_BYTES, MAX_UPDATE_SIGNATURE_BYTES,
+    UpdateCancellation, UpdateClient, UpdateInstallDisposition, UpdateInstallOptions,
+    UpdateProgress, WindowsUpdateInstallMode, default_update_target,
 };
 pub use runtime::{
-    App, AppConfig, AppError, Application, ClickListener, ContextMenuListener, DismissListener,
-    Drag, DragListener, DropListener, FormInvalidListener, FormSubmitListener, GlobalShortcutEvent,
-    HoverListener, InputListener, KeyDownListener, KeyUpListener, MAX_ACTION_LISTENERS_PER_WINDOW,
+    App, AppConfig, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
+    DesktopIntegrationSupport, DismissListener, Drag, DragListener, DropListener,
+    FormInvalidListener, FormSubmitListener, GlobalShortcutEvent, HoverListener, InputListener,
+    KeyDownListener, KeyUpListener, MAX_ACTION_LISTENERS_PER_WINDOW, MAX_APPLICATION_WINDOWS,
     MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW, MAX_GLOBAL_SHORTCUT_ACCELERATOR_BYTES,
     MAX_GLOBAL_SHORTCUTS, MAX_KEY_LISTENERS_PER_WINDOW, MAX_MOUSE_LISTENERS_PER_WINDOW,
-    MAX_PENDING_WINDOW_COMMANDS, MAX_SYSTEM_WINDOW_TABS, MAX_TRAY_ENCODED_ICON_BYTES,
-    MAX_TRAY_ICON_DIMENSION, MAX_TRAY_ICONS, MAX_TRAY_MENU_DEPTH, MAX_TRAY_MENU_ITEMS,
-    MAX_TRAY_TEXT_BYTES, MAX_WINDOW_COMMANDS_PER_EVENT, MAX_WINDOW_DOCUMENT_PATH_BYTES,
-    MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION,
+    MAX_PENDING_NATIVE_POPUP_MENUS, MAX_PENDING_WINDOW_COMMANDS, MAX_SYSTEM_WINDOW_TABS,
+    MAX_TRAY_ENCODED_ICON_BYTES, MAX_TRAY_ICON_DIMENSION, MAX_TRAY_ICONS, MAX_TRAY_MENU_DEPTH,
+    MAX_TRAY_MENU_ITEMS, MAX_TRAY_TEXT_BYTES, MAX_WINDOW_COMMANDS_PER_EVENT,
+    MAX_WINDOW_DOCUMENT_PATH_BYTES, MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION,
     MAX_WINDOW_TABBING_IDENTIFIER_BYTES, MAX_WINDOW_TITLE_BYTES, MouseDownListener,
     MouseExitListener, MouseMoveListener, MousePressureListener, MouseUpListener,
-    PerformanceProfile, PinchListener, PointerListener, PowerEvent, QuitMode, RotationListener,
-    ScrollWheelListener, SmartMagnifyListener, SubmitListener, TitleBarStyle, TouchListener,
-    TrayEvent, TrayEventKind, TrayIconImage, TrayIconOptions, TrayMenuItem, TrayMouseButton, View,
-    ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowCommandError,
-    WindowHandle, WindowKind, WindowOptions, WindowState, WindowTabState,
+    PerformanceProfile, PinchListener, PointerListener, PowerEvent, QuitMode, QuitReason,
+    QuitRequest, RotationListener, ScrollWheelListener, SmartMagnifyListener, SubmitListener,
+    TaskbarProgressState, TitleBarStyle, TouchListener, TrayEvent, TrayEventKind, TrayIconImage,
+    TrayIconOptions, TrayMenuItem, TrayMouseButton, View, ViewContext, WindowAppearance,
+    WindowBackgroundAppearance, WindowBounds, WindowCommandError, WindowHandle, WindowKind,
+    WindowLevel, WindowOptions, WindowRegistry, WindowState, WindowTabState,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime::{AppRunStatus, AppRunner, AppRunnerWaker};
@@ -301,7 +329,7 @@ pub use runtime::{AppRunStatus, AppRunner, AppRunnerWaker};
     target_os = "netbsd"
 ))]
 pub use runtime::{
-    MAX_SECOND_INSTANCE_ARGUMENTS, MAX_SECOND_INSTANCE_MESSAGE_BYTES,
+    MAX_DEEP_LINK_ARGUMENTS, MAX_SECOND_INSTANCE_ARGUMENTS, MAX_SECOND_INSTANCE_MESSAGE_BYTES,
     MAX_SINGLE_INSTANCE_IDENTIFIER_BYTES, SecondInstanceEvent, SingleInstanceError,
 };
 #[cfg(any(test, feature = "test-support"))]

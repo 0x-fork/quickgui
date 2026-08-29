@@ -31,6 +31,9 @@ A clipboard item can retain up to 32 ordered representations:
 
 - `ClipboardString` stores UTF-8 text and optional UTF-8 metadata. JSON helpers serialize without
   panicking and deserialize into an application type.
+- `ClipboardData` stores an arbitrary bounded MIME representation. `html`, `rtf`, and `utf8`
+  constructors cover the common rich-text formats without inventing a second clipboard model.
+- `ClipboardBookmark` stores one native URL/title pair.
 - `ClipboardImage` stores encoded bytes and their `ClipboardImageFormat`; reading an image on
   macOS does not decode or expand it into RGBA memory.
 - `ExternalPaths` stores a validated native file list. `ClipboardItem::text()` falls back to a
@@ -45,6 +48,8 @@ return `ClipboardError` on failure.
 | Entries | 32 |
 | Aggregate text | 8 MiB |
 | Aggregate metadata | 256 KiB |
+| Aggregate arbitrary MIME data | 64 MiB |
+| One MIME type | 256 bytes |
 | Aggregate encoded images | 64 MiB |
 | External paths | 1,024 |
 | One UTF-8 path | 16 KiB |
@@ -58,11 +63,12 @@ only after their first operation. Reads prioritize native file lists, then UTF-8
 PNG, JPEG, WebP, GIF, SVG, BMP, TIFF, ICO, or PNM bytes. `NSData.length` is checked before any native
 payload is copied into Rust-owned memory.
 
-QuickGUI writes external paths as a native filename property list and also supplies a text fallback.
-Multiple string entries are combined, while one string's metadata is stored in private pasteboard
-types beside a deterministic hash of the text. Metadata is restored only when the hash still
-matches, preventing stale application metadata from being attached after another process changes
-the text. Distinct image formats can coexist in one native declaration.
+QuickGUI writes external paths as native file URLs and also supplies a text fallback. HTML, RTF,
+arbitrary MIME data, and URL bookmarks map to registered pasteboard types. Multiple string entries
+are combined, while one string's metadata is stored in private pasteboard types beside a
+deterministic hash of the text. Metadata is restored only when the hash still matches, preventing
+stale application metadata from being attached after another process changes the text. Distinct
+image and data formats can coexist in one native declaration.
 
 macOS's shared Find pasteboard is available through the same bounded model:
 
@@ -75,9 +81,10 @@ let shared_search = cx.read_from_find_pasteboard()?;
 
 Windows and Linux use the lazy `arboard` backend. Text and native file lists remain typed. Clipboard
 images are converted to or from bounded RGBA and PNG because those platform abstractions do not
-expose every original encoding. Metadata is currently a macOS-preserved extension. Multi-format
-writes on Windows/Linux choose native paths first, then an image, then combined text; richer native
-projection belongs to their remaining runtime-acceptance work.
+expose every original encoding. Arbitrary MIME data, bookmarks, and hash-bound metadata are
+currently preserved by the direct macOS backend. Multi-format writes on Windows/Linux choose native
+paths first, then an image, then combined text; richer native projection belongs to their remaining
+runtime-acceptance work.
 
 ## Scheduling and tests
 

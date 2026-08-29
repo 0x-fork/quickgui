@@ -48,7 +48,7 @@ img(&logo)
     .accessibility_label("Project logo")
 ```
 
-`Image::decode` accepts PNG, JPEG, WebP, and the first GIF frame; `Image::from_rgba` accepts
+`Image::decode` accepts PNG, JPEG, TIFF, WebP, and the first GIF frame; `Image::from_rgba` accepts
 generated straight-alpha RGBA8 pixels. Decoding is explicit and synchronous so applications can
 move it off latency-sensitive input handling. A decoded image is limited to 4096 px per axis and
 64 MiB. Clones share immutable pixels and GPU identity. Each renderer retains at most 256 textures

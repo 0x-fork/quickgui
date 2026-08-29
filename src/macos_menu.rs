@@ -8,20 +8,34 @@ use objc2::{
     sel,
 };
 use objc2_app_kit::{
-    NSApplication, NSControlStateValueOff, NSControlStateValueOn, NSEventModifierFlags, NSMenu,
-    NSMenuDelegate, NSMenuItem,
+    NSApplication, NSControlStateValueOff, NSControlStateValueOn, NSEvent, NSEventModifierFlags,
+    NSImage, NSMenu, NSMenuDelegate, NSMenuItem, NSView,
 };
-use objc2_foundation::{MainThreadMarker, NSObject, NSString};
+use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSPoint, NSString};
 use winit::event_loop::EventLoopProxy;
+use winit::{
+    raw_window_handle::{HasWindowHandle, RawWindowHandle},
+    window::Window,
+};
 
 use crate::{
-    Key, Keystroke, Menu, MenuItem, Modifiers, OsAction, SystemMenuType, runtime::RuntimeEvent,
+    Key, Keystroke, Menu, MenuIcon, MenuItem, MenuItemMark, Modifiers, OsAction, SystemMenuType,
+    menu::validate_menus, runtime::RuntimeEvent,
 };
 
 struct MenuTargetIvars {
     proxy: EventLoopProxy<RuntimeEvent>,
+    scope: MenuTargetScope,
     os_actions: RefCell<Vec<Option<OsAction>>>,
+    typed_actions: RefCell<Vec<bool>>,
     native_focus_active: Cell<bool>,
+}
+
+#[derive(Clone, Copy)]
+enum MenuTargetScope {
+    Application,
+    Dock,
+    Popup(u64),
 }
 
 declare_class!(
@@ -42,7 +56,9 @@ declare_class!(
     unsafe impl NSMenuDelegate for QuickGuiMenuTarget {
         #[method(menuWillOpen:)]
         fn menu_will_open(&self, _menu: &NSMenu) {
-            let _ = self.ivars().proxy.send_event(RuntimeEvent::MenuWillOpen);
+            if matches!(self.ivars().scope, MenuTargetScope::Application) {
+                let _ = self.ivars().proxy.send_event(RuntimeEvent::MenuWillOpen);
+            }
         }
     }
 
@@ -51,24 +67,38 @@ declare_class!(
         fn perform_menu_action(&self, sender: &NSMenuItem) {
             let tag = unsafe { sender.tag() };
             if let Ok(action_id) = usize::try_from(tag) {
-                if self.ivars().native_focus_active.get()
-                    && self
+                let os_action = self
                     .ivars()
                     .os_actions
                     .borrow()
                     .get(action_id)
                     .copied()
-                    .flatten()
-                    .is_some_and(|action| perform_os_action(action, sender))
+                    .flatten();
+                let has_typed_action = self
+                    .ivars()
+                    .typed_actions
+                    .borrow()
+                    .get(action_id)
+                    .copied()
+                    .unwrap_or(false);
+                if os_action.is_some_and(|action| {
+                    (!has_typed_action
+                        || self.ivars().native_focus_active.get() && action.is_text_editing())
+                        && perform_os_action(action, sender)
+                })
                 {
                     return;
                 }
                 // The numeric id keeps the AppKit callback Send while typed actions remain cheap,
                 // main-thread-only `Rc` values owned by the runtime.
-                let _ = self
-                    .ivars()
-                    .proxy
-                    .send_event(RuntimeEvent::MenuAction(action_id));
+                let event = match self.ivars().scope {
+                    MenuTargetScope::Application => RuntimeEvent::MenuAction(action_id),
+                    MenuTargetScope::Dock => RuntimeEvent::DockMenuAction(action_id),
+                    MenuTargetScope::Popup(popup_id) => {
+                        RuntimeEvent::NativePopupMenuAction(popup_id, action_id)
+                    }
+                };
+                let _ = self.ivars().proxy.send_event(event);
             }
         }
     }
@@ -78,10 +108,13 @@ impl QuickGuiMenuTarget {
     fn new(
         mtm: MainThreadMarker,
         proxy: EventLoopProxy<RuntimeEvent>,
+        scope: MenuTargetScope,
     ) -> Retained<QuickGuiMenuTarget> {
         let allocated = mtm.alloc().set_ivars(MenuTargetIvars {
             proxy,
+            scope,
             os_actions: RefCell::new(Vec::new()),
+            typed_actions: RefCell::new(Vec::new()),
             native_focus_active: Cell::new(false),
         });
         unsafe { msg_send_id![super(allocated), init] }
@@ -109,6 +142,7 @@ pub(crate) struct MacMenuHost {
 
 impl MacMenuHost {
     pub fn new(menus: &[Menu], proxy: EventLoopProxy<RuntimeEvent>) -> Result<Self, String> {
+        validate_menus(menus).map_err(|error| error.to_string())?;
         let mtm = MainThreadMarker::new().ok_or_else(|| {
             "native menus must be initialized on the AppKit main thread".to_owned()
         })?;
@@ -116,7 +150,9 @@ impl MacMenuHost {
         let main_menu = unsafe { app.mainMenu() }
             .ok_or_else(|| "AppKit did not install an application menu bar".to_owned())?;
         let services_menu = unsafe { app.servicesMenu() };
-        let target = QuickGuiMenuTarget::new(mtm, proxy);
+        let windows_menu = unsafe { app.windowsMenu() };
+        let help_menu = unsafe { app.helpMenu() };
+        let target = QuickGuiMenuTarget::new(mtm, proxy, MenuTargetScope::Application);
         let mut root_items = Vec::with_capacity(menus.len() + 1);
         let mut action_items = Vec::new();
         let mut next_action_id = 0;
@@ -128,6 +164,8 @@ impl MacMenuHost {
                 mtm,
                 &target,
                 services_menu.as_deref(),
+                windows_menu.as_deref(),
+                help_menu.as_deref(),
                 &mut next_action_id,
                 &mut action_items,
             );
@@ -188,14 +226,11 @@ impl MacMenuHost {
         let os_actions = self.target.ivars().os_actions.borrow();
         let mut application_claims_close = keymap_claims_close;
         for (index, (item, state)) in self.action_items.iter().zip(states).enumerate() {
-            let native_available = native_focus_active
-                && os_actions
-                    .get(index)
-                    .copied()
-                    .flatten()
-                    .is_some_and(|action| unsafe {
-                        app.targetForAction(os_action_selector(action)).is_some()
-                    });
+            let os_action = os_actions.get(index).copied().flatten();
+            let native_available = os_action.is_some_and(|action| {
+                (!action.is_text_editing() || native_focus_active)
+                    && unsafe { app.targetForAction(os_action_selector(action)).is_some() }
+            });
             unsafe {
                 item.setEnabled(!state.disabled && (state.action_available || native_available));
                 item.setState(if state.checked {
@@ -208,6 +243,7 @@ impl MacMenuHost {
                 .shortcut
                 .as_ref()
                 .and_then(appkit_key_equivalent)
+                .or_else(|| os_action.and_then(default_os_action_key_equivalent))
                 .unwrap_or_else(|| (String::new(), NSEventModifierFlags::empty()));
             unsafe {
                 item.setKeyEquivalent(&NSString::from_str(&key));
@@ -231,6 +267,31 @@ impl MacMenuHost {
     }
 }
 
+fn default_os_action_key_equivalent(action: OsAction) -> Option<(String, NSEventModifierFlags)> {
+    let command = NSEventModifierFlags::NSEventModifierFlagCommand;
+    let command_option = command | NSEventModifierFlags::NSEventModifierFlagOption;
+    let command_control = command | NSEventModifierFlags::NSEventModifierFlagControl;
+    match action {
+        OsAction::HideApplication => Some(("h".to_owned(), command)),
+        OsAction::HideOtherApplications => Some(("h".to_owned(), command_option)),
+        OsAction::Quit => Some(("q".to_owned(), command)),
+        OsAction::CloseWindow => Some(("w".to_owned(), command)),
+        OsAction::MinimizeWindow => Some(("m".to_owned(), command)),
+        OsAction::ToggleFullscreen => Some(("f".to_owned(), command_control)),
+        OsAction::Cut
+        | OsAction::Copy
+        | OsAction::Paste
+        | OsAction::SelectAll
+        | OsAction::Undo
+        | OsAction::Redo
+        | OsAction::About
+        | OsAction::ShowAllApplications
+        | OsAction::ZoomWindow
+        | OsAction::BringAllToFront
+        | OsAction::ShowHelp => None,
+    }
+}
+
 fn is_close_shortcut(stroke: &Keystroke) -> bool {
     stroke.modifiers == Modifiers::SUPER
         && matches!(&stroke.key, Key::Character(value) if value.eq_ignore_ascii_case("w"))
@@ -246,11 +307,153 @@ impl Drop for MacMenuHost {
     }
 }
 
+/// Owns the application-declared menu returned by `applicationDockMenu:`.
+pub(crate) struct MacDockMenuHost {
+    native: Retained<NSMenu>,
+    _action_items: Vec<Retained<NSMenuItem>>,
+    _target: Retained<QuickGuiMenuTarget>,
+}
+
+impl MacDockMenuHost {
+    pub(crate) fn new(menu: &Menu, proxy: EventLoopProxy<RuntimeEvent>) -> Result<Self, String> {
+        validate_menus(std::slice::from_ref(menu)).map_err(|error| error.to_string())?;
+        let mtm = MainThreadMarker::new().ok_or_else(|| {
+            "the Dock menu must be initialized on the AppKit main thread".to_owned()
+        })?;
+        let app = NSApplication::sharedApplication(mtm);
+        let services_menu = unsafe { app.servicesMenu() };
+        let windows_menu = unsafe { app.windowsMenu() };
+        let help_menu = unsafe { app.helpMenu() };
+        let target = QuickGuiMenuTarget::new(mtm, proxy, MenuTargetScope::Dock);
+        let mut next_action_id = 0;
+        let mut action_items = Vec::new();
+        let native = build_menu(
+            menu,
+            mtm,
+            &target,
+            services_menu.as_deref(),
+            windows_menu.as_deref(),
+            help_menu.as_deref(),
+            &mut next_action_id,
+            &mut action_items,
+        );
+        for (item, declared) in
+            action_items
+                .iter()
+                .zip(crate::menu::collect_menu_actions(std::slice::from_ref(
+                    menu,
+                )))
+        {
+            unsafe {
+                item.setEnabled(!declared.disabled);
+                item.setState(if declared.checked {
+                    NSControlStateValueOn
+                } else {
+                    NSControlStateValueOff
+                });
+            }
+        }
+        Ok(Self {
+            native,
+            _action_items: action_items,
+            _target: target,
+        })
+    }
+
+    pub(crate) fn native_retained(&self) -> Retained<NSMenu> {
+        self.native.clone()
+    }
+}
+
+pub(crate) fn show_popup_menu(
+    menu: &Menu,
+    popup_id: u64,
+    window: &Window,
+    position: Option<crate::Point>,
+    states: &[MacMenuItemState],
+    native_focus_active: bool,
+    proxy: EventLoopProxy<RuntimeEvent>,
+) -> Result<bool, String> {
+    validate_menus(std::slice::from_ref(menu)).map_err(|error| error.to_string())?;
+    let mtm = MainThreadMarker::new()
+        .ok_or_else(|| "native popup menus must be shown on the AppKit main thread".to_owned())?;
+    let app = NSApplication::sharedApplication(mtm);
+    let services_menu = unsafe { app.servicesMenu() };
+    let windows_menu = unsafe { app.windowsMenu() };
+    let help_menu = unsafe { app.helpMenu() };
+    let target = QuickGuiMenuTarget::new(mtm, proxy, MenuTargetScope::Popup(popup_id));
+    let mut next_action_id = 0;
+    let mut action_items = Vec::new();
+    let native = build_menu(
+        menu,
+        mtm,
+        &target,
+        services_menu.as_deref(),
+        windows_menu.as_deref(),
+        help_menu.as_deref(),
+        &mut next_action_id,
+        &mut action_items,
+    );
+    if action_items.len() != states.len() {
+        return Err("native popup menu action state did not match its declaration".to_owned());
+    }
+    target.ivars().native_focus_active.set(native_focus_active);
+    let os_actions = target.ivars().os_actions.borrow();
+    for (index, (item, state)) in action_items.iter().zip(states).enumerate() {
+        let os_action = os_actions.get(index).copied().flatten();
+        let native_available = os_action.is_some_and(|action| {
+            (!action.is_text_editing() || native_focus_active)
+                && unsafe { app.targetForAction(os_action_selector(action)).is_some() }
+        });
+        unsafe {
+            item.setEnabled(!state.disabled && (state.action_available || native_available));
+            item.setState(if state.checked {
+                NSControlStateValueOn
+            } else {
+                NSControlStateValueOff
+            });
+        }
+        let (key, modifiers) = state
+            .shortcut
+            .as_ref()
+            .and_then(appkit_key_equivalent)
+            .or_else(|| os_action.and_then(default_os_action_key_equivalent))
+            .unwrap_or_else(|| (String::new(), NSEventModifierFlags::empty()));
+        unsafe { item.setKeyEquivalent(&NSString::from_str(&key)) };
+        item.setKeyEquivalentModifierMask(modifiers);
+    }
+    drop(os_actions);
+
+    let handle = window.window_handle().map_err(|error| error.to_string())?;
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return Err("an AppKit popup menu requires an AppKit window handle".to_owned());
+    };
+    // SAFETY: Winit owns this NSView for at least the complete lifetime of `window`, retained by
+    // the runtime while synchronous AppKit menu tracking is active.
+    let view = unsafe { &*handle.ns_view.as_ptr().cast::<NSView>() };
+    let (location, view) = if let Some(position) = position {
+        let frame = view.frame();
+        (
+            NSPoint::new(
+                f64::from(position.x),
+                frame.size.height - f64::from(position.y),
+            ),
+            Some(view),
+        )
+    } else {
+        (unsafe { NSEvent::mouseLocation() }, None)
+    };
+    Ok(unsafe { native.popUpMenuPositioningItem_atLocation_inView(None, location, view) })
+}
+
+#[allow(clippy::too_many_arguments)]
 fn build_menu(
     menu: &Menu,
     mtm: MainThreadMarker,
     target: &QuickGuiMenuTarget,
     services_menu: Option<&NSMenu>,
+    windows_menu: Option<&NSMenu>,
+    help_menu: Option<&NSMenu>,
     next_action_id: &mut usize,
     action_items: &mut Vec<Retained<NSMenuItem>>,
 ) -> Retained<NSMenu> {
@@ -265,24 +468,45 @@ fn build_menu(
                 name,
                 os_action,
                 checked,
+                mark,
+                icon,
                 ..
             } => {
-                let item = menu_item(mtm, name, Some(sel!(quickGuiPerformMenuAction:)), "");
-                unsafe {
-                    item.setTarget(Some(target));
-                    item.setTag(*next_action_id as isize);
-                    // Listener availability is known after the first retained-tree render.
-                    item.setEnabled(false);
-                    item.setState(if *checked {
-                        NSControlStateValueOn
-                    } else {
-                        NSControlStateValueOff
-                    });
-                }
-                target.ivars().os_actions.borrow_mut().push(*os_action);
-                *next_action_id += 1;
-                native.addItem(&item);
-                action_items.push(item);
+                append_action_item(
+                    &native,
+                    mtm,
+                    target,
+                    name,
+                    *os_action,
+                    true,
+                    *checked,
+                    *mark,
+                    icon.as_ref(),
+                    next_action_id,
+                    action_items,
+                );
+            }
+            MenuItem::Role {
+                name,
+                role,
+                checked,
+                mark,
+                icon,
+                ..
+            } => {
+                append_action_item(
+                    &native,
+                    mtm,
+                    target,
+                    name,
+                    Some(*role),
+                    false,
+                    *checked,
+                    *mark,
+                    icon.as_ref(),
+                    next_action_id,
+                    action_items,
+                );
             }
             MenuItem::Separator => native.addItem(&NSMenuItem::separatorItem(mtm)),
             MenuItem::Submenu(submenu) => {
@@ -292,6 +516,8 @@ fn build_menu(
                     mtm,
                     target,
                     services_menu,
+                    windows_menu,
+                    help_menu,
                     next_action_id,
                     action_items,
                 );
@@ -303,12 +529,78 @@ fn build_menu(
                 let item = menu_item(mtm, &os_menu.name, None, "");
                 match os_menu.menu_type {
                     SystemMenuType::Services => item.setSubmenu(services_menu),
+                    SystemMenuType::Window => item.setSubmenu(windows_menu),
+                    SystemMenuType::Help => item.setSubmenu(help_menu),
                 }
                 native.addItem(&item);
             }
         }
     }
     native
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_action_item(
+    native: &NSMenu,
+    mtm: MainThreadMarker,
+    target: &QuickGuiMenuTarget,
+    name: &str,
+    os_action: Option<OsAction>,
+    has_typed_action: bool,
+    checked: bool,
+    mark: MenuItemMark,
+    icon: Option<&MenuIcon>,
+    next_action_id: &mut usize,
+    action_items: &mut Vec<Retained<NSMenuItem>>,
+) {
+    let item = menu_item(mtm, name, Some(sel!(quickGuiPerformMenuAction:)), "");
+    unsafe {
+        item.setTarget(Some(target));
+        item.setTag(*next_action_id as isize);
+        // Listener and native responder availability are known after the first render.
+        item.setEnabled(false);
+        item.setState(if checked {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        });
+    }
+    if mark == MenuItemMark::Radio {
+        let symbol = NSString::from_str("circle.inset.filled");
+        let description = NSString::from_str("Selected");
+        let radio = unsafe {
+            NSImage::imageWithSystemSymbolName_accessibilityDescription(&symbol, Some(&description))
+        };
+        unsafe { item.setOnStateImage(radio.as_deref()) };
+    }
+    if let Some(icon) = icon.and_then(|icon| native_menu_icon(mtm, icon)) {
+        unsafe { item.setImage(Some(&icon)) };
+    }
+    target.ivars().os_actions.borrow_mut().push(os_action);
+    target
+        .ivars()
+        .typed_actions
+        .borrow_mut()
+        .push(has_typed_action);
+    *next_action_id += 1;
+    native.addItem(&item);
+    action_items.push(item);
+}
+
+fn native_menu_icon(mtm: MainThreadMarker, icon: &MenuIcon) -> Option<Retained<NSImage>> {
+    use image_codecs::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
+
+    let mut encoded = Vec::new();
+    if let Err(error) = PngEncoder::new(&mut encoded).write_image(
+        icon.rgba(),
+        icon.width(),
+        icon.height(),
+        ExtendedColorType::Rgba8,
+    ) {
+        tracing::warn!(%error, "could not encode a native menu icon");
+        return None;
+    }
+    NSImage::initWithData(mtm.alloc(), &NSData::with_bytes(&encoded))
 }
 
 fn os_action_selector(action: OsAction) -> Sel {
@@ -319,6 +611,17 @@ fn os_action_selector(action: OsAction) -> Sel {
         OsAction::SelectAll => sel!(selectAll:),
         OsAction::Undo => sel!(undo:),
         OsAction::Redo => sel!(redo:),
+        OsAction::About => sel!(orderFrontStandardAboutPanel:),
+        OsAction::HideApplication => sel!(hide:),
+        OsAction::HideOtherApplications => sel!(hideOtherApplications:),
+        OsAction::ShowAllApplications => sel!(unhideAllApplications:),
+        OsAction::Quit => sel!(terminate:),
+        OsAction::CloseWindow => sel!(performClose:),
+        OsAction::MinimizeWindow => sel!(performMiniaturize:),
+        OsAction::ZoomWindow => sel!(performZoom:),
+        OsAction::ToggleFullscreen => sel!(toggleFullScreen:),
+        OsAction::BringAllToFront => sel!(arrangeInFront:),
+        OsAction::ShowHelp => sel!(showHelp:),
     }
 }
 

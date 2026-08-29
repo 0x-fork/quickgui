@@ -20,6 +20,18 @@ Rust views and listeners read this identity from `ViewContext::window_handle` an
 `EventContext::window_handle`; language bindings project those core-routed handles into their own
 callback context rather than choosing a window from focus or creation order.
 
+Application-wide lookup comes from that same registry. Event callbacks receive a bounded immutable
+handle/active-window snapshot, while the externally pumped runner can query that snapshot and any
+mounted window's retained state directly. Membership slices are shared until a window is queued or
+removed, keeping ordinary high-frequency event construction allocation-free; bindings therefore do
+not mirror native window identity or infer focus themselves.
+
+Validated package identity, app-scoped standard paths, and the bounded operating-system/language
+snapshot are resolved once before the first window. The runtime owns these values and projects
+references into `ViewContext` plus cheap shared clones into `EventContext`; neither path resolution
+nor OS/locale discovery occurs during retained rendering. Metadata-free embedders keep identity and
+paths absent instead of inheriting a misleading framework-package default.
+
 Every entry owns a type-erased `View` boundary, but its listener callbacks downcast back to the
 original concrete view type before application code runs. This allows one application to host
 unrelated Rust view types without making the declarative `Element` tree generic. The entry also
@@ -102,6 +114,13 @@ most 256 URLs, 16 KiB each and 1 MiB total, then send one application event thro
 The resulting `EventContext` has no current window but shares the ordinary bounded global, entity,
 window-creation, and platform-effect queues. No lifecycle hook owns a timer or redraw source.
 
+An orderly relaunch is retained as one fully resolved process request rather than spawning inside
+an event callback. The exit path first performs the ordinary child-first close callbacks, then
+cancels foreground work, closes background/image worker queues without waiting on blocked
+application I/O, and retires native process integrations including the single-instance guard.
+Blocking `App::run` drops the completed runtime before spawning; externally pumped runners finalize
+the same services at the exit-producing pump and retain only the spawned process ID for inspection.
+
 `UNUserNotificationCenter` is created only for a bundled application and installed before launch
 when response handling is configured. The first notification starts one authorization request;
 until its background completion returns through the event-loop proxy, posts coalesce by tag in a
@@ -109,6 +128,20 @@ until its background completion returns through the event-loop proxy, posts coal
 strings, and distinct category sets are all bounded before retention. The category cache stops at
 64 immutable action sets and posts later notifications without buttons. Authorization, delivery,
 and response callbacks never mutate QuickGUI application state off the event-loop thread.
+
+Windows projects the same bounded notification value into a Toast XML document and retains native
+activation handlers only for immediate notifications; scheduled delivery is handed to the system.
+Linux registers one bounded tag/action map beside a persistent XDG portal connection and routes
+portal action signals back through the event proxy. Unsupported rich fields are rejected at that
+backend boundary. Dock/taskbar state, recent documents, About panels, file icons, and user tasks
+also enter through the application effect queue, so no platform object is created or mutated while
+an application callback still borrows its view.
+
+Deep links use one application callback on every desktop. AppKit supplies native URL arrays;
+Windows/Linux/BSD inspect a bounded initial argument snapshot and reuse the existing single-instance
+message for later process launches. The core normalizes existing file arguments into file URLs
+before invoking `on_open_urls`, then invokes `on_second_instance` in the same event context when
+both callbacks are installed.
 
 ## Shared entity ownership
 

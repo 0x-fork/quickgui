@@ -353,6 +353,10 @@ pub struct TestAppContext {
     pending_global_notification_types: HashSet<TypeId>,
     pending_all_globals: bool,
     foreground_tasks: ForegroundTaskSpawner,
+    app_info: Option<AppInfo>,
+    app_paths: Option<AppPaths>,
+    system_info: SystemInfo,
+    system_preferences: SystemPreferences,
     clipboard: ClipboardService,
     displays: Displays,
     keyboard_layout: KeyboardLayout,
@@ -361,12 +365,17 @@ pub struct TestAppContext {
     font_system: SharedFontSystem,
     keymap: Keymap,
     menus: Vec<Menu>,
+    system_notifications: HashMap<Arc<str>, SystemNotification>,
+    notification_permission_status: NotificationPermissionStatus,
     application_callbacks: ApplicationCallbacks,
     quit_mode: QuitMode,
     focus_history: Vec<WindowHandle>,
     now: Rc<Cell<Instant>>,
     animation_epoch: Instant,
     exited: bool,
+    quit_phase_active: bool,
+    last_window_quit_prevented: bool,
+    relaunch_request: Option<RelaunchRequest>,
     form_submission_depth: u8,
     visual_renderer: Option<OffscreenRenderer>,
 }
@@ -381,6 +390,17 @@ impl TestAppContext {
     pub fn from_app<V: View>(app: App<V>) -> Result<(Self, TestWindowHandle<V>), TestAppError> {
         validate_window_options(&app.config)?;
         let font_system = create_shared_font_system(&app.assets, &app.fonts)?;
+        let app_info = app.app_info;
+        let app_paths = match (app.app_paths, app_info.as_ref()) {
+            (Some(paths), _) => Some(paths),
+            (None, Some(info)) => Some(
+                info.paths()
+                    .map_err(|error| TestAppError::View(error.to_string()))?,
+            ),
+            (None, None) => None,
+        };
+        let system_info = SystemInfo::current();
+        let system_preferences = SystemPreferences::default();
         let request = WindowRequest::new(app.view, app.config);
         let initial = TestWindowHandle::new(request.handle);
         let now = Rc::new(Cell::new(Instant::now()));
@@ -400,6 +420,10 @@ impl TestAppContext {
             pending_global_notification_types: HashSet::with_capacity(8),
             pending_all_globals: false,
             foreground_tasks: ForegroundTaskSpawner::new_for_test(now.clone()),
+            app_info,
+            app_paths,
+            system_info,
+            system_preferences,
             clipboard: ClipboardService::memory(),
             displays: Displays::test_default(),
             keyboard_layout: KeyboardLayout::default(),
@@ -408,12 +432,17 @@ impl TestAppContext {
             font_system,
             keymap,
             menus: app.menus,
+            system_notifications: HashMap::new(),
+            notification_permission_status: NotificationPermissionStatus::Granted,
             application_callbacks: app.application_callbacks,
             quit_mode: app.quit_mode,
             focus_history: Vec::with_capacity(4),
             now,
             animation_epoch,
             exited: false,
+            quit_phase_active: false,
+            last_window_quit_prevented: false,
+            relaunch_request: None,
             form_submission_depth: 0,
             visual_renderer: None,
         };
@@ -435,12 +464,68 @@ impl TestAppContext {
         self.exited
     }
 
+    /// Inspect the prepared process request without spawning it in the headless runtime.
+    pub fn relaunch_request(&self) -> Option<&RelaunchRequest> {
+        self.relaunch_request.as_ref()
+    }
+
     pub fn is_window_open(&self, window: WindowHandle) -> bool {
         self.windows.contains_key(&window)
     }
 
     pub fn menus(&self) -> &[Menu] {
         &self.menus
+    }
+
+    /// The explicit native menu override for one headless window, if any.
+    pub fn window_menu_override(&self, window: WindowHandle) -> Option<&[Menu]> {
+        self.windows.get(&window)?.config.window_menus.as_deref()
+    }
+
+    /// Inspect a deterministic posted notification by stable replacement tag.
+    pub fn system_notification(&self, tag: &str) -> Option<&SystemNotification> {
+        self.system_notifications.get(tag)
+    }
+
+    /// Set the deterministic notification authorization used by platform-request futures.
+    pub fn set_notification_permission_status(&mut self, status: NotificationPermissionStatus) {
+        self.notification_permission_status = status;
+    }
+
+    pub fn app_info(&self) -> Option<&AppInfo> {
+        self.app_info.as_ref()
+    }
+
+    pub fn app_paths(&self) -> Option<&AppPaths> {
+        self.app_paths.as_ref()
+    }
+
+    pub fn system_info(&self) -> &SystemInfo {
+        &self.system_info
+    }
+
+    /// Inspect the deterministic system-preference snapshot.
+    pub const fn system_preferences(&self) -> SystemPreferences {
+        self.system_preferences
+    }
+
+    pub fn window_registry(&self) -> WindowRegistry {
+        let total = self.windows.len() + self.pending_windows.len();
+        let mut handles = self.windows();
+        handles.extend(
+            self.pending_windows
+                .iter()
+                .take(MAX_APPLICATION_WINDOWS.saturating_sub(handles.len()))
+                .map(|request| request.handle),
+        );
+        handles.sort_unstable();
+        handles.dedup();
+        handles.truncate(MAX_APPLICATION_WINDOWS);
+        WindowRegistry::new(
+            Arc::<[WindowHandle]>::from(handles),
+            self.active_window,
+            total > MAX_APPLICATION_WINDOWS,
+        )
     }
 
     /// Inspect the current deterministic display snapshot.
@@ -504,6 +589,30 @@ impl TestAppContext {
         self.run_until_idle()
     }
 
+    /// Replace the deterministic system-preference snapshot and rebuild only observing views.
+    pub fn simulate_system_preferences_change(
+        &mut self,
+        system_preferences: SystemPreferences,
+    ) -> Result<(), TestAppError> {
+        if self.system_preferences == system_preferences {
+            return Ok(());
+        }
+        self.system_preferences = system_preferences;
+        let now = self.now();
+        for state in self.windows.values_mut() {
+            let reduce_motion = state.config.reduce_motion
+                || system_preferences
+                    .reduce_motion()
+                    .is_some_and(|enabled| enabled);
+            state.ui.set_reduce_motion(reduce_motion);
+            state.ui.set_animations_enabled(!reduce_motion, now);
+            if state.listeners.observes_system_preferences {
+                state.dirty = true;
+            }
+        }
+        self.run_until_idle()
+    }
+
     /// Inspect the deterministic in-memory general clipboard.
     pub fn read_from_clipboard(&self) -> Result<Option<ClipboardItem>, ClipboardError> {
         self.clipboard.read(ClipboardTarget::General)
@@ -512,6 +621,18 @@ impl TestAppContext {
     /// Seed or replace the deterministic in-memory general clipboard.
     pub fn write_to_clipboard(&self, item: ClipboardItem) -> Result<(), ClipboardError> {
         self.clipboard.write(ClipboardTarget::General, item)
+    }
+
+    /// Inspect the deterministic in-memory Linux primary selection.
+    #[cfg(target_os = "linux")]
+    pub fn read_from_selection_clipboard(&self) -> Result<Option<ClipboardItem>, ClipboardError> {
+        self.clipboard.read(ClipboardTarget::Selection)
+    }
+
+    /// Seed or replace the deterministic in-memory Linux primary selection.
+    #[cfg(target_os = "linux")]
+    pub fn write_to_selection_clipboard(&self, item: ClipboardItem) -> Result<(), ClipboardError> {
+        self.clipboard.write(ClipboardTarget::Selection, item)
     }
 
     /// Inspect the deterministic in-memory macOS Find pasteboard.
@@ -1606,6 +1727,18 @@ impl TestAppContext {
         self.run_until_idle()
     }
 
+    /// Deliver one deterministic native power or login-session transition.
+    pub fn simulate_power_event(&mut self, event: PowerEvent) -> Result<(), TestAppError> {
+        let Some(mut callback) = self.application_callbacks.power_event.take() else {
+            return Ok(());
+        };
+        let mut cx = self.event_context(None);
+        callback(event, &mut cx);
+        self.application_callbacks.power_event = Some(callback);
+        self.apply_context(None, cx)?;
+        self.run_until_idle()
+    }
+
     pub fn simulate_system_notification_response(
         &mut self,
         response: SystemNotificationResponse,
@@ -1673,21 +1806,26 @@ impl TestAppContext {
         let pointer_position = window
             .and_then(|window| self.windows.get(&window))
             .and_then(|window| window.pointer);
-        EventContext::with_runtime(
-            self.globals.clone(),
-            self.foreground_tasks.clone(),
-            self.clipboard.clone(),
-            self.displays.clone(),
-            self.keyboard_layout.clone(),
-            self.assets.clone(),
-            crate::event::EventWindowContext {
+        EventContext::with_runtime(EventRuntimeContext {
+            globals: self.globals.clone(),
+            foreground_tasks: self.foreground_tasks.clone(),
+            clipboard: self.clipboard.clone(),
+            displays: self.displays.clone(),
+            keyboard_layout: self.keyboard_layout.clone(),
+            assets: self.assets.clone(),
+            app_info: self.app_info.clone(),
+            app_paths: self.app_paths.clone(),
+            system_info: self.system_info.clone(),
+            system_preferences: self.system_preferences,
+            window_registry: self.window_registry(),
+            window: crate::event::EventWindowContext {
                 window,
                 parent,
                 popover_owner: popover_context.map(|context| context.owner),
                 popover_root: popover_context.map(|context| context.root),
                 pointer_position,
             },
-        )
+        })
     }
 
     fn popover_context(&self, window: WindowHandle) -> Option<PopoverWindowContext> {
@@ -1715,12 +1853,52 @@ impl TestAppContext {
         origin: Option<WindowHandle>,
         mut cx: EventContext,
     ) -> Result<(), TestAppError> {
-        if !cx.platform_requests.is_empty() {
+        let mut unsupported_platform_request = false;
+        for request in std::mem::take(&mut cx.platform_requests) {
+            match request {
+                PlatformRequest::ShowSystemNotification(notification) => {
+                    if self.notification_permission_status == NotificationPermissionStatus::Granted
+                    {
+                        self.system_notifications
+                            .insert(notification.tag.clone(), notification);
+                    }
+                }
+                PlatformRequest::DismissSystemNotification(tag) => {
+                    self.system_notifications.remove(&tag);
+                }
+                PlatformRequest::NotificationPermissionStatus { responder } => {
+                    responder.complete(Ok(self.notification_permission_status));
+                }
+                PlatformRequest::RequestNotificationPermission { responder } => {
+                    if self.notification_permission_status
+                        == NotificationPermissionStatus::NotDetermined
+                    {
+                        self.notification_permission_status = NotificationPermissionStatus::Granted;
+                    }
+                    responder.complete(Ok(self.notification_permission_status));
+                }
+                request => {
+                    request.complete_error(PlatformError::Unsupported);
+                    unsupported_platform_request = true;
+                }
+            }
+        }
+        if unsupported_platform_request {
             return Err(TestAppError::UnsupportedPlatformRequest);
         }
-        if cx.exit {
-            self.exited = true;
-            self.pending_closes.extend(self.windows.keys().copied());
+        if !cx.native_popup_menus.is_empty() {
+            return Err(TestAppError::UnsupportedPlatformRequest);
+        }
+        let relaunch_requested = cx.relaunch.is_some();
+        if let Some(request) = cx.relaunch.take() {
+            self.relaunch_request = Some(request);
+        }
+        if cx.exit && !self.quit_phase_active {
+            self.request_quit(if relaunch_requested {
+                QuitReason::Relaunch
+            } else {
+                QuitReason::Explicit
+            })?;
         }
         if !enqueue_global_notifications(
             &mut self.pending_global_notifications,
@@ -1768,7 +1946,11 @@ impl TestAppContext {
         }
         self.pending_closes.append(&mut cx.close_windows);
         for window in cx.focus_windows.drain(..) {
-            if self.windows.contains_key(&window) {
+            if self
+                .windows
+                .get(&window)
+                .is_some_and(|window| window.config.focusable)
+            {
                 self.set_active_window(Some(window))?;
             }
         }
@@ -1781,7 +1963,16 @@ impl TestAppContext {
             self.apply_window_command(command)?;
         }
         if let Some(menus) = cx.menus.take() {
+            validate_menus(&menus).map_err(|error| TestAppError::View(error.to_string()))?;
             self.menus = menus;
+        }
+        if let Some(window_menus) = cx.window_menus.take()
+            && let Some(origin) = origin
+        {
+            if let Some(menus) = window_menus.as_deref() {
+                validate_menus(menus).map_err(|error| TestAppError::View(error.to_string()))?;
+            }
+            self.window_mut(origin)?.config.window_menus = window_menus;
         }
 
         let mut immediate = Vec::new();
@@ -2012,7 +2203,7 @@ impl TestAppContext {
             let state = test_window_state(
                 handle,
                 &request.options,
-                request.options.focus,
+                request.options.focus && request.options.focusable,
                 &self.displays,
                 parent_state,
             );
@@ -2042,12 +2233,61 @@ impl TestAppContext {
                 pointer: None,
             };
             self.windows.insert(handle, window);
-            if self.active_window.is_none() || self.window(handle)?.config.focus {
+            self.last_window_quit_prevented = false;
+            if (self.active_window.is_none() || self.window(handle)?.config.focus)
+                && self.window(handle)?.config.focusable
+            {
                 self.set_active_window(Some(handle))?;
             }
             progress = true;
         }
         Ok(progress)
+    }
+
+    fn invoke_quit_callback(
+        &mut self,
+        request: QuitRequest,
+        before: bool,
+    ) -> Result<bool, TestAppError> {
+        let callback = if before {
+            self.application_callbacks.before_quit.take()
+        } else {
+            self.application_callbacks.will_quit.take()
+        };
+        let Some(mut callback) = callback else {
+            return Ok(true);
+        };
+        let mut cx = self.event_context(None);
+        self.quit_phase_active = true;
+        callback(request, &mut cx);
+        let prevented = cx.prevent_quit;
+        if before {
+            self.application_callbacks.before_quit = Some(callback);
+        } else {
+            self.application_callbacks.will_quit = Some(callback);
+        }
+        let result = self.apply_context(None, cx);
+        self.quit_phase_active = false;
+        result?;
+        Ok(!prevented)
+    }
+
+    fn request_quit(&mut self, reason: QuitReason) -> Result<(), TestAppError> {
+        let request = QuitRequest { reason };
+        let accepted = self.invoke_quit_callback(request, true)?
+            && self.invoke_quit_callback(request, false)?;
+        if !accepted {
+            if reason == QuitReason::Relaunch {
+                self.relaunch_request = None;
+            }
+            if reason == QuitReason::LastWindowClosed {
+                self.last_window_quit_prevented = true;
+            }
+            return Ok(());
+        }
+        self.exited = true;
+        self.pending_closes.extend(self.windows.keys().copied());
+        Ok(())
     }
 
     fn close_pending_windows(&mut self) -> Result<bool, TestAppError> {
@@ -2149,8 +2389,9 @@ impl TestAppContext {
             && self.windows.is_empty()
             && self.pending_windows.is_empty()
             && self.quit_mode.quits_when_empty()
+            && !self.last_window_quit_prevented
         {
-            self.exited = true;
+            self.request_quit(QuitReason::LastWindowClosed)?;
         }
         Ok(!closed.is_empty())
     }
@@ -2316,6 +2557,10 @@ impl TestAppContext {
             let displays = self.displays.clone();
             let keyboard_layout = self.keyboard_layout.clone();
             let assets = self.assets.clone();
+            let app_info = self.app_info.clone();
+            let app_paths = self.app_paths.clone();
+            let system_info = self.system_info.clone();
+            let system_preferences = self.system_preferences;
             let state_snapshot = self.window(window)?.state;
             let (root, requested, repaint_deadline) = {
                 let state = self.window_mut(window)?;
@@ -2331,6 +2576,10 @@ impl TestAppContext {
                     &displays,
                     &keyboard_layout,
                     &assets,
+                    app_info.as_ref(),
+                    app_paths.as_ref(),
+                    &system_info,
+                    &system_preferences,
                     None,
                     &foreground_tasks,
                     &globals,
@@ -2339,10 +2588,12 @@ impl TestAppContext {
             let previous_focus = self.window(window)?.ui.focused();
             {
                 let state = self.window_mut(window)?;
-                state.ui.set_reduce_motion(state.config.reduce_motion);
-                state
-                    .ui
-                    .set_animations_enabled(!state.config.reduce_motion, now);
+                let reduce_motion = state.config.reduce_motion
+                    || system_preferences
+                        .reduce_motion()
+                        .is_some_and(|enabled| enabled);
+                state.ui.set_reduce_motion(reduce_motion);
+                state.ui.set_animations_enabled(!reduce_motion, now);
                 state
                     .ui
                     .set_root_for_test(
@@ -2935,22 +3186,28 @@ impl TestAppContext {
                     WindowBounds::Windowed(Rect::new(bounds.x, bounds.y, size.width, size.height)),
                 );
             }
-            WindowCommand::Minimize(_) => state.state.minimized = true,
+            WindowCommand::Minimize(_) => {
+                if state.state.minimizable {
+                    state.state.minimized = true;
+                }
+            }
             WindowCommand::Restore(_) => {
                 state.state.minimized = false;
                 let bounds = state.state.bounds.bounds();
                 set_test_window_bounds(state, WindowBounds::Windowed(bounds));
             }
             WindowCommand::Zoom(_) => {
-                let bounds = state.state.bounds.bounds();
-                set_test_window_bounds(
-                    state,
-                    if state.state.maximized {
-                        WindowBounds::Windowed(bounds)
-                    } else {
-                        WindowBounds::Maximized(bounds)
-                    },
-                );
+                if state.state.maximized || state.state.resizable && state.state.maximizable {
+                    let bounds = state.state.bounds.bounds();
+                    set_test_window_bounds(
+                        state,
+                        if state.state.maximized {
+                            WindowBounds::Windowed(bounds)
+                        } else {
+                            WindowBounds::Maximized(bounds)
+                        },
+                    );
+                }
             }
             WindowCommand::ToggleFullscreen(_) => {
                 let bounds = state.state.bounds.bounds();
@@ -2978,13 +3235,108 @@ impl TestAppContext {
             WindowCommand::SetMovable(_, movable) => state.state.movable = movable,
             WindowCommand::SetResizable(_, resizable) => state.state.resizable = resizable,
             WindowCommand::SetMinimumSize(_, minimum) => {
-                if state.config.minimum_size != minimum {
+                let compatible = match (minimum, state.config.maximum_size) {
+                    (Some(minimum), Some(maximum)) => {
+                        minimum.width <= maximum.width && minimum.height <= maximum.height
+                    }
+                    _ => true,
+                };
+                if compatible && state.config.minimum_size != minimum {
                     state.config.minimum_size = minimum;
                     state.state.minimum_size = minimum;
                 }
             }
+            WindowCommand::SetMaximumSize(_, maximum) => {
+                let compatible = match (state.config.minimum_size, maximum) {
+                    (Some(minimum), Some(maximum)) => {
+                        minimum.width <= maximum.width && minimum.height <= maximum.height
+                    }
+                    _ => true,
+                };
+                if compatible && state.config.maximum_size != maximum {
+                    state.config.maximum_size = maximum;
+                    state.state.maximum_size = maximum;
+                }
+            }
             WindowCommand::SetMinimizable(_, minimizable) => {
+                state.config.is_minimizable = minimizable;
                 state.state.minimizable = minimizable;
+            }
+            WindowCommand::SetMaximizable(_, maximizable) => {
+                state.config.is_maximizable = maximizable;
+                state.state.maximizable = maximizable;
+            }
+            WindowCommand::SetClosable(_, closable) => {
+                state.config.is_closable = closable;
+                state.state.closable = closable;
+            }
+            WindowCommand::SetDecorated(_, decorated) => {
+                state.config.decorated = decorated;
+                state.state.decorated = decorated;
+            }
+            WindowCommand::SetShadow(_, shadow) => {
+                state.config.shadow = shadow;
+                state.state.shadow = shadow;
+            }
+            WindowCommand::SetContentProtected(_, protected) => {
+                state.config.content_protected = protected;
+                state.state.content_protected = protected;
+            }
+            WindowCommand::SetWindowLevel(_, level) => {
+                state.config.window_level = level;
+                state.state.window_level = effective_window_level(&state.config);
+            }
+            WindowCommand::SetFocusable(_, focusable) => {
+                state.config.focusable = focusable;
+                state.state.focusable = focusable;
+                if !focusable {
+                    state.config.focus = false;
+                    state.state.focused = false;
+                }
+            }
+            WindowCommand::SetSkipTaskbar(_, skip) => {
+                state.config.skip_taskbar = skip;
+                state.state.skip_taskbar = skip;
+            }
+            WindowCommand::SetVisibleOnAllWorkspaces(_, visible) => {
+                state.config.visible_on_all_workspaces = visible;
+                state.state.visible_on_all_workspaces =
+                    effective_visible_on_all_workspaces(&state.config);
+            }
+            WindowCommand::SetOpacity(_, opacity) => {
+                state.config.opacity = opacity;
+                state.state.opacity = opacity;
+            }
+            WindowCommand::SetIcon(_, icon) => {
+                state.state.has_icon = icon.is_some();
+                state.config.icon = icon;
+            }
+            WindowCommand::SetTaskbarProgress(_, progress_state, progress) => {
+                state.config.taskbar_progress_state = progress_state;
+                state.config.taskbar_progress = progress;
+                state.state.taskbar_progress_state = progress_state;
+                state.state.taskbar_progress = progress;
+            }
+            WindowCommand::SetTaskbarOverlayIcon(_, icon, description) => {
+                state.state.has_taskbar_overlay_icon = icon.is_some();
+                state.config.taskbar_overlay_icon = icon;
+                state.config.taskbar_overlay_description = description;
+            }
+            WindowCommand::SetCursorVisible(_, visible) => {
+                state.config.cursor_visible = visible;
+                state.state.cursor_visible = visible;
+            }
+            WindowCommand::SetCursorGrab(_, mode) => {
+                state.config.cursor_grab = mode;
+                state.state.cursor_grab = mode;
+            }
+            WindowCommand::SetCursorHitTest(_, hit_test) => {
+                state.config.cursor_hit_test = hit_test;
+                state.state.cursor_hit_test = hit_test;
+            }
+            WindowCommand::SetCursorPosition(_, position) => {
+                state.config.cursor_position = Some(position);
+                state.state.cursor_position = Some(position);
             }
             WindowCommand::SetAppearance(_, preference) => {
                 state.config.preferred_appearance = preference;
@@ -3109,12 +3461,14 @@ fn test_window_state(
         bounds,
         viewport_size: Size::new(rect.width, rect.height),
         minimum_size: options.minimum_size,
+        maximum_size: options.maximum_size,
         scale_factor: display_id
             .and_then(|id| displays.find(id))
             .map_or(1.0, Display::scale_factor),
         appearance: options.preferred_appearance.unwrap_or_default(),
         background_appearance: options.window_background,
         focused,
+        focusable: options.focusable,
         visible: options.show,
         minimized: false,
         maximized: matches!(bounds, WindowBounds::Maximized(_)),
@@ -3123,6 +3477,23 @@ fn test_window_state(
         movable: options.is_movable,
         resizable: options.is_resizable,
         minimizable: options.is_minimizable,
+        maximizable: options.is_maximizable,
+        closable: options.is_closable,
+        decorated: options.decorated,
+        shadow: options.shadow,
+        content_protected: options.content_protected,
+        window_level: effective_window_level(options),
+        skip_taskbar: options.skip_taskbar,
+        visible_on_all_workspaces: effective_visible_on_all_workspaces(options),
+        opacity: options.opacity,
+        has_icon: options.icon.is_some(),
+        taskbar_progress_state: options.taskbar_progress_state,
+        taskbar_progress: options.taskbar_progress,
+        has_taskbar_overlay_icon: options.taskbar_overlay_icon.is_some(),
+        cursor_visible: options.cursor_visible,
+        cursor_grab: options.cursor_grab,
+        cursor_hit_test: options.cursor_hit_test,
+        cursor_position: options.cursor_position,
         represented_file: options.represented_file.is_some(),
         document_edited: options.document_edited,
         native_tabbing: options.tabbing_identifier.is_some(),
@@ -3270,6 +3641,119 @@ mod tests {
             cx.read(view, |view| view.clicked.clone()).unwrap().as_ref(),
             "bundled message"
         );
+    }
+
+    #[derive(Default)]
+    struct EnvironmentAccessView {
+        rendered: String,
+        clicked: String,
+    }
+
+    impl View for EnvironmentAccessView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let info = cx.app_info().unwrap();
+            let paths = cx.app_paths().unwrap();
+            self.rendered = format!(
+                "{}:{}:{}",
+                info.name(),
+                paths.config_dir().unwrap().display(),
+                cx.system_info().architecture()
+            );
+            let read_environment = cx.listener("read-environment", |this, cx| {
+                this.clicked = format!(
+                    "{}:{}:{}",
+                    cx.app_info().unwrap().version(),
+                    cx.app_paths().unwrap().resource_dir().display(),
+                    cx.system_info().operating_system().as_str()
+                );
+                cx.invalidate();
+            });
+            button().on_click(read_environment).child("Read")
+        }
+    }
+
+    #[test]
+    fn application_environment_is_shared_with_view_and_event_contexts() {
+        let info = AppInfo::new("Example", "1.2.3", "dev.quickgui.example").unwrap();
+        let paths = info
+            .paths()
+            .unwrap()
+            .with_config_dir(Some("/tmp/quickgui-config"))
+            .with_resource_dir("/tmp/quickgui-resources");
+        let (mut cx, view) = App::new(EnvironmentAccessView::default())
+            .app_info(info.clone())
+            .app_paths(paths.clone())
+            .into_test_context()
+            .unwrap();
+
+        assert_eq!(cx.app_info(), Some(&info));
+        assert_eq!(cx.app_paths(), Some(&paths));
+        assert!(
+            cx.read(view, |view| view.rendered.clone())
+                .unwrap()
+                .starts_with("Example:/tmp/quickgui-config:")
+        );
+        cx.click(view.window_handle(), "read-environment").unwrap();
+        assert!(
+            cx.read(view, |view| view.clicked.clone())
+                .unwrap()
+                .starts_with("1.2.3:/tmp/quickgui-resources:")
+        );
+    }
+
+    #[derive(Default)]
+    struct SystemPreferencesView {
+        observing: bool,
+        rendered: SystemPreferences,
+        clicked: SystemPreferences,
+    }
+
+    impl View for SystemPreferencesView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            if self.observing {
+                self.rendered = cx.system_preferences();
+            }
+            let read_preferences = cx.listener("read-system-preferences", |this, cx| {
+                this.clicked = cx.system_preferences();
+            });
+            button().on_click(read_preferences).child("Read")
+        }
+    }
+
+    #[test]
+    fn system_preferences_invalidate_only_current_declarative_subscribers() {
+        let (mut cx, view) = TestAppContext::new(SystemPreferencesView {
+            observing: true,
+            ..SystemPreferencesView::default()
+        })
+        .unwrap();
+        let window = view.window_handle();
+        let initial_renders = cx.render_count(window).unwrap();
+        let reduced = SystemPreferences::default()
+            .with_color_scheme(ColorScheme::Dark)
+            .with_reduce_motion(Some(true))
+            .with_increase_contrast(Some(true));
+
+        cx.simulate_system_preferences_change(reduced).unwrap();
+        assert_eq!(cx.system_preferences(), reduced);
+        assert_eq!(cx.read(view, |view| view.rendered).unwrap(), reduced);
+        assert_eq!(cx.render_count(window).unwrap(), initial_renders + 1);
+
+        cx.update(view, |view, cx| {
+            view.observing = false;
+            cx.invalidate();
+        })
+        .unwrap();
+        let unsubscribed_renders = cx.render_count(window).unwrap();
+        let restored = SystemPreferences::default()
+            .with_color_scheme(ColorScheme::Light)
+            .with_reduce_motion(Some(false));
+        cx.simulate_system_preferences_change(restored).unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), unsubscribed_renders);
+        assert_eq!(cx.read(view, |view| view.rendered).unwrap(), reduced);
+
+        cx.click(window, "read-system-preferences").unwrap();
+        assert_eq!(cx.read(view, |view| view.clicked).unwrap(), restored);
     }
 
     #[test]
@@ -4527,6 +5011,9 @@ mod tests {
             .unwrap();
         let parent_window = parent.window_handle();
         cx.update(parent, |view, cx| {
+            assert_eq!(cx.windows(), [parent_window]);
+            assert_eq!(cx.active_window(), Some(parent_window));
+            assert!(cx.window_registry().contains(parent_window));
             let child = cx.open_window(
                 ChildView(7),
                 WindowOptions::default().title("Child").size(320.0, 180.0),
@@ -4541,6 +5028,9 @@ mod tests {
         let child = cx.typed_window::<ChildView>(child_window).unwrap();
         assert_eq!(cx.read(child, |view| view.0).unwrap(), 7);
         assert_eq!(cx.windows().len(), 2);
+        assert_eq!(cx.window_registry().windows(), cx.windows());
+        assert_eq!(cx.window_registry().active_window(), Some(child_window));
+        assert!(!cx.window_registry().is_truncated());
         assert_eq!(cx.window_title(parent_window).unwrap(), "Renamed parent");
         assert_eq!(
             cx.window_state(parent_window).unwrap().viewport_size,
@@ -4552,6 +5042,7 @@ mod tests {
             .unwrap();
         assert_eq!(cx.active_window(), Some(parent_window));
         assert_eq!(cx.windows(), [parent_window]);
+        assert!(!cx.window_registry().contains(child_window));
 
         let replacement = cx
             .update(parent, |view, cx| {
@@ -4613,6 +5104,137 @@ mod tests {
         .unwrap();
         assert_eq!(cx.window_state(window).unwrap().minimum_size, None);
         assert_eq!(cx.render_count(window).unwrap(), renders + 2);
+    }
+
+    #[test]
+    fn window_policies_and_size_constraints_are_independently_mutable() {
+        let minimum = Size::new(200.0, 120.0);
+        let maximum = Size::new(800.0, 600.0);
+        let icon = Image::from_rgba(1, 1, [12, 34, 56, 255].as_slice()).unwrap();
+        let (mut cx, view) = App::new(ParentView::default())
+            .minimum_size(minimum.width, minimum.height)
+            .maximum_size(maximum.width, maximum.height)
+            .minimizable(false)
+            .maximizable(false)
+            .closable(false)
+            .decorations(false)
+            .shadow(false)
+            .content_protected(true)
+            .window_level(WindowLevel::AlwaysOnBottom)
+            .focusable(false)
+            .skip_taskbar(true)
+            .visible_on_all_workspaces(true)
+            .opacity(0.75)
+            .icon(icon)
+            .taskbar_progress(TaskbarProgressState::Paused, 0.25)
+            .taskbar_overlay_icon(
+                Image::from_rgba(1, 1, [56, 34, 12, 255].as_slice()).unwrap(),
+                "Needs attention",
+            )
+            .cursor_visible(false)
+            .cursor_grab(CursorGrabMode::Confined)
+            .cursor_hit_test(false)
+            .cursor_position(Point::new(32.0, 48.0))
+            .into_test_context()
+            .unwrap();
+        let window = view.window_handle();
+        let state = cx.window_state(window).unwrap();
+        assert_eq!(state.minimum_size, Some(minimum));
+        assert_eq!(state.maximum_size, Some(maximum));
+        assert!(!state.minimizable);
+        assert!(!state.maximizable);
+        assert!(!state.closable);
+        assert!(!state.decorated);
+        assert!(!state.shadow);
+        assert!(state.content_protected);
+        assert_eq!(state.window_level, WindowLevel::AlwaysOnBottom);
+        assert!(!state.focusable);
+        assert!(state.skip_taskbar);
+        assert!(state.visible_on_all_workspaces);
+        assert_eq!(state.opacity, 0.75);
+        assert!(state.has_icon);
+        assert_eq!(state.taskbar_progress_state, TaskbarProgressState::Paused);
+        assert_eq!(state.taskbar_progress, 0.25);
+        assert!(state.has_taskbar_overlay_icon);
+        assert!(!state.cursor_visible);
+        assert_eq!(state.cursor_grab, CursorGrabMode::Confined);
+        assert!(!state.cursor_hit_test);
+        assert_eq!(state.cursor_position, Some(Point::new(32.0, 48.0)));
+
+        let runtime_maximum = Size::new(500.0, 400.0);
+        cx.update(view, |_view, cx| {
+            cx.set_window_maximum_size(runtime_maximum).unwrap();
+            cx.resize_window(Size::new(900.0, 700.0)).unwrap();
+            cx.set_window_minimizable(true).unwrap();
+            cx.set_window_maximizable(true).unwrap();
+            cx.set_window_closable(true).unwrap();
+            cx.set_window_decorated(true).unwrap();
+            cx.set_window_shadow(true).unwrap();
+            cx.set_window_content_protected(false).unwrap();
+            cx.set_window_always_on_top(true).unwrap();
+            cx.set_window_focusable(true).unwrap();
+            cx.set_window_skip_taskbar(false).unwrap();
+            cx.set_window_visible_on_all_workspaces(false).unwrap();
+            cx.set_window_opacity(0.5).unwrap();
+            cx.clear_window_icon().unwrap();
+            cx.set_taskbar_progress(TaskbarProgressState::Normal, 0.75)
+                .unwrap();
+            cx.clear_taskbar_overlay_icon().unwrap();
+            cx.set_cursor_visible(true).unwrap();
+            cx.set_cursor_grab(CursorGrabMode::Locked).unwrap();
+            cx.set_cursor_hit_test(true).unwrap();
+            cx.set_cursor_position(Point::new(64.0, 96.0)).unwrap();
+        })
+        .unwrap();
+        let state = cx.window_state(window).unwrap();
+        assert_eq!(state.maximum_size, Some(runtime_maximum));
+        assert_eq!(state.viewport_size, Size::new(900.0, 700.0));
+        assert!(state.minimizable);
+        assert!(state.maximizable);
+        assert!(state.closable);
+        assert!(state.decorated);
+        assert!(state.shadow);
+        assert!(!state.content_protected);
+        assert_eq!(state.window_level, WindowLevel::AlwaysOnTop);
+        assert!(state.focusable);
+        assert!(!state.skip_taskbar);
+        assert!(!state.visible_on_all_workspaces);
+        assert_eq!(state.opacity, 0.5);
+        assert!(!state.has_icon);
+        assert_eq!(state.taskbar_progress_state, TaskbarProgressState::Normal);
+        assert_eq!(state.taskbar_progress, 0.75);
+        assert!(!state.has_taskbar_overlay_icon);
+        assert!(state.cursor_visible);
+        assert_eq!(state.cursor_grab, CursorGrabMode::Locked);
+        assert!(state.cursor_hit_test);
+        assert_eq!(state.cursor_position, Some(Point::new(64.0, 96.0)));
+
+        cx.update(view, |_view, cx| {
+            cx.clear_window_maximum_size().unwrap();
+            cx.use_automatic_window_level().unwrap();
+        })
+        .unwrap();
+        let state = cx.window_state(window).unwrap();
+        assert_eq!(state.maximum_size, None);
+        assert_eq!(state.window_level, WindowLevel::Normal);
+
+        assert!(matches!(
+            App::new(ParentView::default())
+                .minimum_size(500.0, 400.0)
+                .maximum_size(300.0, 200.0)
+                .into_test_context(),
+            Err(TestAppError::InvalidWindow(
+                WindowCommandError::InvalidSizeConstraints
+            ))
+        ));
+        assert!(matches!(
+            App::new(ParentView::default())
+                .opacity(f32::NAN)
+                .into_test_context(),
+            Err(TestAppError::InvalidWindow(
+                WindowCommandError::InvalidOpacity
+            ))
+        ));
     }
 
     #[test]
@@ -4698,6 +5320,7 @@ mod tests {
         let opened = Rc::new(RefCell::new(Vec::new()));
         let reopened = Rc::new(Cell::new(false));
         let wakes = Rc::new(Cell::new(0_usize));
+        let power_events = Rc::new(RefCell::new(Vec::new()));
         let keyboard_layouts = Rc::new(RefCell::new(Vec::new()));
         let notification = Rc::new(RefCell::new(None));
         let app = App::new(LifecycleView {
@@ -4716,6 +5339,10 @@ mod tests {
         .on_system_wake({
             let wakes = wakes.clone();
             move |_cx| wakes.set(wakes.get() + 1)
+        })
+        .on_power_event({
+            let power_events = power_events.clone();
+            move |event, _cx| power_events.borrow_mut().push(event)
         })
         .on_keyboard_layout_change({
             let keyboard_layouts = keyboard_layouts.clone();
@@ -4739,6 +5366,10 @@ mod tests {
             .unwrap();
         cx.simulate_reopen(true).unwrap();
         cx.simulate_system_wake().unwrap();
+        cx.simulate_power_event(PowerEvent::ThermalStateChanged(ThermalState::Serious))
+            .unwrap();
+        cx.simulate_power_event(PowerEvent::ShutdownRequested)
+            .unwrap();
         cx.simulate_keyboard_layout_change(
             KeyboardLayout::new("com.apple.keylayout.German", "German").unwrap(),
         )
@@ -4746,11 +5377,19 @@ mod tests {
         cx.simulate_system_notification_response(SystemNotificationResponse {
             tag: Arc::from("build"),
             action_id: Some(Arc::from("open")),
+            reply: None,
         })
         .unwrap();
         assert_eq!(&*opened.borrow(), &["quickgui://one", "quickgui://two"]);
         assert!(reopened.get());
         assert_eq!(wakes.get(), 1);
+        assert_eq!(
+            &*power_events.borrow(),
+            &[
+                PowerEvent::ThermalStateChanged(ThermalState::Serious),
+                PowerEvent::ShutdownRequested,
+            ]
+        );
         assert_eq!(
             &*keyboard_layouts.borrow(),
             &[(
@@ -4841,6 +5480,87 @@ mod tests {
         assert!(cx.is_exited());
         assert!(cx.windows().is_empty());
         assert_eq!(&*closed.borrow(), &[child_window, parent_window]);
+    }
+
+    #[test]
+    fn before_and_will_quit_are_ordered_and_independently_preventable() {
+        let phases = Rc::new(RefCell::new(Vec::new()));
+        let prevent_before_once = Rc::new(Cell::new(true));
+        let (mut cx, root) = App::new(ParentView::default())
+            .quit_mode(QuitMode::Explicit)
+            .on_before_quit({
+                let phases = phases.clone();
+                let prevent_before_once = prevent_before_once.clone();
+                move |request, cx| {
+                    phases.borrow_mut().push(("before", request.reason));
+                    if prevent_before_once.replace(false) {
+                        cx.prevent_quit();
+                    }
+                }
+            })
+            .on_will_quit({
+                let phases = phases.clone();
+                move |request, _cx| phases.borrow_mut().push(("will", request.reason))
+            })
+            .into_test_context()
+            .unwrap();
+
+        cx.update(root, |_view, cx| cx.exit()).unwrap();
+        assert!(!cx.is_exited());
+        assert!(cx.is_window_open(root.window_handle()));
+        assert_eq!(&*phases.borrow(), &[("before", QuitReason::Explicit)]);
+
+        cx.update(root, |_view, cx| cx.exit()).unwrap();
+        assert!(cx.is_exited());
+        assert!(cx.windows().is_empty());
+        assert_eq!(
+            &*phases.borrow(),
+            &[
+                ("before", QuitReason::Explicit),
+                ("before", QuitReason::Explicit),
+                ("will", QuitReason::Explicit),
+            ]
+        );
+    }
+
+    #[test]
+    fn orderly_relaunch_is_retained_only_after_child_first_teardown() {
+        let closed = Rc::new(RefCell::new(Vec::new()));
+        let (mut cx, parent) = App::new(ParentView::default())
+            .quit_mode(QuitMode::Explicit)
+            .on_window_closed({
+                let closed = closed.clone();
+                move |window, _cx| closed.borrow_mut().push(window)
+            })
+            .into_test_context()
+            .unwrap();
+        let parent_window = parent.window_handle();
+        let child_window = cx
+            .update(parent, |_view, cx| {
+                cx.open_window(ChildView(5), WindowOptions::new("Child"))
+            })
+            .unwrap();
+        let executable = std::env::current_exe().unwrap();
+        cx.update(parent, |_view, cx| {
+            cx.relaunch_with(
+                RelaunchOptions::new()
+                    .executable(&executable)
+                    .arguments(["--restored"])
+                    .working_directory(std::env::current_dir().unwrap()),
+            )
+            .unwrap();
+        })
+        .unwrap();
+
+        assert!(cx.is_exited());
+        assert!(cx.windows().is_empty());
+        assert_eq!(&*closed.borrow(), &[child_window, parent_window]);
+        let request = cx.relaunch_request().unwrap();
+        assert_eq!(request.executable(), executable);
+        assert_eq!(
+            request.arguments(),
+            [std::ffi::OsString::from("--restored")]
+        );
     }
 
     struct AppearanceView {

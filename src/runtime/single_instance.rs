@@ -104,6 +104,21 @@ enum SingleInstanceAcquisition {
 }
 
 impl AppRunner {
+    pub const fn single_instance_supported(&self) -> bool {
+        DesktopIntegrationSupport::current().single_instance
+    }
+
+    pub fn has_single_instance_lock(&self) -> bool {
+        self.runtime.single_instance.is_some()
+    }
+
+    pub fn single_instance_identifier(&self) -> Option<&str> {
+        self.runtime
+            .single_instance
+            .as_ref()
+            .map(SingleInstanceGuard::identifier)
+    }
+
     /// Acquire the process-local endpoint for an application identifier.
     ///
     /// The first process returns `true` and receives later launches through
@@ -144,12 +159,23 @@ impl Runtime {
         event_loop: &ActiveEventLoop,
         event: SecondInstanceEvent,
     ) {
-        let Some(mut callback) = self.application_callbacks.second_instance.take() else {
+        let urls = super::deep_link::open_urls_from_arguments(event.argv(), event.cwd());
+        let mut open_urls = self.application_callbacks.open_urls.take().zip(urls);
+        let mut second_instance = self.application_callbacks.second_instance.take();
+        if open_urls.is_none() && second_instance.is_none() {
             return;
-        };
+        }
         let mut context = self.event_context();
-        callback(event, &mut context);
-        self.application_callbacks.second_instance = Some(callback);
+        if let Some((callback, urls)) = &mut open_urls {
+            callback(urls.clone(), &mut context);
+        }
+        if let Some(callback) = &mut second_instance {
+            callback(event, &mut context);
+        }
+        if let Some((callback, _)) = open_urls {
+            self.application_callbacks.open_urls = Some(callback);
+        }
+        self.application_callbacks.second_instance = second_instance;
         self.apply_application_context(event_loop, context);
     }
 }

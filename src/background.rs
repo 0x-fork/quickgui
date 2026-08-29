@@ -120,6 +120,14 @@ impl BackgroundTaskPoolHandle {
             SharedWorkerState::Failed => Err(TaskSpawnError::Unavailable),
         }
     }
+
+    pub(crate) fn shutdown(&self) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *state = SharedWorkerState::Failed;
+    }
 }
 
 impl BackgroundWorkerPool {

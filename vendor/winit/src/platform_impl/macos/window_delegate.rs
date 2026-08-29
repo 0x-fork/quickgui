@@ -31,7 +31,7 @@ use super::cursor::cursor_from_icon;
 use super::monitor::{self, flip_window_screen_coordinates, get_display_id};
 use super::observer::RunLoop;
 use super::view::WinitView;
-use super::window::{window_id, WinitPanel, WinitPanelIvars, WinitWindow};
+use super::window::{window_id, WinitPanel, WinitPanelIvars, WinitWindow, WinitWindowIvars};
 use super::{ffi, Fullscreen, MonitorHandle, OsError, WindowId};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size};
 use crate::error::{ExternalError, NotSupportedError, OsError as RootOsError};
@@ -599,7 +599,7 @@ fn new_window(
         } else {
             let window: Option<Retained<WinitWindow>> = unsafe {
                 msg_send_id![
-                    super(mtm.alloc().set_ivars(())),
+                    super(mtm.alloc().set_ivars(WinitWindowIvars::default())),
                     initWithContentRect: frame,
                     styleMask: masks,
                     backing: NSBackingStoreType::NSBackingStoreBuffered,
@@ -1907,6 +1907,23 @@ impl WindowExtMacOS for WindowDelegate {
         let panel = unsafe { &*(self.window() as *const NSWindow).cast::<WinitPanel>() };
         panel.set_can_become_key_window(can_become_key_window);
         true
+    }
+
+    #[inline]
+    fn set_can_become_key_window(&self, can_become_key_window: bool) -> bool {
+        if self.window().isKindOfClass(WinitPanel::class()) {
+            // SAFETY: The runtime class check proves this is our panel subclass.
+            let panel = unsafe { &*(self.window() as *const NSWindow).cast::<WinitPanel>() };
+            panel.set_can_become_key_window(can_become_key_window);
+            return true;
+        }
+        if self.window().isKindOfClass(WinitWindow::class()) {
+            // SAFETY: The runtime class check proves this is our ordinary window subclass.
+            let window = unsafe { &*(self.window() as *const NSWindow).cast::<WinitWindow>() };
+            window.set_can_become_key_window(can_become_key_window);
+            return true;
+        }
+        false
     }
 
     #[inline]

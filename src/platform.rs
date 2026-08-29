@@ -10,15 +10,16 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
     task::{Context, Poll, Waker},
+    time::SystemTime,
 };
 
 use thiserror::Error;
 #[cfg(target_os = "macos")]
 use winit::event_loop::EventLoopProxy;
 
-use crate::WindowHandle;
 #[cfg(target_os = "macos")]
 use crate::runtime::RuntimeEvent;
+use crate::{Image, Menu, WindowHandle};
 
 /// Maximum native platform operations one event callback may queue.
 pub const MAX_PLATFORM_REQUESTS_PER_EVENT: usize = 32;
@@ -60,10 +61,30 @@ pub const MAX_SYSTEM_NOTIFICATION_BODY_BYTES: usize = 64 * 1024;
 pub const MAX_SYSTEM_NOTIFICATION_ACTIONS: usize = 16;
 /// Maximum UTF-8 bytes retained by one notification action identifier or label.
 pub const MAX_SYSTEM_NOTIFICATION_ACTION_BYTES: usize = 1_024;
+/// Maximum media attachments accepted by one system notification.
+pub const MAX_SYSTEM_NOTIFICATION_ATTACHMENTS: usize = 8;
+/// Maximum UTF-8 bytes retained by an attachment identifier, reply placeholder, or sound name.
+pub const MAX_SYSTEM_NOTIFICATION_OPTION_BYTES: usize = 1_024;
+/// Maximum UTF-8 bytes copied out of one native inline-reply response.
+pub const MAX_SYSTEM_NOTIFICATION_REPLY_BYTES: usize = 64 * 1024;
+/// Maximum icon bytes copied into a desktop notification portal request.
+pub const MAX_SYSTEM_NOTIFICATION_ICON_BYTES: usize = 16 * 1024 * 1024;
 /// Maximum distinct native notification action sets retained by one application.
 pub const MAX_SYSTEM_NOTIFICATION_CATEGORIES: usize = 64;
 /// Maximum distinct notification tags retained while native authorization is pending.
 pub const MAX_PENDING_SYSTEM_NOTIFICATIONS: usize = 64;
+/// Maximum permission futures coalesced behind one native notification authorization operation.
+pub const MAX_PENDING_NOTIFICATION_PERMISSION_REQUESTS: usize = 64;
+/// Maximum UTF-8 bytes accepted for a macOS Dock badge label.
+pub const MAX_DOCK_BADGE_BYTES: usize = 1_024;
+/// Maximum UTF-8 bytes retained by one About-panel field.
+pub const MAX_ABOUT_PANEL_TEXT_BYTES: usize = 64 * 1_024;
+/// Maximum UTF-8 bytes retained by a taskbar-overlay accessibility description.
+pub const MAX_TASKBAR_OVERLAY_DESCRIPTION_BYTES: usize = 4 * 1_024;
+/// Maximum Windows Jump List user tasks accepted in one replacement.
+pub const MAX_USER_TASKS: usize = 32;
+/// Maximum UTF-8 bytes retained by one user-task text field.
+pub const MAX_USER_TASK_TEXT_BYTES: usize = 16 * 1_024;
 
 // Apple reserves these identifiers for activating or dismissing the notification itself. Letting
 // an application reuse them would make a response ambiguous at the cross-platform API boundary.
@@ -91,6 +112,10 @@ pub enum PlatformError {
     TooManyDialogs,
     #[error("this platform service is not implemented on the current operating system")]
     Unsupported,
+    #[error("the native menu declaration is invalid or exceeds its public bounds")]
+    InvalidMenu,
+    #[error("a native popup-menu position must be finite and within the supported desktop range")]
+    InvalidMenuPosition,
     #[error("a native prompt message cannot be empty")]
     EmptyPromptMessage,
     #[error(
@@ -123,6 +148,14 @@ pub enum PlatformError {
         "notification action ids must be unique and non-reserved; ids and labels must be nonempty, NUL-free, and at most {MAX_SYSTEM_NOTIFICATION_ACTION_BYTES} UTF-8 bytes"
     )]
     InvalidNotificationAction,
+    #[error("system-notification media, sound, schedule, or reply options are invalid")]
+    InvalidNotificationOptions,
+    #[error("a Dock badge must be NUL-free and at most {MAX_DOCK_BADGE_BYTES} UTF-8 bytes")]
+    InvalidDockBadge,
+    #[error("About-panel options contain NULs or exceed their public text bounds")]
+    InvalidAboutPanelOptions,
+    #[error("a user-task declaration is invalid or exceeds its public bounds")]
+    InvalidUserTasks,
     #[error("an open panel must allow files, directories, or both")]
     InvalidPathSelection,
     #[error("native file-dialog filters are invalid or exceed their count or byte limits")]
@@ -182,6 +215,14 @@ impl OpenUrls {
 pub struct SystemNotificationAction {
     pub id: Arc<str>,
     pub label: Arc<str>,
+    pub kind: SystemNotificationActionKind,
+}
+
+/// Interaction requested for a notification action.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum SystemNotificationActionKind {
+    Button,
+    TextInput { placeholder: Option<Arc<str>> },
 }
 
 impl SystemNotificationAction {
@@ -189,6 +230,46 @@ impl SystemNotificationAction {
         Self {
             id: id.into(),
             label: label.into(),
+            kind: SystemNotificationActionKind::Button,
+        }
+    }
+
+    /// Request an inline text response from the operating system.
+    pub fn text_input(mut self, placeholder: impl Into<Arc<str>>) -> Self {
+        self.kind = SystemNotificationActionKind::TextInput {
+            placeholder: Some(placeholder.into()),
+        };
+        self
+    }
+
+    pub fn text_input_without_placeholder(mut self) -> Self {
+        self.kind = SystemNotificationActionKind::TextInput { placeholder: None };
+        self
+    }
+}
+
+/// Audio policy for one operating-system notification.
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub enum SystemNotificationSound {
+    #[default]
+    Default,
+    Silent,
+    /// A platform-recognized bundled or system sound name.
+    Named(Arc<str>),
+}
+
+/// One local file attached to a rich operating-system notification.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct SystemNotificationAttachment {
+    pub id: Arc<str>,
+    pub path: PathBuf,
+}
+
+impl SystemNotificationAttachment {
+    pub fn new(id: impl Into<Arc<str>>, path: impl Into<PathBuf>) -> Self {
+        Self {
+            id: id.into(),
+            path: path.into(),
         }
     }
 }
@@ -201,8 +282,15 @@ impl SystemNotificationAction {
 pub struct SystemNotification {
     pub tag: Arc<str>,
     pub title: Arc<str>,
+    pub subtitle: Option<Arc<str>>,
     pub body: Arc<str>,
     pub actions: Vec<SystemNotificationAction>,
+    pub sound: SystemNotificationSound,
+    /// Local image used as the notification icon where the platform supports an explicit icon.
+    pub icon: Option<PathBuf>,
+    pub attachments: Vec<SystemNotificationAttachment>,
+    /// Absolute delivery time. `None` posts immediately.
+    pub delivery_at: Option<SystemTime>,
 }
 
 impl SystemNotification {
@@ -214,13 +302,43 @@ impl SystemNotification {
         Self {
             tag: tag.into(),
             title: title.into(),
+            subtitle: None,
             body: body.into(),
             actions: Vec::new(),
+            sound: SystemNotificationSound::Default,
+            icon: None,
+            attachments: Vec::new(),
+            delivery_at: None,
         }
+    }
+
+    pub fn subtitle(mut self, subtitle: impl Into<Arc<str>>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
     }
 
     pub fn action(mut self, action: SystemNotificationAction) -> Self {
         self.actions.push(action);
+        self
+    }
+
+    pub fn sound(mut self, sound: SystemNotificationSound) -> Self {
+        self.sound = sound;
+        self
+    }
+
+    pub fn icon(mut self, path: impl Into<PathBuf>) -> Self {
+        self.icon = Some(path.into());
+        self
+    }
+
+    pub fn attachment(mut self, attachment: SystemNotificationAttachment) -> Self {
+        self.attachments.push(attachment);
+        self
+    }
+
+    pub fn deliver_at(mut self, delivery_at: SystemTime) -> Self {
+        self.delivery_at = Some(delivery_at);
         self
     }
 }
@@ -231,7 +349,137 @@ pub struct SystemNotificationResponse {
     pub tag: Arc<str>,
     /// The selected action id, or `None` when the notification body was activated.
     pub action_id: Option<Arc<str>>,
+    /// Bounded inline text supplied for a text-input action.
+    pub reply: Option<Arc<str>>,
 }
+
+/// Current operating-system authorization for application notifications.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum NotificationPermissionStatus {
+    NotDetermined,
+    Granted,
+    Denied,
+    Unsupported,
+}
+
+/// Requested native file-icon size.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum FileIconSize {
+    Small,
+    #[default]
+    Normal,
+    Large,
+}
+
+impl FileIconSize {
+    pub(crate) const fn pixels(self) -> u32 {
+        match self {
+            Self::Small => 16,
+            Self::Normal => 32,
+            Self::Large => 48,
+        }
+    }
+}
+
+/// Metadata shown by the operating system's standard About UI.
+///
+/// Omitted fields fall back to package metadata on platforms that provide such defaults.
+#[derive(Clone, Debug, Default)]
+pub struct AboutPanelOptions {
+    pub application_name: Option<Arc<str>>,
+    pub application_version: Option<Arc<str>>,
+    pub version: Option<Arc<str>>,
+    pub copyright: Option<Arc<str>>,
+    pub credits: Option<Arc<str>>,
+    pub icon: Option<Image>,
+}
+
+impl AboutPanelOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn application_name(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.application_name = Some(value.into());
+        self
+    }
+
+    pub fn application_version(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.application_version = Some(value.into());
+        self
+    }
+
+    pub fn version(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.version = Some(value.into());
+        self
+    }
+
+    pub fn copyright(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.copyright = Some(value.into());
+        self
+    }
+
+    pub fn credits(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.credits = Some(value.into());
+        self
+    }
+
+    pub fn icon(mut self, icon: Image) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+}
+
+/// One command exposed in the Windows taskbar Jump List.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserTask {
+    pub title: Arc<str>,
+    pub program: Option<PathBuf>,
+    pub arguments: Arc<str>,
+    pub description: Option<Arc<str>>,
+    pub working_directory: Option<PathBuf>,
+    pub icon_path: Option<PathBuf>,
+    pub icon_index: i32,
+}
+
+impl UserTask {
+    /// Create a task that launches the current executable with `arguments`.
+    pub fn new(title: impl Into<Arc<str>>, arguments: impl Into<Arc<str>>) -> Self {
+        Self {
+            title: title.into(),
+            program: None,
+            arguments: arguments.into(),
+            description: None,
+            working_directory: None,
+            icon_path: None,
+            icon_index: 0,
+        }
+    }
+
+    pub fn program(mut self, path: impl Into<PathBuf>) -> Self {
+        self.program = Some(path.into());
+        self
+    }
+
+    pub fn description(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.description = Some(value.into());
+        self
+    }
+
+    pub fn working_directory(mut self, path: impl Into<PathBuf>) -> Self {
+        self.working_directory = Some(path.into());
+        self
+    }
+
+    pub fn icon(mut self, path: impl Into<PathBuf>, index: i32) -> Self {
+        self.icon_path = Some(path.into());
+        self.icon_index = index;
+        self
+    }
+}
+
+/// Future-like result of an operating-system file-icon lookup.
+pub type FileIconResponse = PlatformResponse<Image>;
 
 /// One semantically classified native prompt button.
 ///
@@ -463,6 +711,8 @@ pub struct PlatformResponse<T> {
 pub type PathPromptResponse = PlatformResponse<Option<Vec<PathBuf>>>;
 /// Future returned by a native save panel.
 pub type SavePathResponse = PlatformResponse<Option<PathBuf>>;
+/// Future returned by a notification authorization status query or explicit request.
+pub type NotificationPermissionResponse = PlatformResponse<NotificationPermissionStatus>;
 /// Future returned after the operating system accepts or rejects one shell integration request.
 pub type ShellResponse = PlatformResponse<()>;
 
@@ -616,6 +866,12 @@ pub(crate) enum PlatformRequest {
     },
     ShowSystemNotification(SystemNotification),
     DismissSystemNotification(Arc<str>),
+    NotificationPermissionStatus {
+        responder: PlatformResponder<NotificationPermissionStatus>,
+    },
+    RequestNotificationPermission {
+        responder: PlatformResponder<NotificationPermissionStatus>,
+    },
     OpenUrl {
         url: Arc<str>,
         responder: Option<PlatformResponder<()>>,
@@ -631,6 +887,21 @@ pub(crate) enum PlatformRequest {
     TrashPath {
         path: PathBuf,
         responder: Option<PlatformResponder<()>>,
+    },
+    SetDockBadge(Option<Arc<str>>),
+    SetDockIcon(Option<Image>),
+    SetDockMenu(Option<Menu>),
+    AddRecentDocument(PathBuf),
+    ClearRecentDocuments,
+    ShowAboutPanel(AboutPanelOptions),
+    GetFileIcon {
+        path: PathBuf,
+        size: FileIconSize,
+        responder: PlatformResponder<Image>,
+    },
+    SetUserTasks {
+        tasks: Vec<UserTask>,
+        responder: PlatformResponder<()>,
     },
 }
 
@@ -778,6 +1049,16 @@ impl PlatformRequest {
         Ok(Self::DismissSystemNotification(tag))
     }
 
+    pub(crate) fn notification_permission_status() -> (Self, NotificationPermissionResponse) {
+        let (responder, response) = response_channel();
+        (Self::NotificationPermissionStatus { responder }, response)
+    }
+
+    pub(crate) fn request_notification_permission() -> (Self, NotificationPermissionResponse) {
+        let (responder, response) = response_channel();
+        (Self::RequestNotificationPermission { responder }, response)
+    }
+
     pub(crate) fn open_path(path: impl Into<PathBuf>) -> Result<Self, PlatformError> {
         let path = path.into();
         validate_path(&path)?;
@@ -806,6 +1087,15 @@ impl PlatformRequest {
         let path = path.into();
         validate_path(&path)?;
         Ok(Self::RevealPath {
+            path,
+            responder: None,
+        })
+    }
+
+    pub(crate) fn trash_path(path: impl Into<PathBuf>) -> Result<Self, PlatformError> {
+        let path = path.into();
+        validate_path(&path)?;
+        Ok(Self::TrashPath {
             path,
             responder: None,
         })
@@ -841,6 +1131,64 @@ impl PlatformRequest {
         ))
     }
 
+    pub(crate) fn set_dock_badge(value: Option<Arc<str>>) -> Result<Self, PlatformError> {
+        if value
+            .as_deref()
+            .is_some_and(|value| value.len() > MAX_DOCK_BADGE_BYTES || value.contains('\0'))
+        {
+            return Err(PlatformError::InvalidDockBadge);
+        }
+        Ok(Self::SetDockBadge(value))
+    }
+
+    pub(crate) fn set_dock_icon(icon: Option<Image>) -> Self {
+        Self::SetDockIcon(icon)
+    }
+
+    pub(crate) fn set_dock_menu(menu: Option<Menu>) -> Result<Self, PlatformError> {
+        if let Some(menu) = &menu {
+            crate::menu::validate_menus(std::slice::from_ref(menu))
+                .map_err(|_| PlatformError::InvalidMenu)?;
+        }
+        Ok(Self::SetDockMenu(menu))
+    }
+
+    pub(crate) fn add_recent_document(path: impl Into<PathBuf>) -> Result<Self, PlatformError> {
+        let path = path.into();
+        validate_path(&path)?;
+        Ok(Self::AddRecentDocument(path))
+    }
+
+    pub(crate) fn show_about_panel(options: AboutPanelOptions) -> Result<Self, PlatformError> {
+        validate_about_panel_options(&options)?;
+        Ok(Self::ShowAboutPanel(options))
+    }
+
+    pub(crate) fn get_file_icon(
+        path: impl Into<PathBuf>,
+        size: FileIconSize,
+    ) -> Result<(Self, FileIconResponse), PlatformError> {
+        let path = path.into();
+        validate_path(&path)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::GetFileIcon {
+                path,
+                size,
+                responder,
+            },
+            response,
+        ))
+    }
+
+    pub(crate) fn set_user_tasks(
+        tasks: Vec<UserTask>,
+    ) -> Result<(Self, ShellResponse), PlatformError> {
+        validate_user_tasks(&tasks)?;
+        let (responder, response) = response_channel();
+        Ok((Self::SetUserTasks { tasks, responder }, response))
+    }
+
     pub(crate) fn window(&self) -> Option<WindowHandle> {
         match self {
             Self::Prompt { window, .. }
@@ -848,10 +1196,20 @@ impl PlatformRequest {
             | Self::SavePath { window, .. } => *window,
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
+            | Self::NotificationPermissionStatus { .. }
+            | Self::RequestNotificationPermission { .. }
             | Self::OpenUrl { .. }
             | Self::OpenPath { .. }
             | Self::RevealPath { .. }
-            | Self::TrashPath { .. } => None,
+            | Self::TrashPath { .. }
+            | Self::SetDockBadge(_)
+            | Self::SetDockIcon(_)
+            | Self::SetDockMenu(_)
+            | Self::AddRecentDocument(_)
+            | Self::ClearRecentDocuments
+            | Self::ShowAboutPanel(_)
+            | Self::GetFileIcon { .. }
+            | Self::SetUserTasks { .. } => None,
         }
     }
 
@@ -866,7 +1224,18 @@ impl PlatformRequest {
             | Self::TrashPath { responder, .. } => responder
                 .as_ref()
                 .is_some_and(PlatformResponder::is_cancelled),
-            Self::ShowSystemNotification(_) | Self::DismissSystemNotification(_) => false,
+            Self::NotificationPermissionStatus { responder }
+            | Self::RequestNotificationPermission { responder } => responder.is_cancelled(),
+            Self::GetFileIcon { responder, .. } => responder.is_cancelled(),
+            Self::SetUserTasks { responder, .. } => responder.is_cancelled(),
+            Self::ShowSystemNotification(_)
+            | Self::DismissSystemNotification(_)
+            | Self::SetDockBadge(_)
+            | Self::SetDockIcon(_)
+            | Self::SetDockMenu(_)
+            | Self::AddRecentDocument(_)
+            | Self::ClearRecentDocuments
+            | Self::ShowAboutPanel(_) => false,
         }
     }
 
@@ -883,10 +1252,20 @@ impl PlatformRequest {
             Self::SavePath { responder, .. } => responder.bind_cancellation(proxy, owner, id),
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
+            | Self::NotificationPermissionStatus { .. }
+            | Self::RequestNotificationPermission { .. }
             | Self::OpenUrl { .. }
             | Self::OpenPath { .. }
             | Self::RevealPath { .. }
-            | Self::TrashPath { .. } => false,
+            | Self::TrashPath { .. }
+            | Self::SetDockBadge(_)
+            | Self::SetDockIcon(_)
+            | Self::SetDockMenu(_)
+            | Self::AddRecentDocument(_)
+            | Self::ClearRecentDocuments
+            | Self::ShowAboutPanel(_)
+            | Self::GetFileIcon { .. }
+            | Self::SetUserTasks { .. } => false,
         }
     }
 
@@ -903,9 +1282,75 @@ impl PlatformRequest {
                     responder.complete(Err(error));
                 }
             }
-            Self::ShowSystemNotification(_) | Self::DismissSystemNotification(_) => {}
+            Self::NotificationPermissionStatus { responder }
+            | Self::RequestNotificationPermission { responder } => {
+                responder.complete(Err(error));
+            }
+            Self::GetFileIcon { responder, .. } => responder.complete(Err(error)),
+            Self::SetUserTasks { responder, .. } => responder.complete(Err(error)),
+            Self::ShowSystemNotification(_)
+            | Self::DismissSystemNotification(_)
+            | Self::SetDockBadge(_)
+            | Self::SetDockIcon(_)
+            | Self::SetDockMenu(_)
+            | Self::AddRecentDocument(_)
+            | Self::ClearRecentDocuments
+            | Self::ShowAboutPanel(_) => {}
         }
     }
+}
+
+fn validate_about_panel_options(options: &AboutPanelOptions) -> Result<(), PlatformError> {
+    let fields = [
+        options.application_name.as_deref(),
+        options.application_version.as_deref(),
+        options.version.as_deref(),
+        options.copyright.as_deref(),
+        options.credits.as_deref(),
+    ];
+    if fields
+        .into_iter()
+        .flatten()
+        .any(|value| value.len() > MAX_ABOUT_PANEL_TEXT_BYTES || value.as_bytes().contains(&0))
+    {
+        Err(PlatformError::InvalidAboutPanelOptions)
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_user_tasks(tasks: &[UserTask]) -> Result<(), PlatformError> {
+    if tasks.len() > MAX_USER_TASKS {
+        return Err(PlatformError::InvalidUserTasks);
+    }
+    for task in tasks {
+        let required = [task.title.as_ref()];
+        let optional = [
+            task.arguments.as_ref(),
+            task.description.as_deref().unwrap_or_default(),
+        ];
+        if required.into_iter().any(|value| {
+            value.is_empty()
+                || value.len() > MAX_USER_TASK_TEXT_BYTES
+                || value.as_bytes().contains(&0)
+        }) || optional
+            .into_iter()
+            .any(|value| value.len() > MAX_USER_TASK_TEXT_BYTES || value.as_bytes().contains(&0))
+        {
+            return Err(PlatformError::InvalidUserTasks);
+        }
+        for path in [
+            task.program.as_deref(),
+            task.working_directory.as_deref(),
+            task.icon_path.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            validate_path(path).map_err(|_| PlatformError::InvalidUserTasks)?;
+        }
+    }
+    Ok(())
 }
 
 fn validate_required_text(value: &str) -> Result<(), PlatformError> {
@@ -1032,6 +1477,9 @@ fn validate_system_notification(notification: &SystemNotification) -> Result<(),
     if notification.title.is_empty()
         || notification.title.len() > MAX_SYSTEM_NOTIFICATION_TITLE_BYTES
         || notification.title.contains('\0')
+        || notification.subtitle.as_deref().is_some_and(|subtitle| {
+            subtitle.len() > MAX_SYSTEM_NOTIFICATION_TITLE_BYTES || subtitle.contains('\0')
+        })
         || notification.body.len() > MAX_SYSTEM_NOTIFICATION_BODY_BYTES
         || notification.body.contains('\0')
     {
@@ -1057,30 +1505,51 @@ fn validate_system_notification(notification: &SystemNotification) -> Result<(),
         {
             return Err(PlatformError::InvalidNotificationAction);
         }
+        if let SystemNotificationActionKind::TextInput { placeholder } = &action.kind
+            && placeholder.as_deref().is_some_and(|placeholder| {
+                placeholder.is_empty()
+                    || placeholder.len() > MAX_SYSTEM_NOTIFICATION_OPTION_BYTES
+                    || placeholder.contains('\0')
+            })
+        {
+            return Err(PlatformError::InvalidNotificationOptions);
+        }
+    }
+    if notification.attachments.len() > MAX_SYSTEM_NOTIFICATION_ATTACHMENTS {
+        return Err(PlatformError::InvalidNotificationOptions);
+    }
+    if let Some(icon) = notification.icon.as_deref() {
+        validate_path(icon).map_err(|_| PlatformError::InvalidNotificationOptions)?;
+    }
+    for (index, attachment) in notification.attachments.iter().enumerate() {
+        if attachment.id.is_empty()
+            || attachment.id.len() > MAX_SYSTEM_NOTIFICATION_OPTION_BYTES
+            || attachment.id.contains('\0')
+            || notification.attachments[..index]
+                .iter()
+                .any(|previous| previous.id == attachment.id)
+            || validate_path(&attachment.path).is_err()
+        {
+            return Err(PlatformError::InvalidNotificationOptions);
+        }
+    }
+    if let SystemNotificationSound::Named(name) = &notification.sound
+        && (name.is_empty()
+            || name.len() > MAX_SYSTEM_NOTIFICATION_OPTION_BYTES
+            || name.contains('\0'))
+    {
+        return Err(PlatformError::InvalidNotificationOptions);
     }
     Ok(())
 }
 
 fn normalize_system_notification(
-    notification: SystemNotification,
+    mut notification: SystemNotification,
 ) -> Result<SystemNotification, PlatformError> {
     validate_system_notification(&notification)?;
-    let SystemNotification {
-        tag,
-        title,
-        body,
-        actions: source_actions,
-    } = notification;
-    let mut actions = Vec::with_capacity(source_actions.len());
-    for action in source_actions {
-        actions.push(action);
-    }
-    Ok(SystemNotification {
-        tag,
-        title,
-        body,
-        actions,
-    })
+    notification.actions.shrink_to_fit();
+    notification.attachments.shrink_to_fit();
+    Ok(notification)
 }
 
 #[cfg(test)]
@@ -1220,6 +1689,40 @@ mod tests {
             PlatformError::InvalidPath
         );
         assert!(PlatformRequest::reveal_path("/tmp").is_ok());
+        assert!(PlatformRequest::trash_path("/tmp/discarded-item").is_ok());
+    }
+
+    #[test]
+    fn desktop_shell_declarations_are_bounded_before_queueing() {
+        assert_eq!(
+            PlatformRequest::set_dock_badge(Some(Arc::from("x".repeat(MAX_DOCK_BADGE_BYTES + 1))))
+                .unwrap_err(),
+            PlatformError::InvalidDockBadge
+        );
+        assert_eq!(
+            PlatformRequest::show_about_panel(
+                AboutPanelOptions::new().credits("x".repeat(MAX_ABOUT_PANEL_TEXT_BYTES + 1))
+            )
+            .unwrap_err(),
+            PlatformError::InvalidAboutPanelOptions
+        );
+        let tasks = (0..=MAX_USER_TASKS)
+            .map(|index| UserTask::new(format!("Task {index}"), "--task"))
+            .collect();
+        assert_eq!(
+            PlatformRequest::set_user_tasks(tasks).unwrap_err(),
+            PlatformError::InvalidUserTasks
+        );
+        assert_eq!(
+            PlatformRequest::set_user_tasks(vec![UserTask::new("", "--task")]).unwrap_err(),
+            PlatformError::InvalidUserTasks
+        );
+
+        let (request, response) = PlatformRequest::get_file_icon("/tmp", FileIconSize::Large)
+            .expect("a bounded path should produce an asynchronous lookup");
+        assert!(!request.response_cancelled());
+        drop(response);
+        assert!(request.response_cancelled());
     }
 
     #[test]
@@ -1258,13 +1761,9 @@ mod tests {
         }
         let mut oversized_allocation = Vec::with_capacity(65_536);
         oversized_allocation.push(SystemNotificationAction::new("open", "Open"));
-        let normalized = PlatformRequest::show_system_notification(SystemNotification {
-            tag: Arc::from("tag"),
-            title: Arc::from("Title"),
-            body: Arc::from("Body"),
-            actions: oversized_allocation,
-        })
-        .unwrap();
+        let mut notification = SystemNotification::new("tag", "Title", "Body");
+        notification.actions = oversized_allocation;
+        let normalized = PlatformRequest::show_system_notification(notification).unwrap();
         let PlatformRequest::ShowSystemNotification(normalized) = normalized else {
             unreachable!("the constructor returns the matching request variant");
         };

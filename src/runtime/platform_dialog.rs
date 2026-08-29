@@ -1,4 +1,9 @@
 use super::*;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+use crate::{
+    SystemNotificationActionKind, SystemNotificationSound,
+    platform::MAX_SYSTEM_NOTIFICATION_REPLY_BYTES,
+};
 
 #[cfg(target_os = "macos")]
 pub(super) struct ActivePlatformDialog {
@@ -8,63 +13,172 @@ pub(super) struct ActivePlatformDialog {
 }
 
 #[cfg(target_os = "windows")]
-const WINDOWS_NOTIFICATION_APP_ID: &str =
-    "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe";
-
-#[cfg(target_os = "windows")]
 fn show_portable_system_notification(
     notification: SystemNotification,
     proxy: EventLoopProxy<RuntimeEvent>,
+    app_id: Option<&str>,
 ) -> Result<(), PlatformError> {
     use std::fmt::Write as _;
     use windows::{
         Data::Xml::Dom::XmlDocument,
-        Foundation::TypedEventHandler,
-        UI::Notifications::{ToastActivatedEventArgs, ToastNotification, ToastNotificationManager},
+        Foundation::{DateTime, IPropertyValue, TypedEventHandler},
+        UI::Notifications::{
+            ScheduledToastNotification, ToastActivatedEventArgs, ToastNotification,
+            ToastNotificationManager,
+        },
         core::{HSTRING, IInspectable, Interface},
     };
 
+    let app_id = windows_notification_app_id(app_id)?;
+    windows_shell::set_current_app_id(app_id)?;
+
     let mut actions = String::new();
+    let mut reply_inputs = Vec::new();
     if !notification.actions.is_empty() {
         actions.push_str("<actions>");
-        for action in &notification.actions {
-            let _ = write!(
-                actions,
-                "<action content=\"{}\" arguments=\"{}\"/>",
-                escape_notification_xml(&action.label),
-                escape_notification_xml(&action.id),
-            );
+        for (index, action) in notification.actions.iter().enumerate() {
+            match &action.kind {
+                SystemNotificationActionKind::Button => {
+                    let _ = write!(
+                        actions,
+                        "<action content=\"{}\" arguments=\"{}\"/>",
+                        escape_notification_xml(&action.label),
+                        escape_notification_xml(&action.id),
+                    );
+                }
+                SystemNotificationActionKind::TextInput { placeholder } => {
+                    let input = format!("quickgui-reply-{index}");
+                    let _ = write!(
+                        actions,
+                        "<input id=\"{input}\" type=\"text\" placeHolderContent=\"{}\"/><action content=\"{}\" arguments=\"{}\" hint-inputId=\"{input}\"/>",
+                        escape_notification_xml(placeholder.as_deref().unwrap_or("")),
+                        escape_notification_xml(&action.label),
+                        escape_notification_xml(&action.id),
+                    );
+                    reply_inputs.push((action.id.clone(), input));
+                }
+            }
         }
         actions.push_str("</actions>");
     }
-    let xml = format!(
-        "<toast><visual><binding template=\"ToastGeneric\"><text>{}</text><text>{}</text></binding></visual>{actions}</toast>",
+
+    let mut images = String::new();
+    if let Some(icon) = &notification.icon {
+        let source = windows_notification_file_uri(icon)?;
+        let _ = write!(
+            images,
+            "<image placement=\"appLogoOverride\" src=\"{}\"/>",
+            escape_notification_xml(&source),
+        );
+    }
+    for attachment in &notification.attachments {
+        let source = windows_notification_file_uri(&attachment.path)?;
+        let _ = write!(
+            images,
+            "<image src=\"{}\" alt=\"{}\"/>",
+            escape_notification_xml(&source),
+            escape_notification_xml(&attachment.id),
+        );
+    }
+
+    let mut texts = String::new();
+    let _ = write!(
+        texts,
+        "<text>{}</text>",
         escape_notification_xml(&notification.title),
+    );
+    if let Some(subtitle) = &notification.subtitle {
+        let _ = write!(texts, "<text>{}</text>", escape_notification_xml(subtitle),);
+    }
+    let _ = write!(
+        texts,
+        "<text>{}</text>",
         escape_notification_xml(&notification.body),
+    );
+
+    let audio = match &notification.sound {
+        SystemNotificationSound::Default => String::new(),
+        SystemNotificationSound::Silent => "<audio silent=\"true\"/>".to_owned(),
+        SystemNotificationSound::Named(name) => {
+            format!("<audio src=\"{}\"/>", escape_notification_xml(name))
+        }
+    };
+    let xml = format!(
+        "<toast><visual><binding template=\"ToastGeneric\">{texts}{images}</binding></visual>{actions}{audio}</toast>",
     );
     let document = XmlDocument::new().map_err(windows_platform_error)?;
     document
         .LoadXml(&HSTRING::from(xml))
         .map_err(windows_platform_error)?;
+    let native_tag = HSTRING::from(windows_notification_tag(&notification.tag));
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id))
+        .map_err(windows_platform_error)?;
+
+    if let Some(delivery_at) = notification
+        .delivery_at
+        .filter(|delivery_at| *delivery_at > std::time::SystemTime::now())
+    {
+        let scheduled = ScheduledToastNotification::CreateScheduledToastNotification(
+            &document,
+            DateTime {
+                UniversalTime: windows_notification_time(delivery_at)?,
+            },
+        )
+        .map_err(windows_platform_error)?;
+        scheduled
+            .SetTag(&native_tag)
+            .map_err(windows_platform_error)?;
+        remove_scheduled_windows_notifications(&notifier, &native_tag)?;
+        notifier
+            .AddToSchedule(&scheduled)
+            .map_err(windows_platform_error)?;
+        return Ok(());
+    }
+
     let toast =
         ToastNotification::CreateToastNotification(&document).map_err(windows_platform_error)?;
-    toast
-        .SetTag(&HSTRING::from(windows_notification_tag(&notification.tag)))
-        .map_err(windows_platform_error)?;
+    toast.SetTag(&native_tag).map_err(windows_platform_error)?;
 
     let tag = notification.tag;
     let activated = TypedEventHandler::<ToastNotification, IInspectable>::new(move |_, value| {
-        let action_id = value
+        let arguments = value
             .as_ref()
-            .and_then(|value| value.cast::<ToastActivatedEventArgs>().ok())
+            .and_then(|value| value.cast::<ToastActivatedEventArgs>().ok());
+        let action_id = arguments
+            .as_ref()
             .and_then(|arguments| arguments.Arguments().ok())
             .map(|arguments| arguments.to_string())
             .filter(|arguments| !arguments.is_empty())
+            .map(Arc::<str>::from);
+        let reply = action_id
+            .as_ref()
+            .and_then(|action_id| {
+                reply_inputs
+                    .iter()
+                    .find(|(candidate, _)| candidate == action_id)
+            })
+            .and_then(|(_, input)| {
+                arguments
+                    .as_ref()?
+                    .UserInput()
+                    .ok()?
+                    .Lookup(&HSTRING::from(input))
+                    .ok()?
+                    .cast::<IPropertyValue>()
+                    .ok()?
+                    .GetString()
+                    .ok()
+            })
+            .map(|reply| reply.to_string())
+            .filter(|reply| {
+                reply.len() <= MAX_SYSTEM_NOTIFICATION_REPLY_BYTES && !reply.contains('\0')
+            })
             .map(Arc::<str>::from);
         let _ = proxy.send_event(RuntimeEvent::SystemNotificationResponse(
             SystemNotificationResponse {
                 tag: tag.clone(),
                 action_id,
+                reply,
             },
         ));
         Ok(())
@@ -72,27 +186,124 @@ fn show_portable_system_notification(
     toast
         .Activated(&activated)
         .map_err(windows_platform_error)?;
-    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(
-        WINDOWS_NOTIFICATION_APP_ID,
-    ))
-    .map_err(windows_platform_error)?;
     notifier.Show(&toast).map_err(windows_platform_error)?;
     Ok(())
 }
 
 #[cfg(target_os = "windows")]
-fn dismiss_windows_system_notification(tag: &str) -> Result<(), PlatformError> {
+fn dismiss_windows_system_notification(
+    tag: &str,
+    app_id: Option<&str>,
+) -> Result<(), PlatformError> {
     use windows::{UI::Notifications::ToastNotificationManager, core::HSTRING};
+
+    let app_id = windows_notification_app_id(app_id)?;
+    windows_shell::set_current_app_id(app_id)?;
+    let native_tag = HSTRING::from(windows_notification_tag(tag));
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id))
+        .map_err(windows_platform_error)?;
+    remove_scheduled_windows_notifications(&notifier, &native_tag)?;
 
     ToastNotificationManager::History()
         .and_then(|history| {
-            history.RemoveGroupedTagWithId(
-                &HSTRING::from(windows_notification_tag(tag)),
-                &HSTRING::new(),
-                &HSTRING::from(WINDOWS_NOTIFICATION_APP_ID),
-            )
+            history.RemoveGroupedTagWithId(&native_tag, &HSTRING::new(), &HSTRING::from(app_id))
         })
         .map_err(windows_platform_error)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_notification_app_id(app_id: Option<&str>) -> Result<&str, PlatformError> {
+    app_id.ok_or_else(|| {
+        PlatformError::Platform(
+            "Windows system notifications require AppInfo with an application identifier".into(),
+        )
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn remove_scheduled_windows_notifications(
+    notifier: &windows::UI::Notifications::ToastNotifier,
+    tag: &windows::core::HSTRING,
+) -> Result<(), PlatformError> {
+    let scheduled = notifier
+        .GetScheduledToastNotifications()
+        .map_err(windows_platform_error)?;
+    for index in 0..scheduled.Size().map_err(windows_platform_error)? {
+        let notification = scheduled.GetAt(index).map_err(windows_platform_error)?;
+        if notification.Tag().ok().as_ref() == Some(tag) {
+            notifier
+                .RemoveFromSchedule(&notification)
+                .map_err(windows_platform_error)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_notification_time(time: std::time::SystemTime) -> Result<i64, PlatformError> {
+    const WINDOWS_TO_UNIX_EPOCH_SECONDS: u64 = 11_644_473_600;
+    const TICKS_PER_SECOND: u64 = 10_000_000;
+
+    let unix = time
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| PlatformError::InvalidNotificationOptions)?;
+    let seconds = unix
+        .as_secs()
+        .checked_add(WINDOWS_TO_UNIX_EPOCH_SECONDS)
+        .and_then(|seconds| seconds.checked_mul(TICKS_PER_SECOND))
+        .ok_or(PlatformError::InvalidNotificationOptions)?;
+    let ticks = seconds
+        .checked_add(u64::from(unix.subsec_nanos()) / 100)
+        .and_then(|ticks| i64::try_from(ticks).ok())
+        .ok_or(PlatformError::InvalidNotificationOptions)?;
+    Ok(ticks)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_notification_file_uri(path: &std::path::Path) -> Result<String, PlatformError> {
+    let path = std::path::absolute(path)
+        .map_err(|error| PlatformError::Platform(error.to_string().into()))?;
+    let path = dunce::simplified(&path)
+        .to_str()
+        .ok_or(PlatformError::InvalidNotificationOptions)?
+        .replace('\\', "/");
+    let mut uri = if path.starts_with("//") {
+        format!("file:{path}")
+    } else {
+        format!("file:///{path}")
+    };
+    let prefix = uri.find(':').map_or(0, |index| index + 1);
+    let unescaped = uri.split_off(prefix);
+    for byte in unescaped.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/' | b':') {
+            uri.push(char::from(byte));
+        } else {
+            use std::fmt::Write as _;
+            let _ = write!(uri, "%{byte:02X}");
+        }
+    }
+    Ok(uri)
+}
+
+#[cfg(target_os = "windows")]
+fn portable_notification_permission_status(
+    app_id: Option<&str>,
+) -> Result<NotificationPermissionStatus, PlatformError> {
+    use windows::{
+        UI::Notifications::{NotificationSetting, ToastNotificationManager},
+        core::HSTRING,
+    };
+
+    let app_id = windows_notification_app_id(app_id)?;
+    windows_shell::set_current_app_id(app_id)?;
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id))
+        .map_err(windows_platform_error)?;
+    let setting = notifier.Setting().map_err(windows_platform_error)?;
+    Ok(if setting == NotificationSetting::Enabled {
+        NotificationPermissionStatus::Granted
+    } else {
+        NotificationPermissionStatus::Denied
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -314,15 +525,20 @@ impl Runtime {
                 responder,
             } => self.start_rfd_save_dialog(window, options, responder),
             PlatformRequest::ShowSystemNotification(notification) => {
-                if let Err(error) =
-                    show_portable_system_notification(notification, self.event_proxy.clone())
-                {
+                if let Err(error) = show_portable_system_notification(
+                    notification,
+                    self.event_proxy.clone(),
+                    self.app_info.as_ref().map(AppInfo::identifier),
+                ) {
                     tracing::warn!(%error, "could not show system notification");
                 }
             }
             PlatformRequest::DismissSystemNotification(tag) => {
                 #[cfg(target_os = "windows")]
-                if let Err(error) = dismiss_windows_system_notification(&tag) {
+                if let Err(error) = dismiss_windows_system_notification(
+                    &tag,
+                    self.app_info.as_ref().map(AppInfo::identifier),
+                ) {
                     tracing::warn!(%error, %tag, "could not dismiss system notification");
                 }
                 #[cfg(target_os = "linux")]
@@ -331,6 +547,12 @@ impl Runtime {
                 }
                 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
                 tracing::warn!(%tag, "dismissing notifications is not supported by this backend");
+            }
+            PlatformRequest::NotificationPermissionStatus { responder }
+            | PlatformRequest::RequestNotificationPermission { responder } => {
+                responder.complete(portable_notification_permission_status(
+                    self.app_info.as_ref().map(AppInfo::identifier),
+                ));
             }
             PlatformRequest::OpenUrl { url, responder } => finish_shell_request(
                 responder,
@@ -352,6 +574,74 @@ impl Runtime {
             ),
             PlatformRequest::TrashPath { path, responder } => {
                 finish_shell_request(responder, move_path_to_trash(&path), "move path to trash")
+            }
+            PlatformRequest::SetDockBadge(value) => {
+                let _ = value;
+                tracing::warn!("macOS Dock integration is not supported by this backend");
+            }
+            PlatformRequest::SetDockIcon(icon) => {
+                let _ = icon;
+                tracing::warn!("macOS Dock integration is not supported by this backend");
+            }
+            PlatformRequest::SetDockMenu(menu) => {
+                let _ = menu;
+                tracing::warn!("macOS Dock integration is not supported by this backend");
+            }
+            PlatformRequest::AddRecentDocument(path) => {
+                #[cfg(target_os = "windows")]
+                windows_shell::add_recent_document(&path);
+                #[cfg(not(target_os = "windows"))]
+                tracing::warn!(?path, "recent documents are not supported by this backend");
+            }
+            PlatformRequest::ClearRecentDocuments => {
+                #[cfg(target_os = "windows")]
+                windows_shell::clear_recent_documents();
+                #[cfg(not(target_os = "windows"))]
+                tracing::warn!("recent documents are not supported by this backend");
+            }
+            PlatformRequest::ShowAboutPanel(mut options) => {
+                if let Some(info) = &self.app_info {
+                    options
+                        .application_name
+                        .get_or_insert_with(|| info.name().into());
+                    options
+                        .application_version
+                        .get_or_insert_with(|| info.version().into());
+                }
+                #[cfg(target_os = "windows")]
+                if let Err(error) = windows_shell::show_about_panel(&options) {
+                    tracing::warn!(%error, "could not show the native About panel");
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = options;
+                    tracing::warn!("a native About panel is not supported by this backend");
+                }
+            }
+            PlatformRequest::GetFileIcon {
+                path,
+                size,
+                responder,
+            } => {
+                #[cfg(target_os = "windows")]
+                responder.complete(windows_shell::file_icon(&path, size));
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = (path, size);
+                    responder.complete(Err(PlatformError::Unsupported));
+                }
+            }
+            PlatformRequest::SetUserTasks { tasks, responder } => {
+                #[cfg(target_os = "windows")]
+                responder.complete(windows_shell::set_user_tasks(
+                    &tasks,
+                    self.app_info.as_ref().map(AppInfo::identifier),
+                ));
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = tasks;
+                    responder.complete(Err(PlatformError::Unsupported));
+                }
             }
         }
     }
@@ -648,11 +938,28 @@ impl Runtime {
     fn process_macos_platform_request(&mut self, request: PlatformRequest) {
         match request {
             PlatformRequest::ShowSystemNotification(notification) => {
-                self.mac_application_host
-                    .show_system_notification(notification);
+                if let Some(host) = self.mac_application_host.as_mut() {
+                    host.show_system_notification(notification);
+                }
             }
             PlatformRequest::DismissSystemNotification(tag) => {
-                self.mac_application_host.dismiss_system_notification(&tag);
+                if let Some(host) = self.mac_application_host.as_mut() {
+                    host.dismiss_system_notification(&tag);
+                }
+            }
+            PlatformRequest::NotificationPermissionStatus { responder } => {
+                if let Some(host) = self.mac_application_host.as_mut() {
+                    host.system_notification_permission_status(responder);
+                } else {
+                    responder.complete(Ok(NotificationPermissionStatus::Unsupported));
+                }
+            }
+            PlatformRequest::RequestNotificationPermission { responder } => {
+                if let Some(host) = self.mac_application_host.as_mut() {
+                    host.request_system_notification_permission(responder);
+                } else {
+                    responder.complete(Ok(NotificationPermissionStatus::Unsupported));
+                }
             }
             PlatformRequest::OpenUrl { url, responder } => finish_shell_request(
                 responder,
@@ -678,6 +985,67 @@ impl Runtime {
                     .map_err(|error| PlatformError::Platform(error.to_string().into())),
                 "move path to trash",
             ),
+            PlatformRequest::SetDockBadge(value) => {
+                match crate::macos_shell::set_dock_badge(value.as_deref()) {
+                    Ok(()) => self.dock_badge = value,
+                    Err(error) => tracing::warn!(%error, "could not change the Dock badge"),
+                }
+            }
+            PlatformRequest::SetDockIcon(icon) => {
+                match crate::macos_shell::set_dock_icon(icon.as_ref()) {
+                    Ok(()) => self.dock_icon = icon,
+                    Err(error) => tracing::warn!(%error, "could not change the Dock icon"),
+                }
+            }
+            PlatformRequest::SetDockMenu(menu) => {
+                let actions = menu
+                    .as_ref()
+                    .map(|menu| collect_menu_actions(std::slice::from_ref(menu)))
+                    .unwrap_or_default();
+                if let Some(host) = self.mac_application_host.as_mut() {
+                    match host.set_dock_menu(menu.clone(), self.event_proxy.clone()) {
+                        Ok(()) => {
+                            self.dock_menu = menu;
+                            self.dock_menu_actions = actions;
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "could not replace the Dock menu");
+                        }
+                    }
+                }
+            }
+            PlatformRequest::AddRecentDocument(path) => {
+                if let Err(error) = crate::macos_shell::add_recent_document(&path) {
+                    tracing::warn!(%error, "could not add a recent document");
+                }
+            }
+            PlatformRequest::ClearRecentDocuments => {
+                if let Err(error) = crate::macos_shell::clear_recent_documents() {
+                    tracing::warn!(%error, "could not clear recent documents");
+                }
+            }
+            PlatformRequest::ShowAboutPanel(mut options) => {
+                if let Some(info) = &self.app_info {
+                    options
+                        .application_name
+                        .get_or_insert_with(|| info.name().into());
+                    options
+                        .application_version
+                        .get_or_insert_with(|| info.version().into());
+                }
+                if let Err(error) = crate::macos_shell::show_about_panel(&options) {
+                    tracing::warn!(%error, "could not show the native About panel");
+                }
+            }
+            PlatformRequest::GetFileIcon {
+                path,
+                size,
+                responder,
+            } => responder.complete(crate::macos_shell::file_icon(&path, size)),
+            PlatformRequest::SetUserTasks { tasks, responder } => {
+                let _ = tasks;
+                responder.complete(Err(PlatformError::Unsupported));
+            }
             request => {
                 let owner = request.window();
                 let native_window = match owner {
@@ -776,10 +1144,20 @@ impl Runtime {
                     }
                     PlatformRequest::ShowSystemNotification(_)
                     | PlatformRequest::DismissSystemNotification(_)
+                    | PlatformRequest::NotificationPermissionStatus { .. }
+                    | PlatformRequest::RequestNotificationPermission { .. }
                     | PlatformRequest::OpenUrl { .. }
                     | PlatformRequest::OpenPath { .. }
                     | PlatformRequest::RevealPath { .. }
-                    | PlatformRequest::TrashPath { .. } => {
+                    | PlatformRequest::TrashPath { .. }
+                    | PlatformRequest::SetDockBadge(_)
+                    | PlatformRequest::SetDockIcon(_)
+                    | PlatformRequest::SetDockMenu(_)
+                    | PlatformRequest::AddRecentDocument(_)
+                    | PlatformRequest::ClearRecentDocuments
+                    | PlatformRequest::ShowAboutPanel(_)
+                    | PlatformRequest::GetFileIcon { .. }
+                    | PlatformRequest::SetUserTasks { .. } => {
                         unreachable!("application-wide platform actions returned above")
                     }
                 };
@@ -1018,7 +1396,7 @@ impl LinuxNotificationHub {
                 };
                 let _ = ready_sender.send(Ok(()));
                 for message in signals {
-                    let Ok((id, action, _parameters)) =
+                    let Ok((id, action, parameters)) =
                         message
                             .body()
                             .deserialize::<(String, String, Vec<zbus::zvariant::OwnedValue>)>()
@@ -1037,6 +1415,15 @@ impl LinuxNotificationHub {
                         continue;
                     };
                     let action_id = (action != "default").then(|| Arc::<str>::from(action));
+                    let reply = parameters
+                        .into_iter()
+                        .next()
+                        .and_then(|value| String::try_from(value).ok())
+                        .filter(|reply| {
+                            reply.len() <= MAX_SYSTEM_NOTIFICATION_REPLY_BYTES
+                                && !reply.contains('\0')
+                        })
+                        .map(Arc::<str>::from);
                     let _ =
                         registration
                             .proxy
@@ -1044,6 +1431,7 @@ impl LinuxNotificationHub {
                                 SystemNotificationResponse {
                                     tag: registration.tag,
                                     action_id,
+                                    reply,
                                 },
                             ));
                 }
@@ -1109,16 +1497,46 @@ fn linux_notification_proxy(
 fn show_portable_system_notification(
     notification: SystemNotification,
     proxy: EventLoopProxy<RuntimeEvent>,
+    _app_id: Option<&str>,
 ) -> Result<(), PlatformError> {
-    use ashpd::desktop::notification::{Button, Notification};
+    use ashpd::desktop::{
+        Icon,
+        notification::{Button, ButtonPurpose, Notification},
+    };
+
+    if notification
+        .delivery_at
+        .is_some_and(|delivery_at| delivery_at > std::time::SystemTime::now())
+        || !notification.attachments.is_empty()
+        || matches!(&notification.sound, SystemNotificationSound::Named(_))
+    {
+        return Err(PlatformError::Unsupported);
+    }
 
     let hub = linux_notification_hub()?;
     let id = notification.tag.to_string();
+    let body = notification.subtitle.as_ref().map_or_else(
+        || notification.body.to_string(),
+        |subtitle| {
+            if notification.body.is_empty() {
+                subtitle.to_string()
+            } else {
+                format!("{subtitle}\n{}", notification.body)
+            }
+        },
+    );
     let mut native = Notification::new(&notification.title)
-        .body(notification.body.as_ref())
+        .body(body.as_str())
         .default_action("default");
+    if let Some(icon) = &notification.icon {
+        native = native.icon(Icon::Bytes(read_bounded_notification_icon(icon)?));
+    }
     for action in &notification.actions {
-        native = native.button(Button::new(&action.label, &action.id));
+        let mut button = Button::new(&action.label, &action.id);
+        if matches!(&action.kind, SystemNotificationActionKind::TextInput { .. }) {
+            button = button.purpose(ButtonPurpose::ImReplyWithText);
+        }
+        native = native.button(button);
     }
     let evicted = hub.register(
         id.clone(),
@@ -1141,6 +1559,22 @@ fn show_portable_system_notification(
 }
 
 #[cfg(target_os = "linux")]
+fn read_bounded_notification_icon(path: &std::path::Path) -> Result<Vec<u8>, PlatformError> {
+    use std::io::Read as _;
+
+    let file = std::fs::File::open(path)
+        .map_err(|error| PlatformError::Platform(error.to_string().into()))?;
+    let mut bytes = Vec::new();
+    file.take((crate::platform::MAX_SYSTEM_NOTIFICATION_ICON_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| PlatformError::Platform(error.to_string().into()))?;
+    if bytes.len() > crate::platform::MAX_SYSTEM_NOTIFICATION_ICON_BYTES {
+        return Err(PlatformError::InvalidNotificationOptions);
+    }
+    Ok(bytes)
+}
+
+#[cfg(target_os = "linux")]
 fn dismiss_linux_system_notification(tag: &str) -> Result<(), PlatformError> {
     let hub = linux_notification_hub()?;
     hub.unregister(tag);
@@ -1148,6 +1582,13 @@ fn dismiss_linux_system_notification(tag: &str) -> Result<(), PlatformError> {
         .map_err(|error| PlatformError::Platform(error.to_string().into()))?;
     let result: zbus::Result<()> = portal.call("RemoveNotification", &(tag));
     result.map_err(|error| PlatformError::Platform(error.to_string().into()))
+}
+
+#[cfg(target_os = "linux")]
+fn portable_notification_permission_status(
+    _app_id: Option<&str>,
+) -> Result<NotificationPermissionStatus, PlatformError> {
+    linux_notification_hub().map(|_| NotificationPermissionStatus::Granted)
 }
 
 #[cfg(any(
@@ -1159,6 +1600,7 @@ fn dismiss_linux_system_notification(tag: &str) -> Result<(), PlatformError> {
 fn show_portable_system_notification(
     notification: SystemNotification,
     _proxy: EventLoopProxy<RuntimeEvent>,
+    _app_id: Option<&str>,
 ) -> Result<(), PlatformError> {
     let status = std::process::Command::new("notify-send")
         .arg("--")
@@ -1173,6 +1615,18 @@ fn show_portable_system_notification(
             format!("notify-send exited with status {status}").into(),
         ))
     }
+}
+
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+fn portable_notification_permission_status(
+    _app_id: Option<&str>,
+) -> Result<NotificationPermissionStatus, PlatformError> {
+    Ok(NotificationPermissionStatus::Unsupported)
 }
 
 #[cfg(any(

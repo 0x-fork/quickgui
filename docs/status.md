@@ -14,15 +14,45 @@ Implemented now:
   self-contained signed production packaging; this is a first vertical slice, not yet parity with
   the Rust framework surface or a published JavaScript release;
 - macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
+- validated immutable Rust-core application identity, app-scoped standard path resolution with
+  explicit overrides, and bounded startup snapshots for OS/version/architecture/hostname and
+  preferred locale/languages, shared directly by runner, view, event, and deterministic test
+  contexts without render-time polling;
+- one-shot Rust-core relaunch requests that preserve or explicitly replace the native process
+  command, spawn only after structured application and service teardown, and remain inspectable
+  without spawning in deterministic tests; plus HTTPS/Minisign updater download progress,
+  mandatory install-time re-verification, confined bounded archive extraction, rollback-capable
+  macOS bundle/Linux executable replacement, and Windows installer launch policies;
+- renderer-independent Rust-core RAII power assertions, bounded battery/thermal/low-power/CPU-limit
+  snapshots, explicit idle and login-session queries, and event-driven suspend, lock, shutdown,
+  source, thermal, and energy-mode transitions with platform-native resource teardown;
+- bounded renderer-independent system preference snapshots with appearance/accessibility flags and
+  semantic native colors, selective declarative invalidation, plus explicit camera, microphone,
+  screen-recording, and accessibility permission status/request services;
 - sleeping heterogeneous multi-window runtime with stable handles, close interception, targeted focus/close/invalidation, resize, DPI, pointer, wheel, keyboard-layout-aware command identity, full IME preedit/commit routing, and focus events;
 - parent-owned normal, dialog-sheet, floating, and transient popover roles with retained restore
-  bounds, initial/runtime minimum inner sizes, declarative native-state snapshots, hidden first-frame
-  creation, child-first teardown, and bounded targeted runtime window commands;
+  bounds, initial/runtime minimum and maximum inner sizes, independent close/minimize/maximize/
+  resize/move policies, decorations, shadow, capture protection, explicit/role-derived stacking,
+  focusability, taskbar/workspace visibility, opacity/icons, retained cursor visibility/grab/
+  position/hit testing, declarative native-state snapshots, a bounded core-owned application-window
+  registry, hidden first-frame creation, child-first teardown, and bounded targeted runtime window
+  commands;
+- renderer-independent desktop capability queries plus Windows taskbar progress/overlays and Jump
+  List user tasks; macOS Dock badges/icons/typed menus; macOS/Windows recent documents, native About
+  panels, and file-icon lookup; unified bounded initial and second-instance deep-link callbacks;
 - true nonactivating macOS `NSPanel` popovers with retained-element anchors, work-area flip/slide/resize constraints, cross-parent-edge rendering, independent grab/key-window eligibility, nested grab dismissal, interactive never-key children, and passive no-monitor operation;
 - window-owned macOS `NSAlert`, `NSOpenPanel`, and `NSSavePanel` futures with cancellation-safe lifecycle and hard request/result bounds, plus `NSWorkspace` URL/open/reveal actions and default Cmd-W close routing;
-- lazy bounded application clipboard items with text and hash-bound metadata, encoded images, native file lists, direct macOS general/Find pasteboards, cross-platform fallback projection, deterministic in-memory tests, and one shared editor-shortcut path;
-- bounded macOS system notifications with tag replacement, actions, dismissal, one-shot authorization, and application-wide response callbacks, plus opt-in URL-open, Dock-reopen, and system-wake lifecycle callbacks;
-- GPUI-shaped `QuitMode` semantics, structured child-first application teardown, post-destruction window callbacks, and a zero-work windowless macOS Dock-reopen state;
+- lazy bounded application clipboard items with text and hash-bound metadata, arbitrary MIME/HTML/
+  RTF data, URL bookmarks, encoded images, native file lists, direct macOS general/Find pasteboards,
+  cross-platform fallback projection, deterministic in-memory tests, and one shared editor-shortcut
+  path;
+- bounded macOS/Windows/Linux system notifications with tag replacement, buttons and replies,
+  permission status/request futures, application-wide response callbacks, and target-specific icon,
+  attachment, sound, and scheduling support; plus opt-in URL-open, Dock-reopen, and system-wake
+  lifecycle callbacks;
+- GPUI-shaped `QuitMode` semantics, preventable before/will-quit phases, structured child-first
+  application teardown, post-destruction window callbacks, and a zero-work windowless macOS
+  Dock-reopen state;
 - bounded immutable active-display snapshots with global logical work areas, scale/refresh metadata, stable macOS UUIDs, declarative change observation, current-display window state, display-targeted centered placement/fullscreen, disconnect fallback, and deterministic no-polling tests;
 - main-thread `Entity<T>`/`WeakEntity<T>` shared state with retained per-window observation, coalesced bounded notification fan-out, and automatic conditional unsubscribe, plus typed `EventEmitter` delivery with RAII `Subscription` lifetimes and bounded deterministic queues;
 - main-thread application globals with exact typed access, conditional per-window observation, RAII change subscriptions, deterministic deferred delivery, and bounded notification fan-out;
@@ -94,7 +124,10 @@ Implemented now:
   hierarchy/set semantics; both retain only bounded layout geometry, reuse `ListState` scrolling,
   and add no idle scheduler source;
 - typed drag/drop with GPU previews and paint-only source/target states, arbitrary process-local values crossing macOS windows without serialization, plus bounded inbound/outbound file, text, and URL formats;
-- native macOS application menus with nested/system menus, contextual key equivalents, focused command validation, dynamic replacement, checked/disabled items, and AppKit responder-chain actions;
+- bounded native macOS/Windows application, per-window, and popup menus with standard roles,
+  nested menus, macOS system-owned submenus, contextual key equivalents, focused command
+  validation, dynamic replacement/removal/query, controlled check/radio marks, item icons, and
+  native responder actions;
 - controlled plain or attributed single-line and wrapped multiline text editing with grapheme/word/line navigation and deletion, visual-line caret movement, mouse caret and drag selection, two-axis scrolling, copy/cut/paste, IME composition, and bounded text-plus-style undo/redo history;
 - semantic browser-style forms with nearest-form Return and submit-button routing, shared controlled field data, bounded document-order validation reports, deterministic first-invalid focus, and one-shot AccessKit live announcements;
 - controlled unstyled `Checkbox`, `Radio`, `RadioGroup`, and `Switch` descriptors with
@@ -116,7 +149,9 @@ Implemented now:
   relationships, exact option/table/tree positions, table row/column counts and indices, tree
   levels/set positions, expanded state, and sort direction;
 - linear-light colors, premultiplied blending, analytic rounded rectangles, borders, CSS-ordered drop/inset shadows, and HiDPI rendering;
-- static, asynchronous, and animated PNG/JPEG/WebP/GIF/RGBA images with intrinsic layout, all web `object-fit` modes, rounded clipping, GPU grayscale, delayed loading/error fallbacks, per-element playback, Reduce Motion, stable identity, and hard-bounded CPU/GPU caches;
+- static PNG/JPEG/TIFF/WebP/GIF/RGBA, asynchronous, and animated GIF/WebP images with intrinsic
+  layout, all web `object-fit` modes, rounded clipping, GPU grayscale, delayed loading/error
+  fallbacks, per-element playback, Reduce Motion, stable identity, and hard-bounded CPU/GPU caches;
 - retained SVG/SVGZ icons and tessellated fill/stroke paths with intrinsic layout, web `object-fit`, transforms, dashes, arcs, two-stop gradients, analytic boundary antialiasing, and scoped custom canvas painting;
 - retained validated WGSL rectangle effects with framework-owned clipping and blending, bounded per-window pipeline caching, four per-instance parameter vectors, and one triple-buffered instanced upload;
 - bounded declarative one-shot, chained, local-repeat, and application-synchronized duration animations with finite easing, optional exact max-FPS deadlines, retained terminal values, occlusion-aware pause/resume, Reduce Motion static resolution, and independently owned tooltip/drag-preview motion that never rebuilds the application view;

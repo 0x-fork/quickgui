@@ -2,11 +2,15 @@ use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
     ffi::c_void,
-    ptr::null_mut,
+    ptr::{NonNull, null_mut},
     sync::{Arc, Mutex},
 };
 
 use block2::{Block, RcBlock};
+use core_foundation::{
+    base::TCFType,
+    runloop::{CFRunLoop, CFRunLoopSource, CFRunLoopSourceRef, kCFRunLoopDefaultMode},
+};
 use objc2::{
     ClassType, DeclaredClass,
     declare::ClassBuilder,
@@ -24,36 +28,57 @@ use objc2::{
 use objc2_app_kit::{
     NSApplication, NSApplicationDidBecomeActiveNotification,
     NSApplicationDidChangeScreenParametersNotification, NSApplicationDidResignActiveNotification,
-    NSWorkspace, NSWorkspaceDidWakeNotification, NSWorkspaceSessionDidBecomeActiveNotification,
-    NSWorkspaceSessionDidResignActiveNotification, NSWorkspaceWillSleepNotification,
+    NSApplicationTerminateReply, NSMenu, NSWorkspace,
+    NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification, NSWorkspaceDidWakeNotification,
+    NSWorkspaceSessionDidBecomeActiveNotification, NSWorkspaceSessionDidResignActiveNotification,
+    NSWorkspaceWillPowerOffNotification, NSWorkspaceWillSleepNotification,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSBundle, NSError, NSNotification, NSNotificationCenter, NSObject,
+    NSProcessInfoPowerStateDidChangeNotification, NSProcessInfoThermalStateDidChangeNotification,
     NSSet, NSString, NSURL, NSUTF8StringEncoding,
 };
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNMutableNotificationContent, UNNotification, UNNotificationAction,
-    UNNotificationActionOptions, UNNotificationCategory, UNNotificationCategoryOptions,
-    UNNotificationDefaultActionIdentifier, UNNotificationDismissActionIdentifier,
-    UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
-    UNUserNotificationCenter, UNUserNotificationCenterDelegate,
+    UNNotificationActionOptions, UNNotificationAttachment, UNNotificationCategory,
+    UNNotificationCategoryOptions, UNNotificationDefaultActionIdentifier,
+    UNNotificationDismissActionIdentifier, UNNotificationPresentationOptions,
+    UNNotificationRequest, UNNotificationResponse, UNNotificationSettings, UNNotificationSound,
+    UNNotificationTrigger, UNTextInputNotificationAction, UNTextInputNotificationResponse,
+    UNTimeIntervalNotificationTrigger, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
 };
 use winit::event_loop::EventLoopProxy;
 
+use crate::macos_menu::MacDockMenuHost;
 use crate::{
-    OpenUrls, PowerEvent, SystemNotification, SystemNotificationAction, SystemNotificationResponse,
+    Menu, NotificationPermissionStatus, OpenUrls, PowerEvent, SystemNotification,
+    SystemNotificationAction, SystemNotificationActionKind, SystemNotificationResponse,
+    SystemNotificationSound,
     platform::{
-        MAX_OPEN_URLS, MAX_OPEN_URLS_TOTAL_BYTES, MAX_PENDING_SYSTEM_NOTIFICATIONS,
-        MAX_PLATFORM_TEXT_BYTES, MAX_PLATFORM_URL_BYTES, MAX_SYSTEM_NOTIFICATION_ACTION_BYTES,
-        MAX_SYSTEM_NOTIFICATION_CATEGORIES, MAX_SYSTEM_NOTIFICATION_TAG_BYTES,
+        MAX_OPEN_URLS, MAX_OPEN_URLS_TOTAL_BYTES, MAX_PENDING_NOTIFICATION_PERMISSION_REQUESTS,
+        MAX_PENDING_SYSTEM_NOTIFICATIONS, MAX_PLATFORM_TEXT_BYTES, MAX_PLATFORM_URL_BYTES,
+        MAX_SYSTEM_NOTIFICATION_ACTION_BYTES, MAX_SYSTEM_NOTIFICATION_CATEGORIES,
+        MAX_SYSTEM_NOTIFICATION_REPLY_BYTES, MAX_SYSTEM_NOTIFICATION_TAG_BYTES, PlatformError,
+        PlatformResponder,
     },
     runtime::RuntimeEvent,
 };
+
+#[link(name = "IOKit", kind = "framework")]
+unsafe extern "C" {
+    fn IOPSNotificationCreateRunLoopSource(
+        callback: unsafe extern "C" fn(*mut c_void),
+        context: *mut c_void,
+    ) -> CFRunLoopSourceRef;
+}
 
 struct ApplicationStateIvars {
     proxy: EventLoopProxy<RuntimeEvent>,
     observe_open_urls: bool,
     observe_reopen: bool,
+    observe_quit: bool,
+    termination_pending: Cell<bool>,
+    dock_menu: RefCell<Option<Retained<NSMenu>>>,
 }
 
 declare_class!(
@@ -76,11 +101,15 @@ impl QuickGuiApplicationState {
         proxy: EventLoopProxy<RuntimeEvent>,
         observe_open_urls: bool,
         observe_reopen: bool,
+        observe_quit: bool,
     ) -> Retained<Self> {
         let allocated = mtm.alloc().set_ivars(ApplicationStateIvars {
             proxy,
             observe_open_urls,
             observe_reopen,
+            observe_quit,
+            termination_pending: Cell::new(false),
+            dock_menu: RefCell::new(None),
         });
         unsafe { msg_send_id![super(allocated), init] }
     }
@@ -140,6 +169,49 @@ unsafe extern "C" fn application_should_handle_reopen(
     Bool::YES
 }
 
+unsafe extern "C" fn application_should_terminate(
+    delegate: &AnyObject,
+    _cmd: Sel,
+    _application: &NSApplication,
+) -> NSApplicationTerminateReply {
+    let Some(state) = application_state(delegate) else {
+        return NSApplicationTerminateReply::NSTerminateNow;
+    };
+    if !state.ivars().observe_quit {
+        return NSApplicationTerminateReply::NSTerminateNow;
+    }
+    if state.ivars().termination_pending.replace(true) {
+        return NSApplicationTerminateReply::NSTerminateLater;
+    }
+    if state
+        .ivars()
+        .proxy
+        .send_event(RuntimeEvent::QuitRequested)
+        .is_err()
+    {
+        state.ivars().termination_pending.set(false);
+        NSApplicationTerminateReply::NSTerminateNow
+    } else {
+        NSApplicationTerminateReply::NSTerminateLater
+    }
+}
+
+unsafe extern "C" fn application_dock_menu(
+    delegate: &AnyObject,
+    _cmd: Sel,
+    _application: &NSApplication,
+) -> *mut NSMenu {
+    let Some(state) = application_state(delegate) else {
+        return null_mut();
+    };
+    state
+        .ivars()
+        .dock_menu
+        .borrow()
+        .as_ref()
+        .map_or_else(null_mut, |menu| Retained::as_ptr(menu).cast_mut())
+}
+
 /// Adds only QuickGUI's optional selectors while preserving Winit's delegate identity, ivars, and
 /// inherited lifecycle methods. Winit looks its delegate up dynamically from `NSApplication`, so
 /// replacing the object would break run-loop wake and termination handling.
@@ -155,6 +227,7 @@ impl MacApplicationDelegateHost {
         proxy: EventLoopProxy<RuntimeEvent>,
         observe_open_urls: bool,
         observe_reopen: bool,
+        observe_quit: bool,
     ) -> Result<Self, String> {
         let application = NSApplication::sharedApplication(mtm);
         let delegate = unsafe { application.delegate() }
@@ -196,6 +269,14 @@ impl MacApplicationDelegateHost {
                         sel!(applicationShouldHandleReopen:hasVisibleWindows:),
                         application_should_handle_reopen as unsafe extern "C" fn(_, _, _, _) -> _,
                     );
+                    builder.add_method(
+                        sel!(applicationShouldTerminate:),
+                        application_should_terminate as unsafe extern "C" fn(_, _, _) -> _,
+                    );
+                    builder.add_method(
+                        sel!(applicationDockMenu:),
+                        application_dock_menu as unsafe extern "C" fn(_, _, _) -> _,
+                    );
                 }
                 let subclass = builder.register();
                 subclasses.push((previous_class, subclass));
@@ -203,8 +284,13 @@ impl MacApplicationDelegateHost {
             }
         };
 
-        let associated =
-            QuickGuiApplicationState::new(mtm, proxy, observe_open_urls, observe_reopen);
+        let associated = QuickGuiApplicationState::new(
+            mtm,
+            proxy,
+            observe_open_urls,
+            observe_reopen,
+            observe_quit,
+        );
         unsafe {
             objc_setAssociatedObject(
                 Retained::as_ptr(&delegate).cast_mut().cast(),
@@ -299,6 +385,34 @@ declare_class!(
                 .send_event(RuntimeEvent::Power(PowerEvent::UnlockScreen));
         }
 
+        #[method(quickGuiSystemWillPowerOff:)]
+        fn system_will_power_off(&self, _notification: &NSNotification) {
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::Power(PowerEvent::ShutdownRequested));
+        }
+
+        #[method(quickGuiThermalStateDidChange:)]
+        fn thermal_state_did_change(&self, _notification: &NSNotification) {
+            if let Ok(state) = quickgui_system::PowerMonitor::current_thermal_state() {
+                let _ = self.ivars().proxy.send_event(RuntimeEvent::Power(
+                    PowerEvent::ThermalStateChanged(state),
+                ));
+            }
+        }
+
+        #[method(quickGuiLowPowerModeDidChange:)]
+        fn low_power_mode_did_change(&self, _notification: &NSNotification) {
+            if let Ok(snapshot) = quickgui_system::PowerMonitor::snapshot()
+                && let Some(enabled) = snapshot.low_power_mode()
+            {
+                let _ = self.ivars().proxy.send_event(RuntimeEvent::Power(
+                    PowerEvent::LowPowerModeChanged(enabled),
+                ));
+            }
+        }
+
         #[method(quickGuiDisplaysDidChange:)]
         fn displays_did_change(&self, _notification: &NSNotification) {
             let _ = self.ivars().proxy.send_event(RuntimeEvent::DisplaysChanged);
@@ -320,6 +434,16 @@ declare_class!(
                 .send_event(RuntimeEvent::KeyboardLayoutChanged);
         }
 
+        #[method(quickGuiSystemPreferencesDidChange:)]
+        fn system_preferences_did_change(&self, _notification: &NSNotification) {
+            if let Ok(preferences) = quickgui_system::SystemPreferences::snapshot() {
+                let _ = self
+                    .ivars()
+                    .proxy
+                    .send_event(RuntimeEvent::SystemPreferencesChanged(preferences));
+            }
+        }
+
     }
 );
 
@@ -327,6 +451,67 @@ impl QuickGuiApplicationObserver {
     fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Retained<Self> {
         let allocated = Self::alloc().set_ivars(ApplicationObserverIvars { proxy });
         unsafe { msg_send_id![super(allocated), init] }
+    }
+}
+
+struct PowerSourceObserverState {
+    proxy: EventLoopProxy<RuntimeEvent>,
+    source: quickgui_system::PowerSource,
+}
+
+struct MacPowerSourceObserver {
+    state: Box<PowerSourceObserverState>,
+    source: CFRunLoopSource,
+    run_loop: CFRunLoop,
+}
+
+impl MacPowerSourceObserver {
+    fn new(proxy: EventLoopProxy<RuntimeEvent>) -> Result<Self, String> {
+        let source = quickgui_system::PowerMonitor::snapshot()
+            .map(|snapshot| snapshot.source())
+            .unwrap_or(quickgui_system::PowerSource::Unknown);
+        let mut state = Box::new(PowerSourceObserverState { proxy, source });
+        let raw_source = unsafe {
+            IOPSNotificationCreateRunLoopSource(
+                power_source_changed,
+                (&mut *state as *mut PowerSourceObserverState).cast(),
+            )
+        };
+        if raw_source.is_null() {
+            return Err("IOKit could not create a power-source run-loop source".to_owned());
+        }
+        let source = unsafe { CFRunLoopSource::wrap_under_create_rule(raw_source) };
+        let run_loop = CFRunLoop::get_main();
+        run_loop.add_source(&source, unsafe { kCFRunLoopDefaultMode });
+        Ok(Self {
+            state,
+            source,
+            run_loop,
+        })
+    }
+}
+
+impl Drop for MacPowerSourceObserver {
+    fn drop(&mut self) {
+        self.run_loop
+            .remove_source(&self.source, unsafe { kCFRunLoopDefaultMode });
+        let _ = &self.state;
+    }
+}
+
+unsafe extern "C" fn power_source_changed(context: *mut c_void) {
+    let Some(state) = (unsafe { context.cast::<PowerSourceObserverState>().as_mut() }) else {
+        return;
+    };
+    let Ok(source) = quickgui_system::PowerMonitor::snapshot().map(|snapshot| snapshot.source())
+    else {
+        return;
+    };
+    if source != state.source {
+        state.source = source;
+        let _ = state
+            .proxy
+            .send_event(RuntimeEvent::Power(PowerEvent::PowerSourceChanged(source)));
     }
 }
 
@@ -373,11 +558,22 @@ declare_class!(
             } else {
                 bounded_string(&action, MAX_SYSTEM_NOTIFICATION_ACTION_BYTES).map(Some)
             };
+            let reply = if response.isKindOfClass(UNTextInputNotificationResponse::class()) {
+                // `isKindOfClass:` proves this Objective-C object has the text-response layout.
+                let response = unsafe {
+                    &*(std::ptr::from_ref(response).cast::<UNTextInputNotificationResponse>())
+                };
+                let user_text = unsafe { response.userText() };
+                bounded_string(&user_text, MAX_SYSTEM_NOTIFICATION_REPLY_BYTES)
+            } else {
+                None
+            };
             if let (Some(tag), Some(action_id)) = (tag, action_id) {
                 let _ = self.ivars().proxy.send_event(
                     RuntimeEvent::SystemNotificationResponse(SystemNotificationResponse {
                         tag,
                         action_id,
+                        reply,
                     }),
                 );
             }
@@ -388,13 +584,18 @@ declare_class!(
         fn will_present_notification(
             &self,
             _center: &UNUserNotificationCenter,
-            _notification: &UNNotification,
+            notification: &UNNotification,
             completion_handler: &Block<dyn Fn(UNNotificationPresentationOptions)>,
         ) {
-            completion_handler.call((
+            let mut options =
                 UNNotificationPresentationOptions::UNNotificationPresentationOptionBanner
-                    | UNNotificationPresentationOptions::UNNotificationPresentationOptionList,
-            ));
+                    | UNNotificationPresentationOptions::UNNotificationPresentationOptionList;
+            let content = unsafe { notification.request().content() };
+            if unsafe { content.sound() }.is_some() {
+                options |=
+                    UNNotificationPresentationOptions::UNNotificationPresentationOptionSound;
+            }
+            completion_handler.call((options,));
         }
     }
 );
@@ -413,6 +614,8 @@ struct MacSystemNotificationCenter {
     categories: RefCell<NotificationCategories>,
     authorization: Cell<NotificationAuthorization>,
     pending: RefCell<Vec<SystemNotification>>,
+    pending_permission_status: RefCell<Vec<PlatformResponder<NotificationPermissionStatus>>>,
+    pending_permission_requests: RefCell<Vec<PlatformResponder<NotificationPermissionStatus>>>,
     proxy: EventLoopProxy<RuntimeEvent>,
 }
 
@@ -444,8 +647,51 @@ impl MacSystemNotificationCenter {
             categories: RefCell::new(HashMap::new()),
             authorization: Cell::new(NotificationAuthorization::NotRequested),
             pending: RefCell::new(Vec::with_capacity(4)),
+            pending_permission_status: RefCell::new(Vec::with_capacity(2)),
+            pending_permission_requests: RefCell::new(Vec::with_capacity(2)),
             proxy,
         })
+    }
+
+    fn permission_status(&self, responder: PlatformResponder<NotificationPermissionStatus>) {
+        let mut pending = self.pending_permission_status.borrow_mut();
+        pending.retain(|responder| !responder.is_cancelled());
+        if pending.len() == MAX_PENDING_NOTIFICATION_PERMISSION_REQUESTS {
+            responder.complete(Err(PlatformError::PendingQueueFull));
+            return;
+        }
+        let start_query = pending.is_empty();
+        pending.push(responder);
+        drop(pending);
+        if !start_query {
+            return;
+        }
+
+        let proxy = self.proxy.clone();
+        let completion = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+            let status =
+                notification_permission_status(unsafe { settings.as_ref().authorizationStatus() });
+            let _ = proxy.send_event(RuntimeEvent::SystemNotificationPermissionStatus(status));
+        });
+        unsafe {
+            self.center
+                .getNotificationSettingsWithCompletionHandler(&completion);
+        }
+    }
+
+    fn request_permission(&self, responder: PlatformResponder<NotificationPermissionStatus>) {
+        let mut pending = self.pending_permission_requests.borrow_mut();
+        pending.retain(|responder| !responder.is_cancelled());
+        if pending.len() == MAX_PENDING_NOTIFICATION_PERMISSION_REQUESTS {
+            responder.complete(Err(PlatformError::PendingQueueFull));
+            return;
+        }
+        pending.push(responder);
+        drop(pending);
+        if self.authorization.get() != NotificationAuthorization::Pending {
+            self.authorization.set(NotificationAuthorization::Pending);
+            self.request_authorization();
+        }
     }
 
     fn request_authorization(&self) {
@@ -496,16 +742,32 @@ impl MacSystemNotificationCenter {
         if self.authorization.get() != NotificationAuthorization::Pending {
             return;
         }
-        if let Some(error) = error {
+        if let Some(ref error) = error {
             tracing::warn!(%error, "system notification authorization failed");
         } else if !granted {
             tracing::info!("system notification authorization was denied");
         }
+        let status = if granted {
+            NotificationPermissionStatus::Granted
+        } else {
+            NotificationPermissionStatus::Denied
+        };
         self.authorization.set(if granted {
             NotificationAuthorization::Granted
+        } else if error.is_some() {
+            NotificationAuthorization::NotRequested
         } else {
             NotificationAuthorization::Denied
         });
+
+        let responders = std::mem::take(&mut *self.pending_permission_requests.borrow_mut());
+        for responder in responders {
+            if let Some(error) = &error {
+                responder.complete(Err(PlatformError::Platform(error.clone())));
+            } else {
+                responder.complete(Ok(status));
+            }
+        }
 
         let pending = std::mem::take(&mut *self.pending.borrow_mut());
         if granted {
@@ -515,11 +777,61 @@ impl MacSystemNotificationCenter {
         }
     }
 
+    fn complete_permission_status(&self, status: NotificationPermissionStatus) {
+        if self.authorization.get() != NotificationAuthorization::Pending {
+            self.authorization.set(match status {
+                NotificationPermissionStatus::Granted => NotificationAuthorization::Granted,
+                NotificationPermissionStatus::Denied => NotificationAuthorization::Denied,
+                NotificationPermissionStatus::NotDetermined
+                | NotificationPermissionStatus::Unsupported => {
+                    NotificationAuthorization::NotRequested
+                }
+            });
+        }
+        for responder in std::mem::take(&mut *self.pending_permission_status.borrow_mut()) {
+            responder.complete(Ok(status));
+        }
+    }
+
     fn post(&self, notification: SystemNotification) {
         let content = unsafe { UNMutableNotificationContent::new() };
         unsafe {
             content.setTitle(&NSString::from_str(&notification.title));
+            if let Some(subtitle) = &notification.subtitle {
+                content.setSubtitle(&NSString::from_str(subtitle));
+            }
             content.setBody(&NSString::from_str(&notification.body));
+            match &notification.sound {
+                SystemNotificationSound::Default => {
+                    let sound = UNNotificationSound::defaultSound();
+                    content.setSound(Some(&sound));
+                }
+                SystemNotificationSound::Silent => content.setSound(None),
+                SystemNotificationSound::Named(name) => {
+                    let sound = UNNotificationSound::soundNamed(&NSString::from_str(name));
+                    content.setSound(Some(&sound));
+                }
+            }
+        }
+
+        let mut attachments = Vec::with_capacity(
+            notification.attachments.len() + usize::from(notification.icon.is_some()),
+        );
+        if let Some(path) = &notification.icon
+            && let Some(attachment) = native_notification_attachment("quickgui-icon", path)
+        {
+            attachments.push(attachment);
+        }
+        for attachment in &notification.attachments {
+            let identifier = format!("quickgui-attachment-{}", attachment.id);
+            if let Some(attachment) = native_notification_attachment(&identifier, &attachment.path)
+            {
+                attachments.push(attachment);
+            }
+        }
+        if !attachments.is_empty() {
+            let attachments = NSArray::from_vec(attachments);
+            unsafe { content.setAttachments(&attachments) };
         }
         if !notification.actions.is_empty() {
             if let Some(identifier) = self.register_category(&notification.actions) {
@@ -534,11 +846,27 @@ impl MacSystemNotificationCenter {
             }
         }
 
+        let trigger: Option<Retained<UNNotificationTrigger>> = notification
+            .delivery_at
+            .and_then(|delivery_at| {
+                delivery_at
+                    .duration_since(std::time::SystemTime::now())
+                    .ok()
+            })
+            .filter(|delay| !delay.is_zero())
+            .map(|delay| unsafe {
+                Retained::into_super(
+                    UNTimeIntervalNotificationTrigger::triggerWithTimeInterval_repeats(
+                        delay.as_secs_f64().max(1.0),
+                        false,
+                    ),
+                )
+            });
         let request = unsafe {
             UNNotificationRequest::requestWithIdentifier_content_trigger(
                 &NSString::from_str(&notification.tag),
                 &content,
-                None,
+                trigger.as_deref(),
             )
         };
         let completion = RcBlock::new(|error: *mut NSError| {
@@ -569,11 +897,26 @@ impl MacSystemNotificationCenter {
         let native_actions = actions
             .iter()
             .map(|action| unsafe {
-                UNNotificationAction::actionWithIdentifier_title_options(
-                    &NSString::from_str(&action.id),
-                    &NSString::from_str(&action.label),
-                    UNNotificationActionOptions::empty(),
-                )
+                match &action.kind {
+                    SystemNotificationActionKind::Button => {
+                        UNNotificationAction::actionWithIdentifier_title_options(
+                            &NSString::from_str(&action.id),
+                            &NSString::from_str(&action.label),
+                            UNNotificationActionOptions::empty(),
+                        )
+                    }
+                    SystemNotificationActionKind::TextInput { placeholder } => {
+                        Retained::into_super(
+                            UNTextInputNotificationAction::actionWithIdentifier_title_options_textInputButtonTitle_textInputPlaceholder(
+                                &NSString::from_str(&action.id),
+                                &NSString::from_str(&action.label),
+                                UNNotificationActionOptions::empty(),
+                                &NSString::from_str(&action.label),
+                                &NSString::from_str(placeholder.as_deref().unwrap_or("")),
+                            ),
+                        )
+                    }
+                }
             })
             .collect();
         let native_actions = NSArray::from_vec(native_actions);
@@ -627,8 +970,10 @@ pub(crate) struct MacApplicationHost {
     application_notifications: Retained<NSNotificationCenter>,
     application_observer: Retained<QuickGuiApplicationObserver>,
     workspace_notifications: Option<Retained<NSNotificationCenter>>,
+    power_source_observer: Option<MacPowerSourceObserver>,
     notifications_initialized: bool,
     notifications: Option<MacSystemNotificationCenter>,
+    dock_menu: Option<MacDockMenuHost>,
     proxy: EventLoopProxy<RuntimeEvent>,
 }
 
@@ -637,22 +982,22 @@ impl MacApplicationHost {
         proxy: EventLoopProxy<RuntimeEvent>,
         observe_open_urls: bool,
         observe_reopen: bool,
+        observe_quit: bool,
         observe_power_events: bool,
         observe_notification_responses: bool,
     ) -> Result<Self, String> {
         let mtm = MainThreadMarker::new().ok_or_else(|| {
             "the AppKit application host must be installed on the main thread".to_owned()
         })?;
-        let application_delegate = (observe_open_urls || observe_reopen)
-            .then(|| {
-                MacApplicationDelegateHost::new(
-                    mtm,
-                    proxy.clone(),
-                    observe_open_urls,
-                    observe_reopen,
-                )
-            })
-            .transpose()?;
+        // The delegate host also owns the optional Dock-menu selector, so install it even when the
+        // application did not register lifecycle callbacks.
+        let application_delegate = Some(MacApplicationDelegateHost::new(
+            mtm,
+            proxy.clone(),
+            observe_open_urls,
+            observe_reopen,
+            observe_quit,
+        )?);
 
         let application_observer = QuickGuiApplicationObserver::new(proxy.clone());
         let application_notifications = unsafe { NSNotificationCenter::defaultCenter() };
@@ -688,11 +1033,31 @@ impl MacApplicationHost {
                 Some(&keyboard_layout_notification),
                 None,
             );
+            if observe_power_events {
+                application_notifications.addObserver_selector_name_object(
+                    application_observer.as_ref(),
+                    sel!(quickGuiThermalStateDidChange:),
+                    Some(NSProcessInfoThermalStateDidChangeNotification),
+                    None,
+                );
+                application_notifications.addObserver_selector_name_object(
+                    application_observer.as_ref(),
+                    sel!(quickGuiLowPowerModeDidChange:),
+                    Some(NSProcessInfoPowerStateDidChangeNotification),
+                    None,
+                );
+            }
         }
 
-        let workspace_notifications = if observe_power_events {
-            unsafe {
-                let center = NSWorkspace::sharedWorkspace().notificationCenter();
+        let workspace_notifications = unsafe {
+            let center = NSWorkspace::sharedWorkspace().notificationCenter();
+            center.addObserver_selector_name_object(
+                application_observer.as_ref(),
+                sel!(quickGuiSystemPreferencesDidChange:),
+                Some(NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification),
+                None,
+            );
+            if observe_power_events {
                 center.addObserver_selector_name_object(
                     application_observer.as_ref(),
                     sel!(quickGuiSystemDidWake:),
@@ -707,6 +1072,12 @@ impl MacApplicationHost {
                 );
                 center.addObserver_selector_name_object(
                     application_observer.as_ref(),
+                    sel!(quickGuiSystemWillPowerOff:),
+                    Some(NSWorkspaceWillPowerOffNotification),
+                    None,
+                );
+                center.addObserver_selector_name_object(
+                    application_observer.as_ref(),
                     sel!(quickGuiSessionDidResignActive:),
                     Some(NSWorkspaceSessionDidResignActiveNotification),
                     None,
@@ -717,7 +1088,16 @@ impl MacApplicationHost {
                     Some(NSWorkspaceSessionDidBecomeActiveNotification),
                     None,
                 );
-                Some(center)
+            }
+            Some(center)
+        };
+        let power_source_observer = if observe_power_events {
+            match MacPowerSourceObserver::new(proxy.clone()) {
+                Ok(observer) => Some(observer),
+                Err(error) => {
+                    tracing::warn!(%error, "macOS power-source monitoring is unavailable");
+                    None
+                }
             }
         } else {
             None
@@ -728,14 +1108,51 @@ impl MacApplicationHost {
             application_notifications,
             application_observer,
             workspace_notifications,
+            power_source_observer,
             notifications_initialized: false,
             notifications: None,
+            dock_menu: None,
             proxy,
         };
         if observe_notification_responses {
             host.ensure_notifications();
         }
         Ok(host)
+    }
+
+    pub(crate) fn reply_to_application_should_terminate(&self, terminate: bool) {
+        let Some(delegate) = self.application_delegate.as_ref() else {
+            return;
+        };
+        delegate.associated.ivars().termination_pending.set(false);
+        let mtm = MainThreadMarker::new()
+            .expect("termination replies are dispatched on the AppKit application thread");
+        let application = NSApplication::sharedApplication(mtm);
+        // SAFETY: This balances one preceding `NSTerminateLater` response on the same application
+        // thread and retains no Rust pointer.
+        unsafe { application.replyToApplicationShouldTerminate(terminate) };
+    }
+
+    pub(crate) fn set_dock_menu(
+        &mut self,
+        menu: Option<Menu>,
+        proxy: EventLoopProxy<RuntimeEvent>,
+    ) -> Result<(), String> {
+        let next = menu
+            .as_ref()
+            .map(|menu| MacDockMenuHost::new(menu, proxy))
+            .transpose()?;
+        let delegate = self
+            .application_delegate
+            .as_ref()
+            .ok_or_else(|| "the AppKit application delegate is unavailable".to_owned())?;
+        delegate
+            .associated
+            .ivars()
+            .dock_menu
+            .replace(next.as_ref().map(MacDockMenuHost::native_retained));
+        self.dock_menu = next;
+        Ok(())
     }
 
     pub(crate) fn show_system_notification(&mut self, notification: SystemNotification) {
@@ -762,6 +1179,39 @@ impl MacApplicationHost {
         }
     }
 
+    pub(crate) fn system_notification_permission_status(
+        &mut self,
+        responder: PlatformResponder<NotificationPermissionStatus>,
+    ) {
+        self.ensure_notifications();
+        if let Some(center) = &self.notifications {
+            center.permission_status(responder);
+        } else {
+            responder.complete(Ok(NotificationPermissionStatus::Unsupported));
+        }
+    }
+
+    pub(crate) fn request_system_notification_permission(
+        &mut self,
+        responder: PlatformResponder<NotificationPermissionStatus>,
+    ) {
+        self.ensure_notifications();
+        if let Some(center) = &self.notifications {
+            center.request_permission(responder);
+        } else {
+            responder.complete(Ok(NotificationPermissionStatus::Unsupported));
+        }
+    }
+
+    pub(crate) fn complete_system_notification_permission_status(
+        &mut self,
+        status: NotificationPermissionStatus,
+    ) {
+        if let Some(center) = &self.notifications {
+            center.complete_permission_status(status);
+        }
+    }
+
     fn ensure_notifications(&mut self) {
         if self.notifications_initialized {
             return;
@@ -771,8 +1221,23 @@ impl MacApplicationHost {
     }
 }
 
+fn notification_permission_status(
+    status: objc2_user_notifications::UNAuthorizationStatus,
+) -> NotificationPermissionStatus {
+    use objc2_user_notifications::UNAuthorizationStatus;
+    match status {
+        UNAuthorizationStatus::NotDetermined => NotificationPermissionStatus::NotDetermined,
+        UNAuthorizationStatus::Denied => NotificationPermissionStatus::Denied,
+        UNAuthorizationStatus::Authorized
+        | UNAuthorizationStatus::Provisional
+        | UNAuthorizationStatus::Ephemeral => NotificationPermissionStatus::Granted,
+        _ => NotificationPermissionStatus::Unsupported,
+    }
+}
+
 impl Drop for MacApplicationHost {
     fn drop(&mut self) {
+        self.power_source_observer.take();
         unsafe {
             self.application_notifications
                 .removeObserver(self.application_observer.as_ref());
@@ -820,6 +1285,36 @@ fn bounded_string(value: &NSString, maximum: usize) -> Option<Arc<str>> {
         None
     } else {
         Some(Arc::from(value))
+    }
+}
+
+fn native_notification_attachment(
+    identifier: &str,
+    path: &std::path::Path,
+) -> Option<Retained<UNNotificationAttachment>> {
+    let url = match crate::macos::native_file_url(path, false) {
+        Ok(url) => url,
+        Err(error) => {
+            tracing::warn!(%error, path = %path.display(), "could not create notification attachment URL");
+            return None;
+        }
+    };
+    match unsafe {
+        UNNotificationAttachment::attachmentWithIdentifier_URL_options_error(
+            &NSString::from_str(identifier),
+            &url,
+            None,
+        )
+    } {
+        Ok(attachment) => Some(attachment),
+        Err(error) => {
+            tracing::warn!(
+                error = %error.localizedDescription(),
+                path = %path.display(),
+                "could not attach a local file to a system notification"
+            );
+            None
+        }
     }
 }
 

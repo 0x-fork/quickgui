@@ -130,7 +130,8 @@ cancelling returns to the retained initial value.
   application epoch when visible again.
 - With Reduce Motion enabled, style transitions and springs resolve directly to their target,
   one-shots resolve to their final phase, and repeating animations resolve to phase zero. No
-  animation frame is scheduled.
+  animation frame is scheduled. The effective value combines a window's explicit
+  `WindowOptions::reduce_motion` policy with the Rust core's current `SystemPreferences` snapshot.
 - Easing and spring inputs are checked for non-finite values before they can poison layout or the
   retained scheduler.
 

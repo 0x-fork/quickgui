@@ -274,6 +274,12 @@ fn describe_item(item: &ClipboardItem) -> Arc<str> {
                     ""
                 }
             ),
+            ClipboardEntry::Data(value) => {
+                format!("{} data {} bytes", value.mime_type(), value.bytes().len())
+            }
+            ClipboardEntry::Bookmark(value) => {
+                format!("bookmark {:?} to {}", value.title(), value.url())
+            }
             ClipboardEntry::Image(value) => format!(
                 "{} image {} bytes",
                 value.format().extension(),

@@ -36,7 +36,10 @@ let notification = SystemNotification::new(
     "Build finished",
     "All checks passed.",
 )
-.action(SystemNotificationAction::new("open", "Open"));
+.subtitle("QuickGUI")
+.action(SystemNotificationAction::new("open", "Open"))
+.action(SystemNotificationAction::new("reply", "Reply").text_input("Message"))
+.sound(quickgui::SystemNotificationSound::Default);
 
 cx.show_system_notification(notification)?;
 // cx.dismiss_system_notification("background-build")?;
@@ -73,13 +76,20 @@ path counts, and returned path bytes all have public hard limits. Unbound Cmd-W 
 AppKit's ordinary close path and still delivers `Event::CloseRequested`.
 
 On macOS, notifications require a real `.app` bundle with a `CFBundleIdentifier`; an unbundled
-`cargo run` process cannot use `UNUserNotificationCenter`. The first post makes one contextual
+`cargo run` process cannot use `UNUserNotificationCenter`. The model supports subtitles, buttons,
+inline replies, sound, icons/attachments, and scheduled delivery. Permission status and explicit
+permission requests are separate single-use futures. The first post can also make one contextual
 authorization request, waits for its result, and coalesces replacement tags in a 64-entry bounded
 queue. Dismissal also removes a matching authorization-pending post. Action category retention is
 capped at 64 distinct action sets; later notifications still post without actions instead of
 growing native state. Open callbacks retain at most 256 URLs and 1 MiB total. None of these
 services installs a polling timer or idle frame. See
 `cargo run --release --example platform_services`.
+
+Dock badges, icon replacement, and a typed native Dock menu are application-wide Rust-core
+services. Recent documents, standard About panels, and native file-icon lookup use AppKit/Workspace
+services through the same bounded platform queue. See
+[Desktop integrations](desktop-integrations.md) for the shared API and target matrix.
 
 ## Clipboard and Find pasteboard
 

@@ -12,6 +12,7 @@ pub struct AppRunner {
     pub(super) root_window: WindowHandle,
     pub(super) root_window_pending: bool,
     pub(super) status: AppRunStatus,
+    pub(super) relaunched_process: Option<RelaunchedProcess>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -27,12 +28,24 @@ impl AppRunner {
         let status = self.event_loop.pump_app_events(timeout, &mut self.runtime);
         if let Some(error) = self.runtime.fatal_error.take() {
             self.status = AppRunStatus::Exited(1);
+            self.runtime.relaunch_request.take();
+            self.runtime.finalize_process_services();
             return Err(error);
         }
         self.status = match status {
             PumpStatus::Continue => AppRunStatus::Continue,
             PumpStatus::Exit(code) => AppRunStatus::Exited(code),
         };
+        if matches!(self.status, AppRunStatus::Exited(_)) {
+            self.runtime.finalize_process_services();
+            if let Some(request) = self.runtime.relaunch_request.take() {
+                self.relaunched_process = Some(
+                    request
+                        .spawn()
+                        .map_err(|error| AppError::Platform(error.to_string()))?,
+                );
+            }
+        }
         Ok(self.status)
     }
 
@@ -67,6 +80,89 @@ impl AppRunner {
     /// core context into their host language without maintaining separate window identity.
     pub fn current_window(&self) -> Option<WindowHandle> {
         self.runtime.current_handle()
+    }
+
+    /// Read the hardware pointer in global logical desktop coordinates.
+    pub fn cursor_screen_position(&self) -> Result<Point, PlatformError> {
+        cursor_screen_position(&self.runtime.displays)
+    }
+
+    /// Immutable package identity supplied before application startup.
+    pub fn app_info(&self) -> Option<&AppInfo> {
+        self.runtime.app_info.as_ref()
+    }
+
+    /// Standard application paths resolved once during startup.
+    pub fn app_paths(&self) -> Option<&AppPaths> {
+        self.runtime.app_paths.as_ref()
+    }
+
+    /// Immutable operating-system and preferred-language snapshot captured at startup.
+    pub fn system_info(&self) -> &SystemInfo {
+        &self.runtime.system_info
+    }
+
+    /// Native integration backends compiled for this target.
+    pub const fn desktop_integration_support(&self) -> DesktopIntegrationSupport {
+        DesktopIntegrationSupport::current()
+    }
+
+    /// Current application-wide native menu declaration, including a queued replacement.
+    pub fn application_menus(&self) -> &[Menu] {
+        self.runtime
+            .external_menus
+            .as_deref()
+            .unwrap_or(&self.runtime.menus)
+    }
+
+    /// Effective native menu declaration for one queued or mounted window.
+    pub fn window_menus(&self, handle: WindowHandle) -> Option<&[Menu]> {
+        let application_menus = self.application_menus();
+        if self.runtime.current_handle() == Some(handle) {
+            return Some(
+                self.runtime
+                    .config
+                    .window_menus
+                    .as_deref()
+                    .unwrap_or(application_menus),
+            );
+        }
+        if let Some(window_id) = self.runtime.window_handles.get(&handle)
+            && let Some(entry) = self.runtime.windows.get(window_id)
+        {
+            return Some(
+                entry
+                    .config
+                    .window_menus
+                    .as_deref()
+                    .unwrap_or(application_menus),
+            );
+        }
+        self.runtime
+            .pending_windows
+            .iter()
+            .find(|request| request.handle == handle)
+            .map(|request| {
+                request
+                    .options
+                    .window_menus
+                    .as_deref()
+                    .unwrap_or(application_menus)
+            })
+    }
+
+    /// Current bounded system appearance and accessibility-preference snapshot.
+    pub const fn system_preferences(&self) -> SystemPreferences {
+        self.runtime.system_preferences
+    }
+
+    /// Immutable bounded lookup of mounted and queued application windows.
+    pub fn window_registry(&self) -> WindowRegistry {
+        self.runtime.window_registry()
+    }
+
+    pub fn active_window(&self) -> Option<WindowHandle> {
+        self.runtime.active_window_handle()
     }
 
     /// Queue a new top-level window from an embedding runtime.
@@ -358,6 +454,11 @@ impl AppRunner {
     pub const fn status(&self) -> AppRunStatus {
         self.status
     }
+
+    /// Replacement process spawned after this runner completed orderly teardown, if any.
+    pub const fn relaunched_process(&self) -> Option<RelaunchedProcess> {
+        self.relaunched_process
+    }
 }
 
 /// Configures a native application independently from its windows.
@@ -367,6 +468,8 @@ impl AppRunner {
 /// [`AppRunner::open_window`]. Ordinary Rust applications can continue to use [`App::new`], which
 /// combines this lifecycle with an initial root view.
 pub struct Application {
+    pub(super) app_info: Option<AppInfo>,
+    pub(super) app_paths: Option<AppPaths>,
     pub(super) keymap: Keymap,
     pub(super) menus: Vec<Menu>,
     pub(super) globals: GlobalStore,
@@ -379,6 +482,8 @@ pub struct Application {
 impl Application {
     pub fn new() -> Self {
         Self {
+            app_info: None,
+            app_paths: None,
             keymap: Keymap::default(),
             menus: Vec::new(),
             globals: GlobalStore::default(),
@@ -398,6 +503,29 @@ impl Application {
     /// GPUI-compatible alias for [`Self::quit_mode`].
     pub fn with_quit_mode(self, mode: QuitMode) -> Self {
         self.quit_mode(mode)
+    }
+
+    /// Install the immutable package identity exposed by every core context.
+    ///
+    /// Standard application paths are resolved from its identifier at startup unless
+    /// [`Self::app_paths`] supplies an explicit snapshot.
+    pub fn app_info(mut self, info: AppInfo) -> Self {
+        self.app_info = Some(info);
+        self
+    }
+
+    pub fn with_app_info(self, info: AppInfo) -> Self {
+        self.app_info(info)
+    }
+
+    /// Override the standard path snapshot retained by the application core.
+    pub fn app_paths(mut self, paths: AppPaths) -> Self {
+        self.app_paths = Some(paths);
+        self
+    }
+
+    pub fn with_app_paths(self, paths: AppPaths) -> Self {
+        self.app_paths(paths)
     }
 
     /// Install the immutable application asset source used by every window.
@@ -511,7 +639,7 @@ impl Application {
         self
     }
 
-    /// Handle native system suspend, resume, lock-screen, and unlock-screen events.
+    /// Handle native power, thermal, shutdown, and login-session transitions.
     pub fn on_power_event(
         mut self,
         callback: impl FnMut(PowerEvent, &mut EventContext) + 'static,
@@ -538,6 +666,24 @@ impl Application {
         self
     }
 
+    /// Run the first preventable phase of an orderly application quit.
+    pub fn on_before_quit(
+        mut self,
+        callback: impl FnMut(QuitRequest, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.before_quit = Some(Box::new(callback));
+        self
+    }
+
+    /// Run the final preventable phase immediately before owned windows are torn down.
+    pub fn on_will_quit(
+        mut self,
+        callback: impl FnMut(QuitRequest, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.will_quit = Some(Box::new(callback));
+        self
+    }
+
     /// Convert this windowless application into an externally pumped native event loop.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn into_runner(self) -> Result<AppRunner, AppError> {
@@ -547,6 +693,8 @@ impl Application {
         let runtime = Runtime::new(
             RuntimeStartup {
                 initial_window: None,
+                app_info: self.app_info,
+                app_paths: self.app_paths,
                 globals: self.globals,
                 keymap: self.keymap,
                 menus: self.menus,
@@ -563,6 +711,7 @@ impl Application {
             root_window,
             root_window_pending: true,
             status: AppRunStatus::Continue,
+            relaunched_process: None,
         })
     }
 }
@@ -577,6 +726,8 @@ impl Default for Application {
 pub struct App<V> {
     pub(super) view: V,
     pub(super) config: AppConfig,
+    pub(super) app_info: Option<AppInfo>,
+    pub(super) app_paths: Option<AppPaths>,
     pub(super) keymap: Keymap,
     pub(super) menus: Vec<Menu>,
     pub(super) globals: GlobalStore,
@@ -591,6 +742,8 @@ impl<V: View> App<V> {
         Self {
             view,
             config: AppConfig::default(),
+            app_info: None,
+            app_paths: None,
             keymap: Keymap::default(),
             menus: Vec::new(),
             globals: GlobalStore::default(),
@@ -610,6 +763,26 @@ impl<V: View> App<V> {
     /// GPUI-compatible alias for [`Self::quit_mode`].
     pub fn with_quit_mode(self, mode: QuitMode) -> Self {
         self.quit_mode(mode)
+    }
+
+    /// Install the immutable package identity exposed by every core context.
+    pub fn app_info(mut self, info: AppInfo) -> Self {
+        self.app_info = Some(info);
+        self
+    }
+
+    pub fn with_app_info(self, info: AppInfo) -> Self {
+        self.app_info(info)
+    }
+
+    /// Override the standard path snapshot retained by the application core.
+    pub fn app_paths(mut self, paths: AppPaths) -> Self {
+        self.app_paths = Some(paths);
+        self
+    }
+
+    pub fn with_app_paths(self, paths: AppPaths) -> Self {
+        self.app_paths(paths)
     }
 
     pub fn config(mut self, config: AppConfig) -> Self {
@@ -697,6 +870,16 @@ impl<V: View> App<V> {
         self
     }
 
+    pub fn maximum_size(mut self, width: f32, height: f32) -> Self {
+        self.config = self.config.maximum_size(width, height);
+        self
+    }
+
+    pub fn without_maximum_size(mut self) -> Self {
+        self.config = self.config.without_maximum_size();
+        self
+    }
+
     /// Represent a file in the root window's native document chrome.
     pub fn represented_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.config.represented_file = Some(path.into());
@@ -754,7 +937,7 @@ impl<V: View> App<V> {
     }
 
     pub fn title_bar_style(mut self, style: TitleBarStyle) -> Self {
-        self.config.title_bar_style = style;
+        self.config = self.config.title_bar_style(style);
         self
     }
 
@@ -770,6 +953,11 @@ impl<V: View> App<V> {
 
     pub fn focus(mut self, focus: bool) -> Self {
         self.config.focus = focus;
+        self
+    }
+
+    pub fn focusable(mut self, focusable: bool) -> Self {
+        self.config = self.config.focusable(focusable);
         self
     }
 
@@ -790,6 +978,116 @@ impl<V: View> App<V> {
 
     pub fn minimizable(mut self, minimizable: bool) -> Self {
         self.config.is_minimizable = minimizable;
+        self
+    }
+
+    pub fn maximizable(mut self, maximizable: bool) -> Self {
+        self.config.is_maximizable = maximizable;
+        self
+    }
+
+    pub fn closable(mut self, closable: bool) -> Self {
+        self.config.is_closable = closable;
+        self
+    }
+
+    pub fn decorations(mut self, decorated: bool) -> Self {
+        self.config = self.config.decorations(decorated);
+        self
+    }
+
+    pub fn shadow(mut self, shadow: bool) -> Self {
+        self.config.shadow = shadow;
+        self
+    }
+
+    pub fn content_protected(mut self, protected: bool) -> Self {
+        self.config.content_protected = protected;
+        self
+    }
+
+    pub fn window_level(mut self, level: WindowLevel) -> Self {
+        self.config.window_level = Some(level);
+        self
+    }
+
+    pub fn automatic_window_level(mut self) -> Self {
+        self.config.window_level = None;
+        self
+    }
+
+    pub fn skip_taskbar(mut self, skip: bool) -> Self {
+        self.config.skip_taskbar = skip;
+        self
+    }
+
+    pub fn visible_on_all_workspaces(mut self, visible: bool) -> Self {
+        self.config.visible_on_all_workspaces = visible;
+        self
+    }
+
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.config.opacity = opacity;
+        self
+    }
+
+    pub fn icon(mut self, icon: Image) -> Self {
+        self.config.icon = Some(icon);
+        self
+    }
+
+    pub fn without_icon(mut self) -> Self {
+        self.config.icon = None;
+        self
+    }
+
+    pub fn taskbar_progress(mut self, state: TaskbarProgressState, progress: f32) -> Self {
+        self.config = self.config.taskbar_progress(state, progress);
+        self
+    }
+
+    pub fn taskbar_overlay_icon(mut self, icon: Image, description: impl Into<String>) -> Self {
+        self.config = self.config.taskbar_overlay_icon(icon, description);
+        self
+    }
+
+    pub fn without_taskbar_overlay_icon(mut self) -> Self {
+        self.config = self.config.without_taskbar_overlay_icon();
+        self
+    }
+
+    pub fn cursor_visible(mut self, visible: bool) -> Self {
+        self.config.cursor_visible = visible;
+        self
+    }
+
+    pub fn cursor_grab(mut self, mode: CursorGrabMode) -> Self {
+        self.config.cursor_grab = mode;
+        self
+    }
+
+    pub fn cursor_hit_test(mut self, hit_test: bool) -> Self {
+        self.config.cursor_hit_test = hit_test;
+        self
+    }
+
+    pub fn cursor_position(mut self, position: Point) -> Self {
+        self.config.cursor_position = Some(position);
+        self
+    }
+
+    pub fn without_cursor_position(mut self) -> Self {
+        self.config.cursor_position = None;
+        self
+    }
+
+    pub fn always_on_top(mut self, always_on_top: bool) -> Self {
+        self.config = self.config.always_on_top(always_on_top);
+        self
+    }
+
+    pub fn always_on_bottom(mut self, always_on_bottom: bool) -> Self {
+        self.config = self.config.always_on_bottom(always_on_bottom);
         self
     }
 
@@ -914,7 +1212,7 @@ impl<V: View> App<V> {
         self
     }
 
-    /// Handle native system suspend, resume, lock-screen, and unlock-screen events.
+    /// Handle native power, thermal, shutdown, and login-session transitions.
     pub fn on_power_event(
         mut self,
         callback: impl FnMut(PowerEvent, &mut EventContext) + 'static,
@@ -944,6 +1242,24 @@ impl<V: View> App<V> {
         self
     }
 
+    /// Run the first preventable phase of an orderly application quit.
+    pub fn on_before_quit(
+        mut self,
+        callback: impl FnMut(QuitRequest, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.before_quit = Some(Box::new(callback));
+        self
+    }
+
+    /// Run the final preventable phase immediately before owned windows are torn down.
+    pub fn on_will_quit(
+        mut self,
+        callback: impl FnMut(QuitRequest, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.will_quit = Some(Box::new(callback));
+        self
+    }
+
     /// Convert this application into an externally pumped native event loop.
     ///
     /// This is intended for embedders which already own a language runtime on the platform main
@@ -958,6 +1274,8 @@ impl<V: View> App<V> {
         let runtime = Runtime::new(
             RuntimeStartup {
                 initial_window: Some(initial_window),
+                app_info: self.app_info,
+                app_paths: self.app_paths,
                 globals: self.globals,
                 keymap: self.keymap,
                 menus: self.menus,
@@ -974,6 +1292,7 @@ impl<V: View> App<V> {
             root_window,
             root_window_pending: false,
             status: AppRunStatus::Continue,
+            relaunched_process: None,
         })
     }
 
@@ -985,11 +1304,21 @@ impl<V: View> App<V> {
                 mut runtime,
                 ..
             } = self.into_runner()?;
-            event_loop.run_app(&mut runtime)?;
-            return match runtime.fatal_error.take() {
-                Some(error) => Err(error),
-                None => Ok(()),
-            };
+            let run_result = event_loop.run_app(&mut runtime);
+            let fatal_error = runtime.fatal_error.take();
+            let relaunch = runtime.relaunch_request.take();
+            runtime.finalize_process_services();
+            drop(runtime);
+            run_result?;
+            if let Some(error) = fatal_error {
+                return Err(error);
+            }
+            if let Some(request) = relaunch {
+                request
+                    .spawn()
+                    .map_err(|error| AppError::Platform(error.to_string()))?;
+            }
+            Ok(())
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -999,6 +1328,8 @@ impl<V: View> App<V> {
             let mut runtime = Runtime::new(
                 RuntimeStartup {
                     initial_window: Some(WindowRequest::new(self.view, self.config)),
+                    app_info: self.app_info,
+                    app_paths: self.app_paths,
                     globals: self.globals,
                     keymap: self.keymap,
                     menus: self.menus,
@@ -1010,6 +1341,11 @@ impl<V: View> App<V> {
                 event_loop.create_proxy(),
             )?;
             event_loop.run_app(&mut runtime)?;
+            if runtime.relaunch_request.is_some() {
+                return Err(AppError::Platform(
+                    "application relaunch is unavailable on WebAssembly".to_owned(),
+                ));
+            }
             match runtime.fatal_error.take() {
                 Some(error) => Err(error),
                 None => Ok(()),

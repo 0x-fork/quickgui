@@ -18,6 +18,36 @@ impl AppRunner {
         true
     }
 
+    /// Request an orderly relaunch preserving the current process arguments and directory.
+    pub fn relaunch(&mut self) -> std::result::Result<bool, crate::SystemIntegrationError> {
+        self.relaunch_with(RelaunchOptions::default())
+    }
+
+    /// Request an orderly relaunch with explicit process overrides.
+    ///
+    /// The replacement is spawned only after a later [`Self::pump`] observes event-loop exit and
+    /// releases the single-instance guard, native integrations, windows, and foreground work.
+    pub fn relaunch_with(
+        &mut self,
+        options: RelaunchOptions,
+    ) -> std::result::Result<bool, crate::SystemIntegrationError> {
+        let request = options.prepare()?;
+        if !matches!(self.status, AppRunStatus::Continue) || self.runtime.exit_requested {
+            return Ok(false);
+        }
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| {
+                crate::SystemIntegrationError::Platform(Arc::from(
+                    "the application event loop is closed",
+                ))
+            })?;
+        self.runtime.relaunch_request = Some(request);
+        self.runtime.exit_requested = true;
+        Ok(true)
+    }
+
     /// Return the latest bounded display snapshot retained by the application runtime.
     ///
     /// This does not poll the operating system. The snapshot is replaced at native display-change
@@ -33,16 +63,7 @@ impl AppRunner {
 
     /// Return a constant-size snapshot of one mounted native window.
     pub fn window_state(&self, handle: WindowHandle) -> Option<WindowState> {
-        if self.runtime.current_handle() == Some(handle) {
-            return window_state_snapshot(
-                handle,
-                &self.runtime.config,
-                self.runtime.window.as_ref()?,
-            );
-        }
-        let window_id = self.runtime.window_handles.get(&handle)?;
-        let entry = self.runtime.windows.get(window_id)?;
-        window_state_snapshot(handle, &entry.config, &entry.state)
+        self.runtime.window_state_for(handle)
     }
 
     /// Read one bounded item from the operating system's general clipboard.
@@ -53,6 +74,25 @@ impl AppRunner {
     /// Atomically replace the operating system's general clipboard with one bounded item.
     pub fn write_to_clipboard(&self, item: ClipboardItem) -> Result<(), crate::ClipboardError> {
         self.runtime.clipboard.write(ClipboardTarget::General, item)
+    }
+
+    /// Read Linux's primary-selection clipboard.
+    #[cfg(target_os = "linux")]
+    pub fn read_from_selection_clipboard(
+        &self,
+    ) -> Result<Option<ClipboardItem>, crate::ClipboardError> {
+        self.runtime.clipboard.read(ClipboardTarget::Selection)
+    }
+
+    /// Replace Linux's primary-selection clipboard.
+    #[cfg(target_os = "linux")]
+    pub fn write_to_selection_clipboard(
+        &self,
+        item: ClipboardItem,
+    ) -> Result<(), crate::ClipboardError> {
+        self.runtime
+            .clipboard
+            .write(ClipboardTarget::Selection, item)
     }
 
     /// Ask the operating system to open a URL with its registered handler.
@@ -95,6 +135,8 @@ impl AppRunner {
         notification: SystemNotification,
     ) -> Result<(), PlatformError> {
         let request = PlatformRequest::show_system_notification(notification)?;
+        #[cfg(target_os = "windows")]
+        validate_windows_notification_app_info(self.runtime.app_info.as_ref())?;
         self.queue_platform_request(request)
     }
 
@@ -104,11 +146,159 @@ impl AppRunner {
         tag: impl Into<Arc<str>>,
     ) -> Result<(), PlatformError> {
         let request = PlatformRequest::dismiss_system_notification(tag)?;
+        #[cfg(target_os = "windows")]
+        validate_windows_notification_app_info(self.runtime.app_info.as_ref())?;
         self.queue_platform_request(request)
     }
 
+    /// Query notification authorization without displaying a prompt.
+    pub fn notification_permission_status(
+        &mut self,
+    ) -> Result<NotificationPermissionResponse, PlatformError> {
+        #[cfg(target_os = "windows")]
+        validate_windows_notification_app_info(self.runtime.app_info.as_ref())?;
+        let (request, response) = PlatformRequest::notification_permission_status();
+        self.queue_platform_response(request)?;
+        Ok(response)
+    }
+
+    /// Explicitly request notification authorization where required by the operating system.
+    pub fn request_notification_permission(
+        &mut self,
+    ) -> Result<NotificationPermissionResponse, PlatformError> {
+        #[cfg(target_os = "windows")]
+        validate_windows_notification_app_info(self.runtime.app_info.as_ref())?;
+        let (request, response) = PlatformRequest::request_notification_permission();
+        self.queue_platform_response(request)?;
+        Ok(response)
+    }
+
+    pub fn set_dock_badge(&mut self, value: impl Into<Arc<str>>) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().dock_badges {
+            return Err(PlatformError::Unsupported);
+        }
+        let value = value.into();
+        self.queue_platform_request(PlatformRequest::set_dock_badge(
+            (!value.is_empty()).then_some(value),
+        )?)
+    }
+
+    pub fn clear_dock_badge(&mut self) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().dock_badges {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::set_dock_badge(None)?)
+    }
+
+    /// Last Dock badge successfully applied by the core runtime.
+    pub fn dock_badge(&self) -> Option<&str> {
+        #[cfg(target_os = "macos")]
+        {
+            self.runtime.dock_badge.as_deref()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
+    }
+
+    pub fn set_dock_icon(&mut self, icon: Image) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().dock_icons {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::set_dock_icon(Some(icon)))
+    }
+
+    pub fn clear_dock_icon(&mut self) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().dock_icons {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::set_dock_icon(None))
+    }
+
+    pub fn set_dock_menu(&mut self, menu: Menu) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().dock_menus {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::set_dock_menu(Some(menu))?)
+    }
+
+    pub fn clear_dock_menu(&mut self) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().dock_menus {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::set_dock_menu(None)?)
+    }
+
+    /// Current macOS Dock menu declaration, after its request has been processed.
+    pub fn dock_menu(&self) -> Option<&Menu> {
+        #[cfg(target_os = "macos")]
+        {
+            self.runtime.dock_menu.as_ref()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
+    }
+
+    pub fn add_recent_document(&mut self, path: impl Into<PathBuf>) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().recent_documents {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::add_recent_document(path)?)
+    }
+
+    pub fn clear_recent_documents(&mut self) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().recent_documents {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::ClearRecentDocuments)
+    }
+
+    pub fn show_about_panel(&mut self, options: AboutPanelOptions) -> Result<(), PlatformError> {
+        if !DesktopIntegrationSupport::current().native_about_panel {
+            return Err(PlatformError::Unsupported);
+        }
+        self.queue_platform_request(PlatformRequest::show_about_panel(options)?)
+    }
+
+    pub fn file_icon(
+        &mut self,
+        path: impl Into<PathBuf>,
+        size: FileIconSize,
+    ) -> Result<FileIconResponse, PlatformError> {
+        if !DesktopIntegrationSupport::current().file_icons {
+            return Err(PlatformError::Unsupported);
+        }
+        let (request, response) = PlatformRequest::get_file_icon(path, size)?;
+        self.queue_platform_response(request)?;
+        Ok(response)
+    }
+
+    pub fn set_user_tasks(
+        &mut self,
+        tasks: impl IntoIterator<Item = UserTask>,
+    ) -> Result<ShellResponse, PlatformError> {
+        if !DesktopIntegrationSupport::current().user_tasks {
+            return Err(PlatformError::Unsupported);
+        }
+        let (request, response) = PlatformRequest::set_user_tasks(tasks.into_iter().collect())?;
+        self.queue_platform_response(request)?;
+        Ok(response)
+    }
+
+    pub fn clear_user_tasks(&mut self) -> Result<ShellResponse, PlatformError> {
+        self.set_user_tasks(std::iter::empty())
+    }
+
     /// Replace the complete native application menu set on the next event-loop turn.
-    pub fn set_application_menus(&mut self, menus: Vec<Menu>) -> Result<(), PlatformError> {
+    pub fn set_application_menus(
+        &mut self,
+        menus: impl IntoIterator<Item = Menu>,
+    ) -> Result<(), PlatformError> {
+        let menus = menus.into_iter().collect::<Vec<_>>();
+        crate::menu::validate_menus(&menus).map_err(|_| PlatformError::InvalidMenu)?;
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             let _ = menus;
@@ -128,6 +318,11 @@ impl AppRunner {
         }
     }
 
+    /// Remove every application-wide native menu.
+    pub fn clear_application_menus(&mut self) -> Result<(), PlatformError> {
+        self.set_application_menus(std::iter::empty())
+    }
+
     /// Queue one title mutation for a mounted native window.
     pub fn set_window_title(
         &mut self,
@@ -137,6 +332,33 @@ impl AppRunner {
         let title = title.into();
         validate_window_title(&title)?;
         self.queue_window_command(handle, WindowCommand::SetTitle(handle, title))
+    }
+
+    pub fn set_window_bounds(
+        &mut self,
+        handle: WindowHandle,
+        bounds: WindowBounds,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_bounds(bounds)?;
+        self.queue_window_command(handle, WindowCommand::SetBounds(handle, bounds))
+    }
+
+    pub fn move_window(
+        &mut self,
+        handle: WindowHandle,
+        position: Point,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_position(position)?;
+        self.queue_window_command(handle, WindowCommand::Move(handle, position))
+    }
+
+    pub fn resize_window(
+        &mut self,
+        handle: WindowHandle,
+        size: Size,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_size(size)?;
+        self.queue_window_command(handle, WindowCommand::Resize(handle, size))
     }
 
     /// Queue a native minimize request for a mounted window.
@@ -176,6 +398,217 @@ impl AppRunner {
         visible: bool,
     ) -> Result<(), WindowCommandError> {
         self.queue_window_command(handle, WindowCommand::SetVisible(handle, visible))
+    }
+
+    pub fn set_window_resizable(
+        &mut self,
+        handle: WindowHandle,
+        resizable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetResizable(handle, resizable))
+    }
+
+    pub fn set_window_movable(
+        &mut self,
+        handle: WindowHandle,
+        movable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetMovable(handle, movable))
+    }
+
+    pub fn set_window_minimum_size(
+        &mut self,
+        handle: WindowHandle,
+        minimum: Option<Size>,
+    ) -> Result<(), WindowCommandError> {
+        if let Some(minimum) = minimum {
+            validate_window_size(minimum)?;
+        }
+        self.queue_window_command(handle, WindowCommand::SetMinimumSize(handle, minimum))
+    }
+
+    pub fn set_window_maximum_size(
+        &mut self,
+        handle: WindowHandle,
+        maximum: Option<Size>,
+    ) -> Result<(), WindowCommandError> {
+        if let Some(maximum) = maximum {
+            validate_window_size(maximum)?;
+        }
+        self.queue_window_command(handle, WindowCommand::SetMaximumSize(handle, maximum))
+    }
+
+    pub fn set_window_minimizable(
+        &mut self,
+        handle: WindowHandle,
+        minimizable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetMinimizable(handle, minimizable))
+    }
+
+    pub fn set_window_maximizable(
+        &mut self,
+        handle: WindowHandle,
+        maximizable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetMaximizable(handle, maximizable))
+    }
+
+    pub fn set_window_closable(
+        &mut self,
+        handle: WindowHandle,
+        closable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetClosable(handle, closable))
+    }
+
+    pub fn set_window_decorated(
+        &mut self,
+        handle: WindowHandle,
+        decorated: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetDecorated(handle, decorated))
+    }
+
+    pub fn set_window_shadow(
+        &mut self,
+        handle: WindowHandle,
+        shadow: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetShadow(handle, shadow))
+    }
+
+    pub fn set_window_content_protected(
+        &mut self,
+        handle: WindowHandle,
+        protected: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetContentProtected(handle, protected),
+        )
+    }
+
+    pub fn set_window_level(
+        &mut self,
+        handle: WindowHandle,
+        level: Option<WindowLevel>,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetWindowLevel(handle, level))
+    }
+
+    pub fn set_window_focusable(
+        &mut self,
+        handle: WindowHandle,
+        focusable: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetFocusable(handle, focusable))
+    }
+
+    pub fn set_window_skip_taskbar(
+        &mut self,
+        handle: WindowHandle,
+        skip: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetSkipTaskbar(handle, skip))
+    }
+
+    pub fn set_window_visible_on_all_workspaces(
+        &mut self,
+        handle: WindowHandle,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetVisibleOnAllWorkspaces(handle, visible),
+        )
+    }
+
+    pub fn set_window_opacity(
+        &mut self,
+        handle: WindowHandle,
+        opacity: f32,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_opacity(opacity)?;
+        self.queue_window_command(handle, WindowCommand::SetOpacity(handle, opacity))
+    }
+
+    pub fn set_window_icon(
+        &mut self,
+        handle: WindowHandle,
+        icon: Option<Image>,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetIcon(handle, icon))
+    }
+
+    pub fn set_cursor_visible(
+        &mut self,
+        handle: WindowHandle,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetCursorVisible(handle, visible))
+    }
+
+    pub fn set_cursor_grab(
+        &mut self,
+        handle: WindowHandle,
+        mode: CursorGrabMode,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetCursorGrab(handle, mode))
+    }
+
+    pub fn set_cursor_hit_test(
+        &mut self,
+        handle: WindowHandle,
+        hit_test: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetCursorHitTest(handle, hit_test))
+    }
+
+    pub fn set_cursor_position(
+        &mut self,
+        handle: WindowHandle,
+        position: Point,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_position(position)?;
+        self.queue_window_command(handle, WindowCommand::SetCursorPosition(handle, position))
+    }
+
+    pub fn set_taskbar_progress(
+        &mut self,
+        handle: WindowHandle,
+        state: TaskbarProgressState,
+        progress: f32,
+    ) -> Result<(), WindowCommandError> {
+        validate_taskbar_progress(progress)?;
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetTaskbarProgress(handle, state, progress),
+        )
+    }
+
+    pub fn set_taskbar_overlay_icon(
+        &mut self,
+        handle: WindowHandle,
+        icon: Image,
+        description: impl Into<String>,
+    ) -> Result<(), WindowCommandError> {
+        let description = description.into();
+        validate_taskbar_overlay_description(Some(&description))?;
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetTaskbarOverlayIcon(handle, Some(icon), Some(description)),
+        )
+    }
+
+    pub fn clear_taskbar_overlay_icon(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetTaskbarOverlayIcon(handle, None, None),
+        )
     }
 
     /// Bring a mounted native window to the front and give it keyboard focus.
@@ -230,6 +663,17 @@ impl AppRunner {
         self.queue_window_command(handle, WindowCommand::SetAppearance(handle, appearance))
     }
 
+    pub fn set_window_background_appearance(
+        &mut self,
+        handle: WindowHandle,
+        appearance: WindowBackgroundAppearance,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetBackgroundAppearance(handle, appearance),
+        )
+    }
+
     fn queue_window_command(
         &mut self,
         handle: WindowHandle,
@@ -280,56 +724,6 @@ impl AppRunner {
             .send_event(RuntimeEvent::ExternalCommandsReady)
             .map_err(|_| WindowCommandError::Unavailable)
     }
-}
-
-fn window_state_snapshot(
-    handle: WindowHandle,
-    config: &AppConfig,
-    state: &RuntimeWindow,
-) -> Option<WindowState> {
-    let platform_content_attached = runtime_window_content_attached(state);
-    let fullscreen = runtime_window_is_fullscreen(state);
-    let maximized = !fullscreen && runtime_window_is_maximized(state, config);
-    let minimized = platform_content_attached && state.window.is_minimized().unwrap_or(false);
-    let current_bounds = Rect::new(
-        state.logical_position.x,
-        state.logical_position.y,
-        state.logical_size.width,
-        state.logical_size.height,
-    );
-    let bounds = if fullscreen {
-        WindowBounds::Fullscreen(state.restore_bounds)
-    } else if maximized {
-        WindowBounds::Maximized(state.restore_bounds)
-    } else {
-        WindowBounds::Windowed(current_bounds)
-    };
-    Some(WindowState {
-        handle,
-        display_id: state.display_id,
-        kind: config.kind,
-        bounds,
-        viewport_size: state.logical_size,
-        minimum_size: config.minimum_size,
-        scale_factor: state.scale_factor,
-        appearance: state.appearance,
-        background_appearance: config.window_background,
-        focused: state.focused,
-        visible: state.visible,
-        minimized,
-        maximized,
-        fullscreen,
-        occluded: state.occluded,
-        movable: config.is_movable,
-        resizable: config.is_resizable,
-        minimizable: config.is_minimizable,
-        represented_file: config.represented_file.is_some(),
-        document_edited: config.document_edited,
-        native_tabbing: config.tabbing_identifier.is_some(),
-        native_tabs: state.native_tabs,
-        #[cfg(feature = "inspector")]
-        inspector_active: state.inspector.is_some(),
-    })
 }
 
 #[cfg(test)]

@@ -327,7 +327,7 @@ impl VirtualList {
     pub(crate) fn scroll_mount(&self) -> VirtualScrollMount {
         let range = self.visible_rows().range;
         let content_range = (!range.is_empty())
-            .then(|| range.start as f32 * self.row_height..range.end as f32 * self.row_height);
+            .then_some(range.start as f32 * self.row_height..range.end as f32 * self.row_height);
         VirtualScrollMount::new(self.scroll_offset(), content_range)
     }
 }

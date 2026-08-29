@@ -1,6 +1,29 @@
 use std::sync::Arc;
 
-use crate::{Action, AnyAction};
+use std::{fmt, path::Path};
+
+use crate::{Action, AnyAction, Image, ImageError};
+
+/// Maximum action, role, separator, submenu, and system-menu nodes in one native menu tree.
+pub const MAX_NATIVE_MENU_ITEMS: usize = 1_024;
+/// Maximum nested native-menu depth.
+pub const MAX_NATIVE_MENU_DEPTH: usize = 16;
+/// Maximum UTF-8 bytes in one native menu or item label.
+pub const MAX_NATIVE_MENU_TEXT_BYTES: usize = 4 * 1024;
+/// Maximum aggregate UTF-8 label bytes in one native menu declaration.
+pub const MAX_NATIVE_MENU_TOTAL_TEXT_BYTES: usize = 1024 * 1024;
+
+#[derive(Clone, Debug, Eq, thiserror::Error, PartialEq)]
+pub enum MenuError {
+    #[error("native menu labels must be nonempty, NUL-free, and at most 4096 UTF-8 bytes")]
+    InvalidText,
+    #[error("a native menu tree cannot contain more than 1024 nodes")]
+    TooManyItems,
+    #[error("a native menu tree cannot be nested more than 16 levels")]
+    TooDeep,
+    #[error("native menu labels cannot retain more than 1 MiB of aggregate UTF-8 text")]
+    TooMuchText,
+}
 
 /// A declarative application menu projected to the platform's native menu system.
 ///
@@ -69,6 +92,10 @@ pub struct OsMenu {
 pub enum SystemMenuType {
     /// The macOS Services menu.
     Services,
+    /// The operating system's window-management menu.
+    Window,
+    /// The operating system's help menu.
+    Help,
 }
 
 /// Commands that should first follow the operating system's native responder chain.
@@ -84,6 +111,99 @@ pub enum OsAction {
     SelectAll,
     Undo,
     Redo,
+    /// Show the application's native About panel where the operating system provides one.
+    About,
+    /// Hide every window belonging to this application.
+    HideApplication,
+    /// Hide other applications while keeping this application visible.
+    HideOtherApplications,
+    /// Reveal applications hidden through the native application menu.
+    ShowAllApplications,
+    /// Request orderly application termination.
+    Quit,
+    /// Close the active window through its ordinary close policy.
+    CloseWindow,
+    /// Minimize the active window.
+    MinimizeWindow,
+    /// Toggle the active window's native zoom/maximized state.
+    ZoomWindow,
+    /// Toggle borderless/native fullscreen for the active window.
+    ToggleFullscreen,
+    /// Bring the application's windows to the front.
+    BringAllToFront,
+    /// Open the operating system's application help UI where available.
+    ShowHelp,
+}
+
+impl OsAction {
+    /// Whether this command participates in focused native text-control responder routing.
+    pub const fn is_text_editing(self) -> bool {
+        matches!(
+            self,
+            Self::Cut | Self::Copy | Self::Paste | Self::SelectAll | Self::Undo | Self::Redo
+        )
+    }
+}
+
+/// Native state indicator shown beside a menu item.
+///
+/// QuickGUI treats check and radio items as controlled state: selecting one dispatches its role or
+/// typed action, and the next menu declaration supplies the resulting state. This avoids a second
+/// mutable source of truth inside the platform menu host.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum MenuItemMark {
+    #[default]
+    None,
+    Check,
+    Radio,
+}
+
+/// A decoded, bounded RGBA image suitable for a native menu item.
+#[derive(Clone)]
+pub struct MenuIcon(Image);
+
+impl MenuIcon {
+    /// Construct an icon from tightly packed, straight-alpha RGBA8 pixels.
+    pub fn from_rgba(
+        width: u32,
+        height: u32,
+        rgba: impl Into<std::sync::Arc<[u8]>>,
+    ) -> Result<Self, ImageError> {
+        Image::from_rgba(width, height, rgba).map(Self)
+    }
+
+    /// Decode PNG, JPEG, TIFF, WebP, or the first frame of a GIF.
+    pub fn decode(encoded: impl AsRef<[u8]>) -> Result<Self, ImageError> {
+        Image::decode(encoded).map(Self)
+    }
+
+    /// Decode a supported image file with QuickGUI's normal image bounds.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, ImageError> {
+        Image::open(path).map(Self)
+    }
+
+    pub fn width(&self) -> u32 {
+        self.0.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.0.height()
+    }
+
+    pub(crate) fn rgba(&self) -> &[u8] {
+        self.0.rgba()
+    }
+}
+
+impl fmt::Debug for MenuIcon {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MenuIcon")
+            .field("width", &self.width())
+            .field("height", &self.height())
+            .field("bytes", &self.0.byte_len())
+            .finish()
+    }
 }
 
 /// One action, separator, or nested menu in a Menu.
@@ -97,6 +217,17 @@ pub enum MenuItem {
         action: AnyAction,
         os_action: Option<OsAction>,
         checked: bool,
+        mark: MenuItemMark,
+        icon: Option<MenuIcon>,
+        disabled: bool,
+    },
+    /// A standard operating-system command that does not require an application action type.
+    Role {
+        name: Arc<str>,
+        role: OsAction,
+        checked: bool,
+        mark: MenuItemMark,
+        icon: Option<MenuIcon>,
         disabled: bool,
     },
 }
@@ -108,6 +239,8 @@ impl MenuItem {
             action: AnyAction::new(action),
             os_action: None,
             checked: false,
+            mark: MenuItemMark::None,
+            icon: None,
             disabled: false,
         }
     }
@@ -118,6 +251,20 @@ impl MenuItem {
             action: AnyAction::new(action),
             os_action: Some(os_action),
             checked: false,
+            mark: MenuItemMark::None,
+            icon: None,
+            disabled: false,
+        }
+    }
+
+    /// Construct a standard native application, window, help, or editing command.
+    pub fn role(name: impl Into<Arc<str>>, role: OsAction) -> Self {
+        Self::Role {
+            name: name.into(),
+            role,
+            checked: false,
+            mark: MenuItemMark::None,
+            icon: None,
             disabled: false,
         }
     }
@@ -138,19 +285,61 @@ impl MenuItem {
     }
 
     pub fn checked(mut self, value: bool) -> Self {
-        if let Self::Action { checked, .. } = &mut self {
-            *checked = value;
+        match &mut self {
+            Self::Action { checked, mark, .. } | Self::Role { checked, mark, .. } => {
+                *checked = value;
+                *mark = MenuItemMark::Check;
+            }
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => {}
+        }
+        self
+    }
+
+    /// Display a mutually-exclusive native radio indicator with controlled checked state.
+    pub fn radio(mut self, value: bool) -> Self {
+        match &mut self {
+            Self::Action { checked, mark, .. } | Self::Role { checked, mark, .. } => {
+                *checked = value;
+                *mark = MenuItemMark::Radio;
+            }
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => {}
+        }
+        self
+    }
+
+    /// Attach an image to a normal native menu item.
+    pub fn icon(mut self, value: MenuIcon) -> Self {
+        match &mut self {
+            Self::Action { icon, .. } | Self::Role { icon, .. } => *icon = Some(value),
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => {}
         }
         self
     }
 
     pub fn is_checked(&self) -> bool {
-        matches!(self, Self::Action { checked: true, .. })
+        matches!(
+            self,
+            Self::Action { checked: true, .. } | Self::Role { checked: true, .. }
+        )
+    }
+
+    pub fn mark(&self) -> MenuItemMark {
+        match self {
+            Self::Action { mark, .. } | Self::Role { mark, .. } => *mark,
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => MenuItemMark::None,
+        }
+    }
+
+    pub fn menu_icon(&self) -> Option<&MenuIcon> {
+        match self {
+            Self::Action { icon, .. } | Self::Role { icon, .. } => icon.as_ref(),
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => None,
+        }
     }
 
     pub fn disabled(mut self, value: bool) -> Self {
         match &mut self {
-            Self::Action { disabled, .. } => *disabled = value,
+            Self::Action { disabled, .. } | Self::Role { disabled, .. } => *disabled = value,
             Self::Submenu(menu) => menu.disabled = value,
             Self::Separator | Self::SystemMenu(_) => {}
         }
@@ -159,7 +348,7 @@ impl MenuItem {
 
     pub fn is_disabled(&self) -> bool {
         match self {
-            Self::Action { disabled, .. } => *disabled,
+            Self::Action { disabled, .. } | Self::Role { disabled, .. } => *disabled,
             Self::Submenu(menu) => menu.disabled,
             Self::Separator | Self::SystemMenu(_) => false,
         }
@@ -176,9 +365,10 @@ impl MenuItem {
 }
 
 pub(crate) struct MenuAction {
-    pub action: AnyAction,
+    pub action: Option<AnyAction>,
     pub os_action: Option<OsAction>,
     pub disabled: bool,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub checked: bool,
 }
 
@@ -193,8 +383,19 @@ pub(crate) fn collect_menu_actions(menus: &[Menu]) -> Vec<MenuAction> {
                     checked,
                     ..
                 } => actions.push(MenuAction {
-                    action: action.clone(),
+                    action: Some(action.clone()),
                     os_action: *os_action,
+                    disabled: *disabled,
+                    checked: *checked,
+                }),
+                MenuItem::Role {
+                    role,
+                    disabled,
+                    checked,
+                    ..
+                } => actions.push(MenuAction {
+                    action: None,
+                    os_action: Some(*role),
                     disabled: *disabled,
                     checked: *checked,
                 }),
@@ -209,6 +410,55 @@ pub(crate) fn collect_menu_actions(menus: &[Menu]) -> Vec<MenuAction> {
         collect(menu, &mut actions);
     }
     actions
+}
+
+pub(crate) fn validate_menus(menus: &[Menu]) -> Result<(), MenuError> {
+    fn validate_text(text: &str, total: &mut usize) -> Result<(), MenuError> {
+        if text.is_empty() || text.len() > MAX_NATIVE_MENU_TEXT_BYTES || text.contains('\0') {
+            return Err(MenuError::InvalidText);
+        }
+        *total = total
+            .checked_add(text.len())
+            .ok_or(MenuError::TooMuchText)?;
+        if *total > MAX_NATIVE_MENU_TOTAL_TEXT_BYTES {
+            return Err(MenuError::TooMuchText);
+        }
+        Ok(())
+    }
+
+    fn validate_menu(
+        menu: &Menu,
+        depth: usize,
+        count: &mut usize,
+        text: &mut usize,
+    ) -> Result<(), MenuError> {
+        if depth > MAX_NATIVE_MENU_DEPTH {
+            return Err(MenuError::TooDeep);
+        }
+        validate_text(&menu.name, text)?;
+        for item in &menu.items {
+            *count = count.checked_add(1).ok_or(MenuError::TooManyItems)?;
+            if *count > MAX_NATIVE_MENU_ITEMS {
+                return Err(MenuError::TooManyItems);
+            }
+            match item {
+                MenuItem::Action { name, .. } | MenuItem::Role { name, .. } => {
+                    validate_text(name, text)?;
+                }
+                MenuItem::Submenu(menu) => validate_menu(menu, depth + 1, count, text)?,
+                MenuItem::SystemMenu(menu) => validate_text(&menu.name, text)?,
+                MenuItem::Separator => {}
+            }
+        }
+        Ok(())
+    }
+
+    let mut count = 0;
+    let mut text = 0;
+    for menu in menus {
+        validate_menu(menu, 1, &mut count, &mut text)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -234,8 +484,14 @@ mod tests {
 
         let actions = collect_menu_actions(&menus);
         assert_eq!(actions.len(), 3);
-        assert_eq!(actions[0].action.type_id(), TypeId::of::<OpenFile>());
-        assert_eq!(actions[1].action.type_id(), TypeId::of::<ToggleSidebar>());
+        assert_eq!(
+            actions[0].action.as_ref().unwrap().type_id(),
+            TypeId::of::<OpenFile>()
+        );
+        assert_eq!(
+            actions[1].action.as_ref().unwrap().type_id(),
+            TypeId::of::<ToggleSidebar>()
+        );
         assert!(actions[1].checked);
         assert!(actions[2].disabled);
     }
@@ -252,5 +508,45 @@ mod tests {
         assert_eq!(menu.items.len(), 2);
         assert!(menu.disabled);
         assert!(MenuItem::submenu(Menu::new("Nested").disabled(true)).is_disabled());
+    }
+
+    #[test]
+    fn roles_radio_marks_and_icons_remain_in_core_action_order() {
+        let icon = MenuIcon::from_rgba(1, 1, [255, 0, 0, 255].as_slice()).unwrap();
+        let menus = [Menu::new("Window")
+            .item(MenuItem::role("Minimize", OsAction::MinimizeWindow))
+            .item(
+                MenuItem::action("Mode", ToggleSidebar)
+                    .radio(true)
+                    .icon(icon),
+            )];
+
+        let actions = collect_menu_actions(&menus);
+        assert_eq!(actions.len(), 2);
+        assert!(actions[0].action.is_none());
+        assert_eq!(actions[0].os_action, Some(OsAction::MinimizeWindow));
+        assert_eq!(menus[0].items[1].mark(), MenuItemMark::Radio);
+        assert!(actions[1].checked);
+    }
+
+    #[test]
+    fn native_menu_validation_bounds_depth_count_and_text() {
+        assert_eq!(
+            validate_menus(&[Menu::new("")]),
+            Err(MenuError::InvalidText)
+        );
+
+        let mut nested = Menu::new("leaf");
+        for depth in 0..MAX_NATIVE_MENU_DEPTH {
+            nested = Menu::new(format!("level-{depth}")).submenu(nested);
+        }
+        assert_eq!(validate_menus(&[nested]), Err(MenuError::TooDeep));
+
+        let oversized = Menu::new("File").items(
+            (0..=MAX_NATIVE_MENU_ITEMS)
+                .map(|_| MenuItem::separator())
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(validate_menus(&[oversized]), Err(MenuError::TooManyItems));
     }
 }

@@ -107,7 +107,9 @@ declare_class!(
         const NAME: &'static str = "WinitWindow";
     }
 
-    impl DeclaredClass for WinitWindow {}
+    impl DeclaredClass for WinitWindow {
+        type Ivars = WinitWindowIvars;
+    }
 
     unsafe impl WinitWindow {
         #[method(canBecomeMainWindow)]
@@ -119,10 +121,31 @@ declare_class!(
         #[method(canBecomeKeyWindow)]
         fn can_become_key_window(&self) -> bool {
             trace_scope!("canBecomeKeyWindow");
-            true
+            self.ivars().can_become_key_window.get()
         }
     }
 );
+
+#[derive(Debug)]
+pub struct WinitWindowIvars {
+    can_become_key_window: Cell<bool>,
+}
+
+impl Default for WinitWindowIvars {
+    fn default() -> Self {
+        Self {
+            can_become_key_window: Cell::new(true),
+        }
+    }
+}
+
+impl WinitWindow {
+    pub(super) fn set_can_become_key_window(&self, can_become_key_window: bool) {
+        self.ivars()
+            .can_become_key_window
+            .set(can_become_key_window);
+    }
+}
 
 #[derive(Debug)]
 pub struct WinitPanelIvars {

@@ -107,19 +107,19 @@ fn monitor_logind(
     event_proxy: EventLoopProxy<RuntimeEvent>,
     ready: mpsc::SyncSender<Result<(), String>>,
 ) {
-    let manager = match Proxy::new(
-        &connection,
-        "org.freedesktop.login1",
-        "/org/freedesktop/login1",
-        "org.freedesktop.login1.Manager",
-    ) {
-        Ok(manager) => manager,
+    let rule = match MatchRule::builder()
+        .msg_type(Type::Signal)
+        .sender("org.freedesktop.login1")
+        .and_then(|builder| builder.interface("org.freedesktop.login1.Manager"))
+        .and_then(|builder| builder.path("/org/freedesktop/login1"))
+    {
+        Ok(builder) => builder.build(),
         Err(error) => {
             let _ = ready.send(Err(error.to_string()));
             return;
         }
     };
-    let mut signals = match manager.receive_signal("PrepareForSleep") {
+    let mut signals = match MessageIterator::for_match_rule(rule, &connection, Some(16)) {
         Ok(signals) => signals,
         Err(error) => {
             let _ = ready.send(Err(error.to_string()));
@@ -131,17 +131,25 @@ fn monitor_logind(
     }
     let mut suspended = false;
     for message in &mut signals {
+        let Ok(message) = message else {
+            break;
+        };
+        let header = message.header();
+        let member = header.member().map(|member| member.as_str());
         let Ok(value) = message.body().deserialize::<bool>() else {
             continue;
         };
-        let event = if value && !suspended {
-            suspended = true;
-            Some(PowerEvent::Suspend)
-        } else if !value && suspended {
-            suspended = false;
-            Some(PowerEvent::Resume)
-        } else {
-            None
+        let event = match member {
+            Some("PrepareForSleep") if value && !suspended => {
+                suspended = true;
+                Some(PowerEvent::Suspend)
+            }
+            Some("PrepareForSleep") if !value && suspended => {
+                suspended = false;
+                Some(PowerEvent::Resume)
+            }
+            Some("PrepareForShutdown") if value => Some(PowerEvent::ShutdownRequested),
+            _ => None,
         };
         if let Some(event) = event
             && event_proxy.send_event(RuntimeEvent::Power(event)).is_err()

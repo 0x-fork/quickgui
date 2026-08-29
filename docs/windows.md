@@ -127,6 +127,16 @@ wake or mutate another cache. On macOS, arbitrary typed drag values can cross th
 windows without serialization; the example includes a bidirectional process-local card transfer.
 See `cargo run --release --example multi_window`.
 
+The Rust core also owns application-wide lookup. `EventContext::window_registry()` captures mounted
+and already queued windows at the start of the callback; `windows()` and `active_window()` are
+convenience reads over the same immutable snapshot. `AppRunner::window_registry()`,
+`active_window()`, and `window_state(handle)` expose the corresponding externally pumped view, so a
+binding does not need a second focus or window-identity registry. Handles sort by stable creation
+identity and round-trip through `WindowHandle::as_u64`/`from_u64`. A snapshot retains at most 4,096
+handles and reports `is_truncated()` if that pathological bound is reached. The runtime reuses the
+shared handle slice while membership is unchanged, so ordinary pointer/key events do not allocate
+another registry.
+
 ## Application and window lifecycle
 
 `QuitMode` makes final-window behavior explicit. `Default` follows GPUI and native desktop
@@ -170,11 +180,17 @@ and `Explicit` mode, QuickGUI stays in `ControlFlow::Wait`; there is no redraw, 
 polling. The `platform_services` example closes its final window, remains resident on macOS, and
 creates a fresh window when its Dock icon is clicked.
 
+`cx.relaunch()` adds one prepared replacement process to that same teardown. QuickGUI releases the
+single-instance guard and process integrations after the last close callback, then spawns exactly
+once. See [Relaunch and signed updates](relaunch-and-updates.md) for overrides and updater flow.
+
 Window creation also retains a native role, restore geometry, initial visibility, and runtime
 capabilities:
 
 ```rust
-use quickgui::{SystemPopover, Rect, Size, WindowBounds, WindowKind, WindowOptions};
+use quickgui::{
+    SystemPopover, Rect, Size, WindowBounds, WindowKind, WindowLevel, WindowOptions,
+};
 
 let dialog = cx.open_window(
     ConfirmDelete::new(),
@@ -182,7 +198,12 @@ let dialog = cx.open_window(
         .window_kind(WindowKind::Dialog)
         .window_bounds(WindowBounds::Windowed(Rect::new(220.0, 140.0, 560.0, 360.0)))
         .minimum_size(480.0, 300.0)
-        .resizable(false),
+        .maximum_size(960.0, 720.0)
+        .resizable(false)
+        .maximizable(false)
+        .closable(false)
+        .content_protected(true)
+        .window_level(WindowLevel::AlwaysOnTop),
 );
 
 let menu = SystemPopover::new(244.0, 178.0)
@@ -193,6 +214,9 @@ cx.set_window_bounds(WindowBounds::windowed(240.0, 160.0, 720.0, 520.0))
     .expect("valid bounds");
 cx.set_window_minimum_size(Size::new(560.0, 360.0))?;
 cx.clear_window_minimum_size_handle(dialog)?;
+cx.set_window_maximum_size_handle(dialog, Size::new(1200.0, 900.0))?;
+cx.set_window_closable_handle(dialog, true)?;
+cx.set_window_shadow_handle(dialog, false)?;
 cx.toggle_fullscreen().expect("native window");
 cx.hide_window().expect("native window");
 cx.show_window_handle(dialog).expect("queued child handle");
@@ -216,14 +240,33 @@ native state changes through `ViewContext`:
 let state = cx.window_state();
 ```
 
-`WindowState::minimum_size` reports the effective inner-size constraint. Normal windows default to
-`320 x 240`; `WindowOptions::without_minimum_size` and `App::without_minimum_size` opt out, while
-system popovers are unconstrained by default. Runtime set/clear commands are validated through the
-same finite 32,768-point dimension bound as resize commands. Raising a minimum above the current
-window requests one constrained native resize; subsequent OS resize events follow the ordinary
-damage path rather than a framework correction loop. Explicit programmatic bounds remain the
-application's requested restore geometry and are still reconciled by the native window manager. A view that
-does not call `window_state()` is not rebuilt when only the constraint changes.
+`WindowState::minimum_size` and `maximum_size` report the effective inner-size constraints. Normal
+windows default to a `320 x 240` minimum and no maximum; system popovers are unconstrained. Runtime
+set/clear commands are validated through the same finite 32,768-point dimension bound as resize
+commands, and startup rejects a minimum larger than its maximum. Changing a constraint requests at
+most one necessary native resize; subsequent OS resize events follow the ordinary damage path
+rather than a framework correction loop. Explicit programmatic bounds remain application-authored
+restore geometry and are still reconciled by the native window manager. A view that does not call
+`window_state()` is not rebuilt when only a constraint changes.
+
+Movable, resizable, minimizable, maximizable, and closable are independent policies. The native
+maximize button is enabled only when both resizable and maximizable are true. Decoration, shadow,
+content protection, and `WindowLevel::{AlwaysOnBottom, Normal, AlwaysOnTop}` are also retained in
+`WindowState`, have startup builders, and have current-window plus handle-targeted commands.
+`automatic_window_level` derives the established role behavior: floating/popover roles stay above
+ordinary windows, while normal/dialog roles use normal stacking. Content protection is enforced by
+Winit on macOS and Windows but remains subject to OS capture limitations; runtime shadow mutation is
+currently native on macOS, while some other window managers always draw decorated-window shadows.
+Unsupported window-manager hints still retain the requested core state rather than making a
+binding-specific source of truth.
+
+Pointer and shell policy are part of the same retained state. `set_cursor_visible`,
+`set_cursor_grab`, `set_cursor_position`, and `set_cursor_hit_test` have handle-targeted variants;
+`cursor_screen_position()` reads the hardware pointer in global logical desktop coordinates.
+Windows additionally exposes taskbar progress plus an accessibility-described overlay icon, while
+macOS exposes application-wide Dock badges/icons/menus. Query
+`DesktopIntegrationSupport::current()` before selecting platform-specific presentation and see
+[Desktop integrations](desktop-integrations.md) for the complete matrix.
 
 The live macOS acceptance gate starts below a larger runtime minimum, verifies the one-time native
 growth, compares both `WindowState::minimum_size` and AppKit's `contentMinSize`, clears the
@@ -307,11 +350,12 @@ uses the versioned `quickgui-winit` and `quickgui-accesskit-winit` support crate
 They keep one Winit type universe for downstream packages and are released in that order before
 `quickgui`; no consumer-side Cargo patch is required.
 
-Title, bounds, move, resize, minimize, restore, zoom, fullscreen, visibility, movability,
-resizability, minimizability, appearance, background composition, focus, attention, and close
-commands can target the current window or a stable `WindowHandle`. Mutations are validated before
-retention, capped at 256 per event and 1,024 per effect cycle, and applied after the application
-callback releases its borrows. Calling `cx.window_state()` or `cx.appearance()` declaratively
-observes native changes; it does not install a timer or polling frame. See
+Title, bounds, move, resize, minimum/maximum constraints, minimize, restore, zoom, fullscreen,
+visibility, movability, resizability, minimizability, maximizability, closability, decorations,
+shadow, content protection, stacking level, appearance, background composition, focus, attention,
+and close commands can target the current window or a stable `WindowHandle`. Mutations are
+validated before retention, capped at 256 per event and 1,024 per effect cycle, and applied after
+the application callback releases its borrows. Calling `cx.window_state()` or `cx.appearance()`
+declaratively observes native changes; it does not install a timer or polling frame. See
 `cargo run --release --example window_controls`, `cargo run --release --example appearance`, and
 `cargo run --release --example window_background`.

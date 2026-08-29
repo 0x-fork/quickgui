@@ -117,6 +117,9 @@ pub trait WindowExtMacOS {
     /// to preserve text and IME focus in their owner window.
     fn set_panel_can_become_key_window(&self, can_become_key_window: bool) -> bool;
 
+    /// Set whether this AppKit window or panel may become the key window.
+    fn set_can_become_key_window(&self, can_become_key_window: bool) -> bool;
+
     /// Group windows together by using the same tabbing identifier.
     ///
     /// <https://developer.apple.com/documentation/appkit/nswindow/1644704-tabbingidentifier>
@@ -205,6 +208,12 @@ impl WindowExtMacOS for Window {
     fn set_panel_can_become_key_window(&self, can_become_key_window: bool) -> bool {
         self.window
             .maybe_wait_on_main(move |w| w.set_panel_can_become_key_window(can_become_key_window))
+    }
+
+    #[inline]
+    fn set_can_become_key_window(&self, can_become_key_window: bool) -> bool {
+        self.window
+            .maybe_wait_on_main(move |w| w.set_can_become_key_window(can_become_key_window))
     }
 
     #[inline]

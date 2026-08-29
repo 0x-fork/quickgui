@@ -97,6 +97,14 @@ impl ImageWorkerPoolHandle {
             SharedWorkerState::Failed => Err(WorkerQueueError::Disconnected),
         }
     }
+
+    pub(crate) fn shutdown(&self) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *state = SharedWorkerState::Failed;
+    }
 }
 
 impl ImageWorkerPool {

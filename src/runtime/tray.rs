@@ -264,6 +264,21 @@ pub(super) enum TrayCommand {
 }
 
 impl AppRunner {
+    pub const fn tray_icons_supported(&self) -> bool {
+        DesktopIntegrationSupport::current().tray_icons
+    }
+
+    pub fn is_tray_icon_registered(&self, id: u32) -> bool {
+        self.runtime.tray_icons.contains_key(&id)
+    }
+
+    /// Sorted ids of tray icons currently owned by this application.
+    pub fn tray_icon_ids(&self) -> Vec<u32> {
+        let mut ids = self.runtime.tray_icons.keys().copied().collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids
+    }
+
     /// Create or atomically replace a native tray icon.
     pub fn set_tray_icon(
         &mut self,
@@ -587,6 +602,13 @@ fn parse_application_menu_native_id(value: &str) -> Option<usize> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
+fn parse_popup_menu_native_id(value: &str) -> Option<(u64, usize)> {
+    let value = value.strip_prefix("quickgui-popup-menu-")?;
+    let (popup, action) = value.split_once("-action-")?;
+    Some((popup.parse().ok()?, action.parse().ok()?))
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 static TRAY_PROXY: Mutex<Option<EventLoopProxy<RuntimeEvent>>> = Mutex::new(None);
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -664,6 +686,8 @@ pub(super) fn install_native_menu_handlers(proxy: EventLoopProxy<RuntimeEvent>) 
         };
         if let Some((tray_id, item_id)) = parse_tray_menu_native_id(native.id.as_ref()) {
             let _ = proxy.send_event(RuntimeEvent::Tray(TrayEvent::menu_item(tray_id, item_id)));
+        } else if let Some((popup_id, action_id)) = parse_popup_menu_native_id(native.id.as_ref()) {
+            let _ = proxy.send_event(RuntimeEvent::NativePopupMenuAction(popup_id, action_id));
         } else if let Some(action_id) = parse_application_menu_native_id(native.id.as_ref()) {
             let _ = proxy.send_event(RuntimeEvent::MenuAction(action_id));
         }
