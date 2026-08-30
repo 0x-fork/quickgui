@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { resolve as resolvePath } from "node:path";
 import * as binding from "./binding.js";
 
 export type AutoStartMode =
@@ -47,6 +48,23 @@ export interface AvailableUpdate {
   signature: string;
   notes?: string;
   publishedAt?: string;
+}
+
+export interface UpdateInstallOptions {
+  targetExecutable?: string;
+  retainBackup?: boolean;
+  windowsMode?: "basic-ui" | "quiet" | "passive";
+  installerArguments?: readonly string[];
+}
+
+export interface InstalledUpdate {
+  version: string;
+  disposition: "applied" | "installer-launched";
+  installedPath: string;
+  backupPath?: string;
+  installerProcessId?: number;
+  requiresApplicationExit: boolean;
+  relaunchRecommended: boolean;
 }
 
 /** Native login-launch registration. Operations run outside the JavaScript event loop. */
@@ -116,7 +134,7 @@ export const SecureStorage = Object.freeze({
   },
 });
 
-/** Signed update discovery and staging. Installing remains package-format specific. */
+/** Signed update discovery, staging, mandatory re-verification, and native installation. */
 export const Updater = Object.freeze({
   defaultTarget(): string {
     return binding.defaultUpdateTarget();
@@ -148,6 +166,32 @@ export const Updater = Object.freeze({
     options: UpdateClientOptions,
   ): Promise<void> {
     return binding.verifyUpdate(path, signature, nativeUpdateOptions(options));
+  },
+
+  async install(
+    update: AvailableUpdate,
+    artifact: string,
+    installOptions: UpdateInstallOptions,
+    options: UpdateClientOptions,
+  ): Promise<InstalledUpdate> {
+    const native: binding.NativeUpdateInstallOptions = {};
+    if (installOptions.targetExecutable !== undefined) {
+      native.targetExecutable = resolvePath(installOptions.targetExecutable);
+    }
+    if (installOptions.retainBackup !== undefined) {
+      native.retainBackup = installOptions.retainBackup;
+    }
+    if (installOptions.windowsMode !== undefined) native.windowsMode = installOptions.windowsMode;
+    if (installOptions.installerArguments !== undefined) {
+      native.installerArguments = [...installOptions.installerArguments];
+    }
+    const installed = await binding.installUpdate(
+      nativeAvailableUpdate(update),
+      resolvePath(artifact),
+      native,
+      nativeUpdateOptions(options),
+    );
+    return { ...installed } as InstalledUpdate;
   },
 });
 

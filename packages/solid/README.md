@@ -42,5 +42,6 @@ open-folder, and save-destination panels with explicit cancellation results.
 The [popover example](../../examples/popover-solid/app.tsx) compares the shared
 `Root`/`Trigger`/`Content` JSX API of `SystemPopover` and the retained in-window `Popover`.
 The [system API example](../../examples/system-api-solid/app.tsx) demonstrates core-owned shell,
-clipboard, display, notification, menu, tray, shortcut, single-instance, deep-link, secure-storage,
-autostart, power, and updater services through the Solid binding.
+app environment, clipboard, display, notification, menu, tray, shortcut, single-instance,
+deep-link, secure-storage, autostart, permission, preference, desktop, power, window, and updater
+services from `@quickgui/native` alongside the Solid renderer.

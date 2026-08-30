@@ -3,20 +3,24 @@ import {
   AutoStart,
   Clipboard,
   DeepLink,
+  Desktop,
   GlobalShortcut,
   Menu,
   Notifications,
+  Permissions,
+  PowerAssertion,
   PowerMonitor,
   Screen,
   SecureStorage,
   Shell,
+  SystemPreferences,
   Tray,
   type TrayIcon,
   Updater,
   Window,
 } from "@quickgui/native";
 import { Button, Text, View, createRenderer } from "@quickgui/solid";
-import { createSignal } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 
 const identifier = "dev.quickgui.system-api-example";
 const appName = "QuickGUI System APIs";
@@ -56,19 +60,38 @@ function SystemApiExample() {
   const [busy, setBusy] = createSignal(false);
   let tray: TrayIcon | undefined;
   let unregisterShortcut: (() => Promise<void>) | undefined;
+  let powerAssertion: PowerAssertion | undefined;
+  let dimmed = false;
+  let dockBadgeVisible = false;
 
-  app.on("secondInstance", ({ argv }) => {
-    window.show();
-    window.focus();
-    setStatus(`A second launch forwarded ${argv.length} argument(s).`);
-  });
-  app.on("openUrls", (urls) => setStatus(`Deep link: ${urls.join(", ")}`));
-  PowerMonitor.on("suspend", () => setStatus("The system is suspending."));
-  PowerMonitor.on("resume", () => setStatus("The system resumed."));
-  PowerMonitor.on("lock-screen", () => setStatus("The session was locked."));
-  PowerMonitor.on("unlock-screen", () => setStatus("The session was unlocked."));
-  Notifications.onResponse(({ tag, actionId }) => {
-    setStatus(`Notification ${tag} activated${actionId ? ` via ${actionId}` : ""}.`);
+  onCleanup(
+    app.on("secondInstance", ({ argv }) => {
+      window.show();
+      window.focus();
+      setStatus(`A second launch forwarded ${argv.length} argument(s).`);
+    }),
+  );
+  onCleanup(app.on("openUrls", (urls) => setStatus(`Deep link: ${urls.join(", ")}`)));
+  onCleanup(PowerMonitor.on("suspend", () => setStatus("The system is suspending.")));
+  onCleanup(PowerMonitor.on("resume", () => setStatus("The system resumed.")));
+  onCleanup(PowerMonitor.on("lock-screen", () => setStatus("The session was locked.")));
+  onCleanup(PowerMonitor.on("unlock-screen", () => setStatus("The session was unlocked.")));
+  onCleanup(
+    Notifications.onResponse(({ tag, actionId, reply }) => {
+      const response = reply ? `: ${reply}` : actionId ? ` via ${actionId}` : "";
+      setStatus(`Notification ${tag} activated${response}.`);
+    }),
+  );
+  onCleanup(
+    SystemPreferences.onChange((preferences) => {
+      setStatus(`System preferences changed to ${preferences.colorScheme} appearance.`);
+    }),
+  );
+  onCleanup(() => {
+    powerAssertion?.release();
+    void unregisterShortcut?.();
+    void tray?.destroy();
+    if (dockBadgeVisible) Desktop.setDockBadge();
   });
 
   Menu.setApplicationMenu([
@@ -77,7 +100,15 @@ function SystemApiExample() {
       items: [
         { label: "Show window", click: () => window.show() },
         { type: "separator" },
-        { label: "Quit", click: () => app.quit() },
+        { type: "role", label: "Quit", role: "quit" },
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        { type: "role", label: "Copy", role: "copy" },
+        { type: "role", label: "Paste", role: "paste" },
+        { type: "role", label: "Select All", role: "select-all" },
       ],
     },
   ]);
@@ -140,25 +171,124 @@ function SystemApiExample() {
         <View style={{ display: "flex", flexDirection: "column", gap: 7 }}>
           <Text style={{ fontSize: 26, lineHeight: 32, fontWeight: 700 }}>Native integrations</Text>
           <Text style={{ color: "#9aa6b7", fontSize: 14, lineHeight: 21 }}>
-            Every button calls a Rust core capability re-exported by the Solid binding.
+            Every button calls a Rust core capability exposed by @quickgui/native.
           </Text>
         </View>
 
         <View style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {action("Clipboard", async () => {
-            await Clipboard.writeText("Hello from QuickGUI");
-            return `Clipboard: ${await Clipboard.readText()}`;
+          {action("App environment", async () => {
+            const info = app.getInfo();
+            const system = app.getSystemInfo();
+            const paths = app.getPaths();
+            return `${info?.name ?? "QuickGUI"} ${info?.version ?? ""} · ${system.name} ${system.version ?? ""} · ${paths?.configDir ?? "no config directory"}`;
+          })}
+          {action("Rich clipboard", async () => {
+            await Clipboard.write({
+              entries: [
+                {
+                  type: "text",
+                  text: "Hello from QuickGUI",
+                  metadata: JSON.stringify({ source: "system-api-solid" }),
+                },
+                {
+                  type: "data",
+                  mimeType: "text/html",
+                  data: new TextEncoder().encode("<strong>Hello from QuickGUI</strong>"),
+                },
+                {
+                  type: "bookmark",
+                  title: "QuickGUI",
+                  url: "https://github.com/egoist/quickgui",
+                },
+              ],
+            });
+            const item = await Clipboard.read();
+            return `Clipboard representations: ${item?.entries.map((entry) => entry.type).join(", ") ?? "none"}`;
           })}
           {action("Displays", async () => {
             const displays = Screen.getAllDisplays();
-            return `${displays.length} display(s), primary ${Screen.getPrimaryDisplay()?.name ?? "unknown"}`;
+            const cursor = Screen.getCursorScreenPoint();
+            return `${displays.length} display(s), primary ${Screen.getPrimaryDisplay()?.name ?? "unknown"}, cursor ${Math.round(cursor.x)},${Math.round(cursor.y)}`;
+          })}
+          {action("Preferences", async () => {
+            const preferences = SystemPreferences.getCurrent();
+            return `${preferences.colorScheme} appearance · reduce motion ${preferences.reduceMotion ?? "unknown"} · screen reader ${preferences.screenReader ?? "unknown"}`;
+          })}
+          {action("Permissions", async () => {
+            return (["camera", "microphone", "screen-recording", "accessibility"] as const)
+              .map((permission) => `${permission}: ${Permissions.status(permission)}`)
+              .join(" · ");
+          })}
+          {action("Power snapshot", async () => {
+            const power = PowerMonitor.getState();
+            return `${power.source} power · ${power.thermalState} thermal · ${PowerMonitor.getSystemIdleState(60)} after ${Math.floor(PowerMonitor.getSystemIdleTime())}s`;
+          })}
+          {action("Sleep assertion", async () => {
+            if (powerAssertion?.active) {
+              powerAssertion.release();
+              powerAssertion = undefined;
+              return "Released the application-suspension assertion.";
+            }
+            powerAssertion = new PowerAssertion(
+              "prevent-application-suspension",
+              "QuickGUI system API example",
+            );
+            return "Preventing application suspension until clicked again or the window closes.";
+          })}
+          {action("Window state", async () => {
+            const state = window.getState();
+            return `${Math.round(state.bounds.width)}×${Math.round(state.bounds.height)} · ${state.appearance} · ${state.focused ? "focused" : "unfocused"} · ${state.windowLevel}`;
+          })}
+          {action("Toggle opacity", async () => {
+            if (!Desktop.getSupport().windowOpacity) return "Window opacity is unsupported here.";
+            dimmed = !dimmed;
+            window.setOpacity(dimmed ? 0.82 : 1);
+            return `Window opacity is now ${dimmed ? "82%" : "100%"}.`;
+          })}
+          {action("Desktop support", async () => {
+            const supported = Object.entries(Desktop.getSupport())
+              .filter(([, enabled]) => enabled)
+              .map(([name]) => name);
+            return `${supported.length} compiled integrations · ${supported.slice(0, 6).join(", ")}`;
+          })}
+          {action("About panel", async () => {
+            if (!Desktop.getSupport().nativeAboutPanel) return "A native About panel is unsupported here.";
+            const info = app.getInfo();
+            Desktop.showAboutPanel({
+              applicationName: appName,
+              ...(info ? { applicationVersion: info.version } : {}),
+              credits: "Core-owned desktop integrations exposed through @quickgui/native.",
+            });
+            return "Opened the native About panel.";
+          })}
+          {action("Executable icon", async () => {
+            if (!Desktop.getSupport().fileIcons) return "Native file icons are unsupported here.";
+            const executable = app.getPaths()?.executable;
+            if (!executable) return "No executable path is available.";
+            const icon = await Desktop.getFileIcon(executable, "normal");
+            return `Loaded a ${icon.width}×${icon.height} native file icon.`;
+          })}
+          {action("Dock badge", async () => {
+            if (!Desktop.getSupport().dockBadges) return "Dock badges are unsupported here.";
+            dockBadgeVisible = !dockBadgeVisible;
+            Desktop.setDockBadge(dockBadgeVisible ? "1" : undefined);
+            return `Dock badge ${dockBadgeVisible ? "set" : "cleared"}.`;
           })}
           {action("Notification", async () => {
+            const permission = await Notifications.requestPermission();
+            if (permission !== "granted" && permission !== "unsupported") {
+              return `Notification permission is ${permission}.`;
+            }
             await Notifications.show({
               tag: "system-api-example",
               title: "QuickGUI",
               body: "Native notification delivery is working.",
-              actions: [{ id: "open", label: "Open" }],
+              subtitle: "Core-owned system integration",
+              actions: [
+                { id: "open", label: "Open" },
+                { id: "reply", label: "Reply", type: "text-input", placeholder: "Message" },
+              ],
+              sound: "default",
             });
             return "Notification delivered.";
           })}

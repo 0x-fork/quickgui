@@ -19,11 +19,12 @@ Electron-shaped result objects. The file-dialog backend uses QuickGUI's AppKit p
 buttons. Linux file dialogs prefer XDG Desktop Portals (with RFD's Zenity fallback), while Linux
 alert dialogs require Zenity because the portal API has no standardized message-dialog surface.
 
-System services are core-first and exported from this package: singleton `app` lifecycle and
-single-instance locking, `Appearance`, `AutoStart`, `Clipboard`, `DeepLink`, `GlobalShortcut`,
-`Keyboard`, `Menu`, `Notifications`, `PowerMonitor`, `Screen`, `SecureStorage`, `Shell`, `Tray`,
-`Updater`, and imperative `Window` controls. The updater discovers and stages signed artifacts;
-package-format-specific installation remains the application's responsibility.
+System services are core-first and exported from this package: singleton `app` lifecycle,
+identity, paths, system information, relaunch, and single-instance locking; `Appearance`,
+`AutoStart`, `Clipboard`, `DeepLink`, `Desktop`, `GlobalShortcut`, `Keyboard`, `Menu`,
+`Notifications`, `Permissions`, `PowerAssertion`, `PowerMonitor`, `Screen`, `SecureStorage`,
+`Shell`, `SystemPreferences`, `Tray`, `Updater`, and imperative `Window` controls. The updater
+discovers, stages, re-verifies, and installs supported native artifacts through the Rust core.
 
 Most applications should depend on this package and [`@quickgui/solid`](../solid/README.md)
 directly. Import `app`, `Window`, dialogs, and platform APIs here, await `app.whenReady()`, then pass

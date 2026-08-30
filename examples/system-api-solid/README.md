@@ -8,11 +8,13 @@ cd examples/system-api-solid
 bun run dev
 ```
 
-The UI demonstrates clipboard access, displays, notifications, shell launching, credential
-storage, autostart, custom protocols, global shortcuts, tray icons, native menus, power events,
-and single-instance forwarding. It only changes OS state after a button click. Remove the
-credential, autostart entry, or protocol registration after experimenting if you do not want to
-keep it.
+The UI demonstrates core-owned app identity and paths, system information and preferences,
+permission status, rich clipboard representations, displays and the global cursor, notifications,
+shell launching, credential storage, autostart, custom protocols, global shortcuts, tray icons,
+native menus, power snapshots and assertions, desktop integration discovery, Dock badges, native
+file icons, window state and controls, and single-instance forwarding. It only changes OS state
+after a button click. Remove the credential, autostart entry, or protocol registration after
+experimenting if you do not want to keep it.
 
 Platform notes:
 
@@ -25,5 +27,6 @@ Platform notes:
 - Linux global shortcuts currently require X11; Wayland intentionally does not permit the same
   unrestricted registration model.
 - Secure storage uses Keychain Services, Windows Credential Manager, or Secret Service.
-- `Updater` discovers and stages a Minisign-verified artifact. Installing it is deliberately left
-  to the app's package format and is not demonstrated with a fake endpoint or signing key.
+- `Updater` discovers, stages, re-verifies, and installs supported native artifacts. The example
+  does not ship a fake endpoint, signing key, or disposable installation target, so it only shows
+  the resolved update target.

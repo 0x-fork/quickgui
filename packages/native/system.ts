@@ -39,6 +39,61 @@ export interface Display {
   primary: boolean;
 }
 
+export interface DesktopIntegrationSupport {
+  systemNotifications: boolean;
+  scheduledNotifications: boolean;
+  notificationReplies: boolean;
+  nativeApplicationMenus: boolean;
+  nativePopupMenus: boolean;
+  trayIcons: boolean;
+  programmableTrayPopup: boolean;
+  globalShortcuts: boolean;
+  singleInstance: boolean;
+  dynamicProtocolRegistration: boolean;
+  autostart: boolean;
+  windowIcons: boolean;
+  windowFocusability: boolean;
+  windowOpacity: boolean;
+  skipTaskbar: boolean;
+  visibleOnAllWorkspaces: boolean;
+  cursorControl: boolean;
+  cursorScreenPosition: boolean;
+  taskbarProgress: boolean;
+  taskbarOverlayIcons: boolean;
+  dockBadges: boolean;
+  dockIcons: boolean;
+  dockMenus: boolean;
+  recentDocuments: boolean;
+  fileIcons: boolean;
+  nativeAboutPanel: boolean;
+  userTasks: boolean;
+}
+
+export interface AboutPanelOptions {
+  applicationName?: string;
+  applicationVersion?: string;
+  version?: string;
+  copyright?: string;
+  credits?: string;
+  icon?: ImageSource;
+}
+
+export interface UserTask {
+  title: string;
+  /** Platform command-line argument string retained by the Windows Jump List. */
+  arguments: string;
+  program?: string;
+  description?: string;
+  workingDirectory?: string;
+  icon?: { path: string; index: number };
+}
+
+export interface NativeImage {
+  data: Uint8Array;
+  width: number;
+  height: number;
+}
+
 export interface KeyboardLayout {
   id: string;
   name: string;
@@ -46,13 +101,32 @@ export interface KeyboardLayout {
 
 export type AppearanceMode = "light" | "dark";
 export type AppearancePreference = AppearanceMode | "system";
+export type WindowKind = "normal" | "popover" | "system-popover" | "floating" | "dialog";
+export type WindowLevel = "always-on-bottom" | "normal" | "always-on-top";
+export type CursorGrabMode = "none" | "confined" | "locked";
+export type TaskbarProgressState = "none" | "normal" | "indeterminate" | "paused" | "error";
+export type WindowBackgroundAppearance = "opaque" | "transparent" | "blurred";
+export type ImageSource =
+  | string
+  | {
+      /** Encoded image bytes, or tightly packed RGBA8 when both dimensions are supplied. */
+      data: Uint8Array;
+      width?: number;
+      height?: number;
+    };
 
 export interface WindowState {
   displayId?: string;
+  kind: WindowKind;
   bounds: Rectangle;
+  viewportSize: { width: number; height: number };
+  minimumSize?: { width: number; height: number };
+  maximumSize?: { width: number; height: number };
   scaleFactor: number;
   appearance: AppearanceMode;
+  backgroundAppearance: WindowBackgroundAppearance;
   focused: boolean;
+  focusable: boolean;
   visible: boolean;
   minimized: boolean;
   maximized: boolean;
@@ -61,8 +135,33 @@ export interface WindowState {
   movable: boolean;
   resizable: boolean;
   minimizable: boolean;
+  maximizable: boolean;
+  closable: boolean;
+  decorated: boolean;
+  shadow: boolean;
+  contentProtected: boolean;
+  windowLevel: WindowLevel;
+  skipTaskbar: boolean;
+  visibleOnAllWorkspaces: boolean;
+  opacity: number;
+  hasIcon: boolean;
+  taskbarProgressState: TaskbarProgressState;
+  taskbarProgress: number;
+  hasTaskbarOverlayIcon: boolean;
+  cursorVisible: boolean;
+  cursorGrab: CursorGrabMode;
+  cursorHitTest: boolean;
+  cursorPosition?: { x: number; y: number };
   representedFile: boolean;
   documentEdited: boolean;
+  nativeTabbing: boolean;
+  nativeTabs: {
+    count: number;
+    selectedIndex?: number;
+    tabBarVisible: boolean;
+    overviewVisible: boolean;
+    truncated: boolean;
+  };
 }
 
 export interface ClipboardTextEntry {
@@ -92,7 +191,24 @@ export interface ClipboardFilesEntry {
   paths: readonly string[];
 }
 
-export type ClipboardEntry = ClipboardTextEntry | ClipboardImageEntry | ClipboardFilesEntry;
+export interface ClipboardDataEntry {
+  type: "data";
+  mimeType: string;
+  data: Uint8Array;
+}
+
+export interface ClipboardBookmarkEntry {
+  type: "bookmark";
+  title: string;
+  url: string;
+}
+
+export type ClipboardEntry =
+  | ClipboardTextEntry
+  | ClipboardImageEntry
+  | ClipboardFilesEntry
+  | ClipboardDataEntry
+  | ClipboardBookmarkEntry;
 
 export interface ClipboardItem {
   /** Representations are committed atomically by one native clipboard write. */
@@ -102,6 +218,13 @@ export interface ClipboardItem {
 export interface NotificationAction {
   id: string;
   label: string;
+  type?: "button" | "text-input";
+  placeholder?: string;
+}
+
+export interface NotificationAttachment {
+  id: string;
+  path: string;
 }
 
 export interface NotificationOptions {
@@ -109,24 +232,68 @@ export interface NotificationOptions {
   tag: string;
   title: string;
   body?: string;
+  subtitle?: string;
   actions?: readonly NotificationAction[];
+  /** `default`, `silent`, or a platform-recognized sound name. */
+  sound?: string;
+  icon?: string;
+  attachments?: readonly NotificationAttachment[];
+  deliverAt?: Date;
 }
 
 export interface NotificationResponse {
   tag: string;
   /** Omitted when the notification body, rather than an action button, was activated. */
   actionId?: string;
+  /** Inline text returned by a `text-input` action. */
+  reply?: string;
 }
 
-export type MenuRole = "cut" | "copy" | "paste" | "select-all" | "undo" | "redo";
+export type NotificationPermissionStatus =
+  | "not-determined"
+  | "granted"
+  | "denied"
+  | "unsupported";
+
+export type MenuRole =
+  | "cut"
+  | "copy"
+  | "paste"
+  | "select-all"
+  | "undo"
+  | "redo"
+  | "about"
+  | "hide-application"
+  | "hide-other-applications"
+  | "show-all-applications"
+  | "quit"
+  | "close-window"
+  | "minimize-window"
+  | "zoom-window"
+  | "toggle-fullscreen"
+  | "bring-all-to-front"
+  | "show-help";
+export type MenuItemMark = "none" | "check" | "radio";
 
 export interface MenuActionItem {
   type?: "action";
   label: string;
   enabled?: boolean;
   checked?: boolean;
+  mark?: MenuItemMark;
+  icon?: ImageSource;
   role?: MenuRole;
   click?: () => void;
+}
+
+export interface MenuRoleItem {
+  type: "role";
+  label: string;
+  role: MenuRole;
+  enabled?: boolean;
+  checked?: boolean;
+  mark?: MenuItemMark;
+  icon?: ImageSource;
 }
 
 export interface MenuSeparatorItem {
@@ -146,11 +313,19 @@ export interface MenuServicesItem {
   label?: string;
 }
 
+export interface MenuSystemItem {
+  type: "system-menu";
+  label: string;
+  menu: "services" | "window" | "help";
+}
+
 export type MenuItem =
   | MenuActionItem
+  | MenuRoleItem
   | MenuSeparatorItem
   | MenuSubmenuItem
-  | MenuServicesItem;
+  | MenuServicesItem
+  | MenuSystemItem;
 
 export interface MenuDefinition {
   label: string;
@@ -159,7 +334,113 @@ export interface MenuDefinition {
 }
 
 export type GlobalShortcutListener = () => void;
-export type PowerEvent = "suspend" | "resume" | "lock-screen" | "unlock-screen";
+export type PowerEventType =
+  | "suspend"
+  | "resume"
+  | "lock-screen"
+  | "unlock-screen"
+  | "shutdown-requested"
+  | "power-source-changed"
+  | "thermal-state-changed"
+  | "low-power-mode-changed"
+  | "cpu-speed-limit-changed";
+
+export type PowerEvent =
+  | { type: "suspend" | "resume" | "lock-screen" | "unlock-screen" | "shutdown-requested" }
+  | { type: "power-source-changed"; source: "ac" | "battery" | "unknown" }
+  | {
+      type: "thermal-state-changed";
+      state: "unknown" | "nominal" | "fair" | "serious" | "critical";
+    }
+  | { type: "low-power-mode-changed"; enabled: boolean }
+  | { type: "cpu-speed-limit-changed"; percent: number };
+
+export type PowerSource = "ac" | "battery" | "unknown";
+export type BatteryStatus =
+  | "charging"
+  | "discharging"
+  | "full"
+  | "not-charging"
+  | "unknown";
+export type ThermalState = "unknown" | "nominal" | "fair" | "serious" | "critical";
+export type SessionState = "active" | "inactive" | "locked" | "unknown";
+export type IdleState = "active" | "idle" | "locked" | "unknown";
+export type PowerAssertionKind =
+  | "prevent-application-suspension"
+  | "prevent-display-sleep";
+
+export interface PowerState {
+  source: PowerSource;
+  battery?: { chargePercent?: number; status: BatteryStatus };
+  thermalState: ThermalState;
+  lowPowerMode?: boolean;
+  cpuSpeedLimitPercent?: number;
+}
+
+export interface SystemColor {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+}
+
+export interface SystemPreferencesSnapshot {
+  colorScheme: "light" | "dark" | "unknown";
+  reduceMotion?: boolean;
+  reduceTransparency?: boolean;
+  increaseContrast?: boolean;
+  differentiateWithoutColor?: boolean;
+  invertColors?: boolean;
+  forcedColors?: boolean;
+  screenReader?: boolean;
+  switchControl?: boolean;
+  colors: Partial<
+    Record<
+      | "accent"
+      | "highlight"
+      | "highlightText"
+      | "windowBackground"
+      | "windowText"
+      | "controlBackground"
+      | "controlText"
+      | "link",
+      SystemColor
+    >
+  >;
+}
+
+export type PermissionKind = "camera" | "microphone" | "screen-recording" | "accessibility";
+export type PermissionStatus =
+  | "not-determined"
+  | "granted"
+  | "denied"
+  | "restricted"
+  | "unknown";
+
+/** RAII native sleep assertion. Releasing or dropping this object removes the OS assertion. */
+export class PowerAssertion {
+  readonly #native: binding.NativePowerAssertion;
+
+  constructor(kind: PowerAssertionKind, reason: string) {
+    this.#native = new binding.NativePowerAssertion(kind, reason);
+  }
+
+  get kind(): PowerAssertionKind {
+    return this.#native.kind as PowerAssertionKind;
+  }
+
+  get reason(): string {
+    return this.#native.reason;
+  }
+
+  get active(): boolean {
+    return this.#native.active;
+  }
+
+  release(): boolean {
+    return this.#native.release();
+  }
+}
 
 type AppContext = {
   appId: number;
@@ -222,10 +503,14 @@ function nativeKeyboardLayout(): KeyboardLayout {
 
 function normalizeWindowState(state: binding.NativeWindowState): WindowState {
   const normalized: WindowState = {
+    kind: state.kind as WindowKind,
     bounds: { x: state.x, y: state.y, width: state.width, height: state.height },
+    viewportSize: { width: state.viewportWidth, height: state.viewportHeight },
     scaleFactor: state.scaleFactor,
     appearance: state.appearance === "dark" ? "dark" : "light",
+    backgroundAppearance: state.backgroundAppearance as WindowBackgroundAppearance,
     focused: state.focused,
+    focusable: state.focusable,
     visible: state.visible,
     minimized: state.minimized,
     maximized: state.maximized,
@@ -234,10 +519,45 @@ function normalizeWindowState(state: binding.NativeWindowState): WindowState {
     movable: state.movable,
     resizable: state.resizable,
     minimizable: state.minimizable,
+    maximizable: state.maximizable,
+    closable: state.closable,
+    decorated: state.decorated,
+    shadow: state.shadow,
+    contentProtected: state.contentProtected,
+    windowLevel: state.windowLevel as WindowLevel,
+    skipTaskbar: state.skipTaskbar,
+    visibleOnAllWorkspaces: state.visibleOnAllWorkspaces,
+    opacity: state.opacity,
+    hasIcon: state.hasIcon,
+    taskbarProgressState: state.taskbarProgressState as TaskbarProgressState,
+    taskbarProgress: state.taskbarProgress,
+    hasTaskbarOverlayIcon: state.hasTaskbarOverlayIcon,
+    cursorVisible: state.cursorVisible,
+    cursorGrab: state.cursorGrab as CursorGrabMode,
+    cursorHitTest: state.cursorHitTest,
     representedFile: state.representedFile,
     documentEdited: state.documentEdited,
+    nativeTabbing: state.nativeTabbing,
+    nativeTabs: {
+      count: state.nativeTabCount,
+      tabBarVisible: state.nativeTabBarVisible,
+      overviewVisible: state.nativeTabOverviewVisible,
+      truncated: state.nativeTabsTruncated,
+    },
   };
   if (state.displayId !== undefined) normalized.displayId = state.displayId;
+  if (state.minimumWidth !== undefined && state.minimumHeight !== undefined) {
+    normalized.minimumSize = { width: state.minimumWidth, height: state.minimumHeight };
+  }
+  if (state.maximumWidth !== undefined && state.maximumHeight !== undefined) {
+    normalized.maximumSize = { width: state.maximumWidth, height: state.maximumHeight };
+  }
+  if (state.cursorX !== undefined && state.cursorY !== undefined) {
+    normalized.cursorPosition = { x: state.cursorX, y: state.cursorY };
+  }
+  if (state.nativeSelectedTab !== undefined) {
+    normalized.nativeTabs.selectedIndex = state.nativeSelectedTab;
+  }
   return normalized;
 }
 
@@ -262,6 +582,43 @@ export function performNativeWindowAction(
   }
 }
 
+export function performNativeWindowImageAction(
+  window: Window,
+  action: "set-icon" | "clear-icon" | "set-taskbar-overlay-icon",
+  image?: ImageSource,
+  description?: string,
+): void {
+  const { context: current, window: resolved } = windowContext(window);
+  const native = image === undefined ? undefined : nativeImageSource(image);
+  if (current.hosted) {
+    binding.performHostedWindowImageAction(
+      current.appId,
+      resolved.nativeId,
+      action,
+      native,
+      description,
+    );
+  } else {
+    binding.performWindowImageAction(
+      current.appId,
+      resolved.nativeId,
+      action,
+      native,
+      description,
+    );
+  }
+}
+
+export function nativeImageSource(source: ImageSource): binding.NativeImageSource {
+  if (typeof source === "string") return { path: resolvePath(source) };
+  const native: binding.NativeImageSource = {
+    data: Buffer.from(source.data.buffer, source.data.byteOffset, source.data.byteLength),
+  };
+  if (source.width !== undefined) native.width = source.width;
+  if (source.height !== undefined) native.height = source.height;
+  return native;
+}
+
 function nativeClipboardItem(item: ClipboardItem): binding.NativeClipboardItem {
   return {
     entries: item.entries.map((entry): binding.NativeClipboardEntry => {
@@ -277,7 +634,15 @@ function nativeClipboardItem(item: ClipboardItem): binding.NativeClipboardItem {
           data: Buffer.from(entry.data.buffer, entry.data.byteOffset, entry.data.byteLength),
         };
       }
-      return { kind: "files", paths: [...entry.paths] };
+      if (entry.type === "files") return { kind: "files", paths: [...entry.paths] };
+      if (entry.type === "data") {
+        return {
+          kind: "data",
+          format: entry.mimeType,
+          data: Buffer.from(entry.data.buffer, entry.data.byteOffset, entry.data.byteLength),
+        };
+      }
+      return { kind: "bookmark", text: entry.title, url: entry.url };
     }),
   };
 }
@@ -300,6 +665,12 @@ function clipboardItem(item: binding.NativeClipboardItem): ClipboardItem {
       if (entry.kind === "files" && entry.paths) {
         return { type: "files", paths: entry.paths };
       }
+      if (entry.kind === "data" && entry.format && entry.data) {
+        return { type: "data", mimeType: entry.format, data: Uint8Array.from(entry.data) };
+      }
+      if (entry.kind === "bookmark" && entry.text !== undefined && entry.url !== undefined) {
+        return { type: "bookmark", title: entry.text, url: entry.url };
+      }
       throw new Error(`the native clipboard returned an invalid ${entry.kind} entry`);
     }),
   };
@@ -308,9 +679,11 @@ function clipboardItem(item: binding.NativeClipboardItem): ClipboardItem {
 const screenListeners = new Set<(displays: readonly Display[]) => void>();
 const appearanceListeners = new Set<(appearance: AppearanceMode, window: Window) => void>();
 const keyboardListeners = new Set<(layout: KeyboardLayout) => void>();
-const powerListeners = new Map<PowerEvent, Set<() => void>>();
+const powerListeners = new Map<PowerEventType, Set<(event: PowerEvent) => void>>();
 const notificationListeners = new Set<(response: NotificationResponse) => void>();
+const systemPreferencesListeners = new Set<(preferences: SystemPreferencesSnapshot) => void>();
 let menuCallbacks = new Map<number, () => void>();
+let applicationMenuActionIds = new Set<number>();
 let nextMenuAction = 1;
 const windowStateListeners = new Map<number, Set<(state: WindowState) => void>>();
 const pendingShellRequests = new Map<
@@ -318,6 +691,22 @@ const pendingShellRequests = new Map<
   { resolve: () => void; reject: (error: Error) => void }
 >();
 let nextShellRequest = 1;
+const pendingNotificationPermissionRequests = new Map<
+  number,
+  { resolve: (status: NotificationPermissionStatus) => void; reject: (error: Error) => void }
+>();
+let nextNotificationPermissionRequest = 1;
+const pendingFileIconRequests = new Map<
+  number,
+  { resolve: (icon: NativeImage) => void; reject: (error: Error) => void }
+>();
+const pendingUserTaskRequests = new Map<
+  number,
+  { resolve: () => void; reject: (error: Error) => void }
+>();
+let nextFileIconRequest = 1;
+let nextUserTaskRequest = 1;
+let disposeDockMenu: (() => void) | undefined;
 const globalShortcutRegistrations = new Map<
   number,
   { accelerator: string; listener: GlobalShortcutListener }
@@ -446,8 +835,26 @@ export const Notifications = Object.freeze({
       tag: options.tag,
       title: options.title,
       body: options.body ?? "",
-      actions: (options.actions ?? []).map((action) => ({ ...action })),
+      actions: (options.actions ?? []).map((action) => {
+        const nativeAction: binding.NativeNotificationAction = {
+          id: action.id,
+          label: action.label,
+        };
+        if (action.type !== undefined) nativeAction.kind = action.type;
+        if (action.placeholder !== undefined) nativeAction.placeholder = action.placeholder;
+        return nativeAction;
+      }),
     };
+    if (options.subtitle !== undefined) native.subtitle = options.subtitle;
+    if (options.sound !== undefined) native.sound = options.sound;
+    if (options.icon !== undefined) native.iconPath = resolvePath(options.icon);
+    if (options.attachments !== undefined) {
+      native.attachments = options.attachments.map((attachment) => ({
+        id: attachment.id,
+        path: resolvePath(attachment.path),
+      }));
+    }
+    if (options.deliverAt !== undefined) native.deliveryAtMs = options.deliverAt.getTime();
     if (current.hosted) binding.showHostedNotification(current.appId, native);
     else binding.showNotification(current.appId, native);
   },
@@ -462,15 +869,76 @@ export const Notifications = Object.freeze({
     notificationListeners.add(listener);
     return () => notificationListeners.delete(listener);
   },
+
+  getPermissionStatus(): Promise<NotificationPermissionStatus> {
+    return notificationPermissionRequest(false);
+  },
+
+  requestPermission(): Promise<NotificationPermissionStatus> {
+    return notificationPermissionRequest(true);
+  },
 });
 
+function notificationPermissionRequest(prompt: boolean): Promise<NotificationPermissionStatus> {
+  try {
+    const current = context();
+    const request = allocateBoundedId(
+      nextNotificationPermissionRequest,
+      pendingNotificationPermissionRequests,
+    );
+    nextNotificationPermissionRequest = request >= 0xffff_ffff ? 1 : request + 1;
+    return new Promise((resolve, reject) => {
+      pendingNotificationPermissionRequests.set(request, { resolve, reject });
+      try {
+        if (current.hosted) {
+          binding.performHostedNotificationPermissionRequest(
+            current.appId,
+            request,
+            prompt,
+          );
+        } else {
+          binding.performNotificationPermissionRequest(current.appId, request, prompt);
+        }
+      } catch (error) {
+        pendingNotificationPermissionRequests.delete(request);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  } catch (error) {
+    return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
 function allocateMenuAction(callbacks: Map<number, () => void>): number {
-  for (let attempt = 0; attempt <= callbacks.size; attempt += 1) {
+  for (let attempt = 0; attempt <= callbacks.size + menuCallbacks.size; attempt += 1) {
     const id = nextMenuAction;
     nextMenuAction = id >= 0xffff_ffff ? 1 : id + 1;
-    if (!callbacks.has(id)) return id;
+    if (!callbacks.has(id) && !menuCallbacks.has(id)) return id;
   }
   throw new Error("the native menu action id space is exhausted");
+}
+
+export function serializeNativeMenu(definitions: readonly MenuDefinition[]): {
+  json: string;
+  actionIds: readonly number[];
+  install: () => () => void;
+} {
+  const callbacks = new Map<number, () => void>();
+  const native = definitions.map((menu) => ({
+    label: menu.label,
+    enabled: menu.enabled ?? true,
+    items: nativeMenuItems(menu.items, callbacks),
+  }));
+  return {
+    json: JSON.stringify(native),
+    actionIds: [...callbacks.keys()],
+    install: () => {
+      for (const [id, callback] of callbacks) menuCallbacks.set(id, callback);
+      return () => {
+        for (const id of callbacks.keys()) menuCallbacks.delete(id);
+      };
+    },
+  };
 }
 
 function nativeMenuItems(
@@ -482,12 +950,26 @@ function nativeMenuItems(
     if (item.type === "services") {
       return { type: "services", label: item.label ?? "Services" };
     }
+    if (item.type === "system-menu") {
+      return { type: "system-menu", label: item.label, menu: item.menu };
+    }
     if (item.type === "submenu") {
       return {
         type: "submenu",
         label: item.label,
         enabled: item.enabled ?? true,
         items: nativeMenuItems(item.items, callbacks),
+      };
+    }
+    if (item.type === "role") {
+      return {
+        type: "role",
+        label: item.label,
+        enabled: item.enabled ?? true,
+        checked: item.checked ?? false,
+        ...(item.mark ? { mark: item.mark } : {}),
+        role: item.role,
+        ...(item.icon ? { icon: jsonImageSource(item.icon) } : {}),
       };
     }
     const id = allocateMenuAction(callbacks);
@@ -498,25 +980,38 @@ function nativeMenuItems(
       label: item.label,
       enabled: item.enabled ?? true,
       checked: item.checked ?? false,
+      ...(item.mark ? { mark: item.mark } : {}),
       ...(item.role ? { role: item.role } : {}),
+      ...(item.icon ? { icon: jsonImageSource(item.icon) } : {}),
     };
   });
+}
+
+function jsonImageSource(source: ImageSource): unknown {
+  if (typeof source === "string") return { path: resolvePath(source) };
+  return {
+    dataBase64: Buffer.from(
+      source.data.buffer,
+      source.data.byteOffset,
+      source.data.byteLength,
+    ).toString("base64"),
+    ...(source.width !== undefined ? { width: source.width } : {}),
+    ...(source.height !== undefined ? { height: source.height } : {}),
+  };
 }
 
 /** Declarative platform-native application menus. */
 export const Menu = Object.freeze({
   setApplicationMenu(definitions: readonly MenuDefinition[] | null): void {
     const current = context();
-    const callbacks = new Map<number, () => void>();
-    const native = (definitions ?? []).map((menu) => ({
-      label: menu.label,
-      enabled: menu.enabled ?? true,
-      items: nativeMenuItems(menu.items, callbacks),
-    }));
-    const json = JSON.stringify(native);
-    if (current.hosted) binding.setHostedApplicationMenu(current.appId, json);
-    else binding.setApplicationMenu(current.appId, json);
-    menuCallbacks = callbacks;
+    const serialized = serializeNativeMenu(definitions ?? []);
+    if (current.hosted) binding.setHostedApplicationMenu(current.appId, serialized.json);
+    else binding.setApplicationMenu(current.appId, serialized.json);
+    for (const id of applicationMenuActionIds) menuCallbacks.delete(id);
+    serialized.install();
+    applicationMenuActionIds = new Set(serialized.actionIds);
+    // Application menu actions live until the next replacement; keep the disposer represented
+    // by their exact ids so window and Dock menu callbacks remain independently owned.
   },
 });
 
@@ -651,9 +1146,137 @@ export const Screen = Object.freeze({
     return nearest;
   },
 
+  getCursorScreenPoint(): { x: number; y: number } {
+    const current = context();
+    const point = current.hosted
+      ? binding.getHostedCursorScreenPosition(current.appId)
+      : binding.getCursorScreenPosition(current.appId);
+    return { x: point.x, y: point.y };
+  },
+
   onChange(listener: (displays: readonly Display[]) => void): () => void {
     screenListeners.add(listener);
     return () => screenListeners.delete(listener);
+  },
+});
+
+/** Compile-time native integration availability for the current target. */
+export const Desktop = Object.freeze({
+  getSupport(): DesktopIntegrationSupport {
+    const current = context();
+    const support = current.hosted
+      ? binding.getHostedDesktopIntegrationSupport(current.appId)
+      : binding.getDesktopIntegrationSupport(current.appId);
+    return { ...support };
+  },
+
+  setDockBadge(value?: string): void {
+    const current = context();
+    if (current.hosted) binding.setHostedDockBadge(current.appId, value);
+    else binding.setDockBadge(current.appId, value);
+  },
+
+  setDockIcon(icon?: ImageSource): void {
+    const current = context();
+    const native = icon === undefined ? undefined : nativeImageSource(icon);
+    if (current.hosted) binding.setHostedDockIcon(current.appId, native);
+    else binding.setDockIcon(current.appId, native);
+  },
+
+  setDockMenu(menu?: MenuDefinition): void {
+    const current = context();
+    const serialized = menu === undefined ? undefined : serializeNativeMenu([menu]);
+    if (current.hosted) binding.setHostedDockMenu(current.appId, serialized?.json);
+    else binding.setDockMenu(current.appId, serialized?.json);
+    disposeDockMenu?.();
+    disposeDockMenu = serialized?.install();
+  },
+
+  addRecentDocument(path: string): void {
+    const current = context();
+    const native = resolvePath(path);
+    if (current.hosted) binding.addHostedRecentDocument(current.appId, native);
+    else binding.addRecentDocument(current.appId, native);
+  },
+
+  clearRecentDocuments(): void {
+    const current = context();
+    if (current.hosted) binding.clearHostedRecentDocuments(current.appId);
+    else binding.clearRecentDocuments(current.appId);
+  },
+
+  showAboutPanel(options: AboutPanelOptions = {}): void {
+    const current = context();
+    const native: binding.NativeAboutPanelOptions = {};
+    if (options.applicationName !== undefined) native.applicationName = options.applicationName;
+    if (options.applicationVersion !== undefined) {
+      native.applicationVersion = options.applicationVersion;
+    }
+    if (options.version !== undefined) native.version = options.version;
+    if (options.copyright !== undefined) native.copyright = options.copyright;
+    if (options.credits !== undefined) native.credits = options.credits;
+    if (options.icon !== undefined) native.icon = nativeImageSource(options.icon);
+    if (current.hosted) binding.showHostedAboutPanel(current.appId, native);
+    else binding.showAboutPanel(current.appId, native);
+  },
+
+  getFileIcon(path: string, size: "small" | "normal" | "large" = "normal"): Promise<NativeImage> {
+    try {
+      const current = context();
+      const request = allocateBoundedId(nextFileIconRequest, pendingFileIconRequests);
+      nextFileIconRequest = request >= 0xffff_ffff ? 1 : request + 1;
+      return new Promise((resolve, reject) => {
+        pendingFileIconRequests.set(request, { resolve, reject });
+        try {
+          if (current.hosted) {
+            binding.requestHostedFileIcon(current.appId, request, resolvePath(path), size);
+          } else {
+            binding.requestFileIcon(current.appId, request, resolvePath(path), size);
+          }
+        } catch (error) {
+          pendingFileIconRequests.delete(request);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  },
+
+  setUserTasks(tasks: readonly UserTask[]): Promise<void> {
+    try {
+      const current = context();
+      const request = allocateBoundedId(nextUserTaskRequest, pendingUserTaskRequests);
+      nextUserTaskRequest = request >= 0xffff_ffff ? 1 : request + 1;
+      const native = tasks.map((task): binding.NativeUserTask => {
+        const value: binding.NativeUserTask = {
+          title: task.title,
+          arguments: task.arguments,
+        };
+        if (task.program !== undefined) value.program = resolvePath(task.program);
+        if (task.description !== undefined) value.description = task.description;
+        if (task.workingDirectory !== undefined) {
+          value.workingDirectory = resolvePath(task.workingDirectory);
+        }
+        if (task.icon !== undefined) {
+          value.iconPath = resolvePath(task.icon.path);
+          value.iconIndex = task.icon.index;
+        }
+        return value;
+      });
+      return new Promise((resolve, reject) => {
+        pendingUserTaskRequests.set(request, { resolve, reject });
+        try {
+          if (current.hosted) binding.setHostedUserTasks(current.appId, request, native);
+          else binding.setUserTasks(current.appId, request, native);
+        } catch (error) {
+          pendingUserTaskRequests.delete(request);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
   },
 });
 
@@ -681,14 +1304,128 @@ export const Keyboard = Object.freeze({
 
 /** Native operating-system sleep and user-session transitions. */
 export const PowerMonitor = Object.freeze({
-  on(event: PowerEvent, listener: () => void): () => void {
+  getState(): PowerState {
+    const state = binding.getPowerState();
+    const result: PowerState = {
+      source: state.source as PowerSource,
+      thermalState: state.thermalState as ThermalState,
+    };
+    if (state.battery !== undefined) {
+      const battery: NonNullable<PowerState["battery"]> = {
+        status: state.battery.status as BatteryStatus,
+      };
+      if (state.battery.chargePercent !== undefined) {
+        battery.chargePercent = state.battery.chargePercent;
+      }
+      result.battery = battery;
+    }
+    if (state.lowPowerMode !== undefined) result.lowPowerMode = state.lowPowerMode;
+    if (state.cpuSpeedLimitPercent !== undefined) {
+      result.cpuSpeedLimitPercent = state.cpuSpeedLimitPercent;
+    }
+    return result;
+  },
+
+  isOnBatteryPower(): boolean {
+    return this.getState().source === "battery";
+  },
+
+  getCurrentThermalState(): ThermalState {
+    return this.getState().thermalState;
+  },
+
+  getSystemIdleTime(): number {
+    return binding.getSystemIdleTime();
+  },
+
+  getSystemIdleState(thresholdSeconds: number): IdleState {
+    return binding.getSystemIdleState(thresholdSeconds) as IdleState;
+  },
+
+  getSessionState(): SessionState {
+    return binding.getSessionState() as SessionState;
+  },
+
+  on<T extends PowerEventType>(
+    event: T,
+    listener: (event: Extract<PowerEvent, { type: T }>) => void,
+  ): () => void {
     const listeners = powerListeners.get(event) ?? new Set();
-    listeners.add(listener);
+    const wrapped = listener as (event: PowerEvent) => void;
+    listeners.add(wrapped);
     powerListeners.set(event, listeners);
     return () => {
-      listeners.delete(listener);
+      listeners.delete(wrapped);
       if (listeners.size === 0) powerListeners.delete(event);
     };
+  },
+});
+
+function nativeSystemPreferences(): binding.NativeSystemPreferences {
+  const current = context();
+  return current.hosted
+    ? binding.getHostedSystemPreferences(current.appId)
+    : binding.getSystemPreferences(current.appId);
+}
+
+function normalizeSystemPreferences(
+  preferences: binding.NativeSystemPreferences,
+): SystemPreferencesSnapshot {
+  const result: SystemPreferencesSnapshot = {
+    colorScheme: preferences.colorScheme as SystemPreferencesSnapshot["colorScheme"],
+    colors: {},
+  };
+  const optionalBooleans = [
+    "reduceMotion",
+    "reduceTransparency",
+    "increaseContrast",
+    "differentiateWithoutColor",
+    "invertColors",
+    "forcedColors",
+    "screenReader",
+    "switchControl",
+  ] as const;
+  for (const key of optionalBooleans) {
+    const value = preferences[key];
+    if (value !== undefined) result[key] = value;
+  }
+  const colors = [
+    ["accent", "accentColor"],
+    ["highlight", "highlightColor"],
+    ["highlightText", "highlightTextColor"],
+    ["windowBackground", "windowBackgroundColor"],
+    ["windowText", "windowTextColor"],
+    ["controlBackground", "controlBackgroundColor"],
+    ["controlText", "controlTextColor"],
+    ["link", "linkColor"],
+  ] as const;
+  for (const [key, nativeKey] of colors) {
+    const value = preferences[nativeKey];
+    if (value !== undefined) result.colors[key] = { ...value };
+  }
+  return result;
+}
+
+/** Core-retained appearance and accessibility settings. */
+export const SystemPreferences = Object.freeze({
+  getCurrent(): SystemPreferencesSnapshot {
+    return normalizeSystemPreferences(nativeSystemPreferences());
+  },
+
+  onChange(listener: (preferences: SystemPreferencesSnapshot) => void): () => void {
+    systemPreferencesListeners.add(listener);
+    return () => systemPreferencesListeners.delete(listener);
+  },
+});
+
+/** Explicit native privacy authorization checks and prompts. */
+export const Permissions = Object.freeze({
+  status(kind: PermissionKind): PermissionStatus {
+    return binding.getPermissionStatus(kind) as PermissionStatus;
+  },
+
+  async request(kind: PermissionKind): Promise<PermissionStatus> {
+    return (await binding.requestPermission(kind)) as PermissionStatus;
   },
 });
 
@@ -714,6 +1451,18 @@ export function rejectPendingSystemRequests(error: Error): void {
     pendingShellRequests.delete(request);
     pending.reject(error);
   }
+  for (const [request, pending] of pendingNotificationPermissionRequests) {
+    pendingNotificationPermissionRequests.delete(request);
+    pending.reject(error);
+  }
+  for (const [request, pending] of pendingFileIconRequests) {
+    pendingFileIconRequests.delete(request);
+    pending.reject(error);
+  }
+  for (const [request, pending] of pendingUserTaskRequests) {
+    pendingUserTaskRequests.delete(request);
+    pending.reject(error);
+  }
   for (const [request, pending] of pendingGlobalShortcutRequests) {
     pendingGlobalShortcutRequests.delete(request);
     pending.reject(error);
@@ -726,7 +1475,11 @@ export function rejectPendingSystemRequests(error: Error): void {
   keyboardListeners.clear();
   powerListeners.clear();
   notificationListeners.clear();
+  systemPreferencesListeners.clear();
   menuCallbacks.clear();
+  applicationMenuActionIds.clear();
+  disposeDockMenu?.();
+  disposeDockMenu = undefined;
   windowStateListeners.clear();
 }
 
@@ -756,16 +1509,14 @@ export function dispatchSystemEvent(
     return true;
   }
   if (event.kind === "power-event") {
-    const value = event.value as PowerEvent | undefined;
-    if (
-      value !== "suspend" &&
-      value !== "resume" &&
-      value !== "lock-screen" &&
-      value !== "unlock-screen"
-    ) {
-      return true;
-    }
-    for (const listener of powerListeners.get(value) ?? []) listener();
+    const value = parsePowerEvent(event.value);
+    if (!value) return true;
+    for (const listener of powerListeners.get(value.type) ?? []) listener(value);
+    return true;
+  }
+  if (event.kind === "system-preferences-change") {
+    const preferences = SystemPreferences.getCurrent();
+    for (const listener of systemPreferencesListeners) listener(preferences);
     return true;
   }
   if (event.kind === "notification-response") {
@@ -773,15 +1524,58 @@ export function dispatchSystemEvent(
       const value = JSON.parse(event.value ?? "{}") as {
         tag?: unknown;
         actionId?: unknown;
+        reply?: unknown;
       };
       if (typeof value.tag !== "string") return true;
       const response: NotificationResponse = { tag: value.tag };
       if (typeof value.actionId === "string") response.actionId = value.actionId;
+      if (typeof value.reply === "string") response.reply = value.reply;
       for (const listener of notificationListeners) listener(response);
     } catch {
       // The app-level dispatcher follows the same fail-closed parsing contract.
     }
     return notificationListeners.size > 0;
+  }
+  if (event.kind === "notification-permission") {
+    const pending = pendingNotificationPermissionRequests.get(event.target);
+    if (!pending) return true;
+    pendingNotificationPermissionRequests.delete(event.target);
+    if (event.error !== undefined) pending.reject(new Error(event.error));
+    else if (
+      event.value === "not-determined" ||
+      event.value === "granted" ||
+      event.value === "denied" ||
+      event.value === "unsupported"
+    ) {
+      pending.resolve(event.value);
+    } else {
+      pending.reject(new Error("the native notification permission response was invalid"));
+    }
+    return true;
+  }
+  if (event.kind === "file-icon") {
+    const pending = pendingFileIconRequests.get(event.target);
+    if (!pending) return true;
+    pendingFileIconRequests.delete(event.target);
+    if (event.error !== undefined) pending.reject(new Error(event.error));
+    else if (event.data !== undefined && event.width !== undefined && event.height !== undefined) {
+      pending.resolve({
+        data: Uint8Array.from(event.data),
+        width: event.width,
+        height: event.height,
+      });
+    } else {
+      pending.reject(new Error("the native file-icon response was invalid"));
+    }
+    return true;
+  }
+  if (event.kind === "user-tasks") {
+    const pending = pendingUserTaskRequests.get(event.target);
+    if (!pending) return true;
+    pendingUserTaskRequests.delete(event.target);
+    if (event.error !== undefined) pending.reject(new Error(event.error));
+    else pending.resolve();
+    return true;
   }
   if (event.kind === "menu-action") {
     menuCallbacks.get(event.target)?.();
@@ -814,4 +1608,46 @@ export function dispatchSystemEvent(
     return true;
   }
   return false;
+}
+
+function parsePowerEvent(value: string | undefined): PowerEvent | undefined {
+  try {
+    const event = JSON.parse(value ?? "{}") as Record<string, unknown>;
+    switch (event.type) {
+      case "suspend":
+      case "resume":
+      case "lock-screen":
+      case "unlock-screen":
+      case "shutdown-requested":
+        return { type: event.type };
+      case "power-source-changed":
+        if (event.source === "ac" || event.source === "battery" || event.source === "unknown") {
+          return { type: event.type, source: event.source };
+        }
+        return undefined;
+      case "thermal-state-changed":
+        if (
+          event.state === "unknown" ||
+          event.state === "nominal" ||
+          event.state === "fair" ||
+          event.state === "serious" ||
+          event.state === "critical"
+        ) {
+          return { type: event.type, state: event.state };
+        }
+        return undefined;
+      case "low-power-mode-changed":
+        return typeof event.enabled === "boolean"
+          ? { type: event.type, enabled: event.enabled }
+          : undefined;
+      case "cpu-speed-limit-changed":
+        return typeof event.percent === "number" && Number.isFinite(event.percent)
+          ? { type: event.type, percent: event.percent }
+          : undefined;
+      default:
+        return undefined;
+    }
+  } catch {
+    return undefined;
+  }
 }

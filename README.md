@@ -148,6 +148,15 @@ cd examples/popover-solid
 bun run dev
 ```
 
+The core-first system API example covers app environment, rich clipboard, displays, desktop
+integrations, permissions, preferences, power, native menus, notifications, tray icons, shortcuts,
+window controls, and updater metadata:
+
+```console
+cd examples/system-api-solid
+bun run dev
+```
+
 This creates and runs the platform-native development host while loading `app.tsx` from disk (an
 `.app` bundle on macOS). Rust framework examples remain available directly through Cargo:
 

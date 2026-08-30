@@ -6,8 +6,9 @@ use napi::{
 };
 use napi_derive::napi;
 use quickgui::{
-    AutoStart, AutoStartMode, AutoStartOptions, AvailableUpdate, ProtocolRegistration,
-    ProtocolRegistrationOptions, SecureStorage, SystemIntegrationError, UpdateClient,
+    AutoStart, AutoStartMode, AutoStartOptions, AvailableUpdate, InstalledUpdate,
+    ProtocolRegistration, ProtocolRegistrationOptions, SecureStorage, SystemIntegrationError,
+    UpdateClient, UpdateInstallDisposition, UpdateInstallOptions, WindowsUpdateInstallMode,
     default_update_target as core_default_update_target,
 };
 
@@ -50,6 +51,47 @@ pub struct NativeAvailableUpdate {
     pub signature: String,
     pub notes: Option<String>,
     pub published_at: Option<String>,
+}
+
+#[derive(Clone, Default)]
+#[napi(object)]
+pub struct NativeUpdateInstallOptions {
+    pub target_executable: Option<String>,
+    pub retain_backup: Option<bool>,
+    pub windows_mode: Option<String>,
+    pub installer_arguments: Option<Vec<String>>,
+}
+
+#[derive(Clone)]
+#[napi(object)]
+pub struct NativeInstalledUpdate {
+    pub version: String,
+    pub disposition: String,
+    pub installed_path: String,
+    pub backup_path: Option<String>,
+    pub installer_process_id: Option<u32>,
+    pub requires_application_exit: bool,
+    pub relaunch_recommended: bool,
+}
+
+impl From<InstalledUpdate> for NativeInstalledUpdate {
+    fn from(update: InstalledUpdate) -> Self {
+        Self {
+            version: update.version().to_owned(),
+            disposition: match update.disposition() {
+                UpdateInstallDisposition::Applied => "applied",
+                UpdateInstallDisposition::InstallerLaunched => "installer-launched",
+            }
+            .to_owned(),
+            installed_path: update.installed_path().to_string_lossy().into_owned(),
+            backup_path: update
+                .backup_path()
+                .map(|path| path.to_string_lossy().into_owned()),
+            installer_process_id: update.installer_process_id(),
+            requires_application_exit: update.requires_application_exit(),
+            relaunch_recommended: update.relaunch_recommended(),
+        }
+    }
 }
 
 impl From<AvailableUpdate> for NativeAvailableUpdate {
@@ -284,6 +326,34 @@ pub struct UpdateVerifyTask {
     signature: String,
 }
 
+#[doc(hidden)]
+pub struct UpdateInstallTask {
+    options: NativeUpdateClientOptions,
+    update: NativeAvailableUpdate,
+    artifact: String,
+    install_options: NativeUpdateInstallOptions,
+}
+
+impl Task for UpdateInstallTask {
+    type Output = InstalledUpdate;
+    type JsValue = NativeInstalledUpdate;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let install_options = update_install_options(self.install_options.clone())?;
+        update_client(self.options.clone())?
+            .install_staged(
+                &self.update.clone().into(),
+                PathBuf::from(&self.artifact),
+                install_options,
+            )
+            .map_err(system_error)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output.into())
+    }
+}
+
 impl Task for UpdateVerifyTask {
     type Output = ();
     type JsValue = ();
@@ -426,6 +496,21 @@ pub fn verify_update(
     })
 }
 
+#[napi(ts_return_type = "Promise<NativeInstalledUpdate>")]
+pub fn install_update(
+    update: NativeAvailableUpdate,
+    artifact: String,
+    install_options: NativeUpdateInstallOptions,
+    options: NativeUpdateClientOptions,
+) -> AsyncTask<UpdateInstallTask> {
+    AsyncTask::new(UpdateInstallTask {
+        options,
+        update,
+        artifact,
+        install_options,
+    })
+}
+
 #[napi]
 pub fn default_update_target() -> String {
     core_default_update_target()
@@ -465,6 +550,32 @@ fn protocol_registration(
     }
     native.arguments = options.arguments.unwrap_or_default();
     ProtocolRegistration::new(options.scheme, native).map_err(system_error)
+}
+
+fn update_install_options(options: NativeUpdateInstallOptions) -> Result<UpdateInstallOptions> {
+    let mut native = UpdateInstallOptions::new();
+    if let Some(executable) = options.target_executable {
+        native = native.target_executable(executable);
+    }
+    if let Some(retain) = options.retain_backup {
+        native = native.retain_backup(retain);
+    }
+    if let Some(mode) = options.windows_mode {
+        native = native.windows_mode(match mode.as_str() {
+            "basic-ui" | "basicUi" => WindowsUpdateInstallMode::BasicUi,
+            "quiet" => WindowsUpdateInstallMode::Quiet,
+            "passive" => WindowsUpdateInstallMode::Passive,
+            value => {
+                return Err(Error::from_reason(format!(
+                    "unknown Windows update install mode `{value}`"
+                )));
+            }
+        });
+    }
+    if let Some(arguments) = options.installer_arguments {
+        native = native.installer_arguments(arguments);
+    }
+    Ok(native)
 }
 
 fn update_client(options: NativeUpdateClientOptions) -> Result<UpdateClient> {

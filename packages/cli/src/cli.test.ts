@@ -208,9 +208,9 @@ test("macOS metadata is escaped and complete", () => {
   expect(plist).toContain("<string>a+b</string>");
 });
 
-test("standalone native shim exports every generated native function", () => {
+test("standalone native shim exports every generated native value", () => {
   const declarations = readFileSync(join(import.meta.dir, "../../native/binding.d.ts"), "utf8");
-  const generated = [...declarations.matchAll(/export declare function (\w+)/g)]
+  const generated = [...declarations.matchAll(/export declare (?:function|class) (\w+)/g)]
     .map((match) => match[1])
     .filter((name): name is string => name !== undefined)
     .sort();

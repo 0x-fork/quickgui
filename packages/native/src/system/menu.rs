@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use quickgui::{Menu, MenuItem, OsAction};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use quickgui::{Menu, MenuIcon, MenuItem, OsAction, SystemMenuType};
 use serde::Deserialize;
 
 const MAX_MENU_JSON_BYTES: usize = 1024 * 1024;
@@ -27,7 +28,19 @@ enum NativeApplicationMenuItem {
         enabled: bool,
         #[serde(default)]
         checked: bool,
+        mark: Option<String>,
         role: Option<String>,
+        icon: Option<NativeMenuIcon>,
+    },
+    Role {
+        label: String,
+        #[serde(default = "default_true")]
+        enabled: bool,
+        #[serde(default)]
+        checked: bool,
+        mark: Option<String>,
+        role: String,
+        icon: Option<NativeMenuIcon>,
     },
     Separator,
     Submenu {
@@ -36,16 +49,29 @@ enum NativeApplicationMenuItem {
         enabled: bool,
         items: Vec<NativeApplicationMenuItem>,
     },
+    SystemMenu {
+        label: String,
+        menu: String,
+    },
     Services {
         label: String,
     },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMenuIcon {
+    path: Option<String>,
+    data_base64: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
 fn default_true() -> bool {
     true
 }
 
-pub(super) fn application_menus(json: &str) -> Result<Vec<Menu>, String> {
+pub(crate) fn application_menus(json: &str) -> Result<Vec<Menu>, String> {
     if json.len() > MAX_MENU_JSON_BYTES {
         return Err("the native application menu exceeds 1 MiB".to_owned());
     }
@@ -105,7 +131,9 @@ fn convert_items(
                 label,
                 enabled,
                 checked,
+                mark,
                 role,
+                icon,
             } => {
                 add_text(&label, text_bytes)?;
                 if id == 0 || !ids.insert(id) {
@@ -114,15 +142,21 @@ fn convert_items(
                 let action = crate::NativeMenuAction(id);
                 let item = match role.as_deref() {
                     None => MenuItem::action(label, action),
-                    Some("cut") => MenuItem::os_action(label, action, OsAction::Cut),
-                    Some("copy") => MenuItem::os_action(label, action, OsAction::Copy),
-                    Some("paste") => MenuItem::os_action(label, action, OsAction::Paste),
-                    Some("select-all") => MenuItem::os_action(label, action, OsAction::SelectAll),
-                    Some("undo") => MenuItem::os_action(label, action, OsAction::Undo),
-                    Some("redo") => MenuItem::os_action(label, action, OsAction::Redo),
-                    Some(role) => return Err(format!("unknown native menu role `{role}`")),
+                    Some(role) => MenuItem::os_action(label, action, os_action(role)?),
                 };
-                item.checked(checked).enabled(enabled)
+                decorate_item(item, checked, mark.as_deref(), icon)?.enabled(enabled)
+            }
+            NativeApplicationMenuItem::Role {
+                label,
+                enabled,
+                checked,
+                mark,
+                role,
+                icon,
+            } => {
+                add_text(&label, text_bytes)?;
+                let item = MenuItem::role(label, os_action(&role)?);
+                decorate_item(item, checked, mark.as_deref(), icon)?.enabled(enabled)
             }
             NativeApplicationMenuItem::Separator => MenuItem::separator(),
             NativeApplicationMenuItem::Submenu {
@@ -143,13 +177,91 @@ fn convert_items(
                         .disabled(!enabled),
                 )
             }
+            NativeApplicationMenuItem::SystemMenu { label, menu } => {
+                add_text(&label, text_bytes)?;
+                MenuItem::os_submenu(
+                    label,
+                    match menu.as_str() {
+                        "services" => SystemMenuType::Services,
+                        "window" => SystemMenuType::Window,
+                        "help" => SystemMenuType::Help,
+                        value => return Err(format!("unknown native system menu `{value}`")),
+                    },
+                )
+            }
             NativeApplicationMenuItem::Services { label } => {
                 add_text(&label, text_bytes)?;
-                MenuItem::os_submenu(label, quickgui::SystemMenuType::Services)
+                MenuItem::os_submenu(label, SystemMenuType::Services)
             }
         });
     }
     Ok(converted)
+}
+
+fn os_action(role: &str) -> Result<OsAction, String> {
+    match role {
+        "cut" => Ok(OsAction::Cut),
+        "copy" => Ok(OsAction::Copy),
+        "paste" => Ok(OsAction::Paste),
+        "select-all" => Ok(OsAction::SelectAll),
+        "undo" => Ok(OsAction::Undo),
+        "redo" => Ok(OsAction::Redo),
+        "about" => Ok(OsAction::About),
+        "hide-application" => Ok(OsAction::HideApplication),
+        "hide-other-applications" => Ok(OsAction::HideOtherApplications),
+        "show-all-applications" => Ok(OsAction::ShowAllApplications),
+        "quit" => Ok(OsAction::Quit),
+        "close-window" => Ok(OsAction::CloseWindow),
+        "minimize-window" => Ok(OsAction::MinimizeWindow),
+        "zoom-window" => Ok(OsAction::ZoomWindow),
+        "toggle-fullscreen" => Ok(OsAction::ToggleFullscreen),
+        "bring-all-to-front" => Ok(OsAction::BringAllToFront),
+        "show-help" => Ok(OsAction::ShowHelp),
+        value => Err(format!("unknown native menu role `{value}`")),
+    }
+}
+
+fn decorate_item(
+    mut item: MenuItem,
+    checked: bool,
+    mark: Option<&str>,
+    icon: Option<NativeMenuIcon>,
+) -> Result<MenuItem, String> {
+    item = match mark.unwrap_or(if checked { "check" } else { "none" }) {
+        "none" if !checked => item,
+        "none" => return Err("a checked menu item cannot use the `none` mark".to_owned()),
+        "check" => item.checked(checked),
+        "radio" => item.radio(checked),
+        value => return Err(format!("unknown native menu mark `{value}`")),
+    };
+    if let Some(icon) = icon {
+        item = item.icon(native_menu_icon(icon)?);
+    }
+    Ok(item)
+}
+
+fn native_menu_icon(icon: NativeMenuIcon) -> Result<MenuIcon, String> {
+    match (icon.path, icon.data_base64) {
+        (Some(path), None) if icon.width.is_none() && icon.height.is_none() => {
+            MenuIcon::open(path).map_err(|error| error.to_string())
+        }
+        (None, Some(data)) => {
+            let data = STANDARD
+                .decode(data)
+                .map_err(|_| "native menu icon data is not valid base64".to_owned())?;
+            match (icon.width, icon.height) {
+                (Some(width), Some(height)) => MenuIcon::from_rgba(width, height, data),
+                (None, None) => MenuIcon::decode(data),
+                _ => {
+                    return Err(
+                        "raw native menu icon data requires both width and height".to_owned()
+                    );
+                }
+            }
+            .map_err(|error| error.to_string())
+        }
+        _ => Err("a native menu icon requires exactly one path or data source".to_owned()),
+    }
 }
 
 #[cfg(test)]
@@ -164,7 +276,7 @@ mod tests {
 
     #[test]
     fn menu_json_accepts_nested_and_system_items() {
-        let json = r#"[{"label":"App","items":[{"type":"submenu","label":"Edit","items":[{"type":"action","id":1,"label":"Copy","role":"copy"}]},{"type":"services","label":"Services"}]}]"#;
+        let json = r#"[{"label":"App","items":[{"type":"submenu","label":"Edit","items":[{"type":"action","id":1,"label":"Copy","role":"copy"}]},{"type":"system-menu","label":"Services","menu":"services"}]}]"#;
         assert_eq!(application_menus(json).expect("valid menu").len(), 1);
     }
 }

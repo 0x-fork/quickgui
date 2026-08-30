@@ -147,7 +147,8 @@ impl Image {
         self.0.id
     }
 
-    pub(crate) fn rgba(&self) -> &[u8] {
+    /// Tightly packed, straight-alpha RGBA8 pixels.
+    pub fn rgba(&self) -> &[u8] {
         &self.0.rgba
     }
 }

@@ -236,16 +236,22 @@ The [Solid AI chat example](../examples/ai-chat-solid) adds Vercel AI SDK/DeepSe
 `SystemPopover` provider-settings surface with a revealable password field, controlled input,
 cancellation, paced updates, and core Markdown rendering.
 
+The [system API example](../examples/system-api-solid) keeps renderer-neutral desktop APIs in
+`@quickgui/native` while Solid owns only the UI. It exercises the Rust core's application
+environment, rich clipboard, displays, permissions, preferences, power, menus, notifications,
+desktop integrations, native file icons, and imperative window controls.
+
 ## Current boundary
 
 This vertical slice supports dynamically created independent native windows, controlled system
 and retained in-window popovers, native alert and file dialogs with optional window
 ownership, retained view/text/button/input/Markdown nodes, variable-height virtual lists, password
-inputs, reactive properties and text, click/hover/input/submit/dismiss events, web-shaped Flexbox
-styling, hidden-inset titlebars, traffic-light positioning, a stable real-`.app` development host,
-and self-contained production packaging on the
-current macOS target. It is not yet the full Rust API surface: additional popover parts such as
-backdrops and arrows, menus, native child views, accessibility actions, every native binary target,
-and dedicated JavaScript performance gates still need bindings and acceptance.
+inputs, reactive properties and text, click/hover/input/submit/dismiss events, core-backed app and
+window lifecycle, native menus and desktop services, web-shaped Flexbox styling, hidden-inset
+titlebars, traffic-light positioning, a stable real-`.app` development host, and self-contained
+production packaging on the current macOS target. It is not yet the full Rust rendering API
+surface: additional popover parts such as backdrops and arrows, native child views, accessibility
+actions, every native binary target, and dedicated JavaScript performance gates still need
+bindings and acceptance.
 
 Return to the [documentation index](README.md).

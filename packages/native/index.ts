@@ -43,10 +43,13 @@ import {
   configureSystemContext,
   dispatchSystemEvent,
   getNativeWindowState,
+  nativeImageSource,
   onNativeWindowStateChange,
   performNativeWindowAction,
+  performNativeWindowImageAction,
   rejectPendingSystemRequests,
   removeNativeWindowStateListeners,
+  serializeNativeMenu,
 } from "./system.ts";
 import {
   type SecondInstanceEvent,
@@ -93,12 +96,16 @@ export type {
 export {
   Appearance,
   Clipboard,
+  Desktop,
   GlobalShortcut,
   Keyboard,
   Menu,
   Notifications,
+  Permissions,
   PowerMonitor,
+  PowerAssertion,
   Screen,
+  SystemPreferences,
   Shell,
   Tray,
   TrayIcon,
@@ -110,31 +117,56 @@ export type {
   AutoStartMode,
   AutoStartOptions,
   AvailableUpdate,
+  InstalledUpdate,
   ProtocolRegistrationOptions,
   UpdateClientOptions,
+  UpdateInstallOptions,
 } from "./integrations.ts";
 export type {
   AppearanceMode,
   AppearancePreference,
   ClipboardEntry,
+  ClipboardBookmarkEntry,
+  ClipboardDataEntry,
   ClipboardFilesEntry,
   ClipboardImageEntry,
   ClipboardItem,
   ClipboardTextEntry,
   Display,
+  DesktopIntegrationSupport,
+  AboutPanelOptions,
+  UserTask,
+  NativeImage,
   GlobalShortcutListener,
   KeyboardLayout,
   MenuActionItem,
   MenuDefinition,
   MenuItem,
   MenuRole,
+  MenuItemMark,
+  MenuRoleItem,
+  MenuSystemItem,
   MenuSeparatorItem,
   MenuServicesItem,
   MenuSubmenuItem,
   NotificationAction,
   NotificationOptions,
+  NotificationAttachment,
+  NotificationPermissionStatus,
   NotificationResponse,
+  PermissionKind,
+  PermissionStatus,
   PowerEvent,
+  PowerEventType,
+  PowerAssertionKind,
+  PowerSource,
+  PowerState,
+  BatteryStatus,
+  ThermalState,
+  SessionState,
+  IdleState,
+  SystemColor,
+  SystemPreferencesSnapshot,
   Rectangle,
   TrayEvent,
   TrayEventType,
@@ -145,11 +177,24 @@ export type {
   TrayMenuSeparatorItem,
   TrayMenuSubmenuItem,
   WindowState,
+  WindowBackgroundAppearance,
+  WindowKind,
+  WindowLevel,
+  CursorGrabMode,
+  TaskbarProgressState,
+  ImageSource,
 } from "./system.ts";
 import type {
   AppearancePreference,
+  CursorGrabMode,
+  ImageSource,
   KeyboardLayout,
+  MenuDefinition,
   NotificationResponse,
+  TaskbarProgressState,
+  WindowBackgroundAppearance,
+  WindowKind,
+  WindowLevel,
   WindowState,
 } from "./system.ts";
 
@@ -169,15 +214,70 @@ export type PopoverPlacement =
   | "right"
   | "right-end";
 
+export type PerformanceProfile = "low-power" | "balanced" | "high-performance";
+export type InitialWindowState = "normal" | "maximized" | "fullscreen";
+export interface Size {
+  width: number;
+  height: number;
+}
+export interface Point {
+  x: number;
+  y: number;
+}
+export interface WindowBounds extends Point, Size {
+  state?: InitialWindowState;
+}
+
 export interface WindowOptions {
   renderer: WindowRenderer;
   title?: string;
   width?: number;
   height?: number;
+  position?: Point;
+  initialState?: InitialWindowState;
+  displayId?: string;
+  /** Pass `null` to remove the core's default minimum window size. */
+  minimumSize?: Size | null;
   minimumWidth?: number;
   minimumHeight?: number;
+  maximumSize?: Size;
+  maximumWidth?: number;
+  maximumHeight?: number;
+  representedFile?: string;
+  documentEdited?: boolean;
+  tabbingIdentifier?: string;
   background?: ColorValue;
+  backgroundAppearance?: WindowBackgroundAppearance;
+  performanceProfile?: PerformanceProfile;
+  appearance?: AppearancePreference;
   titleBarStyle?: "default" | "hidden" | "hiddenInset";
+  kind?: WindowKind;
+  focus?: boolean;
+  focusable?: boolean;
+  visible?: boolean;
+  movable?: boolean;
+  resizable?: boolean;
+  minimizable?: boolean;
+  maximizable?: boolean;
+  closable?: boolean;
+  decorated?: boolean;
+  shadow?: boolean;
+  contentProtected?: boolean;
+  windowLevel?: WindowLevel | "automatic";
+  skipTaskbar?: boolean;
+  visibleOnAllWorkspaces?: boolean;
+  opacity?: number;
+  icon?: ImageSource;
+  taskbarProgress?: { state: TaskbarProgressState; progress: number };
+  taskbarOverlay?: { icon: ImageSource; description: string };
+  cursorVisible?: boolean;
+  cursorGrab?: CursorGrabMode;
+  cursorHitTest?: boolean;
+  cursorPosition?: Point;
+  menu?: readonly MenuDefinition[];
+  lineScrollPixels?: number;
+  keySequenceTimeoutMs?: number;
+  reduceMotion?: boolean;
   trafficLightPosition?: { x: number; y: number };
   transparent?: boolean;
   blur?: boolean;
@@ -196,6 +296,86 @@ export interface WindowOptions {
 export interface RunOptions {
   /** Pump interval used only when running a source file outside the QuickGUI CLI host. */
   sliceMs?: number;
+}
+
+export type QuitMode = "default" | "last-window-closed" | "explicit";
+
+export interface AppPathOverrides {
+  resourceDir?: string;
+  configDir?: string;
+  dataDir?: string;
+  localDataDir?: string;
+  cacheDir?: string;
+  logDir?: string;
+  runtimeDir?: string;
+  tempDir?: string;
+}
+
+export interface AppOptions {
+  name?: string;
+  version?: string;
+  identifier?: string;
+  paths?: AppPathOverrides;
+  quitMode?: QuitMode;
+}
+
+export interface RelaunchOptions {
+  executable?: string;
+  /** Omit to preserve current arguments; pass `null` to relaunch without arguments. */
+  arguments?: readonly string[] | null;
+  workingDirectory?: string;
+}
+
+export interface AppInfo {
+  name: string;
+  version: string;
+  identifier: string;
+}
+
+export interface AppPaths {
+  executable: string;
+  executableDir: string;
+  resourceDir: string;
+  homeDir?: string;
+  configDir?: string;
+  dataDir?: string;
+  localDataDir?: string;
+  cacheDir?: string;
+  logDir?: string;
+  runtimeDir?: string;
+  tempDir: string;
+  audioDir?: string;
+  desktopDir?: string;
+  documentDir?: string;
+  downloadDir?: string;
+  pictureDir?: string;
+  videoDir?: string;
+}
+
+export interface SystemInfo {
+  operatingSystem:
+    | "macos"
+    | "windows"
+    | "linux"
+    | "freebsd"
+    | "dragonfly"
+    | "netbsd"
+    | "openbsd"
+    | "android"
+    | "ios"
+    | "wasm"
+    | "other";
+  family: "unix" | "windows" | "wasm" | "other";
+  name: string;
+  version?: string;
+  edition?: string;
+  codename?: string;
+  architecture: string;
+  bitness: "32" | "64" | "unknown";
+  hostname?: string;
+  locale?: string;
+  preferredLanguages: readonly string[];
+  languagesTruncated: boolean;
 }
 
 export interface AppEventMap {
@@ -221,6 +401,28 @@ type PendingDialog = {
 let activeApp: App | undefined;
 let currentWindow: Window | undefined;
 const hostedRuntime = process.env.QUICKGUI_APP_WORKER === "1";
+
+function nativeAppOptions(options: AppOptions): binding.NativeAppOptions {
+  const native: binding.NativeAppOptions = {};
+  if (options.name !== undefined) native.name = options.name;
+  if (options.version !== undefined) native.version = options.version;
+  if (options.identifier !== undefined) native.identifier = options.identifier;
+  if (options.quitMode !== undefined) native.quitMode = options.quitMode;
+  const paths = options.paths;
+  if (paths?.resourceDir !== undefined) native.resourceDir = paths.resourceDir;
+  if (paths?.configDir !== undefined) native.configDir = paths.configDir;
+  if (paths?.dataDir !== undefined) native.dataDir = paths.dataDir;
+  if (paths?.localDataDir !== undefined) native.localDataDir = paths.localDataDir;
+  if (paths?.cacheDir !== undefined) native.cacheDir = paths.cacheDir;
+  if (paths?.logDir !== undefined) native.logDir = paths.logDir;
+  if (paths?.runtimeDir !== undefined) native.runtimeDir = paths.runtimeDir;
+  if (paths?.tempDir !== undefined) native.tempDir = paths.tempDir;
+  return native;
+}
+
+const embeddedAppOptions = (
+  globalThis as typeof globalThis & { __QUICKGUI_APP_OPTIONS__?: AppOptions }
+).__QUICKGUI_APP_OPTIONS__;
 
 function withCurrentWindow<T>(window: Window, callback: () => T): T {
   const previous = currentWindow;
@@ -279,7 +481,12 @@ class App {
     if (activeApp) {
       throw new Error("a QuickGUI App is already active in this JavaScript isolate");
     }
-    this.nativeId = hostedRuntime ? binding.createHostedApp() : binding.createApp();
+    const initialOptions = embeddedAppOptions
+      ? nativeAppOptions(embeddedAppOptions)
+      : undefined;
+    this.nativeId = hostedRuntime
+      ? binding.createHostedApp(initialOptions)
+      : binding.createApp(initialOptions);
     activeApp = this;
     this.#readyPromise = Promise.resolve().then(() => {
       this.#assertAlive();
@@ -301,6 +508,93 @@ class App {
 
   whenReady(): Promise<void> {
     return this.#readyPromise;
+  }
+
+  /** Patch core-owned identity, paths, and quit policy before the first readiness turn. */
+  configure(options: AppOptions): void {
+    this.#assertAlive();
+    const native = nativeAppOptions(options);
+    if (hostedRuntime) binding.configureHostedApp(this.nativeId, native);
+    else binding.configureApp(this.nativeId, native);
+  }
+
+  getInfo(): AppInfo | undefined {
+    this._assertReady();
+    const info = hostedRuntime
+      ? binding.getHostedAppInfo(this.nativeId)
+      : binding.getAppInfo(this.nativeId);
+    return info ? { ...info } : undefined;
+  }
+
+  getPaths(): AppPaths | undefined {
+    this._assertReady();
+    const paths = hostedRuntime
+      ? binding.getHostedAppPaths(this.nativeId)
+      : binding.getAppPaths(this.nativeId);
+    if (!paths) return undefined;
+    const result: AppPaths = {
+      executable: paths.executable,
+      executableDir: paths.executableDir,
+      resourceDir: paths.resourceDir,
+      tempDir: paths.tempDir,
+    };
+    if (paths.homeDir !== undefined) result.homeDir = paths.homeDir;
+    if (paths.configDir !== undefined) result.configDir = paths.configDir;
+    if (paths.dataDir !== undefined) result.dataDir = paths.dataDir;
+    if (paths.localDataDir !== undefined) result.localDataDir = paths.localDataDir;
+    if (paths.cacheDir !== undefined) result.cacheDir = paths.cacheDir;
+    if (paths.logDir !== undefined) result.logDir = paths.logDir;
+    if (paths.runtimeDir !== undefined) result.runtimeDir = paths.runtimeDir;
+    if (paths.audioDir !== undefined) result.audioDir = paths.audioDir;
+    if (paths.desktopDir !== undefined) result.desktopDir = paths.desktopDir;
+    if (paths.documentDir !== undefined) result.documentDir = paths.documentDir;
+    if (paths.downloadDir !== undefined) result.downloadDir = paths.downloadDir;
+    if (paths.pictureDir !== undefined) result.pictureDir = paths.pictureDir;
+    if (paths.videoDir !== undefined) result.videoDir = paths.videoDir;
+    return result;
+  }
+
+  getSystemInfo(): SystemInfo {
+    this._assertReady();
+    const info = hostedRuntime
+      ? binding.getHostedSystemInfo(this.nativeId)
+      : binding.getSystemInfo(this.nativeId);
+    const result: SystemInfo = {
+      operatingSystem: info.operatingSystem as SystemInfo["operatingSystem"],
+      family: info.family as SystemInfo["family"],
+      name: info.name,
+      architecture: info.architecture,
+      bitness: info.bitness as SystemInfo["bitness"],
+      preferredLanguages: [...info.preferredLanguages],
+      languagesTruncated: info.languagesTruncated,
+    };
+    if (info.version !== undefined) result.version = info.version;
+    if (info.edition !== undefined) result.edition = info.edition;
+    if (info.codename !== undefined) result.codename = info.codename;
+    if (info.hostname !== undefined) result.hostname = info.hostname;
+    if (info.locale !== undefined) result.locale = info.locale;
+    return result;
+  }
+
+  getWindows(): readonly Window[] {
+    this._assertReady();
+    const registry = hostedRuntime
+      ? binding.getHostedWindowRegistry(this.nativeId)
+      : binding.getWindowRegistry(this.nativeId);
+    return registry.windows.flatMap((id) => {
+      const window = this.windows.get(id);
+      return window ? [window] : [];
+    });
+  }
+
+  getActiveWindow(): Window | undefined {
+    this._assertReady();
+    const registry = hostedRuntime
+      ? binding.getHostedWindowRegistry(this.nativeId)
+      : binding.getWindowRegistry(this.nativeId);
+    return registry.activeWindow === undefined
+      ? undefined
+      : this.windows.get(registry.activeWindow);
   }
 
   flush(): void {
@@ -430,6 +724,22 @@ class App {
       : binding.exitApp(this.nativeId);
   }
 
+  /** Schedule a replacement process after ordinary child-first native teardown. */
+  relaunch(options: RelaunchOptions = {}): boolean {
+    this.#assertAlive();
+    this._assertReady();
+    const native: binding.NativeRelaunchOptions = {};
+    if (options.executable !== undefined) native.executable = options.executable;
+    if (options.arguments === null) native.clearArguments = true;
+    else if (options.arguments !== undefined) native.arguments = [...options.arguments];
+    if (options.workingDirectory !== undefined) {
+      native.workingDirectory = options.workingDirectory;
+    }
+    return hostedRuntime
+      ? binding.relaunchHostedApp(this.nativeId, native)
+      : binding.relaunchApp(this.nativeId, native);
+  }
+
   destroy(): void {
     if (this.#destroyed) return;
     const error = new Error("the QuickGUI app was destroyed");
@@ -474,10 +784,12 @@ class App {
         const parsed = JSON.parse(event.value ?? "{}") as {
           tag?: unknown;
           actionId?: unknown;
+          reply?: unknown;
         };
         if (typeof parsed.tag !== "string") return true;
         const response: NotificationResponse = { tag: parsed.tag };
         if (typeof parsed.actionId === "string") response.actionId = parsed.actionId;
+        if (typeof parsed.reply === "string") response.reply = parsed.reply;
         payload = response;
       } catch {
         return true;
@@ -728,19 +1040,110 @@ export class Window {
       throw new Error("await app.whenReady() before creating a QuickGUI Window");
     }
     const nativeOptions: binding.NativeWindowOptions = {};
+    const serializedMenu = options.menu ? serializeNativeMenu(options.menu) : undefined;
     if (options.title !== undefined) nativeOptions.title = options.title;
     if (options.width !== undefined) nativeOptions.width = options.width;
     if (options.height !== undefined) nativeOptions.height = options.height;
-    if (options.minimumWidth !== undefined) nativeOptions.minimumWidth = options.minimumWidth;
-    if (options.minimumHeight !== undefined) nativeOptions.minimumHeight = options.minimumHeight;
+    if (
+      options.minimumSize !== undefined &&
+      (options.minimumWidth !== undefined || options.minimumHeight !== undefined)
+    ) {
+      throw new TypeError("minimumSize cannot be combined with minimumWidth or minimumHeight");
+    }
+    if (options.minimumSize === null) {
+      nativeOptions.minimumSizeEnabled = false;
+    } else if (options.minimumSize !== undefined) {
+      nativeOptions.minimumWidth = options.minimumSize.width;
+      nativeOptions.minimumHeight = options.minimumSize.height;
+    } else {
+      if (options.minimumWidth !== undefined) nativeOptions.minimumWidth = options.minimumWidth;
+      if (options.minimumHeight !== undefined) nativeOptions.minimumHeight = options.minimumHeight;
+    }
+    if (
+      options.maximumSize !== undefined &&
+      (options.maximumWidth !== undefined || options.maximumHeight !== undefined)
+    ) {
+      throw new TypeError("maximumSize cannot be combined with maximumWidth or maximumHeight");
+    }
+    if (options.maximumSize !== undefined) {
+      nativeOptions.maximumWidth = options.maximumSize.width;
+      nativeOptions.maximumHeight = options.maximumSize.height;
+    } else {
+      if (options.maximumWidth !== undefined) nativeOptions.maximumWidth = options.maximumWidth;
+      if (options.maximumHeight !== undefined) nativeOptions.maximumHeight = options.maximumHeight;
+    }
+    if (options.position !== undefined) {
+      nativeOptions.x = options.position.x;
+      nativeOptions.y = options.position.y;
+    }
+    if (options.initialState !== undefined) nativeOptions.initialState = options.initialState;
+    if (options.displayId !== undefined) nativeOptions.displayId = options.displayId;
+    if (options.representedFile !== undefined) nativeOptions.representedFile = options.representedFile;
+    if (options.documentEdited !== undefined) nativeOptions.documentEdited = options.documentEdited;
+    if (options.tabbingIdentifier !== undefined) {
+      nativeOptions.tabbingIdentifier = options.tabbingIdentifier;
+    }
     if (options.background !== undefined) nativeOptions.background = parseColor(options.background);
+    if (options.performanceProfile !== undefined) {
+      nativeOptions.performanceProfile = options.performanceProfile;
+    }
+    if (options.appearance !== undefined) nativeOptions.appearance = options.appearance;
     if (options.titleBarStyle !== undefined) nativeOptions.titleBarStyle = options.titleBarStyle;
+    if (options.kind !== undefined) nativeOptions.kind = options.kind;
+    if (options.focus !== undefined) nativeOptions.focus = options.focus;
+    if (options.focusable !== undefined) nativeOptions.focusable = options.focusable;
+    if (options.visible !== undefined) nativeOptions.show = options.visible;
+    if (options.movable !== undefined) nativeOptions.movable = options.movable;
+    if (options.resizable !== undefined) nativeOptions.resizable = options.resizable;
+    if (options.minimizable !== undefined) nativeOptions.minimizable = options.minimizable;
+    if (options.maximizable !== undefined) nativeOptions.maximizable = options.maximizable;
+    if (options.closable !== undefined) nativeOptions.closable = options.closable;
+    if (options.decorated !== undefined) nativeOptions.decorated = options.decorated;
+    if (options.shadow !== undefined) nativeOptions.shadow = options.shadow;
+    if (options.contentProtected !== undefined) {
+      nativeOptions.contentProtected = options.contentProtected;
+    }
+    if (options.windowLevel !== undefined) nativeOptions.windowLevel = options.windowLevel;
+    if (options.skipTaskbar !== undefined) nativeOptions.skipTaskbar = options.skipTaskbar;
+    if (options.visibleOnAllWorkspaces !== undefined) {
+      nativeOptions.visibleOnAllWorkspaces = options.visibleOnAllWorkspaces;
+    }
+    if (options.opacity !== undefined) nativeOptions.opacity = options.opacity;
+    if (options.icon !== undefined) nativeOptions.icon = nativeImageSource(options.icon);
+    if (options.taskbarProgress !== undefined) {
+      nativeOptions.taskbarProgressState = options.taskbarProgress.state;
+      nativeOptions.taskbarProgress = options.taskbarProgress.progress;
+    }
+    if (options.taskbarOverlay !== undefined) {
+      nativeOptions.taskbarOverlayIcon = nativeImageSource(options.taskbarOverlay.icon);
+      nativeOptions.taskbarOverlayDescription = options.taskbarOverlay.description;
+    }
+    if (options.cursorVisible !== undefined) nativeOptions.cursorVisible = options.cursorVisible;
+    if (options.cursorGrab !== undefined) nativeOptions.cursorGrab = options.cursorGrab;
+    if (options.cursorHitTest !== undefined) nativeOptions.cursorHitTest = options.cursorHitTest;
+    if (options.cursorPosition !== undefined) {
+      nativeOptions.cursorX = options.cursorPosition.x;
+      nativeOptions.cursorY = options.cursorPosition.y;
+    }
+    if (serializedMenu !== undefined) nativeOptions.menu = serializedMenu.json;
+    if (options.lineScrollPixels !== undefined) {
+      nativeOptions.lineScrollPixels = options.lineScrollPixels;
+    }
+    if (options.keySequenceTimeoutMs !== undefined) {
+      nativeOptions.keySequenceTimeoutMs = options.keySequenceTimeoutMs;
+    }
+    if (options.reduceMotion !== undefined) nativeOptions.reduceMotion = options.reduceMotion;
     if (options.trafficLightPosition !== undefined) {
       nativeOptions.trafficLightX = options.trafficLightPosition.x;
       nativeOptions.trafficLightY = options.trafficLightPosition.y;
     }
-    if (options.transparent !== undefined) nativeOptions.transparent = options.transparent;
-    if (options.blur !== undefined) nativeOptions.blur = options.blur;
+    if (options.backgroundAppearance !== undefined) {
+      nativeOptions.transparent = options.backgroundAppearance === "transparent";
+      nativeOptions.blur = options.backgroundAppearance === "blurred";
+    } else {
+      if (options.transparent !== undefined) nativeOptions.transparent = options.transparent;
+      if (options.blur !== undefined) nativeOptions.blur = options.blur;
+    }
     if (options.placement !== undefined) nativeOptions.popoverPlacement = options.placement;
     if (options.gap !== undefined) nativeOptions.popoverGap = options.gap;
     if (options.offset !== undefined) {
@@ -803,6 +1206,7 @@ export class Window {
       }
       this.#nativeReady = true;
       app._registerWindow(this);
+      if (serializedMenu !== undefined) this._trackMount(serializedMenu.install());
     } catch (error) {
       this._didClose();
       throw error;
@@ -839,6 +1243,18 @@ export class Window {
     performNativeWindowAction(this, "set-title", title);
   }
 
+  setBounds(bounds: WindowBounds): void {
+    performNativeWindowAction(this, "set-bounds", JSON.stringify(bounds));
+  }
+
+  setPosition(position: Point): void {
+    performNativeWindowAction(this, "move", JSON.stringify(position));
+  }
+
+  setSize(size: Size): void {
+    performNativeWindowAction(this, "resize", JSON.stringify(size));
+  }
+
   minimize(): void {
     performNativeWindowAction(this, "minimize");
   }
@@ -853,6 +1269,114 @@ export class Window {
 
   setFullscreen(fullscreen: boolean): void {
     performNativeWindowAction(this, "set-fullscreen", String(fullscreen));
+  }
+
+  setResizable(resizable: boolean): void {
+    performNativeWindowAction(this, "set-resizable", String(resizable));
+  }
+
+  setMovable(movable: boolean): void {
+    performNativeWindowAction(this, "set-movable", String(movable));
+  }
+
+  setMinimumSize(size?: Size): void {
+    performNativeWindowAction(
+      this,
+      "set-minimum-size",
+      size === undefined ? undefined : JSON.stringify(size),
+    );
+  }
+
+  setMaximumSize(size?: Size): void {
+    performNativeWindowAction(
+      this,
+      "set-maximum-size",
+      size === undefined ? undefined : JSON.stringify(size),
+    );
+  }
+
+  setMinimizable(minimizable: boolean): void {
+    performNativeWindowAction(this, "set-minimizable", String(minimizable));
+  }
+
+  setMaximizable(maximizable: boolean): void {
+    performNativeWindowAction(this, "set-maximizable", String(maximizable));
+  }
+
+  setClosable(closable: boolean): void {
+    performNativeWindowAction(this, "set-closable", String(closable));
+  }
+
+  setDecorated(decorated: boolean): void {
+    performNativeWindowAction(this, "set-decorated", String(decorated));
+  }
+
+  setShadow(shadow: boolean): void {
+    performNativeWindowAction(this, "set-shadow", String(shadow));
+  }
+
+  setContentProtected(protected_: boolean): void {
+    performNativeWindowAction(this, "set-content-protected", String(protected_));
+  }
+
+  setWindowLevel(level: WindowLevel | "automatic"): void {
+    performNativeWindowAction(this, "set-window-level", level);
+  }
+
+  setFocusable(focusable: boolean): void {
+    performNativeWindowAction(this, "set-focusable", String(focusable));
+  }
+
+  setSkipTaskbar(skip: boolean): void {
+    performNativeWindowAction(this, "set-skip-taskbar", String(skip));
+  }
+
+  setVisibleOnAllWorkspaces(visible: boolean): void {
+    performNativeWindowAction(this, "set-visible-on-all-workspaces", String(visible));
+  }
+
+  setOpacity(opacity: number): void {
+    performNativeWindowAction(this, "set-opacity", String(opacity));
+  }
+
+  setIcon(icon: ImageSource): void {
+    performNativeWindowImageAction(this, "set-icon", icon);
+  }
+
+  clearIcon(): void {
+    performNativeWindowImageAction(this, "clear-icon");
+  }
+
+  setTaskbarProgress(state: TaskbarProgressState, progress: number): void {
+    performNativeWindowAction(
+      this,
+      "set-taskbar-progress",
+      JSON.stringify({ state, progress }),
+    );
+  }
+
+  setTaskbarOverlayIcon(icon: ImageSource, description: string): void {
+    performNativeWindowImageAction(this, "set-taskbar-overlay-icon", icon, description);
+  }
+
+  clearTaskbarOverlayIcon(): void {
+    performNativeWindowAction(this, "clear-taskbar-overlay-icon");
+  }
+
+  setCursorVisible(visible: boolean): void {
+    performNativeWindowAction(this, "set-cursor-visible", String(visible));
+  }
+
+  setCursorGrab(mode: CursorGrabMode): void {
+    performNativeWindowAction(this, "set-cursor-grab", mode);
+  }
+
+  setCursorHitTest(hitTest: boolean): void {
+    performNativeWindowAction(this, "set-cursor-hit-test", String(hitTest));
+  }
+
+  setCursorPosition(position: Point): void {
+    performNativeWindowAction(this, "set-cursor-position", JSON.stringify(position));
   }
 
   show(): void {
@@ -881,6 +1405,10 @@ export class Window {
 
   setAppearance(appearance: AppearancePreference): void {
     performNativeWindowAction(this, "set-appearance", appearance);
+  }
+
+  setBackgroundAppearance(appearance: WindowBackgroundAppearance): void {
+    performNativeWindowAction(this, "set-background-appearance", appearance);
   }
 
   _focusNode(node: NativeNode): boolean {

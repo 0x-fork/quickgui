@@ -2,6 +2,16 @@
 
 [Documentation index](README.md)
 
+The Solid system API example keeps desktop behavior in the Rust core while `@quickgui/native`
+projects it into JavaScript and `@quickgui/solid` renders the controls. It covers application
+identity and paths, system information and preferences, permissions, power, rich clipboard data,
+notifications, menus, desktop integrations, global shortcuts, tray icons, and window controls:
+
+```console
+cd examples/system-api-solid
+bun run dev
+```
+
 The cursor gallery covers every typed GPUI-compatible native cursor and its CSS/Tailwind name.
 Hover changes use the retained hit stack and schedule no cursor-owned frame:
 

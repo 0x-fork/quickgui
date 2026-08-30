@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt,
+    path::PathBuf,
     rc::Rc,
     sync::{
         Arc, Condvar, LazyLock, Mutex,
@@ -17,11 +18,13 @@ use napi::{
 };
 use napi_derive::napi;
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, AppConfig, AppRegion, AppRunStatus, AppRunner,
-    AppRunnerWaker, Application as QuickGuiApplication, Color, CursorStyle, Element, ElementId,
-    FollowMode, FontWeight, IntoElement, ListAlignment, ListState, Markdown, MarkdownStyle,
-    Popover, QuitMode, SystemPopover, TextAlign, TitleBarStyle, View, ViewContext,
-    WindowBackgroundAppearance, WindowHandle, button, div, text, text_area, text_input,
+    AccessibilityRole, AnchorPlacement, AppConfig, AppInfo, AppPaths, AppRegion, AppRunStatus,
+    AppRunner, AppRunnerWaker, Application as QuickGuiApplication, Color, CursorGrabMode,
+    CursorStyle, DisplayId, Element, ElementId, FollowMode, FontWeight, Image, IntoElement,
+    ListAlignment, ListState, Markdown, MarkdownStyle, PerformanceProfile, Point, Popover,
+    QuitMode, SystemPopover, TaskbarProgressState, TextAlign, TitleBarStyle, View, ViewContext,
+    WindowAppearance, WindowBackgroundAppearance, WindowHandle, WindowKind, WindowLevel, button,
+    div, text, text_area, text_input,
 };
 
 mod dialog;
@@ -142,16 +145,104 @@ mod property {
     pub const LAST: u16 = DISMISS_LISTENER;
 }
 
+#[derive(Default)]
+#[napi(object)]
+pub struct NativeImageSource {
+    /// Encoded image bytes, or raw RGBA8 when width and height are both supplied.
+    pub data: Option<Buffer>,
+    /// Image path used when data is omitted.
+    pub path: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+impl Clone for NativeImageSource {
+    fn clone(&self) -> Self {
+        Self {
+            data: self
+                .data
+                .as_ref()
+                .map(|data| Buffer::from(data.as_ref().to_vec())),
+            path: self.path.clone(),
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+#[napi(object)]
+pub struct NativeAppOptions {
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub identifier: Option<String>,
+    pub resource_dir: Option<String>,
+    pub config_dir: Option<String>,
+    pub data_dir: Option<String>,
+    pub local_data_dir: Option<String>,
+    pub cache_dir: Option<String>,
+    pub log_dir: Option<String>,
+    pub runtime_dir: Option<String>,
+    pub temp_dir: Option<String>,
+    /// `default`, `last-window-closed`, or `explicit`.
+    pub quit_mode: Option<String>,
+}
+
 #[derive(Clone, Default)]
 #[napi(object)]
 pub struct NativeWindowOptions {
     pub title: Option<String>,
     pub width: Option<f64>,
     pub height: Option<f64>,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    /// `normal`, `maximized`, or `fullscreen`.
+    pub initial_state: Option<String>,
+    pub display_id: Option<String>,
+    /// Set to false to remove QuickGUI's default minimum size.
+    pub minimum_size_enabled: Option<bool>,
     pub minimum_width: Option<f64>,
     pub minimum_height: Option<f64>,
+    pub maximum_width: Option<f64>,
+    pub maximum_height: Option<f64>,
+    pub represented_file: Option<String>,
+    pub document_edited: Option<bool>,
+    pub tabbing_identifier: Option<String>,
     pub background: Option<u32>,
+    pub performance_profile: Option<String>,
+    pub appearance: Option<String>,
     pub title_bar_style: Option<String>,
+    pub kind: Option<String>,
+    pub focus: Option<bool>,
+    pub focusable: Option<bool>,
+    pub show: Option<bool>,
+    pub movable: Option<bool>,
+    pub resizable: Option<bool>,
+    pub minimizable: Option<bool>,
+    pub maximizable: Option<bool>,
+    pub closable: Option<bool>,
+    pub decorated: Option<bool>,
+    pub shadow: Option<bool>,
+    pub content_protected: Option<bool>,
+    pub window_level: Option<String>,
+    pub skip_taskbar: Option<bool>,
+    pub visible_on_all_workspaces: Option<bool>,
+    pub opacity: Option<f64>,
+    pub icon: Option<NativeImageSource>,
+    pub taskbar_progress_state: Option<String>,
+    pub taskbar_progress: Option<f64>,
+    pub taskbar_overlay_icon: Option<NativeImageSource>,
+    pub taskbar_overlay_description: Option<String>,
+    pub cursor_visible: Option<bool>,
+    pub cursor_grab: Option<String>,
+    pub cursor_hit_test: Option<bool>,
+    pub cursor_x: Option<f64>,
+    pub cursor_y: Option<f64>,
+    /// Bounded JSON encoding of a per-window native menu. Omitted windows inherit the app menu.
+    pub menu: Option<String>,
+    pub line_scroll_pixels: Option<f64>,
+    pub key_sequence_timeout_ms: Option<f64>,
+    pub reduce_motion: Option<bool>,
     pub traffic_light_x: Option<f64>,
     pub traffic_light_y: Option<f64>,
     pub transparent: Option<bool>,
@@ -167,7 +258,6 @@ pub struct NativeWindowOptions {
     pub popover_accepts_key_focus: Option<bool>,
 }
 
-#[derive(Clone)]
 #[napi(object)]
 pub struct NativeEvent {
     pub kind: String,
@@ -175,7 +265,29 @@ pub struct NativeEvent {
     pub target: u32,
     pub value: Option<String>,
     pub paths: Option<Vec<String>>,
+    pub data: Option<Buffer>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
     pub error: Option<String>,
+}
+
+impl Clone for NativeEvent {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            window: self.window,
+            target: self.target,
+            value: self.value.clone(),
+            paths: self.paths.clone(),
+            data: self
+                .data
+                .as_ref()
+                .map(|data| Buffer::from(data.as_ref().to_vec())),
+            width: self.width,
+            height: self.height,
+            error: self.error.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -217,6 +329,7 @@ impl<T> SyncReply<T> {
 enum HostCommand {
     CreateApp {
         app: u32,
+        options: NativeAppOptions,
         reply: Arc<SyncReply<()>>,
     },
     CreateWindow {
@@ -1881,15 +1994,22 @@ struct NativeRuntime {
     closed_windows: Rc<RefCell<Vec<u32>>>,
     pending_dialogs: Vec<PendingDialog>,
     pending_shell: Vec<system::PendingShell>,
+    pending_notification_permissions: Vec<system::PendingNotificationPermission>,
+    pending_file_icons: Vec<system::PendingFileIcon>,
+    pending_user_tasks: Vec<system::PendingUserTasks>,
     pending_global_shortcuts: Vec<system::PendingGlobalShortcut>,
     pending_tray: Vec<system::PendingTray>,
     system_observation: system::SystemObservation,
+    app_info: Option<AppInfo>,
+    app_paths: Option<AppPaths>,
+    quit_mode: QuitMode,
     runner: Option<AppRunner>,
 }
 
 impl NativeRuntime {
-    fn new() -> Self {
-        Self {
+    fn new(options: NativeAppOptions) -> std::result::Result<Self, String> {
+        let (app_info, app_paths, quit_mode) = native_app_configuration(options)?;
+        Ok(Self {
             next_window_id: 1,
             windows: HashMap::new(),
             window_order: Vec::with_capacity(2),
@@ -1898,11 +2018,17 @@ impl NativeRuntime {
             closed_windows: Rc::new(RefCell::new(Vec::with_capacity(2))),
             pending_dialogs: Vec::with_capacity(2),
             pending_shell: Vec::with_capacity(2),
+            pending_notification_permissions: Vec::with_capacity(1),
+            pending_file_icons: Vec::with_capacity(1),
+            pending_user_tasks: Vec::with_capacity(1),
             pending_global_shortcuts: Vec::with_capacity(2),
             pending_tray: Vec::with_capacity(2),
             system_observation: system::SystemObservation::default(),
+            app_info,
+            app_paths,
+            quit_mode,
             runner: None,
-        }
+        })
     }
 
     fn create_window(
@@ -2031,8 +2157,14 @@ impl NativeRuntime {
         let power_events = Rc::clone(&self.events);
         let tray_events = Rc::clone(&self.events);
         let closed_windows = Rc::clone(&self.closed_windows);
-        let mut runner = QuickGuiApplication::new()
-            .quit_mode(QuitMode::LastWindowClosed)
+        let mut application = QuickGuiApplication::new().quit_mode(self.quit_mode);
+        if let Some(info) = self.app_info.clone() {
+            application = application.app_info(info);
+        }
+        if let Some(paths) = self.app_paths.clone() {
+            application = application.app_paths(paths);
+        }
+        let mut runner = application
             .on_open_urls(move |urls, _cx| {
                 let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())
                     .ok()
@@ -2088,6 +2220,7 @@ impl NativeRuntime {
                 let value = serde_json::json!({
                     "tag": response.tag.as_ref(),
                     "actionId": response.action_id.as_deref(),
+                    "reply": response.reply.as_deref(),
                 })
                 .to_string();
                 enqueue_event(
@@ -2132,19 +2265,53 @@ impl NativeRuntime {
                 );
             })
             .on_power_event(move |event, _cx| {
-                let value: Arc<str> = Arc::from(match event {
-                    quickgui::PowerEvent::Suspend => "suspend",
-                    quickgui::PowerEvent::Resume => "resume",
-                    quickgui::PowerEvent::LockScreen => "lock-screen",
-                    quickgui::PowerEvent::UnlockScreen => "unlock-screen",
-                });
+                let value = match event {
+                    quickgui::PowerEvent::Suspend => serde_json::json!({ "type": "suspend" }),
+                    quickgui::PowerEvent::Resume => serde_json::json!({ "type": "resume" }),
+                    quickgui::PowerEvent::LockScreen => {
+                        serde_json::json!({ "type": "lock-screen" })
+                    }
+                    quickgui::PowerEvent::UnlockScreen => {
+                        serde_json::json!({ "type": "unlock-screen" })
+                    }
+                    quickgui::PowerEvent::ShutdownRequested => {
+                        serde_json::json!({ "type": "shutdown-requested" })
+                    }
+                    quickgui::PowerEvent::PowerSourceChanged(source) => serde_json::json!({
+                        "type": "power-source-changed",
+                        "source": match source {
+                            quickgui::PowerSource::Ac => "ac",
+                            quickgui::PowerSource::Battery => "battery",
+                            quickgui::PowerSource::Unknown => "unknown",
+                        },
+                    }),
+                    quickgui::PowerEvent::ThermalStateChanged(state) => serde_json::json!({
+                        "type": "thermal-state-changed",
+                        "state": match state {
+                            quickgui::ThermalState::Unknown => "unknown",
+                            quickgui::ThermalState::Nominal => "nominal",
+                            quickgui::ThermalState::Fair => "fair",
+                            quickgui::ThermalState::Serious => "serious",
+                            quickgui::ThermalState::Critical => "critical",
+                        },
+                    }),
+                    quickgui::PowerEvent::LowPowerModeChanged(enabled) => serde_json::json!({
+                        "type": "low-power-mode-changed",
+                        "enabled": enabled,
+                    }),
+                    quickgui::PowerEvent::CpuSpeedLimitChanged(percent) => serde_json::json!({
+                        "type": "cpu-speed-limit-changed",
+                        "percent": percent,
+                    }),
+                }
+                .to_string();
                 enqueue_event(
                     &power_events,
                     QueuedEvent {
                         kind: "power-event",
                         window: 0,
                         target: ROOT_NODE,
-                        value: Some(value),
+                        value: Some(Arc::from(value)),
                     },
                 );
             })
@@ -2444,6 +2611,9 @@ impl NativeRuntime {
             self.events.borrow().len()
                 + self.pending_dialogs.len()
                 + self.pending_shell.len()
+                + self.pending_notification_permissions.len()
+                + self.pending_file_icons.len()
+                + self.pending_user_tasks.len()
                 + self.pending_global_shortcuts.len()
                 + self.pending_tray.len(),
         );
@@ -2465,6 +2635,30 @@ impl NativeRuntime {
             }
         }
         self.pending_shell = still_pending;
+        let mut still_pending = Vec::with_capacity(self.pending_notification_permissions.len());
+        for mut request in std::mem::take(&mut self.pending_notification_permissions) {
+            match request.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(request),
+            }
+        }
+        self.pending_notification_permissions = still_pending;
+        let mut still_pending = Vec::with_capacity(self.pending_file_icons.len());
+        for mut request in std::mem::take(&mut self.pending_file_icons) {
+            match request.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(request),
+            }
+        }
+        self.pending_file_icons = still_pending;
+        let mut still_pending = Vec::with_capacity(self.pending_user_tasks.len());
+        for mut request in std::mem::take(&mut self.pending_user_tasks) {
+            match request.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(request),
+            }
+        }
+        self.pending_user_tasks = still_pending;
         let mut still_pending = Vec::with_capacity(self.pending_global_shortcuts.len());
         for mut request in std::mem::take(&mut self.pending_global_shortcuts) {
             match request.poll(&mut context) {
@@ -2487,17 +2681,118 @@ impl NativeRuntime {
             target: event.target,
             value: event.value.map(|value| value.to_string()),
             paths: None,
+            data: None,
+            width: None,
+            height: None,
             error: None,
         }));
         events
     }
 }
 
+pub(crate) fn native_app_configuration(
+    options: NativeAppOptions,
+) -> std::result::Result<(Option<AppInfo>, Option<AppPaths>, QuitMode), String> {
+    update_native_app_configuration(None, None, QuitMode::LastWindowClosed, options)
+}
+
+pub(crate) fn update_native_app_configuration(
+    current_info: Option<AppInfo>,
+    current_paths: Option<AppPaths>,
+    current_quit_mode: QuitMode,
+    options: NativeAppOptions,
+) -> std::result::Result<(Option<AppInfo>, Option<AppPaths>, QuitMode), String> {
+    let NativeAppOptions {
+        name,
+        version,
+        identifier,
+        resource_dir,
+        config_dir,
+        data_dir,
+        local_data_dir,
+        cache_dir,
+        log_dir,
+        runtime_dir,
+        temp_dir,
+        quit_mode,
+    } = options;
+    let identity_replaced = name.is_some() || version.is_some() || identifier.is_some();
+    let info = match (name, version, identifier) {
+        (None, None, None) => None,
+        (Some(name), Some(version), Some(identifier)) => {
+            Some(AppInfo::new(name, version, identifier).map_err(|error| error.to_string())?)
+        }
+        _ => {
+            return Err(
+                "application name, version, and identifier must be supplied together".to_owned(),
+            );
+        }
+    }
+    .or(current_info);
+    let has_path_overrides = resource_dir.is_some()
+        || config_dir.is_some()
+        || data_dir.is_some()
+        || local_data_dir.is_some()
+        || cache_dir.is_some()
+        || log_dir.is_some()
+        || runtime_dir.is_some()
+        || temp_dir.is_some();
+    let mut paths = if identity_replaced {
+        info.as_ref()
+            .map(AppInfo::paths)
+            .transpose()
+            .map_err(|error| error.to_string())?
+    } else if let Some(paths) = current_paths {
+        Some(paths)
+    } else {
+        info.as_ref()
+            .map(AppInfo::paths)
+            .transpose()
+            .map_err(|error| error.to_string())?
+    };
+    if has_path_overrides && paths.is_none() {
+        return Err("application path overrides require application identity".to_owned());
+    }
+    if let Some(mut configured) = paths.take() {
+        if let Some(path) = resource_dir {
+            configured = configured.with_resource_dir(path);
+        }
+        if let Some(path) = config_dir {
+            configured = configured.with_config_dir(Some(path));
+        }
+        if let Some(path) = data_dir {
+            configured = configured.with_data_dir(Some(path));
+        }
+        if let Some(path) = local_data_dir {
+            configured = configured.with_local_data_dir(Some(path));
+        }
+        if let Some(path) = cache_dir {
+            configured = configured.with_cache_dir(Some(path));
+        }
+        if let Some(path) = log_dir {
+            configured = configured.with_log_dir(Some(path));
+        }
+        if let Some(path) = runtime_dir {
+            configured = configured.with_runtime_dir(Some(path));
+        }
+        if let Some(path) = temp_dir {
+            configured = configured.with_temp_dir(path);
+        }
+        paths = Some(configured);
+    }
+    let quit_mode = match quit_mode.as_deref() {
+        None => current_quit_mode,
+        Some("default") => QuitMode::Default,
+        Some("last-window-closed" | "lastWindowClosed") => QuitMode::LastWindowClosed,
+        Some("explicit") => QuitMode::Explicit,
+        Some(value) => return Err(format!("unknown application quit mode `{value}`")),
+    };
+    Ok((info, paths, quit_mode))
+}
+
 fn window_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig, String> {
-    let width = finite_dimension(options.width, 960.0);
-    let height = finite_dimension(options.height, 640.0);
-    let minimum_width = finite_dimension(options.minimum_width, 320.0);
-    let minimum_height = finite_dimension(options.minimum_height, 240.0);
+    let width = optional_finite(options.width, "window width")?.unwrap_or(960.0);
+    let height = optional_finite(options.height, "window height")?.unwrap_or(640.0);
     let title_bar_style = match options.title_bar_style.as_deref() {
         Some("hiddenInset") | Some("hidden-inset") => TitleBarStyle::HiddenInset,
         Some("hidden") => TitleBarStyle::Hidden,
@@ -2522,17 +2817,286 @@ fn window_config(options: &NativeWindowOptions) -> std::result::Result<AppConfig
             .unwrap_or_else(|| "QuickGUI".to_owned()),
     )
     .size(width, height)
-    .minimum_size(minimum_width, minimum_height)
     .background(background)
     .window_background(background_appearance)
     .title_bar_style(title_bar_style);
-    if let (Some(x), Some(y)) = (
-        finite_number(options.traffic_light_x),
-        finite_number(options.traffic_light_y),
+
+    if let Some((x, y)) = optional_pair(options.x, options.y, "window position")? {
+        config = config.position(x, y);
+    }
+    if let Some(display) = &options.display_id {
+        let id = display
+            .parse::<u64>()
+            .map_err(|_| "displayId must be an unsigned 64-bit integer string".to_owned())?;
+        config = config.display(DisplayId::new(id));
+    }
+    match options.initial_state.as_deref().unwrap_or("normal") {
+        "normal" | "windowed" => {}
+        "maximized" => config = config.maximized(true),
+        "fullscreen" => config = config.fullscreen(true),
+        state => return Err(format!("unknown initial window state `{state}`")),
+    }
+
+    if options.minimum_size_enabled == Some(false) {
+        if options.minimum_width.is_some() || options.minimum_height.is_some() {
+            return Err("minimumWidth/minimumHeight cannot accompany minimumSize: null".to_owned());
+        }
+        config = config.without_minimum_size();
+    } else if options.minimum_width.is_some() || options.minimum_height.is_some() {
+        let (width, height) = required_pair(
+            options.minimum_width,
+            options.minimum_height,
+            "minimum window size",
+        )?;
+        config = config.minimum_size(width, height);
+    }
+    if options.maximum_width.is_some() || options.maximum_height.is_some() {
+        let (width, height) = required_pair(
+            options.maximum_width,
+            options.maximum_height,
+            "maximum window size",
+        )?;
+        config = config.maximum_size(width, height);
+    }
+
+    if let Some(path) = &options.represented_file {
+        config = config.represented_file(PathBuf::from(path));
+    }
+    if let Some(edited) = options.document_edited {
+        config = config.document_edited(edited);
+    }
+    if let Some(identifier) = &options.tabbing_identifier {
+        config = config.tabbing_identifier(identifier.clone());
+    }
+    if let Some(profile) = options.performance_profile.as_deref() {
+        config = config.performance_profile(match profile {
+            "low-power" | "lowPower" => PerformanceProfile::LowPower,
+            "balanced" => PerformanceProfile::Balanced,
+            "performance" | "high-performance" | "highPerformance" => {
+                PerformanceProfile::HighPerformance
+            }
+            value => return Err(format!("unknown performanceProfile `{value}`")),
+        });
+    }
+    if let Some(appearance) = options.appearance.as_deref() {
+        config = match appearance {
+            "system" => config.follow_system_appearance(),
+            "light" => config.window_appearance(WindowAppearance::Light),
+            "dark" => config.window_appearance(WindowAppearance::Dark),
+            value => return Err(format!("unknown window appearance `{value}`")),
+        };
+    }
+    if let Some(kind) = options.kind.as_deref() {
+        config = config.window_kind(match kind {
+            "normal" => WindowKind::Normal,
+            "popover" => WindowKind::Popover,
+            "floating" => WindowKind::Floating,
+            "dialog" => WindowKind::Dialog,
+            "system-popover" | "systemPopover" => WindowKind::SystemPopover,
+            value => return Err(format!("unknown window kind `{value}`")),
+        });
+    }
+    if let Some(value) = options.focus {
+        config = config.focus(value);
+    }
+    if let Some(value) = options.focusable {
+        config = config.focusable(value);
+    }
+    if let Some(value) = options.show {
+        config = config.show(value);
+    }
+    if let Some(value) = options.movable {
+        config = config.movable(value);
+    }
+    if let Some(value) = options.resizable {
+        config = config.resizable(value);
+    }
+    if let Some(value) = options.minimizable {
+        config = config.minimizable(value);
+    }
+    if let Some(value) = options.maximizable {
+        config = config.maximizable(value);
+    }
+    if let Some(value) = options.closable {
+        config = config.closable(value);
+    }
+    if let Some(value) = options.decorated {
+        config = config.decorations(value);
+    }
+    if let Some(value) = options.shadow {
+        config = config.shadow(value);
+    }
+    if let Some(value) = options.content_protected {
+        config = config.content_protected(value);
+    }
+    if let Some(level) = options.window_level.as_deref() {
+        config = match level {
+            "automatic" => config.automatic_window_level(),
+            "always-on-bottom" | "alwaysOnBottom" => {
+                config.window_level(WindowLevel::AlwaysOnBottom)
+            }
+            "normal" => config.window_level(WindowLevel::Normal),
+            "always-on-top" | "alwaysOnTop" => config.window_level(WindowLevel::AlwaysOnTop),
+            value => return Err(format!("unknown windowLevel `{value}`")),
+        };
+    }
+    if let Some(value) = options.skip_taskbar {
+        config = config.skip_taskbar(value);
+    }
+    if let Some(value) = options.visible_on_all_workspaces {
+        config = config.visible_on_all_workspaces(value);
+    }
+    if let Some(opacity) = optional_finite(options.opacity, "window opacity")? {
+        config = config.opacity(opacity);
+    }
+    if let Some(icon) = options.icon.clone() {
+        config = config.icon(native_image(icon)?);
+    }
+    if options.taskbar_progress_state.is_some() || options.taskbar_progress.is_some() {
+        let state = parse_taskbar_progress_state(
+            options
+                .taskbar_progress_state
+                .as_deref()
+                .unwrap_or("normal"),
+        )?;
+        let progress =
+            optional_finite(options.taskbar_progress, "taskbar progress")?.unwrap_or(0.0);
+        config = config.taskbar_progress(state, progress);
+    }
+    match (
+        options.taskbar_overlay_icon.clone(),
+        options.taskbar_overlay_description.as_deref(),
     ) {
+        (Some(icon), Some(description)) => {
+            config = config.taskbar_overlay_icon(native_image(icon)?, description);
+        }
+        (None, None) => {}
+        _ => {
+            return Err(
+                "taskbarOverlayIcon and taskbarOverlayDescription must be supplied together"
+                    .to_owned(),
+            );
+        }
+    }
+    if let Some(value) = options.cursor_visible {
+        config = config.cursor_visible(value);
+    }
+    if let Some(mode) = options.cursor_grab.as_deref() {
+        config = config.cursor_grab(parse_cursor_grab_mode(mode)?);
+    }
+    if let Some(value) = options.cursor_hit_test {
+        config = config.cursor_hit_test(value);
+    }
+    if let Some((x, y)) = optional_pair(options.cursor_x, options.cursor_y, "cursor position")? {
+        config = config.cursor_position(Point::new(x, y));
+    }
+    if let Some(menu) = &options.menu {
+        config = config.window_menus(system::menu::application_menus(menu)?);
+    }
+    if let Some(value) = optional_finite(options.line_scroll_pixels, "line scroll pixels")? {
+        config.line_scroll_pixels = value;
+    }
+    if let Some(milliseconds) =
+        optional_finite(options.key_sequence_timeout_ms, "key sequence timeout")?
+    {
+        if milliseconds < 0.0 {
+            return Err("keySequenceTimeoutMs cannot be negative".to_owned());
+        }
+        config.key_sequence_timeout = Duration::from_secs_f32(milliseconds / 1_000.0);
+    }
+    if let Some(value) = options.reduce_motion {
+        config = config.reduce_motion(value);
+    }
+
+    if let Some((x, y)) = optional_pair(
+        options.traffic_light_x,
+        options.traffic_light_y,
+        "traffic light position",
+    )? {
         config = config.traffic_light_position(x, y);
     }
     Ok(config)
+}
+
+fn optional_finite(value: Option<f64>, name: &str) -> std::result::Result<Option<f32>, String> {
+    value
+        .map(|value| {
+            let value = value as f32;
+            if value.is_finite() {
+                Ok(value)
+            } else {
+                Err(format!("{name} must be finite"))
+            }
+        })
+        .transpose()
+}
+
+fn required_pair(
+    first: Option<f64>,
+    second: Option<f64>,
+    name: &str,
+) -> std::result::Result<(f32, f32), String> {
+    optional_pair(first, second, name)?.ok_or_else(|| format!("{name} requires both values"))
+}
+
+fn optional_pair(
+    first: Option<f64>,
+    second: Option<f64>,
+    name: &str,
+) -> std::result::Result<Option<(f32, f32)>, String> {
+    match (first, second) {
+        (None, None) => Ok(None),
+        (Some(first), Some(second)) => Ok(Some((
+            optional_finite(Some(first), name)?.expect("present finite value"),
+            optional_finite(Some(second), name)?.expect("present finite value"),
+        ))),
+        _ => Err(format!("{name} requires both values")),
+    }
+}
+
+fn parse_taskbar_progress_state(state: &str) -> std::result::Result<TaskbarProgressState, String> {
+    match state {
+        "none" => Ok(TaskbarProgressState::None),
+        "normal" => Ok(TaskbarProgressState::Normal),
+        "indeterminate" => Ok(TaskbarProgressState::Indeterminate),
+        "paused" => Ok(TaskbarProgressState::Paused),
+        "error" => Ok(TaskbarProgressState::Error),
+        value => Err(format!("unknown taskbar progress state `{value}`")),
+    }
+}
+
+fn parse_cursor_grab_mode(mode: &str) -> std::result::Result<CursorGrabMode, String> {
+    match mode {
+        "none" => Ok(CursorGrabMode::None),
+        "confined" => Ok(CursorGrabMode::Confined),
+        "locked" => Ok(CursorGrabMode::Locked),
+        value => Err(format!("unknown cursor grab mode `{value}`")),
+    }
+}
+
+pub(crate) fn native_image(source: NativeImageSource) -> std::result::Result<Image, String> {
+    match (source.data, source.path) {
+        (Some(data), None) => match (source.width, source.height) {
+            (Some(width), Some(height)) => {
+                Image::from_rgba(width, height, Arc::<[u8]>::from(data.as_ref()))
+            }
+            (None, None) => Image::decode(data.as_ref()),
+            _ => {
+                return Err(
+                    "raw image data requires both width and height, or neither for encoded data"
+                        .to_owned(),
+                );
+            }
+        },
+        (None, Some(path)) if source.width.is_none() && source.height.is_none() => {
+            Image::open(PathBuf::from(path))
+        }
+        (Some(_), Some(_)) => {
+            return Err("an image accepts data or path, but not both".to_owned());
+        }
+        _ => return Err("an image requires data or path".to_owned()),
+    }
+    .map_err(|error| error.to_string())
 }
 
 fn parse_anchor_placement(value: &str) -> Option<AnchorPlacement> {
@@ -2618,14 +3182,16 @@ fn with_app_mut<T>(
 }
 
 #[napi]
-pub fn create_app() -> Result<u32> {
+pub fn create_app(options: Option<NativeAppOptions>) -> Result<u32> {
     REGISTRY.with(|registry| {
         let mut registry = registry.borrow_mut();
         let id = registry.next_id.max(1);
         registry.next_id = id
             .checked_add(1)
             .ok_or_else(|| Error::from_reason("QuickGUI app id space exhausted"))?;
-        registry.apps.insert(id, NativeRuntime::new());
+        let runtime =
+            NativeRuntime::new(options.unwrap_or_default()).map_err(Error::from_reason)?;
+        registry.apps.insert(id, runtime);
         Ok(id)
     })
 }
@@ -2761,12 +3327,13 @@ pub fn destroy_app(app: u32) -> Result<bool> {
 }
 
 #[napi]
-pub fn create_hosted_app() -> Result<u32> {
+pub fn create_hosted_app(options: Option<NativeAppOptions>) -> Result<u32> {
     let app = HOST.allocate_app().map_err(Error::from_reason)?;
     HOST.set_app(app).map_err(Error::from_reason)?;
     let reply = Arc::new(SyncReply::new());
     HOST.enqueue(HostCommand::CreateApp {
         app,
+        options: options.unwrap_or_default(),
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
@@ -3004,13 +3571,22 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
 
         while let Some(command) = commands.pop_front() {
             match command {
-                HostCommand::CreateApp { app, reply } => {
+                HostCommand::CreateApp {
+                    app,
+                    options,
+                    reply,
+                } => {
                     let result = if runtime.is_some() {
                         Err("a QuickGUI native host can own only one app".to_owned())
                     } else {
-                        active_app = Some(app);
-                        runtime = Some(NativeRuntime::new());
-                        Ok(())
+                        match NativeRuntime::new(options) {
+                            Ok(created) => {
+                                active_app = Some(app);
+                                runtime = Some(created);
+                                Ok(())
+                            }
+                            Err(error) => Err(error),
+                        }
                     };
                     reply.complete(result);
                 }
@@ -3220,6 +3796,49 @@ fn finite_dimension(value: Option<f64>, fallback: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_configuration_updates_preserve_embedded_identity_and_paths() {
+        let (info, paths, quit_mode) = native_app_configuration(NativeAppOptions {
+            name: Some("QuickGUI Test".to_owned()),
+            version: Some("1.2.3".to_owned()),
+            identifier: Some("dev.quickgui.binding-test".to_owned()),
+            ..NativeAppOptions::default()
+        })
+        .expect("valid initial application configuration");
+        let initial_paths = paths.clone().expect("identity resolves application paths");
+
+        let (info, paths, quit_mode) = update_native_app_configuration(
+            info,
+            paths,
+            quit_mode,
+            NativeAppOptions {
+                quit_mode: Some("explicit".to_owned()),
+                ..NativeAppOptions::default()
+            },
+        )
+        .expect("quit-only configuration update");
+
+        assert_eq!(info.as_ref().map(AppInfo::identifier), Some("dev.quickgui.binding-test"));
+        assert_eq!(paths.as_ref(), Some(&initial_paths));
+        assert_eq!(quit_mode, QuitMode::Explicit);
+
+        let overridden = PathBuf::from("/tmp/quickgui-binding-test-config");
+        let (info, paths, quit_mode) = update_native_app_configuration(
+            info,
+            paths,
+            quit_mode,
+            NativeAppOptions {
+                config_dir: Some(overridden.to_string_lossy().into_owned()),
+                ..NativeAppOptions::default()
+            },
+        )
+        .expect("path-only configuration update");
+
+        assert_eq!(info.as_ref().map(AppInfo::identifier), Some("dev.quickgui.binding-test"));
+        assert_eq!(paths.as_ref().and_then(AppPaths::config_dir), Some(overridden.as_path()));
+        assert_eq!(quit_mode, QuitMode::Explicit);
+    }
 
     struct BatchWriter {
         bytes: Vec<u8>,

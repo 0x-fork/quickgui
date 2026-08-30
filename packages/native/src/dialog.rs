@@ -140,6 +140,9 @@ impl PendingDialog {
             target: self.request,
             value,
             paths,
+            data: None,
+            width: None,
+            height: None,
             error,
         })
     }
