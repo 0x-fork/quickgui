@@ -142,6 +142,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
   let addingSpace = false;
   let sidebarDragStart = initialSidebarWidth;
   let sectionDragStart = initialSidebarSectionRatio;
+  let sectionDragHeight = 320;
   let persistenceTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
 
@@ -568,14 +569,17 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
     if (pointer.button !== "left") return;
     if (pointer.phase === "down") {
       sectionDragStart = sidebarSectionRatio();
+      sectionDragHeight = Math.max(
+        window.getState().viewportSize.height - 40,
+        320,
+      );
       return;
     }
     if (pointer.phase === "move") {
-      const height = Math.max(window.getState().viewportSize.height - 40, 320);
       setSidebarSectionRatio(
         clamp(
           sectionDragStart +
-            (pointer.position.y - pointer.origin.y) / height,
+            (pointer.position.y - pointer.origin.y) / sectionDragHeight,
           0.25,
           0.75,
         ),
