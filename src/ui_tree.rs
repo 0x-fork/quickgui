@@ -198,6 +198,15 @@ impl HitRegion {
     }
 }
 
+fn expand_hit_bounds(bounds: Rect, slop: Insets) -> Rect {
+    Rect::new(
+        bounds.x - slop.left,
+        bounds.y - slop.top,
+        bounds.width + slop.left + slop.right,
+        bounds.height + slop.top + slop.bottom,
+    )
+}
+
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 enum ExternalDropAcceptance {
@@ -6746,6 +6755,7 @@ fn paint_element(
         natural
     };
     element_bounds.insert(element.runtime_id, bounds);
+    let hit_bounds = expand_hit_bounds(bounds, element.hit_slop);
 
     // A clipped leaf cannot contribute pixels or interaction regions. Avoid emitting offscreen
     // text/image primitives for long documents while retaining its measured and accessibility
@@ -6757,6 +6767,7 @@ fn paint_element(
     };
     if element.children.is_empty()
         && effective_parent_clip.intersection(bounds).is_none()
+        && effective_parent_clip.intersection(hit_bounds).is_none()
         && !element_has_outset_shadow(element)
     {
         return Ok(());
@@ -6933,7 +6944,7 @@ fn paint_element(
         let cursor_style = effective_cursor_style(element, selectable_document_index.is_some());
         hit_regions.push(HitRegion {
             id: element.runtime_id,
-            bounds,
+            bounds: hit_bounds,
             clip: parent_clip,
             clickable: element.clickable && !element.accessibility.disabled,
             pointer_listener: element.pointer_listener && !element.accessibility.disabled,
@@ -9367,6 +9378,23 @@ mod tests {
     }
 
     struct TestTextLayout;
+
+    #[test]
+    fn hit_slop_expands_only_the_interaction_bounds() {
+        let visual = Rect::new(20.0, 30.0, 1.0, 80.0);
+        let interaction = expand_hit_bounds(
+            visual,
+            Insets {
+                top: 2.0,
+                right: 3.0,
+                bottom: 4.0,
+                left: 5.0,
+            },
+        );
+
+        assert_eq!(visual, Rect::new(20.0, 30.0, 1.0, 80.0));
+        assert_eq!(interaction, Rect::new(15.0, 28.0, 9.0, 86.0));
+    }
 
     impl TextLayoutEngine for TestTextLayout {
         fn measure_text(

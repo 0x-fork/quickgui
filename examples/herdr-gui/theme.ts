@@ -231,7 +231,7 @@ export function createStyles(theme: Theme) {
       minWidth: 0,
       flexDirection: "column",
       justifyContent: "center",
-      gap: 3,
+      gap: 1,
     },
     rowLine: {
       display: "flex",
@@ -242,14 +242,20 @@ export function createStyles(theme: Theme) {
     rowTitle: {
       color: theme.text,
       fontSize: 13.5,
+      lineHeight: 16,
       fontWeight: 560,
       lineClamp: 1,
       textOverflow: "ellipsis",
     },
-    rowCount: { color: theme.textGhost, fontSize: 11.5 },
+    rowCount: {
+      color: theme.textGhost,
+      fontSize: 11.5,
+      lineHeight: 16,
+    },
     agentTitle: {
       color: theme.text,
       fontSize: 13.5,
+      lineHeight: 16,
       fontWeight: 560,
       lineClamp: 1,
       textOverflow: "ellipsis",
@@ -257,10 +263,15 @@ export function createStyles(theme: Theme) {
     rowMeta: {
       color: theme.textTertiary,
       fontSize: 11.5,
+      lineHeight: 15,
       lineClamp: 1,
       textOverflow: "ellipsis",
     },
-    rowSeparator: { color: theme.textGhost, fontSize: 11.5 },
+    rowSeparator: {
+      color: theme.textGhost,
+      fontSize: 11.5,
+      lineHeight: 15,
+    },
     rowClose: {
       ...iconButton(theme, 20, 11),
       position: "absolute",
@@ -270,11 +281,11 @@ export function createStyles(theme: Theme) {
     sidebarDivider: {
       position: "relative",
       display: "flex",
-      width: 5,
+      width: 1,
       flexShrink: 0,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "transparent",
+      hitSlopLeft: 5,
       cursor: "ew-resize",
       appRegion: "no-drag",
     },
@@ -319,7 +330,9 @@ export function createStyles(theme: Theme) {
     },
     tabClose: {
       ...iconButton(theme, 20, 11),
-      marginRight: 3,
+      position: "absolute",
+      top: 4,
+      right: 3,
       appRegion: "no-drag",
     },
     tabAdd: {
@@ -574,7 +587,7 @@ export function headingActionStyle(theme: Theme) {
 export function sidebarRow(selected: boolean, theme: Theme) {
   return {
     display: "flex" as const,
-    flex: 1,
+    width: "100%",
     minWidth: 0,
     height: 48,
     flexShrink: 0,
@@ -595,7 +608,6 @@ export function sidebarRow(selected: boolean, theme: Theme) {
 export function agentRow(selected: boolean, theme: Theme) {
   return {
     ...sidebarRow(selected, theme),
-    width: "100%",
     height: 48,
     paddingRight: 8,
   };
@@ -603,6 +615,7 @@ export function agentRow(selected: boolean, theme: Theme) {
 
 export function tabItem(active: boolean, theme: Theme) {
   return {
+    position: "relative" as const,
     display: "flex" as const,
     minWidth: 74,
     maxWidth: 170,
@@ -618,12 +631,12 @@ export function tabItem(active: boolean, theme: Theme) {
 export function tabButton(active: boolean, theme: Theme) {
   return {
     display: "flex" as const,
-    flex: 1,
+    width: "100%",
     minWidth: 0,
     height: 28,
     alignItems: "center" as const,
     paddingLeft: 10,
-    paddingRight: active ? 3 : 10,
+    paddingRight: active ? 30 : 10,
     backgroundColor: "transparent",
     color: active ? theme.text : theme.textTertiary,
     hoverBackgroundColor: active ? theme.selectedStrong : theme.hover,

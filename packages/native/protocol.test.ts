@@ -30,8 +30,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, retained states, popovers, terminals, SVGs, and pointer capture under protocol v11", () => {
-    expect(PROTOCOL_VERSION).toBe(11);
+  test("encodes native controls, retained states, popovers, terminals, SVGs, and pointer capture under protocol v12", () => {
+    expect(PROTOCOL_VERSION).toBe(12);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -75,9 +75,14 @@ describe("binary mutation protocol", () => {
     batch.setProperty(1, PropertyCode.TransitionColors, 90);
     batch.setProperty(1, PropertyCode.PointerListener, true);
     batch.setProperty(1, PropertyCode.FocusOnPointer, false);
+    batch.setProperty(1, PropertyCode.HitSlop, 2);
+    batch.setProperty(1, PropertyCode.HitSlopTop, 3);
+    batch.setProperty(1, PropertyCode.HitSlopRight, 4);
+    batch.setProperty(1, PropertyCode.HitSlopBottom, 5);
+    batch.setProperty(1, PropertyCode.HitSlopLeft, 6);
     batch.createElement(6, NativeNodeTag.Svg);
     batch.setProperty(6, PropertyCode.Value, "<svg/>");
-    expect(batch.mutationCount).toBe(36);
+    expect(batch.mutationCount).toBe(41);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 });

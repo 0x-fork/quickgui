@@ -3,6 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
   GITHUB_DARK_TERMINAL,
   GITHUB_LIGHT_TERMINAL,
+  agentRow,
+  createStyles,
+  sidebarRow,
   themeFor,
 } from "./theme.ts";
 
@@ -60,5 +63,30 @@ describe("GitHub terminal themes", () => {
     expect(themeFor("dark").terminalPalette).toBe(
       GITHUB_DARK_TERMINAL.palette,
     );
+  });
+});
+
+describe("sidebar row layout", () => {
+  test("keeps space and agent rows fixed-height in vertical lists", () => {
+    const theme = themeFor("light");
+
+    for (const row of [sidebarRow(false, theme), agentRow(false, theme)]) {
+      expect(row).toMatchObject({
+        width: "100%",
+        height: 48,
+        flexShrink: 0,
+      });
+      expect(row).not.toHaveProperty("flex");
+    }
+  });
+
+  test("keeps two-line sidebar content compact and aligned", () => {
+    const styles = createStyles(themeFor("light"));
+
+    expect(styles.twoLineRow.gap).toBe(1);
+    expect(styles.rowTitle.lineHeight).toBe(16);
+    expect(styles.agentTitle.lineHeight).toBe(16);
+    expect(styles.rowMeta.lineHeight).toBe(15);
+    expect(styles.rowCount.lineHeight).toBe(16);
   });
 });

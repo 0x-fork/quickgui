@@ -206,6 +206,7 @@ function AgentRow(props: { pane: Pane; model: HerdrModel }) {
                   ? props.model.theme().danger
                   : props.model.theme().textGhost,
               fontSize: 11.5,
+              lineHeight: 15,
             }}
           >
             {statusLabel(props.pane.status().agentStatus)}

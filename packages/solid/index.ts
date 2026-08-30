@@ -109,6 +109,11 @@ const properties: Record<string, PropertyEntry> = {
   role: { code: PropertyCode.Role },
   tabIndex: { code: PropertyCode.TabIndex },
   focusOnPointer: { code: PropertyCode.FocusOnPointer },
+  hitSlop: { code: PropertyCode.HitSlop },
+  hitSlopTop: { code: PropertyCode.HitSlopTop },
+  hitSlopRight: { code: PropertyCode.HitSlopRight },
+  hitSlopBottom: { code: PropertyCode.HitSlopBottom },
+  hitSlopLeft: { code: PropertyCode.HitSlopLeft },
   position: { code: PropertyCode.Position },
   top: { code: PropertyCode.Top },
   right: { code: PropertyCode.Right },
@@ -347,7 +352,8 @@ function isLengthProperty(code: PropertyCode): boolean {
     code === PropertyCode.LineHeight ||
     (code >= PropertyCode.Top && code <= PropertyCode.Left) ||
     code === PropertyCode.AnchorGap ||
-    code === PropertyCode.ViewportMargin
+    code === PropertyCode.ViewportMargin ||
+    (code >= PropertyCode.HitSlop && code <= PropertyCode.HitSlopLeft)
   );
 }
 
@@ -1011,6 +1017,11 @@ export namespace JSX {
     tabIndex?: number;
     /** Keep keyboard focus where it is when this element is activated with a pointer. */
     focusOnPointer?: boolean;
+    hitSlop?: number | string;
+    hitSlopTop?: number | string;
+    hitSlopRight?: number | string;
+    hitSlopBottom?: number | string;
+    hitSlopLeft?: number | string;
     "aria-label"?: string;
     ariaLabel?: string;
     ref?: ((node: NativeNode) => void) | NativeNode;

@@ -24,7 +24,7 @@ use taffy::{
 
 use crate::{
     AnimatedImage, Background, BoxShadow, Canvas, Color, CursorStyle, CustomShader, DispatchPhase,
-    Font, FontFallbacks, FontFamily, FontFeatures, Image, ImageSource, KeyContext,
+    Font, FontFallbacks, FontFamily, FontFeatures, Image, ImageSource, Insets, KeyContext,
     MAX_VALIDATION_MESSAGE_BYTES, ObjectFit, Path, Rect, ScenePlane, ShaderParameters, StyledText,
     Svg, SvgTransform, TextAlign, TextHighlight, TextOverflow, TextShaping, TextStyle,
     TextUnderline, TextWrap, Tooltip, Transition, WhiteSpace,
@@ -1237,6 +1237,7 @@ pub struct Element {
     pub(crate) resolved_user_select: bool,
     pub(crate) focusable: bool,
     pub(crate) focus_on_pointer: bool,
+    pub(crate) hit_slop: Insets,
     pub(crate) focus_trap: bool,
     pub(crate) key_context: Option<KeyContext>,
     pub(crate) tab_index: i16,
@@ -1462,6 +1463,7 @@ impl Element {
             resolved_user_select: false,
             focusable: false,
             focus_on_pointer: true,
+            hit_slop: Insets::default(),
             focus_trap: false,
             key_context: None,
             tab_index: 0,
@@ -3471,6 +3473,21 @@ impl Element {
         self
     }
 
+    /// Expand this element's pointer hit region without changing its layout or paint bounds.
+    ///
+    /// The expanded region remains clipped by the element's parent. This is useful for thin native
+    /// affordances such as split-view dividers and resize handles that need a forgiving target
+    /// without a visible gutter.
+    pub fn hit_slop(mut self, insets: Insets) -> Self {
+        self.hit_slop = Insets {
+            top: finite_nonnegative(insets.top),
+            right: finite_nonnegative(insets.right),
+            bottom: finite_nonnegative(insets.bottom),
+            left: finite_nonnegative(insets.left),
+        };
+        self
+    }
+
     /// Assign a stable focus identity to this element.
     pub fn track_focus(mut self, handle: FocusHandle) -> Self {
         self.bind_listener_id(handle.id());
@@ -5085,6 +5102,27 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
         assert_eq!(element.hover.opacity, Some(0.35));
         assert!(element.has_stateful_paint());
         assert!(!element.has_stateful_cursor());
+    }
+
+    #[test]
+    fn hit_slop_is_nonnegative_and_does_not_enter_layout_style() {
+        let element = div().hit_slop(Insets {
+            top: 4.0,
+            right: -2.0,
+            bottom: f32::NAN,
+            left: 7.0,
+        });
+
+        assert_eq!(
+            element.hit_slop,
+            Insets {
+                top: 4.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: 7.0,
+            }
+        );
+        assert_eq!(element.layout, Style::default());
     }
 
     #[test]

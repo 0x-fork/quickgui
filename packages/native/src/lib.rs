@@ -44,7 +44,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 11;
+const PROTOCOL_VERSION: u16 = 12;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -161,7 +161,12 @@ mod property {
     pub const FONT_FAMILY: u16 = 101;
     pub const TERMINAL_PALETTE: u16 = 102;
     pub const TERMINAL_CURSOR_COLOR: u16 = 103;
-    pub const LAST: u16 = TERMINAL_CURSOR_COLOR;
+    pub const HIT_SLOP: u16 = 104;
+    pub const HIT_SLOP_TOP: u16 = 105;
+    pub const HIT_SLOP_RIGHT: u16 = 106;
+    pub const HIT_SLOP_BOTTOM: u16 = 107;
+    pub const HIT_SLOP_LEFT: u16 = 108;
+    pub const LAST: u16 = HIT_SLOP_LEFT;
 }
 
 #[derive(Default)]
@@ -2140,6 +2145,16 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     }
     if let Some(value) = node.boolean(property::FOCUS_ON_POINTER) {
         element = element.focus_on_pointer(value);
+    }
+    let hit_slop = node.number(property::HIT_SLOP).unwrap_or(0.0);
+    let hit_slop = quickgui::Insets {
+        top: node.number(property::HIT_SLOP_TOP).unwrap_or(hit_slop),
+        right: node.number(property::HIT_SLOP_RIGHT).unwrap_or(hit_slop),
+        bottom: node.number(property::HIT_SLOP_BOTTOM).unwrap_or(hit_slop),
+        left: node.number(property::HIT_SLOP_LEFT).unwrap_or(hit_slop),
+    };
+    if hit_slop != quickgui::Insets::default() {
+        element = element.hit_slop(hit_slop);
     }
     if let Some(value) = node.string(property::POSITION) {
         element = if value == "absolute" {

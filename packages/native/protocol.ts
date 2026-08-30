@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -120,6 +120,11 @@ export const enum PropertyCode {
   FontFamily = 101,
   TerminalPalette = 102,
   TerminalCursorColor = 103,
+  HitSlop = 104,
+  HitSlopTop = 105,
+  HitSlopRight = 106,
+  HitSlopBottom = 107,
+  HitSlopLeft = 108,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

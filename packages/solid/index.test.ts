@@ -229,6 +229,26 @@ describe("Solid universal host", () => {
     expect(button.properties.get(PropertyCode.FocusOnPointer)).toBe(false);
   });
 
+  test("maps paint-free hit slop for thin native interaction targets", () => {
+    const divider = createComponent(View, {
+      style: {
+        width: 1,
+        hitSlop: 2,
+        hitSlopTop: 3,
+        hitSlopRight: 4,
+        hitSlopBottom: 5,
+        hitSlopLeft: 6,
+      },
+    });
+
+    expect(divider.properties.get(PropertyCode.Width)).toBe(1);
+    expect(divider.properties.get(PropertyCode.HitSlop)).toBe(2);
+    expect(divider.properties.get(PropertyCode.HitSlopTop)).toBe(3);
+    expect(divider.properties.get(PropertyCode.HitSlopRight)).toBe(4);
+    expect(divider.properties.get(PropertyCode.HitSlopBottom)).toBe(5);
+    expect(divider.properties.get(PropertyCode.HitSlopLeft)).toBe(6);
+  });
+
   test("creates retained SVG nodes whose source is parsed by the Rust core", () => {
     const source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" />';
     const icon = createComponent(Svg, {
