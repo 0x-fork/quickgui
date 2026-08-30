@@ -53,6 +53,35 @@ impl Color {
         self.with_alpha(self.a * opacity)
     }
 
+    /// Interpolate colors in premultiplied-alpha space, then return straight RGBA.
+    ///
+    /// Paint transitions need this form so fading from transparent to an opaque color does not
+    /// pass through transparent black and produce a dark fringe when composited.
+    pub(crate) fn interpolate_premultiplied(from: Self, to: Self, phase: f32) -> Self {
+        if phase == 0.0 {
+            return from;
+        }
+        if phase == 1.0 {
+            return to;
+        }
+
+        let alpha = from.a + (to.a - from.a) * phase;
+        if alpha.abs() <= f32::EPSILON {
+            return Self::linear(0.0, 0.0, 0.0, alpha);
+        }
+        let component = |from_component: f32, to_component: f32| {
+            let from_premultiplied = from_component * from.a;
+            let to_premultiplied = to_component * to.a;
+            (from_premultiplied + (to_premultiplied - from_premultiplied) * phase) / alpha
+        };
+        Self::linear(
+            component(from.r, to.r),
+            component(from.g, to.g),
+            component(from.b, to.b),
+            alpha,
+        )
+    }
+
     pub(crate) fn as_array(self) -> [f32; 4] {
         [self.r, self.g, self.b, self.a]
     }

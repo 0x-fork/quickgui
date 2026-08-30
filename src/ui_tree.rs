@@ -777,12 +777,12 @@ impl TransitionPaintStyle {
         let selected = |property| properties.contains(property);
         Self {
             background: if selected(TransitionProperties::BACKGROUND) {
-                Color::interpolate(from.background, to.background, phase)
+                Color::interpolate_premultiplied(from.background, to.background, phase)
             } else {
                 to.background
             },
             border_color: if selected(TransitionProperties::BORDER_COLOR) {
-                Color::interpolate(from.border_color, to.border_color, phase)
+                Color::interpolate_premultiplied(from.border_color, to.border_color, phase)
             } else {
                 to.border_color
             },
@@ -807,7 +807,7 @@ impl TransitionPaintStyle {
                 } else if phase == 1.0 {
                     to.text_color
                 } else {
-                    Some(Color::interpolate(
+                    Some(Color::interpolate_premultiplied(
                         from.text_color.unwrap_or(from.text_fallback),
                         to.text_color.unwrap_or(to.text_fallback),
                         phase,
@@ -817,7 +817,7 @@ impl TransitionPaintStyle {
                 to.text_color
             },
             text_fallback: if selected(TransitionProperties::TEXT_COLOR) {
-                Color::interpolate(from.text_fallback, to.text_fallback, phase)
+                Color::interpolate_premultiplied(from.text_fallback, to.text_fallback, phase)
             } else {
                 to.text_fallback
             },
@@ -1470,7 +1470,7 @@ fn interpolate_transition_shadow(from: BoxShadow, to: BoxShadow, phase: f32) -> 
     BoxShadow::new(
         f32::interpolate(from.offset().x, to.offset().x, phase),
         f32::interpolate(from.offset().y, to.offset().y, phase),
-        Color::interpolate(from.color(), to.color(), phase),
+        Color::interpolate_premultiplied(from.color(), to.color(), phase),
     )
     .blur_radius(f32::interpolate(from.blur(), to.blur(), phase))
     .spread_radius(f32::interpolate(from.spread(), to.spread(), phase))
@@ -10192,6 +10192,32 @@ mod tests {
         assert_eq!(reduced, to);
         assert!(!playback.active);
         assert_eq!(playback.deadline(), None);
+    }
+
+    #[test]
+    fn style_transitions_fade_transparent_colors_without_a_dark_fringe() {
+        let surface = Color::rgb8(22, 22, 21);
+        let hover = Color::rgb8(36, 36, 35);
+        let from = transition_test_style(Color::TRANSPARENT, 0.0);
+        let to = transition_test_style(hover, 0.0);
+
+        let midpoint =
+            TransitionPaintStyle::interpolate(from, to, 0.5, TransitionProperties::COLORS);
+
+        assert!((midpoint.background.a - 0.5).abs() < 0.001);
+        assert!((midpoint.background.r - hover.r).abs() < 0.001);
+        assert!((midpoint.background.g - hover.g).abs() < 0.001);
+        assert!((midpoint.background.b - hover.b).abs() < 0.001);
+        for (source, backdrop, target) in [
+            (midpoint.background.r, surface.r, hover.r),
+            (midpoint.background.g, surface.g, hover.g),
+            (midpoint.background.b, surface.b, hover.b),
+        ] {
+            let composited =
+                source * midpoint.background.a + backdrop * (1.0 - midpoint.background.a);
+            assert!(composited > backdrop);
+            assert!(composited < target);
+        }
     }
 
     #[test]
