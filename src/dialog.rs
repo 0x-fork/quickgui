@@ -176,6 +176,7 @@ impl Dialog {
             .inset_0()
             .size_full()
             .focus_trap()
+            .restore_previous_focus()
             .app_region_no_drag()
             .cursor_default()
     }
@@ -277,6 +278,7 @@ mod tests {
 
         let root = dialog.root_part(div());
         assert!(root.focus_trap);
+        assert!(root.restore_previous_focus);
         assert!(root.portal);
         assert!(root.blocks_pointer);
         assert_eq!(root.visual.background, None);

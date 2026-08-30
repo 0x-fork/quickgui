@@ -44,7 +44,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 12;
+const PROTOCOL_VERSION: u16 = 13;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -166,7 +166,12 @@ mod property {
     pub const HIT_SLOP_RIGHT: u16 = 106;
     pub const HIT_SLOP_BOTTOM: u16 = 107;
     pub const HIT_SLOP_LEFT: u16 = 108;
-    pub const LAST: u16 = HIT_SLOP_LEFT;
+    pub const OVERLAY: u16 = 109;
+    pub const FOCUS_TRAP: u16 = 110;
+    pub const RESTORE_PREVIOUS_FOCUS: u16 = 111;
+    pub const AUTO_FOCUS: u16 = 112;
+    pub const ACCESSIBILITY_MODAL: u16 = 113;
+    pub const LAST: u16 = ACCESSIBILITY_MODAL;
 }
 
 #[derive(Default)]
@@ -1655,11 +1660,11 @@ fn build_element(
 
     element = apply_properties(element, node);
 
-    if let Some(anchor_id) = node
+    let anchor_id = node
         .string(property::ANCHOR_TARGET)
         .and_then(|value| value.parse::<u32>().ok())
-        .filter(|anchor_id| *anchor_id != id && tree.nodes.contains_key(anchor_id))
-    {
+        .filter(|anchor_id| *anchor_id != id && tree.nodes.contains_key(anchor_id));
+    if let Some(anchor_id) = anchor_id {
         let dismiss_on_escape = node.boolean(property::DISMISS_ON_ESCAPE).unwrap_or(true);
         let dismiss_on_pointer_outside = node
             .boolean(property::DISMISS_ON_POINTER_OUTSIDE)
@@ -1680,24 +1685,37 @@ fn build_element(
         }
         element = popover.surface_part(element);
 
-        if node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
-            && (dismiss_on_escape || dismiss_on_pointer_outside)
-        {
-            let events = Rc::clone(events);
-            let listener = cx.dismiss_listener(element_id, move |_view, cx| {
-                enqueue_event(
-                    &events,
-                    QueuedEvent {
-                        kind: "dismiss",
-                        window,
-                        target: id,
-                        value: None,
-                    },
-                );
-                cx.invalidate();
-            });
-            element = element.on_dismiss(listener);
+        element = attach_dismiss_listener(
+            element,
+            node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
+                && (dismiss_on_escape || dismiss_on_pointer_outside),
+            element_id,
+            id,
+            window,
+            events,
+            cx,
+        );
+    } else {
+        let dismiss_on_escape = node.boolean(property::DISMISS_ON_ESCAPE).unwrap_or(false);
+        let dismiss_on_pointer_outside = node
+            .boolean(property::DISMISS_ON_POINTER_OUTSIDE)
+            .unwrap_or(false);
+        if dismiss_on_escape {
+            element = element.dismiss_on_escape();
         }
+        if dismiss_on_pointer_outside {
+            element = element.dismiss_on_pointer_outside();
+        }
+        element = attach_dismiss_listener(
+            element,
+            node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
+                && (dismiss_on_escape || dismiss_on_pointer_outside),
+            element_id,
+            id,
+            window,
+            events,
+            cx,
+        );
     }
 
     if node.boolean(property::CLICK_LISTENER).unwrap_or(false) {
@@ -1818,6 +1836,35 @@ fn build_element(
         }
     }
     Some(element)
+}
+
+fn attach_dismiss_listener(
+    mut element: Element,
+    enabled: bool,
+    element_id: ElementId,
+    node_id: u32,
+    window: u32,
+    events: &EventQueue,
+    cx: &mut ViewContext<'_, NativeView>,
+) -> Element {
+    if !enabled {
+        return element;
+    }
+    let events = Rc::clone(events);
+    let listener = cx.dismiss_listener(element_id, move |_view, cx| {
+        enqueue_event(
+            &events,
+            QueuedEvent {
+                kind: "dismiss",
+                window,
+                target: node_id,
+                value: None,
+            },
+        );
+        cx.invalidate();
+    });
+    element = element.on_dismiss(listener);
+    element
 }
 
 fn enqueue_event(events: &EventQueue, event: QueuedEvent) {
@@ -2145,6 +2192,21 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     }
     if let Some(value) = node.boolean(property::FOCUS_ON_POINTER) {
         element = element.focus_on_pointer(value);
+    }
+    if node.boolean(property::OVERLAY) == Some(true) {
+        element = element.overlay();
+    }
+    if node.boolean(property::FOCUS_TRAP) == Some(true) {
+        element = element.focus_trap();
+    }
+    if node.boolean(property::RESTORE_PREVIOUS_FOCUS) == Some(true) {
+        element = element.restore_previous_focus();
+    }
+    if node.boolean(property::AUTO_FOCUS) == Some(true) {
+        element = element.auto_focus();
+    }
+    if let Some(value) = node.boolean(property::ACCESSIBILITY_MODAL) {
+        element = element.accessibility_modal(value);
     }
     let hit_slop = node.number(property::HIT_SLOP).unwrap_or(0.0);
     let hit_slop = quickgui::Insets {
@@ -4656,6 +4718,113 @@ mod tests {
 
         assert!(!cx.contains_element(window, popover_element).unwrap());
         assert_eq!(cx.focused(window).unwrap(), Some(trigger_element));
+    }
+
+    #[test]
+    fn unanchored_overlay_traps_autofocus_dismisses_and_restores_previous_focus() {
+        let outside_id = 40;
+        let overlay_id = 41;
+        let surface_id = 42;
+        let prompt_id = 43;
+        let mut tree = NativeTree::default();
+
+        let mut outside = NativeNode::new(NodeTag::Button);
+        outside.parent = Some(ROOT_NODE);
+        tree.nodes.insert(outside_id, outside);
+        tree.nodes
+            .get_mut(&ROOT_NODE)
+            .unwrap()
+            .children
+            .push(outside_id);
+
+        let events = Rc::new(RefCell::new(VecDeque::new()));
+        let view = NativeView {
+            window: 6,
+            handles: None,
+            tree: Rc::new(RefCell::new(tree)),
+            events: Rc::clone(&events),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
+        };
+        let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+        let window = view.window_handle();
+        let outside_element = ElementId::new(outside_id as u64);
+        let prompt_element = ElementId::new(prompt_id as u64);
+
+        cx.focus(window, outside_element).unwrap();
+        cx.update(view, |view, cx| {
+            let mut tree = view.tree.borrow_mut();
+
+            let mut overlay = NativeNode::new(NodeTag::View);
+            overlay.parent = Some(ROOT_NODE);
+            overlay.children.push(surface_id);
+            overlay.set_property(property::OVERLAY, Some(PropertyValue::Bool(true)));
+            overlay.set_property(property::FOCUS_TRAP, Some(PropertyValue::Bool(true)));
+            overlay.set_property(
+                property::RESTORE_PREVIOUS_FOCUS,
+                Some(PropertyValue::Bool(true)),
+            );
+
+            let mut surface = NativeNode::new(NodeTag::View);
+            surface.parent = Some(overlay_id);
+            surface.children.push(prompt_id);
+            surface.set_property(
+                property::DISMISS_ON_ESCAPE,
+                Some(PropertyValue::Bool(true)),
+            );
+            surface.set_property(
+                property::DISMISS_ON_POINTER_OUTSIDE,
+                Some(PropertyValue::Bool(true)),
+            );
+            surface.set_property(
+                property::DISMISS_LISTENER,
+                Some(PropertyValue::Bool(true)),
+            );
+            surface.set_property(
+                property::ACCESSIBILITY_MODAL,
+                Some(PropertyValue::Bool(true)),
+            );
+
+            let mut prompt = NativeNode::new(NodeTag::Input);
+            prompt.parent = Some(surface_id);
+            prompt.set_property(property::MULTILINE, Some(PropertyValue::Bool(true)));
+            prompt.set_property(property::AUTO_FOCUS, Some(PropertyValue::Bool(true)));
+
+            tree.nodes.insert(overlay_id, overlay);
+            tree.nodes.insert(surface_id, surface);
+            tree.nodes.insert(prompt_id, prompt);
+            tree.nodes
+                .get_mut(&ROOT_NODE)
+                .unwrap()
+                .children
+                .push(overlay_id);
+            cx.invalidate();
+        })
+        .unwrap();
+
+        assert_eq!(cx.focused(window).unwrap(), Some(prompt_element));
+        cx.simulate_keystrokes(window, "escape").unwrap();
+        let event = events.borrow_mut().pop_front().unwrap();
+        assert_eq!(event.kind, "dismiss");
+        assert_eq!(event.target, surface_id);
+
+        cx.update(view, |view, cx| {
+            let mut tree = view.tree.borrow_mut();
+            tree.nodes
+                .get_mut(&ROOT_NODE)
+                .unwrap()
+                .children
+                .retain(|child| *child != overlay_id);
+            tree.nodes.remove(&prompt_id);
+            tree.nodes.remove(&surface_id);
+            tree.nodes.remove(&overlay_id);
+            cx.invalidate();
+        })
+        .unwrap();
+
+        assert_eq!(cx.focused(window).unwrap(), Some(outside_element));
     }
 
     #[test]

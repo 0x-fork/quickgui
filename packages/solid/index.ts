@@ -151,6 +151,11 @@ const properties: Record<string, PropertyEntry> = {
   viewportMargin: { code: PropertyCode.ViewportMargin },
   dismissOnEscape: { code: PropertyCode.DismissOnEscape },
   dismissOnPointerOutside: { code: PropertyCode.DismissOnPointerOutside },
+  overlay: { code: PropertyCode.Overlay },
+  focusTrap: { code: PropertyCode.FocusTrap },
+  restorePreviousFocus: { code: PropertyCode.RestorePreviousFocus },
+  autoFocus: { code: PropertyCode.AutoFocus },
+  ariaModal: { code: PropertyCode.AccessibilityModal },
   program: { code: PropertyCode.TerminalProgram },
   command: { code: PropertyCode.TerminalProgram },
   workingDirectory: { code: PropertyCode.TerminalWorkingDirectory },
@@ -219,6 +224,7 @@ function setProperty(
   }
   if (name === "class" || name === "className") return;
   if (name === "aria-label") name = "ariaLabel";
+  if (name === "aria-modal") name = "ariaModal";
   if (name === "arguments" || name === "args") {
     setNativeProperty(
       node,
@@ -1017,6 +1023,19 @@ export namespace JSX {
     tabIndex?: number;
     /** Keep keyboard focus where it is when this element is activated with a pointer. */
     focusOnPointer?: boolean;
+    /** Paint this subtree in the viewport overlay plane above embedded native views. */
+    overlay?: boolean;
+    /** Contain keyboard focus within this subtree while it is the topmost trap. */
+    focusTrap?: boolean;
+    /** Restore the previously focused mounted control when this surface unmounts. */
+    restorePreviousFocus?: boolean;
+    /** Prefer this control when its containing focus trap takes focus. */
+    autoFocus?: boolean;
+    /** Expose modal semantics to assistive technology. */
+    "aria-modal"?: boolean;
+    ariaModal?: boolean;
+    dismissOnEscape?: boolean;
+    dismissOnPointerOutside?: boolean;
     hitSlop?: number | string;
     hitSlopTop?: number | string;
     hitSlopRight?: number | string;
@@ -1035,6 +1054,7 @@ export namespace JSX {
     onInput?: EventHandler;
     onChange?: EventHandler;
     onSubmit?: EventHandler;
+    onDismiss?: EventHandler;
   }
 
   export interface InputProps extends NativeProps {

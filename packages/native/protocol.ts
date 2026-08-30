@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -125,6 +125,11 @@ export const enum PropertyCode {
   HitSlopRight = 106,
   HitSlopBottom = 107,
   HitSlopLeft = 108,
+  Overlay = 109,
+  FocusTrap = 110,
+  RestorePreviousFocus = 111,
+  AutoFocus = 112,
+  AccessibilityModal = 113,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

@@ -1239,6 +1239,7 @@ pub struct Element {
     pub(crate) focus_on_pointer: bool,
     pub(crate) hit_slop: Insets,
     pub(crate) focus_trap: bool,
+    pub(crate) restore_previous_focus: bool,
     pub(crate) key_context: Option<KeyContext>,
     pub(crate) tab_index: i16,
     pub(crate) auto_focus: bool,
@@ -1465,6 +1466,7 @@ impl Element {
             focus_on_pointer: true,
             hit_slop: Insets::default(),
             focus_trap: false,
+            restore_previous_focus: false,
             key_context: None,
             tab_index: 0,
             auto_focus: false,
@@ -3516,6 +3518,15 @@ impl Element {
         self
     }
 
+    /// Restore the element that owned focus before this surface mounted when it unmounts.
+    ///
+    /// The retained UI tree captures the target once per stable surface identity, so rebuilds do
+    /// not replace it with a descendant focus target. Nested surfaces restore in stack order.
+    pub fn restore_previous_focus(mut self) -> Self {
+        self.restore_previous_focus = true;
+        self
+    }
+
     /// Attach contextual keymap properties to this node in the focused ancestor path.
     pub fn key_context(mut self, context: impl Into<KeyContext>) -> Self {
         self.key_context = Some(context.into());
@@ -3528,7 +3539,7 @@ impl Element {
         self
     }
 
-    /// Focus this element the first time it appears if the window has no focused element.
+    /// Prefer this element for initial window focus or when a newly mounted focus trap takes focus.
     pub fn auto_focus(mut self) -> Self {
         self.auto_focus = true;
         self.focusable = true;
@@ -5122,6 +5133,14 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
                 left: 7.0,
             }
         );
+        assert_eq!(element.layout, Style::default());
+    }
+
+    #[test]
+    fn previous_focus_restoration_is_a_retained_behavior_marker() {
+        let element = div().restore_previous_focus();
+
+        assert!(element.restore_previous_focus);
         assert_eq!(element.layout, Style::default());
     }
 

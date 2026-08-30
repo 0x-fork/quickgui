@@ -17,6 +17,7 @@ import {
   Svg,
   Terminal,
   Text,
+  TextArea,
   View,
   VirtualList,
   createComponent,
@@ -78,6 +79,36 @@ describe("Solid universal host", () => {
       "number",
     );
     expect(button.properties.get(PropertyCode.TransitionColors)).toBe(90);
+  });
+
+  test("projects modal input, focus, dismissal, and accessibility to the native core", () => {
+    const prompt = createComponent(TextArea, {
+      autoFocus: true,
+      value: "",
+    });
+    const surface = createComponent(View, {
+      overlay: true,
+      focusTrap: true,
+      restorePreviousFocus: true,
+      "aria-modal": true,
+      dismissOnEscape: true,
+      dismissOnPointerOutside: true,
+      onDismiss() {},
+      children: prompt,
+    });
+
+    expect(surface.properties.get(PropertyCode.Overlay)).toBe(true);
+    expect(surface.properties.get(PropertyCode.FocusTrap)).toBe(true);
+    expect(surface.properties.get(PropertyCode.RestorePreviousFocus)).toBe(
+      true,
+    );
+    expect(surface.properties.get(PropertyCode.AccessibilityModal)).toBe(true);
+    expect(surface.properties.get(PropertyCode.DismissOnEscape)).toBe(true);
+    expect(
+      surface.properties.get(PropertyCode.DismissOnPointerOutside),
+    ).toBe(true);
+    expect(surface.properties.get(PropertyCode.DismissListener)).toBe(true);
+    expect(prompt.properties.get(PropertyCode.AutoFocus)).toBe(true);
   });
 
   test("flushes Solid 2 signal writes at the native event boundary", async () => {

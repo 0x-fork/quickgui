@@ -466,6 +466,8 @@ export function createStyles(theme: Theme) {
       justifyContent: "center",
       padding: 24,
       backgroundColor: theme.scrim,
+      cursor: "default",
+      userSelect: "none",
     },
     agentSheet: {
       display: "flex",

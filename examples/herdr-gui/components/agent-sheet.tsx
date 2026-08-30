@@ -12,8 +12,21 @@ export function AgentSheet(props: { model: HerdrModel }) {
 
   return (
     <Show when={model.agentSheetOpen()}>
-      <View style={styles().modalScrim}>
-        <View style={styles().agentSheet}>
+      <View
+        overlay
+        focusTrap
+        restorePreviousFocus
+        style={styles().modalScrim}
+      >
+        <View
+          role="dialog"
+          aria-label="New agent"
+          aria-modal
+          dismissOnEscape
+          dismissOnPointerOutside
+          style={styles().agentSheet}
+          onDismiss={model.closeAgentSheet}
+        >
           <View style={styles().sheetHeader}>
             <View style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <Text
@@ -80,6 +93,7 @@ export function AgentSheet(props: { model: HerdrModel }) {
               Initial instruction · optional
             </Text>
             <TextArea
+              autoFocus
               value={model.initialPrompt()}
               placeholder="What should this agent work on?"
               onInput={(event) => model.setInitialPrompt(event.value ?? "")}

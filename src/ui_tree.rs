@@ -2380,9 +2380,10 @@ impl UiTree {
                 self.selecting_input = None;
             }
         }
+        let previous_focused = self.focused;
+        let previous_focus_restorations = std::mem::take(&mut self.focus_restorations);
         self.rebuild_focus_index();
-        let restore_focus = self
-            .focus_restorations
+        let restore_focus = previous_focus_restorations
             .iter()
             .rev()
             .find_map(|restoration| {
@@ -2390,9 +2391,14 @@ impl UiTree {
                     && self.focusable_ids.contains(&restoration.target))
                 .then_some(restoration.target)
             });
-        self.focus_restorations.clear();
         if let Some(root) = &self.root {
-            collect_focus_restorations(root, &self.displayed_ids, &mut self.focus_restorations);
+            collect_focus_restorations(
+                root,
+                &self.displayed_ids,
+                &previous_focus_restorations,
+                previous_focused,
+                &mut self.focus_restorations,
+            );
         }
         self.rebuild_dispatch_index();
         self.rebuild_drop_predicates();
@@ -5309,11 +5315,16 @@ impl UiTree {
                 .focused
                 .is_none_or(|focused| !self.focusable_ids.contains(&focused))
         {
-            self.focused = self
-                .focus_order
-                .first()
-                .copied()
-                .or_else(|| self.focusable_ids.contains(&trap).then_some(trap));
+            let auto_focus = self
+                .root
+                .as_ref()
+                .and_then(|root| find_auto_focus_in(root, &self.focusable_ids));
+            self.focused = auto_focus.or_else(|| {
+                self.focus_order
+                    .first()
+                    .copied()
+                    .or_else(|| self.focusable_ids.contains(&trap).then_some(trap))
+            });
         }
     }
 
@@ -5770,6 +5781,7 @@ fn sanitize_detached_element(element: &mut Element, preserve_motion: bool) {
     element.focusable = false;
     element.focus_on_pointer = true;
     element.focus_trap = false;
+    element.restore_previous_focus = false;
     element.key_context = None;
     element.auto_focus = false;
     element.activation_target = None;
@@ -8392,6 +8404,19 @@ fn find_auto_focus(element: &Element) -> Option<ElementId> {
     element.children.iter().find_map(find_auto_focus)
 }
 
+fn find_auto_focus_in(element: &Element, focusable_ids: &HashSet<ElementId>) -> Option<ElementId> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return None;
+    }
+    if element.auto_focus && focusable_ids.contains(&element.runtime_id) {
+        return Some(element.runtime_id);
+    }
+    element
+        .children
+        .iter()
+        .find_map(|child| find_auto_focus_in(child, focusable_ids))
+}
+
 struct AccessibilityBuildContext<'a> {
     element_bounds: &'a HashMap<ElementId, Rect>,
     scroll_offsets: &'a HashMap<ElementId, Vector>,
@@ -8857,6 +8882,8 @@ fn collect_displayed_ids(element: &Element, ids: &mut HashSet<ElementId>) {
 fn collect_focus_restorations(
     element: &Element,
     displayed_ids: &HashSet<ElementId>,
+    previous: &[FocusRestoration],
+    previous_focused: Option<ElementId>,
     restorations: &mut Vec<FocusRestoration>,
 ) {
     if !displayed_ids.contains(&element.runtime_id) {
@@ -8867,9 +8894,28 @@ fn collect_focus_restorations(
             surface: element.runtime_id,
             target: target.id(),
         });
+    } else if element.restore_previous_focus {
+        let target = previous
+            .iter()
+            .find(|restoration| restoration.surface == element.runtime_id)
+            .map(|restoration| restoration.target)
+            .or(previous_focused)
+            .filter(|target| *target != element.runtime_id && displayed_ids.contains(target));
+        if let Some(target) = target {
+            restorations.push(FocusRestoration {
+                surface: element.runtime_id,
+                target,
+            });
+        }
     }
     for child in &element.children {
-        collect_focus_restorations(child, displayed_ids, restorations);
+        collect_focus_restorations(
+            child,
+            displayed_ids,
+            previous,
+            previous_focused,
+            restorations,
+        );
     }
 }
 
@@ -10808,6 +10854,69 @@ mod tests {
         assert_eq!(tree.active_focus_trap, Some(ElementId::new(10)));
         assert_eq!(tree.focus_order, vec![ElementId::new(11)]);
         assert_eq!(tree.focused(), Some(ElementId::new(11)));
+    }
+
+    #[test]
+    fn focus_trap_prefers_autofocus_and_restores_the_previously_focused_control() {
+        fn declaration(open: bool) -> Element {
+            let mut root = div()
+                .size(320.0, 200.0)
+                .child(button().id("outside-control"));
+            if open {
+                root = root.child(
+                    div()
+                        .id("modal-root")
+                        .overlay()
+                        .inset_0()
+                        .focus_trap()
+                        .restore_previous_focus()
+                        .children([
+                            button().id("modal-close"),
+                            crate::text_area("").id("modal-prompt").auto_focus(),
+                        ]),
+                );
+            }
+            root
+        }
+
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(
+            declaration(false),
+            Size::new(320.0, 200.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+        assert!(tree.focus("outside-control".into()));
+
+        tree.set_root(
+            declaration(true),
+            Size::new(320.0, 200.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+        assert_eq!(tree.focused(), Some("modal-prompt".into()));
+
+        assert!(tree.focus("modal-close".into()));
+        tree.set_root(
+            declaration(true),
+            Size::new(320.0, 200.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+        assert_eq!(tree.focused(), Some("modal-close".into()));
+
+        tree.set_root(
+            declaration(false),
+            Size::new(320.0, 200.0),
+            1.0,
+            &mut renderer,
+        )
+        .unwrap();
+        assert_eq!(tree.focused(), Some("outside-control".into()));
     }
 
     #[test]
