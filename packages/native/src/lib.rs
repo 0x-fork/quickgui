@@ -26,12 +26,16 @@ use quickgui::{
     Popover, QuitMode, Svg, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, TaskbarProgressState,
     Terminal, TerminalOptions, TerminalStatus, TerminalStyle, TerminalTheme, TextAlign,
     TitleBarStyle, Transition, View, ViewContext, WindowAppearance, WindowBackgroundAppearance,
-    WindowHandle, WindowKind, WindowLevel, button, div,
-    svg as svg_element, text, text_area, text_input,
+    WindowHandle, WindowKind, WindowLevel, button, div, svg as svg_element, text, text_area,
+    text_input,
 };
 
 mod dialog;
+// napi-rs omits exported registration glue from lib-test builds, so these binding-only modules
+// appear unreachable to rustc even though every item is reachable from the production addon.
+#[cfg_attr(test, allow(dead_code))]
 mod integrations;
+#[cfg_attr(test, allow(dead_code))]
 mod system;
 
 pub use dialog::{
@@ -414,6 +418,7 @@ enum HostCommand {
         options: NativeSaveDialogOptions,
         reply: Arc<SyncReply<()>>,
     },
+    #[cfg_attr(test, allow(dead_code))]
     System {
         app: u32,
         command: system::SystemCommand,
@@ -1448,19 +1453,14 @@ impl View for NativeView {
             .min_w(0.0)
             .min_h(0.0);
         if let Some(node) = tree.nodes.get(&ROOT_NODE) {
+            let mut states = NativeElementStates {
+                markdown: &mut markdown,
+                svgs: &mut svgs,
+                lists: &mut lists,
+                terminals: &mut terminals,
+            };
             root = root.children(node.children.iter().filter_map(|id| {
-                build_element(
-                    *id,
-                    window,
-                    &tree,
-                    &self.events,
-                    &mut markdown,
-                    &mut svgs,
-                    &mut lists,
-                    &mut terminals,
-                    cx,
-                    0,
-                )
+                build_element(*id, window, &tree, &self.events, &mut states, cx, 0)
             }));
         }
         let events = Rc::clone(&self.events);
@@ -1482,15 +1482,19 @@ impl View for NativeView {
     }
 }
 
+struct NativeElementStates<'a> {
+    markdown: &'a mut HashMap<u32, Markdown>,
+    svgs: &'a mut HashMap<u32, NativeSvgState>,
+    lists: &'a mut HashMap<u32, NativeListState>,
+    terminals: &'a mut HashMap<u32, NativeTerminalState>,
+}
+
 fn build_element(
     id: u32,
     window: u32,
     tree: &NativeTree,
     events: &EventQueue,
-    markdown: &mut HashMap<u32, Markdown>,
-    svgs: &mut HashMap<u32, NativeSvgState>,
-    lists: &mut HashMap<u32, NativeListState>,
-    terminals: &mut HashMap<u32, NativeTerminalState>,
+    states: &mut NativeElementStates<'_>,
     cx: &mut ViewContext<'_, NativeView>,
     depth: usize,
 ) -> Option<Element> {
@@ -1578,7 +1582,7 @@ fn build_element(
             markdown_style.code_font_size = node
                 .number(property::MARKDOWN_CODE_FONT_SIZE)
                 .unwrap_or(markdown_style.code_font_size);
-            let state = markdown.entry(id).or_default();
+            let state = states.markdown.entry(id).or_default();
             state.set_streaming(node.boolean(property::STREAMING).unwrap_or(false));
             state.set_style(markdown_style);
             state.set_text(node.string(property::VALUE).unwrap_or_default());
@@ -1586,7 +1590,8 @@ fn build_element(
         }
         NodeTag::Svg => {
             let source = node.string(property::VALUE).unwrap_or_default();
-            let state = svgs
+            let state = states
+                .svgs
                 .entry(id)
                 .or_insert_with(|| NativeSvgState::new(Arc::from(source)));
             state.sync(source);
@@ -1594,7 +1599,8 @@ fn build_element(
         }
         NodeTag::VirtualList => div(),
         NodeTag::Terminal => {
-            let state = terminals
+            let state = states
+                .terminals
                 .entry(id)
                 .or_insert_with(|| NativeTerminalState::new(node, cx));
             state.sync(node, cx);
@@ -1771,7 +1777,8 @@ fn build_element(
 
     match node.tag {
         NodeTag::VirtualList => {
-            let state = lists
+            let state = states
+                .lists
                 .entry(id)
                 .or_insert_with(|| NativeListState::new(node));
             state.sync(node);
@@ -1786,19 +1793,9 @@ fn build_element(
             let alignment = node.string(property::ALIGN_ITEMS);
             let item_count = children.len();
             let rows = list.render_rows(visible, |index| {
-                let child = build_element(
-                    children[index],
-                    window,
-                    tree,
-                    events,
-                    markdown,
-                    svgs,
-                    lists,
-                    terminals,
-                    cx,
-                    depth + 1,
-                )
-                .unwrap_or_else(|| div().hidden());
+                let child =
+                    build_element(children[index], window, tree, events, states, cx, depth + 1)
+                        .unwrap_or_else(|| div().hidden());
                 let mut row = div().w_full().flex_none().flex_row().child(child);
                 row = match alignment {
                     Some("center") => row.justify_center(),
@@ -1820,18 +1817,7 @@ fn build_element(
         | NodeTag::Terminal => {}
         NodeTag::Root | NodeTag::View | NodeTag::Button => {
             element = element.children(node.children.iter().filter_map(|child| {
-                build_element(
-                    *child,
-                    window,
-                    tree,
-                    events,
-                    markdown,
-                    svgs,
-                    lists,
-                    terminals,
-                    cx,
-                    depth + 1,
-                )
+                build_element(*child, window, tree, events, states, cx, depth + 1)
             }));
         }
     }
@@ -4770,18 +4756,12 @@ mod tests {
             let mut surface = NativeNode::new(NodeTag::View);
             surface.parent = Some(overlay_id);
             surface.children.push(prompt_id);
-            surface.set_property(
-                property::DISMISS_ON_ESCAPE,
-                Some(PropertyValue::Bool(true)),
-            );
+            surface.set_property(property::DISMISS_ON_ESCAPE, Some(PropertyValue::Bool(true)));
             surface.set_property(
                 property::DISMISS_ON_POINTER_OUTSIDE,
                 Some(PropertyValue::Bool(true)),
             );
-            surface.set_property(
-                property::DISMISS_LISTENER,
-                Some(PropertyValue::Bool(true)),
-            );
+            surface.set_property(property::DISMISS_LISTENER, Some(PropertyValue::Bool(true)));
             surface.set_property(
                 property::ACCESSIBILITY_MODAL,
                 Some(PropertyValue::Bool(true)),

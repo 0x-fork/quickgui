@@ -986,7 +986,7 @@ impl Terminal {
         if *current == theme {
             return;
         }
-        if self.try_send(WorkerMessage::Theme(theme.clone())) {
+        if self.try_send(WorkerMessage::Theme(theme.clone().map(Box::new))) {
             *current = theme;
         }
     }
@@ -1008,7 +1008,7 @@ fn terminal_cursor_presentation<V: 'static>(
     let until_next = TERMINAL_CURSOR_BLINK_HALF_PERIOD
         - Duration::from_millis(phase_elapsed.try_into().unwrap_or(u64::MAX));
     cx.request_repaint_at(now + until_next);
-    (half_periods % 2 == 0).then_some(cursor.style)
+    half_periods.is_multiple_of(2).then_some(cursor.style)
 }
 
 fn terminal_cursor_element(
@@ -1172,7 +1172,7 @@ enum WorkerMessage {
     Key(TerminalKeyInput),
     Resize(TerminalSize),
     Scroll(isize),
-    Theme(Option<TerminalTheme>),
+    Theme(Option<Box<TerminalTheme>>),
     Shutdown,
 }
 
@@ -1395,10 +1395,12 @@ fn run_terminal_worker(
         &mut cells,
         &shared,
         &invalidator,
-        &mut revision,
-        status.clone(),
-        detected_agent,
-        recently_active,
+        TerminalSnapshotMetadata::next(
+            &mut revision,
+            status.clone(),
+            detected_agent,
+            recently_active,
+        ),
     );
 
     let mut reader_closed = false;
@@ -1487,10 +1489,12 @@ fn run_terminal_worker(
                 &mut cells,
                 &shared,
                 &invalidator,
-                &mut revision,
-                status.clone(),
-                detected_agent,
-                recently_active,
+                TerminalSnapshotMetadata::next(
+                    &mut revision,
+                    status.clone(),
+                    detected_agent,
+                    recently_active,
+                ),
             );
         }
         if reader_closed && matches!(status, TerminalStatus::Exited { .. }) {
@@ -1558,7 +1562,7 @@ fn handle_worker_message(
             *redraw = true;
         }
         WorkerMessage::Theme(theme) => {
-            if apply_terminal_theme(terminal, theme.as_ref()).is_ok() {
+            if apply_terminal_theme(terminal, theme.as_deref()).is_ok() {
                 *redraw = true;
             }
         }
@@ -1948,6 +1952,40 @@ impl CellVisual {
     }
 }
 
+struct TerminalSnapshotMetadata {
+    revision: u64,
+    status: TerminalStatus,
+    detected_agent: Option<DetectedAgentProcess>,
+    recently_active: bool,
+}
+
+impl TerminalSnapshotMetadata {
+    fn next(
+        revision: &mut u64,
+        status: TerminalStatus,
+        detected_agent: Option<DetectedAgentProcess>,
+        recently_active: bool,
+    ) -> Self {
+        *revision = revision.wrapping_add(1);
+        Self {
+            revision: *revision,
+            status,
+            detected_agent,
+            recently_active,
+        }
+    }
+
+    #[cfg(test)]
+    fn running(revision: u64) -> Self {
+        Self {
+            revision,
+            status: TerminalStatus::Running { process_id: None },
+            detected_agent: None,
+            recently_active: false,
+        }
+    }
+}
+
 fn publish_terminal_snapshot<'alloc: 'cb, 'cb>(
     terminal: &mut GhosttyTerminal<'alloc, 'cb>,
     render_state: &mut RenderState<'alloc>,
@@ -1955,22 +1993,9 @@ fn publish_terminal_snapshot<'alloc: 'cb, 'cb>(
     cells: &mut CellIterator<'alloc>,
     shared: &RwLock<Arc<TerminalSnapshot>>,
     invalidator: &WindowInvalidator,
-    revision: &mut u64,
-    status: TerminalStatus,
-    detected_agent: Option<DetectedAgentProcess>,
-    recently_active: bool,
+    metadata: TerminalSnapshotMetadata,
 ) {
-    *revision = revision.wrapping_add(1);
-    match build_snapshot(
-        terminal,
-        render_state,
-        rows,
-        cells,
-        *revision,
-        status,
-        detected_agent,
-        recently_active,
-    ) {
+    match build_snapshot(terminal, render_state, rows, cells, metadata) {
         Ok(snapshot) => publish(shared, invalidator, snapshot),
         Err(error) => publish_failure(
             shared,
@@ -1991,11 +2016,14 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
     render_state: &mut RenderState<'alloc>,
     rows: &mut RowIterator<'alloc>,
     cells: &mut CellIterator<'alloc>,
-    revision: u64,
-    status: TerminalStatus,
-    detected_agent: Option<DetectedAgentProcess>,
-    recently_active: bool,
+    metadata: TerminalSnapshotMetadata,
 ) -> Result<TerminalSnapshot, libghostty_vt::Error> {
+    let TerminalSnapshotMetadata {
+        revision,
+        status,
+        detected_agent,
+        recently_active,
+    } = metadata;
     let snapshot = render_state.update(terminal)?;
     let cols = snapshot.cols()?;
     let row_count = snapshot.rows()?;
@@ -2388,8 +2416,10 @@ mod tests {
 
     #[test]
     fn options_reject_unbounded_process_declarations() {
-        let mut options = TerminalOptions::default();
-        options.arguments = vec![OsString::from("x"); MAX_TERMINAL_ARGUMENTS + 1];
+        let options = TerminalOptions {
+            arguments: vec![OsString::from("x"); MAX_TERMINAL_ARGUMENTS + 1],
+            ..TerminalOptions::default()
+        };
         assert!(matches!(
             options.validate(),
             Err(TerminalError::TooManyArguments)
@@ -2610,10 +2640,7 @@ mod tests {
             &mut render_state,
             &mut rows,
             &mut cells,
-            1,
-            TerminalStatus::Running { process_id: None },
-            None,
-            false,
+            TerminalSnapshotMetadata::running(1),
         )
         .unwrap();
         assert!(
@@ -2664,10 +2691,7 @@ mod tests {
             &mut render_state,
             &mut rows,
             &mut cells,
-            1,
-            TerminalStatus::Running { process_id: None },
-            None,
-            false,
+            TerminalSnapshotMetadata::running(1),
         )
         .unwrap();
         assert_eq!(snapshot.foreground, theme.foreground);
@@ -2692,10 +2716,7 @@ mod tests {
             &mut render_state,
             &mut rows,
             &mut cells,
-            1,
-            TerminalStatus::Running { process_id: None },
-            None,
-            false,
+            TerminalSnapshotMetadata::running(1),
         )
         .unwrap();
 
@@ -2725,10 +2746,7 @@ mod tests {
             &mut render_state,
             &mut rows,
             &mut cells,
-            1,
-            TerminalStatus::Running { process_id: None },
-            None,
-            false,
+            TerminalSnapshotMetadata::running(1),
         )
         .unwrap();
         assert!(bottom.scroll.total_rows > bottom.scroll.viewport_rows);
@@ -2744,10 +2762,7 @@ mod tests {
             &mut render_state,
             &mut rows,
             &mut cells,
-            2,
-            TerminalStatus::Running { process_id: None },
-            None,
-            false,
+            TerminalSnapshotMetadata::running(2),
         )
         .unwrap();
         assert_eq!(top.scroll.offset_rows, 0);

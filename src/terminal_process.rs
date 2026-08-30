@@ -101,7 +101,7 @@ fn agent_from_package_path(value: &str) -> Option<&'static str> {
 #[cfg(target_os = "macos")]
 fn foreground_group_id(process_id: u32) -> Option<u32> {
     let info = process_bsd_info(process_id)?;
-    (info.e_tpgid > 0).then_some(info.e_tpgid as u32)
+    (info.e_tpgid > 0).then_some(info.e_tpgid)
 }
 
 #[cfg(target_os = "macos")]

@@ -2310,7 +2310,7 @@ mod tests {
         ));
         assert!(matches!(
             parse_shell_action("trash-path", "/tmp/example".to_owned()),
-            Ok(ShellAction::TrashPath(path)) if path == PathBuf::from("/tmp/example")
+            Ok(ShellAction::TrashPath(path)) if path.as_os_str() == "/tmp/example"
         ));
         assert!(parse_shell_action("missing", String::new()).is_err());
     }
