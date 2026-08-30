@@ -4534,7 +4534,14 @@ impl Runtime {
                 return false;
             };
             if !window.ui.is_focusable(element) {
-                return false;
+                if !window.view_dirty {
+                    return false;
+                }
+                window.pending_focus = Some(element);
+                if window.visible && window.scheduler.invalidate() {
+                    window.window.request_redraw();
+                }
+                return true;
             }
             let changed = window.ui.focus(element);
             window.pending_focus = None;
@@ -4559,7 +4566,14 @@ impl Runtime {
             return false;
         };
         if !entry.state.ui.is_focusable(element) {
-            return false;
+            if !entry.state.view_dirty {
+                return false;
+            }
+            entry.state.pending_focus = Some(element);
+            if entry.state.visible && entry.state.scheduler.invalidate() {
+                entry.state.window.request_redraw();
+            }
+            return true;
         }
         let changed = entry.state.ui.focus(element);
         entry.state.pending_focus = None;
@@ -9088,6 +9102,10 @@ impl Runtime {
         }
         self.pending_input = None;
         if let Some(state) = &mut self.window {
+            // Focus is part of ViewContext, so a logical focus change must rebuild the declared
+            // view rather than only repainting the retained tree. Components such as Terminal
+            // derive their focused cursor presentation from this state.
+            state.view_dirty = true;
             #[cfg(target_os = "macos")]
             if focused.is_some()
                 && let Some(host) = &state.native_host
