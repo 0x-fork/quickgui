@@ -28,7 +28,7 @@ use serde::Deserialize;
 
 use super::{
     HOST, HostCommand, NativeAppOptions, NativeImageSource, NativeRuntime, QueuedEvent, ROOT_NODE,
-    SyncReply, native_image, update_native_app_configuration, with_app_mut,
+    SyncReply, native_font_data, native_image, update_native_app_configuration, with_app_mut,
 };
 
 mod bindings;
@@ -768,6 +768,7 @@ impl NativeRuntime {
                         "application options must be configured before readiness".to_owned()
                     );
                 }
+                let fonts = native_font_data(&options);
                 let (app_info, app_paths, quit_mode) = update_native_app_configuration(
                     self.app_info.clone(),
                     self.app_paths.clone(),
@@ -777,6 +778,9 @@ impl NativeRuntime {
                 self.app_info = app_info;
                 self.app_paths = app_paths;
                 self.quit_mode = quit_mode;
+                if let Some(fonts) = fonts {
+                    self.fonts = fonts;
+                }
                 Ok(SystemCommandResult::Unit)
             }
             SystemCommand::Exit => Ok(SystemCommandResult::Boolean(

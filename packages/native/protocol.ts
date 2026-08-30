@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 11;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -12,6 +12,8 @@ export const enum NativeNodeTag {
   Input = 5,
   Markdown = 6,
   VirtualList = 7,
+  Terminal = 8,
+  Svg = 9,
 }
 
 export const enum PropertyCode {
@@ -102,6 +104,22 @@ export const enum PropertyCode {
   DismissOnEscape = 85,
   DismissOnPointerOutside = 86,
   DismissListener = 87,
+  TerminalProgram = 88,
+  TerminalArguments = 89,
+  TerminalWorkingDirectory = 90,
+  TerminalEnvironment = 91,
+  TerminalScrollback = 92,
+  TerminalStatusListener = 93,
+  HoverBackgroundColor = 94,
+  HoverColor = 95,
+  ActiveBackgroundColor = 96,
+  ActiveColor = 97,
+  TransitionColors = 98,
+  PointerListener = 99,
+  FocusOnPointer = 100,
+  FontFamily = 101,
+  TerminalPalette = 102,
+  TerminalCursorColor = 103,
 }
 
 export type NativePropertyValue = boolean | number | string | null;
@@ -139,7 +157,12 @@ export class MutationBatch {
     this.#u32(id);
   }
 
-  setProperty(id: number, property: PropertyCode, value: NativePropertyValue, color = false): void {
+  setProperty(
+    id: number,
+    property: PropertyCode,
+    value: NativePropertyValue,
+    color = false,
+  ): void {
     this.#op(4);
     this.#u32(id);
     this.#u16(property);

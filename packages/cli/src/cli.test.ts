@@ -104,6 +104,7 @@ describe("project configuration", () => {
         identifier: "com.example.great-app",
         entry: "ui/main.tsx",
         resources: ["assets"],
+        fonts: ["assets/JetBrainsMonoNerdFontMono-Regular.ttf"],
         protocols: ["QuickGUI", "quickgui+preview", "quickgui"],
         macos: {
           dmgTitle: "Great App",
@@ -118,6 +119,9 @@ describe("project configuration", () => {
     expect(config.executableName).toBe("My-Great-App");
     expect(config.entry).toBe(join(root, "ui/main.tsx"));
     expect(config.resources).toEqual([join(root, "assets")]);
+    expect(config.fonts).toEqual([
+      join(root, "assets/JetBrainsMonoNerdFontMono-Regular.ttf"),
+    ]);
     expect(config.protocols).toEqual(["quickgui", "quickgui+preview"]);
     expect(config.macos.minimumSystemVersion).toBe("13.0");
     expect(config.macos.dmgTitle).toBe("Great App");

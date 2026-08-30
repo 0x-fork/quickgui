@@ -76,6 +76,10 @@ mod svg;
 mod svg_renderer;
 mod table;
 mod tabs;
+#[cfg(feature = "terminal")]
+mod terminal;
+#[cfg(feature = "terminal")]
+mod terminal_process;
 mod text_input;
 mod tooltip;
 mod transition;
@@ -314,8 +318,8 @@ pub use runtime::{
     QuitRequest, RotationListener, ScrollWheelListener, SmartMagnifyListener, SubmitListener,
     TaskbarProgressState, TitleBarStyle, TouchListener, TrayEvent, TrayEventKind, TrayIconImage,
     TrayIconOptions, TrayMenuItem, TrayMouseButton, View, ViewContext, WindowAppearance,
-    WindowBackgroundAppearance, WindowBounds, WindowCommandError, WindowHandle, WindowKind,
-    WindowLevel, WindowOptions, WindowRegistry, WindowState, WindowTabState,
+    WindowBackgroundAppearance, WindowBounds, WindowCommandError, WindowHandle, WindowInvalidator,
+    WindowKind, WindowLevel, WindowOptions, WindowRegistry, WindowState, WindowTabState,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime::{AppRunStatus, AppRunner, AppRunnerWaker};
@@ -365,6 +369,13 @@ pub use table::{
     TablePreviousRow, TableSort, TableSortDirection, TableState, table_key_bindings,
 };
 pub use tabs::{Tab, TabState, Tabs, TabsOrientation, TabsState};
+#[cfg(feature = "terminal")]
+pub use terminal::{
+    MAX_TERMINAL_ARGUMENTS, MAX_TERMINAL_ENVIRONMENT, MAX_TERMINAL_SCROLLBACK,
+    MAX_TERMINAL_STRING_BYTES, TERMINAL_ANSI_COLOR_COUNT, Terminal, TerminalAgent,
+    TerminalAgentStatus, TerminalCursor, TerminalCursorStyle, TerminalError, TerminalOptions,
+    TerminalScrollState, TerminalSnapshot, TerminalStatus, TerminalStyle, TerminalTheme,
+};
 pub use tooltip::{
     DEFAULT_TOOLTIP_DELAY, MAX_TOOLTIP_CONTENT_NODES, MAX_TOOLTIP_DELAY, MAX_TOOLTIPS_PER_WINDOW,
     Tooltip,

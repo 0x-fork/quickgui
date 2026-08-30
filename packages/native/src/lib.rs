@@ -1,6 +1,7 @@
 use std::{
+    any::Any,
     cell::RefCell,
-    collections::{HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     fmt,
     path::PathBuf,
     rc::Rc,
@@ -21,10 +22,12 @@ use quickgui::{
     AccessibilityRole, AnchorPlacement, AppConfig, AppInfo, AppPaths, AppRegion, AppRunStatus,
     AppRunner, AppRunnerWaker, Application as QuickGuiApplication, Color, CursorGrabMode,
     CursorStyle, DisplayId, Element, ElementId, FollowMode, FontWeight, Image, IntoElement,
-    ListAlignment, ListState, Markdown, MarkdownStyle, PerformanceProfile, Point, Popover,
-    QuitMode, SystemPopover, TaskbarProgressState, TextAlign, TitleBarStyle, View, ViewContext,
-    WindowAppearance, WindowBackgroundAppearance, WindowHandle, WindowKind, WindowLevel, button,
-    div, text, text_area, text_input,
+    ListAlignment, ListState, Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase,
+    Popover, QuitMode, Svg, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, TaskbarProgressState,
+    Terminal, TerminalOptions, TerminalStatus, TerminalStyle, TerminalTheme, TextAlign,
+    TitleBarStyle, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowHandle,
+    WindowKind, WindowLevel, button, div,
+    svg as svg_element, text, text_area, text_input,
 };
 
 mod dialog;
@@ -41,7 +44,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 5;
+const PROTOCOL_VERSION: u16 = 11;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -142,7 +145,23 @@ mod property {
     pub const DISMISS_ON_ESCAPE: u16 = 85;
     pub const DISMISS_ON_POINTER_OUTSIDE: u16 = 86;
     pub const DISMISS_LISTENER: u16 = 87;
-    pub const LAST: u16 = DISMISS_LISTENER;
+    pub const TERMINAL_PROGRAM: u16 = 88;
+    pub const TERMINAL_ARGUMENTS: u16 = 89;
+    pub const TERMINAL_WORKING_DIRECTORY: u16 = 90;
+    pub const TERMINAL_ENVIRONMENT: u16 = 91;
+    pub const TERMINAL_SCROLLBACK: u16 = 92;
+    pub const TERMINAL_STATUS_LISTENER: u16 = 93;
+    pub const HOVER_BACKGROUND_COLOR: u16 = 94;
+    pub const HOVER_COLOR: u16 = 95;
+    pub const ACTIVE_BACKGROUND_COLOR: u16 = 96;
+    pub const ACTIVE_COLOR: u16 = 97;
+    pub const TRANSITION_COLORS: u16 = 98;
+    pub const POINTER_LISTENER: u16 = 99;
+    pub const FOCUS_ON_POINTER: u16 = 100;
+    pub const FONT_FAMILY: u16 = 101;
+    pub const TERMINAL_PALETTE: u16 = 102;
+    pub const TERMINAL_CURSOR_COLOR: u16 = 103;
+    pub const LAST: u16 = TERMINAL_CURSOR_COLOR;
 }
 
 #[derive(Default)]
@@ -170,7 +189,7 @@ impl Clone for NativeImageSource {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 #[napi(object)]
 pub struct NativeAppOptions {
     pub name: Option<String>,
@@ -186,6 +205,8 @@ pub struct NativeAppOptions {
     pub temp_dir: Option<String>,
     /// `default`, `last-window-closed`, or `explicit`.
     pub quit_mode: Option<String>,
+    /// OpenType font files embedded by the JavaScript host and registered by the Rust core.
+    pub font_data: Option<Vec<Buffer>>,
 }
 
 #[derive(Clone, Default)]
@@ -590,6 +611,8 @@ enum NodeTag {
     Input,
     Markdown,
     VirtualList,
+    Terminal,
+    Svg,
 }
 
 impl NodeTag {
@@ -602,6 +625,8 @@ impl NodeTag {
             5 => Ok(Self::Input),
             6 => Ok(Self::Markdown),
             7 => Ok(Self::VirtualList),
+            8 => Ok(Self::Terminal),
+            9 => Ok(Self::Svg),
             _ => Err(ProtocolError::new(format!("unknown node tag {value}"))),
         }
     }
@@ -1206,6 +1231,127 @@ struct NativeListState {
     list: ListState,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeTerminalConfig {
+    options: TerminalOptions,
+}
+
+impl NativeTerminalConfig {
+    fn from_node(node: &NativeNode) -> std::result::Result<Self, String> {
+        let arguments = node
+            .string(property::TERMINAL_ARGUMENTS)
+            .map(|value| {
+                serde_json::from_str::<Vec<String>>(value)
+                    .map_err(|error| format!("invalid terminal arguments: {error}"))
+            })
+            .transpose()?
+            .unwrap_or_default()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let environment = node
+            .string(property::TERMINAL_ENVIRONMENT)
+            .map(|value| {
+                serde_json::from_str::<BTreeMap<String, String>>(value)
+                    .map_err(|error| format!("invalid terminal environment: {error}"))
+            })
+            .transpose()?
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(key, value)| (key.into(), value.into()))
+            .collect();
+        let max_scrollback = node
+            .number(property::TERMINAL_SCROLLBACK)
+            .unwrap_or(10_000.0)
+            .max(0.0) as usize;
+        Ok(Self {
+            options: TerminalOptions {
+                program: node
+                    .string(property::TERMINAL_PROGRAM)
+                    .filter(|program| !program.is_empty())
+                    .map(Into::into),
+                arguments,
+                working_directory: node
+                    .string(property::TERMINAL_WORKING_DIRECTORY)
+                    .filter(|directory| !directory.is_empty())
+                    .map(PathBuf::from),
+                environment,
+                max_scrollback,
+                ..TerminalOptions::default()
+            },
+        })
+    }
+}
+
+struct NativeTerminalState {
+    config: std::result::Result<NativeTerminalConfig, Arc<str>>,
+    terminal: Option<Terminal>,
+    spawn_error: Option<Arc<str>>,
+    last_event: Option<Arc<str>>,
+}
+
+struct NativeSvgState {
+    source: Arc<str>,
+    parsed: std::result::Result<Svg, Arc<str>>,
+}
+
+impl NativeSvgState {
+    fn new(source: Arc<str>) -> Self {
+        let parsed = Svg::from_svg(source.as_ref()).map_err(|error| Arc::from(error.to_string()));
+        Self { source, parsed }
+    }
+
+    fn sync(&mut self, source: &str) {
+        if self.source.as_ref() == source {
+            return;
+        }
+        *self = Self::new(Arc::from(source));
+    }
+
+    fn element(&self) -> Element {
+        match &self.parsed {
+            Ok(svg) => svg_element(svg),
+            Err(_) => div().hidden(),
+        }
+    }
+}
+
+impl NativeTerminalState {
+    fn new(node: &NativeNode, cx: &ViewContext<'_, NativeView>) -> Self {
+        let config = NativeTerminalConfig::from_node(node).map_err(Arc::from);
+        let (terminal, spawn_error) = match &config {
+            Ok(config) => match Terminal::spawn(config.options.clone(), cx.window_invalidator()) {
+                Ok(terminal) => (Some(terminal), None),
+                Err(error) => (None, Some(Arc::from(error.to_string()))),
+            },
+            Err(_) => (None, None),
+        };
+        Self {
+            config,
+            terminal,
+            spawn_error,
+            last_event: None,
+        }
+    }
+
+    fn sync(&mut self, node: &NativeNode, cx: &ViewContext<'_, NativeView>) {
+        let next = NativeTerminalConfig::from_node(node).map_err(Arc::from);
+        if self.config == next {
+            return;
+        }
+        *self = Self::new(node, cx);
+    }
+
+    fn error(&self) -> Option<&str> {
+        match (&self.config, &self.terminal, &self.spawn_error) {
+            (Err(error), _, _) => Some(error),
+            (Ok(_), None, Some(error)) => Some(error),
+            (Ok(_), None, None) => Some("could not start terminal session"),
+            (Ok(_), Some(_), _) => None,
+        }
+    }
+}
+
 impl NativeListState {
     fn new(node: &NativeNode) -> Self {
         let config = NativeListConfig::from_node(node);
@@ -1244,7 +1390,9 @@ struct NativeView {
     tree: Rc<RefCell<NativeTree>>,
     events: EventQueue,
     markdown: Rc<RefCell<HashMap<u32, Markdown>>>,
+    svgs: Rc<RefCell<HashMap<u32, NativeSvgState>>>,
     lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
+    terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1266,11 +1414,23 @@ impl View for NativeView {
                 .get(id)
                 .is_some_and(|node| node.tag == NodeTag::Markdown)
         });
+        let mut svgs = self.svgs.borrow_mut();
+        svgs.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Svg)
+        });
         let mut lists = self.lists.borrow_mut();
         lists.retain(|id, _| {
             tree.nodes
                 .get(id)
                 .is_some_and(|node| node.tag == NodeTag::VirtualList)
+        });
+        let mut terminals = self.terminals.borrow_mut();
+        terminals.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Terminal)
         });
         let mut root = div()
             .id(ElementId::new(ROOT_ELEMENT_ID))
@@ -1285,7 +1445,9 @@ impl View for NativeView {
                     &tree,
                     &self.events,
                     &mut markdown,
+                    &mut svgs,
                     &mut lists,
+                    &mut terminals,
                     cx,
                     0,
                 )
@@ -1316,7 +1478,9 @@ fn build_element(
     tree: &NativeTree,
     events: &EventQueue,
     markdown: &mut HashMap<u32, Markdown>,
+    svgs: &mut HashMap<u32, NativeSvgState>,
     lists: &mut HashMap<u32, NativeListState>,
+    terminals: &mut HashMap<u32, NativeTerminalState>,
     cx: &mut ViewContext<'_, NativeView>,
     depth: usize,
 ) -> Option<Element> {
@@ -1410,7 +1574,77 @@ fn build_element(
             state.set_text(node.string(property::VALUE).unwrap_or_default());
             state.element(element_id)
         }
+        NodeTag::Svg => {
+            let source = node.string(property::VALUE).unwrap_or_default();
+            let state = svgs
+                .entry(id)
+                .or_insert_with(|| NativeSvgState::new(Arc::from(source)));
+            state.sync(source);
+            state.element()
+        }
         NodeTag::VirtualList => div(),
+        NodeTag::Terminal => {
+            let state = terminals
+                .entry(id)
+                .or_insert_with(|| NativeTerminalState::new(node, cx));
+            state.sync(node, cx);
+            let terminal = state.terminal.clone();
+            if let Some(terminal) = terminal {
+                let snapshot = terminal.snapshot();
+                if node
+                    .boolean(property::TERMINAL_STATUS_LISTENER)
+                    .unwrap_or(false)
+                {
+                    let value = terminal_event_json(&snapshot);
+                    if state.last_event.as_deref() != Some(value.as_str()) {
+                        state.last_event = Some(Arc::from(value.as_str()));
+                        enqueue_event(
+                            events,
+                            QueuedEvent {
+                                kind: "terminal",
+                                window,
+                                target: id,
+                                value: Some(value.into()),
+                            },
+                        );
+                    }
+                } else {
+                    state.last_event = None;
+                }
+                terminal.element(
+                    element_id,
+                    TerminalStyle {
+                        font_family: node
+                            .string(property::FONT_FAMILY)
+                            .and_then(native_font_family)
+                            .unwrap_or(quickgui::FontFamily::Monospace),
+                        font_size: node.number(property::FONT_SIZE).unwrap_or(13.0),
+                        line_height: node.number(property::LINE_HEIGHT).unwrap_or(18.0),
+                        padding_top: terminal_padding(node, property::PADDING_TOP),
+                        padding_right: terminal_padding(node, property::PADDING_RIGHT),
+                        padding_bottom: terminal_padding(node, property::PADDING_BOTTOM),
+                        padding_left: terminal_padding(node, property::PADDING_LEFT),
+                        foreground: node.color(property::COLOR),
+                        background: node.color(property::BACKGROUND_COLOR),
+                        theme: native_terminal_theme(node),
+                        ..TerminalStyle::default()
+                    },
+                    cx,
+                )
+            } else {
+                div()
+                    .size_full()
+                    .bg(Color::rgb8(20, 20, 20))
+                    .text_color(Color::rgb8(248, 113, 113))
+                    .font_family(quickgui::FontFamily::Monospace)
+                    .text_sm()
+                    .p_4()
+                    .child(text(format!(
+                        "QuickGUI terminal error\n\n{}",
+                        state.error().unwrap_or("unknown terminal error")
+                    )))
+            }
+        }
     }
     .id(element_id);
 
@@ -1493,6 +1727,24 @@ fn build_element(
         });
         element = element.on_hover(listener);
     }
+    if node.boolean(property::POINTER_LISTENER).unwrap_or(false) {
+        let events = Rc::clone(events);
+        let listener = cx.pointer_listener(element_id, move |_view, event, cx| {
+            enqueue_event(
+                &events,
+                QueuedEvent {
+                    kind: "pointer",
+                    window,
+                    target: id,
+                    value: Some(pointer_event_json(event).into()),
+                },
+            );
+            cx.prevent_default();
+            cx.stop_propagation();
+            cx.invalidate();
+        });
+        element = element.on_pointer(listener);
+    }
 
     match node.tag {
         NodeTag::VirtualList => {
@@ -1517,7 +1769,9 @@ fn build_element(
                     tree,
                     events,
                     markdown,
+                    svgs,
                     lists,
+                    terminals,
                     cx,
                     depth + 1,
                 )
@@ -1535,10 +1789,26 @@ fn build_element(
             });
             element = element.child(rows).variable_virtual_scroll(&list);
         }
-        NodeTag::Text | NodeTag::Sentinel | NodeTag::Input | NodeTag::Markdown => {}
+        NodeTag::Text
+        | NodeTag::Sentinel
+        | NodeTag::Input
+        | NodeTag::Markdown
+        | NodeTag::Svg
+        | NodeTag::Terminal => {}
         NodeTag::Root | NodeTag::View | NodeTag::Button => {
             element = element.children(node.children.iter().filter_map(|child| {
-                build_element(*child, window, tree, events, markdown, lists, cx, depth + 1)
+                build_element(
+                    *child,
+                    window,
+                    tree,
+                    events,
+                    markdown,
+                    svgs,
+                    lists,
+                    terminals,
+                    cx,
+                    depth + 1,
+                )
             }));
         }
     }
@@ -1550,6 +1820,67 @@ fn enqueue_event(events: &EventQueue, event: QueuedEvent) {
     if events.len() < MAX_QUEUED_EVENTS {
         events.push_back(event);
     }
+}
+
+fn terminal_event_json(snapshot: &quickgui::TerminalSnapshot) -> String {
+    let mut event = serde_json::json!({
+        "status": snapshot.status.kind(),
+        "title": snapshot.title.as_ref(),
+        "workingDirectory": snapshot.working_directory.as_ref(),
+    });
+    let object = event
+        .as_object_mut()
+        .expect("terminal event JSON starts as an object");
+    match &snapshot.status {
+        TerminalStatus::Starting => {}
+        TerminalStatus::Running { process_id } => {
+            object.insert("processId".to_owned(), serde_json::json!(process_id));
+        }
+        TerminalStatus::Exited { exit_code, signal } => {
+            object.insert("exitCode".to_owned(), serde_json::json!(exit_code));
+            object.insert("signal".to_owned(), serde_json::json!(signal.as_deref()));
+        }
+        TerminalStatus::Failed { message } => {
+            object.insert("message".to_owned(), serde_json::json!(message.as_ref()));
+        }
+    }
+    if let Some(agent) = &snapshot.agent {
+        object.insert("agent".to_owned(), serde_json::json!(agent.kind.as_ref()));
+        object.insert(
+            "agentStatus".to_owned(),
+            serde_json::json!(agent.status.kind()),
+        );
+        object.insert(
+            "agentProcessId".to_owned(),
+            serde_json::json!(agent.process_id),
+        );
+    }
+    event.to_string()
+}
+
+fn pointer_event_json(event: &quickgui::PointerEvent) -> String {
+    let phase = match event.phase {
+        PointerPhase::Down => "down",
+        PointerPhase::Move => "move",
+        PointerPhase::Up => "up",
+        PointerPhase::Cancel => "cancel",
+    };
+    let button = match event.button {
+        quickgui::MouseButton::Left => "left",
+        quickgui::MouseButton::Right => "right",
+        quickgui::MouseButton::Middle => "middle",
+        quickgui::MouseButton::Back => "back",
+        quickgui::MouseButton::Forward => "forward",
+        quickgui::MouseButton::Other(_) => "other",
+    };
+    serde_json::json!({
+        "phase": phase,
+        "position": { "x": event.position.x, "y": event.position.y },
+        "origin": { "x": event.origin.x, "y": event.origin.y },
+        "delta": { "x": event.delta.x, "y": event.delta.y },
+        "button": button,
+    })
+    .to_string()
 }
 
 fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
@@ -1657,9 +1988,10 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     let padding_right = node.number(property::PADDING_RIGHT).unwrap_or(padding);
     let padding_bottom = node.number(property::PADDING_BOTTOM).unwrap_or(padding);
     let padding_left = node.number(property::PADDING_LEFT).unwrap_or(padding);
-    if [padding_top, padding_right, padding_bottom, padding_left]
-        .iter()
-        .any(|value| *value != 0.0)
+    if node.tag != NodeTag::Terminal
+        && [padding_top, padding_right, padding_bottom, padding_left]
+            .iter()
+            .any(|value| *value != 0.0)
     {
         element = element.padding(padding_top, padding_right, padding_bottom, padding_left);
     }
@@ -1681,6 +2013,37 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     if let Some(color) = node.color(property::COLOR) {
         element = element.text_color(color);
     }
+    let hover_background = node.color(property::HOVER_BACKGROUND_COLOR);
+    let hover_color = node.color(property::HOVER_COLOR);
+    if hover_background.is_some() || hover_color.is_some() {
+        element = element.hover(move |mut style| {
+            if let Some(color) = hover_background {
+                style = style.bg(color);
+            }
+            if let Some(color) = hover_color {
+                style = style.text_color(color);
+            }
+            style
+        });
+    }
+    let active_background = node.color(property::ACTIVE_BACKGROUND_COLOR);
+    let active_color = node.color(property::ACTIVE_COLOR);
+    if active_background.is_some() || active_color.is_some() {
+        element = element.active(move |mut style| {
+            if let Some(color) = active_background {
+                style = style.bg(color);
+            }
+            if let Some(color) = active_color {
+                style = style.text_color(color);
+            }
+            style
+        });
+    }
+    if let Some(milliseconds) = node.number(property::TRANSITION_COLORS) {
+        element = element.transition_colors(Duration::from_secs_f32(
+            (milliseconds / 1_000.0).clamp(0.0, 10.0),
+        ));
+    }
     if let Some(value) = node.number(property::OPACITY) {
         element = element.opacity(value);
     }
@@ -1697,6 +2060,12 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     }
     if let Some(value) = node.number(property::FONT_SIZE) {
         element = element.text_size(value);
+    }
+    if let Some(family) = node
+        .string(property::FONT_FAMILY)
+        .and_then(native_font_family)
+    {
+        element = element.font_family(family);
     }
     if let Some(value) = node.number(property::LINE_HEIGHT) {
         element = element.line_height(value);
@@ -1769,6 +2138,9 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     if let Some(value) = node.number(property::TAB_INDEX) {
         element = element.tab_index(value.clamp(i16::MIN as f32, i16::MAX as f32) as i16);
     }
+    if let Some(value) = node.boolean(property::FOCUS_ON_POINTER) {
+        element = element.focus_on_pointer(value);
+    }
     if let Some(value) = node.string(property::POSITION) {
         element = if value == "absolute" {
             element.absolute()
@@ -1808,6 +2180,12 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     element
 }
 
+fn terminal_padding(node: &NativeNode, side: u16) -> f32 {
+    node.number(side)
+        .or_else(|| node.number(property::PADDING))
+        .unwrap_or(0.0)
+}
+
 enum DimensionKind {
     Width,
     Height,
@@ -1838,6 +2216,33 @@ fn unpack_color(value: u32) -> Color {
         (value >> 8) as u8,
         (value >> 16) as u8,
         (value >> 24) as u8,
+    )
+}
+
+fn native_font_family(value: &str) -> Option<quickgui::FontFamily> {
+    match value.trim() {
+        "sans-serif" | "system-ui" => Some(quickgui::FontFamily::SansSerif),
+        "serif" => Some(quickgui::FontFamily::Serif),
+        "monospace" => Some(quickgui::FontFamily::Monospace),
+        name if !name.is_empty() && name.len() <= quickgui::MAX_FONT_FAMILY_BYTES => {
+            Some(quickgui::FontFamily::named(Arc::<str>::from(name)))
+        }
+        _ => None,
+    }
+}
+
+fn native_terminal_theme(node: &NativeNode) -> Option<TerminalTheme> {
+    let encoded = node.string(property::TERMINAL_PALETTE)?;
+    let packed = serde_json::from_str::<Vec<u32>>(encoded).ok()?;
+    let packed: [u32; TERMINAL_ANSI_COLOR_COUNT] = packed.try_into().ok()?;
+    let ansi = packed.map(unpack_color);
+    let foreground = node.color(property::COLOR)?;
+    let background = node.color(property::BACKGROUND_COLOR)?;
+    Some(
+        TerminalTheme::new(foreground, background, ansi).cursor(
+            node.color(property::TERMINAL_CURSOR_COLOR)
+                .unwrap_or(foreground),
+        ),
     )
 }
 
@@ -1948,7 +2353,9 @@ struct NativeWindowRuntime {
     config: AppConfig,
     tree: Rc<RefCell<NativeTree>>,
     markdown: Rc<RefCell<HashMap<u32, Markdown>>>,
+    svgs: Rc<RefCell<HashMap<u32, NativeSvgState>>>,
     lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
+    terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
     handle: Option<WindowHandle>,
 }
 
@@ -1965,7 +2372,9 @@ impl NativeWindowRuntime {
             tree: Rc::clone(&self.tree),
             events: Rc::clone(events),
             markdown: Rc::clone(&self.markdown),
+            svgs: Rc::clone(&self.svgs),
             lists: Rc::clone(&self.lists),
+            terminals: Rc::clone(&self.terminals),
         }
     }
 }
@@ -2003,11 +2412,13 @@ struct NativeRuntime {
     app_info: Option<AppInfo>,
     app_paths: Option<AppPaths>,
     quit_mode: QuitMode,
+    fonts: Vec<Arc<[u8]>>,
     runner: Option<AppRunner>,
 }
 
 impl NativeRuntime {
     fn new(options: NativeAppOptions) -> std::result::Result<Self, String> {
+        let fonts = native_font_data(&options).unwrap_or_default();
         let (app_info, app_paths, quit_mode) = native_app_configuration(options)?;
         Ok(Self {
             next_window_id: 1,
@@ -2027,6 +2438,7 @@ impl NativeRuntime {
             app_info,
             app_paths,
             quit_mode,
+            fonts,
             runner: None,
         })
     }
@@ -2051,7 +2463,9 @@ impl NativeRuntime {
             config,
             tree: Rc::new(RefCell::new(native_tree_from_initial_batch(initial_batch)?)),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
             handle: None,
         };
         if let Some(runner) = &mut self.runner {
@@ -2105,7 +2519,9 @@ impl NativeRuntime {
             config,
             tree: Rc::new(RefCell::new(native_tree_from_initial_batch(initial_batch)?)),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
             handle: None,
         };
         let runner = self
@@ -2164,6 +2580,7 @@ impl NativeRuntime {
         if let Some(paths) = self.app_paths.clone() {
             application = application.app_paths(paths);
         }
+        application = application.fonts(self.fonts.iter().cloned());
         let mut runner = application
             .on_open_urls(move |urls, _cx| {
                 let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())
@@ -2690,6 +3107,15 @@ impl NativeRuntime {
     }
 }
 
+pub(crate) fn native_font_data(options: &NativeAppOptions) -> Option<Vec<Arc<[u8]>>> {
+    options.font_data.as_ref().map(|fonts| {
+        fonts
+            .iter()
+            .map(|font| Arc::<[u8]>::from(font.as_ref()))
+            .collect()
+    })
+}
+
 pub(crate) fn native_app_configuration(
     options: NativeAppOptions,
 ) -> std::result::Result<(Option<AppInfo>, Option<AppPaths>, QuitMode), String> {
@@ -2715,6 +3141,7 @@ pub(crate) fn update_native_app_configuration(
         runtime_dir,
         temp_dir,
         quit_mode,
+        font_data: _,
     } = options;
     let identity_replaced = name.is_some() || version.is_some() || identifier.is_some();
     let info = match (name, version, identifier) {
@@ -3747,7 +4174,14 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
         let Some(runner) = runtime.runner.as_mut() else {
             continue;
         };
-        let status = runner.pump(None).map_err(|error| error.to_string())?;
+        let status = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runner.pump(None)))
+            .map_err(|payload| {
+                format!(
+                    "QuickGUI event loop panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                )
+            })?
+            .map_err(|error| error.to_string())?;
         if !ready_reported {
             if let Some(on_ready) = on_ready {
                 on_ready.call(()).map_err(|error| error.to_string())?;
@@ -3762,6 +4196,14 @@ fn run_app_host_loop(on_ready: Option<&Function<'_, (), ()>>) -> std::result::Re
             return Ok(code);
         }
     }
+}
+
+fn panic_payload_message(payload: &(dyn Any + Send)) -> &str {
+    payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&'static str>().copied())
+        .unwrap_or("unknown panic payload")
 }
 
 fn with_hosted_runtime<T>(
@@ -3819,7 +4261,10 @@ mod tests {
         )
         .expect("quit-only configuration update");
 
-        assert_eq!(info.as_ref().map(AppInfo::identifier), Some("dev.quickgui.binding-test"));
+        assert_eq!(
+            info.as_ref().map(AppInfo::identifier),
+            Some("dev.quickgui.binding-test")
+        );
         assert_eq!(paths.as_ref(), Some(&initial_paths));
         assert_eq!(quit_mode, QuitMode::Explicit);
 
@@ -3835,8 +4280,14 @@ mod tests {
         )
         .expect("path-only configuration update");
 
-        assert_eq!(info.as_ref().map(AppInfo::identifier), Some("dev.quickgui.binding-test"));
-        assert_eq!(paths.as_ref().and_then(AppPaths::config_dir), Some(overridden.as_path()));
+        assert_eq!(
+            info.as_ref().map(AppInfo::identifier),
+            Some("dev.quickgui.binding-test")
+        );
+        assert_eq!(
+            paths.as_ref().and_then(AppPaths::config_dir),
+            Some(overridden.as_path())
+        );
         assert_eq!(quit_mode, QuitMode::Explicit);
     }
 
@@ -3985,7 +4436,9 @@ mod tests {
             tree: Rc::new(RefCell::new(tree)),
             events: Rc::clone(&events),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
         };
         let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
         let window = view.window_handle();
@@ -4081,7 +4534,9 @@ mod tests {
             tree: Rc::new(RefCell::new(tree)),
             events: Rc::new(RefCell::new(VecDeque::new())),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
         };
         let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
         let window = view.window_handle();
@@ -4146,7 +4601,9 @@ mod tests {
             tree: Rc::new(RefCell::new(tree)),
             events: Rc::clone(&events),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
         };
         let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
         let window = view.window_handle();
@@ -4187,6 +4644,67 @@ mod tests {
     }
 
     #[test]
+    fn native_svg_is_parsed_once_until_its_source_changes() {
+        let svg_id = 30;
+        let first_source = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path d="M2 2h20v20H2z"/></svg>"#;
+        let second_source = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10"/></svg>"#;
+        let mut tree = NativeTree::default();
+        let mut icon = NativeNode::new(NodeTag::Svg);
+        icon.parent = Some(ROOT_NODE);
+        icon.set_property(
+            property::VALUE,
+            Some(PropertyValue::String(Arc::from(first_source))),
+        );
+        icon.set_property(property::WIDTH, Some(PropertyValue::Number(16.0)));
+        icon.set_property(property::HEIGHT, Some(PropertyValue::Number(16.0)));
+        tree.nodes.insert(svg_id, icon);
+        tree.nodes
+            .get_mut(&ROOT_NODE)
+            .unwrap()
+            .children
+            .push(svg_id);
+
+        let svgs = Rc::new(RefCell::new(HashMap::new()));
+        let view = NativeView {
+            window: 7,
+            handles: None,
+            tree: Rc::new(RefCell::new(tree)),
+            events: Rc::new(RefCell::new(VecDeque::new())),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::clone(&svgs),
+            lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
+        };
+        let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+        let window = view.window_handle();
+        let bounds = cx
+            .element_bounds(window, ElementId::new(svg_id as u64))
+            .unwrap();
+        assert_eq!((bounds.width, bounds.height), (16.0, 16.0));
+
+        let first = svgs.borrow()[&svg_id].parsed.as_ref().unwrap().clone();
+        cx.update(view, |_view, cx| cx.invalidate()).unwrap();
+        let unchanged = svgs.borrow()[&svg_id].parsed.as_ref().unwrap().clone();
+        assert_eq!(first, unchanged);
+
+        cx.update(view, |view, cx| {
+            view.tree
+                .borrow_mut()
+                .nodes
+                .get_mut(&svg_id)
+                .unwrap()
+                .set_property(
+                    property::VALUE,
+                    Some(PropertyValue::String(Arc::from(second_source))),
+                );
+            cx.invalidate();
+        })
+        .unwrap();
+        let changed = svgs.borrow()[&svg_id].parsed.as_ref().unwrap().clone();
+        assert_ne!(first, changed);
+    }
+
+    #[test]
     fn native_virtual_list_mounts_only_the_initial_window_and_overscan() {
         let list_id = 40;
         let first_item_id = 1_000;
@@ -4221,7 +4739,9 @@ mod tests {
             tree: Rc::new(RefCell::new(tree)),
             events: Rc::new(RefCell::new(VecDeque::new())),
             markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::clone(&lists),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
         };
         let (cx, view) = quickgui::TestAppContext::new(view).unwrap();
         let window = view.window_handle();
@@ -4239,5 +4759,104 @@ mod tests {
         );
         let mounted = lists.borrow()[&list_id].list.visible_rows().len();
         assert!(mounted < item_count as usize);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
+        let terminal_id = 50;
+        let mut tree = NativeTree::default();
+        let mut terminal = NativeNode::new(NodeTag::Terminal);
+        terminal.parent = Some(ROOT_NODE);
+        terminal.set_property(
+            property::TERMINAL_PROGRAM,
+            Some(PropertyValue::String(Arc::from("/bin/sh"))),
+        );
+        terminal.set_property(
+            property::TERMINAL_ARGUMENTS,
+            Some(PropertyValue::String(Arc::from(
+                serde_json::json!(["-c", "printf 'quickgui-pty-ok\\n'"]).to_string(),
+            ))),
+        );
+        terminal.set_property(
+            property::TERMINAL_STATUS_LISTENER,
+            Some(PropertyValue::Bool(true)),
+        );
+        terminal.set_property(
+            property::POSITION,
+            Some(PropertyValue::String(Arc::from("absolute"))),
+        );
+        terminal.set_property(property::TOP, Some(PropertyValue::Number(8.0)));
+        terminal.set_property(property::RIGHT, Some(PropertyValue::Number(9.0)));
+        terminal.set_property(property::BOTTOM, Some(PropertyValue::Number(8.0)));
+        terminal.set_property(property::LEFT, Some(PropertyValue::Number(9.0)));
+        terminal.set_property(property::PADDING_TOP, Some(PropertyValue::Number(8.0)));
+        terminal.set_property(property::PADDING_RIGHT, Some(PropertyValue::Number(9.0)));
+        terminal.set_property(property::PADDING_BOTTOM, Some(PropertyValue::Number(8.0)));
+        terminal.set_property(property::PADDING_LEFT, Some(PropertyValue::Number(9.0)));
+        tree.nodes.insert(terminal_id, terminal);
+        tree.nodes
+            .get_mut(&ROOT_NODE)
+            .unwrap()
+            .children
+            .push(terminal_id);
+
+        let terminals = Rc::new(RefCell::new(HashMap::new()));
+        let events = Rc::new(RefCell::new(VecDeque::new()));
+        let view = NativeView {
+            window: 6,
+            handles: None,
+            tree: Rc::new(RefCell::new(tree)),
+            events: Rc::clone(&events),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::clone(&terminals),
+        };
+        let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+        let window = view.window_handle();
+        for _ in 0..200 {
+            let finished_with_output = terminals
+                .borrow()
+                .get(&terminal_id)
+                .and_then(|state| state.terminal.as_ref())
+                .is_some_and(|terminal| {
+                    let snapshot = terminal.snapshot();
+                    matches!(snapshot.status, TerminalStatus::Exited { .. })
+                        && snapshot.content.contains("quickgui-pty-ok")
+                });
+            if finished_with_output {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        cx.update(view, |_view, cx| cx.invalidate()).unwrap();
+
+        let snapshot = terminals.borrow()[&terminal_id]
+            .terminal
+            .as_ref()
+            .unwrap()
+            .snapshot();
+        assert!(
+            snapshot.content.contains("quickgui-pty-ok"),
+            "snapshot: {snapshot:#?}"
+        );
+        assert!(matches!(snapshot.status, TerminalStatus::Exited { .. }));
+        let root_bounds = cx
+            .element_bounds(window, ElementId::new(ROOT_ELEMENT_ID))
+            .unwrap();
+        let terminal_bounds = cx
+            .element_bounds(window, ElementId::new(terminal_id as u64))
+            .unwrap();
+        assert_eq!(terminal_bounds.x, root_bounds.x + 9.0);
+        assert_eq!(terminal_bounds.y, root_bounds.y + 8.0);
+        assert_eq!(terminal_bounds.right(), root_bounds.right() - 9.0);
+        assert_eq!(terminal_bounds.bottom(), root_bounds.bottom() - 8.0);
+        assert!(
+            events
+                .borrow()
+                .iter()
+                .any(|event| event.kind == "terminal" && event.target == terminal_id)
+        );
     }
 }

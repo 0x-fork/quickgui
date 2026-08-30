@@ -45,6 +45,17 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/herdr-gui": {
+      "name": "herdr-gui",
+      "dependencies": {
+        "@quickgui/native": "workspace:*",
+        "@quickgui/solid": "workspace:*",
+        "solid-js": "2.0.0-rc.3",
+      },
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/popover-solid": {
       "name": "quickgui-solid-popover-example",
       "dependencies": {
@@ -450,6 +461,8 @@
 
     "get-stream": ["get-stream@9.0.1", "", { "dependencies": { "@sec-ant/readable-stream": "^0.4.1", "is-stream": "^4.0.1" } }, "sha512-kVCxPF3vQM/N0B1PmoqVUqgHP+EeVjmZSQn+1oCRPxd2P21P2F19lIgbR3HBosbB1PUhOAoctJnfEn2GbN2eZA=="],
 
+    "herdr-gui": ["herdr-gui@workspace:examples/herdr-gui"],
+
     "human-signals": ["human-signals@8.0.1", "", {}, "sha512-eKCa6bwnJhvxj14kZk5NCPc6Hb6BdsU9DZcOnmQKSnO1VKrfV0zCvtttPZUsBvjmNDn8rpcJfpwSYnHBjc95MQ=="],
 
     "icns-lib": ["icns-lib@1.0.1", "", {}, "sha512-J7+RDRQApG/vChY5TP043NitBcNC7QMn1kOgGvlAkyrK65hozAaSwTNsTZ2HJh+br9e1NlzpBreAOpk4YuhOJA=="],
@@ -537,6 +550,8 @@
     "quickgui-solid-example": ["quickgui-solid-example@workspace:examples/solid"],
 
     "quickgui-solid-file-dialog-example": ["quickgui-solid-file-dialog-example@workspace:examples/file-dialog-solid"],
+
+    "quickgui-solid-popover-example": ["quickgui-solid-popover-example@workspace:examples/popover-solid"],
 
     "quickgui-solid-system-api-example": ["quickgui-solid-system-api-example@workspace:examples/system-api-solid"],
 

@@ -27,10 +27,11 @@ use unicode_segmentation::UnicodeSegmentation;
 /// The shaping strategy of some text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Shaping {
-    /// Basic shaping with no font fallback.
+    /// Basic one-codepoint shaping with font fallback.
     ///
-    /// This shaping strategy is very cheap, but it will not display complex
-    /// scripts properly nor try to find missing glyphs in your system fonts.
+    /// This shaping strategy is very cheap and preserves independent glyph
+    /// advances, but it will not display complex scripts properly. Missing
+    /// glyphs are resolved through the declared and platform fallback lists.
     ///
     /// You should use this strategy when you have complete control of the text
     /// and the font you are displaying in your application.
@@ -501,12 +502,13 @@ fn shape_skip(
     let fonts = font_system.get_font_matches(&attrs);
 
     let default_families = default_families(&attrs);
+    let word = &line[start_run..end_run];
     let mut font_iter = FontFallbackIter::new(
         font_system,
         &fonts,
         &default_families,
         &[],
-        "",
+        word,
         attrs.weight,
     );
 
@@ -515,61 +517,40 @@ fn shape_skip(
 
     shape_skip_glyphs(glyphs, &font, line, attrs_list, start_run, end_run);
 
-    // If any glyphs are missing and the user has specified a font,
-    // fall back to a default font (SansSerif or Monospace)
-    if matches!(attrs.family, Family::Name(_))
-        && glyphs[glyph_start..].iter().any(|g| g.glyph_id == 0)
+    while glyphs[glyph_start..]
+        .iter()
+        .any(|glyph| glyph.glyph_id == 0)
     {
-        let is_mono = font_system
-            .db()
-            .face(font.id())
-            .is_some_and(|face| face.monospaced);
-        let fb_family = if is_mono {
-            Family::Monospace
-        } else {
-            Family::SansSerif
+        let Some(fallback) = font_iter.next() else {
+            break;
         };
-        let fb_attrs = Attrs::new()
-            .family(fb_family)
-            .weight(attrs.weight)
-            .style(attrs.style)
-            .stretch(attrs.stretch);
-        let fb_fonts = font_system.get_font_matches(&fb_attrs);
-        let fb_families = [fb_family];
-        let mut fb_iter =
-            FontFallbackIter::new(font_system, &fb_fonts, &fb_families, &[], "", attrs.weight);
+        let swash = fallback.as_swash();
+        let charmap = swash.charmap();
+        let metrics = swash.metrics(&[]);
+        let glyph_metrics = swash.glyph_metrics(&[]).scale(1.0);
+        let scale = f32::from(metrics.units_per_em);
 
-        if let Some(fb_font) = fb_iter.next() {
-            let fb_swash = fb_font.as_swash();
-            let fb_charmap = fb_swash.charmap();
-            let fb_metrics = fb_swash.metrics(&[]);
-            let fb_glyph_metrics = fb_swash.glyph_metrics(&[]).scale(1.0);
-            let fb_scale = f32::from(fb_metrics.units_per_em);
-
-            for glyph in glyphs[glyph_start..].iter_mut() {
-                if glyph.glyph_id != 0 {
-                    continue;
-                }
-                let codepoint = line[glyph.start..glyph.end].chars().next().unwrap_or('\0');
-                let glyph_id = fb_charmap.map(codepoint);
-                if glyph_id != 0 {
-                    let span_attrs = attrs_list.get_span(glyph.start);
-                    glyph.glyph_id = glyph_id;
-                    glyph.font_id = fb_font.id();
-                    glyph.font_monospace_em_width = fb_font.monospace_em_width();
-                    glyph.ascent = fb_metrics.ascent / fb_scale;
-                    glyph.descent = fb_metrics.descent / fb_scale;
-                    glyph.x_advance = fb_glyph_metrics.advance_width(glyph_id)
-                        + span_attrs
-                            .letter_spacing_opt
-                            .map_or(0.0, |spacing| spacing.0);
-                    glyph.cache_key_flags = override_fake_italic(
-                        span_attrs.cache_key_flags,
-                        fb_font.as_ref(),
-                        &span_attrs,
-                    );
-                }
+        for glyph in glyphs[glyph_start..]
+            .iter_mut()
+            .filter(|glyph| glyph.glyph_id == 0)
+        {
+            let codepoint = line[glyph.start..glyph.end].chars().next().unwrap_or('\0');
+            let glyph_id = charmap.map(codepoint);
+            if glyph_id == 0 {
+                continue;
             }
+            let span_attrs = attrs_list.get_span(glyph.start);
+            glyph.glyph_id = glyph_id;
+            glyph.font_id = fallback.id();
+            glyph.font_monospace_em_width = fallback.monospace_em_width();
+            glyph.ascent = metrics.ascent / scale;
+            glyph.descent = metrics.descent / scale;
+            glyph.x_advance = glyph_metrics.advance_width(glyph_id)
+                + span_attrs
+                    .letter_spacing_opt
+                    .map_or(0.0, |spacing| spacing.0);
+            glyph.cache_key_flags =
+                override_fake_italic(span_attrs.cache_key_flags, fallback.as_ref(), &span_attrs);
         }
     }
 }

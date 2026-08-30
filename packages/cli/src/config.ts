@@ -43,6 +43,8 @@ export interface QuickGuiConfig {
   outDir?: string;
   target?: QuickGuiTarget;
   resources?: string[];
+  /** OpenType font files embedded in the executable and registered before app startup. */
+  fonts?: string[];
   /** Custom URL schemes. Packaged macOS apps declare these in their signed Info.plist. */
   protocols?: string[];
   macos?: MacOSConfig;
@@ -59,6 +61,7 @@ export interface ResolvedQuickGuiConfig {
   outDir: string;
   target?: QuickGuiTarget;
   resources: string[];
+  fonts: string[];
   protocols: string[];
   macos: Required<Pick<MacOSConfig, "minimumSystemVersion" | "category">> & MacOSConfig;
   windows: Required<Pick<WindowsConfig, "hideConsole">> & WindowsConfig;
@@ -109,6 +112,9 @@ export function resolveConfig(
   const resources = stringArray(input.resources, "resources").map((path) =>
     resolveRelative(projectRoot, path),
   );
+  const fonts = stringArray(input.fonts, "fonts").map((path) =>
+    resolveRelative(projectRoot, path),
+  );
   const protocols = protocolArray(input.protocols);
   const macos = objectOrEmpty(input.macos, "macos");
   const windows = objectOrEmpty(input.windows, "windows");
@@ -127,6 +133,7 @@ export function resolveConfig(
     outDir,
     ...(target ? { target } : {}),
     resources,
+    fonts,
     protocols,
     macos: {
       minimumSystemVersion:

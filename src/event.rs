@@ -962,6 +962,11 @@ pub struct KeyDownEvent {
     pub key: Key,
     /// Printable character the physical press could produce before IME composition.
     pub key_char: Option<Key>,
+    /// Composed UTF-8 text reported by the platform for this press.
+    ///
+    /// This can differ from `key` for input methods and synthesized Unicode input. It is absent
+    /// for navigation keys and may contain more than one Unicode scalar value.
+    pub text: Option<String>,
     pub modifiers: Modifiers,
     pub repeat: bool,
 }
@@ -1008,6 +1013,7 @@ pub struct EventContext {
     pub(crate) exit: bool,
     pub(crate) relaunch: Option<RelaunchRequest>,
     pub(crate) focus: Option<Option<ElementId>>,
+    pub(crate) clear_text_selection: bool,
     pub(crate) actions: Vec<AnyAction>,
     pub(crate) targeted_actions: Vec<(WindowHandle, AnyAction)>,
     pub(crate) menus: Option<Vec<Menu>>,
@@ -1086,6 +1092,7 @@ impl EventContext {
             exit: false,
             relaunch: None,
             focus: None,
+            clear_text_selection: false,
             actions: Vec::new(),
             targeted_actions: Vec::new(),
             menus: None,
@@ -2702,6 +2709,14 @@ impl EventContext {
         self.focus = Some(None);
     }
 
+    /// Clear the retained selection painted across immutable selectable text.
+    ///
+    /// Custom text surfaces such as terminals and editors should call this after accepting input
+    /// so an earlier pointer selection does not remain highlighted while the content changes.
+    pub fn clear_text_selection(&mut self) {
+        self.clear_text_selection = true;
+    }
+
     /// Validate and submit a mounted form after the current callback completes.
     ///
     /// Repeated requests for the same form in one callback coalesce. The bounded queue prevents a
@@ -3378,6 +3393,10 @@ mod tests {
     #[test]
     fn input_propagation_and_default_prevention_are_independent() {
         let mut cx = EventContext::default();
+        assert!(!cx.clear_text_selection);
+        cx.clear_text_selection();
+        assert!(cx.clear_text_selection);
+
         cx.stop_propagation();
         assert!(cx.stop_event_propagation);
         assert!(!cx.prevent_default);

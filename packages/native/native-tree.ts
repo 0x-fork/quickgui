@@ -13,14 +13,18 @@ export type NativeElementName =
   | "input"
   | "textarea"
   | "markdown"
-  | "virtual-list";
+  | "virtual-list"
+  | "terminal"
+  | "svg";
 export type NativeEventType =
   | "click"
   | "mouseenter"
   | "mouseleave"
   | "input"
   | "submit"
-  | "dismiss";
+  | "dismiss"
+  | "terminal"
+  | "pointer";
 export type NativeEventListener = (event: QuickGuiEvent) => void;
 
 export interface NativeNodeHost {
@@ -39,7 +43,11 @@ export interface NativeNodeHost {
     color: boolean,
   ): void;
   _enqueueText(node: NativeNode): void;
-  _enqueueInsert(parent: NativeNode, child: NativeNode, before?: NativeNode): void;
+  _enqueueInsert(
+    parent: NativeNode,
+    child: NativeNode,
+    before?: NativeNode,
+  ): void;
   _enqueueRemove(parent: NativeNode, child: NativeNode): void;
   _enqueueCleanup(parent: NativeNode, children: readonly NativeNode[]): void;
 }
@@ -104,9 +112,14 @@ export function createNativeElement(name: NativeElementName): NativeNode {
           ? NativeNodeTag.Markdown
           : name === "virtual-list"
             ? NativeNodeTag.VirtualList
-            : NativeNodeTag.View;
+            : name === "terminal"
+              ? NativeNodeTag.Terminal
+              : name === "svg"
+                ? NativeNodeTag.Svg
+                : NativeNodeTag.View;
   const node = new NativeNode(tag);
-  if (name === "textarea") setNativeProperty(node, PropertyCode.Multiline, true);
+  if (name === "textarea")
+    setNativeProperty(node, PropertyCode.Multiline, true);
   return node;
 }
 
@@ -119,7 +132,8 @@ export function createNativeSentinel(): NativeNode {
 }
 
 export function replaceNativeText(node: NativeNode, value: string): void {
-  if (node.tag !== NativeNodeTag.Text) throw new TypeError("replaceText expects a text node");
+  if (node.tag !== NativeNodeTag.Text)
+    throw new TypeError("replaceText expects a text node");
   if (node.text === value) return;
   node.text = value;
   if (node.materialized) node.host?._enqueueText(node);
@@ -137,7 +151,10 @@ export function setNativeProperty(
     node.colorProperties.delete(property);
   } else {
     const previous = node.properties.get(property);
-    if (Object.is(previous, normalized) && node.colorProperties.has(property) === !!options.color) {
+    if (
+      Object.is(previous, normalized) &&
+      node.colorProperties.has(property) === !!options.color
+    ) {
       return;
     }
     node.properties.set(property, normalized);
@@ -157,21 +174,55 @@ export function setNativeEventListener(
   if (listener) node.listeners.set(type, listener);
   else node.listeners.delete(type);
   if (type === "click") {
-    setNativeProperty(node, PropertyCode.ClickListener, node.listeners.has("click"));
+    setNativeProperty(
+      node,
+      PropertyCode.ClickListener,
+      node.listeners.has("click"),
+    );
   } else if (type === "input") {
-    setNativeProperty(node, PropertyCode.InputListener, node.listeners.has("input"));
+    setNativeProperty(
+      node,
+      PropertyCode.InputListener,
+      node.listeners.has("input"),
+    );
   } else if (type === "submit") {
-    setNativeProperty(node, PropertyCode.SubmitListener, node.listeners.has("submit"));
+    setNativeProperty(
+      node,
+      PropertyCode.SubmitListener,
+      node.listeners.has("submit"),
+    );
   } else if (type === "dismiss") {
-    setNativeProperty(node, PropertyCode.DismissListener, node.listeners.has("dismiss"));
+    setNativeProperty(
+      node,
+      PropertyCode.DismissListener,
+      node.listeners.has("dismiss"),
+    );
+  } else if (type === "terminal") {
+    setNativeProperty(
+      node,
+      PropertyCode.TerminalStatusListener,
+      node.listeners.has("terminal"),
+    );
+  } else if (type === "pointer") {
+    setNativeProperty(
+      node,
+      PropertyCode.PointerListener,
+      node.listeners.has("pointer"),
+    );
   } else {
-    const listensForHover = node.listeners.has("mouseenter") || node.listeners.has("mouseleave");
+    const listensForHover =
+      node.listeners.has("mouseenter") || node.listeners.has("mouseleave");
     setNativeProperty(node, PropertyCode.HoverListener, listensForHover);
   }
 }
 
-export function insertNativeNode(parent: NativeNode, node: NativeNode, anchor?: NativeNode): void {
-  if (anchor && anchor.parent !== parent) throw new Error("anchor is not a child of parent");
+export function insertNativeNode(
+  parent: NativeNode,
+  node: NativeNode,
+  anchor?: NativeNode,
+): void {
+  if (anchor && anchor.parent !== parent)
+    throw new Error("anchor is not a child of parent");
   if (node === parent) throw new Error("a native node cannot contain itself");
   if (anchor === node && node.parent === parent) return;
 
@@ -179,7 +230,9 @@ export function insertNativeNode(parent: NativeNode, node: NativeNode, anchor?: 
     const previousIndex = node.parent.children.indexOf(node);
     if (previousIndex >= 0) node.parent.children.splice(previousIndex, 1);
   }
-  const index = anchor ? parent.children.indexOf(anchor) : parent.children.length;
+  const index = anchor
+    ? parent.children.indexOf(anchor)
+    : parent.children.length;
   parent.children.splice(index, 0, node);
   node.parent = parent;
 
@@ -194,11 +247,15 @@ export function removeNativeNode(parent: NativeNode, node: NativeNode): void {
   const index = parent.children.indexOf(node);
   if (index >= 0) parent.children.splice(index, 1);
   node.parent = undefined;
-  if (node.materialized && parent.host) parent.host._enqueueRemove(parent, node);
+  if (node.materialized && parent.host)
+    parent.host._enqueueRemove(parent, node);
   dematerialize(node);
 }
 
-export function cleanupNativeNodes(parent: NativeNode, nodes: readonly NativeNode[]): void {
+export function cleanupNativeNodes(
+  parent: NativeNode,
+  nodes: readonly NativeNode[],
+): void {
   const attached = nodes.filter((node) => node.parent === parent);
   if (attached.length === 0) return;
   for (const node of attached) {
@@ -270,23 +327,27 @@ export function parseColor(value: ColorValue): number {
 }
 
 function packColor(r: number, g: number, b: number, a: number): number {
-  const component = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+  const component = (value: number) =>
+    Math.max(0, Math.min(255, Math.round(value)));
   return (
-    component(r) |
-    (component(g) << 8) |
-    (component(b) << 16) |
-    (component(a) << 24)
-  ) >>> 0;
+    (component(r) |
+      (component(g) << 8) |
+      (component(b) << 16) |
+      (component(a) << 24)) >>>
+    0
+  );
 }
 
 function allocateNodeId(): number {
-  if (nextNodeId >= 0xffff_ffff) throw new Error("QuickGUI native node id space exhausted");
+  if (nextNodeId >= 0xffff_ffff)
+    throw new Error("QuickGUI native node id space exhausted");
   return nextNodeId++;
 }
 
 function materialize(node: NativeNode, host: NativeNodeHost): void {
   if (node.materialized) {
-    if (node.host !== host) throw new Error("a native node cannot move between QuickGUI windows");
+    if (node.host !== host)
+      throw new Error("a native node cannot move between QuickGUI windows");
     return;
   }
   node.host = host;
@@ -294,7 +355,12 @@ function materialize(node: NativeNode, host: NativeNodeHost): void {
   host.nodes.set(node.id, node);
   host._enqueueCreate(node);
   for (const [property, value] of node.properties) {
-    host._enqueueProperty(node, property, value, node.colorProperties.has(property));
+    host._enqueueProperty(
+      node,
+      property,
+      value,
+      node.colorProperties.has(property),
+    );
   }
   for (const child of node.children) {
     materialize(child, host);

@@ -4402,6 +4402,70 @@ mod tests {
     }
 
     #[test]
+    fn basic_shaping_preserves_independent_glyphs_and_uses_declared_fallbacks() {
+        let mut font_system = fixture_font_system();
+        let style = TextStyle::new(16.0, Color::WHITE)
+            .family(FontFamily::named("Inter"))
+            .font_fallbacks(FontFallbacks::from_fonts(["Noto Sans Hebrew"]))
+            .shaping(TextShaping::Basic);
+        let mut buffer = Buffer::new(&mut font_system, Metrics::new(16.0, 22.0));
+        configure_text_buffer(&mut buffer, &mut font_system, "Aא", &style, None, None, 1.0);
+
+        let families = buffer
+            .layout_runs()
+            .flat_map(|run| run.glyphs.iter())
+            .map(|glyph| {
+                (
+                    glyph.start,
+                    glyph.glyph_id,
+                    font_system.db().face(glyph.font_id).unwrap().families[0]
+                        .0
+                        .clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(families.len(), 2);
+        assert_eq!((families[0].0, families[0].2.as_str()), (0, "Inter"));
+        assert_eq!(
+            (families[1].0, families[1].2.as_str()),
+            (1, "Noto Sans Hebrew")
+        );
+        assert!(families.iter().all(|(_, glyph_id, _)| *glyph_id != 0));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn basic_shaping_uses_the_platform_emoji_fallback() {
+        let mut font_system = create_font_system();
+        font_system
+            .db_mut()
+            .load_font_data(include_bytes!("../tests/fixtures/fonts/Inter-Regular.ttf").to_vec());
+        let style = TextStyle::new(16.0, Color::WHITE)
+            .family(FontFamily::named("Inter"))
+            .shaping(TextShaping::Basic);
+        let mut buffer = Buffer::new(&mut font_system, Metrics::new(16.0, 22.0));
+        configure_text_buffer(&mut buffer, &mut font_system, "🐳", &style, None, None, 1.0);
+
+        let glyph = buffer
+            .layout_runs()
+            .flat_map(|run| run.glyphs.iter())
+            .next()
+            .expect("emoji glyph");
+        let face = font_system.db().face(glyph.font_id).expect("emoji face");
+        assert_ne!(glyph.glyph_id, 0);
+        assert!(
+            face.families
+                .iter()
+                .any(|(family, _)| family == "Apple Color Emoji")
+        );
+        assert!(
+            SwashCache::new()
+                .get_image_uncached(&mut font_system, glyph.physical((0.0, 0.0), 1.0).cache_key,)
+                .is_some()
+        );
+    }
+
+    #[test]
     fn opentype_features_affect_plain_and_rich_text_shaping() {
         fn glyph_ids(
             font_system: &mut FontSystem,

@@ -254,8 +254,9 @@ impl AppRunner {
     ///
     /// This is the imperative counterpart to [`crate::Element::auto_focus`]. It is intended for
     /// host bindings that expose web-like `element.focus()` behavior after an external event has
-    /// returned to the host language. The request is applied synchronously and schedules at most
-    /// one redraw when focus changes.
+    /// returned to the host language. The request is applied synchronously, reasserts native
+    /// keyboard ownership, and schedules one redraw even when the element was already logically
+    /// focused.
     pub fn focus_element(&mut self, handle: WindowHandle, element: ElementId) -> bool {
         if !matches!(self.status, AppRunStatus::Continue) {
             return false;

@@ -75,11 +75,23 @@ const properties: Record<string, PropertyEntry> = {
   background: { code: PropertyCode.BackgroundColor, color: true },
   backgroundColor: { code: PropertyCode.BackgroundColor, color: true },
   color: { code: PropertyCode.Color, color: true },
+  hoverBackgroundColor: {
+    code: PropertyCode.HoverBackgroundColor,
+    color: true,
+  },
+  hoverColor: { code: PropertyCode.HoverColor, color: true },
+  activeBackgroundColor: {
+    code: PropertyCode.ActiveBackgroundColor,
+    color: true,
+  },
+  activeColor: { code: PropertyCode.ActiveColor, color: true },
+  transitionColors: { code: PropertyCode.TransitionColors },
   opacity: { code: PropertyCode.Opacity },
   borderWidth: { code: PropertyCode.BorderWidth },
   borderColor: { code: PropertyCode.BorderColor, color: true },
   borderRadius: { code: PropertyCode.BorderRadius },
   fontSize: { code: PropertyCode.FontSize },
+  fontFamily: { code: PropertyCode.FontFamily },
   fontWeight: { code: PropertyCode.FontWeight },
   lineHeight: { code: PropertyCode.LineHeight },
   textAlign: { code: PropertyCode.TextAlign },
@@ -96,6 +108,7 @@ const properties: Record<string, PropertyEntry> = {
   ariaLabel: { code: PropertyCode.AccessibilityLabel },
   role: { code: PropertyCode.Role },
   tabIndex: { code: PropertyCode.TabIndex },
+  focusOnPointer: { code: PropertyCode.FocusOnPointer },
   position: { code: PropertyCode.Position },
   top: { code: PropertyCode.Top },
   right: { code: PropertyCode.Right },
@@ -110,11 +123,17 @@ const properties: Record<string, PropertyEntry> = {
   placeholder: { code: PropertyCode.Placeholder },
   multiline: { code: PropertyCode.Multiline },
   streaming: { code: PropertyCode.Streaming },
-  markdownCodeBackground: { code: PropertyCode.MarkdownCodeBackground, color: true },
+  markdownCodeBackground: {
+    code: PropertyCode.MarkdownCodeBackground,
+    color: true,
+  },
   markdownBorderColor: { code: PropertyCode.MarkdownBorderColor, color: true },
   markdownMutedColor: { code: PropertyCode.MarkdownMutedColor, color: true },
   markdownLinkColor: { code: PropertyCode.MarkdownLinkColor, color: true },
-  markdownCodeTextColor: { code: PropertyCode.MarkdownCodeTextColor, color: true },
+  markdownCodeTextColor: {
+    code: PropertyCode.MarkdownCodeTextColor,
+    color: true,
+  },
   markdownBlockGap: { code: PropertyCode.MarkdownBlockGap },
   markdownCodeFontSize: { code: PropertyCode.MarkdownCodeFontSize },
   scrollToEndRevision: { code: PropertyCode.ScrollToEndRevision },
@@ -127,20 +146,39 @@ const properties: Record<string, PropertyEntry> = {
   viewportMargin: { code: PropertyCode.ViewportMargin },
   dismissOnEscape: { code: PropertyCode.DismissOnEscape },
   dismissOnPointerOutside: { code: PropertyCode.DismissOnPointerOutside },
+  program: { code: PropertyCode.TerminalProgram },
+  command: { code: PropertyCode.TerminalProgram },
+  workingDirectory: { code: PropertyCode.TerminalWorkingDirectory },
+  cwd: { code: PropertyCode.TerminalWorkingDirectory },
+  scrollback: { code: PropertyCode.TerminalScrollback },
+  terminalCursorColor: {
+    code: PropertyCode.TerminalCursorColor,
+    color: true,
+  },
 };
 
 const colorProperties = new Set([
   PropertyCode.BackgroundColor,
   PropertyCode.Color,
+  PropertyCode.HoverBackgroundColor,
+  PropertyCode.HoverColor,
+  PropertyCode.ActiveBackgroundColor,
+  PropertyCode.ActiveColor,
   PropertyCode.BorderColor,
   PropertyCode.MarkdownCodeBackground,
   PropertyCode.MarkdownBorderColor,
   PropertyCode.MarkdownMutedColor,
   PropertyCode.MarkdownLinkColor,
   PropertyCode.MarkdownCodeTextColor,
+  PropertyCode.TerminalCursorColor,
 ]);
 
-function setProperty(node: NativeNode, name: string, value: PropertyInput, previous?: PropertyInput) {
+function setProperty(
+  node: NativeNode,
+  name: string,
+  value: PropertyInput,
+  previous?: PropertyInput,
+) {
   if (name === "children" || name === "ref" || name === "key") return;
   if (name === "style") {
     setStyle(node, value, previous);
@@ -176,6 +214,36 @@ function setProperty(node: NativeNode, name: string, value: PropertyInput, previ
   }
   if (name === "class" || name === "className") return;
   if (name === "aria-label") name = "ariaLabel";
+  if (name === "arguments" || name === "args") {
+    setNativeProperty(
+      node,
+      PropertyCode.TerminalArguments,
+      value === null || value === undefined
+        ? null
+        : encodeTerminalArguments(value),
+    );
+    return;
+  }
+  if (name === "environment" || name === "env") {
+    setNativeProperty(
+      node,
+      PropertyCode.TerminalEnvironment,
+      value === null || value === undefined
+        ? null
+        : encodeTerminalEnvironment(value),
+    );
+    return;
+  }
+  if (name === "terminalPalette") {
+    setNativeProperty(
+      node,
+      PropertyCode.TerminalPalette,
+      value === null || value === undefined
+        ? null
+        : encodeTerminalPalette(value),
+    );
+    return;
+  }
   if (name === "type") {
     setNativeProperty(node, PropertyCode.Password, value === "password");
     return;
@@ -190,20 +258,29 @@ function setProperty(node: NativeNode, name: string, value: PropertyInput, previ
   setNativeProperty(node, entry.code, normalized, { color: !!entry.color });
 }
 
-function setStyle(node: NativeNode, value: PropertyInput, previous: PropertyInput): void {
+function setStyle(
+  node: NativeNode,
+  value: PropertyInput,
+  previous: PropertyInput,
+): void {
   const next = isRecord(value) ? value : {};
   const old = isRecord(previous) ? previous : {};
   for (const name of Object.keys(old)) {
     if (!(name in next)) setProperty(node, name, null, old[name]);
   }
   for (const [name, nextValue] of Object.entries(next)) {
-    if (!Object.is(nextValue, old[name])) setProperty(node, name, nextValue, old[name]);
+    if (!Object.is(nextValue, old[name]))
+      setProperty(node, name, nextValue, old[name]);
   }
 }
 
 function setFlex(node: NativeNode, value: PropertyInput): void {
   if (value === null || value === undefined || value === false) {
-    for (const code of [PropertyCode.FlexGrow, PropertyCode.FlexShrink, PropertyCode.FlexBasis]) {
+    for (const code of [
+      PropertyCode.FlexGrow,
+      PropertyCode.FlexShrink,
+      PropertyCode.FlexBasis,
+    ]) {
       setNativeProperty(node, code, null);
     }
     return;
@@ -221,19 +298,25 @@ function setFlex(node: NativeNode, value: PropertyInput): void {
     setNativeProperty(node, PropertyCode.FlexBasis, "auto");
     return;
   }
-  if (parts.length >= 1) setNativeProperty(node, PropertyCode.FlexGrow, Number(parts[0]));
-  if (parts.length >= 2) setNativeProperty(node, PropertyCode.FlexShrink, Number(parts[1]));
+  if (parts.length >= 1)
+    setNativeProperty(node, PropertyCode.FlexGrow, Number(parts[0]));
+  if (parts.length >= 2)
+    setNativeProperty(node, PropertyCode.FlexShrink, Number(parts[1]));
   if (parts.length >= 3) {
     setNativeProperty(node, PropertyCode.FlexBasis, normalizeLength(parts[2]));
   }
 }
 
-function normalizeValue(value: PropertyInput, code: PropertyCode): boolean | number | string | null {
+function normalizeValue(
+  value: PropertyInput,
+  code: PropertyCode,
+): boolean | number | string | null {
   if (value === null || value === undefined) return null;
   if (value === false) {
     return code === PropertyCode.Disabled ||
       code === PropertyCode.DismissOnEscape ||
-      code === PropertyCode.DismissOnPointerOutside
+      code === PropertyCode.DismissOnPointerOutside ||
+      code === PropertyCode.FocusOnPointer
       ? false
       : null;
   }
@@ -268,13 +351,17 @@ function isLengthProperty(code: PropertyCode): boolean {
   );
 }
 
-function eventName(name: string):
+function eventName(
+  name: string,
+):
   | "click"
   | "mouseenter"
   | "mouseleave"
   | "input"
   | "submit"
   | "dismiss"
+  | "terminal"
+  | "pointer"
   | undefined {
   switch (name.toLowerCase()) {
     case "onclick":
@@ -294,9 +381,57 @@ function eventName(name: string):
     case "ondismiss":
     case "on:dismiss":
       return "dismiss";
+    case "onstatus":
+    case "onterminal":
+    case "on:terminal":
+      return "terminal";
+    case "onpointer":
+    case "on:pointer":
+      return "pointer";
     default:
       return undefined;
   }
+}
+
+function encodeTerminalArguments(value: unknown): string {
+  if (
+    !Array.isArray(value) ||
+    value.some((argument) => typeof argument !== "string")
+  ) {
+    throw new TypeError(
+      "QuickGUI terminal arguments must be an array of strings",
+    );
+  }
+  return JSON.stringify(value);
+}
+
+function encodeTerminalEnvironment(value: unknown): string {
+  if (
+    !isRecord(value) ||
+    Object.entries(value).some(
+      ([key, item]) => key.length === 0 || typeof item !== "string",
+    )
+  ) {
+    throw new TypeError(
+      "QuickGUI terminal environment must contain string keys and values",
+    );
+  }
+  return JSON.stringify(value);
+}
+
+function encodeTerminalPalette(value: unknown): string {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 16 ||
+    value.some(
+      (color) => typeof color !== "string" && typeof color !== "number",
+    )
+  ) {
+    throw new TypeError(
+      "QuickGUI terminalPalette must contain exactly 16 colors",
+    );
+  }
+  return JSON.stringify(value.map((color) => parseColor(color)));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -316,13 +451,16 @@ const universal = createUniversalRenderer<NativeNode>({
         "textarea",
         "markdown",
         "virtual-list",
+        "terminal",
+        "svg",
       ].includes(name)
     ) {
       throw new TypeError(`unknown QuickGUI element <${tag}>`);
     }
     const node = createNativeElement(name);
     if (staticProps) {
-      for (const [name, value] of Object.entries(staticProps)) setProperty(node, name, value);
+      for (const [name, value] of Object.entries(staticProps))
+        setProperty(node, name, value);
     }
     return node;
   },
@@ -390,6 +528,82 @@ export function VirtualList(props: JSX.VirtualListProps): NativeNode {
   return node;
 }
 
+/** Real PTY terminal rendered by QuickGUI core through libghostty-vt. */
+export function Terminal(props: JSX.TerminalProps): NativeNode {
+  const node = universal.createElement("terminal");
+  universal.spread(node, props);
+  return node;
+}
+
+/** Parsed-once retained SVG mask tinted by the inherited `color` style. */
+export function Svg(props: JSX.SvgProps): NativeNode {
+  const node = universal.createElement("svg");
+  universal.spread(node, props);
+  return node;
+}
+
+export type TerminalStatusKind = "starting" | "running" | "exited" | "failed";
+
+export interface TerminalStatusEvent {
+  status: TerminalStatusKind;
+  title: string;
+  workingDirectory: string | null;
+  processId?: number;
+  exitCode?: number | null;
+  signal?: string | null;
+  message?: string;
+  agent?: string;
+  agentStatus?: "idle" | "working" | "blocked";
+  agentProcessId?: number;
+}
+
+export type TerminalPalette = readonly [
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+  number | string,
+];
+
+/** Decode the structured payload delivered to a terminal's `onStatus` listener. */
+export function terminalStatusFromEvent(
+  event: QuickGuiEvent,
+): TerminalStatusEvent {
+  if (!event.value)
+    throw new TypeError("QuickGUI terminal status event has no payload");
+  return JSON.parse(event.value) as TerminalStatusEvent;
+}
+
+export type PointerPhase = "down" | "move" | "up" | "cancel";
+
+export interface CapturedPointerEvent {
+  phase: PointerPhase;
+  position: { x: number; y: number };
+  origin: { x: number; y: number };
+  delta: { x: number; y: number };
+  button: "left" | "right" | "middle" | "back" | "forward" | "other";
+}
+
+/** Decode a Rust-core captured pointer payload. */
+export function capturedPointerFromEvent(
+  event: QuickGuiEvent,
+): CapturedPointerEvent {
+  if (!event.value)
+    throw new TypeError("QuickGUI pointer event has no payload");
+  return JSON.parse(event.value) as CapturedPointerEvent;
+}
+
 export type PopoverOpenChangeReason = "trigger-press" | "dismiss";
 
 export interface PopoverOpenChangeDetails {
@@ -417,7 +631,9 @@ function createPopoverRoot(
   surface: PopoverSurface,
   props: JSX.PopoverRootProps,
 ): NativeNode {
-  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(props.defaultOpen ?? false);
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(
+    props.defaultOpen ?? false,
+  );
   const [anchor, setAnchor] = createSignal<NativeNode>();
   const triggers = new Set<NativeNode>();
   const open = () => props.open ?? uncontrolledOpen();
@@ -483,10 +699,14 @@ export function PopoverTrigger(props: JSX.PopoverTriggerProps): NativeNode {
         context.registerTrigger(node);
       },
       props.ref,
-    ].filter((value): value is (node: NativeNode) => void => typeof value === "function"),
+    ].filter(
+      (value): value is (node: NativeNode) => void =>
+        typeof value === "function",
+    ),
     onClick(event: QuickGuiEvent) {
       props.onClick?.(event);
-      if (!event.defaultPrevented && trigger) context.toggleFromTrigger(trigger, event);
+      if (!event.defaultPrevented && trigger)
+        context.toggleFromTrigger(trigger, event);
     },
   }) as JSX.PopoverTriggerProps;
   const node = universal.createElement("button");
@@ -497,7 +717,10 @@ export function PopoverTrigger(props: JSX.PopoverTriggerProps): NativeNode {
   return node;
 }
 
-function requirePopoverSurface(expected: PopoverSurface, component: string): PopoverContextValue {
+function requirePopoverSurface(
+  expected: PopoverSurface,
+  component: string,
+): PopoverContextValue {
   const context = useContext(PopoverContext);
   if (context.surface !== expected) {
     const root = expected === "popover" ? "Popover.Root" : "SystemPopover.Root";
@@ -511,7 +734,12 @@ function createInWindowPopoverContent(
   context: PopoverContextValue,
   anchor: NativeNode,
 ): NativeNode {
-  const surface = omit(props, "placement", "gap", "viewportMargin") as JSX.NativeProps;
+  const surface = omit(
+    props,
+    "placement",
+    "gap",
+    "viewportMargin",
+  ) as JSX.NativeProps;
   const node = universal.createElement("view");
   const forwarded = universal.mergeProps(surface, {
     anchor,
@@ -557,7 +785,12 @@ function createSystemPopoverContent(
 ): NativeNode {
   const owner = getOwner();
   const placeholder = createNativeSentinel();
-  const surface = omit(props, "placement", "gap", "viewportMargin") as JSX.NativeProps;
+  const surface = omit(
+    props,
+    "placement",
+    "gap",
+    "viewportMargin",
+  ) as JSX.NativeProps;
   let systemWindow: Window | undefined;
   let disposing = false;
 
@@ -609,8 +842,13 @@ function createSystemPopoverContent(
 }
 
 /** Popover content rendered through a separate Solid renderer in a native child window. */
-export function SystemPopoverContent(props: JSX.PopoverContentProps): NativeNode {
-  const context = requirePopoverSurface("system-popover", "SystemPopover.Content");
+export function SystemPopoverContent(
+  props: JSX.PopoverContentProps,
+): NativeNode {
+  const context = requirePopoverSurface(
+    "system-popover",
+    "SystemPopover.Content",
+  );
   return Show({
     keyed: true,
     get when() {
@@ -682,9 +920,24 @@ export namespace JSX {
     flexGrow?: number;
     flexShrink?: number;
     flexBasis?: number | string;
-    alignItems?: "start" | "flex-start" | "center" | "end" | "flex-end" | "baseline" | "stretch";
+    alignItems?:
+      | "start"
+      | "flex-start"
+      | "center"
+      | "end"
+      | "flex-end"
+      | "baseline"
+      | "stretch";
     alignSelf?: Style["alignItems"];
-    justifyContent?: "start" | "flex-start" | "center" | "end" | "flex-end" | "space-between" | "space-around" | "space-evenly";
+    justifyContent?:
+      | "start"
+      | "flex-start"
+      | "center"
+      | "end"
+      | "flex-end"
+      | "space-between"
+      | "space-around"
+      | "space-evenly";
     alignContent?: Style["justifyContent"] | "normal" | "stretch";
     gap?: number | string;
     columnGap?: number | string;
@@ -708,11 +961,17 @@ export namespace JSX {
     background?: number | string;
     backgroundColor?: number | string;
     color?: number | string;
+    hoverBackgroundColor?: number | string;
+    hoverColor?: number | string;
+    activeBackgroundColor?: number | string;
+    activeColor?: number | string;
+    transitionColors?: number;
     opacity?: number;
     borderWidth?: number | string;
     borderColor?: number | string;
     borderRadius?: number | string;
     fontSize?: number | string;
+    fontFamily?: string;
     fontWeight?: number | string;
     lineHeight?: number | string;
     textAlign?: "left" | "center" | "right" | "justify" | "start" | "end";
@@ -750,6 +1009,8 @@ export namespace JSX {
     disabled?: boolean;
     role?: string;
     tabIndex?: number;
+    /** Keep keyboard focus where it is when this element is activated with a pointer. */
+    focusOnPointer?: boolean;
     "aria-label"?: string;
     ariaLabel?: string;
     ref?: ((node: NativeNode) => void) | NativeNode;
@@ -758,6 +1019,8 @@ export namespace JSX {
     onMouseLeave?: EventHandler;
     onPointerEnter?: EventHandler;
     onPointerLeave?: EventHandler;
+    /** Captured pointer stream from press through release/cancel, including outside the element. */
+    onPointer?: EventHandler;
     onInput?: EventHandler;
     onChange?: EventHandler;
     onSubmit?: EventHandler;
@@ -781,6 +1044,29 @@ export namespace JSX {
     overscan?: number;
     listAlignment?: "top" | "bottom";
     followMode?: "normal" | "tail";
+  }
+
+  export interface TerminalProps extends NativeProps {
+    /** Executable to launch. Omit to use the user's default shell. */
+    program?: string;
+    command?: string;
+    arguments?: readonly string[];
+    args?: readonly string[];
+    workingDirectory?: string;
+    cwd?: string;
+    environment?: Readonly<Record<string, string>>;
+    env?: Readonly<Record<string, string>>;
+    scrollback?: number;
+    /** Standard black-through-white colors followed by their eight bright variants. */
+    terminalPalette?: TerminalPalette;
+    terminalCursorColor?: number | string;
+    onStatus?: EventHandler;
+    onTerminal?: EventHandler;
+  }
+
+  export interface SvgProps extends NativeProps {
+    /** Complete inline SVG document. External resources are ignored by the Rust core. */
+    source: string;
   }
 
   export interface PopoverRootProps {
@@ -811,5 +1097,7 @@ export namespace JSX {
     textarea: InputProps;
     markdown: MarkdownProps;
     "virtual-list": VirtualListProps;
+    terminal: TerminalProps;
+    svg: SvgProps;
   }
 }

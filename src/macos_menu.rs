@@ -249,9 +249,7 @@ impl MacMenuHost {
                 item.setKeyEquivalent(&NSString::from_str(&key));
             }
             item.setKeyEquivalentModifierMask(modifiers);
-            application_claims_close |= !state.disabled
-                && (state.action_available || native_available)
-                && state.shortcut.as_ref().is_some_and(is_close_shortcut);
+            application_claims_close |= menu_item_claims_close(state, os_action, native_available);
         }
         unsafe {
             self.fallback_close_item.setHidden(application_claims_close);
@@ -290,6 +288,17 @@ fn default_os_action_key_equivalent(action: OsAction) -> Option<(String, NSEvent
         | OsAction::BringAllToFront
         | OsAction::ShowHelp => None,
     }
+}
+
+fn menu_item_claims_close(
+    state: &MacMenuItemState,
+    os_action: Option<OsAction>,
+    native_available: bool,
+) -> bool {
+    !state.disabled
+        && (state.action_available || native_available)
+        && (os_action == Some(OsAction::CloseWindow)
+            || state.shortcut.as_ref().is_some_and(is_close_shortcut))
 }
 
 fn is_close_shortcut(stroke: &Keystroke) -> bool {
@@ -735,5 +744,27 @@ mod tests {
             &Keystroke::parse("cmd-shift-w").unwrap()
         ));
         assert!(!is_close_shortcut(&Keystroke::parse("ctrl-w").unwrap()));
+
+        let available = MacMenuItemState {
+            disabled: false,
+            action_available: true,
+            checked: false,
+            shortcut: None,
+        };
+        assert!(menu_item_claims_close(
+            &available,
+            Some(OsAction::CloseWindow),
+            false,
+        ));
+
+        let disabled = MacMenuItemState {
+            disabled: true,
+            ..available
+        };
+        assert!(!menu_item_claims_close(
+            &disabled,
+            Some(OsAction::CloseWindow),
+            true,
+        ));
     }
 }

@@ -3696,8 +3696,12 @@ impl UiTree {
             .filter(|region| region.clickable)
             .map(|region| region.id);
         if pressed {
-            let focus_changed = if static_position.is_some() {
-                self.blur()
+            let focus_changed = if let Some(position) = static_position {
+                if let Some(id) = self.nearest_focusable_ancestor(position.id) {
+                    self.focus_from_pointer(id)
+                } else {
+                    self.blur()
+                }
             } else {
                 region
                     .filter(|region| region.focusable)
@@ -4882,6 +4886,18 @@ impl UiTree {
         self.focusable_ids.contains(&id)
     }
 
+    fn nearest_focusable_ancestor(&self, id: ElementId) -> Option<ElementId> {
+        let mut current = Some(id);
+        for _ in 0..MAX_FOCUSED_EVENT_PATH {
+            let id = current?;
+            if self.focusable_ids.contains(&id) {
+                return Some(id);
+            }
+            current = self.parents.get(&id).copied();
+        }
+        None
+    }
+
     /// Return the retained root-to-focus element path used for scoped command dispatch.
     pub fn focus_path(&self) -> Vec<ElementId> {
         let Some(root) = self.root.as_ref().map(|root| root.runtime_id) else {
@@ -5743,6 +5759,7 @@ fn sanitize_detached_element(element: &mut Element, preserve_motion: bool) {
     element.user_select = UserSelect::None;
     element.resolved_user_select = false;
     element.focusable = false;
+    element.focus_on_pointer = true;
     element.focus_trap = false;
     element.key_context = None;
     element.auto_focus = false;
@@ -6922,7 +6939,9 @@ fn paint_element(
             pointer_listener: element.pointer_listener && !element.accessibility.disabled,
             drag_source: element.drag_source && !element.accessibility.disabled,
             drop_target: element.drop_target && !element.accessibility.disabled,
-            focusable: element.focusable && !element.accessibility.disabled,
+            focusable: element.focusable
+                && element.focus_on_pointer
+                && !element.accessibility.disabled,
             cursor_style,
             cursor_states: CursorStateStyles {
                 hover: element.hover.cursor_style,
@@ -11808,6 +11827,80 @@ mod tests {
 
         assert!(tree.focus_from_pointer(id));
         assert!(tree.next_tooltip_deadline().is_none());
+    }
+
+    #[test]
+    fn selectable_text_focuses_its_control_ancestor_without_losing_selection() {
+        let terminal_id = ElementId::new(93);
+        let text_id = ElementId::new(94);
+        let root = div()
+            .size(240.0, 40.0)
+            .track_focus(FocusHandle::new(terminal_id))
+            .child(text("shell output").id(text_id).selectable());
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(240.0, 40.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let bounds = tree
+            .element_bounds(text_id)
+            .expect("selectable text bounds");
+
+        let result = tree.pointer_button(
+            Some(Point::new(bounds.x + 2.0, bounds.y + 2.0)),
+            true,
+            false,
+            Instant::now(),
+            &mut renderer,
+        );
+
+        assert!(result.repaint);
+        assert_eq!(tree.focused(), Some(terminal_id));
+        assert!(tree.static_text_selection.is_some());
+    }
+
+    #[test]
+    fn pointer_focus_can_be_disabled_without_disabling_button_activation_or_keyboard_focus() {
+        let terminal_id = ElementId::new(95);
+        let sidebar_button_id = ElementId::new(96);
+        let root = div()
+            .size(200.0, 40.0)
+            .child(
+                button()
+                    .id(terminal_id)
+                    .absolute()
+                    .top(0.0)
+                    .left(0.0)
+                    .size(100.0, 40.0)
+                    .clickable(),
+            )
+            .child(
+                button()
+                    .id(sidebar_button_id)
+                    .absolute()
+                    .top(0.0)
+                    .left(100.0)
+                    .size(100.0, 40.0)
+                    .focus_on_pointer(false)
+                    .clickable(),
+            );
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        tree.set_root(root, Size::new(200.0, 40.0), 1.0, &mut renderer)
+            .unwrap();
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        assert!(tree.focus(terminal_id));
+
+        let point = Point::new(150.0, 20.0);
+        tree.pointer_button(Some(point), true, false, Instant::now(), &mut renderer);
+        assert_eq!(tree.focused(), Some(terminal_id));
+        let release = tree.pointer_button(Some(point), false, false, Instant::now(), &mut renderer);
+        assert_eq!(release.clicked, Some(sidebar_button_id));
+
+        assert!(tree.focus(sidebar_button_id));
+        assert_eq!(tree.focused(), Some(sidebar_button_id));
     }
 
     #[test]

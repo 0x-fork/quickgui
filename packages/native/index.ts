@@ -1,4 +1,5 @@
 import * as binding from "./binding.js";
+import { Buffer } from "node:buffer";
 import {
   type AlertDialogOptions,
   type OpenDialogOptions,
@@ -56,7 +57,7 @@ import {
   urlsFromArguments,
 } from "./single-instance.ts";
 
-export { PropertyCode } from "./protocol.ts";
+export { NativeNodeTag, PropertyCode } from "./protocol.ts";
 export {
   NativeNode,
   QuickGuiEvent,
@@ -317,6 +318,8 @@ export interface AppOptions {
   identifier?: string;
   paths?: AppPathOverrides;
   quitMode?: QuitMode;
+  /** OpenType font files registered by the Rust core before the first window is created. */
+  fonts?: readonly Uint8Array[];
 }
 
 export interface RelaunchOptions {
@@ -408,6 +411,9 @@ function nativeAppOptions(options: AppOptions): binding.NativeAppOptions {
   if (options.version !== undefined) native.version = options.version;
   if (options.identifier !== undefined) native.identifier = options.identifier;
   if (options.quitMode !== undefined) native.quitMode = options.quitMode;
+  if (options.fonts !== undefined) {
+    native.fontData = options.fonts.map((font) => Buffer.from(font));
+  }
   const paths = options.paths;
   if (paths?.resourceDir !== undefined) native.resourceDir = paths.resourceDir;
   if (paths?.configDir !== undefined) native.configDir = paths.configDir;

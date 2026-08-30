@@ -168,6 +168,8 @@ export interface NativeAppOptions {
   tempDir?: string
   /** `default`, `last-window-closed`, or `explicit`. */
   quitMode?: string
+  /** OpenType font files embedded by the JavaScript host and registered by the Rust core. */
+  fontData?: Array<Buffer>
 }
 
 export interface NativeAppPaths {

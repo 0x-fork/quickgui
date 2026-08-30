@@ -25,11 +25,13 @@ describe("binary mutation protocol", () => {
 
   test("rejects non-finite numeric properties", () => {
     const batch = new MutationBatch();
-    expect(() => batch.setProperty(1, PropertyCode.Width, Number.NaN)).toThrow("finite");
+    expect(() => batch.setProperty(1, PropertyCode.Width, Number.NaN)).toThrow(
+      "finite",
+    );
   });
 
-  test("encodes native controls and retained popovers under protocol v5", () => {
-    expect(PROTOCOL_VERSION).toBe(5);
+  test("encodes native controls, retained states, popovers, terminals, SVGs, and pointer capture under protocol v11", () => {
+    expect(PROTOCOL_VERSION).toBe(11);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -48,7 +50,34 @@ describe("binary mutation protocol", () => {
     batch.setProperty(4, PropertyCode.DismissOnEscape, false);
     batch.setProperty(4, PropertyCode.DismissOnPointerOutside, true);
     batch.setProperty(4, PropertyCode.DismissListener, true);
-    expect(batch.mutationCount).toBe(17);
+    batch.createElement(5, NativeNodeTag.Terminal);
+    batch.setProperty(5, PropertyCode.TerminalProgram, "/bin/zsh");
+    batch.setProperty(
+      5,
+      PropertyCode.TerminalArguments,
+      JSON.stringify(["-l"]),
+    );
+    batch.setProperty(5, PropertyCode.TerminalWorkingDirectory, "/tmp");
+    batch.setProperty(
+      5,
+      PropertyCode.TerminalEnvironment,
+      JSON.stringify({ TERM: "xterm-256color" }),
+    );
+    batch.setProperty(5, PropertyCode.TerminalScrollback, 20_000);
+    batch.setProperty(5, PropertyCode.TerminalStatusListener, true);
+    batch.setProperty(5, PropertyCode.FontFamily, "JetBrainsMono Nerd Font Mono");
+    batch.setProperty(5, PropertyCode.TerminalPalette, "[1,2,3]");
+    batch.setProperty(5, PropertyCode.TerminalCursorColor, 0xffda6909, true);
+    batch.setProperty(1, PropertyCode.HoverBackgroundColor, 0xff332211, true);
+    batch.setProperty(1, PropertyCode.HoverColor, 0xffeeeeee, true);
+    batch.setProperty(1, PropertyCode.ActiveBackgroundColor, 0xff221100, true);
+    batch.setProperty(1, PropertyCode.ActiveColor, 0xffffffff, true);
+    batch.setProperty(1, PropertyCode.TransitionColors, 90);
+    batch.setProperty(1, PropertyCode.PointerListener, true);
+    batch.setProperty(1, PropertyCode.FocusOnPointer, false);
+    batch.createElement(6, NativeNodeTag.Svg);
+    batch.setProperty(6, PropertyCode.Value, "<svg/>");
+    expect(batch.mutationCount).toBe(36);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 });

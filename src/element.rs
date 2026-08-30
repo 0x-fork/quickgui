@@ -1236,6 +1236,7 @@ pub struct Element {
     pub(crate) user_select: UserSelect,
     pub(crate) resolved_user_select: bool,
     pub(crate) focusable: bool,
+    pub(crate) focus_on_pointer: bool,
     pub(crate) focus_trap: bool,
     pub(crate) key_context: Option<KeyContext>,
     pub(crate) tab_index: i16,
@@ -1460,6 +1461,7 @@ impl Element {
             user_select: UserSelect::Auto,
             resolved_user_select: false,
             focusable: false,
+            focus_on_pointer: true,
             focus_trap: false,
             key_context: None,
             tab_index: 0,
@@ -3456,6 +3458,16 @@ impl Element {
     /// Include this element in the window's focus path and Tab traversal.
     pub fn focusable(mut self) -> Self {
         self.focusable = true;
+        self
+    }
+
+    /// Control whether a pointer press moves keyboard focus to this focusable element.
+    ///
+    /// Disabling pointer focus does not remove the element from Tab traversal or accessibility
+    /// focus. This is useful for native-style sidebars and toolbars whose controls should activate
+    /// without taking keyboard ownership from an editor or terminal.
+    pub fn focus_on_pointer(mut self, focus: bool) -> Self {
+        self.focus_on_pointer = focus;
         self
     }
 

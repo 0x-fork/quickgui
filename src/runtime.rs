@@ -150,6 +150,7 @@ use crate::macos_menu::{MacMenuHost, MacMenuItemState};
 
 pub(crate) enum RuntimeEvent {
     ExternalCommandsReady,
+    InvalidateWindow(WindowHandle),
     Accessibility(AccessibilityEvent),
     ImageLoaded(WindowHandle, ImageLoadCompletion),
     BackgroundCompleted(BackgroundCompletion),
@@ -1381,6 +1382,7 @@ trait AnyView {
         background_tasks: Option<&BackgroundTaskPoolHandle>,
         foreground_tasks: &ForegroundTaskSpawner,
         globals: &GlobalStore,
+        event_proxy: Option<&EventLoopProxy<RuntimeEvent>>,
     ) -> (Element, bool, Option<Instant>);
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -1416,6 +1418,7 @@ impl<V: View> AnyView for ViewAdapter<V> {
         background_tasks: Option<&BackgroundTaskPoolHandle>,
         foreground_tasks: &ForegroundTaskSpawner,
         globals: &GlobalStore,
+        event_proxy: Option<&EventLoopProxy<RuntimeEvent>>,
     ) -> (Element, bool, Option<Instant>) {
         let mut cx = ViewContext::<V> {
             size,
@@ -1438,6 +1441,7 @@ impl<V: View> AnyView for ViewAdapter<V> {
             background_tasks,
             foreground_tasks,
             globals,
+            event_proxy,
             marker: PhantomData,
         };
         cx.listeners.clear();
@@ -1637,6 +1641,7 @@ pub struct ViewContext<'a, V> {
     background_tasks: Option<&'a BackgroundTaskPoolHandle>,
     foreground_tasks: &'a ForegroundTaskSpawner,
     globals: &'a GlobalStore,
+    event_proxy: Option<&'a EventLoopProxy<RuntimeEvent>>,
     marker: PhantomData<fn(&mut V)>,
 }
 
@@ -1657,6 +1662,17 @@ impl<V: 'static> ViewContext<'_, V> {
 
     pub fn window_handle(&self) -> WindowHandle {
         self.window
+    }
+
+    /// Create a thread-safe handle that invalidates this window from background work.
+    ///
+    /// The returned handle wakes the native event loop and marks only this view dirty. It is
+    /// suitable for long-lived producers such as terminal sessions, file watchers, or streaming
+    /// transports that should leave the application asleep while no updates are available.
+    pub fn window_invalidator(&self) -> WindowInvalidator {
+        WindowInvalidator {
+            runtime: self.event_proxy.map(|proxy| (proxy.clone(), self.window)),
+        }
     }
 
     /// Read retained native window state and observe future state changes for this render branch.
@@ -2777,6 +2793,10 @@ struct ListenerRegistry {
 }
 
 impl ListenerRegistry {
+    fn requires_window_state_rebuild(&self, state_changed: bool) -> bool {
+        state_changed && self.observes_window_state
+    }
+
     fn push_mouse_listener(&mut self, callback: MouseListenerCallback) -> MouseListenerKey {
         assert!(
             self.mouse_listeners.len() < MAX_MOUSE_LISTENERS_PER_WINDOW,
@@ -3424,6 +3444,26 @@ impl AppRunnerWaker {
         self.proxy
             .send_event(RuntimeEvent::ExternalCommandsReady)
             .is_ok()
+    }
+}
+
+/// Thread-safe invalidation handle for one retained window.
+///
+/// Clones can be moved into background threads. Calling [`Self::invalidate`] is coalesced by the
+/// window scheduler, so a burst of updates results in at most one pending redraw.
+#[derive(Clone)]
+pub struct WindowInvalidator {
+    runtime: Option<(EventLoopProxy<RuntimeEvent>, WindowHandle)>,
+}
+
+impl WindowInvalidator {
+    /// Wake the application and rebuild this window, returning `false` after the event loop closes.
+    pub fn invalidate(&self) -> bool {
+        self.runtime.as_ref().is_some_and(|(proxy, window)| {
+            proxy
+                .send_event(RuntimeEvent::InvalidateWindow(*window))
+                .is_ok()
+        })
     }
 }
 
@@ -4500,14 +4540,14 @@ impl Runtime {
             window.pending_focus = None;
             if changed {
                 self.pending_input = None;
-                #[cfg(target_os = "macos")]
-                if let Some(host) = &window.native_host {
-                    host.focus_framework();
-                }
-                window.view_dirty = true;
-                if window.visible && window.scheduler.invalidate() {
-                    window.window.request_redraw();
-                }
+            }
+            #[cfg(target_os = "macos")]
+            if let Some(host) = &window.native_host {
+                host.focus_framework();
+            }
+            window.view_dirty = true;
+            if window.visible && window.scheduler.invalidate() {
+                window.window.request_redraw();
             }
             return true;
         }
@@ -4525,14 +4565,14 @@ impl Runtime {
         entry.state.pending_focus = None;
         if changed {
             entry.pending_input = None;
-            #[cfg(target_os = "macos")]
-            if let Some(host) = &entry.state.native_host {
-                host.focus_framework();
-            }
-            entry.state.view_dirty = true;
-            if entry.state.visible && entry.state.scheduler.invalidate() {
-                entry.state.window.request_redraw();
-            }
+        }
+        #[cfg(target_os = "macos")]
+        if let Some(host) = &entry.state.native_host {
+            host.focus_framework();
+        }
+        entry.state.view_dirty = true;
+        if entry.state.visible && entry.state.scheduler.invalidate() {
+            entry.state.window.request_redraw();
         }
         true
     }
@@ -6558,6 +6598,8 @@ impl Runtime {
         if let Some(state) = &mut self.window {
             let previous_focus = state.ui.focused();
             let mut deferred_focus = false;
+            let selection_changed =
+                cx.clear_text_selection && state.ui.clear_static_text_selection();
             if let Some(request) = cx.focus {
                 match request {
                     Some(id) => {
@@ -6593,7 +6635,11 @@ impl Runtime {
             if cx.invalidate {
                 state.view_dirty = true;
             }
-            if (force_redraw || cx.invalidate || focus_changed || deferred_focus)
+            if (force_redraw
+                || cx.invalidate
+                || focus_changed
+                || deferred_focus
+                || selection_changed)
                 && state.scheduler.invalidate()
             {
                 state.window.request_redraw();
@@ -8860,6 +8906,7 @@ impl Runtime {
             KeyListenerEvent::Down(KeyDownEvent {
                 key: key.clone(),
                 key_char: key_char.clone(),
+                text: text.clone(),
                 modifiers,
                 repeat,
             }),
@@ -9094,6 +9141,7 @@ impl Runtime {
         let app_paths = self.app_paths.clone();
         let system_info = self.system_info.clone();
         let system_preferences = self.system_preferences;
+        let event_proxy = self.event_proxy.clone();
         let Some(state) = &mut self.window else {
             return;
         };
@@ -9176,6 +9224,7 @@ impl Runtime {
                 Some(&background_tasks),
                 &foreground_tasks,
                 &globals,
+                Some(&event_proxy),
             );
             request_animation_frame = requested;
             state.view_deadline = repaint_deadline;
@@ -11465,6 +11514,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                                     KeyListenerEvent::Down(KeyDownEvent {
                                         key: key.clone(),
                                         key_char: stroke.key_char.clone(),
+                                        text: event.text.as_ref().map(ToString::to_string),
                                         modifiers: stroke.modifiers,
                                         repeat: event.repeat,
                                     }),
@@ -11565,7 +11615,11 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                     .then(|| self.current_handle())
                     .flatten();
                     if let Some(state) = &mut self.window {
+                        let rebuild = state
+                            .listeners
+                            .requires_window_state_rebuild(state.focused != focused);
                         state.focused = focused;
+                        state.view_dirty |= rebuild;
                     }
                     if focused {
                         self.note_window_focused(window_id);
@@ -11669,6 +11723,10 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: RuntimeEvent) {
         if matches!(&event, RuntimeEvent::ExternalCommandsReady) {
             self.process_window_commands(event_loop);
+            return;
+        }
+        if let RuntimeEvent::InvalidateWindow(handle) = &event {
+            self.invalidate_external(*handle);
             return;
         }
         if matches!(&event, RuntimeEvent::ForegroundTasksReady) {
@@ -11827,6 +11885,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         let released_image_capacity = matches!(&event, RuntimeEvent::ImageLoaded(_, _));
         let target = match &event {
             RuntimeEvent::ExternalCommandsReady => unreachable!("handled before target routing"),
+            RuntimeEvent::InvalidateWindow(_) => unreachable!("handled before target routing"),
             RuntimeEvent::Accessibility(event) => Some(event.window_id),
             RuntimeEvent::ImageLoaded(handle, _) => self.window_handles.get(handle).copied(),
             RuntimeEvent::BackgroundCompleted(completion) => {
@@ -11911,6 +11970,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
         }
         (|| match event {
             RuntimeEvent::ExternalCommandsReady => unreachable!("handled before window routing"),
+            RuntimeEvent::InvalidateWindow(_) => unreachable!("handled before window routing"),
             RuntimeEvent::ImageLoaded(_, completion) => {
                 let Some(state) = &mut self.window else {
                     return;
@@ -13244,10 +13304,14 @@ mod tests {
             ..ListenerRegistry::default()
         };
 
+        assert!(listeners.requires_window_state_rebuild(true));
+        assert!(!listeners.requires_window_state_rebuild(false));
+
         listeners.clear();
 
         assert!(!listeners.observes_window_state);
         assert!(!listeners.observes_viewport);
+        assert!(!listeners.requires_window_state_rebuild(true));
     }
 
     #[test]

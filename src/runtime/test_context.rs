@@ -1978,6 +1978,10 @@ impl TestAppContext {
         let mut immediate = Vec::new();
         if let Some(origin) = origin {
             let previous = self.window(origin)?.ui.focused();
+            if cx.clear_text_selection && self.window_mut(origin)?.ui.clear_static_text_selection()
+            {
+                self.window_mut(origin)?.dirty = true;
+            }
             if let Some(request) = cx.focus {
                 match request {
                     Some(element) if self.window(origin)?.ui.is_focusable(element) => {
@@ -2583,6 +2587,7 @@ impl TestAppContext {
                     None,
                     &foreground_tasks,
                     &globals,
+                    None,
                 )
             };
             let previous_focus = self.window(window)?.ui.focused();
@@ -2807,6 +2812,11 @@ impl TestAppContext {
             KeyListenerEvent::Down(KeyDownEvent {
                 key: stroke.key.clone(),
                 key_char: stroke.key_char.clone(),
+                text: match &stroke.key {
+                    Key::Character(value) => Some(value.clone()),
+                    Key::Space => Some(" ".to_owned()),
+                    _ => None,
+                },
                 modifiers,
                 repeat: false,
             }),

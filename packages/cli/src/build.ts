@@ -432,6 +432,9 @@ async function compileExecutable(
     const workerEntrypoint = resolve(stagingRoot, "quickgui-app-worker.ts");
     const nativeHostModule = Bun.resolveSync("@quickgui/native/host", import.meta.dir);
     const nativeApplicationModule = Bun.resolveSync("@quickgui/native", import.meta.dir);
+    const embeddedFonts = config.fonts.map((font) =>
+      readFileSync(font).toString("base64"),
+    );
     writeFileSync(
       hostEntrypoint,
       `import { runApplicationWorker } from ${JSON.stringify(nativeHostModule)};\n` +
@@ -440,13 +443,20 @@ async function compileExecutable(
     );
     writeFileSync(
       workerEntrypoint,
-      `postMessage("quickgui:worker-ready");\n` +
+      `import { Buffer } from "node:buffer";\n` +
+        `postMessage("quickgui:worker-ready");\n` +
         `import { reportWorkerFailure } from ${JSON.stringify(nativeHostModule)};\n` +
         `(globalThis as any).__QUICKGUI_APP_OPTIONS__ = ${JSON.stringify({
           name: config.name,
           version: config.version,
           identifier: config.identifier,
-        })};\n` +
+        }).slice(0, -1)}${
+          embeddedFonts.length > 0
+            ? `,"fonts":[${embeddedFonts
+                .map((font) => `Buffer.from(${JSON.stringify(font)},"base64")`)
+                .join(",")}]}`
+            : "}"
+        };\n` +
         `try {\n  await import(${JSON.stringify(config.entry)});\n` +
         `  const { app } = await import(${JSON.stringify(nativeApplicationModule)});\n` +
         `  await app.run();\n} catch (error) {\n` +
@@ -618,6 +628,11 @@ function validateInputs(
   }
   for (const resource of config.resources) {
     if (!existsSync(resource)) throw new CliError(`Resource not found: ${resource}`);
+  }
+  for (const font of config.fonts) {
+    if (!existsSync(font) || !statSync(font).isFile()) {
+      throw new CliError(`Font file not found: ${font}`);
+    }
   }
   if (platform === "darwin") {
     if (config.macos.icon && !existsSync(config.macos.icon)) {

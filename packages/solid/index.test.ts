@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { app, PropertyCode, QuickGuiEvent, Window } from "@quickgui/native";
+import {
+  app,
+  NativeNodeTag,
+  PropertyCode,
+  QuickGuiEvent,
+  Window,
+} from "@quickgui/native";
 import { createSignal, onCleanup } from "solid-js";
 import * as solid from "./index.ts";
 import {
@@ -8,6 +14,8 @@ import {
   Markdown,
   Popover,
   SystemPopover,
+  Svg,
+  Terminal,
   Text,
   View,
   VirtualList,
@@ -15,8 +23,10 @@ import {
   createElement,
   createRenderer,
   createTextNode,
+  capturedPointerFromEvent,
   insertNode,
   setProp,
+  terminalStatusFromEvent,
 } from "./index.ts";
 
 describe("Solid universal host", () => {
@@ -43,6 +53,31 @@ describe("Solid universal host", () => {
     expect(parent.children).toEqual([child]);
     expect(child.parent).toBe(parent);
     expect(parent.properties.size).toBe(2);
+  });
+
+  test("projects retained hover and pressed styles into the native core", () => {
+    const button = createComponent(Button, {
+      style: {
+        hoverBackgroundColor: "#222233",
+        hoverColor: "#ffffff",
+        activeBackgroundColor: "#111122",
+        activeColor: "#ddddff",
+        transitionColors: 90,
+      },
+      children: "New agent",
+    });
+
+    expect(button.properties.get(PropertyCode.HoverBackgroundColor)).toBeTypeOf(
+      "number",
+    );
+    expect(button.properties.get(PropertyCode.HoverColor)).toBeTypeOf("number");
+    expect(
+      button.properties.get(PropertyCode.ActiveBackgroundColor),
+    ).toBeTypeOf("number");
+    expect(button.properties.get(PropertyCode.ActiveColor)).toBeTypeOf(
+      "number",
+    );
+    expect(button.properties.get(PropertyCode.TransitionColors)).toBe(90);
   });
 
   test("flushes Solid 2 signal writes at the native event boundary", async () => {
@@ -84,7 +119,9 @@ describe("Solid universal host", () => {
 
     expect(count.children[0]?.text).toBe("Count: 1");
     expect(eventWindow).toBe(window);
-    expect(() => Window.getCurrentWindow()).toThrow("while rendering or handling a window event");
+    expect(() => Window.getCurrentWindow()).toThrow(
+      "while rendering or handling a window event",
+    );
     window.close();
   });
 
@@ -162,14 +199,21 @@ describe("Solid universal host", () => {
     expect(input.properties.get(PropertyCode.Value)).toBe("hello");
     expect(input.properties.get(PropertyCode.InputListener)).toBe(true);
     expect(input.properties.get(PropertyCode.SubmitListener)).toBe(true);
-    input.listeners.get("input")!(new QuickGuiEvent("input", input, "hello world"));
+    input.listeners.get("input")!(
+      new QuickGuiEvent("input", input, "hello world"),
+    );
     expect(value).toBe("hello world");
-    input.listeners.get("submit")!(new QuickGuiEvent("submit", input, "hello world"));
+    input.listeners.get("submit")!(
+      new QuickGuiEvent("submit", input, "hello world"),
+    );
     expect(submitted).toBe("hello world");
   });
 
   test("maps web-style password input types without replacing the controlled value", () => {
-    const input = createComponent(Input, { type: "password", value: "sk-secret" });
+    const input = createComponent(Input, {
+      type: "password",
+      value: "sk-secret",
+    });
 
     expect(input.properties.get(PropertyCode.Password)).toBe(true);
     expect(input.properties.get(PropertyCode.Value)).toBe("sk-secret");
@@ -177,6 +221,121 @@ describe("Solid universal host", () => {
     setProp(input, "type", "text", "password");
     expect(input.properties.get(PropertyCode.Password)).toBe(false);
     expect(input.properties.get(PropertyCode.Value)).toBe("sk-secret");
+  });
+
+  test("can preserve keyboard focus when a button is pressed with a pointer", () => {
+    const button = createComponent(Button, { focusOnPointer: false });
+
+    expect(button.properties.get(PropertyCode.FocusOnPointer)).toBe(false);
+  });
+
+  test("creates retained SVG nodes whose source is parsed by the Rust core", () => {
+    const source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" />';
+    const icon = createComponent(Svg, {
+      source,
+      style: { width: 16, height: 16, color: "#ffffff" },
+    });
+
+    expect(icon.tag).toBe(NativeNodeTag.Svg);
+    expect(icon.properties.get(PropertyCode.Value)).toBe(source);
+    expect(icon.properties.get(PropertyCode.Width)).toBe(16);
+    expect(icon.properties.get(PropertyCode.Height)).toBe(16);
+    expect(icon.properties.get(PropertyCode.Color)).toBeTypeOf("number");
+  });
+
+  test("declaratively configures a core-owned PTY terminal and decodes status events", () => {
+    let status = "";
+    const terminal = createComponent(Terminal, {
+      program: "/bin/zsh",
+      args: ["-l"],
+      cwd: "/tmp",
+      env: { QUICKGUI_TERMINAL_TEST: "1" },
+      scrollback: 20_000,
+      terminalCursorColor: "#0969da",
+      terminalPalette: [
+        "#24292f",
+        "#cf222e",
+        "#116329",
+        "#4d2d00",
+        "#0969da",
+        "#8250df",
+        "#1b7c83",
+        "#6e7781",
+        "#57606a",
+        "#a40e26",
+        "#1a7f37",
+        "#633c01",
+        "#218bff",
+        "#a475f9",
+        "#3192aa",
+        "#8c959f",
+      ],
+      style: { fontFamily: "JetBrainsMono Nerd Font Mono" },
+      onStatus: (event) => {
+        status = terminalStatusFromEvent(event).status;
+      },
+    });
+
+    expect(terminal.tag).toBe(NativeNodeTag.Terminal);
+    expect(terminal.properties.get(PropertyCode.TerminalProgram)).toBe(
+      "/bin/zsh",
+    );
+    expect(terminal.properties.get(PropertyCode.TerminalArguments)).toBe(
+      '["-l"]',
+    );
+    expect(terminal.properties.get(PropertyCode.TerminalWorkingDirectory)).toBe(
+      "/tmp",
+    );
+    expect(terminal.properties.get(PropertyCode.TerminalEnvironment)).toBe(
+      '{"QUICKGUI_TERMINAL_TEST":"1"}',
+    );
+    expect(terminal.properties.get(PropertyCode.TerminalScrollback)).toBe(
+      20_000,
+    );
+    expect(terminal.properties.get(PropertyCode.TerminalStatusListener)).toBe(
+      true,
+    );
+    expect(terminal.properties.get(PropertyCode.FontFamily)).toBe(
+      "JetBrainsMono Nerd Font Mono",
+    );
+    expect(terminal.properties.get(PropertyCode.TerminalCursorColor)).toBeTypeOf(
+      "number",
+    );
+    expect(
+      JSON.parse(
+        terminal.properties.get(PropertyCode.TerminalPalette) as string,
+      ),
+    ).toHaveLength(16);
+
+    terminal.listeners.get("terminal")!(
+      new QuickGuiEvent(
+        "terminal",
+        terminal,
+        '{"status":"running","title":"zsh","workingDirectory":"/tmp","processId":42}',
+      ),
+    );
+    expect(status).toBe("running");
+  });
+
+  test("bridges the Rust-core captured pointer stream", () => {
+    let delta = 0;
+    const divider = createComponent(View, {
+      onPointer: (event) => {
+        delta =
+          capturedPointerFromEvent(event).position.x -
+          capturedPointerFromEvent(event).origin.x;
+      },
+    });
+
+    expect(divider.properties.get(PropertyCode.PointerListener)).toBe(true);
+    divider.listeners.get("pointer")!(
+      new QuickGuiEvent(
+        "pointer",
+        divider,
+        '{"phase":"move","position":{"x":310,"y":40},"origin":{"x":250,"y":40},"delta":{"x":4,"y":0},"button":"left"}',
+      ),
+    );
+    expect(delta).toBe(60);
   });
 
   test("retains Markdown source and streaming presentation properties", () => {
@@ -188,7 +347,9 @@ describe("Solid universal host", () => {
 
     expect(markdown.properties.get(PropertyCode.Value)).toBe("# Hello");
     expect(markdown.properties.get(PropertyCode.Streaming)).toBe(true);
-    expect(markdown.properties.get(PropertyCode.MarkdownLinkColor)).toBeTypeOf("number");
+    expect(markdown.properties.get(PropertyCode.MarkdownLinkColor)).toBeTypeOf(
+      "number",
+    );
   });
 
   test("creates unstyled variable lists with native windowing properties", () => {
@@ -250,12 +411,18 @@ describe("Solid universal host", () => {
 
     const popover = window.root.children[1]!;
     expect(open()).toBe(true);
-    expect(popover.properties.get(PropertyCode.AnchorTarget)).toBe(String(trigger.id));
-    expect(popover.properties.get(PropertyCode.AnchorPlacement)).toBe("bottom-end");
+    expect(popover.properties.get(PropertyCode.AnchorTarget)).toBe(
+      String(trigger.id),
+    );
+    expect(popover.properties.get(PropertyCode.AnchorPlacement)).toBe(
+      "bottom-end",
+    );
     expect(popover.properties.get(PropertyCode.AnchorGap)).toBe(8);
     expect(popover.properties.get(PropertyCode.ViewportMargin)).toBe(12);
     expect(popover.properties.get(PropertyCode.DismissOnEscape)).toBe(false);
-    expect(popover.properties.get(PropertyCode.DismissOnPointerOutside)).toBe(true);
+    expect(popover.properties.get(PropertyCode.DismissOnPointerOutside)).toBe(
+      true,
+    );
     expect(popover.properties.get(PropertyCode.DismissListener)).toBe(true);
     expect(popover.children[0]?.children[0]?.text).toBe("Popover");
     expect(changes).toEqual([{ open: true, reason: "trigger-press" }]);
@@ -313,7 +480,9 @@ describe("Solid universal host", () => {
 
     const trigger = owner.root.children[0]!;
     owner._focusNode = () => {
-      throw new Error("SystemPopover focus restoration must stay in the Rust core");
+      throw new Error(
+        "SystemPopover focus restoration must stay in the Rust core",
+      );
     };
     expect(trigger.materialized).toBe(true);
     expect(trigger.host).toBe(owner);
@@ -323,7 +492,9 @@ describe("Solid universal host", () => {
     owner._dispatchEvent("click", trigger.id);
     await Promise.resolve();
 
-    const systemWindow = [...app.windows.values()].find((window) => window !== owner);
+    const systemWindow = [...app.windows.values()].find(
+      (window) => window !== owner,
+    );
     expect(open()).toBe(true);
     expect(systemWindow).toBeDefined();
     expect(systemWindow!.root.children).toHaveLength(1);
@@ -347,7 +518,9 @@ describe("Solid universal host", () => {
 
     owner._dispatchEvent("click", trigger.id);
     await Promise.resolve();
-    const reopened = [...app.windows.values()].find((window) => window !== owner);
+    const reopened = [...app.windows.values()].find(
+      (window) => window !== owner,
+    );
     expect(open()).toBe(true);
     expect(reopened).toBeDefined();
 
@@ -362,7 +535,9 @@ describe("Solid universal host", () => {
 
     owner._dispatchEvent("click", trigger.id);
     await Promise.resolve();
-    const ownedPopover = [...app.windows.values()].find((window) => window !== owner);
+    const ownedPopover = [...app.windows.values()].find(
+      (window) => window !== owner,
+    );
     expect(ownedPopover).toBeDefined();
     owner.close();
     expect(ownedPopover!.closed).toBe(true);
