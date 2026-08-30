@@ -1076,12 +1076,19 @@ impl Runtime {
                 if !request.bind_cancellation(self.event_proxy.clone(), owner, id) {
                     return;
                 }
-                let context = MacPlatformDialogContext::new(
+                let context = match MacPlatformDialogContext::new(
                     owner,
                     id,
                     open.clone(),
                     self.event_proxy.clone(),
-                );
+                    native_window.as_ref(),
+                ) {
+                    Ok(context) => context,
+                    Err(error) => {
+                        request.complete_error(PlatformError::Platform(error.into()));
+                        return;
+                    }
+                };
                 let native = match request {
                     PlatformRequest::Prompt {
                         level,

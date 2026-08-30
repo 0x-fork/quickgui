@@ -114,7 +114,11 @@ function TabBar(props: { model: HerdrModel }) {
       </View>
 
       <View style={{ flex: 1, appRegion: "drag" }} />
-      <Button style={styles().agentAction} onClick={model.openAgentSheet}>
+      <Button
+        focusOnPointer={false}
+        style={styles().agentAction}
+        onClick={model.openAgentSheet}
+      >
         <Icon name="plus" size={13} />
         <Text>Agent</Text>
       </Button>
