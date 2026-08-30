@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    App, Color, Element, Event, EventContext, Tab, Tabs, TabsState, View, ViewContext, div, text,
+    App, Color, Element, Event, EventContext, Tab, Tabs, TabsState, Transition, View, ViewContext,
+    div, text,
 };
 
 const COLOR_TRANSITION: Duration = Duration::from_millis(100);
@@ -103,7 +104,7 @@ impl TabsDemo {
             .active(|state| state.bg(palette.pressed))
             .focus(|state| state.border(2.0, palette.focus))
             .disabled_style(|state| state.opacity(0.38))
-            .transition_colors(COLOR_TRANSITION)
+            .transition(Transition::colors(COLOR_TRANSITION))
             .child(text(label).text_sm().font_medium())
             .children(
                 tab.indicator_part(
@@ -144,7 +145,7 @@ impl TabsDemo {
             .active(|state| state.bg(palette.pressed))
             .focus(|state| state.border(2.0, palette.focus))
             .disabled_style(|state| state.opacity(0.38))
-            .transition_colors(COLOR_TRANSITION)
+            .transition(Transition::colors(COLOR_TRANSITION))
             .child(text(label).text_sm().font_medium())
             .children(
                 tab.indicator_part(

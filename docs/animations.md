@@ -37,9 +37,10 @@ let control = button()
 ```
 
 A `Duration` converts directly to an all-property transition, so
-`.transition(Duration::from_millis(140))` is the common form. `transition_colors` is the compact
-color-only helper. The default easing is `ease_in_out`; custom finite easing and `with_max_fps`
-use the same API shape as duration animations.
+`.transition(Duration::from_millis(140))` is the common form. Use
+`.transition(Transition::colors(duration))` to restrict interpolation to background, border, and
+inherited text colors. The default easing is `ease_in_out`; custom finite easing and
+`with_max_fps` use the same API shape as duration animations.
 
 Opacity remains a scalar paint value throughout a transition. It multiplies with ancestor opacity
 and reaches every specialized pipeline and embedded macOS child view, while Glyphon applies it

@@ -25,8 +25,8 @@ use quickgui::{
     ListAlignment, ListState, Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase,
     Popover, QuitMode, Svg, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, TaskbarProgressState,
     Terminal, TerminalOptions, TerminalStatus, TerminalStyle, TerminalTheme, TextAlign,
-    TitleBarStyle, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowHandle,
-    WindowKind, WindowLevel, button, div,
+    TitleBarStyle, Transition, View, ViewContext, WindowAppearance, WindowBackgroundAppearance,
+    WindowHandle, WindowKind, WindowLevel, button, div,
     svg as svg_element, text, text_area, text_input,
 };
 
@@ -155,7 +155,7 @@ mod property {
     pub const HOVER_COLOR: u16 = 95;
     pub const ACTIVE_BACKGROUND_COLOR: u16 = 96;
     pub const ACTIVE_COLOR: u16 = 97;
-    pub const TRANSITION_COLORS: u16 = 98;
+    pub const TRANSITION: u16 = 98;
     pub const POINTER_LISTENER: u16 = 99;
     pub const FOCUS_ON_POINTER: u16 = 100;
     pub const FONT_FAMILY: u16 = 101;
@@ -2091,10 +2091,10 @@ fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
             style
         });
     }
-    if let Some(milliseconds) = node.number(property::TRANSITION_COLORS) {
-        element = element.transition_colors(Duration::from_secs_f32(
+    if let Some(milliseconds) = node.number(property::TRANSITION) {
+        element = element.transition(Transition::colors(Duration::from_secs_f32(
             (milliseconds / 1_000.0).clamp(0.0, 10.0),
-        ));
+        )));
     }
     if let Some(value) = node.number(property::OPACITY) {
         element = element.opacity(value);

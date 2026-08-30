@@ -3123,12 +3123,6 @@ impl Element {
         self
     }
 
-    /// Smooth only background, border, and inherited text-color changes.
-    pub fn transition_colors(mut self, duration: std::time::Duration) -> Self {
-        self.transition = Some(Transition::colors(duration));
-        self
-    }
-
     /// Paint-only styling while this element owns keyboard focus.
     pub fn focus(mut self, style: impl FnOnce(ElementStateStyle) -> ElementStateStyle) -> Self {
         self.focus = style(ElementStateStyle::default());

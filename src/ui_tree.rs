@@ -3077,26 +3077,51 @@ impl UiTree {
         Ok(())
     }
 
+    /// Resolve retained hover against the completed layout before that layout is painted.
+    ///
+    /// A layout-driven target change is discrete: the old element is no longer beneath the
+    /// pointer, so its interaction transition must not be carried to its new screen position.
+    pub(crate) fn refresh_hover_after_layout(
+        &mut self,
+        point: Option<Point>,
+    ) -> Result<bool, UiError> {
+        self.natural_bounds.clear();
+        self.hit_regions.clear();
+        if let Some(root) = &self.root {
+            let viewport = Rect::from_size(self.viewport);
+            collect_layout_bounds(
+                root,
+                &self.taffy,
+                &mut self.scroll_offsets,
+                &mut self.scroll_end_states,
+                &mut self.natural_bounds,
+                Point::ZERO,
+            )?;
+            let mut source_order = 0;
+            collect_layout_hit_regions(
+                root,
+                &self.taffy,
+                &self.natural_bounds,
+                &mut self.scroll_offsets,
+                &self.selectable_text_indices,
+                &mut self.hit_regions,
+                Point::ZERO,
+                viewport,
+                viewport,
+                PaintLayerKey::default(),
+                &mut source_order,
+            )?;
+            self.hit_regions.sort_by_key(|region| region.order);
+        }
+        let changed = self.refresh_paint_hover(point, true);
+        self.refresh_mouse_hover(point);
+        Ok(changed)
+    }
+
     /// Returns true when paint-only hover state changed.
     pub fn pointer_moved(&mut self, point: Point, renderer: &mut impl TextLayoutEngine) -> bool {
         let now = Instant::now();
-        self.hover_scratch.clear();
-        if self.dragging.is_none() && !self.external_drag_active {
-            for region in self.hit_regions.iter().rev() {
-                if region.stateful && region.contains(point) {
-                    self.hover_scratch.insert(region.id);
-                }
-                if (region.blocks_pointer || region.pointer_listener) && region.contains(point) {
-                    break;
-                }
-            }
-        }
-        let hover_changed = self.hover_scratch != self.hovered;
-        if hover_changed {
-            std::mem::swap(&mut self.hovered, &mut self.hover_scratch);
-        }
-        self.hover_scratch.clear();
-        self.refresh_mouse_hover(Some(point));
+        let hover_changed = self.refresh_retained_hover(Some(point));
 
         let mut selection_changed = false;
         if let Some(id) = self.selecting_input
@@ -3179,20 +3204,56 @@ impl UiTree {
     }
 
     pub fn pointer_left(&mut self) -> bool {
-        let hover_changed = if self.hovered.is_empty() {
-            false
-        } else {
-            self.hovered.clear();
-            true
-        };
-        self.refresh_mouse_hover(None);
+        let hover_changed = self.refresh_retained_hover(None);
         hover_changed | self.update_tooltip_hover(None, Instant::now())
     }
 
-    /// Recompute listener hover state without changing selection, scrolling, or tooltip timers.
+    /// Recompute retained paint and listener hover state without changing selection, scrolling, or
+    /// tooltip timers.
     ///
     /// Redraw calls this after layout so moving an element beneath a stationary pointer produces
-    /// the same entry/exit transitions as web hover.
+    /// the same visual and entry/exit transitions as web hover.
+    pub(crate) fn refresh_retained_hover(&mut self, point: Option<Point>) -> bool {
+        let paint_hover_changed = self.refresh_paint_hover(point, false);
+        self.refresh_mouse_hover(point);
+        paint_hover_changed
+    }
+
+    fn refresh_paint_hover(&mut self, point: Option<Point>, snap_transition: bool) -> bool {
+        self.hover_scratch.clear();
+        if self.dragging.is_none()
+            && !self.external_drag_active
+            && let Some(point) = point
+        {
+            for region in self.hit_regions.iter().rev() {
+                if region.stateful && region.contains(point) {
+                    self.hover_scratch.insert(region.id);
+                }
+                if (region.blocks_pointer || region.pointer_listener) && region.contains(point) {
+                    break;
+                }
+            }
+        }
+        let paint_hover_changed = self.hover_scratch != self.hovered;
+        if paint_hover_changed {
+            if snap_transition {
+                for id in &self.hovered {
+                    if !self.hover_scratch.contains(id) {
+                        self.style_transitions.remove(id);
+                    }
+                }
+                for id in &self.hover_scratch {
+                    if !self.hovered.contains(id) {
+                        self.style_transitions.remove(id);
+                    }
+                }
+            }
+            std::mem::swap(&mut self.hovered, &mut self.hover_scratch);
+        }
+        self.hover_scratch.clear();
+        paint_hover_changed
+    }
+
     pub(crate) fn refresh_mouse_hover(&mut self, point: Option<Point>) {
         self.mouse_hover_path_scratch.clear();
         if self.dragging.is_none()
@@ -6693,6 +6754,210 @@ fn collect_inspector_nodes(
     }
 }
 
+fn element_hit_region(
+    element: &Element,
+    bounds: Rect,
+    clip: Rect,
+    order: PaintOrder,
+    selectable_text: bool,
+) -> Option<HitRegion> {
+    if !(element.clickable
+        || element.pointer_listener
+        || (element.mouse_listeners.is_some() && !element.accessibility.disabled)
+        || element.scroll_wheel_listener
+        || element.touch_listener
+        || element.context_menu_listener
+        || element.mouse_pressure_listener
+        || element.pinch_listener
+        || element.rotation_listener
+        || element.smart_magnify_listener
+        || element.tooltip.is_some()
+        || element.drag_source
+        || element.drop_target
+        || element.cursor_style.is_some()
+        || selectable_text
+        || element.focusable
+        || element.blocks_pointer
+        || element.app_region.is_some()
+        || element.has_stateful_paint()
+        || element.has_stateful_cursor())
+    {
+        return None;
+    }
+
+    Some(HitRegion {
+        id: element.runtime_id,
+        bounds: expand_hit_bounds(bounds, element.hit_slop),
+        clip,
+        clickable: element.clickable && !element.accessibility.disabled,
+        pointer_listener: element.pointer_listener && !element.accessibility.disabled,
+        drag_source: element.drag_source && !element.accessibility.disabled,
+        drop_target: element.drop_target && !element.accessibility.disabled,
+        focusable: element.focusable && element.focus_on_pointer && !element.accessibility.disabled,
+        cursor_style: effective_cursor_style(element, selectable_text),
+        cursor_states: CursorStateStyles {
+            hover: element.hover.cursor_style,
+            active: element.active.cursor_style,
+            focus: element.focus.cursor_style,
+            invalid: element
+                .accessibility
+                .invalid
+                .then_some(element.invalid_style.cursor_style)
+                .flatten(),
+            dragging: element.dragging.cursor_style,
+            drag_over: element.drag_over.cursor_style,
+        },
+        stateful: element.has_stateful_paint(),
+        blocks_pointer: element.blocks_pointer,
+        app_region: element.app_region,
+        order,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_layout_hit_regions(
+    element: &Element,
+    taffy: &TaffyTree<MeasureContext>,
+    natural_bounds: &HashMap<ElementId, Rect>,
+    scroll_offsets: &mut HashMap<ElementId, Vector>,
+    selectable_text_indices: &HashMap<ElementId, usize>,
+    hit_regions: &mut Vec<HitRegion>,
+    parent_origin: Point,
+    parent_clip: Rect,
+    viewport: Rect,
+    parent_layer: PaintLayerKey,
+    source_order: &mut usize,
+) -> Result<(), UiError> {
+    if element.is_display_none() || element.is_visibility_hidden() {
+        return Ok(());
+    }
+    let node = element
+        .taffy_node
+        .expect("layout nodes are assigned before hit testing");
+    let layout = taffy.layout(node)?;
+    let natural = Rect::new(
+        parent_origin.x + layout.location.x,
+        parent_origin.y + layout.location.y,
+        layout.size.width,
+        layout.size.height,
+    );
+    let bounds = if let Some(anchor) = element.anchor {
+        let anchor_bounds = match anchor.target {
+            AnchorTarget::Element(target) => {
+                natural_bounds
+                    .get(&target)
+                    .copied()
+                    .ok_or(UiError::MissingAnchor {
+                        element: element.runtime_id,
+                        anchor: target,
+                    })?
+            }
+            AnchorTarget::Point(point) => Rect::new(point.x, point.y, 0.0, 0.0),
+        };
+        place_anchored(
+            anchor_bounds,
+            Size::new(layout.size.width, layout.size.height),
+            viewport,
+            anchor.placement,
+            anchor.gap,
+            anchor.viewport_margin,
+        )
+    } else {
+        natural
+    };
+    let hit_bounds = expand_hit_bounds(bounds, element.hit_slop);
+    let effective_parent_clip = if element.portal {
+        viewport
+    } else {
+        parent_clip
+    };
+    if element.children.is_empty()
+        && effective_parent_clip.intersection(bounds).is_none()
+        && effective_parent_clip.intersection(hit_bounds).is_none()
+        && !element_has_outset_shadow(element)
+    {
+        return Ok(());
+    }
+
+    let plane = element.plane.unwrap_or(parent_layer.plane);
+    let z_index = if plane == parent_layer.plane {
+        parent_layer
+            .z_index
+            .saturating_add(element.z_index.unwrap_or(0))
+    } else {
+        element.z_index.unwrap_or(0)
+    };
+    let layer = PaintLayerKey { plane, z_index };
+    let order = PaintOrder {
+        layer,
+        source: *source_order,
+    };
+    *source_order = (*source_order).saturating_add(1);
+    let parent_clip = effective_parent_clip;
+    if let Some(region) = element_hit_region(
+        element,
+        bounds,
+        parent_clip,
+        order,
+        selectable_text_indices.contains_key(&element.runtime_id),
+    ) {
+        hit_regions.push(region);
+    }
+
+    let clips_children = element.layout.overflow.x != Overflow::Visible
+        || element.layout.overflow.y != Overflow::Visible;
+    let child_clip = if clips_children {
+        let Some(clip) = parent_clip.intersection(bounds) else {
+            return Ok(());
+        };
+        clip
+    } else {
+        parent_clip
+    };
+
+    let is_scrollable = !matches!(&element.kind, ElementKind::TextInput(_))
+        && (element.layout.overflow.x == Overflow::Scroll
+            || element.layout.overflow.y == Overflow::Scroll);
+    let mut scroll = Vector::ZERO;
+    if is_scrollable {
+        let max_offset = Vector::new(
+            (layout.content_size.width - layout.size.width).max(0.0),
+            (layout.content_size.height - layout.size.height).max(0.0),
+        );
+        let offset = scroll_offsets.entry(element.runtime_id).or_default();
+        offset.x = offset.x.clamp(0.0, max_offset.x);
+        offset.y = offset.y.clamp(0.0, max_offset.y);
+        scroll = *offset;
+    } else if let Some(virtual_scroll) = &element.virtual_scroll {
+        let max_offset_y = virtual_scroll
+            .handle
+            .max_offset(virtual_scroll.max_offset_y)
+            .max(0.0);
+        let offset = scroll_offsets.entry(element.runtime_id).or_default();
+        offset.x = 0.0;
+        offset.y = virtual_scroll.handle.offset().clamp(0.0, max_offset_y);
+        scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
+    }
+
+    let child_origin = Point::new(bounds.x - scroll.x, bounds.y - scroll.y);
+    for child in &element.children {
+        collect_layout_hit_regions(
+            child,
+            taffy,
+            natural_bounds,
+            scroll_offsets,
+            selectable_text_indices,
+            hit_regions,
+            child_origin,
+            child_clip,
+            viewport,
+            layer,
+            source_order,
+        )?;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn paint_element(
     element: &Element,
@@ -6932,57 +7197,14 @@ fn paint_element(
     push_element_shadows(scene, layer, bounds, radius, parent_clip, shadows, true);
 
     let selectable_document_index = selectable_text_indices.get(&element.runtime_id).copied();
-    if element.clickable
-        || element.pointer_listener
-        || (element.mouse_listeners.is_some() && !element.accessibility.disabled)
-        || element.scroll_wheel_listener
-        || element.touch_listener
-        || element.context_menu_listener
-        || element.mouse_pressure_listener
-        || element.pinch_listener
-        || element.rotation_listener
-        || element.smart_magnify_listener
-        || element.tooltip.is_some()
-        || element.drag_source
-        || element.drop_target
-        || element.cursor_style.is_some()
-        || selectable_document_index.is_some()
-        || element.focusable
-        || element.blocks_pointer
-        || element.app_region.is_some()
-        || element.has_stateful_paint()
-        || element.has_stateful_cursor()
-    {
-        let cursor_style = effective_cursor_style(element, selectable_document_index.is_some());
-        hit_regions.push(HitRegion {
-            id: element.runtime_id,
-            bounds: hit_bounds,
-            clip: parent_clip,
-            clickable: element.clickable && !element.accessibility.disabled,
-            pointer_listener: element.pointer_listener && !element.accessibility.disabled,
-            drag_source: element.drag_source && !element.accessibility.disabled,
-            drop_target: element.drop_target && !element.accessibility.disabled,
-            focusable: element.focusable
-                && element.focus_on_pointer
-                && !element.accessibility.disabled,
-            cursor_style,
-            cursor_states: CursorStateStyles {
-                hover: element.hover.cursor_style,
-                active: element.active.cursor_style,
-                focus: element.focus.cursor_style,
-                invalid: element
-                    .accessibility
-                    .invalid
-                    .then_some(element.invalid_style.cursor_style)
-                    .flatten(),
-                dragging: element.dragging.cursor_style,
-                drag_over: element.drag_over.cursor_style,
-            },
-            stateful: element.has_stateful_paint(),
-            blocks_pointer: element.blocks_pointer,
-            app_region: element.app_region,
-            order,
-        });
+    if let Some(region) = element_hit_region(
+        element,
+        bounds,
+        parent_clip,
+        order,
+        selectable_document_index.is_some(),
+    ) {
+        hit_regions.push(region);
     }
     if !element.dismiss_policy.is_empty() {
         dismiss_regions.push(DismissRegion {
@@ -12103,6 +12325,113 @@ mod tests {
         assert_eq!(tree.pinch_listener_at(point), None);
         assert_eq!(tree.rotation_listener_at(point), None);
         assert_eq!(tree.smart_magnify_listener_at(point), None);
+    }
+
+    #[test]
+    fn retained_paint_hover_tracks_rebuilt_layout_under_a_stationary_pointer() {
+        let mut tree = UiTree::new();
+        let plus = ElementId::new(90);
+        let inserted_tab = ElementId::new(91);
+        let original_bounds = Rect::new(0.0, 0.0, 32.0, 32.0);
+        let moved_bounds = Rect::new(80.0, 0.0, 32.0, 32.0);
+        let region = |id, bounds, source| HitRegion {
+            id,
+            bounds,
+            clip: bounds,
+            clickable: true,
+            pointer_listener: false,
+            drag_source: false,
+            drop_target: false,
+            focusable: true,
+            cursor_style: None,
+            cursor_states: CursorStateStyles::default(),
+            stateful: true,
+            blocks_pointer: true,
+            app_region: None,
+            order: PaintOrder {
+                layer: PaintLayerKey::default(),
+                source,
+            },
+        };
+        let pointer = Point::new(16.0, 16.0);
+
+        tree.hit_regions.push(region(plus, original_bounds, 0));
+        assert!(tree.refresh_retained_hover(Some(pointer)));
+        assert!(tree.hovered.contains(&plus));
+        assert!(!tree.refresh_retained_hover(Some(pointer)));
+
+        tree.hit_regions.clear();
+        tree.hit_regions.push(region(plus, moved_bounds, 0));
+        tree.hit_regions
+            .push(region(inserted_tab, original_bounds, 1));
+        assert!(tree.refresh_retained_hover(Some(pointer)));
+        assert!(!tree.hovered.contains(&plus));
+        assert!(tree.hovered.contains(&inserted_tab));
+    }
+
+    #[test]
+    fn layout_hit_testing_clears_moved_hover_before_paint() {
+        let plus = ElementId::new(92);
+        let inserted_tab = ElementId::new(93);
+        let hover_color = Color::rgb8(255, 0, 0);
+        let declaration = |insert_tab| {
+            let plus_button = button()
+                .id(plus)
+                .size(32.0, 32.0)
+                .flex_none()
+                .clickable()
+                .hover(|style| style.bg(hover_color))
+                .transition(Transition::colors(Duration::from_millis(70)));
+            let mut children = Vec::with_capacity(2);
+            if insert_tab {
+                children.push(
+                    button()
+                        .id(inserted_tab)
+                        .size(48.0, 32.0)
+                        .flex_none()
+                        .clickable(),
+                );
+            }
+            children.push(plus_button);
+            div().size(112.0, 32.0).flex_row().children(children)
+        };
+        let viewport = Size::new(112.0, 32.0);
+        let pointer = Point::new(16.0, 16.0);
+        let started = Instant::now();
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        let mut scene = Scene::new();
+
+        tree.set_root(declaration(false), viewport, 1.0, &mut renderer)
+            .unwrap();
+        tree.paint_at(&mut scene, &mut renderer, started).unwrap();
+        assert!(tree.pointer_moved(pointer, &mut renderer));
+        scene.clear(Color::TRANSPARENT);
+        tree.paint_at(&mut scene, &mut renderer, started).unwrap();
+        scene.clear(Color::TRANSPARENT);
+        tree.paint_at(
+            &mut scene,
+            &mut renderer,
+            started + Duration::from_millis(70),
+        )
+        .unwrap();
+        assert_eq!(scene.quads().len(), 1);
+        assert_eq!(scene.quads()[0].fill, hover_color);
+
+        tree.set_root(declaration(true), viewport, 1.0, &mut renderer)
+            .unwrap();
+        assert!(tree.refresh_hover_after_layout(Some(pointer)).unwrap());
+        assert!(!tree.hovered.contains(&plus));
+        assert!(!tree.style_transitions.contains_key(&plus));
+
+        scene.clear(Color::TRANSPARENT);
+        tree.paint_at(
+            &mut scene,
+            &mut renderer,
+            started + Duration::from_millis(71),
+        )
+        .unwrap();
+        assert!(scene.quads().is_empty());
     }
 
     #[test]

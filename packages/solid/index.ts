@@ -40,6 +40,7 @@ type PropertyInput = unknown;
 type PropertyEntry = {
   code: PropertyCode;
   color?: boolean;
+  normalize?: (value: PropertyInput) => boolean | number | string | null;
 };
 
 const properties: Record<string, PropertyEntry> = {
@@ -85,7 +86,10 @@ const properties: Record<string, PropertyEntry> = {
     color: true,
   },
   activeColor: { code: PropertyCode.ActiveColor, color: true },
-  transitionColors: { code: PropertyCode.TransitionColors },
+  transition: {
+    code: PropertyCode.Transition,
+    normalize: normalizeTransitionShorthand,
+  },
   opacity: { code: PropertyCode.Opacity },
   borderWidth: { code: PropertyCode.BorderWidth },
   borderColor: { code: PropertyCode.BorderColor, color: true },
@@ -265,7 +269,9 @@ function setProperty(
   }
   const entry = properties[name];
   if (!entry) return;
-  const normalized = normalizeValue(value, entry.code);
+  const normalized = entry.normalize
+    ? entry.normalize(value)
+    : normalizeValue(value, entry.code);
   setNativeProperty(node, entry.code, normalized, { color: !!entry.color });
 }
 
@@ -347,6 +353,72 @@ function normalizeLength(value: string | undefined): number | string | null {
   if (trimmed === "0") return 0;
   const number = Number(trimmed);
   return Number.isFinite(number) ? number : trimmed;
+}
+
+function normalizeTransitionShorthand(value: PropertyInput): number | null {
+  if (value === null || value === undefined || value === false) return null;
+  if (typeof value !== "string") {
+    throw new TypeError("QuickGUI transition must use the CSS transition shorthand");
+  }
+  const shorthand = value.trim();
+  if (shorthand === "" || shorthand === "none") return null;
+
+  const declarations = splitCssList(shorthand);
+  const supported = new Set(["background-color", "border-color", "color"]);
+  const declared = new Set<string>();
+  let sharedDuration: number | undefined;
+  for (const declaration of declarations) {
+    const property = declaration
+      .split(/\s+/)
+      .find((token) => supported.has(token));
+    if (!property) {
+      throw new TypeError(
+        "QuickGUI transition currently supports background-color, border-color, and color",
+      );
+    }
+    declared.add(property);
+    const times = Array.from(
+      declaration.matchAll(/(?:^|\s)(\d*\.?\d+)(ms|s)(?=\s|$)/g),
+      (match) => Number(match[1]) * (match[2] === "s" ? 1_000 : 1),
+    );
+    const duration = times[0] ?? 0;
+    const delay = times[1] ?? 0;
+    if (delay !== 0) {
+      throw new TypeError("QuickGUI transition does not support a non-zero delay");
+    }
+    if (sharedDuration !== undefined && sharedDuration !== duration) {
+      throw new TypeError(
+        "QuickGUI color transition properties must share one duration",
+      );
+    }
+    sharedDuration = duration;
+  }
+  if (
+    declared.size !== supported.size ||
+    Array.from(supported).some((property) => !declared.has(property))
+  ) {
+    throw new TypeError(
+      "QuickGUI color transition must declare background-color, border-color, and color",
+    );
+  }
+  return sharedDuration ?? 0;
+}
+
+function splitCssList(value: string): string[] {
+  const values: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "(") depth += 1;
+    else if (character === ")") depth = Math.max(0, depth - 1);
+    else if (character === "," && depth === 0) {
+      values.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  values.push(value.slice(start).trim());
+  return values.filter(Boolean);
 }
 
 function isLengthProperty(code: PropertyCode): boolean {
@@ -977,7 +1049,7 @@ export namespace JSX {
     hoverColor?: number | string;
     activeBackgroundColor?: number | string;
     activeColor?: number | string;
-    transitionColors?: number;
+    transition?: string;
     opacity?: number;
     borderWidth?: number | string;
     borderColor?: number | string;

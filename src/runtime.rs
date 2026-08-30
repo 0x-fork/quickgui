@@ -9191,6 +9191,8 @@ impl Runtime {
             && !state.view_dirty
             && !state.layout_dirty;
         let retained_layout_only = state.layout_dirty && !state.view_dirty;
+        let retained_geometry_changed =
+            state.view_dirty || state.layout_dirty || scroll_result.changed;
         let accessibility_geometry = if retained_layout_only {
             Some(AccessibilityUpdateKind::LayoutGeometry)
         } else if retained_scroll_only {
@@ -9285,11 +9287,6 @@ impl Runtime {
 
         state.ui.advance_animations(Instant::now());
         state.ui.advance_scrollbars(Instant::now());
-        state.scene.clear(self.config.background);
-        if let Err(error) = state.ui.paint(&mut state.scene, &mut state.renderer) {
-            self.fail(event_loop, AppError::View(error.to_string()));
-            return;
-        }
         #[cfg(feature = "inspector")]
         let retained_hover_pointer = state.pointer.filter(|point| {
             !state
@@ -9299,6 +9296,17 @@ impl Runtime {
         });
         #[cfg(not(feature = "inspector"))]
         let retained_hover_pointer = state.pointer;
+        if retained_geometry_changed
+            && let Err(error) = state.ui.refresh_hover_after_layout(retained_hover_pointer)
+        {
+            self.fail(event_loop, AppError::View(error.to_string()));
+            return;
+        }
+        state.scene.clear(self.config.background);
+        if let Err(error) = state.ui.paint(&mut state.scene, &mut state.renderer) {
+            self.fail(event_loop, AppError::View(error.to_string()));
+            return;
+        }
         state.ui.refresh_mouse_hover(retained_hover_pointer);
         // Paint rebuilds the retained hit stack even when only scrolling moved content. Resolve
         // once during this already-damaged frame so a stationary pointer cannot keep the cursor

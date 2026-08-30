@@ -72,7 +72,7 @@ describe("binary mutation protocol", () => {
     batch.setProperty(1, PropertyCode.HoverColor, 0xffeeeeee, true);
     batch.setProperty(1, PropertyCode.ActiveBackgroundColor, 0xff221100, true);
     batch.setProperty(1, PropertyCode.ActiveColor, 0xffffffff, true);
-    batch.setProperty(1, PropertyCode.TransitionColors, 90);
+    batch.setProperty(1, PropertyCode.Transition, 90);
     batch.setProperty(1, PropertyCode.PointerListener, true);
     batch.setProperty(1, PropertyCode.FocusOnPointer, false);
     batch.setProperty(1, PropertyCode.HitSlop, 2);

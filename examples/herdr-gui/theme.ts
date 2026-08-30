@@ -1,6 +1,9 @@
 import type { AppearanceMode } from "@quickgui/native";
 import type { TerminalPalette } from "@quickgui/solid";
 
+const COLOR_TRANSITION =
+  "background-color 70ms, border-color 70ms, color 70ms";
+
 export const GITHUB_LIGHT_TERMINAL = {
   background: "#ffffff",
   foreground: "#1f2328",
@@ -352,7 +355,7 @@ export function createStyles(theme: Theme) {
       backgroundColor: "transparent",
       hoverBackgroundColor: theme.hover,
       activeBackgroundColor: theme.active,
-      transitionColors: 70,
+      transition: COLOR_TRANSITION,
       borderRadius: 5,
       fontSize: 11.5,
       fontWeight: 600,
@@ -575,7 +578,7 @@ function iconButton(theme: Theme, size: number, fontSize: number) {
     hoverBackgroundColor: theme.hover,
     hoverColor: theme.text,
     activeBackgroundColor: theme.active,
-    transitionColors: 70,
+    transition: COLOR_TRANSITION,
     borderRadius: 5,
     fontSize,
     cursor: "default",
@@ -600,7 +603,7 @@ export function sidebarRow(selected: boolean, theme: Theme) {
     backgroundColor: selected ? theme.selected : "transparent",
     hoverBackgroundColor: selected ? theme.selectedStrong : theme.hover,
     activeBackgroundColor: theme.active,
-    transitionColors: 70,
+    transition: COLOR_TRANSITION,
     borderRadius: 6,
     cursor: "default",
     userSelect: "none" as const,

@@ -90,3 +90,13 @@ describe("sidebar row layout", () => {
     expect(styles.rowCount.lineHeight).toBe(16);
   });
 });
+
+describe("tab bar interactions", () => {
+  test("uses the standard transition shorthand for the new-tab button", () => {
+    const styles = createStyles(themeFor("light"));
+
+    expect(styles.tabAdd.transition).toBe(
+      "background-color 70ms, border-color 70ms, color 70ms",
+    );
+  });
+});

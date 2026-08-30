@@ -114,7 +114,7 @@ export const enum PropertyCode {
   HoverColor = 95,
   ActiveBackgroundColor = 96,
   ActiveColor = 97,
-  TransitionColors = 98,
+  Transition = 98,
   PointerListener = 99,
   FocusOnPointer = 100,
   FontFamily = 101,

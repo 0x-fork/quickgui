@@ -63,7 +63,8 @@ describe("Solid universal host", () => {
         hoverColor: "#ffffff",
         activeBackgroundColor: "#111122",
         activeColor: "#ddddff",
-        transitionColors: 90,
+        transition:
+          "background-color 90ms, border-color 90ms, color 90ms",
       },
       children: "New agent",
     });
@@ -78,7 +79,7 @@ describe("Solid universal host", () => {
     expect(button.properties.get(PropertyCode.ActiveColor)).toBeTypeOf(
       "number",
     );
-    expect(button.properties.get(PropertyCode.TransitionColors)).toBe(90);
+    expect(button.properties.get(PropertyCode.Transition)).toBe(90);
   });
 
   test("projects modal input, focus, dismissal, and accessibility to the native core", () => {
