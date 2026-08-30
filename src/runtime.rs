@@ -5386,6 +5386,10 @@ impl Runtime {
                         ) {
                             tracing::warn!(%error, "could not change native window visibility");
                         }
+                        #[cfg(target_os = "macos")]
+                        if visible && window_presentation_activates_application(&entry.config) {
+                            state.window.focus_window();
+                        }
                         #[cfg(not(target_os = "macos"))]
                         state.window.set_visible(visible);
                         state.visible = visible;
@@ -10147,6 +10151,15 @@ impl Runtime {
                 self.deactivate_window();
                 return;
             }
+            #[cfg(target_os = "macos")]
+            if window_presentation_activates_application(&self.config)
+                && let Some(state) = self.window.as_ref()
+            {
+                // A windowless AppRunner completes AppKit launch before an embedding runtime
+                // queues its first window. Winit's launch-time activation pass therefore cannot
+                // promote that window, so use its ordinary focus path after native presentation.
+                state.window.focus_window();
+            }
             if let Some(state) = &mut self.window {
                 state.relation_presented = relation_presented;
                 state.visible = true;
@@ -12561,6 +12574,13 @@ fn effective_visible_on_all_workspaces(config: &AppConfig) -> bool {
         || matches!(config.kind, WindowKind::Popover | WindowKind::SystemPopover)
 }
 
+#[cfg(any(target_os = "macos", test))]
+fn window_presentation_activates_application(config: &AppConfig) -> bool {
+    config.focus
+        && config.focusable
+        && !matches!(config.kind, WindowKind::Popover | WindowKind::SystemPopover)
+}
+
 fn winit_window_icon(image: &Image) -> Icon {
     Icon::from_rgba(image.rgba().to_vec(), image.width(), image.height())
         .expect("QuickGUI Image has already validated its RGBA dimensions")
@@ -13050,6 +13070,26 @@ mod tests {
                 blur: true,
             }
         );
+    }
+
+    #[test]
+    fn focused_top_level_presentation_activates_the_application_but_popovers_do_not() {
+        for kind in [WindowKind::Normal, WindowKind::Floating, WindowKind::Dialog] {
+            let options = WindowOptions::new("Window").window_kind(kind);
+            assert!(window_presentation_activates_application(&options));
+        }
+
+        for kind in [WindowKind::Popover, WindowKind::SystemPopover] {
+            let options = WindowOptions::new("Popover").window_kind(kind);
+            assert!(!window_presentation_activates_application(&options));
+        }
+
+        assert!(!window_presentation_activates_application(
+            &WindowOptions::new("Inactive").focus(false)
+        ));
+        assert!(!window_presentation_activates_application(
+            &WindowOptions::new("Never key").focusable(false)
+        ));
     }
 
     #[test]
