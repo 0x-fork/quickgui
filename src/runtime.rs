@@ -130,12 +130,12 @@ use crate::event::{ExternalDragEndEvent, ExternalDragOperation};
 use crate::macos::{
     MacExternalDragMonitor, MacExternalDragSession, MacFirstFrameGuard, MacMouseDownEvent,
     MacNativeDropHost, MacNativeDropOffer, MacNativeDropPayload, MacNativeDropPending,
-    MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPopoverMonitor,
-    MacTypedDragPayload, MacTypedDragRegistry, MacWindowTabAction, capture_left_mouse_down,
-    configure_document_window, configure_gpu_window_resize, configure_window_kind,
-    current_cursor_screen_position as macos_cursor_screen_position, current_pointer_position,
-    dismiss_window_relation, is_window_fullscreen, is_window_maximized, perform_window_close,
-    perform_window_drag, perform_window_tab_action, position_system_popover,
+    MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPlatformDialogFocus,
+    MacPopoverMonitor, MacTypedDragPayload, MacTypedDragRegistry, MacWindowTabAction,
+    capture_left_mouse_down, configure_document_window, configure_gpu_window_resize,
+    configure_window_kind, current_cursor_screen_position as macos_cursor_screen_position,
+    current_pointer_position, dismiss_window_relation, is_window_fullscreen, is_window_maximized,
+    perform_window_close, perform_window_drag, perform_window_tab_action, position_system_popover,
     position_traffic_lights, present_native_open_panel, present_native_prompt,
     present_native_save_panel, present_window_relation, set_window_document_edited,
     set_window_focusable, set_window_movable, set_window_opacity, set_window_represented_file,
@@ -11891,8 +11891,11 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 .active_platform_dialogs
                 .get(owner)
                 .is_some_and(|dialog| dialog.id == *id)
+                && let Some(dialog) = self.active_platform_dialogs.remove(owner)
+                && let Some(focus) = dialog.focus
+                && !focus.restore()
             {
-                self.active_platform_dialogs.remove(owner);
+                tracing::warn!("AppKit rejected the platform dialog's saved first responder");
             }
             return;
         }
@@ -11902,7 +11905,7 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                 .active_platform_dialogs
                 .get(owner)
                 .is_some_and(|dialog| dialog.id == *id)
-                && let Some(dialog) = self.active_platform_dialogs.remove(owner)
+                && let Some(dialog) = self.active_platform_dialogs.get(owner)
             {
                 dialog.native.cancel();
             }

@@ -8,8 +8,8 @@ use crate::{
 #[cfg(target_os = "macos")]
 pub(super) struct ActivePlatformDialog {
     pub(super) id: PlatformDialogId,
-    pub(super) open: Arc<AtomicBool>,
     pub(super) native: MacPlatformDialog,
+    pub(super) focus: Option<MacPlatformDialogFocus>,
 }
 
 #[cfg(target_os = "windows")]
@@ -461,11 +461,13 @@ fn bounded_selected_path(path: PathBuf) -> Result<PathBuf, PlatformError> {
 impl Runtime {
     pub(super) fn process_platform_requests(&mut self) {
         #[cfg(target_os = "macos")]
-        self.active_platform_dialogs.retain(|owner, dialog| {
+        // AppKit completes the response before the queued close event is dispatched. Keep that
+        // completed dialog alive until `PlatformDialogClosed` removes it so its saved responder
+        // cannot be lost between those two event-loop boundaries.
+        self.active_platform_dialogs.retain(|owner, _| {
             owner
                 .as_ref()
                 .is_none_or(|handle| self.window_handles.contains_key(handle))
-                && dialog.open.load(Ordering::Acquire)
         });
 
         while let Some(request) = self.platform_requests.pop_front() {
@@ -1076,19 +1078,19 @@ impl Runtime {
                 if !request.bind_cancellation(self.event_proxy.clone(), owner, id) {
                     return;
                 }
-                let context = match MacPlatformDialogContext::new(
-                    owner,
-                    id,
-                    open.clone(),
-                    self.event_proxy.clone(),
-                    native_window.as_ref(),
-                ) {
-                    Ok(context) => context,
+                let focus = match MacPlatformDialogFocus::capture(native_window.as_ref()) {
+                    Ok(focus) => focus,
                     Err(error) => {
                         request.complete_error(PlatformError::Platform(error.into()));
                         return;
                     }
                 };
+                let context = MacPlatformDialogContext::new(
+                    owner,
+                    id,
+                    open.clone(),
+                    self.event_proxy.clone(),
+                );
                 let native = match request {
                     PlatformRequest::Prompt {
                         level,
@@ -1170,7 +1172,11 @@ impl Runtime {
                 };
                 if open.load(Ordering::Acquire) {
                     self.active_platform_dialogs
-                        .insert(owner, ActivePlatformDialog { id, open, native });
+                        .insert(owner, ActivePlatformDialog { id, native, focus });
+                } else if let Some(focus) = focus
+                    && !focus.restore()
+                {
+                    tracing::warn!("AppKit rejected the platform dialog's saved first responder");
                 }
             }
         }

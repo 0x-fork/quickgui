@@ -1721,25 +1721,30 @@ pub(crate) struct MacPlatformDialogContext {
     id: PlatformDialogId,
     open: Arc<AtomicBool>,
     proxy: EventLoopProxy<RuntimeEvent>,
-    focus: Option<MacPlatformDialogFocus>,
 }
 
 #[derive(Clone)]
-struct MacPlatformDialogFocus {
+pub(crate) struct MacPlatformDialogFocus {
     window: Retained<NSWindow>,
     responder: Retained<NSResponder>,
 }
 
 impl MacPlatformDialogFocus {
-    fn capture(window: &Arc<Window>) -> Result<Option<Self>, String> {
+    pub(crate) fn capture(window: Option<&Arc<Window>>) -> Result<Option<Self>, String> {
+        let Some(window) = window else {
+            return Ok(None);
+        };
         let window = deepest_appkit_sheet(window)?;
         Ok(window
             .firstResponder()
             .map(|responder| Self { window, responder }))
     }
 
-    fn restore(&self) {
-        let _ = self.window.makeFirstResponder(Some(&self.responder));
+    pub(crate) fn restore(&self) -> bool {
+        if !self.window.isKeyWindow() {
+            self.window.makeKeyAndOrderFront(None);
+        }
+        self.window.makeFirstResponder(Some(&self.responder))
     }
 }
 
@@ -1749,23 +1754,12 @@ impl MacPlatformDialogContext {
         id: PlatformDialogId,
         open: Arc<AtomicBool>,
         proxy: EventLoopProxy<RuntimeEvent>,
-        window: Option<&Arc<Window>>,
-    ) -> Result<Self, String> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             owner,
             id,
             open,
             proxy,
-            focus: window
-                .map(MacPlatformDialogFocus::capture)
-                .transpose()?
-                .flatten(),
-        })
-    }
-
-    fn restore_focus(&self) {
-        if let Some(focus) = &self.focus {
-            focus.restore();
         }
     }
 }
@@ -1821,7 +1815,6 @@ fn finish_native_dialog<T>(
     result: Result<T, PlatformError>,
 ) {
     context.open.store(false, Ordering::Release);
-    context.restore_focus();
     let _ = context.proxy.send_event(RuntimeEvent::PlatformDialogClosed(
         context.owner,
         context.id,
