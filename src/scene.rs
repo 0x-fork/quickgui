@@ -132,6 +132,8 @@ pub struct TextStyle {
     pub fallbacks: Option<FontFallbacks>,
     pub weight: Weight,
     pub font_style: GlyphStyle,
+    /// Optically thicken rasterized glyph stems without selecting another font weight.
+    pub font_thicken: bool,
     pub underline: TextUnderline,
     pub underline_color: Option<Color>,
     /// Whether underlines use a spell-checker-style wave instead of a solid line.
@@ -159,6 +161,7 @@ impl TextStyle {
             fallbacks: None,
             weight: Weight::NORMAL,
             font_style: GlyphStyle::Normal,
+            font_thicken: false,
             underline: TextUnderline::None,
             underline_color: None,
             underline_wavy: false,
@@ -218,6 +221,11 @@ impl TextStyle {
 
     pub fn font_style(mut self, style: GlyphStyle) -> Self {
         self.font_style = style;
+        self
+    }
+
+    pub fn font_thicken(mut self, thicken: bool) -> Self {
+        self.font_thicken = thicken;
         self
     }
 

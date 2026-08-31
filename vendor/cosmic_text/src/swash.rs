@@ -3,14 +3,112 @@
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 use core::fmt;
-use swash::scale::{image::Content, ScaleContext};
 use swash::scale::{Render, Source, StrikeWith};
-use swash::zeno::{Format, Vector};
+use swash::scale::{ScaleContext, image::Content};
+use swash::zeno::{Format, Stroke, Vector};
 
 use crate::{CacheKey, CacheKeyFlags, Color, FontSystem, HashMap};
 
 pub use swash::scale::image::{Content as SwashContent, Image as SwashImage};
 pub use swash::zeno::{Angle, Command, Placement, Transform};
+
+/// Combine two tightly-bounded alpha masks without changing either glyph outline.
+fn union_masks(mut base: SwashImage, overlay: SwashImage) -> SwashImage {
+    let base_left = i64::from(base.placement.left);
+    let base_top = i64::from(base.placement.top);
+    let base_right = base_left + i64::from(base.placement.width);
+    let base_bottom = base_top - i64::from(base.placement.height);
+    let overlay_left = i64::from(overlay.placement.left);
+    let overlay_top = i64::from(overlay.placement.top);
+    let overlay_right = overlay_left + i64::from(overlay.placement.width);
+    let overlay_bottom = overlay_top - i64::from(overlay.placement.height);
+
+    let left = base_left.min(overlay_left);
+    let top = base_top.max(overlay_top);
+    let right = base_right.max(overlay_right);
+    let bottom = base_bottom.min(overlay_bottom);
+    let Ok(width) = u32::try_from(right - left) else {
+        return base;
+    };
+    let Ok(height) = u32::try_from(top - bottom) else {
+        return base;
+    };
+    let Some(pixel_count) = (width as usize).checked_mul(height as usize) else {
+        return base;
+    };
+    let Ok(left_i32) = i32::try_from(left) else {
+        return base;
+    };
+    let Ok(top_i32) = i32::try_from(top) else {
+        return base;
+    };
+
+    let base_placement = base.placement;
+    let base_data = core::mem::take(&mut base.data);
+    base.placement = Placement {
+        left: left_i32,
+        top: top_i32,
+        width,
+        height,
+    };
+    base.data.resize(pixel_count, 0);
+
+    let mut composite = |data: &[u8], placement: Placement| {
+        let x = usize::try_from(i64::from(placement.left) - left)
+            .expect("union mask left edge contains each source mask");
+        let y = usize::try_from(top - i64::from(placement.top))
+            .expect("union mask top edge contains each source mask");
+        let source_width = placement.width as usize;
+        for row in 0..placement.height as usize {
+            let source_start = row * source_width;
+            let destination_start = (y + row) * width as usize + x;
+            for (destination, source) in base.data
+                [destination_start..destination_start + source_width]
+                .iter_mut()
+                .zip(&data[source_start..source_start + source_width])
+            {
+                *destination = (*destination).max(*source);
+            }
+        }
+    };
+    composite(&base_data, base_placement);
+    composite(&overlay.data, overlay.placement);
+    base
+}
+
+/// Rasterize the original outline as a subtle fill-and-stroke mask. This is the same optical
+/// operation exposed by native terminal renderers: the font face and its metrics stay unchanged,
+/// while the rasterizer adds coverage around the existing contour. It deliberately does not move
+/// outline points, which can distort hinted glyphs and close small counters.
+fn thicken_outline_mask(
+    scaler: &mut swash::scale::Scaler<'_>,
+    cache_key: CacheKey,
+    offset: Vector,
+    transform: Option<Transform>,
+    image: SwashImage,
+) -> SwashImage {
+    if !cache_key.flags.contains(CacheKeyFlags::FONT_THICKEN)
+        || image.content != Content::Mask
+        || !matches!(image.source, Source::Outline)
+    {
+        return image;
+    }
+
+    // CoreText's negative two-percent stroke is a useful native reference. Stroke width is the
+    // full width centered on the contour, so this expands each edge by one percent of the physical
+    // font size without changing advance or layout metrics.
+    let stroke = Stroke::new(f32::from_bits(cache_key.font_size_bits) * 0.02);
+    let Some(stroke_image) = Render::new(&[Source::Outline])
+        .format(Format::Alpha)
+        .offset(offset)
+        .style(stroke)
+        .transform(transform)
+        .render(scaler, cache_key.glyph_id)
+    else {
+        return image;
+    };
+    union_masks(image, stroke_image)
+}
 
 fn swash_image(
     font_system: &mut FontSystem,
@@ -52,7 +150,15 @@ fn swash_image(
     };
 
     // Select our source order
-    Render::new(&[
+    let transform = if cache_key.flags.contains(CacheKeyFlags::FAKE_ITALIC) {
+        Some(Transform::skew(
+            Angle::from_degrees(14.0),
+            Angle::from_degrees(0.0),
+        ))
+    } else {
+        None
+    };
+    let image = Render::new(&[
         // Color outline with the first palette
         Source::ColorOutline(0),
         // Color bitmap with best fit selection mode
@@ -64,16 +170,16 @@ fn swash_image(
     .format(Format::Alpha)
     // Apply the fractional offset
     .offset(offset)
-    .transform(if cache_key.flags.contains(CacheKeyFlags::FAKE_ITALIC) {
-        Some(Transform::skew(
-            Angle::from_degrees(14.0),
-            Angle::from_degrees(0.0),
-        ))
-    } else {
-        None
-    })
+    .transform(transform)
     // Render the image
-    .render(&mut scaler, cache_key.glyph_id)
+    .render(&mut scaler, cache_key.glyph_id)?;
+    Some(thicken_outline_mask(
+        &mut scaler,
+        cache_key,
+        offset,
+        transform,
+        image,
+    ))
 }
 
 fn swash_outline_commands(
@@ -110,7 +216,6 @@ fn swash_outline_commands(
     let mut outline = scaler
         .scale_outline(cache_key.glyph_id)
         .or_else(|| scaler.scale_color_outline(cache_key.glyph_id))?;
-
     if cache_key.flags.contains(CacheKeyFlags::FAKE_ITALIC) {
         outline.transform(&Transform::skew(
             Angle::from_degrees(14.0),

@@ -1133,6 +1133,7 @@ pub(crate) struct TypographyStyle {
     pub fallbacks: Option<Option<FontFallbacks>>,
     pub weight: Option<Weight>,
     pub font_style: Option<GlyphStyle>,
+    pub font_thicken: Option<bool>,
     pub underline: Option<TextUnderline>,
     pub underline_color: Option<Option<Color>>,
     pub underline_wavy: Option<bool>,
@@ -1172,6 +1173,7 @@ impl TypographyStyle {
             ),
             weight: self.weight.unwrap_or(inherited.weight),
             font_style: self.font_style.unwrap_or(inherited.font_style),
+            font_thicken: self.font_thicken.unwrap_or(inherited.font_thicken),
             underline: self.underline.unwrap_or(inherited.underline),
             underline_color: self.underline_color.unwrap_or(inherited.underline_color),
             underline_wavy: self.underline_wavy.unwrap_or(inherited.underline_wavy),
@@ -2666,6 +2668,12 @@ impl Element {
 
     pub fn not_italic(self) -> Self {
         self.font_style(GlyphStyle::Normal)
+    }
+
+    /// Optically thicken descendant glyph stems without selecting a heavier font face.
+    pub fn font_thicken(mut self, thicken: bool) -> Self {
+        self.typography.font_thicken = Some(thicken);
+        self
     }
 
     /// Underline descendant text with the font's native single-line metrics.
@@ -4779,22 +4787,26 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
             .font_features(inherited_features.clone())
             .font_fallbacks(inherited_fallbacks.clone())
             .weight(Weight::SEMIBOLD)
-            .font_style(GlyphStyle::Italic);
+            .font_style(GlyphStyle::Italic)
+            .font_thicken(true);
 
         let resolved = TypographyStyle::default().resolve(&inherited);
         assert_eq!(resolved.features, inherited_features);
         assert_eq!(resolved.fallbacks, Some(inherited_fallbacks));
+        assert!(resolved.font_thicken);
 
         let local_features = FontFeatures::new().enable(crate::FontFeatureTag::SLASHED_ZERO);
         let resolved = div()
             .font_features(local_features.clone())
             .font_fallbacks(FontFallbacks::new())
+            .font_thicken(false)
             .typography
             .resolve(&inherited);
         assert_eq!(resolved.family, FontFamily::Monospace);
         assert_eq!(resolved.features, local_features);
         assert_eq!(resolved.fallbacks, None);
         assert_eq!(resolved.weight, Weight::SEMIBOLD);
+        assert!(!resolved.font_thicken);
 
         let resolved = div()
             .font(

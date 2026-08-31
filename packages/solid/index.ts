@@ -170,6 +170,7 @@ const properties: Record<string, PropertyEntry> = {
     color: true,
   },
   terminalPaddingColor: { code: PropertyCode.TerminalPaddingColor },
+  fontThicken: { code: PropertyCode.TerminalFontThicken },
 };
 
 const colorProperties = new Set([
@@ -1166,6 +1167,8 @@ export namespace JSX {
     terminalCursorColor?: number | string;
     /** Paint grid padding with the default background or extend edge-cell backgrounds into it. */
     terminalPaddingColor?: "background" | "extend";
+    /** Optically thicken terminal glyph stems without selecting another font weight. */
+    fontThicken?: boolean;
     onStatus?: EventHandler;
     onTerminal?: EventHandler;
   }

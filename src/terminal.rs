@@ -368,6 +368,8 @@ pub struct TerminalStyle {
     pub font_family: FontFamily,
     pub font_size: f32,
     pub line_height: f32,
+    /// Optically thicken glyph stems without selecting a heavier font face.
+    pub font_thicken: bool,
     /// Logical cell width as a multiple of `font_size`.
     pub cell_width_ratio: f32,
     /// Space between the terminal surface and its PTY-backed content.
@@ -391,6 +393,7 @@ impl Default for TerminalStyle {
             font_family: FontFamily::Monospace,
             font_size: 13.0,
             line_height: 18.0,
+            font_thicken: false,
             cell_width_ratio: DEFAULT_CELL_WIDTH_RATIO,
             padding_top: 0.0,
             padding_right: 0.0,
@@ -410,6 +413,7 @@ impl TerminalStyle {
             font_family: self.font_family.clone(),
             font_size: finite_clamp(self.font_size, 1.0, 128.0, 13.0),
             line_height: finite_clamp(self.line_height, 1.0, 256.0, 18.0),
+            font_thicken: self.font_thicken,
             cell_width_ratio: finite_clamp(
                 self.cell_width_ratio,
                 0.2,
@@ -911,6 +915,7 @@ impl Terminal {
             .id(derived_terminal_id(id, TERMINAL_TEXT_ID_TAG))
             .font_family(style.font_family)
             .text_size(style.font_size)
+            .font_thicken(style.font_thicken)
             .line_height(line_height)
             .monospace_width(cell_width)
             .text_color(style.foreground.unwrap_or(snapshot.foreground))
@@ -2790,6 +2795,7 @@ mod tests {
     #[test]
     fn terminal_style_normalizes_content_padding() {
         let style = TerminalStyle {
+            font_thicken: true,
             padding_top: 8.0,
             padding_right: 9.0,
             padding_bottom: f32::INFINITY,
@@ -2804,6 +2810,7 @@ mod tests {
         assert_eq!(style.padding_bottom, 0.0);
         assert_eq!(style.padding_left, 0.0);
         assert_eq!(style.padding_color, TerminalPaddingColor::Extend);
+        assert!(style.font_thicken);
     }
 
     #[test]

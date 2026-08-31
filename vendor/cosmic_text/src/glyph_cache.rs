@@ -11,6 +11,8 @@ bitflags::bitflags! {
         const DISABLE_HINTING = 2;
         /// Render as a pixel font
         const PIXEL_FONT = 4;
+        /// Apply subtle optical stem thickening without selecting a heavier font face
+        const FONT_THICKEN = 8;
     }
 }
 

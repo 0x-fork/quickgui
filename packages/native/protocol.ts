@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 14;
+export const PROTOCOL_VERSION = 15;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -131,6 +131,7 @@ export const enum PropertyCode {
   AutoFocus = 112,
   AccessibilityModal = 113,
   TerminalPaddingColor = 114,
+  TerminalFontThicken = 115,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

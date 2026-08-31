@@ -14,8 +14,8 @@ use glyphon::{
     Shaping as GlyphShaping, Style as GlyphStyle, SwashCache, TextArea, TextAtlas, TextBounds,
     TextRenderer, Viewport, Wrap,
     cosmic_text::{
-        Align as GlyphAlign, DecorationSpan, Ellipsize, EllipsizeHeightLimit, LayoutGlyph,
-        LayoutRun, UnderlineStyle as GlyphUnderlineStyle,
+        Align as GlyphAlign, CacheKeyFlags, DecorationSpan, Ellipsize, EllipsizeHeightLimit,
+        LayoutGlyph, LayoutRun, UnderlineStyle as GlyphUnderlineStyle,
     },
 };
 use thiserror::Error;
@@ -2248,6 +2248,7 @@ struct TextLayoutKey {
     fallbacks: Option<FontFallbacks>,
     weight: glyphon::Weight,
     font_style: GlyphStyle,
+    font_thicken: bool,
     underline: TextUnderline,
     underline_color: Option<UiColor>,
     underline_wavy: bool,
@@ -2275,6 +2276,7 @@ impl PartialEq for TextLayoutKey {
             && self.fallbacks == other.fallbacks
             && self.weight == other.weight
             && self.font_style == other.font_style
+            && self.font_thicken == other.font_thicken
             && self.underline == other.underline
             && optional_color_bits(self.underline_color)
                 == optional_color_bits(other.underline_color)
@@ -2318,6 +2320,7 @@ impl TextLayoutKey {
             && self.fallbacks == other.fallbacks
             && self.weight == other.weight
             && self.font_style == other.font_style
+            && self.font_thicken == other.font_thicken
             && self.underline == other.underline
             && optional_color_bits(self.underline_color)
                 == optional_color_bits(other.underline_color)
@@ -2347,6 +2350,7 @@ impl Hash for TextLayoutKey {
         self.fallbacks.hash(state);
         self.weight.hash(state);
         self.font_style.hash(state);
+        self.font_thicken.hash(state);
         self.underline.hash(state);
         optional_color_bits(self.underline_color).hash(state);
         self.underline_wavy.hash(state);
@@ -3141,6 +3145,7 @@ impl TextSystem {
             fallbacks: normalize_fallbacks(style.fallbacks.clone()),
             weight: style.weight,
             font_style: style.font_style,
+            font_thicken: style.font_thicken,
             underline: style.underline,
             underline_color: style.underline_color,
             underline_wavy: style.underline_wavy,
@@ -3266,6 +3271,7 @@ impl TextSystem {
             fallbacks: normalize_fallbacks(style.fallbacks.clone()),
             weight: style.weight,
             font_style: style.font_style,
+            font_thicken: style.font_thicken,
             underline: style.underline,
             underline_color: style.underline_color,
             underline_wavy: style.underline_wavy,
@@ -4168,6 +4174,9 @@ fn configure_text_buffer(
         .weight(style.weight)
         .style(style.font_style)
         .font_features(style.features.cosmic());
+    if style.font_thicken {
+        attrs = attrs.cache_key_flags(CacheKeyFlags::FONT_THICKEN);
+    }
     if let Some(fallbacks) = style.fallbacks.as_ref() {
         attrs = attrs.font_fallbacks(fallbacks.cosmic());
     }
@@ -4834,6 +4843,7 @@ mod tests {
             fallbacks: None,
             weight: glyphon::Weight::NORMAL,
             font_style: GlyphStyle::Normal,
+            font_thicken: false,
             underline: TextUnderline::None,
             underline_color: None,
             underline_wavy: false,
@@ -4854,6 +4864,10 @@ mod tests {
         let mut different_style = narrower.clone();
         different_style.font_size = 15.0;
         assert!(!key.same_except_width(&different_style));
+
+        let mut optically_thick = key.clone();
+        optically_thick.font_thicken = true;
+        assert!(!key.same_except_width(&optically_thick));
 
         let mut fixed_cells = key.clone();
         fixed_cells.monospace_width = Some(8.54);
@@ -4967,6 +4981,86 @@ mod tests {
         }
         assert!(
             (geometry.backgrounds.last().unwrap().rect.right() - cell_width * 5.0).abs() < 0.01
+        );
+    }
+
+    #[test]
+    fn font_thicken_preserves_weight_and_outline_geometry() {
+        let scale = 2.0;
+        let style = TextStyle::new(14.0, Color::BLACK)
+            .family(FontFamily::named("JetBrainsMono Nerd Font Mono"))
+            .font_thicken(true)
+            .wrap(TextWrap::None)
+            .shaping(TextShaping::Basic);
+        let mut font_system = fixture_terminal_font_system();
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size * scale, style.line_height * scale),
+        );
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            "M",
+            &style,
+            None,
+            None,
+            scale,
+        );
+
+        let glyph = buffer
+            .layout_runs()
+            .flat_map(|run| run.glyphs.iter())
+            .next()
+            .expect("one terminal glyph");
+        assert_eq!(glyph.font_weight, glyphon::Weight::NORMAL);
+        let thick_key = glyph.physical((0.0, 0.0), 1.0).cache_key;
+        assert!(thick_key.flags.contains(CacheKeyFlags::FONT_THICKEN));
+
+        let mut normal_key = thick_key;
+        normal_key.flags.remove(CacheKeyFlags::FONT_THICKEN);
+        let mut swash = SwashCache::new();
+        let normal_outline = swash
+            .get_outline_commands_uncached(&mut font_system, normal_key)
+            .expect("regular glyph outline");
+        let thick_outline = swash
+            .get_outline_commands_uncached(&mut font_system, thick_key)
+            .expect("optically thick glyph outline");
+        assert_eq!(thick_outline, normal_outline);
+
+        let normal = swash
+            .get_image_uncached(&mut font_system, normal_key)
+            .expect("regular glyph mask");
+        let thick = swash
+            .get_image_uncached(&mut font_system, thick_key)
+            .expect("thickened glyph mask");
+        assert_eq!(thick.content, normal.content);
+        assert!(thick.placement.width <= normal.placement.width + 2);
+        assert!(thick.placement.height <= normal.placement.height + 2);
+        let normal_x = usize::try_from(normal.placement.left - thick.placement.left)
+            .expect("thick mask contains the regular mask's left edge");
+        let normal_y = usize::try_from(thick.placement.top - normal.placement.top)
+            .expect("thick mask contains the regular mask's top edge");
+        for row in 0..normal.placement.height as usize {
+            for column in 0..normal.placement.width as usize {
+                let normal_alpha = normal.data[row * normal.placement.width as usize + column];
+                let thick_alpha = thick.data
+                    [(normal_y + row) * thick.placement.width as usize + normal_x + column];
+                assert!(thick_alpha >= normal_alpha);
+            }
+        }
+        let normal_coverage = normal
+            .data
+            .iter()
+            .map(|value| u64::from(*value))
+            .sum::<u64>();
+        let thick_coverage = thick
+            .data
+            .iter()
+            .map(|value| u64::from(*value))
+            .sum::<u64>();
+        assert!(
+            thick_coverage > normal_coverage,
+            "expected thickened coverage {thick_coverage} to exceed regular coverage {normal_coverage}",
         );
     }
 

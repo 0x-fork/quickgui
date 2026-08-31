@@ -166,6 +166,7 @@ export function createStyles(theme: Theme) {
       minHeight: 0,
       backgroundColor: theme.app,
       color: theme.text,
+      fontWeight: 500,
     },
     sidebar: {
       display: "flex",

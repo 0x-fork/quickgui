@@ -48,7 +48,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 14;
+const PROTOCOL_VERSION: u16 = 15;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -176,7 +176,8 @@ mod property {
     pub const AUTO_FOCUS: u16 = 112;
     pub const ACCESSIBILITY_MODAL: u16 = 113;
     pub const TERMINAL_PADDING_COLOR: u16 = 114;
-    pub const LAST: u16 = TERMINAL_PADDING_COLOR;
+    pub const TERMINAL_FONT_THICKEN: u16 = 115;
+    pub const LAST: u16 = TERMINAL_FONT_THICKEN;
 }
 
 #[derive(Default)]
@@ -1637,6 +1638,9 @@ fn build_element(
                             .unwrap_or(quickgui::FontFamily::Monospace),
                         font_size: node.number(property::FONT_SIZE).unwrap_or(13.0),
                         line_height: node.number(property::LINE_HEIGHT).unwrap_or(18.0),
+                        font_thicken: node
+                            .boolean(property::TERMINAL_FONT_THICKEN)
+                            .unwrap_or(false),
                         padding_top: terminal_padding(node, property::PADDING_TOP),
                         padding_right: terminal_padding(node, property::PADDING_RIGHT),
                         padding_bottom: terminal_padding(node, property::PADDING_BOTTOM),
