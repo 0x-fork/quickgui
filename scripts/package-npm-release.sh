@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repository_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+cd "$repository_root"
+
+output_dir=${1:-target/npm-release}
+if [[ $output_dir != /* ]]; then
+  output_dir="$repository_root/$output_dir"
+fi
+mkdir -p "$output_dir"
+find "$output_dir" -maxdepth 1 -type f \( -name 'quickgui-*.tgz' -o -name 'NPM_SHA256SUMS' \) -delete
+
+npm_version() {
+  node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(manifest.version)' "$1"
+}
+
+npm_release_version=$(npm_version packages/native/package.json)
+solid_version=$(npm_version packages/solid/package.json)
+cli_version=$(npm_version packages/cli/package.json)
+if [[ $npm_release_version != "$solid_version" ]] || [[ $npm_release_version != "$cli_version" ]]
+then
+  echo "package-npm-release: all @quickgui packages must have the same version" >&2
+  exit 1
+fi
+
+arm64_binary=packages/native/quickgui-native.darwin-arm64.node
+x64_binary=packages/native/quickgui-native.darwin-x64.node
+for binary in "$arm64_binary" "$x64_binary"; do
+  if [[ ! -f $binary ]]; then
+    echo "package-npm-release: missing native binary $binary" >&2
+    exit 1
+  fi
+done
+if [[ $(uname -s) == Darwin ]]; then
+  if ! file "$arm64_binary" | grep -q 'arm64'; then
+    echo "package-npm-release: $arm64_binary is not a macOS arm64 binary" >&2
+    exit 1
+  fi
+  if ! file "$x64_binary" | grep -q 'x86_64'; then
+    echo "package-npm-release: $x64_binary is not a macOS x64 binary" >&2
+    exit 1
+  fi
+fi
+
+for package_name in native solid cli; do
+  (cd "packages/$package_name" && bun pm pack --destination "$output_dir" --quiet)
+done
+
+native_archive="$output_dir/quickgui-native-${npm_release_version}.tgz"
+solid_archive="$output_dir/quickgui-solid-${npm_release_version}.tgz"
+cli_archive="$output_dir/quickgui-cli-${npm_release_version}.tgz"
+for archive in "$native_archive" "$solid_archive" "$cli_archive"; do
+  if [[ ! -f $archive ]]; then
+    echo "package-npm-release: missing archive $archive" >&2
+    exit 1
+  fi
+done
+
+verify_manifest() {
+  local archive=$1
+  local expected_name=$2
+  local manifest_file=$3
+  tar -xOf "$archive" package/package.json > "$manifest_file"
+  if [[ $(jq -r '.name' "$manifest_file") != "$expected_name" || \
+        $(jq -r '.version' "$manifest_file") != "$npm_release_version" ]]
+  then
+    echo "package-npm-release: unexpected name or version in $archive" >&2
+    exit 1
+  fi
+  if ! jq -e '.os == ["darwin"] and .publishConfig.access == "public"' "$manifest_file" >/dev/null; then
+    echo "package-npm-release: $archive must be a public macOS package" >&2
+    exit 1
+  fi
+}
+
+manifest_dir=$(mktemp -d -t quickgui-npm-manifests.XXXXXX)
+trap 'rm -rf "$manifest_dir"' EXIT
+verify_manifest "$native_archive" '@quickgui/native' "$manifest_dir/native.json"
+verify_manifest "$solid_archive" '@quickgui/solid' "$manifest_dir/solid.json"
+verify_manifest "$cli_archive" '@quickgui/cli' "$manifest_dir/cli.json"
+
+if ! jq -e --arg version "$npm_release_version" \
+  '.dependencies["@quickgui/native"] == $version' \
+  "$manifest_dir/solid.json" >/dev/null
+then
+  echo "package-npm-release: Solid must depend on the exact native release" >&2
+  exit 1
+fi
+if ! jq -e --arg version "$npm_release_version" \
+  '.dependencies["@quickgui/native"] == $version and
+   .dependencies["@quickgui/solid"] == $version and
+   .bin.quickgui == "src/cli.ts"' \
+  "$manifest_dir/cli.json" >/dev/null
+then
+  echo "package-npm-release: CLI release dependencies or binary are incorrect" >&2
+  exit 1
+fi
+
+native_entries=$(tar -tzf "$native_archive")
+for entry in \
+  package/quickgui-native.darwin-arm64.node \
+  package/quickgui-native.darwin-x64.node
+do
+  if ! grep -Fxq "$entry" <<< "$native_entries"; then
+    echo "package-npm-release: native archive is missing $entry" >&2
+    exit 1
+  fi
+done
+native_binary_count=$(grep -Ec '\.node$' <<< "$native_entries" || true)
+if [[ $native_binary_count != 2 ]]; then
+  echo "package-npm-release: native archive must contain exactly two binaries" >&2
+  exit 1
+fi
+
+checksum_file="$output_dir/NPM_SHA256SUMS"
+(
+  cd "$output_dir"
+  shasum -a 256 \
+    "$(basename "$native_archive")" \
+    "$(basename "$solid_archive")" \
+    "$(basename "$cli_archive")"
+) > "$checksum_file"
+
+printf '%s\n' \
+  "QUICKGUI_NPM_PACKAGE_RESULT {\"version\":\"$npm_release_version\",\"native\":\"$(basename "$native_archive")\",\"solid\":\"$(basename "$solid_archive")\",\"cli\":\"$(basename "$cli_archive")\",\"checksums\":\"$(basename "$checksum_file")\",\"passed\":true}"
