@@ -1,6 +1,6 @@
 export const en = {
   meta: {
-    title: 'QuickGUI — Desktop UI that only renders what changed.',
+    title: 'QuickGUI — Build native desktop apps. Skip the webview.',
     description:
       'QuickGUI is a GPU-accelerated GUI framework for building native desktop apps in Rust or TypeScript. Familiar Flexbox and Grid layout, real text, built-in accessibility — and zero CPU while your app is idle.',
   },
@@ -19,7 +19,8 @@ export const en = {
   },
   hero: {
     badge: 'v{{version}} on crates.io',
-    title: 'Desktop UI that only renders what changed.',
+    titleLine1: 'Build native desktop apps.',
+    titleLine2: 'Skip the webview.',
     sub: 'A GPU-accelerated GUI framework for native desktop apps, in Rust or TypeScript. Familiar layout, real text, built-in accessibility — and zero CPU while your app is idle.',
   },
   features: {

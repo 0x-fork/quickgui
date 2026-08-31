@@ -31,7 +31,7 @@ export default function OgCard() {
 
       <div className="relative">
         <h1 className="max-w-4xl text-[64px] leading-[1.08] font-semibold tracking-tight">
-          Desktop UI that only renders what changed.
+          Build native desktop apps. Skip the webview.
         </h1>
         <p className="mt-8 font-mono text-xl text-muted-foreground">
           GPU-accelerated · Rust or TypeScript · zero CPU when idle

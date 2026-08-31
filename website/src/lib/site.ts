@@ -1,6 +1,6 @@
 export const site = {
   name: 'QuickGUI',
-  tagline: 'Desktop UI that only renders what changed.',
+  tagline: 'Build native desktop apps. Skip the webview.',
   description:
     'QuickGUI is a GPU-accelerated GUI framework for building native desktop apps in Rust or TypeScript. Familiar Flexbox and Grid layout, real text, built-in accessibility — and zero CPU while your app is idle.',
   repo: 'egoist/quickgui',

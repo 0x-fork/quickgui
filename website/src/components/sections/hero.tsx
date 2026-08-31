@@ -22,8 +22,9 @@ export function Hero({ stats }: { stats: RepoStats }) {
           <span className="i-lucide-arrow-up-right size-3" aria-hidden />
         </a>
 
-        <h1 className="animate-fade-up mt-8 max-w-4xl text-5xl leading-[1.08] font-semibold tracking-tight text-balance [animation-delay:60ms] sm:text-6xl">
-          {t('hero.title')}
+        <h1 className="animate-fade-up mt-8 max-w-4xl text-5xl leading-[1.08] font-semibold tracking-tight text-balance [animation-delay:60ms] lg:text-6xl">
+          <span className="block">{t('hero.titleLine1')}</span>
+          <span className="block">{t('hero.titleLine2')}</span>
         </h1>
 
         <p className="animate-fade-up mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground [animation-delay:120ms] sm:text-lg">
