@@ -1,5 +1,5 @@
 {
-	"name": "quickgui-website",
+	"name": "website",
 	"private": true,
 	"type": "module",
 	"imports": {
