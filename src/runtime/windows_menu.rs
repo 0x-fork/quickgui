@@ -176,7 +176,7 @@ fn append(parent: &Submenu, item: &dyn IsMenuItem) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, PartialEq)]
     struct TestAction;
 
     #[test]

@@ -1,7 +1,9 @@
 use super::*;
+use crate::{BoxShadow, Color, FontFeatureTag, HighlightStyle, StyledText};
+#[cfg(target_os = "macos")]
 use crate::{
-    BoxShadow, Color, CustomShader, CustomShaderPrimitive, FontFeatureTag, HighlightStyle, Image,
-    ImagePrimitive, PathBuilder, PathPrimitive, StyledText, Svg, SvgPrimitive,
+    CustomShader, CustomShaderPrimitive, Image, ImagePrimitive, PathBuilder, PathPrimitive, Svg,
+    SvgPrimitive,
 };
 
 fn fixture_font_system() -> FontSystem {

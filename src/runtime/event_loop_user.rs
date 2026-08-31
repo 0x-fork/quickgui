@@ -147,10 +147,15 @@ impl Runtime {
                 .get(owner)
                 .is_some_and(|dialog| dialog.id == *id)
                 && let Some(dialog) = self.active_platform_dialogs.remove(owner)
-                && let Some(focus) = dialog.focus
-                && !focus.restore()
             {
-                tracing::warn!("AppKit rejected the platform dialog's saved first responder");
+                #[cfg(target_os = "macos")]
+                if let Some(focus) = dialog.focus
+                    && !focus.restore()
+                {
+                    tracing::warn!("AppKit rejected the platform dialog's saved first responder");
+                }
+                #[cfg(not(target_os = "macos"))]
+                drop(dialog);
             }
             return;
         }

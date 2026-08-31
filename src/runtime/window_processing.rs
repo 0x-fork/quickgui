@@ -2,6 +2,8 @@ use super::*;
 
 impl Runtime {
     pub(super) fn process_queued_window_commands(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(not(target_os = "macos"))]
+        let _ = event_loop;
         #[cfg(target_os = "macos")]
         let mut refresh_native_tabs = false;
         for command in std::mem::take(&mut self.window_commands) {

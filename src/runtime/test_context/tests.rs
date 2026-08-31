@@ -3,10 +3,11 @@ use std::cell::RefCell;
 
 #[cfg(feature = "inspector")]
 use crate::AccessibilityRole;
+#[cfg(target_os = "macos")]
+use crate::{AnchorPlacement, Interpolate, ListState, Tooltip};
 use crate::{
-    AnchorPlacement, Animation, AnimationExt as _, BundledAssets, Interpolate, ListState,
-    MAX_CUSTOM_FONTS, SpringAnimation, SpringConfig, SpringPlayback, Tooltip, button,
-    container_query, div, form, submit_button, text, text_input,
+    Animation, AnimationExt as _, BundledAssets, MAX_CUSTOM_FONTS, SpringAnimation, SpringConfig,
+    SpringPlayback, button, container_query, div, form, submit_button, text, text_input,
 };
 
 crate::actions!(

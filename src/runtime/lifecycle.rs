@@ -142,6 +142,8 @@ impl Runtime {
         &mut self,
         event_loop: &ActiveEventLoop,
     ) -> Vec<ClosedWindow> {
+        #[cfg(not(target_os = "macos"))]
+        let _ = event_loop;
         let mut stack = std::mem::take(&mut self.close_requests)
             .into_iter()
             .map(|handle| (handle, false))
