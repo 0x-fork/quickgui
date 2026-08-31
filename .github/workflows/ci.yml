@@ -59,17 +59,17 @@ jobs:
       - name: Check release-gate scripts
         run: bash -n scripts/*.sh
       - name: Run all tests
-        run: cargo test --all-targets --all-features --locked
+        run: scripts/with-macos-ghostty-zig.sh cargo test --all-targets --all-features --locked
       - name: Check every target and feature
-        run: cargo check --all-targets --all-features --locked
+        run: scripts/with-macos-ghostty-zig.sh cargo check --all-targets --all-features --locked
       - name: Check minimum supported Rust version
-        run: cargo +1.90.0 check --all-targets --all-features --locked
+        run: scripts/with-macos-ghostty-zig.sh cargo +1.90.0 check --all-targets --all-features --locked
       - name: Run Clippy
-        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+        run: scripts/with-macos-ghostty-zig.sh cargo clippy --all-targets --all-features --locked -- -D warnings
       - name: Build documentation
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --no-deps --all-features --locked
+        run: scripts/with-macos-ghostty-zig.sh cargo doc --no-deps --all-features --locked
       - name: Verify publish archives and downstream installation
         env:
           QUICKGUI_PACKAGE_TARGET_DIR: target/package-gate
