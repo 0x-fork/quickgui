@@ -11,7 +11,7 @@ import {
   nativeExports,
 } from "./build.ts";
 import { resolveConfig } from "./config.ts";
-import { ActiveProcessMonitor } from "./dev.ts";
+import { ActiveProcessMonitor, shouldIgnoreChange } from "./dev.ts";
 import { initProject } from "./init.ts";
 import { hostTarget, parseTarget } from "./targets.ts";
 
@@ -93,6 +93,16 @@ test("dev process monitoring ignores replaced and cleanup exits", async () => {
   cleanup.resolve(0);
   await cleanup.promise;
   expect(statuses).toEqual([7]);
+});
+
+test("dev watcher ignores Bun compile transients without ignoring source", () => {
+  const root = join(tmpdir(), "quickgui-dev-watch");
+  const outDir = join(root, "dist");
+
+  expect(
+    shouldIgnoreChange(root, join(root, ".e5a5df0030510628-00000001.bun-build"), outDir),
+  ).toBe(true);
+  expect(shouldIgnoreChange(root, join(root, "app.tsx"), outDir)).toBe(false);
 });
 
 describe("project configuration", () => {

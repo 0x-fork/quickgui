@@ -44,12 +44,28 @@ pub(super) fn compute_detached_layout(
     scale_factor: f32,
     renderer: &mut impl TextLayoutEngine,
 ) -> Result<(), UiError> {
-    taffy.compute_layout_with_measure(
+    compute_detached_layout_available(
+        taffy,
         root,
         TaffySize {
             width: AvailableSpace::Definite(viewport.width),
             height: AvailableSpace::Definite(viewport.height),
         },
+        scale_factor,
+        renderer,
+    )
+}
+
+pub(super) fn compute_detached_layout_available(
+    taffy: &mut TaffyTree<MeasureContext>,
+    root: NodeId,
+    available: TaffySize<AvailableSpace>,
+    scale_factor: f32,
+    renderer: &mut impl TextLayoutEngine,
+) -> Result<(), UiError> {
+    taffy.compute_layout_with_measure(
+        root,
+        available,
         |known, available, _node, context, style| {
             let Some(context) = context else {
                 return TaffySize::ZERO;

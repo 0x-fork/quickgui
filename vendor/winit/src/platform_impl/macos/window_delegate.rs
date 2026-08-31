@@ -80,12 +80,17 @@ impl Default for PlatformSpecificWindowAttributes {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct State {
     /// Strong reference to the global application state.
     app_delegate: Retained<ApplicationDelegate>,
 
     window: Retained<NSWindow>,
+
+    // Keep the rendering view independently of the backing NSWindow's contentView. Embedding
+    // runtimes may reparent this exact view into another AppKit hierarchy while the hidden
+    // backing window continues to own Winit's stable WindowId and event queue.
+    view: Retained<WinitView>,
+    embedded_view: Cell<bool>,
 
     // During `windowDidResize`, we use this to only send Moved if the position changed.
     //
@@ -749,6 +754,17 @@ impl WindowDelegate {
 
         let scale_factor = window.backingScaleFactor() as _;
 
+        // SAFETY: `new_window` installs a WinitView as the content view immediately before it
+        // returns. Retaining it here keeps all Window operations valid after an embedding host
+        // reparents the view away from the hidden backing NSWindow.
+        let view: Retained<WinitView> = unsafe {
+            Retained::cast(
+                window
+                    .contentView()
+                    .expect("a newly created Winit window must have a content view"),
+            )
+        };
+
         if let Some(appearance) = theme_to_appearance(attrs.preferred_theme) {
             unsafe { window.setAppearance(Some(&appearance)) };
         }
@@ -756,6 +772,8 @@ impl WindowDelegate {
         let delegate = mtm.alloc().set_ivars(State {
             app_delegate: app_delegate.retain(),
             window: window.retain(),
+            view,
+            embedded_view: Cell::new(false),
             previous_position: Cell::new(flip_window_screen_coordinates(window.frame())),
             previous_scale_factor: Cell::new(scale_factor),
             resize_increments: Cell::new(resize_increments),
@@ -838,8 +856,17 @@ impl WindowDelegate {
 
     #[track_caller]
     pub(super) fn view(&self) -> Retained<WinitView> {
-        // SAFETY: The view inside WinitWindow and WinitPanel is always `WinitView`.
-        unsafe { Retained::cast(self.window().contentView().unwrap()) }
+        self.ivars().view.clone()
+    }
+
+    pub(crate) fn set_embedded_view(&self, embedded: bool) {
+        self.ivars().embedded_view.set(embedded);
+        self.view().set_embedded(embedded);
+        if embedded {
+            // The backing NSWindow must never become visible after its rendering view is hosted
+            // by another native hierarchy.
+            self.window().orderOut(None);
+        }
     }
 
     #[track_caller]
@@ -943,6 +970,9 @@ impl WindowDelegate {
     }
 
     pub fn set_visible(&self, visible: bool) {
+        if self.ivars().embedded_view.get() {
+            return;
+        }
         match visible {
             true => self.window().makeKeyAndOrderFront(None),
             false => self.window().orderOut(None),
@@ -951,6 +981,13 @@ impl WindowDelegate {
 
     #[inline]
     pub fn is_visible(&self) -> Option<bool> {
+        if self.ivars().embedded_view.get() {
+            return Some(
+                self.view()
+                    .actual_window()
+                    .is_some_and(|window| window.isVisible()),
+            );
+        }
         Some(self.window().isVisible())
     }
 
@@ -964,17 +1001,37 @@ impl WindowDelegate {
     pub fn pre_present_notify(&self) {}
 
     pub fn outer_position(&self) -> Result<PhysicalPosition<i32>, NotSupportedError> {
+        if self.ivars().embedded_view.get() {
+            return self.embedded_view_position();
+        }
         let position = flip_window_screen_coordinates(self.window().frame());
         Ok(LogicalPosition::new(position.x, position.y).to_physical(self.scale_factor()))
     }
 
     pub fn inner_position(&self) -> Result<PhysicalPosition<i32>, NotSupportedError> {
+        if self.ivars().embedded_view.get() {
+            return self.embedded_view_position();
+        }
         let content_rect = self.window().contentRectForFrameRect(self.window().frame());
         let position = flip_window_screen_coordinates(content_rect);
         Ok(LogicalPosition::new(position.x, position.y).to_physical(self.scale_factor()))
     }
 
+    fn embedded_view_position(&self) -> Result<PhysicalPosition<i32>, NotSupportedError> {
+        let view = self.view();
+        let Some(window) = view.actual_window() else {
+            return Err(NotSupportedError::new());
+        };
+        let window_rect = view.convertRect_toView(view.bounds(), None);
+        let screen_rect = window.convertRectToScreen(window_rect);
+        let position = flip_window_screen_coordinates(screen_rect);
+        Ok(LogicalPosition::new(position.x, position.y).to_physical(self.scale_factor()))
+    }
+
     pub fn set_outer_position(&self, position: Position) {
+        if self.ivars().embedded_view.get() {
+            return;
+        }
         let position = position.to_logical(self.scale_factor());
         let point = flip_window_screen_coordinates(NSRect::new(
             NSPoint::new(position.x, position.y),
@@ -985,6 +1042,11 @@ impl WindowDelegate {
 
     #[inline]
     pub fn inner_size(&self) -> PhysicalSize<u32> {
+        if self.ivars().embedded_view.get() {
+            let frame = self.view().frame();
+            let logical = LogicalSize::new(frame.size.width, frame.size.height);
+            return logical.to_physical(self.scale_factor());
+        }
         let content_rect = self.window().contentRectForFrameRect(self.window().frame());
         let logical = LogicalSize::new(content_rect.size.width, content_rect.size.height);
         logical.to_physical(self.scale_factor())
@@ -992,6 +1054,9 @@ impl WindowDelegate {
 
     #[inline]
     pub fn outer_size(&self) -> PhysicalSize<u32> {
+        if self.ivars().embedded_view.get() {
+            return self.inner_size();
+        }
         let frame = self.window().frame();
         let logical = LogicalSize::new(frame.size.width, frame.size.height);
         logical.to_physical(self.scale_factor())
@@ -999,6 +1064,11 @@ impl WindowDelegate {
 
     #[inline]
     pub fn request_inner_size(&self, size: Size) -> Option<PhysicalSize<u32>> {
+        if self.ivars().embedded_view.get() {
+            // SwiftUI owns the hosted view's final frame. A resize request becomes observable
+            // through frameDidChange once its parent layout commits.
+            return Some(self.inner_size());
+        }
         let scale_factor = self.scale_factor();
         let size = size.to_logical(scale_factor);
         self.window()
@@ -1170,7 +1240,13 @@ impl WindowDelegate {
         }
 
         view.set_cursor_icon(cursor);
-        self.window().invalidateCursorRectsForView(&view);
+        if self.ivars().embedded_view.get() {
+            if let Some(window) = view.actual_window() {
+                window.invalidateCursorRectsForView(&view);
+            }
+        } else {
+            self.window().invalidateCursorRectsForView(&view);
+        }
     }
 
     #[inline]
@@ -1193,12 +1269,23 @@ impl WindowDelegate {
         let view = self.view();
         let state_changed = view.set_cursor_visible(visible);
         if state_changed {
-            self.window().invalidateCursorRectsForView(&view);
+            if self.ivars().embedded_view.get() {
+                if let Some(window) = view.actual_window() {
+                    window.invalidateCursorRectsForView(&view);
+                }
+            } else {
+                self.window().invalidateCursorRectsForView(&view);
+            }
         }
     }
 
     #[inline]
     pub fn scale_factor(&self) -> f64 {
+        if self.ivars().embedded_view.get() {
+            if let Some(window) = self.view().actual_window() {
+                return window.backingScaleFactor() as _;
+            }
+        }
         self.window().backingScaleFactor() as _
     }
 
@@ -1226,7 +1313,14 @@ impl WindowDelegate {
         let event = NSApplication::sharedApplication(mtm)
             .currentEvent()
             .ok_or(ExternalError::Ignored)?;
-        self.window().performWindowDragWithEvent(&event);
+        if self.ivars().embedded_view.get() {
+            self.view()
+                .actual_window()
+                .ok_or(ExternalError::Ignored)?
+                .performWindowDragWithEvent(&event);
+        } else {
+            self.window().performWindowDragWithEvent(&event);
+        }
         Ok(())
     }
 
@@ -1642,6 +1736,15 @@ impl WindowDelegate {
     #[inline]
     pub fn focus_window(&self) {
         let mtm = MainThreadMarker::from(self);
+        if self.ivars().embedded_view.get() {
+            if let Some(window) = self.view().actual_window() {
+                #[allow(deprecated)]
+                NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+                window.makeKeyAndOrderFront(None);
+                let _ = window.makeFirstResponder(Some(&self.view()));
+            }
+            return;
+        }
         let is_minimized = self.window().isMiniaturized();
         let is_visible = self.window().isVisible();
 
@@ -1739,6 +1842,9 @@ impl WindowDelegate {
 
     #[inline]
     pub fn has_focus(&self) -> bool {
+        if self.ivars().embedded_view.get() {
+            return self.view().is_embedded_focused();
+        }
         self.window().isKeyWindow()
     }
 
@@ -1924,6 +2030,11 @@ impl WindowExtMacOS for WindowDelegate {
             return true;
         }
         false
+    }
+
+    #[inline]
+    fn set_embedded_view(&self, embedded: bool) {
+        WindowDelegate::set_embedded_view(self, embedded);
     }
 
     #[inline]

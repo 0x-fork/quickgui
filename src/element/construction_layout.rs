@@ -2,7 +2,7 @@ use super::*;
 
 impl Element {
     pub(super) fn container() -> Self {
-        let default_text = TextStyle::new(14.0, Color::WHITE);
+        let default_text = TextStyle::default();
         Self {
             explicit_id: None,
             runtime_id: ElementId::new(0),

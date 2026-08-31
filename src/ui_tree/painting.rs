@@ -544,7 +544,7 @@ pub(super) fn paint_element(
         .or(focus_state.text_color)
         .or(inherited_state_text_color);
     let sampled_transition = element.transition.as_ref().map(|config| {
-        let text_fallback = sane_transition_color(element.resolved_typography.color, Color::WHITE);
+        let text_fallback = sane_transition_color(element.resolved_typography.color, Color::BLACK);
         transition_context.sample(
             element.runtime_id,
             TransitionPaintStyle {

@@ -12,12 +12,16 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
+    "./swift-ui": "./swift-ui.ts",
+    "./swift-ui/modifiers": "./swift-ui/modifiers.ts",
     "./compiler": "./compiler.ts",
     "./jsx-runtime": "./jsx-runtime.ts",
     "./jsx-dev-runtime": "./jsx-runtime.ts"
   },
   "files": [
     "index.ts",
+    "swift-ui.ts",
+    "swift-ui/modifiers.ts",
     "compiler.ts",
     "jsx-runtime.ts",
     "README.md"

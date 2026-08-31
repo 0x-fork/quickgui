@@ -200,5 +200,42 @@ still hidden. QuickGUI briefly detaches the retained content view from that hidd
 allows WGPU to present the actual Metal layer without ordering any window onscreen. It reattaches
 the same view at the unchanged frame only after GPU completion, preventing both black intermediate
 frames and cross-monitor movement in unoptimized builds.
-See `cargo run --release --example native_view` and
+
+The native Liquid Glass example embeds an AppKit `NSButton` with the macOS 26
+`NSBezelStyleGlass` bezel and falls back to a standard native push button on older systems:
+
+```console
+cargo run --release --example liquid_glass_button
+```
+
+Solid applications can instead describe real SwiftUI controls through the Rust-owned host bridge:
+
+```tsx
+import { Button, Host } from "@quickgui/solid/swift-ui";
+import { buttonStyle } from "@quickgui/solid/swift-ui/modifiers";
+
+<Host matchContents>
+  <Button label="Save changes" modifiers={[buttonStyle("glass")]} />
+</Host>;
+```
+
+`QuickGUIHostView` provides the reverse direction, analogous to Expo UI's `RNHostView`. It creates
+one child retained renderer in the Rust core, reparents that renderer's stable AppKit/WGPU view
+into SwiftUI, and keeps QuickGUI pointer, wheel, keyboard, IME, terminal, focus, and accessibility
+paths intact. The view can use a fixed `width`/`height` or max-content measurement on either axis.
+Its hidden backing `NSWindow` is never presented and remains only as the stable Winit event
+identity; closing the owner tears down every embedded child.
+
+The SwiftUI `Popover` API uses controlled `isPresented` state plus compound `Trigger` and `Content`
+parts. `Popover.Trigger` follows Base UI-style composition through
+`render={<Button label="Open" />}`: the rendered SwiftUI component keeps its own props and handler,
+then the trigger requests presentation unless that handler prevents the default action. Because
+AppKit owns the popover window, it is natively above the owner QuickGUI scene; a `QuickGUIHostView`
+inside `Popover.Content` makes ordinary QuickGUI components interactive there.
+
+Run `cd examples/swift-ui-solid && bun run dev` for the centered white-background example. Its
+Liquid Glass SwiftUI button opens a native popover containing QuickGUI text, input, and button
+components.
+
+See also `cargo run --release --example native_view` and
 `cargo run --release --example overlays`.

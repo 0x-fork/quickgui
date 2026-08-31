@@ -30,8 +30,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, retained states, overlays, terminals, SVGs, and pointer capture under protocol v15", () => {
-    expect(PROTOCOL_VERSION).toBe(15);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, and pointer capture under protocol v17", () => {
+    expect(PROTOCOL_VERSION).toBe(17);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -65,7 +65,11 @@ describe("binary mutation protocol", () => {
     );
     batch.setProperty(5, PropertyCode.TerminalScrollback, 20_000);
     batch.setProperty(5, PropertyCode.TerminalStatusListener, true);
-    batch.setProperty(5, PropertyCode.FontFamily, "JetBrainsMono Nerd Font Mono");
+    batch.setProperty(
+      5,
+      PropertyCode.FontFamily,
+      "JetBrainsMono Nerd Font Mono",
+    );
     batch.setProperty(5, PropertyCode.TerminalPalette, "[1,2,3]");
     batch.setProperty(5, PropertyCode.TerminalCursorColor, 0xffda6909, true);
     batch.setProperty(5, PropertyCode.TerminalPaddingColor, "extend");
@@ -89,7 +93,34 @@ describe("binary mutation protocol", () => {
     batch.setProperty(4, PropertyCode.AccessibilityModal, true);
     batch.createElement(6, NativeNodeTag.Svg);
     batch.setProperty(6, PropertyCode.Value, "<svg/>");
-    expect(batch.mutationCount).toBe(48);
+    batch.createElement(7, NativeNodeTag.SwiftUIHost);
+    batch.setProperty(7, PropertyCode.SwiftUIMatchContentsHorizontal, true);
+    batch.setProperty(7, PropertyCode.SwiftUIMatchContentsVertical, true);
+    batch.createElement(8, NativeNodeTag.SwiftUIButton);
+    batch.setProperty(8, PropertyCode.SwiftUIButtonStyle, "glass");
+    batch.setProperty(8, PropertyCode.SwiftUIControlSize, "large");
+    batch.setProperty(
+      8,
+      PropertyCode.SwiftUISystemImage,
+      "square.and.arrow.down",
+    );
+    batch.setProperty(8, PropertyCode.SwiftUITarget, "save");
+    batch.setProperty(8, PropertyCode.SwiftUITestId, "save-button");
+    batch.setProperty(
+      8,
+      PropertyCode.SwiftUIModifiers,
+      JSON.stringify([{ $type: "buttonStyle", style: "glass" }]),
+    );
+    batch.createElement(9, NativeNodeTag.SwiftUIQuickGUIHost);
+    batch.setProperty(9, PropertyCode.SwiftUIEmbeddedWindow, 2);
+    batch.createElement(10, NativeNodeTag.SwiftUIPopover);
+    batch.setProperty(10, PropertyCode.SwiftUIIsPresented, true);
+    batch.setProperty(10, PropertyCode.SwiftUIAttachmentAnchor, "bottom");
+    batch.setProperty(10, PropertyCode.SwiftUIArrowEdge, "top");
+    batch.setProperty(10, PropertyCode.SwiftUIPresentationListener, true);
+    batch.createElement(11, NativeNodeTag.SwiftUIPopoverTrigger);
+    batch.createElement(12, NativeNodeTag.SwiftUIPopoverContent);
+    expect(batch.mutationCount).toBe(67);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 });

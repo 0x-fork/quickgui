@@ -12,6 +12,12 @@ pub(super) enum NodeTag {
     VirtualList,
     Terminal,
     Svg,
+    SwiftUiHost,
+    SwiftUiButton,
+    SwiftUiQuickGuiHost,
+    SwiftUiPopover,
+    SwiftUiPopoverTrigger,
+    SwiftUiPopoverContent,
 }
 
 impl NodeTag {
@@ -26,6 +32,12 @@ impl NodeTag {
             7 => Ok(Self::VirtualList),
             8 => Ok(Self::Terminal),
             9 => Ok(Self::Svg),
+            10 => Ok(Self::SwiftUiHost),
+            11 => Ok(Self::SwiftUiButton),
+            12 => Ok(Self::SwiftUiQuickGuiHost),
+            13 => Ok(Self::SwiftUiPopover),
+            14 => Ok(Self::SwiftUiPopoverTrigger),
+            15 => Ok(Self::SwiftUiPopoverContent),
             _ => Err(ProtocolError::new(format!("unknown node tag {value}"))),
         }
     }

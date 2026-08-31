@@ -3,6 +3,8 @@ use super::*;
 impl Runtime {
     pub(super) fn redraw(&mut self, event_loop: &ActiveEventLoop) {
         let mut mounted_focus_previous = None;
+        #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+        let mut embedded_owner_size_changed = None;
         #[cfg(target_os = "macos")]
         {
             let previous_focus = self.window.as_ref().and_then(|state| state.ui.focused());
@@ -166,6 +168,28 @@ impl Runtime {
             }
             request_animation_frame |= image_assets.finish_resolve_frame();
             state.layout_dirty = false;
+        }
+        #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+        if let Some(embedded) = state.embedded.clone() {
+            let (match_horizontal, match_vertical) = embedded.match_axes();
+            if match_horizontal || match_vertical {
+                let measured = match state.ui.measure_intrinsic_content(
+                    state.logical_size,
+                    state.scale_factor,
+                    match_horizontal,
+                    match_vertical,
+                    &mut state.renderer,
+                ) {
+                    Ok(size) => size,
+                    Err(error) => {
+                        self.fail(event_loop, AppError::View(error.to_string()));
+                        return;
+                    }
+                };
+                if embedded.update_content_size(measured) {
+                    embedded_owner_size_changed = Some(embedded.owner);
+                }
+            }
         }
         let ime_target = state.ui.focused_text_input();
         if ime_target != state.ime_target {
@@ -391,6 +415,12 @@ impl Runtime {
         }
         if !self.invoke_pending_mouse_hover(event_loop) {
             return;
+        }
+        #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+        if let Some(owner) = embedded_owner_size_changed
+            && !self.invalidate_requests.contains(&owner)
+        {
+            self.invalidate_requests.push(owner);
         }
         if let Some(previous) = mounted_focus_previous {
             self.announce_focus_change(event_loop, previous);

@@ -74,6 +74,27 @@ pub fn create_system_popover(
     })
 }
 
+#[cfg(target_os = "macos")]
+#[napi]
+pub fn create_embedded_view(
+    app: u32,
+    parent: u32,
+    match_horizontal: bool,
+    match_vertical: bool,
+    options: Option<NativeWindowOptions>,
+    initial_batch: Option<Buffer>,
+) -> Result<u32> {
+    with_app_mut(app, |runtime| {
+        runtime.create_embedded_view(
+            parent,
+            match_horizontal,
+            match_vertical,
+            options.unwrap_or_default(),
+            initial_batch.as_deref().unwrap_or_default(),
+        )
+    })
+}
+
 #[napi]
 pub fn apply_batch(app: u32, window: u32, batch: Buffer) -> Result<u32> {
     with_app_mut(app, |runtime| runtime.apply_batch(window, &batch))
@@ -217,6 +238,30 @@ pub fn create_hosted_system_popover(
         app,
         parent,
         anchor,
+        options: options.unwrap_or_default(),
+        initial_batch: initial_batch.map_or_else(Vec::new, |batch| batch.to_vec()),
+        reply: Arc::clone(&reply),
+    })
+    .map_err(Error::from_reason)?;
+    reply.wait().map_err(Error::from_reason)
+}
+
+#[cfg(target_os = "macos")]
+#[napi]
+pub fn create_hosted_embedded_view(
+    app: u32,
+    parent: u32,
+    match_horizontal: bool,
+    match_vertical: bool,
+    options: Option<NativeWindowOptions>,
+    initial_batch: Option<Buffer>,
+) -> Result<u32> {
+    let reply = Arc::new(SyncReply::new());
+    HOST.enqueue(HostCommand::CreateEmbeddedView {
+        app,
+        parent,
+        match_horizontal,
+        match_vertical,
         options: options.unwrap_or_default(),
         initial_batch: initial_batch.map_or_else(Vec::new, |batch| batch.to_vec()),
         reply: Arc::clone(&reply),
@@ -465,6 +510,31 @@ pub(super) fn run_app_host_loop(
                         app,
                         |runtime| {
                             runtime.create_system_popover(parent, anchor, options, &initial_batch)
+                        },
+                    ));
+                }
+                #[cfg(target_os = "macos")]
+                HostCommand::CreateEmbeddedView {
+                    app,
+                    parent,
+                    match_horizontal,
+                    match_vertical,
+                    options,
+                    initial_batch,
+                    reply,
+                } => {
+                    reply.complete(with_hosted_runtime(
+                        active_app,
+                        runtime.as_mut(),
+                        app,
+                        |runtime| {
+                            runtime.create_embedded_view(
+                                parent,
+                                match_horizontal,
+                                match_vertical,
+                                options,
+                                &initial_batch,
+                            )
                         },
                     ));
                 }

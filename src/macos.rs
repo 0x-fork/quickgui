@@ -97,9 +97,8 @@ pub(crate) use windowing::{
 };
 
 use drag_drop::point_outside_ns_rect;
-use windowing::{
-    appkit_view, appkit_window, deepest_appkit_sheet, finish_native_dialog, native_file_path,
-};
+pub(crate) use windowing::appkit_view;
+use windowing::{appkit_window, deepest_appkit_sheet, finish_native_dialog, native_file_path};
 
 #[cfg(test)]
 use drag_drop::{

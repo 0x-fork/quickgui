@@ -29,6 +29,13 @@ use quickgui::{
     WindowKind, WindowLevel, WindowOptions, button, div, svg as svg_element, text, text_area,
     text_input,
 };
+#[cfg(target_os = "macos")]
+use quickgui::{
+    MacEmbeddedView, MacSwiftUiHost, SwiftUiButton, SwiftUiButtonBorderShape, SwiftUiButtonRole,
+    SwiftUiButtonStyle, SwiftUiControlSize, SwiftUiElement, SwiftUiLabelStyle, SwiftUiModifier,
+    SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor, SwiftUiQuickGuiHost,
+    native_view,
+};
 
 mod dialog;
 // napi-rs omits exported registration glue from lib-test builds, so these binding-only modules
@@ -48,7 +55,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 15;
+const PROTOCOL_VERSION: u16 = 17;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -177,7 +184,20 @@ mod property {
     pub const ACCESSIBILITY_MODAL: u16 = 113;
     pub const TERMINAL_PADDING_COLOR: u16 = 114;
     pub const TERMINAL_FONT_THICKEN: u16 = 115;
-    pub const LAST: u16 = TERMINAL_FONT_THICKEN;
+    pub const SWIFT_UI_SYSTEM_IMAGE: u16 = 116;
+    pub const SWIFT_UI_BUTTON_STYLE: u16 = 117;
+    pub const SWIFT_UI_CONTROL_SIZE: u16 = 118;
+    pub const SWIFT_UI_MATCH_CONTENTS_HORIZONTAL: u16 = 119;
+    pub const SWIFT_UI_MATCH_CONTENTS_VERTICAL: u16 = 120;
+    pub const SWIFT_UI_TARGET: u16 = 121;
+    pub const SWIFT_UI_TEST_ID: u16 = 122;
+    pub const SWIFT_UI_MODIFIERS: u16 = 123;
+    pub const SWIFT_UI_EMBEDDED_WINDOW: u16 = 124;
+    pub const SWIFT_UI_IS_PRESENTED: u16 = 125;
+    pub const SWIFT_UI_ATTACHMENT_ANCHOR: u16 = 126;
+    pub const SWIFT_UI_ARROW_EDGE: u16 = 127;
+    pub const SWIFT_UI_PRESENTATION_LISTENER: u16 = 128;
+    pub const LAST: u16 = SWIFT_UI_PRESENTATION_LISTENER;
 }
 
 #[derive(Default)]
@@ -379,6 +399,16 @@ enum HostCommand {
         app: u32,
         parent: u32,
         anchor: u32,
+        options: NativeWindowOptions,
+        initial_batch: Vec<u8>,
+        reply: Arc<SyncReply<u32>>,
+    },
+    #[cfg(target_os = "macos")]
+    CreateEmbeddedView {
+        app: u32,
+        parent: u32,
+        match_horizontal: bool,
+        match_vertical: bool,
         options: NativeWindowOptions,
         initial_batch: Vec<u8>,
         reply: Arc<SyncReply<u32>>,

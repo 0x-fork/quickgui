@@ -175,6 +175,49 @@ fn malformed_batch_is_rejected_before_tree_mutation() {
     let error = decode_batch(b"not a batch").unwrap_err();
     assert!(error.to_string().contains("magic"));
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn swift_ui_button_modifiers_decode_in_declared_order() {
+    let mut button = NativeNode::new(NodeTag::SwiftUiButton);
+    button.set_property(
+        property::SWIFT_UI_MODIFIERS,
+        Some(PropertyValue::String(Arc::from(
+            r##"[{"$type":"buttonStyle","style":"glass"},{"$type":"controlSize","size":"large"},{"$type":"buttonBorderShape","shape":"roundedRectangle","cornerRadius":14},{"$type":"labelStyle","style":"iconOnly"},{"$type":"tint","color":"#3366ffff"},{"$type":"disabled","disabled":false}]"##,
+        ))),
+    );
+
+    assert_eq!(
+        swift_ui_modifiers(&button).unwrap(),
+        vec![
+            SwiftUiModifier::ButtonStyle(SwiftUiButtonStyle::Glass),
+            SwiftUiModifier::ControlSize(SwiftUiControlSize::Large),
+            SwiftUiModifier::ButtonBorderShape {
+                shape: SwiftUiButtonBorderShape::RoundedRectangle,
+                corner_radius: Some(14.0),
+            },
+            SwiftUiModifier::LabelStyle(SwiftUiLabelStyle::IconOnly),
+            SwiftUiModifier::Tint(Arc::from("#3366ffff")),
+            SwiftUiModifier::Disabled(false),
+        ]
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn swift_ui_button_rejects_unknown_modifiers() {
+    let mut button = NativeNode::new(NodeTag::SwiftUiButton);
+    button.set_property(
+        property::SWIFT_UI_MODIFIERS,
+        Some(PropertyValue::String(Arc::from(r#"[{"$type":"unknown"}]"#))),
+    );
+
+    assert!(
+        swift_ui_modifiers(&button)
+            .unwrap_err()
+            .contains("unsupported SwiftUI modifier")
+    );
+}
 #[test]
 fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value() {
     let input_id = 7;
@@ -200,6 +243,9 @@ fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
     };
     let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
     let window = view.window_handle();
@@ -298,6 +344,9 @@ fn flex_without_direction_uses_css_row_default() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
     };
     let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
     let window = view.window_handle();
@@ -365,6 +414,9 @@ fn retained_popover_uses_core_placement_dismissal_and_focus_restoration() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
     };
     let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
     let window = view.window_handle();
@@ -431,6 +483,9 @@ fn unanchored_overlay_traps_autofocus_dismisses_and_restores_previous_focus() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
     };
     let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
     let window = view.window_handle();
@@ -536,6 +591,9 @@ fn native_svg_is_parsed_once_until_its_source_changes() {
         svgs: Rc::clone(&svgs),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
     };
     let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
     let window = view.window_handle();
@@ -604,6 +662,9 @@ fn native_virtual_list_mounts_only_the_initial_window_and_overscan() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::clone(&lists),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
     };
     let (cx, view) = quickgui::TestAppContext::new(view).unwrap();
     let window = view.window_handle();
@@ -674,6 +735,9 @@ fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::clone(&terminals),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
     };
     let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
     let window = view.window_handle();

@@ -52,7 +52,7 @@ pub(crate) fn set_window_movable(window: &Arc<Window>, movable: bool) -> Result<
     Ok(())
 }
 
-pub(super) fn appkit_view(window: &Arc<Window>) -> Result<Retained<NSView>, String> {
+pub(crate) fn appkit_view(window: &Arc<Window>) -> Result<Retained<NSView>, String> {
     MainThreadMarker::new().ok_or_else(|| {
         "native window state must be changed on the AppKit main thread".to_owned()
     })?;

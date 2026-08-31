@@ -34,7 +34,11 @@ export declare function configureHostedApp(app: number, options: NativeAppOption
 
 export declare function createApp(options?: NativeAppOptions | undefined | null): number
 
+export declare function createEmbeddedView(app: number, parent: number, matchHorizontal: boolean, matchVertical: boolean, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
+
 export declare function createHostedApp(options?: NativeAppOptions | undefined | null): number
+
+export declare function createHostedEmbeddedView(app: number, parent: number, matchHorizontal: boolean, matchVertical: boolean, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 
 export declare function createHostedSystemPopover(app: number, parent: number, anchor: number, options?: NativeWindowOptions | undefined | null, initialBatch?: Buffer | undefined | null): number
 

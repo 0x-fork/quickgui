@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { buildProject, type BuildResult } from "./build.ts";
 import { loadConfig, type ResolvedQuickGuiConfig } from "./config.ts";
@@ -241,9 +241,11 @@ async function stopApplication(child: AppProcess): Promise<void> {
   await child.exited;
 }
 
-function shouldIgnoreChange(root: string, path: string, outDir: string): boolean {
+/** @internal */
+export function shouldIgnoreChange(root: string, path: string, outDir: string): boolean {
   const pathFromRoot = relative(root, path);
   if (pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) return true;
+  if (basename(path).endsWith(".bun-build")) return true;
   const parts = pathFromRoot.split(sep);
   if (parts.some((part) => [".git", ".quickgui", "node_modules", "target"].includes(part))) {
     return true;

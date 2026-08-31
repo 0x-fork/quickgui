@@ -53,6 +53,8 @@ export const nativeExports = [
   "configureApp",
   "configureHostedApp",
   "createApp",
+  "createEmbeddedView",
+  "createHostedEmbeddedView",
   "createSystemPopover",
   "createHostedSystemPopover",
   "createHostedApp",

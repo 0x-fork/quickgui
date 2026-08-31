@@ -754,7 +754,7 @@ impl DetachedTree {
             self.seen_ids
                 .insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
             validate_container_query_limits(&root)?;
-            let inherited = TextStyle::new(14.0, Color::WHITE);
+            let inherited = TextStyle::default();
             let root_node = build_layout_node(
                 &mut self.taffy,
                 &mut self.seen_ids,

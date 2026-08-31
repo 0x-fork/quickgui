@@ -8,6 +8,8 @@ impl Runtime {
             options,
             parent,
             popover_anchor_element,
+            #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+            embedded,
         } = request;
         if let Err(error) = validate_window_options(&options) {
             self.fail(event_loop, AppError::Window(error.to_string()));
@@ -492,6 +494,8 @@ impl Runtime {
         self.window = Some(RuntimeWindow {
             parent,
             restore_focus_on_close,
+            #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+            embedded,
             view,
             renderer,
             image_assets: ImageAssetCache::new(handle, self.image_workers.clone()),
@@ -618,6 +622,52 @@ impl Runtime {
                 );
                 self.deactivate_window();
                 return;
+            }
+
+            #[cfg(feature = "swift-ui")]
+            if let Some(embedded) = self
+                .window
+                .as_ref()
+                .and_then(|state| state.embedded.clone())
+            {
+                let native_view = match self
+                    .window
+                    .as_ref()
+                    .map(|state| crate::macos::appkit_view(&state.window))
+                    .transpose()
+                {
+                    Ok(Some(view)) => crate::MacNativeView::new(&view),
+                    Ok(None) => {
+                        self.fail(
+                            event_loop,
+                            AppError::Platform(
+                                "an embedded QuickGUI surface lost its native window".to_owned(),
+                            ),
+                        );
+                        self.deactivate_window();
+                        return;
+                    }
+                    Err(error) => {
+                        self.fail(event_loop, AppError::Platform(error));
+                        self.deactivate_window();
+                        return;
+                    }
+                };
+                if let Some(state) = self.window.as_mut() {
+                    state.window.set_embedded_view(true);
+                    state.visible = true;
+                    if state.scheduler.invalidate() {
+                        // Reparenting the Winit view moves its CAMetalLayer out of the hidden
+                        // backing window. The prepared frame is not guaranteed to survive that
+                        // AppKit hierarchy change, so schedule a real surface present in the
+                        // native host instead of only leaving the retained frame marked dirty.
+                        state.window.request_redraw();
+                    }
+                }
+                embedded.install(native_view);
+                if !self.invalidate_requests.contains(&embedded.owner) {
+                    self.invalidate_requests.push(embedded.owner);
+                }
             }
 
             if self.config.kind != WindowKind::SystemPopover {

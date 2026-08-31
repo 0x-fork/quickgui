@@ -138,6 +138,11 @@ pub struct ViewState {
     marked_text: RefCell<Retained<NSMutableAttributedString>>,
     accepts_first_mouse: bool,
 
+    /// The retained WinitView is currently hosted by an AppKit hierarchy other than its hidden
+    /// backing NSWindow. Events still target `_ns_window` so Winit keeps one stable WindowId.
+    embedded: Cell<bool>,
+    embedded_focused: Cell<bool>,
+
     // Weak reference because the window keeps a strong reference to the view
     _ns_window: WeakId<NSWindow>,
 
@@ -179,6 +184,14 @@ declare_class!(
             };
             assert_ne!(tracking_rect, 0, "failed adding tracking rect");
             self.ivars().tracking_rect.set(Some(tracking_rect));
+
+            if self.ivars().embedded.get()
+                && self.actual_window().is_none()
+                && self.ivars().embedded_focused.replace(false)
+            {
+                self.reset_modifiers();
+                self.queue_event(WindowEvent::Focused(false));
+            }
         }
 
         #[method(frameDidChange:)]
@@ -218,6 +231,25 @@ declare_class!(
         #[method(acceptsFirstResponder)]
         fn accepts_first_responder(&self) -> bool {
             trace_scope!("acceptsFirstResponder");
+            true
+        }
+
+        #[method(becomeFirstResponder)]
+        fn become_first_responder(&self) -> bool {
+            trace_scope!("becomeFirstResponder");
+            if self.ivars().embedded.get() && !self.ivars().embedded_focused.replace(true) {
+                self.queue_event(WindowEvent::Focused(true));
+            }
+            true
+        }
+
+        #[method(resignFirstResponder)]
+        fn resign_first_responder(&self) -> bool {
+            trace_scope!("resignFirstResponder");
+            if self.ivars().embedded.get() && self.ivars().embedded_focused.replace(false) {
+                self.reset_modifiers();
+                self.queue_event(WindowEvent::Focused(false));
+            }
             true
         }
 
@@ -389,7 +421,7 @@ declare_class!(
                 self.ivars().ime_size.get()
             );
             // Return value is expected to be in screen coordinates, so we need a conversion here
-            self.window()
+            self.interaction_window()
                 .convertRectToScreen(self.convertRect_toView(rect, None))
         }
 
@@ -531,7 +563,7 @@ declare_class!(
         #[method(insertTab:)]
         fn insert_tab(&self, _sender: Option<&AnyObject>) {
             trace_scope!("insertTab:");
-            let window = self.window();
+            let window = self.interaction_window();
             if let Some(first_responder) = window.firstResponder() {
                 if *first_responder == ***self {
                     window.selectNextKeyView(Some(self))
@@ -542,7 +574,7 @@ declare_class!(
         #[method(insertBackTab:)]
         fn insert_back_tab(&self, _sender: Option<&AnyObject>) {
             trace_scope!("insertBackTab:");
-            let window = self.window();
+            let window = self.interaction_window();
             if let Some(first_responder) = window.firstResponder() {
                 if *first_responder == ***self {
                     window.selectPreviousKeyView(Some(self))
@@ -838,6 +870,8 @@ impl WinitView {
             forward_key_to_app: Default::default(),
             marked_text: Default::default(),
             accepts_first_mouse,
+            embedded: Cell::new(false),
+            embedded_focused: Cell::new(false),
             _ns_window: WeakId::new(&window.retain()),
             option_as_alt: Cell::new(option_as_alt),
         });
@@ -880,6 +914,30 @@ impl WinitView {
             .expect("view to have a window")
     }
 
+    pub(super) fn actual_window(&self) -> Option<Retained<NSWindow>> {
+        unsafe { msg_send_id![self, window] }
+    }
+
+    fn interaction_window(&self) -> Retained<NSWindow> {
+        if self.ivars().embedded.get() {
+            if let Some(window) = self.actual_window() {
+                return window;
+            }
+        }
+        self.window()
+    }
+
+    pub(super) fn is_embedded_focused(&self) -> bool {
+        self.ivars().embedded_focused.get()
+    }
+
+    pub(super) fn set_embedded(&self, embedded: bool) {
+        self.ivars().embedded.set(embedded);
+        if !embedded {
+            self.ivars().embedded_focused.set(false);
+        }
+    }
+
     fn queue_event(&self, event: WindowEvent) {
         self.ivars()
             .app_delegate
@@ -910,6 +968,11 @@ impl WinitView {
     }
 
     fn scale_factor(&self) -> f64 {
+        if self.ivars().embedded.get() {
+            if let Some(window) = self.actual_window() {
+                return window.backingScaleFactor() as f64;
+            }
+        }
         self.window().backingScaleFactor() as f64
     }
 

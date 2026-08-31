@@ -196,6 +196,72 @@ impl AppRunner {
         Ok(handle)
     }
 
+    /// Queue a retained QuickGUI surface whose AppKit view will be mounted by a native host.
+    ///
+    /// The returned handle is stable immediately, just like [`Self::open_window`]. The hidden
+    /// backing NSWindow is never presented; it exists only to preserve Winit's event identity and
+    /// the existing renderer, input, IME, and accessibility pipelines while its rendering NSView
+    /// is reparented into SwiftUI.
+    #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+    pub fn open_embedded_view<V: View>(
+        &mut self,
+        owner: WindowHandle,
+        mut options: WindowOptions,
+        match_horizontal: bool,
+        match_vertical: bool,
+        view: V,
+    ) -> Result<crate::MacEmbeddedView, AppError> {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return Err(AppError::Window(
+                "cannot open an embedded view after the application event loop exited".to_owned(),
+            ));
+        }
+        let owner_exists = self.runtime.current_handle() == Some(owner)
+            || self.runtime.window_handles.contains_key(&owner)
+            || self
+                .runtime
+                .pending_windows
+                .iter()
+                .any(|request| request.handle == owner);
+        if !owner_exists {
+            return Err(AppError::Window(
+                "an embedded view requires a queued or mounted owner window".to_owned(),
+            ));
+        }
+        options.show = false;
+        options.focus = false;
+        options.window_bounds = None;
+        options.minimum_size = None;
+        options.maximum_size = None;
+        options.decorated = false;
+        options.title_bar_style = TitleBarStyle::Hidden;
+        options.shadow = false;
+        options.is_movable = false;
+        options.is_resizable = false;
+        options.is_minimizable = false;
+        options.is_maximizable = false;
+        options.is_closable = false;
+        options.size.width = options.size.width.max(1.0);
+        options.size.height = options.size.height.max(1.0);
+        validate_window_options(&options).map_err(|error| AppError::Window(error.to_string()))?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| AppError::Window("application event loop is closed".to_owned()))?;
+        let handle = WindowHandle::next();
+        let embedded = crate::MacEmbeddedView::pending(
+            handle,
+            owner,
+            options.size,
+            match_horizontal,
+            match_vertical,
+        );
+        let mut request = WindowRequest::with_handle(view, options, Some(owner), handle);
+        request.embedded = Some(embedded.clone());
+        self.runtime.pending_windows.push_back(request);
+        Ok(embedded)
+    }
+
     /// Queue a native popover anchored to one currently mounted element in a parent window.
     ///
     /// Embedding runtimes may call this before the parent's first presented frame. Resolution is

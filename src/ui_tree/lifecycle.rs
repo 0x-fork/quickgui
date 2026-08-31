@@ -236,7 +236,7 @@ impl UiTree {
         validate_style_transition_count(&root, &mut style_transition_count)?;
         validate_container_query_limits(&root)?;
         collect_explicit_ids(&root, &mut self.seen_ids)?;
-        let inherited = TextStyle::new(14.0, Color::WHITE);
+        let inherited = TextStyle::default();
         let root_node = build_layout_node(
             &mut self.taffy,
             &mut self.seen_ids,
@@ -755,6 +755,55 @@ impl UiTree {
             Instant::now(),
             &mut prepare,
         )
+    }
+
+    /// Measure the mounted root with max-content constraints on selected axes, then restore its
+    /// ordinary finite viewport layout. Embedded native hosts use this bounded two-pass path so
+    /// intrinsic SwiftUI sizing does not create a second renderer or a parallel layout engine.
+    #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+    pub(crate) fn measure_intrinsic_content(
+        &mut self,
+        viewport: Size,
+        scale_factor: f32,
+        match_horizontal: bool,
+        match_vertical: bool,
+        renderer: &mut impl TextLayoutEngine,
+    ) -> Result<Size, UiError> {
+        let Some(root) = self.root_node else {
+            return Ok(Size::new(1.0, 1.0));
+        };
+        compute_detached_layout_available(
+            &mut self.taffy,
+            root,
+            TaffySize {
+                width: if match_horizontal {
+                    AvailableSpace::MaxContent
+                } else {
+                    AvailableSpace::Definite(viewport.width)
+                },
+                height: if match_vertical {
+                    AvailableSpace::MaxContent
+                } else {
+                    AvailableSpace::Definite(viewport.height)
+                },
+            },
+            scale_factor,
+            renderer,
+        )?;
+        let measured = self.taffy.layout(root)?.size;
+        compute_detached_layout(&mut self.taffy, root, viewport, scale_factor, renderer)?;
+        Ok(Size::new(
+            if match_horizontal {
+                measured.width.max(1.0)
+            } else {
+                viewport.width.max(1.0)
+            },
+            if match_vertical {
+                measured.height.max(1.0)
+            } else {
+                viewport.height.max(1.0)
+            },
+        ))
     }
 
     /// Discard CPU-only semantic measurement caches before an exact offscreen visual layout.

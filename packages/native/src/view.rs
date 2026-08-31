@@ -9,6 +9,10 @@ pub(super) struct NativeView {
     pub(super) svgs: Rc<RefCell<HashMap<u32, NativeSvgState>>>,
     pub(super) lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
     pub(super) terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
+    #[cfg(target_os = "macos")]
+    pub(super) swift_ui_hosts: Rc<RefCell<HashMap<u32, NativeSwiftUiHostState>>>,
+    #[cfg(target_os = "macos")]
+    pub(super) embedded_views: Rc<RefCell<HashMap<u32, MacEmbeddedView>>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,6 +52,16 @@ impl View for NativeView {
                 .get(id)
                 .is_some_and(|node| node.tag == NodeTag::Terminal)
         });
+        #[cfg(target_os = "macos")]
+        let mut swift_ui_hosts = self.swift_ui_hosts.borrow_mut();
+        #[cfg(target_os = "macos")]
+        let embedded_views = self.embedded_views.borrow();
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::SwiftUiHost)
+        });
         let mut root = div()
             .id(ElementId::new(ROOT_ELEMENT_ID))
             .size_full()
@@ -59,6 +73,10 @@ impl View for NativeView {
                 svgs: &mut svgs,
                 lists: &mut lists,
                 terminals: &mut terminals,
+                #[cfg(target_os = "macos")]
+                swift_ui_hosts: &mut swift_ui_hosts,
+                #[cfg(target_os = "macos")]
+                embedded_views: &embedded_views,
             };
             root = root.children(node.children.iter().filter_map(|id| {
                 build_element(*id, window, &tree, &self.events, &mut states, cx, 0)
@@ -88,6 +106,365 @@ pub(super) struct NativeElementStates<'a> {
     pub(super) svgs: &'a mut HashMap<u32, NativeSvgState>,
     pub(super) lists: &'a mut HashMap<u32, NativeListState>,
     pub(super) terminals: &'a mut HashMap<u32, NativeTerminalState>,
+    #[cfg(target_os = "macos")]
+    pub(super) swift_ui_hosts: &'a mut HashMap<u32, NativeSwiftUiHostState>,
+    #[cfg(target_os = "macos")]
+    pub(super) embedded_views: &'a HashMap<u32, MacEmbeddedView>,
+}
+
+#[cfg(target_os = "macos")]
+pub(super) struct NativeSwiftUiHostState {
+    host: std::result::Result<MacSwiftUiHost, String>,
+}
+
+#[cfg(target_os = "macos")]
+impl NativeSwiftUiHostState {
+    fn new(window: u32, events: &EventQueue, invalidator: quickgui::WindowInvalidator) -> Self {
+        let action_events = Rc::clone(events);
+        let presentation_events = Rc::clone(events);
+        let action_invalidator = invalidator.clone();
+        let presentation_invalidator = invalidator;
+        Self {
+            host: MacSwiftUiHost::new_with_events(
+                move |target| {
+                    let Ok(target) = u32::try_from(target) else {
+                        return;
+                    };
+                    enqueue_event(
+                        &action_events,
+                        QueuedEvent {
+                            kind: "click",
+                            window,
+                            target,
+                            value: None,
+                        },
+                    );
+                    action_invalidator.invalidate();
+                },
+                move |target, presented| {
+                    let Ok(target) = u32::try_from(target) else {
+                        return;
+                    };
+                    enqueue_event(
+                        &presentation_events,
+                        QueuedEvent {
+                            kind: "presentationchange",
+                            window,
+                            target,
+                            value: Some(Arc::from(if presented { "true" } else { "false" })),
+                        },
+                    );
+                    presentation_invalidator.invalidate();
+                },
+            ),
+        }
+    }
+
+    fn element(
+        &mut self,
+        node: &NativeNode,
+        tree: &NativeTree,
+        embedded_views: &HashMap<u32, MacEmbeddedView>,
+    ) -> std::result::Result<Element, String> {
+        let host = self.host.as_mut().map_err(|error| error.clone())?;
+        let elements = swift_ui_children(&node.children, tree, embedded_views)?;
+        host.sync(&elements)?;
+        let fitting = host.fitting_size()?;
+        let mut element = native_view(host.view());
+        if node
+            .boolean(property::SWIFT_UI_MATCH_CONTENTS_HORIZONTAL)
+            .unwrap_or(false)
+        {
+            element = element.w(fitting.width);
+        }
+        if node
+            .boolean(property::SWIFT_UI_MATCH_CONTENTS_VERTICAL)
+            .unwrap_or(false)
+        {
+            element = element.h(fitting.height);
+        }
+        Ok(element)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn swift_ui_button(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiButton, String> {
+    let label = node
+        .string(property::VALUE)
+        .map(Arc::<str>::from)
+        .or_else(|| {
+            let text = swift_ui_text_content(node, tree);
+            (!text.is_empty()).then(|| Arc::from(text))
+        });
+    let mut button = SwiftUiButton::new(u64::from(id)).role(match node.string(property::ROLE) {
+        Some("cancel") => SwiftUiButtonRole::Cancel,
+        Some("destructive") => SwiftUiButtonRole::Destructive,
+        _ => SwiftUiButtonRole::Default,
+    });
+    if let Some(label) = label {
+        button = button.label(label);
+    }
+    if let Some(target) = node.string(property::SWIFT_UI_TARGET) {
+        button = button.target(Arc::<str>::from(target));
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        button = button.test_id(Arc::<str>::from(test_id));
+    }
+    if let Some(style) = node.string(property::SWIFT_UI_BUTTON_STYLE) {
+        button = button.style(match style {
+            "bordered" => SwiftUiButtonStyle::Bordered,
+            "borderedProminent" => SwiftUiButtonStyle::BorderedProminent,
+            "borderless" => SwiftUiButtonStyle::Borderless,
+            "plain" => SwiftUiButtonStyle::Plain,
+            "glass" => SwiftUiButtonStyle::Glass,
+            "glassProminent" => SwiftUiButtonStyle::GlassProminent,
+            _ => SwiftUiButtonStyle::Automatic,
+        });
+    }
+    if let Some(size) = node.string(property::SWIFT_UI_CONTROL_SIZE) {
+        button = button.control_size(match size {
+            "mini" => SwiftUiControlSize::Mini,
+            "small" => SwiftUiControlSize::Small,
+            "large" => SwiftUiControlSize::Large,
+            "extraLarge" => SwiftUiControlSize::ExtraLarge,
+            _ => SwiftUiControlSize::Regular,
+        });
+    }
+    if let Some(disabled) = node.boolean(property::DISABLED) {
+        button = button.disabled(disabled);
+    }
+    button = button
+        .modifiers(swift_ui_modifiers(node)?)
+        .action(node.boolean(property::CLICK_LISTENER).unwrap_or(false));
+    if let Some(system_image) = node
+        .string(property::SWIFT_UI_SYSTEM_IMAGE)
+        .filter(|value| !value.is_empty())
+    {
+        button = button.system_image(Arc::<str>::from(system_image));
+    }
+    Ok(button)
+}
+
+#[cfg(target_os = "macos")]
+fn swift_ui_children(
+    children: &[u32],
+    tree: &NativeTree,
+    embedded_views: &HashMap<u32, MacEmbeddedView>,
+) -> std::result::Result<Vec<SwiftUiElement>, String> {
+    children
+        .iter()
+        .filter_map(|id| {
+            tree.nodes
+                .get(id)
+                .and_then(|node| swift_ui_element(*id, node, tree, embedded_views))
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn swift_ui_element(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+    embedded_views: &HashMap<u32, MacEmbeddedView>,
+) -> Option<std::result::Result<SwiftUiElement, String>> {
+    match node.tag {
+        NodeTag::SwiftUiButton => Some(swift_ui_button(id, node, tree).map(SwiftUiElement::Button)),
+        NodeTag::SwiftUiQuickGuiHost => Some((|| {
+            let embedded_id = node
+                .number(property::SWIFT_UI_EMBEDDED_WINDOW)
+                .filter(|id| *id >= 1.0 && *id <= u32::MAX as f32)
+                .map(|id| id as u32);
+            let mut host = match embedded_id {
+                Some(embedded_id) => {
+                    let embedded = embedded_views.get(&embedded_id).cloned().ok_or_else(|| {
+                        format!(
+                            "SwiftUI QuickGUIHostView {id} references unknown embedded window {embedded_id}"
+                        )
+                    })?;
+                    SwiftUiQuickGuiHost::new(u64::from(id), embedded)
+                }
+                None => SwiftUiQuickGuiHost::pending(u64::from(id)),
+            };
+            host.match_horizontal = node
+                .boolean(property::SWIFT_UI_MATCH_CONTENTS_HORIZONTAL)
+                .unwrap_or(false);
+            host.match_vertical = node
+                .boolean(property::SWIFT_UI_MATCH_CONTENTS_VERTICAL)
+                .unwrap_or(false);
+            host.width = node.number(property::WIDTH).filter(|value| *value > 0.0);
+            host.height = node.number(property::HEIGHT).filter(|value| *value > 0.0);
+            host.test_id = node
+                .string(property::SWIFT_UI_TEST_ID)
+                .filter(|value| !value.is_empty())
+                .map(Arc::<str>::from);
+            Ok(SwiftUiElement::QuickGuiHost(host))
+        })()),
+        NodeTag::SwiftUiPopover => Some((|| {
+            let mut trigger = None;
+            let mut content = None;
+            for child in &node.children {
+                let Some(slot) = tree.nodes.get(child) else {
+                    continue;
+                };
+                match slot.tag {
+                    NodeTag::SwiftUiPopoverTrigger if trigger.is_none() => {
+                        trigger = Some(swift_ui_children(&slot.children, tree, embedded_views)?);
+                    }
+                    NodeTag::SwiftUiPopoverContent if content.is_none() => {
+                        content = Some(swift_ui_children(&slot.children, tree, embedded_views)?);
+                    }
+                    _ => {}
+                }
+            }
+            let mut popover = SwiftUiPopover::new(u64::from(id));
+            popover.is_presented = node
+                .boolean(property::SWIFT_UI_IS_PRESENTED)
+                .unwrap_or(false);
+            popover.attachment_anchor = match node.string(property::SWIFT_UI_ATTACHMENT_ANCHOR) {
+                Some("top") => SwiftUiPopoverAttachmentAnchor::Top,
+                Some("bottom") => SwiftUiPopoverAttachmentAnchor::Bottom,
+                Some("leading") => SwiftUiPopoverAttachmentAnchor::Leading,
+                Some("trailing") => SwiftUiPopoverAttachmentAnchor::Trailing,
+                _ => SwiftUiPopoverAttachmentAnchor::Center,
+            };
+            popover.arrow_edge = match node.string(property::SWIFT_UI_ARROW_EDGE) {
+                Some("top") => SwiftUiPopoverArrowEdge::Top,
+                Some("leading") => SwiftUiPopoverArrowEdge::Leading,
+                Some("trailing") => SwiftUiPopoverArrowEdge::Trailing,
+                _ => SwiftUiPopoverArrowEdge::Bottom,
+            };
+            popover.trigger = trigger
+                .ok_or_else(|| format!("SwiftUI Popover {id} requires one Popover.Trigger"))?;
+            popover.content = content
+                .ok_or_else(|| format!("SwiftUI Popover {id} requires one Popover.Content"))?;
+            popover.test_id = node
+                .string(property::SWIFT_UI_TEST_ID)
+                .filter(|value| !value.is_empty())
+                .map(Arc::<str>::from);
+            Ok(SwiftUiElement::Popover(popover))
+        })()),
+        NodeTag::SwiftUiPopoverTrigger | NodeTag::SwiftUiPopoverContent => None,
+        _ => Some(Err(format!(
+            "node {id} is not a SwiftUI component and cannot be mounted directly in Host"
+        ))),
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[derive(serde::Deserialize)]
+struct NativeSwiftUiModifier {
+    #[serde(rename = "$type")]
+    kind: String,
+    style: Option<String>,
+    size: Option<String>,
+    shape: Option<String>,
+    #[serde(rename = "cornerRadius")]
+    corner_radius: Option<f32>,
+    color: Option<String>,
+    disabled: Option<bool>,
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_modifiers(
+    node: &NativeNode,
+) -> std::result::Result<Vec<SwiftUiModifier>, String> {
+    let Some(payload) = node.string(property::SWIFT_UI_MODIFIERS) else {
+        return Ok(Vec::new());
+    };
+    let modifiers = serde_json::from_str::<Vec<NativeSwiftUiModifier>>(payload)
+        .map_err(|error| format!("invalid SwiftUI modifiers: {error}"))?;
+    modifiers
+        .into_iter()
+        .map(|modifier| match modifier.kind.as_str() {
+            "buttonStyle" => Ok(SwiftUiModifier::ButtonStyle(
+                match modifier.style.as_deref() {
+                    Some("automatic") => SwiftUiButtonStyle::Automatic,
+                    Some("bordered") => SwiftUiButtonStyle::Bordered,
+                    Some("borderedProminent") => SwiftUiButtonStyle::BorderedProminent,
+                    Some("borderless") => SwiftUiButtonStyle::Borderless,
+                    Some("glass") => SwiftUiButtonStyle::Glass,
+                    Some("glassProminent") => SwiftUiButtonStyle::GlassProminent,
+                    Some("plain") => SwiftUiButtonStyle::Plain,
+                    _ => return Err("buttonStyle modifier has an invalid style".to_owned()),
+                },
+            )),
+            "buttonBorderShape" => {
+                let shape = match modifier.shape.as_deref() {
+                    Some("automatic") => SwiftUiButtonBorderShape::Automatic,
+                    Some("capsule") => SwiftUiButtonBorderShape::Capsule,
+                    Some("roundedRectangle") => SwiftUiButtonBorderShape::RoundedRectangle,
+                    Some("circle") => SwiftUiButtonBorderShape::Circle,
+                    _ => return Err("buttonBorderShape modifier has an invalid shape".to_owned()),
+                };
+                if modifier
+                    .corner_radius
+                    .is_some_and(|radius| !radius.is_finite() || radius < 0.0)
+                {
+                    return Err("buttonBorderShape modifier has an invalid cornerRadius".to_owned());
+                }
+                Ok(SwiftUiModifier::ButtonBorderShape {
+                    shape,
+                    corner_radius: modifier.corner_radius,
+                })
+            }
+            "controlSize" => Ok(SwiftUiModifier::ControlSize(
+                match modifier.size.as_deref() {
+                    Some("mini") => SwiftUiControlSize::Mini,
+                    Some("small") => SwiftUiControlSize::Small,
+                    Some("regular") => SwiftUiControlSize::Regular,
+                    Some("large") => SwiftUiControlSize::Large,
+                    Some("extraLarge") => SwiftUiControlSize::ExtraLarge,
+                    _ => return Err("controlSize modifier has an invalid size".to_owned()),
+                },
+            )),
+            "labelStyle" => Ok(SwiftUiModifier::LabelStyle(
+                match modifier.style.as_deref() {
+                    Some("automatic") => SwiftUiLabelStyle::Automatic,
+                    Some("iconOnly") => SwiftUiLabelStyle::IconOnly,
+                    Some("titleAndIcon") => SwiftUiLabelStyle::TitleAndIcon,
+                    Some("titleOnly") => SwiftUiLabelStyle::TitleOnly,
+                    _ => return Err("labelStyle modifier has an invalid style".to_owned()),
+                },
+            )),
+            "tint" => modifier
+                .color
+                .filter(|color| !color.is_empty())
+                .map(|color| SwiftUiModifier::Tint(Arc::from(color)))
+                .ok_or_else(|| "tint modifier has an invalid color".to_owned()),
+            "disabled" => modifier
+                .disabled
+                .map(SwiftUiModifier::Disabled)
+                .ok_or_else(|| "disabled modifier has no disabled value".to_owned()),
+            kind => Err(format!("unsupported SwiftUI modifier `{kind}`")),
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn swift_ui_text_content(node: &NativeNode, tree: &NativeTree) -> String {
+    let mut text = String::new();
+    let mut pending = node.children.iter().copied().rev().collect::<Vec<_>>();
+    let mut visited = 0;
+    while let Some(id) = pending.pop() {
+        visited += 1;
+        if visited > MAX_TREE_DEPTH {
+            break;
+        }
+        let Some(child) = tree.nodes.get(&id) else {
+            continue;
+        };
+        if child.tag == NodeTag::Text {
+            text.push_str(&child.text);
+        } else {
+            pending.extend(child.children.iter().copied().rev());
+        }
+    }
+    text
 }
 
 pub(super) fn build_element(
@@ -269,6 +646,32 @@ pub(super) fn build_element(
                     )))
             }
         }
+        NodeTag::SwiftUiHost => {
+            #[cfg(target_os = "macos")]
+            {
+                let state = states.swift_ui_hosts.entry(id).or_insert_with(|| {
+                    NativeSwiftUiHostState::new(window, events, cx.window_invalidator())
+                });
+                match state.element(node, tree, states.embedded_views) {
+                    Ok(element) => element,
+                    Err(error) => div()
+                        .size_full()
+                        .bg(Color::rgb8(255, 255, 255))
+                        .text_color(Color::rgb8(185, 28, 28))
+                        .p_4()
+                        .child(text(format!("SwiftUI host error: {error}"))),
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                div().hidden()
+            }
+        }
+        NodeTag::SwiftUiButton
+        | NodeTag::SwiftUiQuickGuiHost
+        | NodeTag::SwiftUiPopover
+        | NodeTag::SwiftUiPopoverTrigger
+        | NodeTag::SwiftUiPopoverContent => return None,
     }
     .id(element_id);
 
@@ -423,6 +826,12 @@ pub(super) fn build_element(
         | NodeTag::Markdown
         | NodeTag::Svg
         | NodeTag::Terminal => {}
+        NodeTag::SwiftUiHost
+        | NodeTag::SwiftUiButton
+        | NodeTag::SwiftUiQuickGuiHost
+        | NodeTag::SwiftUiPopover
+        | NodeTag::SwiftUiPopoverTrigger
+        | NodeTag::SwiftUiPopoverContent => {}
         NodeTag::Root | NodeTag::View | NodeTag::Button => {
             element = element.children(node.children.iter().filter_map(|child| {
                 build_element(*child, window, tree, events, states, cx, depth + 1)

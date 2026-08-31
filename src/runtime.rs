@@ -479,6 +479,8 @@ struct ClosedWindow {
 struct RuntimeWindow {
     parent: Option<WindowHandle>,
     restore_focus_on_close: Option<ElementId>,
+    #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+    embedded: Option<crate::MacEmbeddedView>,
     view: Box<dyn AnyView>,
     renderer: GpuRenderer,
     image_assets: ImageAssetCache,

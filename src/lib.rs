@@ -74,6 +74,8 @@ mod spring;
 mod styled_text;
 mod svg;
 mod svg_renderer;
+#[cfg(all(target_os = "macos", feature = "swift-ui"))]
+mod swift_ui;
 mod table;
 mod tabs;
 #[cfg(feature = "terminal")]
@@ -362,6 +364,12 @@ pub use svg::{
     SvgTransform,
 };
 pub use svg_renderer::{MAX_GPU_SVG_CACHE_BYTES, MAX_GPU_SVG_CACHE_ENTRIES};
+#[cfg(all(target_os = "macos", feature = "swift-ui"))]
+pub use swift_ui::{
+    MacEmbeddedView, MacSwiftUiHost, SwiftUiButton, SwiftUiButtonBorderShape, SwiftUiButtonRole,
+    SwiftUiButtonStyle, SwiftUiControlSize, SwiftUiElement, SwiftUiLabelStyle, SwiftUiModifier,
+    SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor, SwiftUiQuickGuiHost,
+};
 pub use table::{
     MAX_TABLE_COLUMNS, MAX_TABLE_ROWS, TableActivate, TableCellPosition, TableCellState,
     TableColumn, TableColumnAlign, TableFirstRow, TableHeaderState, TableLastRow, TableLayout,

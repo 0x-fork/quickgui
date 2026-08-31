@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 15;
+export const PROTOCOL_VERSION = 17;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -14,6 +14,12 @@ export const enum NativeNodeTag {
   VirtualList = 7,
   Terminal = 8,
   Svg = 9,
+  SwiftUIHost = 10,
+  SwiftUIButton = 11,
+  SwiftUIQuickGUIHost = 12,
+  SwiftUIPopover = 13,
+  SwiftUIPopoverTrigger = 14,
+  SwiftUIPopoverContent = 15,
 }
 
 export const enum PropertyCode {
@@ -132,6 +138,19 @@ export const enum PropertyCode {
   AccessibilityModal = 113,
   TerminalPaddingColor = 114,
   TerminalFontThicken = 115,
+  SwiftUISystemImage = 116,
+  SwiftUIButtonStyle = 117,
+  SwiftUIControlSize = 118,
+  SwiftUIMatchContentsHorizontal = 119,
+  SwiftUIMatchContentsVertical = 120,
+  SwiftUITarget = 121,
+  SwiftUITestId = 122,
+  SwiftUIModifiers = 123,
+  SwiftUIEmbeddedWindow = 124,
+  SwiftUIIsPresented = 125,
+  SwiftUIAttachmentAnchor = 126,
+  SwiftUIArrowEdge = 127,
+  SwiftUIPresentationListener = 128,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

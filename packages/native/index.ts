@@ -418,7 +418,8 @@ function nativeAppOptions(options: AppOptions): binding.NativeAppOptions {
   if (paths?.resourceDir !== undefined) native.resourceDir = paths.resourceDir;
   if (paths?.configDir !== undefined) native.configDir = paths.configDir;
   if (paths?.dataDir !== undefined) native.dataDir = paths.dataDir;
-  if (paths?.localDataDir !== undefined) native.localDataDir = paths.localDataDir;
+  if (paths?.localDataDir !== undefined)
+    native.localDataDir = paths.localDataDir;
   if (paths?.cacheDir !== undefined) native.cacheDir = paths.cacheDir;
   if (paths?.logDir !== undefined) native.logDir = paths.logDir;
   if (paths?.runtimeDir !== undefined) native.runtimeDir = paths.runtimeDir;
@@ -443,15 +444,21 @@ function withCurrentWindow<T>(window: Window, callback: () => T): T {
 configureSystemContext(
   () => {
     const app = activeApp;
-    if (!app) throw new Error("create a QuickGUI App before using a native system API");
+    if (!app)
+      throw new Error("create a QuickGUI App before using a native system API");
     app._assertReady();
     return { appId: app.nativeId, hosted: hostedRuntime };
   },
   (window) => {
     const app = window?.app ?? activeApp;
-    if (!app) throw new Error("create a QuickGUI App before using a native window API");
+    if (!app)
+      throw new Error("create a QuickGUI App before using a native window API");
     const resolved = window ?? app.windows.values().next().value;
-    if (!resolved || resolved.closed || app.windows.get(resolved.nativeId) !== resolved) {
+    if (
+      !resolved ||
+      resolved.closed ||
+      app.windows.get(resolved.nativeId) !== resolved
+    ) {
       throw new Error("a native window API requires an open QuickGUI Window");
     }
     app._assertReady();
@@ -485,7 +492,9 @@ class App {
 
   constructor() {
     if (activeApp) {
-      throw new Error("a QuickGUI App is already active in this JavaScript isolate");
+      throw new Error(
+        "a QuickGUI App is already active in this JavaScript isolate",
+      );
     }
     const initialOptions = embeddedAppOptions
       ? nativeAppOptions(embeddedAppOptions)
@@ -547,7 +556,8 @@ class App {
     if (paths.homeDir !== undefined) result.homeDir = paths.homeDir;
     if (paths.configDir !== undefined) result.configDir = paths.configDir;
     if (paths.dataDir !== undefined) result.dataDir = paths.dataDir;
-    if (paths.localDataDir !== undefined) result.localDataDir = paths.localDataDir;
+    if (paths.localDataDir !== undefined)
+      result.localDataDir = paths.localDataDir;
     if (paths.cacheDir !== undefined) result.cacheDir = paths.cacheDir;
     if (paths.logDir !== undefined) result.logDir = paths.logDir;
     if (paths.runtimeDir !== undefined) result.runtimeDir = paths.runtimeDir;
@@ -634,7 +644,9 @@ class App {
         this.#dispatchDialog(event);
         continue;
       }
-      const systemEvent = dispatchSystemEvent(event, (id) => this.windows.get(id));
+      const systemEvent = dispatchSystemEvent(event, (id) =>
+        this.windows.get(id),
+      );
       const appEvent = this.#dispatchAppEvent(event);
       if (systemEvent || appEvent) continue;
       const window = this.windows.get(event.window);
@@ -642,7 +654,11 @@ class App {
       if (event.kind === "close") {
         this._didCloseWindow(window);
       } else {
-        window._dispatchEvent(event.kind as NativeEventType, event.target, event.value);
+        window._dispatchEvent(
+          event.kind as NativeEventType,
+          event.target,
+          event.value,
+        );
       }
     }
   }
@@ -689,7 +705,8 @@ class App {
           await Bun.sleep(0);
         }
       }
-      if (exitCode === undefined) throw new Error("the QuickGUI app exited without a status code");
+      if (exitCode === undefined)
+        throw new Error("the QuickGUI app exited without a status code");
       await this.#emitAppEventAndWait("quit", { exitCode });
       return exitCode;
     } finally {
@@ -702,7 +719,9 @@ class App {
     this.#assertAlive();
     if (this.#singleInstanceIdentifier) {
       if (this.#singleInstanceIdentifier !== identifier) {
-        throw new Error("this QuickGUI app already owns a different single-instance lock");
+        throw new Error(
+          "this QuickGUI app already owns a different single-instance lock",
+        );
       }
       return true;
     }
@@ -735,9 +754,11 @@ class App {
     this.#assertAlive();
     this._assertReady();
     const native: binding.NativeRelaunchOptions = {};
-    if (options.executable !== undefined) native.executable = options.executable;
+    if (options.executable !== undefined)
+      native.executable = options.executable;
     if (options.arguments === null) native.clearArguments = true;
-    else if (options.arguments !== undefined) native.arguments = [...options.arguments];
+    else if (options.arguments !== undefined)
+      native.arguments = [...options.arguments];
     if (options.workingDirectory !== undefined) {
       native.workingDirectory = options.workingDirectory;
     }
@@ -768,7 +789,11 @@ class App {
       type = "openUrls";
       try {
         const parsed: unknown = JSON.parse(event.value ?? "[]");
-        payload = Array.isArray(parsed) && parsed.every((url) => typeof url === "string") ? parsed : [];
+        payload =
+          Array.isArray(parsed) &&
+          parsed.every((url) => typeof url === "string")
+            ? parsed
+            : [];
       } catch {
         payload = [];
       }
@@ -794,7 +819,8 @@ class App {
         };
         if (typeof parsed.tag !== "string") return true;
         const response: NotificationResponse = { tag: parsed.tag };
-        if (typeof parsed.actionId === "string") response.actionId = parsed.actionId;
+        if (typeof parsed.actionId === "string")
+          response.actionId = parsed.actionId;
         if (typeof parsed.reply === "string") response.reply = parsed.reply;
         payload = response;
       } catch {
@@ -827,8 +853,12 @@ class App {
     return true;
   }
 
-  #emitAppEvent<K extends keyof AppEventMap>(type: K, payload: AppEventMap[K]): void {
-    for (const listener of this.#appEventListeners.get(type) ?? []) listener(payload);
+  #emitAppEvent<K extends keyof AppEventMap>(
+    type: K,
+    payload: AppEventMap[K],
+  ): void {
+    for (const listener of this.#appEventListeners.get(type) ?? [])
+      listener(payload);
   }
 
   async #emitAppEventAndWait<K extends keyof AppEventMap>(
@@ -836,7 +866,9 @@ class App {
     payload: AppEventMap[K],
   ): Promise<void> {
     await Promise.all(
-      [...(this.#appEventListeners.get(type) ?? [])].map((listener) => listener(payload)),
+      [...(this.#appEventListeners.get(type) ?? [])].map((listener) =>
+        listener(payload),
+      ),
     );
   }
 
@@ -848,7 +880,9 @@ class App {
   _assertReady(): void {
     this.#assertAlive();
     if (!this.isReady()) {
-      throw new Error("await app.whenReady() before using the native QuickGUI application");
+      throw new Error(
+        "await app.whenReady() before using the native QuickGUI application",
+      );
     }
   }
 
@@ -863,11 +897,17 @@ class App {
   _didCloseWindow(window: Window): void {
     if (this.windows.get(window.nativeId) !== window) return;
     this.windows.delete(window.nativeId);
-    this.#rejectDialogs(window, new Error("the native dialog's owner window closed"));
+    this.#rejectDialogs(
+      window,
+      new Error("the native dialog's owner window closed"),
+    );
     window._didClose();
   }
 
-  _showAlertDialog(window: Window | undefined, options: AlertDialogOptions): Promise<number> {
+  _showAlertDialog(
+    window: Window | undefined,
+    options: AlertDialogOptions,
+  ): Promise<number> {
     try {
       const nativeOptions = normalizeAlertDialogOptions(options);
       return this.#requestDialog(
@@ -875,15 +915,27 @@ class App {
         "alert-dialog",
         (request) => {
           if (hostedRuntime) {
-            binding.showHostedAlertDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showHostedAlertDialog(
+              this.nativeId,
+              window?.nativeId,
+              request,
+              nativeOptions,
+            );
           } else {
-            binding.showAlertDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showAlertDialog(
+              this.nativeId,
+              window?.nativeId,
+              request,
+              nativeOptions,
+            );
           }
         },
         (event) => {
           const response = Number(event.value);
           if (!Number.isSafeInteger(response) || response < 0) {
-            throw new Error("the native dialog returned an invalid button index");
+            throw new Error(
+              "the native dialog returned an invalid button index",
+            );
           }
           return response;
         },
@@ -904,9 +956,19 @@ class App {
         "open-dialog",
         (request) => {
           if (hostedRuntime) {
-            binding.showHostedOpenDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showHostedOpenDialog(
+              this.nativeId,
+              window?.nativeId,
+              request,
+              nativeOptions,
+            );
           } else {
-            binding.showOpenDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showOpenDialog(
+              this.nativeId,
+              window?.nativeId,
+              request,
+              nativeOptions,
+            );
           }
         },
         (event) => ({
@@ -930,9 +992,19 @@ class App {
         "save-dialog",
         (request) => {
           if (hostedRuntime) {
-            binding.showHostedSaveDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showHostedSaveDialog(
+              this.nativeId,
+              window?.nativeId,
+              request,
+              nativeOptions,
+            );
           } else {
-            binding.showSaveDialog(this.nativeId, window?.nativeId, request, nativeOptions);
+            binding.showSaveDialog(
+              this.nativeId,
+              window?.nativeId,
+              request,
+              nativeOptions,
+            );
           }
         },
         (event) =>
@@ -952,8 +1024,13 @@ class App {
     result: (event: binding.NativeEvent) => T,
   ): Promise<T> {
     this.#assertAlive();
-    if (window && (window.closed || this.windows.get(window.nativeId) !== window)) {
-      return Promise.reject(new Error("the native dialog parent must be an open window"));
+    if (
+      window &&
+      (window.closed || this.windows.get(window.nativeId) !== window)
+    ) {
+      return Promise.reject(
+        new Error("the native dialog parent must be an open window"),
+      );
     }
     const request = this.#allocateDialogRequest();
     return new Promise<T>((resolve, reject) => {
@@ -977,11 +1054,15 @@ class App {
     if (!pending) return;
     this.#pendingDialogs.delete(event.target);
     if ((pending.window?.nativeId ?? 0) !== event.window) {
-      pending.reject(new Error("the native dialog response had the wrong owner window"));
+      pending.reject(
+        new Error("the native dialog response had the wrong owner window"),
+      );
       return;
     }
     if (pending.kind !== event.kind) {
-      pending.reject(new Error("the native dialog response had the wrong response type"));
+      pending.reject(
+        new Error("the native dialog response had the wrong response type"),
+      );
       return;
     }
     if (event.error !== undefined) {
@@ -1013,7 +1094,8 @@ class App {
   }
 
   #assertAlive(): void {
-    if (this.#destroyed) throw new Error("this QuickGUI app has been destroyed");
+    if (this.#destroyed)
+      throw new Error("this QuickGUI app has been destroyed");
   }
 }
 
@@ -1025,6 +1107,7 @@ export class Window {
   #batch = new MutationBatch();
   #flushScheduled = false;
   #nativeReady = false;
+  readonly #nativeReadyCallbacks = new Set<() => void>();
   #closed = false;
   readonly #closeListeners = new Set<WindowCloseListener>();
   readonly #mountDisposers = new Set<() => void>();
@@ -1039,22 +1122,50 @@ export class Window {
     return currentWindow;
   }
 
-  constructor(options: WindowOptions) {
+  /** @internal Create one retained renderer whose native view is owned by a SwiftUI host. */
+  static _createEmbedded(
+    owner: Window,
+    options: WindowOptions,
+    matchContents: { horizontal: boolean; vertical: boolean },
+  ): Window {
+    if (owner.closed) {
+      throw new Error(
+        "an embedded QuickGUI view requires an open owner Window",
+      );
+    }
+    owner.flush();
+    return new Window(options, { owner, matchContents });
+  }
+
+  constructor(
+    options: WindowOptions,
+    embedded?: {
+      owner: Window;
+      matchContents: { horizontal: boolean; vertical: boolean };
+    },
+  ) {
     const app = activeApp;
     if (!app) throw new Error("the QuickGUI app is unavailable");
     if (!app.isReady()) {
-      throw new Error("await app.whenReady() before creating a QuickGUI Window");
+      throw new Error(
+        "await app.whenReady() before creating a QuickGUI Window",
+      );
     }
     const nativeOptions: binding.NativeWindowOptions = {};
-    const serializedMenu = options.menu ? serializeNativeMenu(options.menu) : undefined;
+    const serializedMenu = options.menu
+      ? serializeNativeMenu(options.menu)
+      : undefined;
     if (options.title !== undefined) nativeOptions.title = options.title;
     if (options.width !== undefined) nativeOptions.width = options.width;
     if (options.height !== undefined) nativeOptions.height = options.height;
     if (
       options.minimumSize !== undefined &&
-      (options.minimumWidth !== undefined || options.minimumHeight !== undefined)
+      (options.minimumWidth !== undefined ||
+        options.minimumHeight !== undefined)
     ) {
-      throw new TypeError("minimumSize cannot be combined with minimumWidth or minimumHeight");
+      throw new TypeError(
+        "minimumSize cannot be combined with minimumWidth or minimumHeight",
+      );
     }
     if (options.minimumSize === null) {
       nativeOptions.minimumSizeEnabled = false;
@@ -1062,71 +1173,100 @@ export class Window {
       nativeOptions.minimumWidth = options.minimumSize.width;
       nativeOptions.minimumHeight = options.minimumSize.height;
     } else {
-      if (options.minimumWidth !== undefined) nativeOptions.minimumWidth = options.minimumWidth;
-      if (options.minimumHeight !== undefined) nativeOptions.minimumHeight = options.minimumHeight;
+      if (options.minimumWidth !== undefined)
+        nativeOptions.minimumWidth = options.minimumWidth;
+      if (options.minimumHeight !== undefined)
+        nativeOptions.minimumHeight = options.minimumHeight;
     }
     if (
       options.maximumSize !== undefined &&
-      (options.maximumWidth !== undefined || options.maximumHeight !== undefined)
+      (options.maximumWidth !== undefined ||
+        options.maximumHeight !== undefined)
     ) {
-      throw new TypeError("maximumSize cannot be combined with maximumWidth or maximumHeight");
+      throw new TypeError(
+        "maximumSize cannot be combined with maximumWidth or maximumHeight",
+      );
     }
     if (options.maximumSize !== undefined) {
       nativeOptions.maximumWidth = options.maximumSize.width;
       nativeOptions.maximumHeight = options.maximumSize.height;
     } else {
-      if (options.maximumWidth !== undefined) nativeOptions.maximumWidth = options.maximumWidth;
-      if (options.maximumHeight !== undefined) nativeOptions.maximumHeight = options.maximumHeight;
+      if (options.maximumWidth !== undefined)
+        nativeOptions.maximumWidth = options.maximumWidth;
+      if (options.maximumHeight !== undefined)
+        nativeOptions.maximumHeight = options.maximumHeight;
     }
     if (options.position !== undefined) {
       nativeOptions.x = options.position.x;
       nativeOptions.y = options.position.y;
     }
-    if (options.initialState !== undefined) nativeOptions.initialState = options.initialState;
-    if (options.displayId !== undefined) nativeOptions.displayId = options.displayId;
-    if (options.representedFile !== undefined) nativeOptions.representedFile = options.representedFile;
-    if (options.documentEdited !== undefined) nativeOptions.documentEdited = options.documentEdited;
+    if (options.initialState !== undefined)
+      nativeOptions.initialState = options.initialState;
+    if (options.displayId !== undefined)
+      nativeOptions.displayId = options.displayId;
+    if (options.representedFile !== undefined)
+      nativeOptions.representedFile = options.representedFile;
+    if (options.documentEdited !== undefined)
+      nativeOptions.documentEdited = options.documentEdited;
     if (options.tabbingIdentifier !== undefined) {
       nativeOptions.tabbingIdentifier = options.tabbingIdentifier;
     }
-    if (options.background !== undefined) nativeOptions.background = parseColor(options.background);
+    if (options.background !== undefined)
+      nativeOptions.background = parseColor(options.background);
     if (options.performanceProfile !== undefined) {
       nativeOptions.performanceProfile = options.performanceProfile;
     }
-    if (options.appearance !== undefined) nativeOptions.appearance = options.appearance;
-    if (options.titleBarStyle !== undefined) nativeOptions.titleBarStyle = options.titleBarStyle;
+    if (options.appearance !== undefined)
+      nativeOptions.appearance = options.appearance;
+    if (options.titleBarStyle !== undefined)
+      nativeOptions.titleBarStyle = options.titleBarStyle;
     if (options.kind !== undefined) nativeOptions.kind = options.kind;
     if (options.focus !== undefined) nativeOptions.focus = options.focus;
-    if (options.focusable !== undefined) nativeOptions.focusable = options.focusable;
+    if (options.focusable !== undefined)
+      nativeOptions.focusable = options.focusable;
     if (options.visible !== undefined) nativeOptions.show = options.visible;
     if (options.movable !== undefined) nativeOptions.movable = options.movable;
-    if (options.resizable !== undefined) nativeOptions.resizable = options.resizable;
-    if (options.minimizable !== undefined) nativeOptions.minimizable = options.minimizable;
-    if (options.maximizable !== undefined) nativeOptions.maximizable = options.maximizable;
-    if (options.closable !== undefined) nativeOptions.closable = options.closable;
-    if (options.decorated !== undefined) nativeOptions.decorated = options.decorated;
+    if (options.resizable !== undefined)
+      nativeOptions.resizable = options.resizable;
+    if (options.minimizable !== undefined)
+      nativeOptions.minimizable = options.minimizable;
+    if (options.maximizable !== undefined)
+      nativeOptions.maximizable = options.maximizable;
+    if (options.closable !== undefined)
+      nativeOptions.closable = options.closable;
+    if (options.decorated !== undefined)
+      nativeOptions.decorated = options.decorated;
     if (options.shadow !== undefined) nativeOptions.shadow = options.shadow;
     if (options.contentProtected !== undefined) {
       nativeOptions.contentProtected = options.contentProtected;
     }
-    if (options.windowLevel !== undefined) nativeOptions.windowLevel = options.windowLevel;
-    if (options.skipTaskbar !== undefined) nativeOptions.skipTaskbar = options.skipTaskbar;
+    if (options.windowLevel !== undefined)
+      nativeOptions.windowLevel = options.windowLevel;
+    if (options.skipTaskbar !== undefined)
+      nativeOptions.skipTaskbar = options.skipTaskbar;
     if (options.visibleOnAllWorkspaces !== undefined) {
       nativeOptions.visibleOnAllWorkspaces = options.visibleOnAllWorkspaces;
     }
     if (options.opacity !== undefined) nativeOptions.opacity = options.opacity;
-    if (options.icon !== undefined) nativeOptions.icon = nativeImageSource(options.icon);
+    if (options.icon !== undefined)
+      nativeOptions.icon = nativeImageSource(options.icon);
     if (options.taskbarProgress !== undefined) {
       nativeOptions.taskbarProgressState = options.taskbarProgress.state;
       nativeOptions.taskbarProgress = options.taskbarProgress.progress;
     }
     if (options.taskbarOverlay !== undefined) {
-      nativeOptions.taskbarOverlayIcon = nativeImageSource(options.taskbarOverlay.icon);
-      nativeOptions.taskbarOverlayDescription = options.taskbarOverlay.description;
+      nativeOptions.taskbarOverlayIcon = nativeImageSource(
+        options.taskbarOverlay.icon,
+      );
+      nativeOptions.taskbarOverlayDescription =
+        options.taskbarOverlay.description;
     }
-    if (options.cursorVisible !== undefined) nativeOptions.cursorVisible = options.cursorVisible;
-    if (options.cursorGrab !== undefined) nativeOptions.cursorGrab = options.cursorGrab;
-    if (options.cursorHitTest !== undefined) nativeOptions.cursorHitTest = options.cursorHitTest;
+    if (options.cursorVisible !== undefined)
+      nativeOptions.cursorVisible = options.cursorVisible;
+    if (options.cursorGrab !== undefined)
+      nativeOptions.cursorGrab = options.cursorGrab;
+    if (options.cursorHitTest !== undefined)
+      nativeOptions.cursorHitTest = options.cursorHitTest;
     if (options.cursorPosition !== undefined) {
       nativeOptions.cursorX = options.cursorPosition.x;
       nativeOptions.cursorY = options.cursorPosition.y;
@@ -1138,19 +1278,23 @@ export class Window {
     if (options.keySequenceTimeoutMs !== undefined) {
       nativeOptions.keySequenceTimeoutMs = options.keySequenceTimeoutMs;
     }
-    if (options.reduceMotion !== undefined) nativeOptions.reduceMotion = options.reduceMotion;
+    if (options.reduceMotion !== undefined)
+      nativeOptions.reduceMotion = options.reduceMotion;
     if (options.trafficLightPosition !== undefined) {
       nativeOptions.trafficLightX = options.trafficLightPosition.x;
       nativeOptions.trafficLightY = options.trafficLightPosition.y;
     }
     if (options.backgroundAppearance !== undefined) {
-      nativeOptions.transparent = options.backgroundAppearance === "transparent";
+      nativeOptions.transparent =
+        options.backgroundAppearance === "transparent";
       nativeOptions.blur = options.backgroundAppearance === "blurred";
     } else {
-      if (options.transparent !== undefined) nativeOptions.transparent = options.transparent;
+      if (options.transparent !== undefined)
+        nativeOptions.transparent = options.transparent;
       if (options.blur !== undefined) nativeOptions.blur = options.blur;
     }
-    if (options.placement !== undefined) nativeOptions.popoverPlacement = options.placement;
+    if (options.placement !== undefined)
+      nativeOptions.popoverPlacement = options.placement;
     if (options.gap !== undefined) nativeOptions.popoverGap = options.gap;
     if (options.offset !== undefined) {
       nativeOptions.popoverOffsetX = options.offset.x;
@@ -1163,7 +1307,8 @@ export class Window {
       nativeOptions.popoverDismissOnEscape = options.dismissOnEscape;
     }
     if (options.dismissOnPointerOutside !== undefined) {
-      nativeOptions.popoverDismissOnPointerOutside = options.dismissOnPointerOutside;
+      nativeOptions.popoverDismissOnPointerOutside =
+        options.dismissOnPointerOutside;
     }
     if (options.grab !== undefined) nativeOptions.popoverGrab = options.grab;
     if (options.acceptsKeyFocus !== undefined) {
@@ -1174,7 +1319,9 @@ export class Window {
       options.anchor &&
       (!parent || parent.closed || !options.anchor.materialized)
     ) {
-      throw new Error("a system popover requires a mounted node in an open parent Window");
+      throw new Error(
+        "a system popover requires a mounted node in an open parent Window",
+      );
     }
     parent?.flush();
     this.app = app;
@@ -1185,11 +1332,34 @@ export class Window {
     try {
       const dispose = withCurrentWindow(this, () => options.renderer(this));
       if (typeof dispose !== "function") {
-        throw new TypeError("a QuickGUI Window renderer must return a dispose function");
+        throw new TypeError(
+          "a QuickGUI Window renderer must return a dispose function",
+        );
       }
       this._trackMount(dispose);
       const initialBatch = this.#takePendingBatch();
-      if (options.anchor) {
+      if (embedded) {
+        if (process.platform !== "darwin") {
+          throw new Error("embedded SwiftUI QuickGUI views require macOS");
+        }
+        this.nativeId = hostedRuntime
+          ? binding.createHostedEmbeddedView(
+              app.nativeId,
+              embedded.owner.nativeId,
+              embedded.matchContents.horizontal,
+              embedded.matchContents.vertical,
+              nativeOptions,
+              initialBatch,
+            )
+          : binding.createEmbeddedView(
+              app.nativeId,
+              embedded.owner.nativeId,
+              embedded.matchContents.horizontal,
+              embedded.matchContents.vertical,
+              nativeOptions,
+              initialBatch,
+            );
+      } else if (options.anchor) {
         this.nativeId = hostedRuntime
           ? binding.createHostedSystemPopover(
               app.nativeId,
@@ -1207,12 +1377,21 @@ export class Window {
             );
       } else {
         this.nativeId = hostedRuntime
-          ? binding.createHostedWindow(app.nativeId, nativeOptions, initialBatch)
+          ? binding.createHostedWindow(
+              app.nativeId,
+              nativeOptions,
+              initialBatch,
+            )
           : binding.createWindow(app.nativeId, nativeOptions, initialBatch);
       }
       this.#nativeReady = true;
       app._registerWindow(this);
-      if (serializedMenu !== undefined) this._trackMount(serializedMenu.install());
+      for (const callback of [...this.#nativeReadyCallbacks]) {
+        this.#nativeReadyCallbacks.delete(callback);
+        callback();
+      }
+      if (serializedMenu !== undefined)
+        this._trackMount(serializedMenu.install());
     } catch (error) {
       this._didClose();
       throw error;
@@ -1230,6 +1409,17 @@ export class Window {
     }
     this.#closeListeners.add(listener);
     return () => this.#closeListeners.delete(listener);
+  }
+
+  /** @internal Run after this window has a native id, including during its initial construction. */
+  _afterNativeReady(callback: () => void): () => void {
+    if (this.#closed) return () => {};
+    if (this.#nativeReady) {
+      callback();
+      return () => {};
+    }
+    this.#nativeReadyCallbacks.add(callback);
+    return () => this.#nativeReadyCallbacks.delete(callback);
   }
 
   close(): void {
@@ -1322,7 +1512,11 @@ export class Window {
   }
 
   setContentProtected(protected_: boolean): void {
-    performNativeWindowAction(this, "set-content-protected", String(protected_));
+    performNativeWindowAction(
+      this,
+      "set-content-protected",
+      String(protected_),
+    );
   }
 
   setWindowLevel(level: WindowLevel | "automatic"): void {
@@ -1338,7 +1532,11 @@ export class Window {
   }
 
   setVisibleOnAllWorkspaces(visible: boolean): void {
-    performNativeWindowAction(this, "set-visible-on-all-workspaces", String(visible));
+    performNativeWindowAction(
+      this,
+      "set-visible-on-all-workspaces",
+      String(visible),
+    );
   }
 
   setOpacity(opacity: number): void {
@@ -1362,7 +1560,12 @@ export class Window {
   }
 
   setTaskbarOverlayIcon(icon: ImageSource, description: string): void {
-    performNativeWindowImageAction(this, "set-taskbar-overlay-icon", icon, description);
+    performNativeWindowImageAction(
+      this,
+      "set-taskbar-overlay-icon",
+      icon,
+      description,
+    );
   }
 
   clearTaskbarOverlayIcon(): void {
@@ -1382,7 +1585,11 @@ export class Window {
   }
 
   setCursorPosition(position: Point): void {
-    performNativeWindowAction(this, "set-cursor-position", JSON.stringify(position));
+    performNativeWindowAction(
+      this,
+      "set-cursor-position",
+      JSON.stringify(position),
+    );
   }
 
   show(): void {
@@ -1444,7 +1651,11 @@ export class Window {
     return batch.finish();
   }
 
-  _dispatchEvent(type: NativeEventType, targetId: number, value?: string): void {
+  _dispatchEvent(
+    type: NativeEventType,
+    targetId: number,
+    value?: string,
+  ): void {
     withCurrentWindow(this, () => {
       const target = this.nodes.get(targetId);
       if (!target) return;
@@ -1467,6 +1678,7 @@ export class Window {
     if (this.#closed) return;
     this.#closed = true;
     this.#flushScheduled = false;
+    this.#nativeReadyCallbacks.clear();
     const disposers = [...this.#mountDisposers];
     this.#mountDisposers.clear();
     for (const dispose of disposers) dispose();
@@ -1518,7 +1730,11 @@ export class Window {
     this._scheduleFlush();
   }
 
-  _enqueueInsert(parent: NativeNode, child: NativeNode, before?: NativeNode): void {
+  _enqueueInsert(
+    parent: NativeNode,
+    child: NativeNode,
+    before?: NativeNode,
+  ): void {
     this.#batch.insert(parent.id, child.id, before?.id);
     this._scheduleFlush();
   }
@@ -1546,45 +1762,70 @@ export class Window {
 }
 
 function showAlertDialog(options: AlertDialogOptions): Promise<number>;
-function showAlertDialog(window: Window, options: AlertDialogOptions): Promise<number>;
+function showAlertDialog(
+  window: Window,
+  options: AlertDialogOptions,
+): Promise<number>;
 function showAlertDialog(
   windowOrOptions: Window | AlertDialogOptions,
   maybeOptions?: AlertDialogOptions,
 ): Promise<number> {
   const hasWindow = windowOrOptions instanceof Window;
   const window = hasWindow ? windowOrOptions : undefined;
-  const options = hasWindow ? maybeOptions : (windowOrOptions as AlertDialogOptions);
-  if (!options) return Promise.reject(new TypeError("showAlertDialog requires options"));
+  const options = hasWindow
+    ? maybeOptions
+    : (windowOrOptions as AlertDialogOptions);
+  if (!options)
+    return Promise.reject(new TypeError("showAlertDialog requires options"));
   const app = window?.app ?? activeApp;
-  if (!app) return Promise.reject(new Error("create a QuickGUI App before showing a dialog"));
+  if (!app)
+    return Promise.reject(
+      new Error("create a QuickGUI App before showing a dialog"),
+    );
   return app._showAlertDialog(window, options);
 }
 
 function showOpenDialog(options?: OpenDialogOptions): Promise<OpenDialogResult>;
-function showOpenDialog(window: Window, options?: OpenDialogOptions): Promise<OpenDialogResult>;
+function showOpenDialog(
+  window: Window,
+  options?: OpenDialogOptions,
+): Promise<OpenDialogResult>;
 function showOpenDialog(
   windowOrOptions: Window | OpenDialogOptions = {},
   maybeOptions: OpenDialogOptions = {},
 ): Promise<OpenDialogResult> {
   const hasWindow = windowOrOptions instanceof Window;
   const window = hasWindow ? windowOrOptions : undefined;
-  const options = hasWindow ? maybeOptions : (windowOrOptions as OpenDialogOptions);
+  const options = hasWindow
+    ? maybeOptions
+    : (windowOrOptions as OpenDialogOptions);
   const app = window?.app ?? activeApp;
-  if (!app) return Promise.reject(new Error("create a QuickGUI App before showing a dialog"));
+  if (!app)
+    return Promise.reject(
+      new Error("create a QuickGUI App before showing a dialog"),
+    );
   return app._showOpenDialog(window, options);
 }
 
 function showSaveDialog(options?: SaveDialogOptions): Promise<SaveDialogResult>;
-function showSaveDialog(window: Window, options?: SaveDialogOptions): Promise<SaveDialogResult>;
+function showSaveDialog(
+  window: Window,
+  options?: SaveDialogOptions,
+): Promise<SaveDialogResult>;
 function showSaveDialog(
   windowOrOptions: Window | SaveDialogOptions = {},
   maybeOptions: SaveDialogOptions = {},
 ): Promise<SaveDialogResult> {
   const hasWindow = windowOrOptions instanceof Window;
   const window = hasWindow ? windowOrOptions : undefined;
-  const options = hasWindow ? maybeOptions : (windowOrOptions as SaveDialogOptions);
+  const options = hasWindow
+    ? maybeOptions
+    : (windowOrOptions as SaveDialogOptions);
   const app = window?.app ?? activeApp;
-  if (!app) return Promise.reject(new Error("create a QuickGUI App before showing a dialog"));
+  if (!app)
+    return Promise.reject(
+      new Error("create a QuickGUI App before showing a dialog"),
+    );
   return app._showSaveDialog(window, options);
 }
 

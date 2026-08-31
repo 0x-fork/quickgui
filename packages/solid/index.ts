@@ -171,6 +171,16 @@ const properties: Record<string, PropertyEntry> = {
   },
   terminalPaddingColor: { code: PropertyCode.TerminalPaddingColor },
   fontThicken: { code: PropertyCode.TerminalFontThicken },
+  label: { code: PropertyCode.Value },
+  systemImage: { code: PropertyCode.SwiftUISystemImage },
+  buttonStyle: { code: PropertyCode.SwiftUIButtonStyle },
+  controlSize: { code: PropertyCode.SwiftUIControlSize },
+  target: { code: PropertyCode.SwiftUITarget },
+  testID: { code: PropertyCode.SwiftUITestId },
+  embeddedWindow: { code: PropertyCode.SwiftUIEmbeddedWindow },
+  isPresented: { code: PropertyCode.SwiftUIIsPresented },
+  attachmentAnchor: { code: PropertyCode.SwiftUIAttachmentAnchor },
+  arrowEdge: { code: PropertyCode.SwiftUIArrowEdge },
 };
 
 const colorProperties = new Set([
@@ -269,12 +279,46 @@ function setProperty(
     setFlex(node, value);
     return;
   }
+  if (name === "matchContents") {
+    setMatchContents(node, value);
+    return;
+  }
+  if (name === "modifiers") {
+    setNativeProperty(
+      node,
+      PropertyCode.SwiftUIModifiers,
+      encodeSwiftUiModifiers(value),
+    );
+    return;
+  }
   const entry = properties[name];
   if (!entry) return;
   const normalized = entry.normalize
     ? entry.normalize(value)
     : normalizeValue(value, entry.code);
   setNativeProperty(node, entry.code, normalized, { color: !!entry.color });
+}
+
+function setMatchContents(node: NativeNode, value: PropertyInput): void {
+  let horizontal = false;
+  let vertical = false;
+  if (value === true) {
+    horizontal = true;
+    vertical = true;
+  } else if (isRecord(value)) {
+    horizontal = value.horizontal === true;
+    vertical = value.vertical === true;
+  }
+  setNativeProperty(
+    node,
+    PropertyCode.SwiftUIMatchContentsHorizontal,
+    horizontal || null,
+  );
+  setNativeProperty(
+    node,
+    PropertyCode.SwiftUIMatchContentsVertical,
+    vertical || null,
+  );
 }
 
 function setStyle(
@@ -360,7 +404,9 @@ function normalizeLength(value: string | undefined): number | string | null {
 function normalizeTransitionShorthand(value: PropertyInput): number | null {
   if (value === null || value === undefined || value === false) return null;
   if (typeof value !== "string") {
-    throw new TypeError("QuickGUI transition must use the CSS transition shorthand");
+    throw new TypeError(
+      "QuickGUI transition must use the CSS transition shorthand",
+    );
   }
   const shorthand = value.trim();
   if (shorthand === "" || shorthand === "none") return null;
@@ -386,7 +432,9 @@ function normalizeTransitionShorthand(value: PropertyInput): number | null {
     const duration = times[0] ?? 0;
     const delay = times[1] ?? 0;
     if (delay !== 0) {
-      throw new TypeError("QuickGUI transition does not support a non-zero delay");
+      throw new TypeError(
+        "QuickGUI transition does not support a non-zero delay",
+      );
     }
     if (sharedDuration !== undefined && sharedDuration !== duration) {
       throw new TypeError(
@@ -448,10 +496,12 @@ function eventName(
   | "dismiss"
   | "terminal"
   | "pointer"
+  | "presentationchange"
   | undefined {
   switch (name.toLowerCase()) {
     case "onclick":
     case "on:click":
+    case "onpress":
       return "click";
     case "onmouseenter":
     case "onpointerenter":
@@ -474,6 +524,10 @@ function eventName(
     case "onpointer":
     case "on:pointer":
       return "pointer";
+    case "onispresentedchange":
+    case "onpresentationchange":
+    case "on:presentationchange":
+      return "presentationchange";
     default:
       return undefined;
   }
@@ -520,6 +574,108 @@ function encodeTerminalPalette(value: unknown): string {
   return JSON.stringify(value.map((color) => parseColor(color)));
 }
 
+function encodeSwiftUiModifiers(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value)) {
+    throw new TypeError("QuickGUI SwiftUI modifiers must be an array");
+  }
+  const modifiers = value.map((modifier, index) => {
+    if (!isRecord(modifier) || typeof modifier.$type !== "string") {
+      throw new TypeError(
+        `QuickGUI SwiftUI modifier ${index} must contain a $type`,
+      );
+    }
+    switch (modifier.$type) {
+      case "buttonStyle":
+        return {
+          $type: modifier.$type,
+          style: swiftUiEnum(
+            modifier.style,
+            [
+              "automatic",
+              "bordered",
+              "borderedProminent",
+              "borderless",
+              "glass",
+              "glassProminent",
+              "plain",
+            ],
+            modifier.$type,
+          ),
+        };
+      case "buttonBorderShape": {
+        const shape = swiftUiEnum(
+          modifier.shape,
+          ["automatic", "capsule", "roundedRectangle", "circle"],
+          modifier.$type,
+        );
+        const cornerRadius = modifier.cornerRadius;
+        if (
+          cornerRadius !== undefined &&
+          (typeof cornerRadius !== "number" ||
+            !Number.isFinite(cornerRadius) ||
+            cornerRadius < 0)
+        ) {
+          throw new TypeError(
+            "QuickGUI buttonBorderShape cornerRadius must be a non-negative finite number",
+          );
+        }
+        return {
+          $type: modifier.$type,
+          shape,
+          ...(cornerRadius === undefined ? {} : { cornerRadius }),
+        };
+      }
+      case "controlSize":
+        return {
+          $type: modifier.$type,
+          size: swiftUiEnum(
+            modifier.size,
+            ["mini", "small", "regular", "large", "extraLarge"],
+            modifier.$type,
+          ),
+        };
+      case "labelStyle":
+        return {
+          $type: modifier.$type,
+          style: swiftUiEnum(
+            modifier.style,
+            ["automatic", "iconOnly", "titleAndIcon", "titleOnly"],
+            modifier.$type,
+          ),
+        };
+      case "tint":
+        if (typeof modifier.color !== "string" || modifier.color.length === 0) {
+          throw new TypeError("QuickGUI tint color must be a non-empty string");
+        }
+        return { $type: modifier.$type, color: modifier.color };
+      case "disabled":
+        if (typeof modifier.disabled !== "boolean") {
+          throw new TypeError(
+            "QuickGUI disabled modifier must contain a boolean",
+          );
+        }
+        return { $type: modifier.$type, disabled: modifier.disabled };
+      default:
+        throw new TypeError(
+          `unsupported QuickGUI SwiftUI modifier \`${modifier.$type}\``,
+        );
+    }
+  });
+  return JSON.stringify(modifiers);
+}
+
+function swiftUiEnum(
+  value: unknown,
+  allowed: readonly string[],
+  modifier: string,
+): string {
+  if (typeof value === "string" && allowed.includes(value)) return value;
+  throw new TypeError(
+    `QuickGUI ${modifier} must be one of ${allowed.join(", ")}`,
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -539,6 +695,12 @@ const universal = createUniversalRenderer<NativeNode>({
         "virtual-list",
         "terminal",
         "svg",
+        "swift-ui-host",
+        "swift-ui-button",
+        "swift-ui-quickgui-host",
+        "swift-ui-popover",
+        "swift-ui-popover-trigger",
+        "swift-ui-popover-content",
       ].includes(name)
     ) {
       throw new TypeError(`unknown QuickGUI element <${tag}>`);

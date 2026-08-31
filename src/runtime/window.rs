@@ -1234,6 +1234,8 @@ pub(crate) struct WindowRequest {
     /// Resolve this anchor from the parent window's retained layout at the event boundary and
     /// retain it as the focus-restoration target for the child lifetime.
     pub(crate) popover_anchor_element: Option<ElementId>,
+    #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+    pub(crate) embedded: Option<crate::MacEmbeddedView>,
 }
 
 impl WindowRequest {
@@ -1261,17 +1263,22 @@ impl WindowRequest {
             options,
             parent,
             popover_anchor_element: None,
+            #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+            embedded: None,
         }
     }
 }
 
 impl fmt::Debug for WindowRequest {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("WindowRequest")
+        let mut debug = formatter.debug_struct("WindowRequest");
+        debug
             .field("handle", &self.handle)
             .field("parent", &self.parent)
-            .field("popover_anchor_element", &self.popover_anchor_element)
+            .field("popover_anchor_element", &self.popover_anchor_element);
+        #[cfg(all(target_os = "macos", feature = "swift-ui"))]
+        debug.field("embedded", &self.embedded);
+        debug
             .field("options", &self.options)
             .finish_non_exhaustive()
     }

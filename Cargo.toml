@@ -11,6 +11,7 @@ repository = "https://github.com/egoist/quickgui"
 keywords = ["gui", "wgpu", "desktop", "graphics"]
 categories = ["gui", "graphics"]
 include = [
+  "/build.rs",
   "/src/**",
   "/Cargo.lock",
   "/CHANGELOG.md",
@@ -34,6 +35,7 @@ resolver = "3"
 [features]
 default = ["updater"]
 inspector = []
+swift-ui = []
 test-support = []
 terminal = ["dep:libghostty-vt", "dep:portable-pty"]
 updater = ["quickgui-system/updater"]
@@ -70,8 +72,8 @@ libc = "0.2"
 block2 = "0.5.1"
 core-foundation = "0.9.4"
 objc2 = "0.5.2"
-objc2-app-kit = { version = "0.2.2", features = ["NSAccessibility", "NSAccessibilityConstants", "NSAccessibilityProtocols", "NSAlert", "NSApplication", "NSBox", "NSButton", "NSCell", "NSColor", "NSControl", "NSDockTile", "NSDocumentController", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSGraphics", "NSGraphicsContext", "NSImage", "NSMenu", "NSMenuItem", "NSOpenPanel", "NSPanel", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSScreen", "NSTextField", "NSView", "NSWindow", "NSWindowTabGroup", "NSWorkspace", "block2", "objc2-quartz-core"] }
-objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSFileManager", "NSGeometry", "NSNotification", "NSRange", "NSSet", "NSString", "NSURL", "NSUUID"] }
+objc2-app-kit = { version = "0.2.2", features = ["NSAccessibility", "NSAccessibilityConstants", "NSAccessibilityProtocols", "NSAlert", "NSApplication", "NSBox", "NSButton", "NSButtonCell", "NSCell", "NSColor", "NSControl", "NSDockTile", "NSDocumentController", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSGraphics", "NSGraphicsContext", "NSImage", "NSMenu", "NSMenuItem", "NSOpenPanel", "NSPanel", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSScreen", "NSTextField", "NSView", "NSWindow", "NSWindowTabGroup", "NSWorkspace", "block2", "objc2-quartz-core"] }
+objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSFileManager", "NSGeometry", "NSNotification", "NSProcessInfo", "NSRange", "NSSet", "NSString", "NSURL", "NSUUID"] }
 objc2-quartz-core = { version = "0.2.2", features = ["CALayer", "CAMetalLayer"] }
 objc2-user-notifications = { version = "0.2.2", features = ["UNNotification", "UNNotificationAction", "UNNotificationAttachment", "UNNotificationCategory", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNNotificationSound", "UNNotificationTrigger", "UNUserNotificationCenter", "block2"] }
 raw-window-metal = "1.1.0"

@@ -150,6 +150,12 @@ pub struct TextStyle {
     pub color: Color,
 }
 
+impl Default for TextStyle {
+    fn default() -> Self {
+        Self::new(14.0, Color::BLACK)
+    }
+}
+
 impl TextStyle {
     pub fn new(font_size: f32, color: Color) -> Self {
         Self {
@@ -1395,6 +1401,14 @@ mod tests {
     fn named_text_ids_are_stable_and_distinct() {
         assert_eq!(TextId::named("row:42"), TextId::named("row:42"));
         assert_ne!(TextId::named("row:42"), TextId::named("row:43"));
+    }
+
+    #[test]
+    fn default_text_style_uses_a_black_foreground() {
+        let style = TextStyle::default();
+
+        assert_eq!(style.font_size, 14.0);
+        assert_eq!(style.color, Color::BLACK);
     }
 
     #[test]

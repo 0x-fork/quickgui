@@ -15,7 +15,13 @@ export type NativeElementName =
   | "markdown"
   | "virtual-list"
   | "terminal"
-  | "svg";
+  | "svg"
+  | "swift-ui-host"
+  | "swift-ui-button"
+  | "swift-ui-quickgui-host"
+  | "swift-ui-popover"
+  | "swift-ui-popover-trigger"
+  | "swift-ui-popover-content";
 export type NativeEventType =
   | "click"
   | "mouseenter"
@@ -24,7 +30,8 @@ export type NativeEventType =
   | "submit"
   | "dismiss"
   | "terminal"
-  | "pointer";
+  | "pointer"
+  | "presentationchange";
 export type NativeEventListener = (event: QuickGuiEvent) => void;
 
 export interface NativeNodeHost {
@@ -104,19 +111,31 @@ export class QuickGuiEvent {
 
 export function createNativeElement(name: NativeElementName): NativeNode {
   const tag =
-    name === "button"
-      ? NativeNodeTag.Button
-      : name === "input" || name === "textarea"
-        ? NativeNodeTag.Input
-        : name === "markdown"
-          ? NativeNodeTag.Markdown
-          : name === "virtual-list"
-            ? NativeNodeTag.VirtualList
-            : name === "terminal"
-              ? NativeNodeTag.Terminal
-              : name === "svg"
-                ? NativeNodeTag.Svg
-                : NativeNodeTag.View;
+    name === "swift-ui-host"
+      ? NativeNodeTag.SwiftUIHost
+      : name === "swift-ui-button"
+        ? NativeNodeTag.SwiftUIButton
+        : name === "swift-ui-quickgui-host"
+          ? NativeNodeTag.SwiftUIQuickGUIHost
+          : name === "swift-ui-popover"
+            ? NativeNodeTag.SwiftUIPopover
+            : name === "swift-ui-popover-trigger"
+              ? NativeNodeTag.SwiftUIPopoverTrigger
+              : name === "swift-ui-popover-content"
+                ? NativeNodeTag.SwiftUIPopoverContent
+                : name === "button"
+                  ? NativeNodeTag.Button
+                  : name === "input" || name === "textarea"
+                    ? NativeNodeTag.Input
+                    : name === "markdown"
+                      ? NativeNodeTag.Markdown
+                      : name === "virtual-list"
+                        ? NativeNodeTag.VirtualList
+                        : name === "terminal"
+                          ? NativeNodeTag.Terminal
+                          : name === "svg"
+                            ? NativeNodeTag.Svg
+                            : NativeNodeTag.View;
   const node = new NativeNode(tag);
   if (name === "textarea")
     setNativeProperty(node, PropertyCode.Multiline, true);
@@ -208,6 +227,12 @@ export function setNativeEventListener(
       node,
       PropertyCode.PointerListener,
       node.listeners.has("pointer"),
+    );
+  } else if (type === "presentationchange") {
+    setNativeProperty(
+      node,
+      PropertyCode.SwiftUIPresentationListener,
+      node.listeners.has("presentationchange"),
     );
   } else {
     const listensForHover =

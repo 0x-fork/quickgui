@@ -120,6 +120,11 @@ pub trait WindowExtMacOS {
     /// Set whether this AppKit window or panel may become the key window.
     fn set_can_become_key_window(&self, can_become_key_window: bool) -> bool;
 
+    /// Keep this window's retained rendering NSView usable after a native host reparents it.
+    ///
+    /// The original NSWindow remains hidden and continues to provide the stable Winit WindowId.
+    fn set_embedded_view(&self, embedded: bool);
+
     /// Group windows together by using the same tabbing identifier.
     ///
     /// <https://developer.apple.com/documentation/appkit/nswindow/1644704-tabbingidentifier>
@@ -214,6 +219,12 @@ impl WindowExtMacOS for Window {
     fn set_can_become_key_window(&self, can_become_key_window: bool) -> bool {
         self.window
             .maybe_wait_on_main(move |w| w.set_can_become_key_window(can_become_key_window))
+    }
+
+    #[inline]
+    fn set_embedded_view(&self, embedded: bool) {
+        self.window
+            .maybe_wait_on_main(move |window| window.set_embedded_view(embedded))
     }
 
     #[inline]

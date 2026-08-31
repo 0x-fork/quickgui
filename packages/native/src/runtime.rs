@@ -7,6 +7,10 @@ pub(super) struct NativeWindowRuntime {
     pub(super) svgs: Rc<RefCell<HashMap<u32, NativeSvgState>>>,
     pub(super) lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
     pub(super) terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
+    #[cfg(target_os = "macos")]
+    pub(super) swift_ui_hosts: Rc<RefCell<HashMap<u32, NativeSwiftUiHostState>>>,
+    #[cfg(target_os = "macos")]
+    pub(super) embedded_views: Rc<RefCell<HashMap<u32, MacEmbeddedView>>>,
     pub(super) handle: Option<WindowHandle>,
 }
 
@@ -26,6 +30,10 @@ impl NativeWindowRuntime {
             svgs: Rc::clone(&self.svgs),
             lists: Rc::clone(&self.lists),
             terminals: Rc::clone(&self.terminals),
+            #[cfg(target_os = "macos")]
+            swift_ui_hosts: Rc::clone(&self.swift_ui_hosts),
+            #[cfg(target_os = "macos")]
+            embedded_views: Rc::clone(&self.embedded_views),
         }
     }
 }
@@ -53,6 +61,8 @@ pub(super) struct NativeRuntime {
     pub(super) window_order: Vec<u32>,
     pub(super) events: EventQueue,
     pub(super) handles: Rc<RefCell<HashMap<WindowHandle, u32>>>,
+    #[cfg(target_os = "macos")]
+    pub(super) embedded_views: Rc<RefCell<HashMap<u32, MacEmbeddedView>>>,
     pub(super) closed_windows: Rc<RefCell<Vec<u32>>>,
     pub(super) pending_dialogs: Vec<PendingDialog>,
     pub(super) pending_shell: Vec<system::PendingShell>,
@@ -79,6 +89,8 @@ impl NativeRuntime {
             window_order: Vec::with_capacity(2),
             events: Rc::new(RefCell::new(VecDeque::with_capacity(32))),
             handles: Rc::new(RefCell::new(HashMap::with_capacity(2))),
+            #[cfg(target_os = "macos")]
+            embedded_views: Rc::new(RefCell::new(HashMap::with_capacity(2))),
             closed_windows: Rc::new(RefCell::new(Vec::with_capacity(2))),
             pending_dialogs: Vec::with_capacity(2),
             pending_shell: Vec::with_capacity(2),
@@ -119,6 +131,10 @@ impl NativeRuntime {
             svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
+            #[cfg(target_os = "macos")]
+            swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+            #[cfg(target_os = "macos")]
+            embedded_views: Rc::clone(&self.embedded_views),
             handle: None,
         };
         if let Some(runner) = &mut self.runner {
@@ -175,6 +191,10 @@ impl NativeRuntime {
             svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
+            #[cfg(target_os = "macos")]
+            swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+            #[cfg(target_os = "macos")]
+            embedded_views: Rc::clone(&self.embedded_views),
             handle: None,
         };
         let runner = self
@@ -190,6 +210,65 @@ impl NativeRuntime {
             )
             .map_err(|error| error.to_string())?;
         self.handles.borrow_mut().insert(handle, id);
+        window.handle = Some(handle);
+        self.windows.insert(id, window);
+        self.window_order.push(id);
+        Ok(id)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) fn create_embedded_view(
+        &mut self,
+        parent: u32,
+        match_horizontal: bool,
+        match_vertical: bool,
+        options: NativeWindowOptions,
+        initial_batch: &[u8],
+    ) -> std::result::Result<u32, String> {
+        self.sync_closed_windows();
+        if self.windows.len() >= MAX_WINDOWS {
+            return Err(format!(
+                "an application cannot own more than {MAX_WINDOWS} windows"
+            ));
+        }
+        let parent_handle = self
+            .windows
+            .get(&parent)
+            .ok_or_else(|| format!("unknown QuickGUI parent window {parent}"))?
+            .handle
+            .ok_or_else(|| "an embedded view requires a running parent window".to_owned())?;
+        let id = self.next_window_id.max(1);
+        self.next_window_id = id
+            .checked_add(1)
+            .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?;
+        let config = window_config(&options)?;
+        let mut window = NativeWindowRuntime {
+            config,
+            tree: Rc::new(RefCell::new(native_tree_from_initial_batch(initial_batch)?)),
+            markdown: Rc::new(RefCell::new(HashMap::new())),
+            svgs: Rc::new(RefCell::new(HashMap::new())),
+            lists: Rc::new(RefCell::new(HashMap::new())),
+            terminals: Rc::new(RefCell::new(HashMap::new())),
+            swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+            embedded_views: Rc::clone(&self.embedded_views),
+            handle: None,
+        };
+        let runner = self
+            .runner
+            .as_mut()
+            .ok_or_else(|| "an embedded view requires a running application".to_owned())?;
+        let embedded = runner
+            .open_embedded_view(
+                parent_handle,
+                window.config.clone(),
+                match_horizontal,
+                match_vertical,
+                window.view(id, &self.events, &self.handles),
+            )
+            .map_err(|error| error.to_string())?;
+        let handle = embedded.window_handle();
+        self.handles.borrow_mut().insert(handle, id);
+        self.embedded_views.borrow_mut().insert(id, embedded);
         window.handle = Some(handle);
         self.windows.insert(id, window);
         self.window_order.push(id);
@@ -495,6 +574,8 @@ impl NativeRuntime {
             if self.windows.remove(&window).is_none() {
                 return false;
             }
+            #[cfg(target_os = "macos")]
+            self.embedded_views.borrow_mut().remove(&window);
             self.window_order.retain(|id| *id != window);
             enqueue_event(
                 &self.events,
@@ -515,6 +596,8 @@ impl NativeRuntime {
         }
         self.handles.borrow_mut().remove(&handle);
         self.windows.remove(&window);
+        #[cfg(target_os = "macos")]
+        self.embedded_views.borrow_mut().remove(&window);
         self.window_order.retain(|id| *id != window);
         enqueue_event(
             &self.events,
@@ -679,6 +762,8 @@ impl NativeRuntime {
         }
         for id in &closed {
             self.windows.remove(id);
+            #[cfg(target_os = "macos")]
+            self.embedded_views.borrow_mut().remove(id);
         }
         self.window_order.retain(|id| !closed.contains(id));
     }
