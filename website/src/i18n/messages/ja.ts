@@ -70,6 +70,10 @@ export const ja: typeof en = {
     title: 'Rust でも、TypeScript でも',
     lead: '好きな方でどうぞ——どちらも同じネイティブアプリになります。webview はありません',
   },
+  swiftUi: {
+    title: 'QuickGUI でネイティブ SwiftUI を使う',
+    lead: 'macOS の Solid アプリに、本物の SwiftUI コントロールをそのまま埋め込めます。',
+  },
   quickstart: {
     title: '1 分ではじめる',
     rust: {

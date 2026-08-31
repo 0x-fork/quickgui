@@ -70,6 +70,10 @@ export const zh: typeof en = {
     title: '用 Rust 或 TypeScript 来写',
     lead: '想用哪个都行——产出的是同一个原生应用, 而且没有 webview',
   },
+  swiftUi: {
+    title: '在 QuickGUI 中使用原生 SwiftUI',
+    lead: '在 macOS 的 Solid 应用中直接嵌入真正的 SwiftUI 控件。',
+  },
   quickstart: {
     title: '一分钟上手',
     rust: {

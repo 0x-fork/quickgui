@@ -63,6 +63,18 @@ impl View for Counter {
   );
 }`,
   },
+  swiftUi: {
+    lang: 'tsx',
+    code: `import { Button, Host } from "@quickgui/solid/swift-ui";
+import { buttonStyle } from "@quickgui/solid/swift-ui/modifiers";
+
+<Host matchContents>
+  <Button
+    label="Save changes"
+    modifiers={[buttonStyle("glass")]}
+  />
+</Host>;`,
+  },
   cargoAdd: {
     lang: 'bash',
     code: `cargo add quickgui`,

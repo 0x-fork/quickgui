@@ -6,6 +6,7 @@ import { SiteFooter } from '../components/site-footer'
 import { Hero } from '../components/sections/hero'
 import { Features } from '../components/sections/features'
 import { CodeShowcase } from '../components/sections/code-showcase'
+import { SwiftUi } from '../components/sections/swift-ui'
 import { Quickstart } from '../components/sections/quickstart'
 import { Platforms } from '../components/sections/platforms'
 import { FinalCta } from '../components/sections/final-cta'
@@ -106,6 +107,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <Hero stats={stats} />
           <Features />
           <CodeShowcase highlighted={highlighted} />
+          <SwiftUi highlighted={highlighted} />
           <Quickstart highlighted={highlighted} />
           <Platforms />
           <FinalCta />

@@ -68,6 +68,10 @@ export const en = {
     title: 'Write it in Rust or TypeScript.',
     lead: 'Use whichever you like — both produce the same native app, with no webview.',
   },
+  swiftUi: {
+    title: 'Use native SwiftUI in QuickGUI.',
+    lead: 'Embed real SwiftUI controls directly in your Solid app on macOS.',
+  },
   quickstart: {
     title: 'Start in a minute.',
     rust: {
