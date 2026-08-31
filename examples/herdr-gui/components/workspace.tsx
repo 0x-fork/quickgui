@@ -192,6 +192,7 @@ function TerminalPane(props: { pane: Pane; model: HerdrModel }) {
           scrollback={50_000}
           terminalPalette={theme().terminalPalette}
           terminalCursorColor={theme().terminalCursor}
+          terminalPaddingColor="extend"
           onClick={() => model.selectPane(props.pane)}
           onStatus={(event) => model.handleTerminalStatus(props.pane, event)}
           style={{
@@ -200,7 +201,9 @@ function TerminalPane(props: { pane: Pane; model: HerdrModel }) {
             right: 0,
             bottom: 0,
             left: 0,
-            padding: 1,
+            padding: 8,
+            borderWidth: 1,
+            borderColor: theme().terminal,
             backgroundColor: theme().terminal,
             color: theme().terminalText,
             fontFamily: "JetBrainsMono Nerd Font Mono",

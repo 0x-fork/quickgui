@@ -304,6 +304,7 @@ describe("Solid universal host", () => {
       env: { QUICKGUI_TERMINAL_TEST: "1" },
       scrollback: 20_000,
       terminalCursorColor: "#0969da",
+      terminalPaddingColor: "extend",
       terminalPalette: [
         "#24292f",
         "#cf222e",
@@ -352,6 +353,9 @@ describe("Solid universal host", () => {
     );
     expect(terminal.properties.get(PropertyCode.TerminalCursorColor)).toBeTypeOf(
       "number",
+    );
+    expect(terminal.properties.get(PropertyCode.TerminalPaddingColor)).toBe(
+      "extend",
     );
     expect(
       JSON.parse(

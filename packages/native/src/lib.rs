@@ -24,10 +24,10 @@ use quickgui::{
     CursorStyle, DisplayId, Element, ElementId, FollowMode, FontWeight, Image, IntoElement,
     ListAlignment, ListState, Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase,
     Popover, QuitMode, Svg, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, TaskbarProgressState,
-    Terminal, TerminalOptions, TerminalStatus, TerminalStyle, TerminalTheme, TextAlign,
-    TitleBarStyle, Transition, View, ViewContext, WindowAppearance, WindowBackgroundAppearance,
-    WindowHandle, WindowKind, WindowLevel, button, div, svg as svg_element, text, text_area,
-    text_input,
+    Terminal, TerminalOptions, TerminalPaddingColor, TerminalStatus, TerminalStyle, TerminalTheme,
+    TextAlign, TitleBarStyle, Transition, View, ViewContext, WindowAppearance,
+    WindowBackgroundAppearance, WindowHandle, WindowKind, WindowLevel, button, div,
+    svg as svg_element, text, text_area, text_input,
 };
 
 mod dialog;
@@ -48,7 +48,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 13;
+const PROTOCOL_VERSION: u16 = 14;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -175,7 +175,8 @@ mod property {
     pub const RESTORE_PREVIOUS_FOCUS: u16 = 111;
     pub const AUTO_FOCUS: u16 = 112;
     pub const ACCESSIBILITY_MODAL: u16 = 113;
-    pub const LAST: u16 = ACCESSIBILITY_MODAL;
+    pub const TERMINAL_PADDING_COLOR: u16 = 114;
+    pub const LAST: u16 = TERMINAL_PADDING_COLOR;
 }
 
 #[derive(Default)]
@@ -1640,6 +1641,10 @@ fn build_element(
                         padding_right: terminal_padding(node, property::PADDING_RIGHT),
                         padding_bottom: terminal_padding(node, property::PADDING_BOTTOM),
                         padding_left: terminal_padding(node, property::PADDING_LEFT),
+                        padding_color: match node.string(property::TERMINAL_PADDING_COLOR) {
+                            Some("extend") => TerminalPaddingColor::Extend,
+                            _ => TerminalPaddingColor::Background,
+                        },
                         foreground: node.color(property::COLOR),
                         background: node.color(property::BACKGROUND_COLOR),
                         theme: native_terminal_theme(node),

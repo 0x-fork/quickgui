@@ -374,7 +374,8 @@ pub use terminal::{
     MAX_TERMINAL_ARGUMENTS, MAX_TERMINAL_ENVIRONMENT, MAX_TERMINAL_SCROLLBACK,
     MAX_TERMINAL_STRING_BYTES, TERMINAL_ANSI_COLOR_COUNT, Terminal, TerminalAgent,
     TerminalAgentStatus, TerminalCursor, TerminalCursorStyle, TerminalError, TerminalOptions,
-    TerminalScrollState, TerminalSnapshot, TerminalStatus, TerminalStyle, TerminalTheme,
+    TerminalPaddingColor, TerminalScrollState, TerminalSnapshot, TerminalStatus, TerminalStyle,
+    TerminalTheme,
 };
 pub use tooltip::{
     DEFAULT_TOOLTIP_DELAY, MAX_TOOLTIP_CONTENT_NODES, MAX_TOOLTIP_DELAY, MAX_TOOLTIPS_PER_WINDOW,

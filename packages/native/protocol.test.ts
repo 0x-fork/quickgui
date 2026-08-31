@@ -30,8 +30,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, retained states, overlays, terminals, SVGs, and pointer capture under protocol v13", () => {
-    expect(PROTOCOL_VERSION).toBe(13);
+  test("encodes native controls, retained states, overlays, terminals, SVGs, and pointer capture under protocol v14", () => {
+    expect(PROTOCOL_VERSION).toBe(14);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -68,6 +68,7 @@ describe("binary mutation protocol", () => {
     batch.setProperty(5, PropertyCode.FontFamily, "JetBrainsMono Nerd Font Mono");
     batch.setProperty(5, PropertyCode.TerminalPalette, "[1,2,3]");
     batch.setProperty(5, PropertyCode.TerminalCursorColor, 0xffda6909, true);
+    batch.setProperty(5, PropertyCode.TerminalPaddingColor, "extend");
     batch.setProperty(1, PropertyCode.HoverBackgroundColor, 0xff332211, true);
     batch.setProperty(1, PropertyCode.HoverColor, 0xffeeeeee, true);
     batch.setProperty(1, PropertyCode.ActiveBackgroundColor, 0xff221100, true);
@@ -87,7 +88,7 @@ describe("binary mutation protocol", () => {
     batch.setProperty(4, PropertyCode.AccessibilityModal, true);
     batch.createElement(6, NativeNodeTag.Svg);
     batch.setProperty(6, PropertyCode.Value, "<svg/>");
-    expect(batch.mutationCount).toBe(46);
+    expect(batch.mutationCount).toBe(47);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 });

@@ -31,7 +31,9 @@ use libghostty_vt::{
 };
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
-use self::graphics::{CellMetrics, is_block_element, paint_block};
+use self::graphics::{
+    CellMetrics, EdgeBackgrounds, is_block_element, paint_block, paint_padding_extension,
+};
 use crate::terminal_process::DetectedAgentProcess;
 use crate::{
     AccessibilityRole, Color, Element, ElementId, EventContext, FontFamily, GesturePhase,
@@ -310,6 +312,7 @@ pub struct TerminalSnapshot {
     pub cursor: Option<TerminalCursor>,
     cursor_range: Option<Range<usize>>,
     graphics: Arc<[TerminalCellGraphic]>,
+    edge_backgrounds: EdgeBackgrounds,
     pub status: TerminalStatus,
     pub agent: Option<TerminalAgent>,
 }
@@ -330,6 +333,7 @@ impl TerminalSnapshot {
             cursor: None,
             cursor_range: None,
             graphics: Arc::from([]),
+            edge_backgrounds: EdgeBackgrounds::empty(cols, rows),
             status: TerminalStatus::Starting,
             agent: None,
         }
@@ -348,6 +352,16 @@ struct TerminalCellGraphic {
     foreground: Option<Color>,
 }
 
+/// How a terminal paints the space between its grid and its element bounds.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TerminalPaddingColor {
+    /// Paint padding with the terminal's default background.
+    #[default]
+    Background,
+    /// Extend the nearest grid-edge cell background through the padding.
+    Extend,
+}
+
 /// Visual metrics for a [`Terminal`] element.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TerminalStyle {
@@ -361,6 +375,8 @@ pub struct TerminalStyle {
     pub padding_right: f32,
     pub padding_bottom: f32,
     pub padding_left: f32,
+    /// Background treatment for the space around the terminal grid.
+    pub padding_color: TerminalPaddingColor,
     /// Override the emulator's default foreground without changing explicit ANSI colors.
     pub foreground: Option<Color>,
     /// Override the emulator's default background without changing explicit ANSI colors.
@@ -380,6 +396,7 @@ impl Default for TerminalStyle {
             padding_right: 0.0,
             padding_bottom: 0.0,
             padding_left: 0.0,
+            padding_color: TerminalPaddingColor::Background,
             foreground: None,
             background: None,
             theme: None,
@@ -403,6 +420,7 @@ impl TerminalStyle {
             padding_right: finite_clamp(self.padding_right, 0.0, 256.0, 0.0),
             padding_bottom: finite_clamp(self.padding_bottom, 0.0, 256.0, 0.0),
             padding_left: finite_clamp(self.padding_left, 0.0, 256.0, 0.0),
+            padding_color: self.padding_color,
             foreground: self.foreground,
             background: self.background,
             theme: self.theme.clone(),
@@ -852,6 +870,17 @@ impl Terminal {
             })
         };
         let terminal_background = style.background.unwrap_or(snapshot.background);
+        let padding_extension = (style.padding_color == TerminalPaddingColor::Extend).then(|| {
+            let edges = snapshot.edge_backgrounds.clone();
+            let padding_top = style.padding_top;
+            let padding_left = style.padding_left;
+            canvas(move |_bounds, canvas| {
+                paint_padding_extension(canvas, &edges, cell_metrics, padding_top, padding_left);
+            })
+            .absolute()
+            .inset_0()
+            .size_full()
+        });
         let block_cursor_graphic = cursor == Some(TerminalCursorStyle::Block)
             && snapshot.cursor.is_some_and(|cursor| {
                 snapshot
@@ -957,7 +986,11 @@ impl Terminal {
             .track_focus(focus)
             .accessibility_role(AccessibilityRole::Group)
             .accessibility_label("Terminal")
-            .cursor_text()
+            .cursor_text();
+        if let Some(padding_extension) = padding_extension {
+            terminal = terminal.child(padding_extension);
+        }
+        terminal = terminal
             .child(terminal_content)
             .on_key_down(key_down)
             .on_key_up(key_up)
@@ -1600,13 +1633,17 @@ fn handle_worker_message(
             let _ = writer.write_all(&bytes);
             let _ = writer.flush();
         }
-        WorkerMessage::Paste(value) => write_paste(terminal, writer, value),
-        WorkerMessage::Key(input) => {
-            if terminal_key_follows_prompt(&input) {
+        WorkerMessage::Paste(value) => {
+            if write_paste(terminal, writer, value) {
                 terminal.scroll_viewport(ScrollViewport::Bottom);
                 *redraw = true;
             }
-            write_key(terminal, key_encoder, writer, input);
+        }
+        WorkerMessage::Key(input) => {
+            if write_key(terminal, key_encoder, writer, input) {
+                terminal.scroll_viewport(ScrollViewport::Bottom);
+                *redraw = true;
+            }
         }
         WorkerMessage::Resize(next) => {
             if *size != next {
@@ -1663,14 +1700,6 @@ fn terminal_rgb(color: Color) -> RgbColor {
     RgbColor { r, g, b }
 }
 
-fn terminal_key_follows_prompt(input: &TerminalKeyInput) -> bool {
-    input.key == Key::Enter
-        && matches!(
-            input.action,
-            GhosttyKeyAction::Press | GhosttyKeyAction::Repeat
-        )
-}
-
 fn terminal_command(options: &TerminalOptions) -> CommandBuilder {
     let mut command = options
         .program
@@ -1701,7 +1730,7 @@ fn write_paste(
     terminal: &GhosttyTerminal<'_, '_>,
     writer: &mut Box<dyn Write + Send>,
     value: String,
-) {
+) -> bool {
     let bracketed = terminal.mode(Mode::BRACKETED_PASTE).unwrap_or(false);
     let mut input = value.into_bytes();
     let mut encoded = vec![0; input.len().saturating_add(16)];
@@ -1713,13 +1742,14 @@ fn write_paste(
             encoded.resize(required, 0);
             match libghostty_vt::paste::encode(&mut input, bracketed, &mut encoded) {
                 Ok(length) => length,
-                Err(_) => return,
+                Err(_) => return false,
             }
         }
-        Err(_) => return,
+        Err(_) => return false,
     };
     let _ = writer.write_all(&encoded[..length]);
     let _ = writer.flush();
+    true
 }
 
 fn write_key(
@@ -1727,15 +1757,15 @@ fn write_key(
     encoder: &mut GhosttyKeyEncoder<'_>,
     writer: &mut Box<dyn Write + Send>,
     input: TerminalKeyInput,
-) {
+) -> bool {
     let Some((key, text, unshifted)) =
         ghostty_key(&input.key, input.key_char.as_ref(), input.text.as_deref())
     else {
-        return;
+        return false;
     };
     let mut event = match GhosttyKeyEvent::new() {
         Ok(event) => event,
-        Err(_) => return,
+        Err(_) => return false,
     };
     event
         .set_action(input.action)
@@ -1754,6 +1784,9 @@ fn write_key(
     if encoder.encode_to_vec(&event, &mut bytes).is_ok() && !bytes.is_empty() {
         let _ = writer.write_all(&bytes);
         let _ = writer.flush();
+        true
+    } else {
+        false
     }
 }
 
@@ -2120,6 +2153,10 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
         String::with_capacity(cols as usize * row_count as usize + row_count as usize);
     let mut highlights = Vec::new();
     let mut graphics = Vec::new();
+    let mut top_backgrounds = vec![None; usize::from(cols)];
+    let mut right_backgrounds = vec![None; usize::from(row_count)];
+    let mut bottom_backgrounds = vec![None; usize::from(cols)];
+    let mut left_backgrounds = vec![None; usize::from(row_count)];
     let mut graphemes = Vec::new();
     let mut active_run: Option<(usize, usize, CellVisual)> = None;
     let mut row_iterator = rows.update(&snapshot)?;
@@ -2129,9 +2166,37 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
         let mut row_visible_end = row_start;
         let mut cell_iterator = cells.update(row)?;
         let mut column = 0_u16;
+        let mut grid_column = 0_u16;
         while let Some(cell) = cell_iterator.next() {
             let raw = cell.raw_cell()?;
             let wide = raw.wide()?;
+            let style = cell.style()?;
+            let mut resolved_foreground = cell.fg_color()?.map(ghostty_color).unwrap_or(foreground);
+            let mut resolved_background = cell.bg_color()?.map(ghostty_color).unwrap_or(background);
+            if style.inverse {
+                std::mem::swap(&mut resolved_foreground, &mut resolved_background);
+            }
+            let edge_background =
+                (resolved_background != background).then_some(resolved_background);
+            let edge_column = usize::from(grid_column);
+            let edge_row = usize::from(row_index);
+            if edge_column < usize::from(cols) {
+                if edge_row == 0 {
+                    top_backgrounds[edge_column] = edge_background;
+                }
+                if edge_row + 1 == usize::from(row_count) {
+                    bottom_backgrounds[edge_column] = edge_background;
+                }
+            }
+            if edge_row < usize::from(row_count) {
+                if edge_column == 0 {
+                    left_backgrounds[edge_row] = edge_background;
+                }
+                if edge_column + 1 == usize::from(cols) {
+                    right_backgrounds[edge_row] = edge_background;
+                }
+            }
+            grid_column = grid_column.saturating_add(1);
             if wide == CellWide::SpacerTail {
                 column = column.saturating_add(1);
                 continue;
@@ -2155,12 +2220,6 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
                 }
             }
             let end = content.len();
-            let style = cell.style()?;
-            let mut resolved_foreground = cell.fg_color()?.map(ghostty_color).unwrap_or(foreground);
-            let mut resolved_background = cell.bg_color()?.map(ghostty_color).unwrap_or(background);
-            if style.inverse {
-                std::mem::swap(&mut resolved_foreground, &mut resolved_background);
-            }
             if style.invisible {
                 resolved_foreground = resolved_background;
             } else if style.faint {
@@ -2243,6 +2302,12 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
         cursor,
         cursor_range,
         graphics: graphics.into(),
+        edge_backgrounds: EdgeBackgrounds::new(
+            top_backgrounds,
+            right_backgrounds,
+            bottom_backgrounds,
+            left_backgrounds,
+        ),
         status,
         agent,
     })
@@ -2461,6 +2526,7 @@ fn publish_failure(
             cursor: None,
             cursor_range: None,
             graphics: Arc::from([]),
+            edge_backgrounds: EdgeBackgrounds::empty(size.cols, size.rows),
             status: TerminalStatus::Failed {
                 message: Arc::from(message),
             },
@@ -2668,25 +2734,57 @@ mod tests {
     }
 
     #[test]
-    fn enter_press_and_repeat_follow_the_live_prompt() {
-        let input = |action| TerminalKeyInput {
-            key: Key::Enter,
+    fn every_encoded_keystroke_follows_the_live_prompt() {
+        let terminal = GhosttyTerminal::new(GhosttyTerminalOptions {
+            cols: 80,
+            rows: 24,
+            max_scrollback: 100,
+        })
+        .unwrap();
+        let mut encoder = GhosttyKeyEncoder::new().unwrap();
+        let mut writer: Box<dyn Write + Send> = Box::new(Vec::<u8>::new());
+        let input = |key, text, action| TerminalKeyInput {
+            key,
             key_char: None,
-            text: None,
+            text,
             modifiers: Modifiers::empty(),
             action,
         };
-        assert!(terminal_key_follows_prompt(&input(GhosttyKeyAction::Press)));
-        assert!(terminal_key_follows_prompt(&input(
-            GhosttyKeyAction::Repeat
-        )));
-        assert!(!terminal_key_follows_prompt(&input(
-            GhosttyKeyAction::Release
-        )));
 
-        let mut character = input(GhosttyKeyAction::Press);
-        character.key = Key::Character("a".to_owned());
-        assert!(!terminal_key_follows_prompt(&character));
+        assert!(write_key(
+            &terminal,
+            &mut encoder,
+            &mut writer,
+            input(
+                Key::Character("a".to_owned()),
+                Some("a".to_owned()),
+                GhosttyKeyAction::Press,
+            ),
+        ));
+        assert!(write_key(
+            &terminal,
+            &mut encoder,
+            &mut writer,
+            input(Key::Backspace, None, GhosttyKeyAction::Press),
+        ));
+        assert!(write_key(
+            &terminal,
+            &mut encoder,
+            &mut writer,
+            input(Key::ArrowUp, None, GhosttyKeyAction::Press),
+        ));
+        assert!(write_key(
+            &terminal,
+            &mut encoder,
+            &mut writer,
+            input(Key::Enter, None, GhosttyKeyAction::Repeat),
+        ));
+        assert!(!write_key(
+            &terminal,
+            &mut encoder,
+            &mut writer,
+            input(Key::Other, None, GhosttyKeyAction::Press),
+        ));
     }
 
     #[test]
@@ -2696,6 +2794,7 @@ mod tests {
             padding_right: 9.0,
             padding_bottom: f32::INFINITY,
             padding_left: -4.0,
+            padding_color: TerminalPaddingColor::Extend,
             ..TerminalStyle::default()
         }
         .normalized();
@@ -2704,6 +2803,7 @@ mod tests {
         assert_eq!(style.padding_right, 9.0);
         assert_eq!(style.padding_bottom, 0.0);
         assert_eq!(style.padding_left, 0.0);
+        assert_eq!(style.padding_color, TerminalPaddingColor::Extend);
     }
 
     #[test]
@@ -2733,6 +2833,42 @@ mod tests {
         assert_eq!(snapshot.scroll.viewport_rows, 24);
         assert_eq!(snapshot.scroll.total_rows, 24);
         assert_eq!(snapshot.scroll.offset_rows, 0);
+    }
+
+    #[test]
+    fn ghostty_snapshot_retains_grid_edge_backgrounds() {
+        let mut terminal = GhosttyTerminal::new(GhosttyTerminalOptions {
+            cols: 4,
+            rows: 3,
+            max_scrollback: 100,
+        })
+        .unwrap();
+        terminal.vt_write(b"\x1b[48;2;10;20;30m\x1b[2J\x1b[H");
+        let mut render_state = RenderState::new().unwrap();
+        let mut rows = RowIterator::new().unwrap();
+        let mut cells = CellIterator::new().unwrap();
+        let snapshot = build_snapshot(
+            &terminal,
+            &mut render_state,
+            &mut rows,
+            &mut cells,
+            TerminalSnapshotMetadata::running(1),
+        )
+        .unwrap();
+        let surface = Color::rgb8(10, 20, 30);
+
+        assert!(
+            snapshot
+                .edge_backgrounds
+                .top
+                .iter()
+                .chain(snapshot.edge_backgrounds.right.iter())
+                .chain(snapshot.edge_backgrounds.bottom.iter())
+                .chain(snapshot.edge_backgrounds.left.iter())
+                .all(|color| *color == Some(surface)),
+            "edge backgrounds: {:?}",
+            snapshot.edge_backgrounds,
+        );
     }
 
     #[test]

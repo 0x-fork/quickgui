@@ -169,6 +169,7 @@ const properties: Record<string, PropertyEntry> = {
     code: PropertyCode.TerminalCursorColor,
     color: true,
   },
+  terminalPaddingColor: { code: PropertyCode.TerminalPaddingColor },
 };
 
 const colorProperties = new Set([
@@ -1163,6 +1164,8 @@ export namespace JSX {
     /** Standard black-through-white colors followed by their eight bright variants. */
     terminalPalette?: TerminalPalette;
     terminalCursorColor?: number | string;
+    /** Paint grid padding with the default background or extend edge-cell backgrounds into it. */
+    terminalPaddingColor?: "background" | "extend";
     onStatus?: EventHandler;
     onTerminal?: EventHandler;
   }

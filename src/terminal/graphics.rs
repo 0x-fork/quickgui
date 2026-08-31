@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{Canvas, Color, Rect};
 
 /// Physical and logical dimensions of one terminal grid cell.
@@ -36,6 +38,222 @@ impl CellMetrics {
             physical_height,
             scale_factor,
         }
+    }
+}
+
+/// Resolved backgrounds along the four edges of the terminal grid.
+///
+/// Ghostty's `window-padding-color=extend` paints each padding pixel with the nearest edge cell.
+/// Retaining only the edges keeps that behavior bounded to O(columns + rows) snapshot storage.
+#[derive(Clone, Debug)]
+pub(super) struct EdgeBackgrounds {
+    pub(super) top: Arc<[Option<Color>]>,
+    pub(super) right: Arc<[Option<Color>]>,
+    pub(super) bottom: Arc<[Option<Color>]>,
+    pub(super) left: Arc<[Option<Color>]>,
+}
+
+impl EdgeBackgrounds {
+    pub(super) fn new(
+        top: Vec<Option<Color>>,
+        right: Vec<Option<Color>>,
+        bottom: Vec<Option<Color>>,
+        left: Vec<Option<Color>>,
+    ) -> Self {
+        Self {
+            top: top.into(),
+            right: right.into(),
+            bottom: bottom.into(),
+            left: left.into(),
+        }
+    }
+
+    pub(super) fn empty(columns: u16, rows: u16) -> Self {
+        Self::new(
+            vec![None; usize::from(columns)],
+            vec![None; usize::from(rows)],
+            vec![None; usize::from(columns)],
+            vec![None; usize::from(rows)],
+        )
+    }
+
+    #[cfg(test)]
+    fn solid(columns: u16, rows: u16, color: Color) -> Self {
+        Self::new(
+            vec![Some(color); usize::from(columns)],
+            vec![Some(color); usize::from(rows)],
+            vec![Some(color); usize::from(columns)],
+            vec![Some(color); usize::from(rows)],
+        )
+    }
+}
+
+/// Extend terminal edge-cell backgrounds through the visual grid padding.
+///
+/// The grid itself remains inset, so shell text keeps its breathing room. Full-screen TUIs usually
+/// paint every edge cell, causing their surface background to reach the terminal's inner border.
+pub(super) fn paint_padding_extension(
+    canvas: &mut Canvas<'_>,
+    edges: &EdgeBackgrounds,
+    metrics: CellMetrics,
+    padding_top: f32,
+    padding_left: f32,
+) {
+    for_each_padding_rect(
+        canvas.bounds(),
+        edges,
+        metrics,
+        padding_top,
+        padding_left,
+        |rect, color| canvas.fill_rect(rect, color),
+    );
+}
+
+fn for_each_padding_rect(
+    bounds: Rect,
+    edges: &EdgeBackgrounds,
+    metrics: CellMetrics,
+    padding_top: f32,
+    padding_left: f32,
+    mut paint: impl FnMut(Rect, Color),
+) {
+    if bounds.is_empty() || edges.top.is_empty() || edges.left.is_empty() {
+        return;
+    }
+
+    let grid_left = padding_left.clamp(0.0, bounds.width);
+    let grid_top = padding_top.clamp(0.0, bounds.height);
+    let grid_right =
+        (grid_left + edges.top.len() as f32 * metrics.logical_width).clamp(grid_left, bounds.width);
+    let grid_bottom = (grid_top + edges.left.len() as f32 * metrics.logical_height)
+        .clamp(grid_top, bounds.height);
+
+    paint_horizontal_runs(
+        &edges.top,
+        grid_left,
+        0.0,
+        metrics.logical_width,
+        grid_right,
+        grid_top,
+        &mut paint,
+    );
+    paint_horizontal_runs(
+        &edges.bottom,
+        grid_left,
+        grid_bottom,
+        metrics.logical_width,
+        grid_right,
+        bounds.height - grid_bottom,
+        &mut paint,
+    );
+    paint_vertical_runs(
+        &edges.left,
+        0.0,
+        grid_top,
+        grid_left,
+        metrics.logical_height,
+        grid_bottom,
+        &mut paint,
+    );
+    paint_vertical_runs(
+        &edges.right,
+        grid_right,
+        grid_top,
+        bounds.width - grid_right,
+        metrics.logical_height,
+        grid_bottom,
+        &mut paint,
+    );
+
+    let corners = [
+        (
+            Rect::new(0.0, 0.0, grid_left, grid_top),
+            edges.top.first().copied().flatten(),
+        ),
+        (
+            Rect::new(grid_right, 0.0, bounds.width - grid_right, grid_top),
+            edges.top.last().copied().flatten(),
+        ),
+        (
+            Rect::new(0.0, grid_bottom, grid_left, bounds.height - grid_bottom),
+            edges.bottom.first().copied().flatten(),
+        ),
+        (
+            Rect::new(
+                grid_right,
+                grid_bottom,
+                bounds.width - grid_right,
+                bounds.height - grid_bottom,
+            ),
+            edges.bottom.last().copied().flatten(),
+        ),
+    ];
+    for (rect, color) in corners {
+        if !rect.is_empty()
+            && let Some(color) = color
+        {
+            paint(rect, color);
+        }
+    }
+}
+
+fn paint_horizontal_runs(
+    colors: &[Option<Color>],
+    origin_x: f32,
+    y: f32,
+    cell_width: f32,
+    right: f32,
+    height: f32,
+    paint: &mut impl FnMut(Rect, Color),
+) {
+    if height <= 0.0 || right <= origin_x {
+        return;
+    }
+    for_each_color_run(colors, |range, color| {
+        let left = (origin_x + range.start as f32 * cell_width).min(right);
+        let run_right = (origin_x + range.end as f32 * cell_width).min(right);
+        if run_right > left {
+            paint(Rect::new(left, y, run_right - left, height), color);
+        }
+    });
+}
+
+fn paint_vertical_runs(
+    colors: &[Option<Color>],
+    x: f32,
+    origin_y: f32,
+    width: f32,
+    cell_height: f32,
+    bottom: f32,
+    paint: &mut impl FnMut(Rect, Color),
+) {
+    if width <= 0.0 || bottom <= origin_y {
+        return;
+    }
+    for_each_color_run(colors, |range, color| {
+        let top = (origin_y + range.start as f32 * cell_height).min(bottom);
+        let run_bottom = (origin_y + range.end as f32 * cell_height).min(bottom);
+        if run_bottom > top {
+            paint(Rect::new(x, top, width, run_bottom - top), color);
+        }
+    });
+}
+
+fn for_each_color_run(
+    colors: &[Option<Color>],
+    mut paint: impl FnMut(std::ops::Range<usize>, Color),
+) {
+    let mut start = 0;
+    while start < colors.len() {
+        let color = colors[start];
+        let mut end = start + 1;
+        while end < colors.len() && colors[end] == color {
+            end += 1;
+        }
+        if let Some(color) = color {
+            paint(start..end, color);
+        }
+        start = end;
     }
 }
 
@@ -208,6 +426,63 @@ mod tests {
                 physical_height: 41,
                 scale_factor: 2.0,
             }
+        );
+    }
+
+    #[test]
+    fn default_edge_backgrounds_do_not_add_padding_quads() {
+        let edges = EdgeBackgrounds::empty(2, 2);
+        let mut rects = Vec::new();
+        for_each_padding_rect(
+            Rect::new(0.0, 0.0, 40.0, 40.0),
+            &edges,
+            CellMetrics {
+                logical_width: 10.0,
+                logical_height: 10.0,
+                physical_width: 10,
+                physical_height: 10,
+                scale_factor: 1.0,
+            },
+            8.0,
+            8.0,
+            |rect, color| rects.push((rect, color)),
+        );
+
+        assert!(rects.is_empty());
+    }
+
+    #[test]
+    fn edge_backgrounds_extend_to_every_padding_edge() {
+        let surface = Color::rgb8(9, 105, 218);
+        let edges = EdgeBackgrounds::solid(2, 2, surface);
+        let mut rects = Vec::new();
+        for_each_padding_rect(
+            Rect::new(0.0, 0.0, 40.0, 40.0),
+            &edges,
+            CellMetrics {
+                logical_width: 10.0,
+                logical_height: 10.0,
+                physical_width: 10,
+                physical_height: 10,
+                scale_factor: 1.0,
+            },
+            8.0,
+            8.0,
+            |rect, color| rects.push((rect, color)),
+        );
+
+        assert_eq!(
+            rects,
+            [
+                (Rect::new(8.0, 0.0, 20.0, 8.0), surface),
+                (Rect::new(8.0, 28.0, 20.0, 12.0), surface),
+                (Rect::new(0.0, 8.0, 8.0, 20.0), surface),
+                (Rect::new(28.0, 8.0, 12.0, 20.0), surface),
+                (Rect::new(0.0, 0.0, 8.0, 8.0), surface),
+                (Rect::new(28.0, 0.0, 12.0, 8.0), surface),
+                (Rect::new(0.0, 28.0, 8.0, 12.0), surface),
+                (Rect::new(28.0, 28.0, 12.0, 12.0), surface),
+            ]
         );
     }
 
