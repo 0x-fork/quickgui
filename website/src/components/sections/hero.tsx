@@ -1,14 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '../copy-button'
-import { repoStatsQueryOptions } from '../../lib/queries'
 import { site } from '../../lib/site'
+import type { RepoStats } from '../../lib/stats'
 
-export function Hero() {
+export function Hero({ stats }: { stats: RepoStats }) {
   const { t } = useTranslation()
-  const { data } = useQuery(repoStatsQueryOptions())
-  const version = data?.version ?? site.version
+  const version = stats.version ?? site.version
 
   return (
     <section className="border-b border-border">

@@ -1,15 +1,13 @@
 node_modules
 .DS_Store
+build
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
 .env
-.nitro
-.tanstack
+.react-router
 .wrangler
-.output
-.vinxi
-__unconfig*
 todos.json
 
 .dev.vars*

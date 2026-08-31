@@ -9,6 +9,7 @@ import {
 import { GitHubButton } from './github-button'
 import { Logo } from './logo'
 import { site } from '../lib/site'
+import type { RepoStats } from '../lib/stats'
 import {
   LOCALE_LABELS,
   SUPPORTED_LOCALES,
@@ -62,7 +63,7 @@ function LanguageMenu() {
   )
 }
 
-export function SiteHeader() {
+export function SiteHeader({ stats }: { stats: RepoStats }) {
   const { t, i18n } = useTranslation()
   const current = (i18n.language as Locale) ?? 'en'
 
@@ -99,7 +100,7 @@ export function SiteHeader() {
 
         <div className="flex items-center gap-2">
           <LanguageMenu />
-          <GitHubButton />
+          <GitHubButton stats={stats} />
           <Button asChild size="sm" className="hidden h-8 px-3.5 sm:inline-flex">
             <a href="#quickstart">{t('common.getStarted')}</a>
           </Button>

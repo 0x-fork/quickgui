@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from '../code-block'
 import { SectionHeading } from '../section-heading'
-import type { HighlightedSnippets } from '../../server/highlight'
+import type { HighlightedSnippets } from '../../lib/snippets'
 
 const PANES = [
   {

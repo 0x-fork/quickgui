@@ -1,6 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { repoStatsQueryOptions } from '../lib/queries'
 import { site } from '../lib/site'
+import type { RepoStats } from '../lib/stats'
 
 function formatCount(value: number): string {
   if (value >= 1000) {
@@ -9,9 +8,7 @@ function formatCount(value: number): string {
   return String(value)
 }
 
-export function GitHubButton() {
-  const { data } = useQuery(repoStatsQueryOptions())
-
+export function GitHubButton({ stats }: { stats: RepoStats }) {
   return (
     <a
       href={site.links.github}
@@ -21,10 +18,10 @@ export function GitHubButton() {
     >
       <span className="i-simple-icons-github size-3.5" aria-hidden />
       <span className="hidden sm:inline">GitHub</span>
-      {typeof data?.stars === 'number' ? (
+      {typeof stats.stars === 'number' ? (
         <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground tabular-nums">
           <span className="i-lucide-star size-3" aria-hidden />
-          {formatCount(data.stars)}
+          {formatCount(stats.stars)}
         </span>
       ) : null}
     </a>

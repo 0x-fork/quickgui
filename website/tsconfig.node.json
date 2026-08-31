@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["react-router.config.ts", "vite.config.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["node"]
+  }
+}

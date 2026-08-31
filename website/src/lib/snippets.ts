@@ -86,3 +86,4 @@ bun run dev`,
 } as const
 
 export type SnippetKey = keyof typeof snippets
+export type HighlightedSnippets = Record<SnippetKey, string>

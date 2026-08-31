@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    ".react-router/types/**/*",
+    "src/**/*",
+    "workers/**/*",
+    "worker-configuration.d.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "rootDirs": [".", "./.react-router/types"],
+    "paths": {
+      "#/*": ["./src/*"],
+      "@/*": ["./src/*"]
+    },
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  }
+}

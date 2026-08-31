@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { CodeBlock } from '../code-block'
 import { SectionHeading } from '../section-heading'
-import type { HighlightedSnippets } from '../../server/highlight'
+import type { HighlightedSnippets } from '../../lib/snippets'
 
 function Step({
   number,

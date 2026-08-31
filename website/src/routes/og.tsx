@@ -1,15 +1,20 @@
-import { createFileRoute } from '@tanstack/react-router'
+import type { Route } from './+types/og'
 import { Cross } from '../components/cross'
 import { Logo } from '../components/logo'
+import { siteMeta } from '../lib/meta'
 
 // Renders the 1200×630 social card; public/og.png is a screenshot of this
 // route. Not linked from anywhere and marked noindex.
-export const Route = createFileRoute('/og')({
-  head: () => ({ meta: [{ name: 'robots', content: 'noindex' }] }),
-  component: OgCard,
-})
+export function loader({ request }: Route.LoaderArgs) {
+  return { origin: new URL(request.url).origin }
+}
 
-function OgCard() {
+export const meta: Route.MetaFunction = ({ loaderData }) => [
+  ...siteMeta(loaderData?.origin ?? ''),
+  { name: 'robots', content: 'noindex' },
+]
+
+export default function OgCard() {
   return (
     <div className="relative flex h-[630px] w-[1200px] flex-col justify-between overflow-hidden bg-background p-24">
       <div className="absolute inset-12 border border-border">

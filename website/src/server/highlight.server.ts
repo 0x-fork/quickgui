@@ -1,7 +1,4 @@
-import { createServerFn } from '@tanstack/react-start'
-import type { SnippetKey } from '../lib/snippets'
-
-export type HighlightedSnippets = Record<SnippetKey, string>
+import type { HighlightedSnippets, SnippetKey } from '../lib/snippets'
 
 let cached: Promise<HighlightedSnippets> | null = null
 
@@ -38,9 +35,7 @@ async function highlightAll(): Promise<HighlightedSnippets> {
   return out
 }
 
-export const getHighlightedSnippets = createServerFn({
-  method: 'GET',
-}).handler((): Promise<HighlightedSnippets> => {
+export function getHighlightedSnippets(): Promise<HighlightedSnippets> {
   cached ??= highlightAll()
   return cached
-})
+}
