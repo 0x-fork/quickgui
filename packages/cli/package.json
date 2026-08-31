@@ -2,15 +2,30 @@
   "name": "@quickgui/cli",
   "version": "0.0.1",
   "description": "Project, development, and packaging CLI for QuickGUI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/egoist/quickgui.git",
+    "directory": "packages/cli"
+  },
+  "bugs": "https://github.com/egoist/quickgui/issues",
+  "homepage": "https://github.com/egoist/quickgui#readme",
   "type": "module",
   "bin": {
-    "quickgui": "./src/cli.ts"
+    "quickgui": "src/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "files": [
-    "src",
+    "src/args.ts",
+    "src/build.ts",
+    "src/cli.ts",
+    "src/config.ts",
+    "src/dev.ts",
+    "src/error.ts",
+    "src/index.ts",
+    "src/init.ts",
+    "src/targets.ts",
     "templates",
     "README.md"
   ],
@@ -24,6 +39,12 @@
   },
   "engines": {
     "bun": ">=1.3.0"
+  },
+  "os": [
+    "darwin"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT OR Apache-2.0"
 }

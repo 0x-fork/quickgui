@@ -151,10 +151,7 @@ impl Terminal {
         event: &PointerEvent,
         cols: u16,
         rows: u16,
-        cell_width: f32,
-        line_height: f32,
-        physical_cell_width: u32,
-        scale_factor: f32,
+        cell_metrics: CellMetrics,
     ) -> bool {
         let bounds = *self
             .inner
@@ -166,10 +163,10 @@ impl Terminal {
             bounds,
             cols,
             rows,
-            cell_width,
-            line_height,
-            physical_cell_width,
-            scale_factor,
+            cell_metrics.logical_width,
+            cell_metrics.logical_height,
+            cell_metrics.physical_width,
+            cell_metrics.scale_factor,
             Instant::now().saturating_duration_since(self.inner.selection_epoch),
         ) else {
             return false;
@@ -487,10 +484,7 @@ impl Terminal {
                 event,
                 selection_cols,
                 selection_rows,
-                cell_width,
-                line_height,
-                cell_metrics.physical_width,
-                scale_factor,
+                cell_metrics,
             ) {
                 event_cx.clear_text_selection();
                 event_cx.prevent_default();

@@ -472,6 +472,14 @@ impl Runtime {
         let mut ui = UiTree::new_at(self.animation_epoch);
         ui.set_reduce_motion(reduce_motion);
         ui.set_animations_enabled(!reduce_motion, Instant::now());
+        // A never-key popover leaves focus in its owner window. Restoring its anchor on close
+        // would undo legitimate owner-side focus movement such as normal Tab traversal.
+        let restore_focus_on_close = popover_anchor_element.filter(|_| {
+            self.config
+                .popover
+                .as_ref()
+                .is_some_and(|popover| popover.accepts_key_focus)
+        });
         self.current_window = Some((window_id, handle));
         self.window_handles.insert(handle, window_id);
         if self.active_window.is_none()
@@ -483,7 +491,7 @@ impl Runtime {
         }
         self.window = Some(RuntimeWindow {
             parent,
-            restore_focus_on_close: popover_anchor_element,
+            restore_focus_on_close,
             view,
             renderer,
             image_assets: ImageAssetCache::new(handle, self.image_workers.clone()),

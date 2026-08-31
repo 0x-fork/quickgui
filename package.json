@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build:native": "bun run --filter @quickgui/native build",
-    "test:js": "bun test --conditions=browser packages/native packages/solid packages/cli examples/ai-chat-solid/history.test.ts",
+    "test:js": "bun test --conditions=browser ./packages/native ./packages/solid ./packages/cli ./examples/ai-chat-solid/history.test.ts",
     "typecheck:js": "bunx tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

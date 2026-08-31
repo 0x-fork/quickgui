@@ -12,7 +12,7 @@ pub(super) struct CellMetrics {
     pub(super) logical_height: f32,
     pub(super) physical_width: u32,
     pub(super) physical_height: u32,
-    scale_factor: f32,
+    pub(super) scale_factor: f32,
 }
 
 impl CellMetrics {

@@ -166,9 +166,18 @@ impl TestAppContext {
                 &self.displays,
                 parent_state,
             );
+            // Match production: a child that never takes key focus must not restore its anchor and
+            // overwrite focus movement that already happened in the owner window.
+            let restore_focus_on_close = request.popover_anchor_element.filter(|_| {
+                request
+                    .options
+                    .popover
+                    .as_ref()
+                    .is_some_and(|popover| popover.accepts_key_focus)
+            });
             let window = TestWindow {
                 parent: request.parent,
-                restore_focus_on_close: request.popover_anchor_element,
+                restore_focus_on_close,
                 view: request.view,
                 ui: UiTree::new_at(self.animation_epoch),
                 #[cfg(feature = "inspector")]

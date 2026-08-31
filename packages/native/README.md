@@ -39,10 +39,11 @@ bun run build:native
 bun test packages/native
 ```
 
-The native package declares macOS, Windows, and Linux targets. A source checkout only needs the
-host `.node` build for development; release packaging must supply the target-specific addons used
-by the CLI. The source protocol is versioned and malformed batches are rejected transactionally
-before the committed retained tree changes.
+The native source declares macOS, Windows, and Linux targets. The 0.0.1 npm release contains and
+supports macOS arm64 and x64 addons; later releases can add other platforms once their addons and
+acceptance gates are ready. A source checkout only needs the host `.node` build for development.
+The source protocol is versioned and malformed batches are rejected transactionally before the
+committed retained tree changes.
 
 On macOS, the build script detects a selected beta Xcode and prefers `/Applications/Xcode.app`
 when it is available. Set `QUICKGUI_ALLOW_BETA_XCODE=1` to opt out of that fallback.

@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const debug = process.argv.includes("--debug");
+const forwardedArguments = process.argv.slice(2).filter((argument) => argument !== "--debug");
 const environment = { ...process.env };
 const cleanup: string[] = [];
 
@@ -52,6 +53,7 @@ const arguments_ = [
   "binding.js",
   "--dts",
   "binding.d.ts",
+  ...forwardedArguments,
 ];
 let exitCode = 1;
 try {

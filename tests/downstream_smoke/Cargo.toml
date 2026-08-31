@@ -2,8 +2,8 @@
 name = "quickgui-downstream-smoke"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.90"
 publish = false
 
 [dependencies]
-quickgui = { version = "=0.1.0", features = ["inspector"] }
+quickgui = { version = "=0.1.1", features = ["inspector"] }

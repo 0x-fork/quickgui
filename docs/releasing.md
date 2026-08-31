@@ -13,9 +13,9 @@ Cosmic Text support version. Winit 0.31 beta exposes
 native panels upstream, but also changes the window and event-loop interfaces; migrating to that
 beta is not part of the 0.1 release boundary.
 
-The main crate's minimum supported Rust version is 1.89, matching Cosmic Text 0.19 as selected by
-Glyphon 0.12. CI compiles every target and feature with that exact toolchain on Linux in addition
-to the stable macOS quality job.
+The main crate's minimum supported Rust version is 1.90, matching `libghostty-vt` 0.2.1 as selected
+by the optional terminal feature. CI compiles every target and feature with that exact toolchain on
+Linux in addition to the stable macOS quality job.
 
 ## Automated release gate
 
@@ -25,28 +25,28 @@ Start from a clean checkout of the intended tag and run:
 cargo fmt --all -- --check
 cargo test --all-targets --all-features --locked
 cargo check --all-targets --all-features --locked
-cargo +1.89.0 check --all-targets --all-features --locked
+cargo +1.90.0 check --all-targets --all-features --locked
 cargo clippy --all-targets --all-features --locked -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --locked
 bash -n scripts/*.sh
 git diff --check
-QUICKGUI_PACKAGE_TOOLCHAIN=1.89.0 scripts/package-release-gate.sh
+QUICKGUI_PACKAGE_TOOLCHAIN=1.90.0 scripts/package-release-gate.sh
 ```
 
-The package gate builds all five `.crate` archives, extracts the exact normalized contents, and
+The package gate builds all six `.crate` archives, extracts the exact normalized contents, and
 compiles `tests/downstream_smoke` with only those extracted packages patched into the registry
 graph. This catches missing files, accidental path-only dependencies, mismatched renamed-crate
 types, missing license/notice files, duplicated vendor sources, and a public API that cannot be
 consumed outside this repository. It rejects a dirty source tree by default;
 `QUICKGUI_PACKAGE_ALLOW_DIRTY=1` exists only for development verification.
-CI sets `QUICKGUI_PACKAGE_TOOLCHAIN=1.89.0`, making both package creation and the fresh downstream
+CI sets `QUICKGUI_PACKAGE_TOOLCHAIN=1.90.0`, making both package creation and the fresh downstream
 resolution use the declared MSRV rather than the runner's newer default compiler.
 
 The GitHub `CI` workflow runs this complete non-interactive gate on clean commits. Pushes, tags, and
 manual dispatches upload one immutable `quickgui-<version>-crates-<commit>` artifact containing all
-five verified `.crate` archives, `SHA256SUMS`, this release guide, and the changelog. Pull requests
+six verified `.crate` archives, `SHA256SUMS`, this release guide, and the changelog. Pull requests
 verify the same packages but do not retain release artifacts. A tag build fails unless the tag is
-exactly `v<package-version>`; for 0.1.0 that is `v0.1.0`. Ordinary CI never publishes a crate.
+exactly `v<package-version>`; for 0.1.1 that is `v0.1.1`. Ordinary CI never publishes a crate.
 
 ## macOS acceptance evidence
 
@@ -75,21 +75,22 @@ cargo publish --manifest-path vendor/winit/Cargo.toml
 cargo publish --manifest-path vendor/accesskit_winit/Cargo.toml
 cargo publish --manifest-path vendor/cosmic_text/Cargo.toml
 cargo publish --manifest-path vendor/glyphon/Cargo.toml
+cargo publish --manifest-path crates/quickgui-system/Cargo.toml --locked
 cargo publish --locked
 ```
 
 Wait for each support version to become resolvable from crates.io before publishing its dependent.
-The versions are intentionally exact: `quickgui-winit = 0.30.13-quickgui.1`, then
-`quickgui-accesskit-winit = 0.33.2-quickgui.1`; independently publish
-`quickgui-cosmic-text = 0.19.0-quickgui.1`, then `quickgui-glyphon = 0.12.0-quickgui.1`, before
-`quickgui = 0.1.0`. Never rerun a successful publish;
+The versions are intentionally exact: `quickgui-winit = 0.30.13-quickgui.2`, then
+`quickgui-accesskit-winit = 0.33.2-quickgui.2`; independently publish
+`quickgui-cosmic-text = 0.19.0-quickgui.2`, then `quickgui-glyphon = 0.12.0-quickgui.2`. Publish
+`quickgui-system = 0.1.1` before `quickgui = 0.1.1`. Never rerun a successful publish;
 registry releases are immutable, so any correction requires a new version.
 
 QuickGUI 0.1 was the first release of these package names and was published manually on 2026-08-27.
 crates.io Trusted Publishing can now replace long-lived API tokens after explicit publisher
 configuration; it is intentionally not guessed or enabled by this workflow.
 
-Finally, create a fresh crate outside this repository, add `quickgui = "=0.1.0"` without any
+Finally, create a fresh crate outside this repository, add `quickgui = "=0.1.1"` without any
 `[patch]` or path dependency, and run `cargo check`. Run all three live macOS gates once more from the
 tagged source if the published archives differ from the previously recorded checksums.
 

@@ -21,10 +21,22 @@ if [[ -n ${QUICKGUI_PACKAGE_TOOLCHAIN:-} ]]; then
   cargo_command=(cargo "+$QUICKGUI_PACKAGE_TOOLCHAIN")
 fi
 
+package_version() {
+  awk -F '"' '/^version = "/ { print $2; exit }' "$1"
+}
+
+winit_version=$(package_version vendor/winit/Cargo.toml)
+accesskit_version=$(package_version vendor/accesskit_winit/Cargo.toml)
+cosmic_text_version=$(package_version vendor/cosmic_text/Cargo.toml)
+glyphon_version=$(package_version vendor/glyphon/Cargo.toml)
+system_version=$(package_version crates/quickgui-system/Cargo.toml)
+quickgui_version=$(package_version Cargo.toml)
+
 winit_patch="patch.crates-io.quickgui-winit.path=\"$repository_root/vendor/winit\""
 accesskit_patch="patch.crates-io.quickgui-accesskit-winit.path=\"$repository_root/vendor/accesskit_winit\""
 cosmic_text_patch="patch.crates-io.quickgui-cosmic-text.path=\"$repository_root/vendor/cosmic_text\""
 glyphon_patch="patch.crates-io.quickgui-glyphon.path=\"$repository_root/vendor/glyphon\""
+system_patch="patch.crates-io.quickgui-system.path=\"$repository_root/crates/quickgui-system\""
 
 CARGO_TARGET_DIR="$package_target_dir" "${cargo_command[@]}" package \
   --manifest-path vendor/winit/Cargo.toml \
@@ -42,22 +54,28 @@ CARGO_TARGET_DIR="$package_target_dir" "${cargo_command[@]}" package \
   ${allow_dirty_arg:+"$allow_dirty_arg"} \
   --config "$cosmic_text_patch"
 CARGO_TARGET_DIR="$package_target_dir" "${cargo_command[@]}" package \
+  --manifest-path crates/quickgui-system/Cargo.toml \
+  --locked \
+  ${allow_dirty_arg:+"$allow_dirty_arg"}
+CARGO_TARGET_DIR="$package_target_dir" "${cargo_command[@]}" package \
   --locked \
   --no-verify \
   ${allow_dirty_arg:+"$allow_dirty_arg"} \
   --config "$winit_patch" \
   --config "$accesskit_patch" \
   --config "$cosmic_text_patch" \
-  --config "$glyphon_patch"
+  --config "$glyphon_patch" \
+  --config "$system_patch"
 
 package_dir="$package_target_dir/package"
-winit_archive="$package_dir/quickgui-winit-0.30.13-quickgui.1.crate"
-accesskit_archive="$package_dir/quickgui-accesskit-winit-0.33.2-quickgui.1.crate"
-cosmic_text_archive="$package_dir/quickgui-cosmic-text-0.19.0-quickgui.1.crate"
-glyphon_archive="$package_dir/quickgui-glyphon-0.12.0-quickgui.1.crate"
-quickgui_archive="$package_dir/quickgui-0.1.0.crate"
+winit_archive="$package_dir/quickgui-winit-${winit_version}.crate"
+accesskit_archive="$package_dir/quickgui-accesskit-winit-${accesskit_version}.crate"
+cosmic_text_archive="$package_dir/quickgui-cosmic-text-${cosmic_text_version}.crate"
+glyphon_archive="$package_dir/quickgui-glyphon-${glyphon_version}.crate"
+system_archive="$package_dir/quickgui-system-${system_version}.crate"
+quickgui_archive="$package_dir/quickgui-${quickgui_version}.crate"
 
-for archive in "$winit_archive" "$accesskit_archive" "$cosmic_text_archive" "$glyphon_archive" "$quickgui_archive"; do
+for archive in "$winit_archive" "$accesskit_archive" "$cosmic_text_archive" "$glyphon_archive" "$system_archive" "$quickgui_archive"; do
   if [[ ! -f $archive ]]; then
     echo "package-release-gate: missing archive $archive" >&2
     exit 1
@@ -71,29 +89,32 @@ tar -xzf "$winit_archive" -C "$scratch_dir"
 tar -xzf "$accesskit_archive" -C "$scratch_dir"
 tar -xzf "$cosmic_text_archive" -C "$scratch_dir"
 tar -xzf "$glyphon_archive" -C "$scratch_dir"
+tar -xzf "$system_archive" -C "$scratch_dir"
 tar -xzf "$quickgui_archive" -C "$scratch_dir"
 cp -R tests/downstream_smoke "$scratch_dir/consumer"
 
 required_files=(
-  "quickgui-winit-0.30.13-quickgui.1/LICENSE"
-  "quickgui-winit-0.30.13-quickgui.1/README.md"
-  "quickgui-accesskit-winit-0.33.2-quickgui.1/LICENSE-APACHE"
-  "quickgui-accesskit-winit-0.33.2-quickgui.1/README.md"
-  "quickgui-cosmic-text-0.19.0-quickgui.1/LICENSE-APACHE"
-  "quickgui-cosmic-text-0.19.0-quickgui.1/LICENSE-MIT"
-  "quickgui-cosmic-text-0.19.0-quickgui.1/README.md"
-  "quickgui-glyphon-0.12.0-quickgui.1/LICENSE-APACHE"
-  "quickgui-glyphon-0.12.0-quickgui.1/LICENSE-MIT"
-  "quickgui-glyphon-0.12.0-quickgui.1/LICENSE-ZLIB"
-  "quickgui-glyphon-0.12.0-quickgui.1/README.md"
-  "quickgui-0.1.0/LICENSE-MIT"
-  "quickgui-0.1.0/LICENSE-APACHE"
-  "quickgui-0.1.0/CHANGELOG.md"
-  "quickgui-0.1.0/THIRD_PARTY_NOTICES.md"
-  "quickgui-0.1.0/README.md"
-  "quickgui-0.1.0/docs/releasing.md"
-  "quickgui-0.1.0/tests/fixtures/fonts/Inter-LICENSE"
-  "quickgui-0.1.0/tests/fixtures/fonts/NotoSans-LICENSE"
+  "quickgui-winit-${winit_version}/LICENSE"
+  "quickgui-winit-${winit_version}/README.md"
+  "quickgui-accesskit-winit-${accesskit_version}/LICENSE-APACHE"
+  "quickgui-accesskit-winit-${accesskit_version}/README.md"
+  "quickgui-cosmic-text-${cosmic_text_version}/LICENSE-APACHE"
+  "quickgui-cosmic-text-${cosmic_text_version}/LICENSE-MIT"
+  "quickgui-cosmic-text-${cosmic_text_version}/README.md"
+  "quickgui-glyphon-${glyphon_version}/LICENSE-APACHE"
+  "quickgui-glyphon-${glyphon_version}/LICENSE-MIT"
+  "quickgui-glyphon-${glyphon_version}/LICENSE-ZLIB"
+  "quickgui-glyphon-${glyphon_version}/README.md"
+  "quickgui-system-${system_version}/Cargo.toml"
+  "quickgui-system-${system_version}/src/lib.rs"
+  "quickgui-${quickgui_version}/LICENSE-MIT"
+  "quickgui-${quickgui_version}/LICENSE-APACHE"
+  "quickgui-${quickgui_version}/CHANGELOG.md"
+  "quickgui-${quickgui_version}/THIRD_PARTY_NOTICES.md"
+  "quickgui-${quickgui_version}/README.md"
+  "quickgui-${quickgui_version}/docs/releasing.md"
+  "quickgui-${quickgui_version}/tests/fixtures/fonts/Inter-LICENSE"
+  "quickgui-${quickgui_version}/tests/fixtures/fonts/NotoSans-LICENSE"
 )
 for relative_path in "${required_files[@]}"; do
   if [[ ! -f "$scratch_dir/$relative_path" ]]; then
@@ -101,16 +122,17 @@ for relative_path in "${required_files[@]}"; do
     exit 1
   fi
 done
-if [[ -d "$scratch_dir/quickgui-0.1.0/vendor" ]]; then
+if [[ -d "$scratch_dir/quickgui-${quickgui_version}/vendor" ]]; then
   echo "package-release-gate: the main archive must not duplicate vendored support sources" >&2
   exit 1
 fi
 
-packaged_winit_patch="patch.crates-io.quickgui-winit.path=\"$scratch_dir/quickgui-winit-0.30.13-quickgui.1\""
-packaged_accesskit_patch="patch.crates-io.quickgui-accesskit-winit.path=\"$scratch_dir/quickgui-accesskit-winit-0.33.2-quickgui.1\""
-packaged_cosmic_text_patch="patch.crates-io.quickgui-cosmic-text.path=\"$scratch_dir/quickgui-cosmic-text-0.19.0-quickgui.1\""
-packaged_glyphon_patch="patch.crates-io.quickgui-glyphon.path=\"$scratch_dir/quickgui-glyphon-0.12.0-quickgui.1\""
-packaged_quickgui_patch="patch.crates-io.quickgui.path=\"$scratch_dir/quickgui-0.1.0\""
+packaged_winit_patch="patch.crates-io.quickgui-winit.path=\"$scratch_dir/quickgui-winit-${winit_version}\""
+packaged_accesskit_patch="patch.crates-io.quickgui-accesskit-winit.path=\"$scratch_dir/quickgui-accesskit-winit-${accesskit_version}\""
+packaged_cosmic_text_patch="patch.crates-io.quickgui-cosmic-text.path=\"$scratch_dir/quickgui-cosmic-text-${cosmic_text_version}\""
+packaged_glyphon_patch="patch.crates-io.quickgui-glyphon.path=\"$scratch_dir/quickgui-glyphon-${glyphon_version}\""
+packaged_system_patch="patch.crates-io.quickgui-system.path=\"$scratch_dir/quickgui-system-${system_version}\""
+packaged_quickgui_patch="patch.crates-io.quickgui.path=\"$scratch_dir/quickgui-${quickgui_version}\""
 
 CARGO_TARGET_DIR="$package_target_dir/downstream" "${cargo_command[@]}" check \
   --manifest-path "$scratch_dir/consumer/Cargo.toml" \
@@ -118,12 +140,14 @@ CARGO_TARGET_DIR="$package_target_dir/downstream" "${cargo_command[@]}" check \
   --config "$packaged_accesskit_patch" \
   --config "$packaged_cosmic_text_patch" \
   --config "$packaged_glyphon_patch" \
+  --config "$packaged_system_patch" \
   --config "$packaged_quickgui_patch"
 
 read -r winit_hash _ < <(shasum -a 256 "$winit_archive")
 read -r accesskit_hash _ < <(shasum -a 256 "$accesskit_archive")
 read -r cosmic_text_hash _ < <(shasum -a 256 "$cosmic_text_archive")
 read -r glyphon_hash _ < <(shasum -a 256 "$glyphon_archive")
+read -r system_hash _ < <(shasum -a 256 "$system_archive")
 read -r quickgui_hash _ < <(shasum -a 256 "$quickgui_archive")
 
 checksum_file="$package_dir/SHA256SUMS"
@@ -132,8 +156,9 @@ printf '%s  %s\n' \
   "$accesskit_hash" "$(basename "$accesskit_archive")" \
   "$cosmic_text_hash" "$(basename "$cosmic_text_archive")" \
   "$glyphon_hash" "$(basename "$glyphon_archive")" \
+  "$system_hash" "$(basename "$system_archive")" \
   "$quickgui_hash" "$(basename "$quickgui_archive")" \
   > "$checksum_file"
 
 printf '%s\n' \
-  "QUICKGUI_PACKAGE_RESULT {\"winit_sha256\":\"${winit_hash}\",\"accesskit_sha256\":\"${accesskit_hash}\",\"cosmic_text_sha256\":\"${cosmic_text_hash}\",\"glyphon_sha256\":\"${glyphon_hash}\",\"quickgui_sha256\":\"${quickgui_hash}\",\"checksums\":\"SHA256SUMS\",\"required_files\":true,\"vendor_excluded\":true,\"downstream_check\":true,\"passed\":true}"
+  "QUICKGUI_PACKAGE_RESULT {\"winit_sha256\":\"${winit_hash}\",\"accesskit_sha256\":\"${accesskit_hash}\",\"cosmic_text_sha256\":\"${cosmic_text_hash}\",\"glyphon_sha256\":\"${glyphon_hash}\",\"system_sha256\":\"${system_hash}\",\"quickgui_sha256\":\"${quickgui_hash}\",\"checksums\":\"SHA256SUMS\",\"required_files\":true,\"vendor_excluded\":true,\"downstream_check\":true,\"passed\":true}"

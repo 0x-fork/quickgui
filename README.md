@@ -202,14 +202,14 @@ marks unavailable mixed-scale hardware as skipped, never passed.
 
 ```console
 cargo test --all-targets --all-features --locked
-cargo +1.89.0 check --all-targets --all-features --locked
+cargo +1.90.0 check --all-targets --all-features --locked
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo bench --bench virtual_list
 cargo bench --bench animation
 scripts/macos-performance-gate.sh
 scripts/macos-acceptance-gate.sh
 scripts/macos-display-acceptance-gate.sh
-QUICKGUI_PACKAGE_TOOLCHAIN=1.89.0 scripts/package-release-gate.sh
+QUICKGUI_PACKAGE_TOOLCHAIN=1.90.0 scripts/package-release-gate.sh
 ```
 
 ## License

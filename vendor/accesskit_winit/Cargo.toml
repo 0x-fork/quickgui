@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "quickgui-accesskit-winit"
-version = "0.33.2-quickgui.1"
+version = "0.33.2-quickgui.2"
 authors = ["The AccessKit contributors"]
 build = false
 autolib = false
@@ -88,13 +88,13 @@ optional = true
 package = "raw-window-handle"
 
 [dependencies.winit]
-version = "=0.30.13-quickgui.1"
+version = "=0.30.13-quickgui.2"
 default-features = false
 package = "quickgui-winit"
 path = "../winit"
 
 [dev-dependencies.winit]
-version = "=0.30.13-quickgui.1"
+version = "=0.30.13-quickgui.2"
 features = [
     "x11",
     "wayland",

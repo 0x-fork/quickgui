@@ -4,6 +4,8 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+## 0.1.1 - 2026-08-31
+
 ### JavaScript tooling
 
 - Changed Solid window mounting to `new Window({ renderer: createRenderer(() => <App />) })`.
@@ -18,6 +20,8 @@ All notable user-facing changes to QuickGUI are recorded here.
   cannot start.
 - Production macOS builds now retain the signed `.app`, create a versioned DMG with `create-dmg`,
   and can submit, staple, and validate the DMG with an Apple Notary Keychain profile.
+- Published the initial `@quickgui/native`, `@quickgui/solid`, and `@quickgui/cli` packages for
+  macOS arm64 and x64.
 - Added controlled `Input`/`TextArea` and retained core `Markdown` bindings to
   `@quickgui/native`/`@quickgui/solid`, plus a packaged Solid AI chat example using Vercel AI SDK
   streaming and the DeepSeek provider.

@@ -23,6 +23,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
       - name: Verify release metadata
         id: release
         shell: bash
@@ -40,7 +43,7 @@ jobs:
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal --component clippy,rustfmt
-          rustup toolchain install 1.89.0 --profile minimal
+          rustup toolchain install 1.90.0 --profile minimal
           rustup default stable
       - name: Cache Cargo
         uses: actions/cache@v6
@@ -60,7 +63,7 @@ jobs:
       - name: Check every target and feature
         run: cargo check --all-targets --all-features --locked
       - name: Check minimum supported Rust version
-        run: cargo +1.89.0 check --all-targets --all-features --locked
+        run: cargo +1.90.0 check --all-targets --all-features --locked
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - name: Build documentation
@@ -70,7 +73,7 @@ jobs:
       - name: Verify publish archives and downstream installation
         env:
           QUICKGUI_PACKAGE_TARGET_DIR: target/package-gate
-          QUICKGUI_PACKAGE_TOOLCHAIN: 1.89.0
+          QUICKGUI_PACKAGE_TOOLCHAIN: 1.90.0
         run: scripts/package-release-gate.sh
       - name: Upload verified release-candidate crates
         if: github.event_name != 'pull_request'
@@ -95,12 +98,15 @@ jobs:
         include:
           - name: Linux MSRV
             os: ubuntu-latest
-            toolchain: 1.89.0
+            toolchain: 1.90.0
           - name: Windows
             os: windows-latest
             toolchain: stable
     steps:
       - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
       - name: Install Rust ${{ matrix.toolchain }}
         run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal && rustup default ${{ matrix.toolchain }}
       - name: Cache Cargo
