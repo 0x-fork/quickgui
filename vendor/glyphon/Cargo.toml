@@ -6,6 +6,13 @@ edition = "2021"
 homepage = "https://github.com/grovesNL/glyphon.git"
 repository = "https://github.com/egoist/quickgui"
 license = "MIT OR Apache-2.0 OR Zlib"
+include = [
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+    "/LICENSE-ZLIB",
+    "/README.md",
+    "/src",
+]
 
 [lib]
 name = "glyphon"

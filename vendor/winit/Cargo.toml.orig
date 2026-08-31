@@ -16,14 +16,11 @@ license.workspace = true
 edition.workspace = true
 include = [
     "/build.rs",
-    "/docs",
-    "/examples",
-    "/FEATURES.md",
     "/LICENSE",
+    "/README.md",
     "/src",
     "!/src/platform_impl/web/script",
     "/src/platform_impl/web/script/**/*.min.js",
-    "/tests",
 ]
 
 [package.metadata.docs.rs]

@@ -37,7 +37,9 @@ The package gate builds all six `.crate` archives, extracts the exact normalized
 compiles `tests/downstream_smoke` with only those extracted packages patched into the registry
 graph. This catches missing files, accidental path-only dependencies, mismatched renamed-crate
 types, missing license/notice files, duplicated vendor sources, and a public API that cannot be
-consumed outside this repository. It rejects a dirty source tree by default;
+consumed outside this repository. Each archive is also restricted to a per-crate top-level
+allowlist, so examples, benches, tests, repository docs, scripts, and workflow files cannot leak
+into future crates.io releases. It rejects a dirty source tree by default;
 `QUICKGUI_PACKAGE_ALLOW_DIRTY=1` exists only for development verification.
 CI sets `QUICKGUI_PACKAGE_TOOLCHAIN=1.90.0`, making both package creation and the fresh downstream
 resolution use the declared MSRV rather than the runner's newer default compiler.

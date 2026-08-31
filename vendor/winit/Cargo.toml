@@ -21,14 +21,11 @@ authors = [
 build = "build.rs"
 include = [
     "/build.rs",
-    "/docs",
-    "/examples",
-    "/FEATURES.md",
     "/LICENSE",
+    "/README.md",
     "/src",
     "!/src/platform_impl/web/script",
     "/src/platform_impl/web/script/**/*.min.js",
-    "/tests",
 ]
 autolib = false
 autobins = false

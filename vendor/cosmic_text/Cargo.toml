@@ -26,6 +26,12 @@ documentation = "https://docs.rs/quickgui-cosmic-text/latest/cosmic_text/"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/egoist/quickgui"
+include = [
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+    "/README.md",
+    "/src",
+]
 
 [package.metadata.docs.rs]
 features = ["vi"]

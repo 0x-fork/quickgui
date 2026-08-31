@@ -11,8 +11,6 @@ readme = "README.md"
 edition.workspace = true
 rust-version.workspace = true
 include = [
-    "/CHANGELOG.md",
-    "/examples",
     "/LICENSE-APACHE",
     "/README.md",
     "/src",

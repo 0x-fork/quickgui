@@ -6,6 +6,7 @@ rust-version = "1.89"
 description = "Cross-platform operating-system services for QuickGUI"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/egoist/quickgui"
+include = ["/src/**"]
 
 [features]
 default = ["autostart", "protocol", "secure-storage", "updater"]

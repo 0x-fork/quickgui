@@ -34,8 +34,6 @@ license = "Apache-2.0"
 repository = "https://github.com/egoist/quickgui"
 resolver = "2"
 include = [
-    "/CHANGELOG.md",
-    "/examples",
     "/LICENSE-APACHE",
     "/README.md",
     "/src",

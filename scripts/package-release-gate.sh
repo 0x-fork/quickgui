@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repository_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repository_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 cd "$repository_root"
 
 package_target_dir=${QUICKGUI_PACKAGE_TARGET_DIR:-"$repository_root/target/package-gate"}
@@ -107,14 +107,12 @@ required_files=(
   "quickgui-glyphon-${glyphon_version}/README.md"
   "quickgui-system-${system_version}/Cargo.toml"
   "quickgui-system-${system_version}/src/lib.rs"
+  "quickgui-${quickgui_version}/src/lib.rs"
   "quickgui-${quickgui_version}/LICENSE-MIT"
   "quickgui-${quickgui_version}/LICENSE-APACHE"
   "quickgui-${quickgui_version}/CHANGELOG.md"
   "quickgui-${quickgui_version}/THIRD_PARTY_NOTICES.md"
   "quickgui-${quickgui_version}/README.md"
-  "quickgui-${quickgui_version}/docs/releasing.md"
-  "quickgui-${quickgui_version}/tests/fixtures/fonts/Inter-LICENSE"
-  "quickgui-${quickgui_version}/tests/fixtures/fonts/NotoSans-LICENSE"
 )
 for relative_path in "${required_files[@]}"; do
   if [[ ! -f "$scratch_dir/$relative_path" ]]; then
@@ -122,6 +120,43 @@ for relative_path in "${required_files[@]}"; do
     exit 1
   fi
 done
+
+assert_only_top_level_entries() {
+  local package_directory=$1
+  shift
+  local entry entry_name allowed_name allowed
+
+  while IFS= read -r entry; do
+    entry_name=${entry##*/}
+    allowed=0
+    for allowed_name in "$@"; do
+      if [[ $entry_name == "$allowed_name" ]]; then
+        allowed=1
+        break
+      fi
+    done
+    if (( allowed == 0 )); then
+      echo "package-release-gate: unexpected packaged entry: $package_directory/$entry_name" >&2
+      exit 1
+    fi
+  done < <(find "$scratch_dir/$package_directory" -mindepth 1 -maxdepth 1 -print | LC_ALL=C sort)
+}
+
+common_cargo_entries=(.cargo_vcs_info.json Cargo.lock Cargo.toml Cargo.toml.orig)
+assert_only_top_level_entries "quickgui-winit-${winit_version}" \
+  "${common_cargo_entries[@]}" LICENSE README.md build.rs src
+assert_only_top_level_entries "quickgui-accesskit-winit-${accesskit_version}" \
+  "${common_cargo_entries[@]}" LICENSE-APACHE README.md src
+assert_only_top_level_entries "quickgui-cosmic-text-${cosmic_text_version}" \
+  "${common_cargo_entries[@]}" LICENSE-APACHE LICENSE-MIT README.md src
+assert_only_top_level_entries "quickgui-glyphon-${glyphon_version}" \
+  "${common_cargo_entries[@]}" LICENSE-APACHE LICENSE-MIT LICENSE-ZLIB README.md src
+assert_only_top_level_entries "quickgui-system-${system_version}" \
+  "${common_cargo_entries[@]}" src
+assert_only_top_level_entries "quickgui-${quickgui_version}" \
+  "${common_cargo_entries[@]}" CHANGELOG.md LICENSE-APACHE LICENSE-MIT README.md \
+  THIRD_PARTY_NOTICES.md src
+
 if [[ -d "$scratch_dir/quickgui-${quickgui_version}/vendor" ]]; then
   echo "package-release-gate: the main archive must not duplicate vendored support sources" >&2
   exit 1
@@ -161,4 +196,4 @@ printf '%s  %s\n' \
   > "$checksum_file"
 
 printf '%s\n' \
-  "QUICKGUI_PACKAGE_RESULT {\"winit_sha256\":\"${winit_hash}\",\"accesskit_sha256\":\"${accesskit_hash}\",\"cosmic_text_sha256\":\"${cosmic_text_hash}\",\"glyphon_sha256\":\"${glyphon_hash}\",\"system_sha256\":\"${system_hash}\",\"quickgui_sha256\":\"${quickgui_hash}\",\"checksums\":\"SHA256SUMS\",\"required_files\":true,\"vendor_excluded\":true,\"downstream_check\":true,\"passed\":true}"
+  "QUICKGUI_PACKAGE_RESULT {\"winit_sha256\":\"${winit_hash}\",\"accesskit_sha256\":\"${accesskit_hash}\",\"cosmic_text_sha256\":\"${cosmic_text_hash}\",\"glyphon_sha256\":\"${glyphon_hash}\",\"system_sha256\":\"${system_hash}\",\"quickgui_sha256\":\"${quickgui_hash}\",\"checksums\":\"SHA256SUMS\",\"required_files\":true,\"minimal_top_level\":true,\"vendor_excluded\":true,\"downstream_check\":true,\"passed\":true}"

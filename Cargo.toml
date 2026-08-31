@@ -10,13 +10,14 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/egoist/quickgui"
 keywords = ["gui", "wgpu", "desktop", "graphics"]
 categories = ["gui", "graphics"]
-exclude = [
-  "/vendor",
-  "/packages",
-  "/website",
-  "/bun.lock",
-  "/package.json",
-  "/tsconfig.json",
+include = [
+  "/src/**",
+  "/Cargo.lock",
+  "/CHANGELOG.md",
+  "/LICENSE-APACHE",
+  "/LICENSE-MIT",
+  "/README.md",
+  "/THIRD_PARTY_NOTICES.md",
 ]
 
 [workspace]
