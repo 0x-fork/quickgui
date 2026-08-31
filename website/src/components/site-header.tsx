@@ -68,8 +68,8 @@ export function SiteHeader({ stats }: { stats: RepoStats }) {
   const current = (i18n.language as Locale) ?? 'en'
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-sm">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 border-x border-border px-6 sm:px-12">
+    <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-sm">
+      <div className="rail-joints rail-joints-bottom mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 border-x border-b border-border px-6 sm:px-12">
         <a href={localePath(current)} className="flex items-center gap-2.5">
           <Logo />
           <span className="text-sm font-semibold tracking-tight">

@@ -11,8 +11,8 @@ export function SiteFooter() {
   const { t } = useTranslation()
 
   return (
-    <footer className="border-t border-border">
-      <div className="mx-auto flex w-full max-w-6xl flex-col justify-between gap-4 border-x border-border px-6 py-8 sm:flex-row sm:items-center sm:px-12">
+    <footer>
+      <div className="rail-joints rail-joints-top mx-auto flex w-full max-w-6xl flex-col justify-between gap-4 border-x border-t border-border px-6 py-8 sm:flex-row sm:items-center sm:px-12">
         <span className="font-mono text-xs text-muted-foreground/80">
           © 2026 EGOIST · {t('footer.license')}
         </span>
