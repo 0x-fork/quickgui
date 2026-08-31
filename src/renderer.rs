@@ -2242,6 +2242,7 @@ struct TextLayoutKey {
     width: Option<f32>,
     font_size: f32,
     line_height: f32,
+    monospace_width: Option<f32>,
     family: FontFamily,
     features: FontFeatures,
     fallbacks: Option<FontFallbacks>,
@@ -2268,6 +2269,7 @@ impl PartialEq for TextLayoutKey {
             && self.width.map(f32::to_bits) == other.width.map(f32::to_bits)
             && self.font_size.to_bits() == other.font_size.to_bits()
             && self.line_height.to_bits() == other.line_height.to_bits()
+            && self.monospace_width.map(f32::to_bits) == other.monospace_width.map(f32::to_bits)
             && self.family == other.family
             && self.features == other.features
             && self.fallbacks == other.fallbacks
@@ -2310,6 +2312,7 @@ impl TextLayoutKey {
             && highlights_equal(&self.highlights, &other.highlights)
             && self.font_size.to_bits() == other.font_size.to_bits()
             && self.line_height.to_bits() == other.line_height.to_bits()
+            && self.monospace_width.map(f32::to_bits) == other.monospace_width.map(f32::to_bits)
             && self.family == other.family
             && self.features == other.features
             && self.fallbacks == other.fallbacks
@@ -2338,6 +2341,7 @@ impl Hash for TextLayoutKey {
         self.width.map(f32::to_bits).hash(state);
         self.font_size.to_bits().hash(state);
         self.line_height.to_bits().hash(state);
+        self.monospace_width.map(f32::to_bits).hash(state);
         self.family.hash(state);
         self.features.hash(state);
         self.fallbacks.hash(state);
@@ -3131,6 +3135,7 @@ impl TextSystem {
             width,
             font_size: style.font_size,
             line_height: style.line_height,
+            monospace_width: style.monospace_width,
             family: style.family.clone(),
             features: style.features.clone(),
             fallbacks: normalize_fallbacks(style.fallbacks.clone()),
@@ -3255,6 +3260,7 @@ impl TextSystem {
             ),
             font_size: style.font_size,
             line_height: style.line_height,
+            monospace_width: style.monospace_width,
             family: style.family.clone(),
             features: style.features.clone(),
             fallbacks: normalize_fallbacks(style.fallbacks.clone()),
@@ -4150,6 +4156,7 @@ fn configure_text_buffer(
 ) {
     let metrics = Metrics::new(style.font_size * scale, style.line_height * scale);
     buffer.set_metrics_and_size(metrics, width.map(|value| value * scale), None);
+    buffer.set_monospace_width(style.monospace_width.map(|width| width * scale));
     buffer.set_wrap(match style.wrap {
         TextWrap::None => Wrap::None,
         TextWrap::Word => Wrap::Word,
@@ -4335,6 +4342,15 @@ mod tests {
             .load_font_data(include_bytes!("../tests/fixtures/fonts/Inter-Regular.ttf").to_vec());
         database
             .load_font_data(include_bytes!("../tests/fixtures/fonts/NotoSansHebrew.ttf").to_vec());
+        FontSystem::new_with_locale_and_db("en-US".to_owned(), database)
+    }
+
+    fn fixture_terminal_font_system() -> FontSystem {
+        let mut database = glyphon::cosmic_text::fontdb::Database::new();
+        database.load_font_data(
+            include_bytes!("../examples/herdr-gui/assets/JetBrainsMonoNerdFontMono-Regular.ttf")
+                .to_vec(),
+        );
         FontSystem::new_with_locale_and_db("en-US".to_owned(), database)
     }
 
@@ -4639,6 +4655,59 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn adjacent_square_quads_do_not_show_internal_seams() {
+        let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+        let mut renderer = pollster::block_on(OffscreenRenderer::new(
+            PerformanceProfile::Balanced,
+            font_system,
+        ))
+        .unwrap();
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+
+        // Terminal cell backgrounds commonly land between physical pixels. They are still one
+        // continuous opaque surface, so rasterizing each square cell must not expose its edges.
+        // JetBrains Mono's declared advance is 0.6em, which is also the terminal grid metric.
+        let cell_width = 14.0 * 0.6;
+        let cell_height = 20.5;
+        let fill = Color::rgb8(225, 226, 231);
+        for row in 0..2 {
+            for column in 0..5 {
+                scene.push_quad(Quad::new(
+                    Rect::new(
+                        column as f32 * cell_width,
+                        row as f32 * cell_height,
+                        cell_width,
+                        cell_height,
+                    ),
+                    fill,
+                ));
+            }
+        }
+        scene.finish();
+
+        let snapshot = renderer
+            .render_to_snapshot(&scene, Size::new(cell_width * 5.0, cell_height * 2.0), 2.0)
+            .unwrap();
+        let interior = snapshot.pixel(4, 4).unwrap();
+        for column in 1..5 {
+            let boundary_x = (column as f32 * cell_width * 2.0).floor() as u32;
+            assert_eq!(
+                snapshot.pixel(boundary_x, 10).unwrap(),
+                interior,
+                "vertical cell edge at x={boundary_x} must be invisible"
+            );
+        }
+        let boundary_y = (cell_height * 2.0) as u32;
+        assert_eq!(
+            snapshot.pixel(10, boundary_y).unwrap(),
+            interior,
+            "horizontal row edge at y={boundary_y} must be invisible"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn oversized_target_keeps_primitive_clips_in_logical_viewport_space() {
         let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
         let mut renderer = pollster::block_on(OffscreenRenderer::new(
@@ -4759,6 +4828,7 @@ mod tests {
             width: Some(320.0),
             font_size: 14.0,
             line_height: 20.0,
+            monospace_width: None,
             family: FontFamily::SansSerif,
             features: FontFeatures::new(),
             fallbacks: None,
@@ -4784,6 +4854,10 @@ mod tests {
         let mut different_style = narrower.clone();
         different_style.font_size = 15.0;
         assert!(!key.same_except_width(&different_style));
+
+        let mut fixed_cells = key.clone();
+        fixed_cells.monospace_width = Some(8.54);
+        assert!(!key.same_except_width(&fixed_cells));
 
         let mut italic = key.clone();
         italic.font_style = GlyphStyle::Italic;
@@ -4826,6 +4900,143 @@ mod tests {
         let mut custom_narrower = custom.clone();
         custom_narrower.width = Some(180.0);
         assert!(!custom.same_except_width(&custom_narrower));
+    }
+
+    #[test]
+    fn fixed_monospace_width_controls_glyph_and_background_cells() {
+        let content: Arc<str> = Arc::from("ABCDE");
+        // The terminal grid must use the bundled font's declared 0.6em advance.
+        let cell_width = 14.0 * 0.6;
+        let scale = 2.0;
+        let styled =
+            StyledText::new(content.clone()).with_highlights((0..content.len()).map(|index| {
+                (
+                    index..index + 1,
+                    HighlightStyle::default().background(if index % 2 == 0 {
+                        Color::rgb8(225, 226, 231)
+                    } else {
+                        Color::rgb8(128, 128, 128)
+                    }),
+                )
+            }));
+        let style = TextStyle::new(14.0, Color::BLACK)
+            .family(FontFamily::named("JetBrainsMono Nerd Font Mono"))
+            .line_height(20.5)
+            .monospace_width(cell_width)
+            .wrap(TextWrap::None)
+            .shaping(TextShaping::Basic);
+        let mut font_system = fixture_terminal_font_system();
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size * scale, style.line_height * scale),
+        );
+
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            &content,
+            &style,
+            Some(styled.highlights()),
+            None,
+            scale,
+        );
+
+        assert_eq!(buffer.monospace_width(), Some(cell_width * scale));
+        let run = buffer.layout_runs().next().expect("one terminal row");
+        let expected_width = content.len() as f32 * cell_width * scale;
+        assert!(
+            (run.line_w - expected_width).abs() < 0.01,
+            "expected {expected_width}, got {}",
+            run.line_w,
+        );
+        for cells in run.glyphs.windows(2) {
+            assert!((cells[1].x - cells[0].x - cell_width * scale).abs() < 0.01);
+        }
+
+        let geometry = collect_styled_text_geometry(
+            &buffer,
+            styled.highlights(),
+            &style,
+            scale,
+            0.0..1_000.0,
+            None,
+        );
+        assert_eq!(geometry.backgrounds.len(), content.len());
+        for cells in geometry.backgrounds.windows(2) {
+            assert!((cells[0].rect.right() - cells[1].rect.x).abs() < 0.01);
+        }
+        assert!(
+            (geometry.backgrounds.last().unwrap().rect.right() - cell_width * 5.0).abs() < 0.01
+        );
+    }
+
+    #[test]
+    fn fixed_monospace_width_keeps_fallback_symbols_on_the_terminal_grid() {
+        let content: Arc<str> = Arc::from("■⬝■⬝");
+        let cell_width = 14.0 * 0.6;
+        let scale = 2.0;
+        let styled = StyledText::new(content.clone()).with_highlights(
+            content
+                .char_indices()
+                .enumerate()
+                .map(|(index, (start, character))| {
+                    (
+                        start..start + character.len_utf8(),
+                        HighlightStyle::default().color(if index % 2 == 0 {
+                            Color::rgb8(153, 102, 204)
+                        } else {
+                            Color::rgb8(174, 157, 197)
+                        }),
+                    )
+                }),
+        );
+        let style = TextStyle::new(14.0, Color::BLACK)
+            .family(FontFamily::named("JetBrainsMono Nerd Font Mono"))
+            .line_height(20.5)
+            .monospace_width(cell_width)
+            .wrap(TextWrap::None)
+            .shaping(TextShaping::Basic);
+        let mut font_system = create_font_system();
+        font_system.db_mut().load_font_data(
+            include_bytes!("../examples/herdr-gui/assets/JetBrainsMonoNerdFontMono-Regular.ttf")
+                .to_vec(),
+        );
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size * scale, style.line_height * scale),
+        );
+
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            &content,
+            &style,
+            Some(styled.highlights()),
+            None,
+            scale,
+        );
+
+        let run = buffer.layout_runs().next().expect("one terminal row");
+        assert_eq!(run.glyphs.len(), 4);
+        let expected_width = 4.0 * cell_width * scale;
+        assert!(
+            (run.line_w - expected_width).abs() < 0.01,
+            "terminal row should measure {expected_width}, got {}",
+            run.line_w,
+        );
+        for (column, glyph) in run.glyphs.iter().enumerate() {
+            let expected_x = column as f32 * cell_width * scale;
+            assert!(
+                (glyph.x - expected_x).abs() < 0.01,
+                "terminal column {column} should start at {expected_x}, got {}",
+                glyph.x,
+            );
+            assert!(
+                (glyph.w - cell_width * scale).abs() < 0.01,
+                "terminal column {column} should occupy one cell, got {}",
+                glyph.w,
+            );
+        }
     }
 
     #[test]

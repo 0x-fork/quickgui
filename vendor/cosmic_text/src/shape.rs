@@ -2899,9 +2899,15 @@ impl ShapeLine {
                                     0.0
                                 },
                             );
-                            if let Some(match_em_width) = match_mono_em_width {
-                                // Round to nearest monospace width
-                                x_advance = ((x_advance / match_em_width).round()) * match_em_width;
+                            if let Some(match_width) = match_mono_width {
+                                // Preserve zero-width combining glyphs, but every visible glyph
+                                // must advance by at least one requested monospace cell. Quantizing
+                                // against the em ratio here made narrow glyphs from proportional
+                                // fallback fonts consume only a fraction of a terminal cell.
+                                if x_advance != 0.0 {
+                                    let cells = (x_advance / match_width).round().max(1.0);
+                                    x_advance = cells * match_width;
+                                }
                             }
                             if hinting == Hinting::Enabled {
                                 x_advance = x_advance.round();
@@ -3018,8 +3024,24 @@ impl ShapeLine {
                 }
             }
 
+            let monospace_line_width = match_mono_width.map(|_| {
+                let mut left = f32::INFINITY;
+                let mut right = f32::NEG_INFINITY;
+                for glyph in &glyphs {
+                    left = left.min(glyph.x);
+                    right = right.max(glyph.x + glyph.w);
+                }
+                if left.is_finite() && right.is_finite() {
+                    (right - left).max(0.0)
+                } else {
+                    0.0
+                }
+            });
+
             layout_lines.push(LayoutLine {
-                w: if align != Align::Justified {
+                w: if let Some(width) = monospace_line_width {
+                    width
+                } else if align != Align::Justified {
                     visual_line.w
                 } else if self.rtl {
                     start_x - x

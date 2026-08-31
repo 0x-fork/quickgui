@@ -1127,6 +1127,7 @@ pub(crate) struct TypographyStyle {
     pub color: Option<Color>,
     pub font_size: Option<f32>,
     pub line_height: Option<f32>,
+    pub monospace_width: Option<f32>,
     pub family: Option<FontFamily>,
     pub features: Option<FontFeatures>,
     pub fallbacks: Option<Option<FontFallbacks>>,
@@ -1155,6 +1156,7 @@ impl TypographyStyle {
                     .map(|_| font_size * 1.35)
                     .unwrap_or(inherited.line_height)
             }),
+            monospace_width: self.monospace_width.or(inherited.monospace_width),
             family: self
                 .family
                 .clone()
@@ -2600,6 +2602,12 @@ impl Element {
 
     pub fn line_height(mut self, height: f32) -> Self {
         self.typography.line_height = Some(height.max(1.0));
+        self
+    }
+
+    /// Quantize glyph advances to one logical monospace cell width.
+    pub fn monospace_width(mut self, width: f32) -> Self {
+        self.typography.monospace_width = Some(width.max(1.0));
         self
     }
 

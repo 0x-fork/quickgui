@@ -1,5 +1,7 @@
 //! A retained, PTY-backed terminal component powered by libghostty-vt.
 
+mod graphics;
+
 use std::{
     cell::RefCell,
     ffi::{OsStr, OsString},
@@ -29,6 +31,7 @@ use libghostty_vt::{
 };
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
+use self::graphics::{CellMetrics, is_block_element, paint_block};
 use crate::terminal_process::DetectedAgentProcess;
 use crate::{
     AccessibilityRole, Color, Element, ElementId, EventContext, FontFamily, GesturePhase,
@@ -51,6 +54,7 @@ pub const TERMINAL_ANSI_COLOR_COUNT: usize = 16;
 
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
+const DEFAULT_CELL_WIDTH_RATIO: f32 = 0.6;
 const MAX_COLS: u16 = 512;
 const MAX_ROWS: u16 = 256;
 const MESSAGE_CAPACITY: usize = 256;
@@ -305,6 +309,7 @@ pub struct TerminalSnapshot {
     pub scroll: TerminalScrollState,
     pub cursor: Option<TerminalCursor>,
     cursor_range: Option<Range<usize>>,
+    graphics: Arc<[TerminalCellGraphic]>,
     pub status: TerminalStatus,
     pub agent: Option<TerminalAgent>,
 }
@@ -324,10 +329,23 @@ impl TerminalSnapshot {
             scroll: TerminalScrollState::initial(rows),
             cursor: None,
             cursor_range: None,
+            graphics: Arc::from([]),
             status: TerminalStatus::Starting,
             agent: None,
         }
     }
+}
+
+/// A Unicode block element rendered from terminal-cell geometry instead of a font outline.
+///
+/// Terminal emulators synthesize these glyphs so adjoining blocks cover the grid exactly. Keeping
+/// the original character in `TerminalSnapshot::content` preserves selection and clipboard text.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TerminalCellGraphic {
+    column: u16,
+    row: u16,
+    character: char,
+    foreground: Option<Color>,
 }
 
 /// Visual metrics for a [`Terminal`] element.
@@ -357,7 +375,7 @@ impl Default for TerminalStyle {
             font_family: FontFamily::Monospace,
             font_size: 13.0,
             line_height: 18.0,
-            cell_width_ratio: 0.61,
+            cell_width_ratio: DEFAULT_CELL_WIDTH_RATIO,
             padding_top: 0.0,
             padding_right: 0.0,
             padding_bottom: 0.0,
@@ -375,7 +393,12 @@ impl TerminalStyle {
             font_family: self.font_family.clone(),
             font_size: finite_clamp(self.font_size, 1.0, 128.0, 13.0),
             line_height: finite_clamp(self.line_height, 1.0, 256.0, 18.0),
-            cell_width_ratio: finite_clamp(self.cell_width_ratio, 0.2, 2.0, 0.61),
+            cell_width_ratio: finite_clamp(
+                self.cell_width_ratio,
+                0.2,
+                2.0,
+                DEFAULT_CELL_WIDTH_RATIO,
+            ),
             padding_top: finite_clamp(self.padding_top, 0.0, 256.0, 0.0),
             padding_right: finite_clamp(self.padding_right, 0.0, 256.0, 0.0),
             padding_bottom: finite_clamp(self.padding_bottom, 0.0, 256.0, 0.0),
@@ -744,6 +767,14 @@ impl Terminal {
         self.sync_theme(style.theme.clone());
         let snapshot = self.snapshot();
         let scale_factor = cx.scale_factor();
+        let cell_metrics = CellMetrics::new(
+            style.font_size,
+            style.line_height,
+            style.cell_width_ratio,
+            scale_factor,
+        );
+        let cell_width = cell_metrics.logical_width;
+        let line_height = cell_metrics.logical_height;
         let focus = cx.focus_handle(id);
         let focused = cx.window_state().focused && cx.is_focused(focus);
         let now = Instant::now();
@@ -775,7 +806,6 @@ impl Terminal {
             }
         });
         let scroll_terminal = self.clone();
-        let line_height = style.line_height;
         let scroll = cx.scroll_wheel_listener(id, move |_view, event, event_cx| {
             let delta = event.delta.pixel_delta(line_height).y;
             if scroll_terminal.scroll_pixel_delta(delta, line_height, event.phase) {
@@ -786,24 +816,20 @@ impl Terminal {
         });
 
         let resize_terminal = self.clone();
-        let font_size = style.font_size;
-        let cell_width_ratio = style.cell_width_ratio;
         let resize_probe = canvas(move |_bounds, canvas| {
             let bounds = canvas.bounds();
             resize_terminal.update_viewport_height(bounds.height);
-            let cell_width = (font_size * cell_width_ratio).max(1.0);
-            let cell_height = line_height.max(1.0);
             let cols = (bounds.width / cell_width)
                 .floor()
                 .clamp(1.0, MAX_COLS as f32) as u16;
-            let rows = (bounds.height / cell_height)
+            let rows = (bounds.height / line_height)
                 .floor()
                 .clamp(1.0, MAX_ROWS as f32) as u16;
             let _ = resize_terminal.resize(
                 cols,
                 rows,
-                (cell_width * scale_factor).round().max(1.0) as u32,
-                (cell_height * scale_factor).round().max(1.0) as u32,
+                cell_metrics.physical_width,
+                cell_metrics.physical_height,
             );
         })
         .absolute()
@@ -826,6 +852,13 @@ impl Terminal {
             })
         };
         let terminal_background = style.background.unwrap_or(snapshot.background);
+        let block_cursor_graphic = cursor == Some(TerminalCursorStyle::Block)
+            && snapshot.cursor.is_some_and(|cursor| {
+                snapshot
+                    .graphics
+                    .iter()
+                    .any(|graphic| graphic.column == cursor.column && graphic.row == cursor.row)
+            });
         let highlights = if cursor == Some(TerminalCursorStyle::Block)
             && let Some(range) = snapshot.cursor_range.clone()
         {
@@ -833,7 +866,11 @@ impl Terminal {
                 &snapshot.highlights,
                 range,
                 HighlightStyle::default()
-                    .color(terminal_background)
+                    .color(if block_cursor_graphic {
+                        Color::TRANSPARENT
+                    } else {
+                        terminal_background
+                    })
                     .background(cursor_color),
             )
         } else {
@@ -845,21 +882,45 @@ impl Terminal {
             .id(derived_terminal_id(id, TERMINAL_TEXT_ID_TAG))
             .font_family(style.font_family)
             .text_size(style.font_size)
-            .line_height(style.line_height)
+            .line_height(line_height)
+            .monospace_width(cell_width)
             .text_color(style.foreground.unwrap_or(snapshot.foreground))
             .whitespace_nowrap()
             .text_shaping_basic()
             .selectable();
 
-        let cell_width = (style.font_size * style.cell_width_ratio).max(1.0);
+        let terminal_graphics = (!snapshot.graphics.is_empty()).then(|| {
+            let graphics = snapshot.graphics.clone();
+            let default_foreground = style.foreground.unwrap_or(snapshot.foreground);
+            let block_cursor = (cursor == Some(TerminalCursorStyle::Block))
+                .then_some(snapshot.cursor)
+                .flatten();
+            canvas(move |_bounds, canvas| {
+                for graphic in graphics.iter() {
+                    let color = if block_cursor.is_some_and(|cursor| {
+                        cursor.column == graphic.column && cursor.row == graphic.row
+                    }) {
+                        terminal_background
+                    } else {
+                        graphic.foreground.unwrap_or(default_foreground)
+                    };
+                    paint_block(
+                        canvas,
+                        graphic.column,
+                        graphic.row,
+                        graphic.character,
+                        cell_metrics,
+                        color,
+                    );
+                }
+            })
+            .absolute()
+            .inset_0()
+            .size_full()
+        });
+
         let cursor_element = cursor.zip(snapshot.cursor).map(|(cursor_style, cursor)| {
-            terminal_cursor_element(
-                cursor,
-                cursor_style,
-                cell_width,
-                style.line_height,
-                cursor_color,
-            )
+            terminal_cursor_element(cursor, cursor_style, cell_width, line_height, cursor_color)
         });
         let mut terminal_content = div()
             .absolute()
@@ -877,6 +938,9 @@ impl Terminal {
             terminal_content = terminal_content.child(cursor_element);
         }
         terminal_content = terminal_content.child(terminal_text);
+        if let Some(terminal_graphics) = terminal_graphics {
+            terminal_content = terminal_content.child(terminal_graphics);
+        }
         if cursor != Some(TerminalCursorStyle::Block)
             && let Some(cursor_element) = cursor_element
         {
@@ -2055,6 +2119,7 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
     let mut content =
         String::with_capacity(cols as usize * row_count as usize + row_count as usize);
     let mut highlights = Vec::new();
+    let mut graphics = Vec::new();
     let mut graphemes = Vec::new();
     let mut active_run: Option<(usize, usize, CellVisual)> = None;
     let mut row_iterator = rows.update(&snapshot)?;
@@ -2073,11 +2138,15 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
             }
             let start = content.len();
             let mut has_visible_text = false;
+            let mut graphic_character = None;
             if raw.has_text()? {
                 let grapheme_count = cell.graphemes_len()?;
                 graphemes.resize(grapheme_count, '\0');
                 cell.graphemes_buf(&mut graphemes)?;
                 has_visible_text = graphemes.iter().any(|value| !value.is_whitespace());
+                graphic_character = (graphemes.len() == 1)
+                    .then_some(graphemes[0])
+                    .filter(|character| is_block_element(*character));
                 content.extend(graphemes.iter().copied());
             } else {
                 content.push(' ');
@@ -2104,8 +2173,20 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
                             && wide == CellWide::Wide
                             && cursor.x == column.saturating_add(1)))
             });
+            if let Some(character) = graphic_character {
+                graphics.push(TerminalCellGraphic {
+                    column,
+                    row: row_index,
+                    character,
+                    foreground: (resolved_foreground != foreground).then_some(resolved_foreground),
+                });
+            }
             let visual = CellVisual {
-                foreground: (resolved_foreground != foreground).then_some(resolved_foreground),
+                foreground: if graphic_character.is_some() {
+                    Some(Color::TRANSPARENT)
+                } else {
+                    (resolved_foreground != foreground).then_some(resolved_foreground)
+                },
                 background: (resolved_background != background).then_some(resolved_background),
                 bold: style.bold,
                 italic: style.italic,
@@ -2161,6 +2242,7 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
         },
         cursor,
         cursor_range,
+        graphics: graphics.into(),
         status,
         agent,
     })
@@ -2378,6 +2460,7 @@ fn publish_failure(
             scroll: TerminalScrollState::initial(size.rows),
             cursor: None,
             cursor_range: None,
+            graphics: Arc::from([]),
             status: TerminalStatus::Failed {
                 message: Arc::from(message),
             },
@@ -2650,6 +2733,69 @@ mod tests {
         assert_eq!(snapshot.scroll.viewport_rows, 24);
         assert_eq!(snapshot.scroll.total_rows, 24);
         assert_eq!(snapshot.scroll.offset_rows, 0);
+    }
+
+    #[test]
+    fn ghostty_snapshot_preserves_block_text_and_uses_cell_graphics() {
+        let mut terminal = GhosttyTerminal::new(GhosttyTerminalOptions {
+            cols: 20,
+            rows: 4,
+            max_scrollback: 100,
+        })
+        .unwrap();
+        terminal.vt_write("█▀▄\r\n".as_bytes());
+        let mut render_state = RenderState::new().unwrap();
+        let mut rows = RowIterator::new().unwrap();
+        let mut cells = CellIterator::new().unwrap();
+        let snapshot = build_snapshot(
+            &terminal,
+            &mut render_state,
+            &mut rows,
+            &mut cells,
+            TerminalSnapshotMetadata::running(1),
+        )
+        .unwrap();
+
+        assert!(snapshot.content.starts_with("█▀▄"));
+        assert_eq!(
+            snapshot
+                .graphics
+                .iter()
+                .map(|graphic| (graphic.column, graphic.row, graphic.character))
+                .collect::<Vec<_>>(),
+            [(0, 0, '█'), (1, 0, '▀'), (2, 0, '▄')]
+        );
+        assert_eq!(snapshot.highlights[0].0, 0.."█▀▄".len());
+        assert_eq!(snapshot.highlights[0].1.color, Some(Color::TRANSPARENT));
+    }
+
+    #[test]
+    fn ghostty_snapshot_preserves_spinner_columns() {
+        let mut terminal = GhosttyTerminal::new(GhosttyTerminalOptions {
+            cols: 20,
+            rows: 4,
+            max_scrollback: 100,
+        })
+        .unwrap();
+        terminal.vt_write("■■■■⬝⬝⬝⬝".as_bytes());
+        let mut render_state = RenderState::new().unwrap();
+        let mut rows = RowIterator::new().unwrap();
+        let mut cells = CellIterator::new().unwrap();
+        let snapshot = build_snapshot(
+            &terminal,
+            &mut render_state,
+            &mut rows,
+            &mut cells,
+            TerminalSnapshotMetadata::running(1),
+        )
+        .unwrap();
+
+        assert!(
+            snapshot.content.starts_with("■■■■⬝⬝⬝⬝"),
+            "snapshot content: {:?}",
+            snapshot.content,
+        );
+        assert_eq!(snapshot.cursor.unwrap().column, 8);
     }
 
     #[test]

@@ -125,6 +125,8 @@ pub enum TextShaping {
 pub struct TextStyle {
     pub font_size: f32,
     pub line_height: f32,
+    /// Logical width of one monospace cell. When set, glyph advances are quantized to this width.
+    pub monospace_width: Option<f32>,
     pub family: FontFamily,
     pub features: FontFeatures,
     pub fallbacks: Option<FontFallbacks>,
@@ -151,6 +153,7 @@ impl TextStyle {
         Self {
             font_size,
             line_height: font_size * 1.35,
+            monospace_width: None,
             family: FontFamily::SansSerif,
             features: FontFeatures::new(),
             fallbacks: None,
@@ -173,6 +176,11 @@ impl TextStyle {
 
     pub fn line_height(mut self, line_height: f32) -> Self {
         self.line_height = line_height;
+        self
+    }
+
+    pub fn monospace_width(mut self, width: f32) -> Self {
+        self.monospace_width = Some(width.max(1.0));
         self
     }
 

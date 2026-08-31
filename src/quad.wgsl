@@ -123,6 +123,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         return vec4<f32>(input.primary.rgb * alpha, alpha);
     }
 
+    // A square, borderless quad already has exact coverage from its two triangles. Running an
+    // SDF over that geometry antialiases every internal edge independently, which exposes seams
+    // between adjacent terminal-cell backgrounds at fractional physical coordinates.
+    if input.params.x < 0.5 && input.params.y <= 0.0 && input.params.z <= 0.0 {
+        let alpha = input.primary.a;
+        return vec4<f32>(input.primary.rgb * alpha, alpha);
+    }
+
     let subject_distance = rounded_rect_distance(
         input.logical_position,
         input.subject,
