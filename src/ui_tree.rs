@@ -109,7 +109,7 @@ struct ValidationAnnouncement {
     message: Arc<str>,
 }
 
-fn static_selection_color() -> Color {
+pub(crate) fn static_selection_color() -> Color {
     Color::rgba8(48, 120, 196, 105)
 }
 

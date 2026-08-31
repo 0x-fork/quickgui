@@ -7480,13 +7480,16 @@ impl Runtime {
         id: ElementId,
         event: PointerEvent,
     ) -> bool {
-        let listener = self
-            .window
-            .as_ref()
-            .and_then(|window| window.listeners.pointers.get(&id).cloned());
+        let (listener, bounds) = self.window.as_ref().map_or((None, None), |window| {
+            (
+                window.listeners.pointers.get(&id).cloned(),
+                window.ui.element_bounds(id),
+            )
+        });
         let Some(listener) = listener else {
             return true;
         };
+        let event = bounds.map_or(event, |bounds| event.localize(bounds));
         let mut cx = self.event_context();
         if let Some(window) = &mut self.window {
             listener(window.view.as_any_mut(), &event, &mut cx);
@@ -10696,6 +10699,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                                 phase: PointerPhase::Move,
                                 position: point,
                                 origin: capture.origin,
+                                local_position: point,
+                                local_origin: capture.origin,
                                 delta,
                                 button: capture.button,
                                 modifiers: self.modifiers,
@@ -11076,6 +11081,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                                         phase: PointerPhase::Up,
                                         position,
                                         origin: capture.origin,
+                                        local_position: position,
+                                        local_origin: capture.origin,
                                         delta: position - capture.position,
                                         button,
                                         modifiers: self.modifiers,
@@ -11233,6 +11240,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                                             phase: PointerPhase::Down,
                                             position,
                                             origin: position,
+                                            local_position: position,
+                                            local_origin: position,
                                             delta: Vector::ZERO,
                                             button,
                                             modifiers: self.modifiers,
@@ -11256,6 +11265,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                                             phase: PointerPhase::Up,
                                             position,
                                             origin: capture.origin,
+                                            local_position: position,
+                                            local_origin: capture.origin,
                                             delta: position - capture.position,
                                             button,
                                             modifiers: self.modifiers,
@@ -11689,6 +11700,8 @@ impl ApplicationHandler<RuntimeEvent> for Runtime {
                                     phase: PointerPhase::Cancel,
                                     position: capture.position,
                                     origin: capture.origin,
+                                    local_position: capture.position,
+                                    local_origin: capture.origin,
                                     delta: Vector::ZERO,
                                     button: capture.button,
                                     modifiers: self.modifiers,

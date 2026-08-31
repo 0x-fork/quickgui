@@ -392,7 +392,7 @@ describe("Solid universal host", () => {
       new QuickGuiEvent(
         "pointer",
         divider,
-        '{"phase":"move","position":{"x":310,"y":40},"origin":{"x":250,"y":40},"delta":{"x":4,"y":0},"button":"left"}',
+        '{"phase":"move","position":{"x":310,"y":40},"origin":{"x":250,"y":40},"localPosition":{"x":60,"y":20},"localOrigin":{"x":0,"y":20},"delta":{"x":4,"y":0},"button":"left"}',
       ),
     );
     expect(delta).toBe(60);

@@ -1924,6 +1924,8 @@ fn pointer_event_json(event: &quickgui::PointerEvent) -> String {
         "phase": phase,
         "position": { "x": event.position.x, "y": event.position.y },
         "origin": { "x": event.origin.x, "y": event.origin.y },
+        "localPosition": { "x": event.local_position.x, "y": event.local_position.y },
+        "localOrigin": { "x": event.local_origin.x, "y": event.local_origin.y },
         "delta": { "x": event.delta.x, "y": event.delta.y },
         "button": button,
     })

@@ -20,14 +20,23 @@ use std::{
 
 use libghostty_vt::{
     RenderState, Terminal as GhosttyTerminal, TerminalOptions as GhosttyTerminalOptions,
+    fmt::Format as GhosttyFormat,
     key::{
         Action as GhosttyKeyAction, Encoder as GhosttyKeyEncoder, Event as GhosttyKeyEvent,
         Key as GhosttyKey, Mods as GhosttyMods, OptionAsAlt,
     },
     render::{CellIterator, CursorVisualStyle, RowIterator},
     screen::CellWide,
+    selection::{
+        FormatOptions as GhosttySelectionFormatOptions,
+        gesture::{
+            DragEvent as GhosttySelectionDragEvent, Geometry as GhosttySelectionGeometry,
+            Gesture as GhosttySelectionGesture, PressEvent as GhosttySelectionPressEvent,
+            ReleaseEvent as GhosttySelectionReleaseEvent,
+        },
+    },
     style::{RgbColor, Underline},
-    terminal::{Mode, ScrollViewport},
+    terminal::{Mode, Point as GhosttyPoint, PointCoordinate, ScrollViewport},
 };
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
@@ -35,10 +44,12 @@ use self::graphics::{
     CellMetrics, EdgeBackgrounds, is_block_element, paint_block, paint_padding_extension,
 };
 use crate::terminal_process::DetectedAgentProcess;
+use crate::ui_tree::static_selection_color;
 use crate::{
-    AccessibilityRole, Color, Element, ElementId, EventContext, FontFamily, GesturePhase,
-    HighlightStyle, IntoElement, Key, KeyDownEvent, KeyUpEvent, MAX_TEXT_HIGHLIGHTS, Modifiers,
-    MouseButton, PointerPhase, StyledText, ViewContext, WindowInvalidator, canvas, div,
+    AccessibilityRole, ClipboardItem, Color, Element, ElementId, EventContext, FontFamily,
+    GesturePhase, HighlightStyle, IntoElement, Key, KeyDownEvent, KeyUpEvent, MAX_TEXT_HIGHLIGHTS,
+    Modifiers, MouseButton, PointerEvent, PointerPhase, Rect, StyledText, ViewContext,
+    WindowInvalidator, canvas, div,
 };
 
 /// Maximum UTF-8 bytes accepted for a program, argument, environment entry, or working directory.
@@ -74,7 +85,10 @@ const TERMINAL_SCROLLBAR_MIN_THUMB: f32 = 24.0;
 const TERMINAL_SCROLLBAR_HIDE_DELAY: Duration = Duration::from_millis(900);
 const TERMINAL_SCROLLBAR_ID_TAG: u64 = 0x7465_726d_7363_726c;
 const TERMINAL_TEXT_ID_TAG: u64 = 0x7465_726d_7465_7874;
+const TERMINAL_SELECTION_ID_TAG: u64 = 0x7465_726d_7365_6c65;
 const TERMINAL_CURSOR_BLINK_HALF_PERIOD: Duration = Duration::from_millis(500);
+const TERMINAL_MULTI_CLICK_INTERVAL: Duration = Duration::from_millis(500);
+const TERMINAL_MULTI_CLICK_DISTANCE: f32 = 4.0;
 
 /// Process and scrollback configuration for a terminal session.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -310,6 +324,7 @@ pub struct TerminalSnapshot {
     pub working_directory: Arc<str>,
     pub scroll: TerminalScrollState,
     pub cursor: Option<TerminalCursor>,
+    selected_text: Option<Arc<str>>,
     cursor_range: Option<Range<usize>>,
     graphics: Arc<[TerminalCellGraphic]>,
     edge_backgrounds: EdgeBackgrounds,
@@ -331,6 +346,7 @@ impl TerminalSnapshot {
             working_directory: Arc::from(""),
             scroll: TerminalScrollState::initial(rows),
             cursor: None,
+            selected_text: None,
             cursor_range: None,
             graphics: Arc::from([]),
             edge_backgrounds: EdgeBackgrounds::empty(cols, rows),
@@ -443,6 +459,8 @@ struct TerminalInner {
     snapshot: Arc<RwLock<Arc<TerminalSnapshot>>>,
     last_size: AtomicU64,
     viewport_height_bits: AtomicU32,
+    viewport_bounds: Mutex<Rect>,
+    selection_epoch: Instant,
     wheel_remainder: Mutex<f32>,
     scrollbar_drag_remainder: Mutex<f32>,
     scrollbar_interaction: Mutex<TerminalScrollbarInteraction>,
@@ -573,6 +591,8 @@ impl Terminal {
                 snapshot,
                 last_size: AtomicU64::new(pack_size(initial_size)),
                 viewport_height_bits: AtomicU32::new(0),
+                viewport_bounds: Mutex::new(Rect::ZERO),
+                selection_epoch: Instant::now(),
                 wheel_remainder: Mutex::new(0.0),
                 scrollbar_drag_remainder: Mutex::new(0.0),
                 scrollbar_interaction: Mutex::new(TerminalScrollbarInteraction::default()),
@@ -663,6 +683,46 @@ impl Terminal {
         self.inner
             .viewport_height_bits
             .store(height.to_bits(), Ordering::Relaxed);
+    }
+
+    fn update_viewport_bounds(&self, bounds: Rect) {
+        self.update_viewport_height(bounds.height);
+        *self
+            .inner
+            .viewport_bounds
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = bounds;
+    }
+
+    fn send_selection_pointer(
+        &self,
+        event: &PointerEvent,
+        cols: u16,
+        rows: u16,
+        cell_width: f32,
+        line_height: f32,
+        physical_cell_width: u32,
+        scale_factor: f32,
+    ) -> bool {
+        let bounds = *self
+            .inner
+            .viewport_bounds
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(input) = terminal_selection_input(
+            event,
+            bounds,
+            cols,
+            rows,
+            cell_width,
+            line_height,
+            physical_cell_width,
+            scale_factor,
+            Instant::now().saturating_duration_since(self.inner.selection_epoch),
+        ) else {
+            return false;
+        };
+        self.try_send(WorkerMessage::Selection(input))
     }
 
     fn viewport_height(&self) -> f32 {
@@ -803,6 +863,11 @@ impl Terminal {
 
         let keyboard = self.clone();
         let key_down = cx.key_down_listener(id, move |_view, event, event_cx| {
+            if handle_terminal_copy(&keyboard, event, event_cx)
+                || handle_terminal_select_all(&keyboard, event, event_cx)
+            {
+                return;
+            }
             if handle_terminal_paste(&keyboard, event, event_cx) {
                 return;
             }
@@ -840,7 +905,7 @@ impl Terminal {
         let resize_terminal = self.clone();
         let resize_probe = canvas(move |_bounds, canvas| {
             let bounds = canvas.bounds();
-            resize_terminal.update_viewport_height(bounds.height);
+            resize_terminal.update_viewport_bounds(bounds);
             let cols = (bounds.width / cell_width)
                 .floor()
                 .clamp(1.0, MAX_COLS as f32) as u16;
@@ -920,8 +985,7 @@ impl Terminal {
             .monospace_width(cell_width)
             .text_color(style.foreground.unwrap_or(snapshot.foreground))
             .whitespace_nowrap()
-            .text_shaping_basic()
-            .selectable();
+            .text_shaping_basic();
 
         let terminal_graphics = (!snapshot.graphics.is_empty()).then(|| {
             let graphics = snapshot.graphics.clone();
@@ -956,7 +1020,34 @@ impl Terminal {
         let cursor_element = cursor.zip(snapshot.cursor).map(|(cursor_style, cursor)| {
             terminal_cursor_element(cursor, cursor_style, cell_width, line_height, cursor_color)
         });
+        let selection_id = derived_terminal_id(id, TERMINAL_SELECTION_ID_TAG);
+        let selection_cols = snapshot.cols;
+        let selection_rows = snapshot.rows;
+        let selection_terminal = self.clone();
+        let selection_pointer = cx.pointer_listener(selection_id, move |_view, event, event_cx| {
+            if event.button != MouseButton::Left {
+                return;
+            }
+            if event.phase == PointerPhase::Down {
+                event_cx.focus(focus);
+            }
+            if selection_terminal.send_selection_pointer(
+                event,
+                selection_cols,
+                selection_rows,
+                cell_width,
+                line_height,
+                cell_metrics.physical_width,
+                scale_factor,
+            ) {
+                event_cx.clear_text_selection();
+                event_cx.prevent_default();
+                event_cx.stop_propagation();
+                event_cx.invalidate();
+            }
+        });
         let mut terminal_content = div()
+            .id(selection_id)
             .absolute()
             .top(style.padding_top)
             .right(style.padding_right)
@@ -965,6 +1056,7 @@ impl Terminal {
             .min_w(0.0)
             .min_h(0.0)
             .overflow_hidden()
+            .on_pointer(selection_pointer)
             .child(resize_probe);
         if cursor == Some(TerminalCursorStyle::Block)
             && let Some(cursor_element) = cursor_element.clone()
@@ -1258,6 +1350,70 @@ fn derived_terminal_id(parent: ElementId, tag: u64) -> ElementId {
     ElementId::new(hash)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn terminal_selection_input(
+    event: &PointerEvent,
+    bounds: Rect,
+    cols: u16,
+    rows: u16,
+    cell_width: f32,
+    line_height: f32,
+    physical_cell_width: u32,
+    scale_factor: f32,
+    time: Duration,
+) -> Option<TerminalSelectionInput> {
+    if cols == 0
+        || rows == 0
+        || bounds.width <= 0.0
+        || bounds.height <= 0.0
+        || !bounds.x.is_finite()
+        || !bounds.y.is_finite()
+        || !bounds.width.is_finite()
+        || !bounds.height.is_finite()
+        || !event.local_position.x.is_finite()
+        || !event.local_position.y.is_finite()
+        || !cell_width.is_finite()
+        || cell_width <= 0.0
+        || !line_height.is_finite()
+        || line_height <= 0.0
+        || !scale_factor.is_finite()
+        || scale_factor <= 0.0
+    {
+        return None;
+    }
+    let local_x = event.local_position.x;
+    let local_y = event.local_position.y;
+    let column = terminal_pointer_cell(local_x, cell_width, cols);
+    let row = terminal_pointer_cell(local_y, line_height, rows);
+    let surface_scale = f64::from(scale_factor);
+    Some(TerminalSelectionInput {
+        phase: match event.phase {
+            PointerPhase::Down => TerminalSelectionPhase::Press,
+            PointerPhase::Move => TerminalSelectionPhase::Drag,
+            PointerPhase::Up => TerminalSelectionPhase::Release,
+            PointerPhase::Cancel => TerminalSelectionPhase::Cancel,
+        },
+        column,
+        row,
+        surface_x: f64::from(local_x) * surface_scale,
+        surface_y: f64::from(local_y) * surface_scale,
+        geometry: GhosttySelectionGeometry {
+            columns: u32::from(cols),
+            cell_width: physical_cell_width.max(1),
+            padding_left: 0,
+            screen_height: (bounds.height * scale_factor).round().max(1.0) as u32,
+        },
+        time,
+        repeat_distance: f64::from(TERMINAL_MULTI_CLICK_DISTANCE * scale_factor),
+        rectangle: event.modifiers.contains(Modifiers::ALT),
+    })
+}
+
+fn terminal_pointer_cell(position: f32, cell_size: f32, count: u16) -> u16 {
+    let maximum = i32::from(count.saturating_sub(1));
+    ((position / cell_size).floor() as i32).clamp(0, maximum) as u16
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct TerminalSize {
     cols: u16,
@@ -1274,8 +1430,119 @@ enum WorkerMessage {
     Key(TerminalKeyInput),
     Resize(TerminalSize),
     Scroll(isize),
+    Selection(TerminalSelectionInput),
+    SelectAll,
     Theme(Option<Box<TerminalTheme>>),
     Shutdown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalSelectionPhase {
+    Press,
+    Drag,
+    Release,
+    Cancel,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TerminalSelectionInput {
+    phase: TerminalSelectionPhase,
+    column: u16,
+    row: u16,
+    surface_x: f64,
+    surface_y: f64,
+    geometry: GhosttySelectionGeometry,
+    time: Duration,
+    repeat_distance: f64,
+    rectangle: bool,
+}
+
+struct TerminalSelectionState {
+    gesture: GhosttySelectionGesture<'static>,
+    press: GhosttySelectionPressEvent<'static>,
+    drag: GhosttySelectionDragEvent<'static>,
+    release: GhosttySelectionReleaseEvent<'static>,
+    anchor: Option<(u16, u16)>,
+}
+
+impl TerminalSelectionState {
+    fn new() -> Result<Self, libghostty_vt::Error> {
+        Ok(Self {
+            gesture: GhosttySelectionGesture::new()?,
+            press: GhosttySelectionPressEvent::new()?,
+            drag: GhosttySelectionDragEvent::new()?,
+            release: GhosttySelectionReleaseEvent::new()?,
+            anchor: None,
+        })
+    }
+
+    fn clear(&mut self, terminal: &GhosttyTerminal<'_, '_>) {
+        self.gesture.reset(terminal);
+        self.anchor = None;
+        let _ = terminal.set_selection(None);
+    }
+
+    fn apply(
+        &mut self,
+        terminal: &GhosttyTerminal<'_, '_>,
+        input: TerminalSelectionInput,
+    ) -> Result<(), libghostty_vt::Error> {
+        let grid_ref = || {
+            terminal.grid_ref(GhosttyPoint::Viewport(PointCoordinate {
+                x: input.column,
+                y: u32::from(input.row),
+            }))
+        };
+        match input.phase {
+            TerminalSelectionPhase::Press => {
+                self.press
+                    .set_position(input.surface_x, input.surface_y)?
+                    .set_repeat_distance(input.repeat_distance)?
+                    .set_repeat_interval(TERMINAL_MULTI_CLICK_INTERVAL)?
+                    .set_time(input.time)?;
+                let selection = self.press.apply(&mut self.gesture, terminal, grid_ref()?)?;
+                terminal.set_selection(selection.as_ref())?;
+                self.anchor = Some((input.column, input.row));
+            }
+            TerminalSelectionPhase::Drag => {
+                self.drag_to(terminal, input)?;
+            }
+            TerminalSelectionPhase::Release => {
+                if let Some(anchor) = self.anchor
+                    && (input.column, input.row) != anchor
+                {
+                    self.drag_to(terminal, input)?;
+                }
+                self.release
+                    .apply(&mut self.gesture, terminal, Some(grid_ref()?))?;
+                self.anchor = None;
+            }
+            TerminalSelectionPhase::Cancel => {
+                self.release.apply(&mut self.gesture, terminal, None)?;
+                self.anchor = None;
+            }
+        }
+        Ok(())
+    }
+
+    fn drag_to(
+        &mut self,
+        terminal: &GhosttyTerminal<'_, '_>,
+        input: TerminalSelectionInput,
+    ) -> Result<(), libghostty_vt::Error> {
+        self.drag
+            .set_position(input.surface_x, input.surface_y)?
+            .set_rectangle(input.rectangle)?;
+        let grid_ref = terminal.grid_ref(GhosttyPoint::Viewport(PointCoordinate {
+            x: input.column,
+            y: u32::from(input.row),
+        }))?;
+        let selection = self
+            .drag
+            .apply(&mut self.gesture, terminal, grid_ref, input.geometry)?;
+        terminal.set_selection(selection.as_ref())?;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -1390,6 +1657,18 @@ fn run_terminal_worker(
     };
     let mut key_encoder = match GhosttyKeyEncoder::new() {
         Ok(encoder) => encoder,
+        Err(error) => {
+            publish_failure(
+                &shared,
+                &invalidator,
+                size,
+                format!("libghostty-vt: {error}"),
+            );
+            return;
+        }
+    };
+    let mut selection = match TerminalSelectionState::new() {
+        Ok(selection) => selection,
         Err(error) => {
             publish_failure(
                 &shared,
@@ -1522,6 +1801,7 @@ fn run_terminal_worker(
                 message,
                 &mut terminal,
                 &mut key_encoder,
+                &mut selection,
                 &pty_responses,
                 &mut writer,
                 master.as_ref(),
@@ -1540,6 +1820,7 @@ fn run_terminal_worker(
                             message,
                             &mut terminal,
                             &mut key_encoder,
+                            &mut selection,
                             &pty_responses,
                             &mut writer,
                             master.as_ref(),
@@ -1613,6 +1894,7 @@ fn handle_worker_message(
     message: WorkerMessage,
     terminal: &mut GhosttyTerminal<'_, '_>,
     key_encoder: &mut GhosttyKeyEncoder<'_>,
+    selection: &mut TerminalSelectionState,
     pty_responses: &Rc<RefCell<Vec<u8>>>,
     writer: &mut Box<dyn Write + Send>,
     master: &dyn portable_pty::MasterPty,
@@ -1635,17 +1917,21 @@ fn handle_worker_message(
         }
         WorkerMessage::ReaderClosed => *reader_closed = true,
         WorkerMessage::Input(bytes) => {
+            selection.clear(terminal);
             let _ = writer.write_all(&bytes);
             let _ = writer.flush();
+            *redraw = true;
         }
         WorkerMessage::Paste(value) => {
             if write_paste(terminal, writer, value) {
+                selection.clear(terminal);
                 terminal.scroll_viewport(ScrollViewport::Bottom);
                 *redraw = true;
             }
         }
         WorkerMessage::Key(input) => {
             if write_key(terminal, key_encoder, writer, input) {
+                selection.clear(terminal);
                 terminal.scroll_viewport(ScrollViewport::Bottom);
                 *redraw = true;
             }
@@ -1666,6 +1952,19 @@ fn handle_worker_message(
         WorkerMessage::Scroll(rows) => {
             terminal.scroll_viewport(ScrollViewport::Delta(rows));
             *redraw = true;
+        }
+        WorkerMessage::Selection(input) => {
+            if selection.apply(terminal, input).is_ok() {
+                *redraw = true;
+            }
+        }
+        WorkerMessage::SelectAll => {
+            if let Ok(selected) = terminal.select_all()
+                && terminal.set_selection(selected.as_ref()).is_ok()
+            {
+                selection.gesture.reset(terminal);
+                *redraw = true;
+            }
         }
         WorkerMessage::Theme(theme) => {
             if apply_terminal_theme(terminal, theme.as_deref()).is_ok() {
@@ -1990,14 +2289,38 @@ fn ghostty_function_key(value: u8) -> GhosttyKey {
     }
 }
 
+fn handle_terminal_copy(terminal: &Terminal, event: &KeyDownEvent, cx: &mut EventContext) -> bool {
+    if !terminal_command_shortcut(event, "c") {
+        return false;
+    }
+    if let Some(text) = terminal.snapshot().selected_text.clone()
+        && let Ok(item) = ClipboardItem::new_string(text)
+    {
+        let _ = cx.write_to_clipboard(item);
+    }
+    cx.prevent_default();
+    cx.stop_propagation();
+    true
+}
+
+fn handle_terminal_select_all(
+    terminal: &Terminal,
+    event: &KeyDownEvent,
+    cx: &mut EventContext,
+) -> bool {
+    if !terminal_command_shortcut(event, "a") {
+        return false;
+    }
+    let _ = terminal.try_send(WorkerMessage::SelectAll);
+    cx.clear_text_selection();
+    cx.prevent_default();
+    cx.stop_propagation();
+    cx.invalidate();
+    true
+}
+
 fn handle_terminal_paste(terminal: &Terminal, event: &KeyDownEvent, cx: &mut EventContext) -> bool {
-    let paste = key_character(&event.key).is_some_and(|value| value.eq_ignore_ascii_case("v"))
-        && (event.modifiers.contains(Modifiers::SUPER)
-            || (cfg!(not(target_os = "macos"))
-                && event
-                    .modifiers
-                    .contains(Modifiers::CONTROL | Modifiers::SHIFT)));
-    if !paste {
+    if !terminal_command_shortcut(event, "v") {
         return false;
     }
     if let Ok(Some(item)) = cx.read_from_clipboard()
@@ -2009,6 +2332,15 @@ fn handle_terminal_paste(terminal: &Terminal, event: &KeyDownEvent, cx: &mut Eve
     cx.prevent_default();
     cx.stop_propagation();
     true
+}
+
+fn terminal_command_shortcut(event: &KeyDownEvent, key: &str) -> bool {
+    key_character(&event.key).is_some_and(|value| value.eq_ignore_ascii_case(key))
+        && (event.modifiers.contains(Modifiers::SUPER)
+            || (cfg!(not(target_os = "macos"))
+                && event
+                    .modifiers
+                    .contains(Modifiers::CONTROL | Modifiers::SHIFT)))
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -2138,6 +2470,17 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
     };
     let foreground = ghostty_color(colors.foreground);
     let background = ghostty_color(colors.background);
+    let selected_text = terminal
+        .format_selection_alloc(
+            None,
+            GhosttySelectionFormatOptions::new()
+                .with_emit_format(GhosttyFormat::Plain)
+                .with_unwrap(true)
+                .with_trim(true),
+        )
+        .ok()
+        .flatten()
+        .map(|bytes| Arc::<str>::from(String::from_utf8_lossy(bytes.as_ref()).into_owned()));
     let cursor_style = snapshot.cursor_visual_style()?;
     let cursor_blinking = snapshot.cursor_blinking()?;
     let cursor = cursor_position.map(|position| TerminalCursor {
@@ -2167,6 +2510,7 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
     let mut row_iterator = rows.update(&snapshot)?;
     let mut row_index = 0_u16;
     while let Some(row) = row_iterator.next() {
+        let row_selection = row.selection()?;
         let row_start = content.len();
         let mut row_visible_end = row_start;
         let mut cell_iterator = cells.update(row)?;
@@ -2176,6 +2520,15 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
             let raw = cell.raw_cell()?;
             let wide = raw.wide()?;
             let style = cell.style()?;
+            let cell_start_column = grid_column;
+            let cell_end_column = if wide == CellWide::Wide {
+                grid_column.saturating_add(1)
+            } else {
+                grid_column
+            };
+            let selected = row_selection.is_some_and(|selection| {
+                selection.start_x <= cell_end_column && selection.end_x >= cell_start_column
+            });
             let mut resolved_foreground = cell.fg_color()?.map(ghostty_color).unwrap_or(foreground);
             let mut resolved_background = cell.bg_color()?.map(ghostty_color).unwrap_or(background);
             if style.inverse {
@@ -2229,6 +2582,9 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
                 resolved_foreground = resolved_background;
             } else if style.faint {
                 resolved_foreground = resolved_foreground.with_alpha(0.65);
+            }
+            if selected {
+                resolved_background = static_selection_color();
             }
             let cursor_here = cursor_position.is_some_and(|cursor| {
                 cursor.y == row_index
@@ -2305,6 +2661,7 @@ fn build_snapshot<'alloc: 'cb, 'cb>(
             viewport_rows: scrollbar.len,
         },
         cursor,
+        selected_text,
         cursor_range,
         graphics: graphics.into(),
         edge_backgrounds: EdgeBackgrounds::new(
@@ -2529,6 +2886,7 @@ fn publish_failure(
             working_directory: Arc::from(""),
             scroll: TerminalScrollState::initial(size.rows),
             cursor: None,
+            selected_text: None,
             cursor_range: None,
             graphics: Arc::from([]),
             edge_backgrounds: EdgeBackgrounds::empty(size.cols, size.rows),
@@ -2608,6 +2966,13 @@ mod tests {
         assert_eq!(content, "prompt");
         assert_eq!(highlights.len(), 1);
         assert_eq!(highlights[0].0, 4..6);
+    }
+
+    #[test]
+    fn terminal_pointer_cells_clamp_to_the_complete_grid() {
+        assert_eq!(terminal_pointer_cell(-12.0, 8.0, 10), 0);
+        assert_eq!(terminal_pointer_cell(16.1, 8.0, 10), 2);
+        assert_eq!(terminal_pointer_cell(10_000.0, 8.0, 10), 9);
     }
 
     #[test]
@@ -2814,6 +3179,37 @@ mod tests {
     }
 
     #[test]
+    fn terminal_selection_uses_pointer_coordinates_local_to_the_terminal() {
+        let event = PointerEvent {
+            phase: PointerPhase::Move,
+            position: crate::Point::new(436.0, 158.0),
+            origin: crate::Point::new(420.0, 158.0),
+            local_position: crate::Point::new(36.0, 18.0),
+            local_origin: crate::Point::new(20.0, 18.0),
+            delta: crate::Vector::new(16.0, 0.0),
+            button: MouseButton::Left,
+            modifiers: Modifiers::empty(),
+        };
+        let input = terminal_selection_input(
+            &event,
+            Rect::new(0.0, 0.0, 800.0, 360.0),
+            100,
+            20,
+            8.0,
+            18.0,
+            16,
+            2.0,
+            Duration::from_millis(100),
+        )
+        .unwrap();
+
+        assert_eq!(input.column, 4);
+        assert_eq!(input.row, 1);
+        assert_eq!(input.surface_x, 72.0);
+        assert_eq!(input.surface_y, 36.0);
+    }
+
+    #[test]
     fn ghostty_snapshot_retains_complete_lines() {
         let mut terminal = GhosttyTerminal::new(GhosttyTerminalOptions {
             cols: 80,
@@ -2840,6 +3236,60 @@ mod tests {
         assert_eq!(snapshot.scroll.viewport_rows, 24);
         assert_eq!(snapshot.scroll.total_rows, 24);
         assert_eq!(snapshot.scroll.offset_rows, 0);
+    }
+
+    #[test]
+    fn ghostty_selection_follows_release_into_blank_cells_without_copy_padding() {
+        let mut terminal = GhosttyTerminal::new(GhosttyTerminalOptions {
+            cols: 8,
+            rows: 2,
+            max_scrollback: 100,
+        })
+        .unwrap();
+        terminal.vt_write(b"hi");
+        let geometry = GhosttySelectionGeometry {
+            columns: 8,
+            cell_width: 8,
+            padding_left: 0,
+            screen_height: 32,
+        };
+        let input = |phase, column, surface_x| TerminalSelectionInput {
+            phase,
+            column,
+            row: 0,
+            surface_x,
+            surface_y: 8.0,
+            geometry,
+            time: Duration::from_millis(100),
+            repeat_distance: 4.0,
+            rectangle: false,
+        };
+        let mut selection = TerminalSelectionState::new().unwrap();
+        selection
+            .apply(&terminal, input(TerminalSelectionPhase::Press, 1, 12.0))
+            .unwrap();
+        selection
+            .apply(&terminal, input(TerminalSelectionPhase::Release, 6, 53.0))
+            .unwrap();
+
+        let mut render_state = RenderState::new().unwrap();
+        let mut rows = RowIterator::new().unwrap();
+        let mut cells = CellIterator::new().unwrap();
+        let snapshot = build_snapshot(
+            &terminal,
+            &mut render_state,
+            &mut rows,
+            &mut cells,
+            TerminalSnapshotMetadata::running(1),
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.content.as_ref(), "hi     ");
+        assert_eq!(snapshot.selected_text.as_deref(), Some("i"));
+        assert!(snapshot.highlights.iter().any(|(range, style)| {
+            range.start <= 1 && range.end >= 7 && style.background == Some(static_selection_color())
+        }));
+        selection.clear(&terminal);
     }
 
     #[test]

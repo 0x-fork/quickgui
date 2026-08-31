@@ -12,9 +12,10 @@ use thiserror::Error;
 use crate::{
     AboutPanelOptions, Action, AnyAction, AppInfo, AppPaths, Assets, CursorGrabMode, Display,
     DisplayId, Displays, ElementId, Entity, EntityId, EventEmitter, FileIconResponse, FileIconSize,
-    FocusHandle, Global, Image, KeyboardLayout, Menu, Point, RelaunchOptions, RelaunchRequest,
-    Size, SystemInfo, SystemIntegrationError, SystemPreferences, TaskbarProgressState, UserTask,
-    Vector, View, WindowHandle, WindowLevel, WindowOptions, WindowRegistry,
+    FocusHandle, Global, Image, KeyboardLayout, Menu, Point, Rect, RelaunchOptions,
+    RelaunchRequest, Size, SystemInfo, SystemIntegrationError, SystemPreferences,
+    TaskbarProgressState, UserTask, Vector, View, WindowHandle, WindowLevel, WindowOptions,
+    WindowRegistry,
     clipboard::{ClipboardError, ClipboardItem, ClipboardService, ClipboardTarget},
     entity::{EntityEvent, MAX_ENTITY_EVENTS_PER_CALLBACK, MAX_ENTITY_NOTIFICATIONS_PER_EVENT},
     foreground::{AsyncViewContext, ForegroundTaskSpawnError, ForegroundTaskSpawner, Task},
@@ -695,19 +696,35 @@ pub enum PointerPhase {
 
 /// A pointer event delivered to an element that owns pointer capture.
 ///
-/// Positions and deltas use logical pixels. Once an element receives [`PointerPhase::Down`], it
-/// continues to receive move events and the terminal up or cancel event even when the pointer is
-/// outside its bounds.
+/// Positions and deltas use logical pixels. [`Self::position`] and [`Self::origin`] are relative
+/// to the native window; [`Self::local_position`] and [`Self::local_origin`] are relative to the
+/// captured element. Once an element receives [`PointerPhase::Down`], it continues to receive move
+/// events and the terminal up or cancel event even when the pointer is outside its bounds.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PointerEvent {
     pub phase: PointerPhase,
+    /// Current pointer position in logical window coordinates.
     pub position: Point,
     /// Position at which this capture started.
     pub origin: Point,
+    /// Current pointer position relative to the captured element's top-left corner.
+    ///
+    /// The value can be outside the element while pointer capture is active.
+    pub local_position: Point,
+    /// Capture origin relative to the captured element's current top-left corner.
+    pub local_origin: Point,
     /// Motion since the preceding captured event.
     pub delta: Vector,
     pub button: MouseButton,
     pub modifiers: Modifiers,
+}
+
+impl PointerEvent {
+    pub(crate) fn localize(mut self, bounds: Rect) -> Self {
+        self.local_position = Point::new(self.position.x - bounds.x, self.position.y - bounds.y);
+        self.local_origin = Point::new(self.origin.x - bounds.x, self.origin.y - bounds.y);
+        self
+    }
 }
 
 /// Maximum absolute platform pixel delta retained from one scroll-wheel event.
@@ -2943,6 +2960,27 @@ mod tests {
     struct TestGlobal(u32);
 
     impl Global for TestGlobal {}
+
+    #[test]
+    fn captured_pointer_localizes_window_coordinates_to_its_element() {
+        let event = PointerEvent {
+            phase: PointerPhase::Move,
+            position: Point::new(342.0, 186.0),
+            origin: Point::new(294.0, 168.0),
+            local_position: Point::ZERO,
+            local_origin: Point::ZERO,
+            delta: Vector::new(6.0, 0.0),
+            button: MouseButton::Left,
+            modifiers: Modifiers::empty(),
+        }
+        .localize(Rect::new(286.0, 144.0, 640.0, 480.0));
+
+        assert_eq!(event.position, Point::new(342.0, 186.0));
+        assert_eq!(event.origin, Point::new(294.0, 168.0));
+        assert_eq!(event.local_position, Point::new(56.0, 42.0));
+        assert_eq!(event.local_origin, Point::new(8.0, 24.0));
+        assert_eq!(event.delta, Vector::new(6.0, 0.0));
+    }
 
     impl View for SecondaryView {
         fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {

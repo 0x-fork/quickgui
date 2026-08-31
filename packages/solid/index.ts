@@ -677,6 +677,8 @@ export interface CapturedPointerEvent {
   phase: PointerPhase;
   position: { x: number; y: number };
   origin: { x: number; y: number };
+  localPosition: { x: number; y: number };
+  localOrigin: { x: number; y: number };
   delta: { x: number; y: number };
   button: "left" | "right" | "middle" | "back" | "forward" | "other";
 }
