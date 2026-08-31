@@ -1,4 +1,5 @@
 target/
+.zig-cache/
 /vendor/*/target
 *.profraw
 node_modules
