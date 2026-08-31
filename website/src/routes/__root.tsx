@@ -24,7 +24,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         { charSet: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { title: site.name },
-        { name: 'theme-color', content: '#0a0a0a' },
+        { name: 'theme-color', content: '#ffffff' },
         { property: 'og:site_name', content: site.name },
         { property: 'og:type', content: 'website' },
         { property: 'og:image', content: `${origin}/og.png` },
@@ -33,7 +33,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       ],
       links: [
         { rel: 'stylesheet', href: appCss },
-        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/png', href: '/favicon.png' },
       ],
     }
   },
@@ -63,7 +63,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   const locale = resolveLocale(params.locale) ?? 'en'
 
   return (
-    <html lang={htmlLang(locale)} className="dark" suppressHydrationWarning>
+    <html lang={htmlLang(locale)} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

@@ -2,7 +2,7 @@ export const site = {
   name: 'QuickGUI',
   tagline: 'Desktop UI that only renders what changed.',
   description:
-    'QuickGUI is a damage-driven, GPU-accelerated GUI framework for Rust desktop apps: a GPUI-style fluent API, Flexbox and CSS Grid, retained Unicode text, native accessibility, and bounded virtual scrolling. Clean windows sleep, so idle apps render zero frames.',
+    'QuickGUI is a GPU-accelerated GUI framework for building native desktop apps in Rust or TypeScript. Familiar Flexbox and Grid layout, real text, built-in accessibility — and zero CPU while your app is idle.',
   repo: 'egoist/quickgui',
   /** Fallback when the crates.io lookup is unavailable. */
   version: '0.1.0',

@@ -1,24 +1,14 @@
 import { cn } from '@/lib/utils'
 
+/* Generated brand mark (public/logo.png): a Q whose tail is a lightning
+   bolt. White background, so it sits on white surfaces only. */
 export function Logo({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 32 32"
-      fill="none"
+    <img
+      src="/logo.png"
+      alt=""
       aria-hidden
       className={cn('size-6', className)}
-    >
-      <rect
-        x="7"
-        y="12"
-        width="13"
-        height="13"
-        rx="3"
-        stroke="var(--peach)"
-        strokeOpacity="0.5"
-        strokeWidth="1.75"
-      />
-      <rect x="12" y="7" width="13" height="13" rx="3" fill="var(--peach)" />
-    </svg>
+    />
   )
 }

@@ -13,7 +13,7 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     rust,
     tsx,
     bash,
-    vesper,
+    githubLight,
   ] = await Promise.all([
     import('../lib/snippets'),
     import('shiki/core'),
@@ -21,11 +21,11 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     import('shiki/langs/rust.mjs'),
     import('shiki/langs/tsx.mjs'),
     import('shiki/langs/bash.mjs'),
-    import('shiki/themes/vesper.mjs'),
+    import('shiki/themes/github-light.mjs'),
   ])
 
   const highlighter = await createHighlighterCore({
-    themes: [vesper.default],
+    themes: [githubLight.default],
     langs: [rust.default, tsx.default, bash.default],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   })
@@ -33,7 +33,7 @@ async function highlightAll(): Promise<HighlightedSnippets> {
   const out = {} as HighlightedSnippets
   for (const key of Object.keys(snippets) as Array<SnippetKey>) {
     const { lang, code } = snippets[key]
-    out[key] = highlighter.codeToHtml(code, { lang, theme: 'vesper' })
+    out[key] = highlighter.codeToHtml(code, { lang, theme: 'github-light' })
   }
   return out
 }

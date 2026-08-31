@@ -4,11 +4,8 @@ import { I18nextProvider, useTranslation } from 'react-i18next'
 import { SiteHeader } from '../../components/site-header'
 import { SiteFooter } from '../../components/site-footer'
 import { Hero } from '../../components/sections/hero'
-import { StatsBand } from '../../components/sections/stats-band'
 import { Features } from '../../components/sections/features'
 import { CodeShowcase } from '../../components/sections/code-showcase'
-import { Architecture } from '../../components/sections/architecture'
-import { Statement } from '../../components/sections/statement'
 import { Quickstart } from '../../components/sections/quickstart'
 import { Platforms } from '../../components/sections/platforms'
 import { FinalCta } from '../../components/sections/final-cta'
@@ -73,7 +70,7 @@ function SkipLink() {
   return (
     <a
       href="#features"
-      className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
     >
       {t('common.skipToContent')}
     </a>
@@ -94,16 +91,17 @@ function Home() {
     <I18nextProvider i18n={i18n}>
       <SkipLink />
       <SiteHeader />
-      <main className="space-y-24 pb-24 sm:space-y-28 sm:pb-28">
-        <Hero />
-        <StatsBand />
-        <Features />
-        <CodeShowcase highlighted={highlighted} />
-        <Architecture />
-        <Statement />
-        <Quickstart highlighted={highlighted} />
-        <Platforms />
-        <FinalCta />
+      <main>
+        {/* One bordered column runs the whole page; sections stack flush,
+            separated by hairlines. */}
+        <div className="mx-auto w-full max-w-6xl border-x border-border">
+          <Hero />
+          <Features />
+          <CodeShowcase highlighted={highlighted} />
+          <Quickstart highlighted={highlighted} />
+          <Platforms />
+          <FinalCta />
+        </div>
       </main>
       <SiteFooter />
     </I18nextProvider>

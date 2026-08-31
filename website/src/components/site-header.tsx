@@ -19,7 +19,6 @@ import {
 const NAV_ITEMS = [
   { key: 'nav.features', href: '#features' },
   { key: 'nav.code', href: '#code' },
-  { key: 'nav.architecture', href: '#architecture' },
   { key: 'nav.quickstart', href: '#quickstart' },
 ] as const
 
@@ -33,7 +32,7 @@ function LanguageMenu() {
         <button
           type="button"
           aria-label={t('common.language')}
-          className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-2.5 font-mono text-xs text-foreground/90 transition-colors hover:border-foreground/25 hover:bg-secondary"
+          className="flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 font-mono text-xs text-foreground/90 transition-colors hover:bg-muted"
         >
           <span className="i-lucide-globe size-3.5" aria-hidden />
           {LOCALE_LABELS[current]}
@@ -68,11 +67,11 @@ export function SiteHeader() {
   const current = (i18n.language as Locale) ?? 'en'
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-border/70 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-6">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-sm">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 border-x border-border px-6 sm:px-12">
         <a href={localePath(current)} className="flex items-center gap-2.5">
           <Logo />
-          <span className="text-[15px] font-semibold tracking-tight">
+          <span className="text-sm font-semibold tracking-tight">
             {site.name}
           </span>
         </a>
@@ -98,10 +97,10 @@ export function SiteHeader() {
           </a>
         </nav>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <LanguageMenu />
           <GitHubButton />
-          <Button asChild size="sm" className="hidden h-8 sm:inline-flex">
+          <Button asChild size="sm" className="hidden h-8 px-3.5 sm:inline-flex">
             <a href="#quickstart">{t('common.getStarted')}</a>
           </Button>
         </div>

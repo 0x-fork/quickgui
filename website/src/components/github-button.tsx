@@ -17,12 +17,12 @@ export function GitHubButton() {
       href={site.links.github}
       target="_blank"
       rel="noreferrer"
-      className="flex h-8 items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 text-sm text-foreground/90 transition-colors hover:border-foreground/25 hover:bg-secondary"
+      className="flex h-8 items-center gap-2 border border-border bg-background px-3 text-[13px] text-foreground/90 transition-colors hover:bg-muted"
     >
       <span className="i-simple-icons-github size-3.5" aria-hidden />
       <span className="hidden sm:inline">GitHub</span>
       {typeof data?.stars === 'number' ? (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+        <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground tabular-nums">
           <span className="i-lucide-star size-3" aria-hidden />
           {formatCount(data.stars)}
         </span>
