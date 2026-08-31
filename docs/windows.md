@@ -10,10 +10,10 @@ stable handle. Closing one window does not affect unrelated windows:
 ```rust
 let open = cx.listener("open-inspector", |this, cx| {
     this.inspector = Some(cx.open_window(
-        Inspector::new(),
         WindowOptions::new("Inspector")
             .size(520.0, 360.0)
             .background(Color::rgb8(20, 22, 27)),
+        Inspector::new(),
     ));
     cx.invalidate();
 });
@@ -79,7 +79,7 @@ Application-wide settings and services use one exact Rust type instead of an ent
 through every view constructor:
 
 ```rust
-use quickgui::{App, Global, Subscription};
+use quickgui::{Application, Global, Subscription, WindowOptions};
 
 #[derive(Default)]
 struct Appearance {
@@ -87,9 +87,11 @@ struct Appearance {
 }
 impl Global for Appearance {}
 
-App::new(Launcher::default())
+Application::new()
     .global(Appearance::default())
-    .run()?;
+    .run(|cx| {
+        cx.open_window(WindowOptions::default(), Launcher::default());
+    })?;
 
 // During render, this read conditionally watches the type for this window.
 let warm = cx.watch_global::<Appearance, _>(|appearance| appearance.warm);
@@ -145,19 +147,21 @@ Windows and Linux quit after their last window closes. Examples and applications
 one behavior can select it directly:
 
 ```rust
-use quickgui::{App, QuitMode};
+use quickgui::{Application, QuitMode, WindowOptions};
 
-App::new(Workspace::default())
+Application::new()
     .quit_mode(QuitMode::Explicit)
     .on_window_closed(|window, cx| {
         cx.update_global::<Session, _>(|session| session.note_closed(window));
     })
     .on_reopen(|had_visible_windows, cx| {
         if !had_visible_windows {
-            cx.open_window(Workspace::default(), workspace_window_options());
+            cx.open_window(workspace_window_options(), Workspace::default());
         }
     })
-    .run()?;
+    .run(|cx| {
+        cx.open_window(WindowOptions::default(), Workspace::default());
+    })?;
 ```
 
 `LastWindowClosed` always exits with the final window; `Explicit` waits for `cx.exit()` or native
@@ -193,7 +197,6 @@ use quickgui::{
 };
 
 let dialog = cx.open_window(
-    ConfirmDelete::new(),
     WindowOptions::new("Confirm delete")
         .window_kind(WindowKind::Dialog)
         .window_bounds(WindowBounds::Windowed(Rect::new(220.0, 140.0, 560.0, 360.0)))
@@ -204,6 +207,7 @@ let dialog = cx.open_window(
         .closable(false)
         .content_protected(true)
         .window_level(WindowLevel::AlwaysOnTop),
+    ConfirmDelete::new(),
 );
 
 let menu = SystemPopover::new(244.0, 178.0)
@@ -222,7 +226,7 @@ cx.hide_window().expect("native window");
 cx.show_window_handle(dialog).expect("queued child handle");
 ```
 
-`WindowOptions::display` and `App::display` target automatic centering and borderless fullscreen at
+`WindowOptions::display` targets automatic centering and borderless fullscreen at
 one active monitor. `WindowState::display_id` reports the monitor currently containing a window.
 See [Displays and window placement](displays.md) for work-area geometry, stable macOS identities,
 disconnect fallback, and the event-driven observation contract.

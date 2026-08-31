@@ -4,8 +4,9 @@
 
 ## Deterministic test context
 
-The optional `test-support` feature exposes `TestAppContext`, which consumes the same `App`
-builder without constructing Winit, WGPU, AccessKit, background workers, or platform objects. Each
+The optional `test-support` feature exposes `TestAppContext`, which consumes the same `Application`
+configuration and explicit root `WindowOptions` without constructing Winit, WGPU, AccessKit,
+background workers, or platform objects. Each
 headless window owns the production type-erased view adapter, retained `UiTree`, listener registry,
 window snapshot, parent relation, and dirty bit. Application globals, keymaps, menus, deferred
 entity/global queues, application callbacks, and foreground task registry remain shared exactly as

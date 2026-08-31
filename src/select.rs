@@ -1027,7 +1027,7 @@ fn bounded_validation_message(message: Arc<str>) -> (Option<Arc<str>>, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{App, Color, select_key_bindings, text};
+    use crate::{Application, Color, WindowOptions, select_key_bindings, text};
 
     fn options() -> [PickerItem<&'static str>; 4] {
         [
@@ -1149,9 +1149,9 @@ mod tests {
 
     #[test]
     fn native_popover_commits_through_owner_and_close_lifecycle_clears_state() {
-        let (mut cx, owner) = App::new(SelectOwner::default())
+        let (mut cx, owner) = Application::new()
             .bind_keys(select_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), SelectOwner::default())
             .unwrap();
         cx.click(owner.window_handle(), "select").unwrap();
         let popover = cx

@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
 use quickgui::{
-    Accordion, AccordionItem, AccordionState, App, ClickListener, Collapsible, Color, Element,
-    Event, EventContext, View, ViewContext, div, text,
+    Accordion, AccordionItem, AccordionState, Application, ClickListener, Collapsible, Color,
+    Element, Event, EventContext, View, ViewContext, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(DisclosuresDemo::default())
-        .title("QuickGUI — Disclosures")
-        .size(760.0, 720.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Disclosures").size(760.0, 720.0),
+            DisclosuresDemo::default(),
+        );
+    })
 }
 
 #[derive(Clone, Copy)]

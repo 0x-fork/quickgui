@@ -1,20 +1,24 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    AnchorPlacement, Animation, AnimationExt as _, AnimationPhase, App, Color, ContextMenuLayout,
-    ContextMenuState, Element, PopoverMenu, PopoverMenuItem, PopoverMenuItemKind,
-    PopoverMenuItemState, TitleBarStyle, Tooltip, View, ViewContext, button, div, ease_out_quint,
-    popover_menu_key_bindings, text,
+    AnchorPlacement, Animation, AnimationExt as _, AnimationPhase, Application, Color,
+    ContextMenuLayout, ContextMenuState, Element, PopoverMenu, PopoverMenuItem,
+    PopoverMenuItemKind, PopoverMenuItemState, TitleBarStyle, Tooltip, View, ViewContext, button,
+    div, ease_out_quint, popover_menu_key_bindings, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(TooltipContextDemo::default())
+    Application::new()
         .bind_keys(popover_menu_key_bindings())
-        .title("QuickGUI — Tooltips and context menus")
-        .size(840.0, 580.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
-        .run()
+        .run(|cx| {
+            cx.open_window(
+                quickgui::WindowOptions::new("QuickGUI — Tooltips and context menus")
+                    .size(840.0, 580.0)
+                    .title_bar_style(TitleBarStyle::HiddenInset)
+                    .traffic_light_position(16.0, 13.0),
+                TooltipContextDemo::default(),
+            );
+        })
 }
 
 #[derive(Default)]

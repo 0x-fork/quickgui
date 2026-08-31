@@ -1,16 +1,19 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, Dialog, Element, EventContext, IntoElement, TitleBarStyle, View, ViewContext,
-    WindowAppearance, button, div, text, text_input,
+    Application, Color, Dialog, Element, EventContext, IntoElement, TitleBarStyle, View,
+    ViewContext, WindowAppearance, button, div, text, text_input,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(DialogGallery::default())
-        .title("QuickGUI — Unstyled dialogs")
-        .size(880.0, 620.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Unstyled dialogs")
+                .size(880.0, 620.0)
+                .title_bar_style(TitleBarStyle::HiddenInset),
+            DialogGallery::default(),
+        );
+    })
 }
 
 struct DialogGallery {

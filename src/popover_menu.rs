@@ -1462,10 +1462,10 @@ mod tests {
         let first = cx
             .update(owner, |_view, cx| {
                 cx.open_window(
-                    IntermediatePopover,
                     WindowOptions::new("First popover")
                         .size(160.0, 100.0)
                         .system_popover(PopoverOptions::new(Rect::new(10.0, 10.0, 20.0, 20.0))),
+                    IntermediatePopover,
                 )
             })
             .unwrap();
@@ -1473,10 +1473,10 @@ mod tests {
         let second = cx
             .update(first, |_view, cx| {
                 cx.open_window(
-                    MenuPopover::new(),
                     WindowOptions::new("Nested menu")
                         .size(160.0, 100.0)
                         .system_popover(PopoverOptions::new(Rect::new(20.0, 20.0, 20.0, 20.0))),
+                    MenuPopover::new(),
                 )
             })
             .unwrap();

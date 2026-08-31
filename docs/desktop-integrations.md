@@ -44,7 +44,7 @@ ownership, autostart, window icons/focusability/opacity, workspace visibility, a
 
 Taskbar progress, taskbar overlays, native window icons, opacity, cursor visibility/confinement/
 position/hit testing, focusability, taskbar omission, and workspace visibility are retained window
-properties. They have startup builders on `App`/`WindowOptions`, current-window and handle-targeted
+properties. They have startup builders on `WindowOptions`, current-window and handle-targeted
 `EventContext` commands, externally pumped `AppRunner` commands, and observable `WindowState`
 fields. Unsupported window-manager hints remain in the core snapshot so another runtime or binding
 never becomes a competing source of truth.

@@ -1,12 +1,17 @@
-use quickgui::{App, Color, Element, GridTrack, TitleBarStyle, View, ViewContext, div, text};
+use quickgui::{
+    Application, Color, Element, GridTrack, TitleBarStyle, View, ViewContext, div, text,
+};
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(GridLayoutDemo)
-        .title("QuickGUI — CSS Grid")
-        .size(920.0, 680.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — CSS Grid")
+                .size(920.0, 680.0)
+                .title_bar_style(TitleBarStyle::HiddenInset)
+                .traffic_light_position(16.0, 13.0),
+            GridLayoutDemo,
+        );
+    })
 }
 
 struct GridLayoutDemo;

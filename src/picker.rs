@@ -51,7 +51,7 @@ pub struct PickerConfirm;
 
 /// Default contextual bindings for [`PickerState::element`].
 ///
-/// Applications install these once with [`crate::App::bind_keys`]. The `Picker` context exists
+/// Applications install these once with [`crate::Application::bind_keys`]. The `Picker` context exists
 /// only on the focused picker path, so ordinary text fields retain their normal arrow behavior.
 pub fn picker_key_bindings() -> [KeyBinding; 7] {
     [
@@ -1099,7 +1099,7 @@ fn finite_clamped(value: f32, minimum: f32, maximum: f32, fallback: f32) -> f32 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{App, Color, View, text, text_input};
+    use crate::{Application, Color, View, WindowOptions, text, text_input};
 
     fn item(label: &str) -> PickerItem<usize> {
         PickerItem::new(label, 0)
@@ -1346,8 +1346,10 @@ mod tests {
 
     #[test]
     fn unstyled_picker_uses_caller_elements_and_existing_input_action_paths() {
-        let app = App::new(PickerView::default()).bind_keys(picker_key_bindings());
-        let (mut cx, view) = app.into_test_context().unwrap();
+        let (mut cx, view) = Application::new()
+            .bind_keys(picker_key_bindings())
+            .into_test_context(WindowOptions::default(), PickerView::default())
+            .unwrap();
         let window = view.window_handle();
         assert_eq!(
             cx.focused(window).unwrap(),

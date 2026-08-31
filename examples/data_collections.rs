@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, sync::Arc};
 
 use quickgui::{
-    App, Color, ElementId, GridTrack, IntoElement, TableCellPosition, TableColumn,
+    Application, Color, ElementId, GridTrack, IntoElement, TableCellPosition, TableColumn,
     TableColumnAlign, TableLayout, TableSort, TableSortDirection, TableState, TitleBarStyle,
     TreeLayout, TreeNode, TreeState, View, ViewContext, div, table_key_bindings, text,
     tree_key_bindings,
@@ -10,14 +10,18 @@ use quickgui::{
 const TABLE_ROWS: usize = 20_000;
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(CollectionsGallery::new())
-        .title("QuickGUI — Table and tree collections")
-        .size(1_120.0, 720.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
+    Application::new()
         .bind_keys(table_key_bindings())
         .bind_keys(tree_key_bindings())
-        .run()
+        .run(|cx| {
+            cx.open_window(
+                quickgui::WindowOptions::new("QuickGUI — Table and tree collections")
+                    .size(1_120.0, 720.0)
+                    .title_bar_style(TitleBarStyle::HiddenInset)
+                    .traffic_light_position(16.0, 13.0),
+                CollectionsGallery::new(),
+            );
+        })
 }
 
 #[derive(Clone, Debug)]

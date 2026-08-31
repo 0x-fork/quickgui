@@ -4,7 +4,8 @@ use super::*;
 ///
 /// Create and pump this value on the platform application thread. Each call still dispatches
 /// redraw and lifecycle callbacks synchronously inside Winit, which is required for correct macOS
-/// resize behavior. A blocking [`App::run`] remains the simplest choice for ordinary Rust apps.
+/// resize behavior. A blocking [`Application::run`] remains the simplest choice for ordinary Rust
+/// apps.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct AppRunner {
     pub(super) event_loop: EventLoop<RuntimeEvent>,
@@ -171,8 +172,8 @@ impl AppRunner {
     /// loop turn, so callers can finish installing retained state before pumping again.
     pub fn open_window<V: View>(
         &mut self,
-        view: V,
         options: WindowOptions,
+        view: V,
     ) -> Result<WindowHandle, AppError> {
         if !matches!(self.status, AppRunStatus::Continue) {
             return Err(AppError::Window(
@@ -206,8 +207,8 @@ impl AppRunner {
         &mut self,
         parent: WindowHandle,
         anchor: ElementId,
-        view: V,
         options: WindowOptions,
+        view: V,
     ) -> Result<WindowHandle, AppError> {
         if !matches!(self.status, AppRunStatus::Continue) {
             return Err(AppError::Window(
@@ -462,12 +463,18 @@ impl AppRunner {
     }
 }
 
-/// Configures a native application independently from its windows.
+/// Live application context supplied after native launch and to application callbacks.
 ///
-/// This is the core lifecycle used by language bindings and other embedders. Convert it into an
-/// [`AppRunner`], pump once until [`AppRunner::is_ready`] is true, then queue the first window with
-/// [`AppRunner::open_window`]. Ordinary Rust applications can continue to use [`App::new`], which
-/// combines this lifecycle with an initial root view.
+/// This is the application-wide form of [`EventContext`]. A launch callback has no current
+/// window; windows are created with [`App::open_window`].
+pub type App = EventContext;
+
+/// Configures and starts a native application independently from its windows.
+///
+/// Ordinary Rust applications call [`Self::run`] and open their initial windows from its launch
+/// callback. Language bindings and other embedders can instead convert it into an [`AppRunner`],
+/// pump once until [`AppRunner::is_ready`] is true, then queue a window with
+/// [`AppRunner::open_window`].
 pub struct Application {
     pub(super) app_info: Option<AppInfo>,
     pub(super) app_paths: Option<AppPaths>,
@@ -715,589 +722,18 @@ impl Application {
             relaunched_process: None,
         })
     }
-}
 
-impl Default for Application {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Configures and runs one retained QuickGUI view.
-pub struct App<V> {
-    pub(super) view: V,
-    pub(super) config: AppConfig,
-    pub(super) app_info: Option<AppInfo>,
-    pub(super) app_paths: Option<AppPaths>,
-    pub(super) keymap: Keymap,
-    pub(super) menus: Vec<Menu>,
-    pub(super) globals: GlobalStore,
-    pub(super) assets: Assets,
-    pub(super) fonts: Vec<FontSource>,
-    pub(super) application_callbacks: ApplicationCallbacks,
-    pub(super) quit_mode: QuitMode,
-}
-
-impl<V: View> App<V> {
-    pub fn new(view: V) -> Self {
-        Self {
-            view,
-            config: AppConfig::default(),
-            app_info: None,
-            app_paths: None,
-            keymap: Keymap::default(),
-            menus: Vec::new(),
-            globals: GlobalStore::default(),
-            assets: Assets::default(),
-            fonts: Vec::new(),
-            application_callbacks: ApplicationCallbacks::default(),
-            quit_mode: QuitMode::Default,
-        }
-    }
-
-    /// Configure when closing the final window terminates the application.
-    pub fn quit_mode(mut self, mode: QuitMode) -> Self {
-        self.quit_mode = mode;
-        self
-    }
-
-    /// GPUI-compatible alias for [`Self::quit_mode`].
-    pub fn with_quit_mode(self, mode: QuitMode) -> Self {
-        self.quit_mode(mode)
-    }
-
-    /// Install the immutable package identity exposed by every core context.
-    pub fn app_info(mut self, info: AppInfo) -> Self {
-        self.app_info = Some(info);
-        self
-    }
-
-    pub fn with_app_info(self, info: AppInfo) -> Self {
-        self.app_info(info)
-    }
-
-    /// Override the standard path snapshot retained by the application core.
-    pub fn app_paths(mut self, paths: AppPaths) -> Self {
-        self.app_paths = Some(paths);
-        self
-    }
-
-    pub fn with_app_paths(self, paths: AppPaths) -> Self {
-        self.app_paths(paths)
-    }
-
-    pub fn config(mut self, config: AppConfig) -> Self {
-        self.config = config;
-        self
-    }
-
-    /// Install the immutable application asset source used by every window and background image
-    /// resource. Later registration replaces the previous source.
-    pub fn with_assets(mut self, source: impl crate::AssetSource) -> Self {
-        self.assets = Assets::new(source);
-        self
-    }
-
-    /// Install an already shared application asset handle.
-    pub fn assets(mut self, assets: Assets) -> Self {
-        self.assets = assets;
-        self
-    }
-
-    /// Register one custom OpenType font file or one path in the application asset source.
+    /// Start the native event loop and invoke `on_finish_launching` once application-wide native
+    /// initialization is complete.
     ///
-    /// `include_bytes!("Inter.ttf")` remains zero-copy. String values resolve through
-    /// [`Self::with_assets`] once during startup. Counts, individual bytes, aggregate bytes, and
-    /// collection faces are validated before any native window or renderer is created.
-    pub fn font(mut self, font: impl Into<FontSource>) -> Self {
-        self.fonts.push(font.into());
-        self
-    }
-
-    /// Register custom fonts in declaration order.
-    pub fn fonts(mut self, fonts: impl IntoIterator<Item = impl Into<FontSource>>) -> Self {
-        self.fonts.extend(fonts.into_iter().map(Into::into));
-        self
-    }
-
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.config.title = title.into();
-        self
-    }
-
-    pub fn size(mut self, width: f32, height: f32) -> Self {
-        self.config = self.config.size(width, height);
-        self
-    }
-
-    pub fn window_bounds(mut self, bounds: WindowBounds) -> Self {
-        self.config = self.config.window_bounds(bounds);
-        self
-    }
-
-    pub fn position(mut self, x: f32, y: f32) -> Self {
-        self.config = self.config.position(x, y);
-        self
-    }
-
-    /// Select the display used for automatic root-window placement and fullscreen creation.
-    pub fn display(mut self, display: DisplayId) -> Self {
-        self.config.display_id = Some(display);
-        self
-    }
-
-    pub fn without_display(mut self) -> Self {
-        self.config.display_id = None;
-        self
-    }
-
-    pub fn maximized(mut self, maximized: bool) -> Self {
-        self.config = self.config.maximized(maximized);
-        self
-    }
-
-    pub fn fullscreen(mut self, fullscreen: bool) -> Self {
-        self.config = self.config.fullscreen(fullscreen);
-        self
-    }
-
-    pub fn minimum_size(mut self, width: f32, height: f32) -> Self {
-        self.config = self.config.minimum_size(width, height);
-        self
-    }
-
-    pub fn without_minimum_size(mut self) -> Self {
-        self.config = self.config.without_minimum_size();
-        self
-    }
-
-    pub fn maximum_size(mut self, width: f32, height: f32) -> Self {
-        self.config = self.config.maximum_size(width, height);
-        self
-    }
-
-    pub fn without_maximum_size(mut self) -> Self {
-        self.config = self.config.without_maximum_size();
-        self
-    }
-
-    /// Represent a file in the root window's native document chrome.
-    pub fn represented_file(mut self, path: impl Into<PathBuf>) -> Self {
-        self.config.represented_file = Some(path.into());
-        self
-    }
-
-    /// GPUI-compatible alias for [`Self::represented_file`].
-    pub fn document_path(self, path: impl Into<PathBuf>) -> Self {
-        self.represented_file(path)
-    }
-
-    pub fn without_represented_file(mut self) -> Self {
-        self.config.represented_file = None;
-        self
-    }
-
-    /// Set the root window's initial native unsaved-document indication.
-    pub fn document_edited(mut self, edited: bool) -> Self {
-        self.config.document_edited = edited;
-        self
-    }
-
-    /// Opt the root window into native system tabbing.
-    pub fn tabbing_identifier(mut self, identifier: impl Into<String>) -> Self {
-        self.config.tabbing_identifier = Some(identifier.into());
-        self
-    }
-
-    pub fn without_tabbing_identifier(mut self) -> Self {
-        self.config.tabbing_identifier = None;
-        self
-    }
-
-    pub fn performance_profile(mut self, profile: PerformanceProfile) -> Self {
-        self.config.performance_profile = profile;
-        self
-    }
-
-    /// Force the initial native light/dark appearance for the root window.
-    pub fn window_appearance(mut self, appearance: WindowAppearance) -> Self {
-        self.config.preferred_appearance = Some(appearance);
-        self
-    }
-
-    /// Let the root window follow the operating system appearance.
-    pub fn follow_system_appearance(mut self) -> Self {
-        self.config.preferred_appearance = None;
-        self
-    }
-
-    /// Configure how the native compositor treats transparent root-window pixels.
-    pub fn window_background(mut self, appearance: WindowBackgroundAppearance) -> Self {
-        self.config.window_background = appearance;
-        self
-    }
-
-    pub fn title_bar_style(mut self, style: TitleBarStyle) -> Self {
-        self.config = self.config.title_bar_style(style);
-        self
-    }
-
-    pub fn window_kind(mut self, kind: WindowKind) -> Self {
-        self.config = self.config.window_kind(kind);
-        self
-    }
-
-    pub fn system_popover(mut self, popover: crate::PopoverOptions) -> Self {
-        self.config = self.config.system_popover(popover);
-        self
-    }
-
-    pub fn focus(mut self, focus: bool) -> Self {
-        self.config.focus = focus;
-        self
-    }
-
-    pub fn focusable(mut self, focusable: bool) -> Self {
-        self.config = self.config.focusable(focusable);
-        self
-    }
-
-    pub fn show(mut self, show: bool) -> Self {
-        self.config.show = show;
-        self
-    }
-
-    pub fn movable(mut self, movable: bool) -> Self {
-        self.config.is_movable = movable;
-        self
-    }
-
-    pub fn resizable(mut self, resizable: bool) -> Self {
-        self.config.is_resizable = resizable;
-        self
-    }
-
-    pub fn minimizable(mut self, minimizable: bool) -> Self {
-        self.config.is_minimizable = minimizable;
-        self
-    }
-
-    pub fn maximizable(mut self, maximizable: bool) -> Self {
-        self.config.is_maximizable = maximizable;
-        self
-    }
-
-    pub fn closable(mut self, closable: bool) -> Self {
-        self.config.is_closable = closable;
-        self
-    }
-
-    pub fn decorations(mut self, decorated: bool) -> Self {
-        self.config = self.config.decorations(decorated);
-        self
-    }
-
-    pub fn shadow(mut self, shadow: bool) -> Self {
-        self.config.shadow = shadow;
-        self
-    }
-
-    pub fn content_protected(mut self, protected: bool) -> Self {
-        self.config.content_protected = protected;
-        self
-    }
-
-    pub fn window_level(mut self, level: WindowLevel) -> Self {
-        self.config.window_level = Some(level);
-        self
-    }
-
-    pub fn automatic_window_level(mut self) -> Self {
-        self.config.window_level = None;
-        self
-    }
-
-    pub fn skip_taskbar(mut self, skip: bool) -> Self {
-        self.config.skip_taskbar = skip;
-        self
-    }
-
-    pub fn visible_on_all_workspaces(mut self, visible: bool) -> Self {
-        self.config.visible_on_all_workspaces = visible;
-        self
-    }
-
-    pub fn opacity(mut self, opacity: f32) -> Self {
-        self.config.opacity = opacity;
-        self
-    }
-
-    pub fn icon(mut self, icon: Image) -> Self {
-        self.config.icon = Some(icon);
-        self
-    }
-
-    pub fn without_icon(mut self) -> Self {
-        self.config.icon = None;
-        self
-    }
-
-    pub fn taskbar_progress(mut self, state: TaskbarProgressState, progress: f32) -> Self {
-        self.config = self.config.taskbar_progress(state, progress);
-        self
-    }
-
-    pub fn taskbar_overlay_icon(mut self, icon: Image, description: impl Into<String>) -> Self {
-        self.config = self.config.taskbar_overlay_icon(icon, description);
-        self
-    }
-
-    pub fn without_taskbar_overlay_icon(mut self) -> Self {
-        self.config = self.config.without_taskbar_overlay_icon();
-        self
-    }
-
-    pub fn cursor_visible(mut self, visible: bool) -> Self {
-        self.config.cursor_visible = visible;
-        self
-    }
-
-    pub fn cursor_grab(mut self, mode: CursorGrabMode) -> Self {
-        self.config.cursor_grab = mode;
-        self
-    }
-
-    pub fn cursor_hit_test(mut self, hit_test: bool) -> Self {
-        self.config.cursor_hit_test = hit_test;
-        self
-    }
-
-    pub fn cursor_position(mut self, position: Point) -> Self {
-        self.config.cursor_position = Some(position);
-        self
-    }
-
-    pub fn without_cursor_position(mut self) -> Self {
-        self.config.cursor_position = None;
-        self
-    }
-
-    pub fn always_on_top(mut self, always_on_top: bool) -> Self {
-        self.config = self.config.always_on_top(always_on_top);
-        self
-    }
-
-    pub fn always_on_bottom(mut self, always_on_bottom: bool) -> Self {
-        self.config = self.config.always_on_bottom(always_on_bottom);
-        self
-    }
-
-    /// Position the macOS close button in logical points from the window's top-left.
-    pub fn traffic_light_position(mut self, x: f32, y: f32) -> Self {
-        self.config.traffic_light_position = Some(Point::new(x, y));
-        self
-    }
-
-    pub fn without_traffic_light_position(mut self) -> Self {
-        self.config.traffic_light_position = None;
-        self
-    }
-
-    pub fn reduce_motion(mut self, reduce_motion: bool) -> Self {
-        self.config.reduce_motion = reduce_motion;
-        self
-    }
-
-    /// Open or suppress the retained-tree inspector for the root window.
-    #[cfg(feature = "inspector")]
-    pub fn inspector(mut self, inspector: bool) -> Self {
-        self.config.inspector = inspector;
-        self
-    }
-
-    /// Add application key bindings. Later bindings take precedence at equal context depth.
-    pub fn bind_keys(mut self, bindings: impl IntoIterator<Item = KeyBinding>) -> Self {
-        self.keymap.add_bindings(bindings);
-        self
-    }
-
-    /// Replace the complete application keymap.
-    pub fn keymap(mut self, keymap: Keymap) -> Self {
-        self.keymap = keymap;
-        self
-    }
-
-    /// Append one declarative application menu.
-    pub fn menu(mut self, menu: Menu) -> Self {
-        self.menus.push(menu);
-        self
-    }
-
-    /// Replace the complete declarative application menu set.
-    pub fn menus(mut self, menus: impl IntoIterator<Item = Menu>) -> Self {
-        self.menus = menus.into_iter().collect();
-        self
-    }
-
-    /// Install or replace one main-thread application-global value before launch.
-    ///
-    /// Every native window opened by this application reads the same typed store. Values are
-    /// dropped with the runtime after the final window closes.
-    pub fn global<G: Global>(self, global: G) -> Self {
-        self.globals.set(global);
-        self
-    }
-
-    /// Handle URLs supplied by the operating system, including `file:` URLs.
-    ///
-    /// The callback is application-wide and receives a context without a current window. It can
-    /// update globals/entities or open a new top-level window. Subsequent registration replaces
-    /// the previous callback.
-    pub fn on_open_urls(
+    /// The callback receives a windowless [`App`] context. Open the initial window there with
+    /// [`App::open_window`].
+    pub fn run(
         mut self,
-        callback: impl FnMut(OpenUrls, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.open_urls = Some(Box::new(callback));
-        self
-    }
+        on_finish_launching: impl FnOnce(&mut App) + 'static,
+    ) -> Result<(), AppError> {
+        self.application_callbacks.finish_launching = Some(Box::new(on_finish_launching));
 
-    /// Handle a Dock/Finder request to reopen an already-running macOS application.
-    pub fn on_reopen(mut self, callback: impl FnMut(bool, &mut EventContext) + 'static) -> Self {
-        self.application_callbacks.reopen = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle the operating system waking from sleep.
-    pub fn on_system_wake(mut self, callback: impl FnMut(&mut EventContext) + 'static) -> Self {
-        self.application_callbacks.system_wake = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle a native keyboard-layout change after QuickGUI installs the new command map.
-    ///
-    /// The callback is notification-driven and application-wide. Views that only need to render
-    /// the layout name should prefer [`ViewContext::keyboard_layout`], which invalidates only the
-    /// views that read it.
-    pub fn on_keyboard_layout_change(
-        mut self,
-        callback: impl FnMut(&KeyboardLayout, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.keyboard_layout = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle activation of a delivered system notification or one of its action buttons.
-    pub fn on_system_notification_response(
-        mut self,
-        callback: impl FnMut(SystemNotificationResponse, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.system_notification_response = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle a registered system-wide keyboard shortcut when it is pressed.
-    pub fn on_global_shortcut(
-        mut self,
-        callback: impl FnMut(GlobalShortcutEvent, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.global_shortcut = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle arguments and the working directory forwarded by a later application process.
-    pub fn on_second_instance(
-        mut self,
-        callback: impl FnMut(SecondInstanceEvent, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.second_instance = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle native power, thermal, shutdown, and login-session transitions.
-    pub fn on_power_event(
-        mut self,
-        callback: impl FnMut(PowerEvent, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.power_event = Some(Box::new(callback));
-        self
-    }
-
-    /// Handle clicks, scrolling, and native menu actions from application tray icons.
-    pub fn on_tray_event(
-        mut self,
-        callback: impl FnMut(TrayEvent, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.tray_event = Some(Box::new(callback));
-        self
-    }
-
-    /// Run after a native window and its owned resources have been removed from the application.
-    ///
-    /// Owned child windows close first. The callback has no current window, so opening a window
-    /// creates a new top-level window. Subsequent registration replaces the previous callback.
-    pub fn on_window_closed(
-        mut self,
-        callback: impl FnMut(WindowHandle, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.window_closed = Some(Box::new(callback));
-        self
-    }
-
-    /// Run the first preventable phase of an orderly application quit.
-    pub fn on_before_quit(
-        mut self,
-        callback: impl FnMut(QuitRequest, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.before_quit = Some(Box::new(callback));
-        self
-    }
-
-    /// Run the final preventable phase immediately before owned windows are torn down.
-    pub fn on_will_quit(
-        mut self,
-        callback: impl FnMut(QuitRequest, &mut EventContext) + 'static,
-    ) -> Self {
-        self.application_callbacks.will_quit = Some(Box::new(callback));
-        self
-    }
-
-    /// Convert this application into an externally pumped native event loop.
-    ///
-    /// This is intended for embedders which already own a language runtime on the platform main
-    /// thread. It preserves QuickGUI's damage-driven scheduling: the caller chooses only the
-    /// maximum time before control is yielded back to that runtime.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn into_runner(self) -> Result<AppRunner, AppError> {
-        let event_loop = EventLoop::with_user_event().build()?;
-        event_loop.set_control_flow(ControlFlow::Wait);
-        let initial_window = WindowRequest::new(self.view, self.config);
-        let root_window = initial_window.handle;
-        let runtime = Runtime::new(
-            RuntimeStartup {
-                initial_window: Some(initial_window),
-                app_info: self.app_info,
-                app_paths: self.app_paths,
-                globals: self.globals,
-                keymap: self.keymap,
-                menus: self.menus,
-                assets: self.assets,
-                fonts: self.fonts,
-                application_callbacks: self.application_callbacks,
-                quit_mode: self.quit_mode,
-            },
-            event_loop.create_proxy(),
-        )?;
-        Ok(AppRunner {
-            event_loop,
-            runtime,
-            root_window,
-            root_window_pending: false,
-            status: AppRunStatus::Continue,
-            relaunched_process: None,
-        })
-    }
-
-    pub fn run(self) -> Result<(), AppError> {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let AppRunner {
@@ -1328,7 +764,7 @@ impl<V: View> App<V> {
             event_loop.set_control_flow(ControlFlow::Wait);
             let mut runtime = Runtime::new(
                 RuntimeStartup {
-                    initial_window: Some(WindowRequest::new(self.view, self.config)),
+                    initial_window: None,
                     app_info: self.app_info,
                     app_paths: self.app_paths,
                     globals: self.globals,
@@ -1352,5 +788,11 @@ impl<V: View> App<V> {
                 None => Ok(()),
             }
         }
+    }
+}
+
+impl Default for Application {
+    fn default() -> Self {
+        Self::new()
     }
 }

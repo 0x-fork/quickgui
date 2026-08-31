@@ -244,7 +244,7 @@ and focused key dispatch cannot diverge.
 Applications that need to update non-view state can observe the same boundary directly:
 
 ```rust
-App::new(view).on_keyboard_layout_change(|layout, cx| {
+Application::new().on_keyboard_layout_change(|layout, cx| {
     tracing::info!(layout = layout.id(), "keyboard layout changed");
     cx.update_global::<ShortcutLabels, _>(|labels| labels.refresh(layout));
 })
@@ -289,7 +289,7 @@ div()
 ```
 
 ```rust
-App::new(view).bind_keys([
+Application::new().bind_keys([
     KeyBinding::new("platform-s", Save, Some("Editor")),
     KeyBinding::new("platform-k left", SplitLeft, Some("Workspace > Editor")),
 ]);
@@ -330,7 +330,7 @@ let palette = PickerState::new([
         .keywords("view explorer panel"),
 ])?;
 
-App::new(view).bind_keys(picker_key_bindings());
+Application::new().bind_keys(picker_key_bindings());
 
 // Inside View::render:
 let colors = self.command_palette_colors();
@@ -394,7 +394,7 @@ let menus = [
     ]),
 ];
 
-App::new(view).menus(menus);
+Application::new().menus(menus);
 ```
 
 On macOS and Windows these are native menu trees with keyboard navigation, nested submenus,

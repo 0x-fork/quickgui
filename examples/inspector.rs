@@ -1,20 +1,24 @@
 #[cfg(feature = "inspector")]
 mod enabled {
     use quickgui::{
-        App, Color, Element, Event, EventContext, Key, KeyBinding, Menu, MenuItem, View,
+        Application, Color, Element, Event, EventContext, Key, KeyBinding, Menu, MenuItem, View,
         ViewContext, button, div, text,
     };
 
     quickgui::actions!(inspector_actions, [ToggleInspector]);
 
     pub fn run() -> Result<(), quickgui::AppError> {
-        App::new(InspectorExample)
-            .title("QuickGUI — Retained-tree inspector")
-            .size(920.0, 620.0)
-            .inspector(true)
+        Application::new()
             .bind_keys([KeyBinding::new("platform-alt-i", ToggleInspector, None)])
             .menus([Menu::new("View").item(MenuItem::action("Toggle Inspector", ToggleInspector))])
-            .run()
+            .run(|cx| {
+                cx.open_window(
+                    quickgui::WindowOptions::new("QuickGUI — Retained-tree inspector")
+                        .size(920.0, 620.0)
+                        .inspector(true),
+                    InspectorExample,
+                );
+            })
     }
 
     struct InspectorExample;

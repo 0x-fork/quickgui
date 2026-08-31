@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, AppConfig, ClipboardEntry, ClipboardError, ClipboardImage, ClipboardImageFormat,
+    Application, ClipboardEntry, ClipboardError, ClipboardImage, ClipboardImageFormat,
     ClipboardItem, Color, Element, ExternalPaths, IntoElement, TitleBarStyle, View, ViewContext,
-    button, div, text, text_input,
+    WindowOptions, button, div, text, text_input,
 };
 
 const ONE_PIXEL_PNG: &[u8] = &[
@@ -13,16 +13,17 @@ const ONE_PIXEL_PNG: &[u8] = &[
 ];
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(ClipboardDemo::default())
-        .config(
-            AppConfig::new("QuickGUI — Clipboard")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Clipboard")
                 .size(760.0, 580.0)
                 .minimum_size(620.0, 480.0)
                 .title_bar_style(TitleBarStyle::HiddenInset)
                 .traffic_light_position(16.0, 14.0)
                 .background(Color::rgb8(17, 20, 27)),
-        )
-        .run()
+            ClipboardDemo::default(),
+        );
+    })
 }
 
 struct ClipboardDemo {

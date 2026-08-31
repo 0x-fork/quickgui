@@ -180,7 +180,7 @@ img(&animation).size(320.0, 180.0).object_fit(ObjectFit::Cover)
 Playback schedules only the next frame deadline instead of enabling a display-rate frame loop.
 Offscreen and occluded animations pause without catching up when they return; finite animations
 stop on their last frame. macOS Reduce Motion is respected automatically, and
-`App::reduce_motion(true)` provides an application override. One animation retains at most 256
+`WindowOptions::reduce_motion(true)` provides a per-window override. One animation retains at most 256
 frames and 64 MiB of unique decoded pixels, while delays faster than 60 Hz are clamped. See
 `cargo run --release --example animated_images` for direct, finite, and asynchronously loaded
 animations.

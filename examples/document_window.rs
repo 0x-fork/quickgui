@@ -1,20 +1,23 @@
 use std::{path::PathBuf, sync::Arc};
 
 use quickgui::{
-    App, Color, Element, IntoElement, View, ViewContext, WindowOptions, button, div, text,
+    Application, Color, Element, IntoElement, View, ViewContext, WindowOptions, button, div, text,
 };
 
 const WORKSPACE_TABS: &str = "dev.quickgui.example.document-window";
 
 fn main() -> Result<(), quickgui::AppError> {
     let path = manifest_path();
-    App::new(DocumentWindow::new(path.clone(), 1))
-        .title("QuickGUI — Document window")
-        .size(760.0, 620.0)
-        .minimum_size(620.0, 480.0)
-        .represented_file(path)
-        .tabbing_identifier(WORKSPACE_TABS)
-        .run()
+    Application::new().run(move |cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Document window")
+                .size(760.0, 620.0)
+                .minimum_size(620.0, 480.0)
+                .represented_file(path.clone())
+                .tabbing_identifier(WORKSPACE_TABS),
+            DocumentWindow::new(path, 1),
+        );
+    })
 }
 
 struct DocumentWindow {
@@ -93,12 +96,12 @@ impl View for DocumentWindow {
             let number = this.opened;
             let path = this.path.clone();
             cx.open_window(
-                DocumentWindow::new(path.clone(), number),
                 WindowOptions::new(format!("QuickGUI document #{number}"))
                     .size(760.0, 620.0)
                     .minimum_size(620.0, 480.0)
-                    .represented_file(path)
+                    .represented_file(path.clone())
                     .tabbing_identifier(WORKSPACE_TABS),
+                DocumentWindow::new(path, number),
             );
             this.status = format!("Opened document window #{number} in the native tab group");
             cx.invalidate();

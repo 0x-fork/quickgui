@@ -9,8 +9,8 @@ use std::{
 };
 
 use quickgui::{
-    App, AsyncContextError, AsyncViewContext, Color, Element, ElementId, Event, EventContext,
-    FrameMetrics, Key, View, ViewContext, VirtualList, WindowKind, div, text,
+    Application, AsyncContextError, AsyncViewContext, Color, Element, ElementId, Event,
+    EventContext, FrameMetrics, Key, View, ViewContext, VirtualList, WindowKind, div, text,
 };
 use serde::Serialize;
 
@@ -37,15 +37,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let automated_probe = std::env::args_os().any(|argument| argument == "--perf-probe");
     let probe_failed = Arc::new(AtomicBool::new(false));
 
-    let mut app = App::new(ScrollDemo::new(automated_probe, Arc::clone(&probe_failed)))
-        .title("QuickGUI — 100,000 row stress test")
-        .size(1_000.0, 720.0);
+    let mut options =
+        quickgui::WindowOptions::new("QuickGUI — 100,000 row stress test").size(1_000.0, 720.0);
     if automated_probe {
         // macOS suspends redraw delivery for fully occluded windows. Keep the live probe exposed
         // on the primary display while a terminal or CI harness captures its output.
-        app = app.window_kind(WindowKind::Floating).position(80.0, 80.0);
+        options = options
+            .window_kind(WindowKind::Floating)
+            .position(80.0, 80.0);
     }
-    app.run()?;
+    let view_probe_failed = Arc::clone(&probe_failed);
+    Application::new().run(move |cx| {
+        cx.open_window(options, ScrollDemo::new(automated_probe, view_probe_failed));
+    })?;
 
     if probe_failed.load(Ordering::Relaxed) {
         return Err(Box::new(PerformanceGateFailed));

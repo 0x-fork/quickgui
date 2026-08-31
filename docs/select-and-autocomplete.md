@@ -19,9 +19,9 @@ The application owns committed values, source replacement, and every visual prop
 contextual bindings once:
 
 ```rust
-use quickgui::{App, combobox_key_bindings, select_key_bindings};
+use quickgui::{Application, combobox_key_bindings, select_key_bindings};
 
-App::new(Editor::new())
+Application::new()
     .bind_keys(select_key_bindings())
     .bind_keys(combobox_key_bindings());
 ```

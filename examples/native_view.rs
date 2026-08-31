@@ -6,8 +6,8 @@ mod app {
     use objc2_app_kit::NSTextField;
     use objc2_foundation::{MainThreadMarker, NSRect, NSString};
     use quickgui::{
-        AccessibilityRole, AnchorPlacement, App, Color, KeyBinding, Menu, MenuItem, OsAction, View,
-        ViewContext, button, div, native_view, overlay, text, text_input,
+        AccessibilityRole, AnchorPlacement, Application, Color, KeyBinding, Menu, MenuItem,
+        OsAction, View, ViewContext, button, div, native_view, overlay, text, text_input,
     };
 
     quickgui::actions!(edit, [Cut, Copy, Paste, SelectAll, Undo, Redo]);
@@ -34,24 +34,28 @@ mod app {
             )));
             field.setStringValue(&NSString::from_str("Native child view"));
         }
-        App::new(NativeViewDemo {
-            field,
-            gpu_value: Arc::from("GPU child input"),
-            native_visible: true,
-            overlay_open: false,
-        })
-        .title("QuickGUI — Native NSView composition")
-        .size(760.0, 500.0)
-        .bind_keys([
-            KeyBinding::new("platform-z", Undo, None),
-            KeyBinding::new("platform-shift-z", Redo, None),
-            KeyBinding::new("platform-x", Cut, None),
-            KeyBinding::new("platform-c", Copy, None),
-            KeyBinding::new("platform-v", Paste, None),
-            KeyBinding::new("platform-a", SelectAll, None),
-        ])
-        .menu(edit_menu())
-        .run()
+        Application::new()
+            .bind_keys([
+                KeyBinding::new("platform-z", Undo, None),
+                KeyBinding::new("platform-shift-z", Redo, None),
+                KeyBinding::new("platform-x", Cut, None),
+                KeyBinding::new("platform-c", Copy, None),
+                KeyBinding::new("platform-v", Paste, None),
+                KeyBinding::new("platform-a", SelectAll, None),
+            ])
+            .menu(edit_menu())
+            .run(move |cx| {
+                cx.open_window(
+                    quickgui::WindowOptions::new("QuickGUI — Native NSView composition")
+                        .size(760.0, 500.0),
+                    NativeViewDemo {
+                        field,
+                        gpu_value: Arc::from("GPU child input"),
+                        native_visible: true,
+                        overlay_open: false,
+                    },
+                );
+            })
     }
 
     struct NativeViewDemo {

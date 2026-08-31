@@ -1,17 +1,19 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    App, Checkbox, Color, Element, Event, EventContext, Radio, RadioGroup, Switch, ToggleState,
-    View, ViewContext, button, div, text,
+    Application, Checkbox, Color, Element, Event, EventContext, Radio, RadioGroup, Switch,
+    ToggleState, View, ViewContext, button, div, text,
 };
 
 const CONTROL_TRANSITION: Duration = Duration::from_millis(100);
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(SelectionControlsDemo::default())
-        .title("QuickGUI — Selection controls")
-        .size(720.0, 640.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Selection controls").size(720.0, 640.0),
+            SelectionControlsDemo::default(),
+        );
+    })
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

@@ -1,0 +1,797 @@
+use super::*;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum NodeTag {
+    Root,
+    View,
+    Button,
+    Text,
+    Sentinel,
+    Input,
+    Markdown,
+    VirtualList,
+    Terminal,
+    Svg,
+}
+
+impl NodeTag {
+    pub(super) fn decode(value: u8) -> std::result::Result<Self, ProtocolError> {
+        match value {
+            1 => Ok(Self::View),
+            2 => Ok(Self::Button),
+            3 => Ok(Self::Text),
+            4 => Ok(Self::Sentinel),
+            5 => Ok(Self::Input),
+            6 => Ok(Self::Markdown),
+            7 => Ok(Self::VirtualList),
+            8 => Ok(Self::Terminal),
+            9 => Ok(Self::Svg),
+            _ => Err(ProtocolError::new(format!("unknown node tag {value}"))),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum PropertyValue {
+    Bool(bool),
+    Number(f32),
+    Color(u32),
+    String(Arc<str>),
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct NativeNode {
+    pub(super) tag: NodeTag,
+    pub(super) parent: Option<u32>,
+    pub(super) children: Vec<u32>,
+    pub(super) text: Arc<str>,
+    pub(super) properties: Vec<(u16, PropertyValue)>,
+}
+
+impl NativeNode {
+    pub(super) fn new(tag: NodeTag) -> Self {
+        Self {
+            tag,
+            parent: None,
+            children: Vec::new(),
+            text: Arc::from(""),
+            properties: Vec::new(),
+        }
+    }
+
+    pub(super) fn property(&self, key: u16) -> Option<&PropertyValue> {
+        self.properties
+            .binary_search_by_key(&key, |(property, _)| *property)
+            .ok()
+            .map(|index| &self.properties[index].1)
+    }
+
+    pub(super) fn number(&self, key: u16) -> Option<f32> {
+        match self.property(key) {
+            Some(PropertyValue::Number(value)) if value.is_finite() => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub(super) fn boolean(&self, key: u16) -> Option<bool> {
+        match self.property(key) {
+            Some(PropertyValue::Bool(value)) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub(super) fn string(&self, key: u16) -> Option<&str> {
+        match self.property(key) {
+            Some(PropertyValue::String(value)) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub(super) fn color(&self, key: u16) -> Option<Color> {
+        match self.property(key) {
+            Some(PropertyValue::Color(value)) => Some(unpack_color(*value)),
+            _ => None,
+        }
+    }
+
+    pub(super) fn set_property(&mut self, key: u16, value: Option<PropertyValue>) {
+        match self
+            .properties
+            .binary_search_by_key(&key, |(property, _)| *property)
+        {
+            Ok(index) => match value {
+                Some(value) => self.properties[index].1 = value,
+                None => {
+                    self.properties.remove(index);
+                }
+            },
+            Err(index) => {
+                if let Some(value) = value {
+                    self.properties.insert(index, (key, value));
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct NativeTree {
+    pub(super) nodes: HashMap<u32, NativeNode>,
+    pub(super) revision: u32,
+}
+
+impl Default for NativeTree {
+    fn default() -> Self {
+        let mut nodes = HashMap::with_capacity(64);
+        nodes.insert(ROOT_NODE, NativeNode::new(NodeTag::Root));
+        Self { nodes, revision: 0 }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) enum Mutation {
+    Create {
+        id: u32,
+        tag: NodeTag,
+        text: Arc<str>,
+    },
+    SetProperty {
+        id: u32,
+        key: u16,
+        value: Option<PropertyValue>,
+    },
+    ReplaceText {
+        id: u32,
+        text: Arc<str>,
+    },
+    Insert {
+        parent: u32,
+        child: u32,
+        before: Option<u32>,
+    },
+    Remove {
+        parent: u32,
+        child: u32,
+    },
+    Cleanup {
+        parent: u32,
+        children: Vec<u32>,
+    },
+}
+
+pub(super) struct TreeTransaction<'a> {
+    pub(super) base: &'a NativeTree,
+    pub(super) overlay: HashMap<u32, Option<NativeNode>>,
+}
+
+impl<'a> TreeTransaction<'a> {
+    pub(super) fn new(base: &'a NativeTree) -> Self {
+        Self {
+            base,
+            overlay: HashMap::new(),
+        }
+    }
+
+    pub(super) fn node(&self, id: u32) -> Option<&NativeNode> {
+        match self.overlay.get(&id) {
+            Some(node) => node.as_ref(),
+            None => self.base.nodes.get(&id),
+        }
+    }
+
+    pub(super) fn edit(&mut self, id: u32) -> std::result::Result<&mut NativeNode, ProtocolError> {
+        if !self.overlay.contains_key(&id) {
+            let node = self
+                .base
+                .nodes
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| ProtocolError::new(format!("node {id} does not exist")))?;
+            self.overlay.insert(id, Some(node));
+        }
+        self.overlay
+            .get_mut(&id)
+            .and_then(Option::as_mut)
+            .ok_or_else(|| ProtocolError::new(format!("node {id} was already removed")))
+    }
+
+    pub(super) fn create(
+        &mut self,
+        id: u32,
+        tag: NodeTag,
+        text: Arc<str>,
+    ) -> std::result::Result<(), ProtocolError> {
+        if id == ROOT_NODE {
+            return Err(ProtocolError::new("node id 0 is reserved for the root"));
+        }
+        if self.node(id).is_some() {
+            return Err(ProtocolError::new(format!("node {id} already exists")));
+        }
+        let mut node = NativeNode::new(tag);
+        node.text = text;
+        self.overlay.insert(id, Some(node));
+        Ok(())
+    }
+
+    pub(super) fn set_property(
+        &mut self,
+        id: u32,
+        key: u16,
+        value: Option<PropertyValue>,
+    ) -> std::result::Result<(), ProtocolError> {
+        if !(1..=property::LAST).contains(&key) {
+            return Err(ProtocolError::new(format!("unknown property code {key}")));
+        }
+        self.edit(id)?.set_property(key, value);
+        Ok(())
+    }
+
+    pub(super) fn replace_text(
+        &mut self,
+        id: u32,
+        text: Arc<str>,
+    ) -> std::result::Result<(), ProtocolError> {
+        let node = self.edit(id)?;
+        if node.tag != NodeTag::Text {
+            return Err(ProtocolError::new(format!("node {id} is not a text node")));
+        }
+        node.text = text;
+        Ok(())
+    }
+
+    pub(super) fn insert(
+        &mut self,
+        parent: u32,
+        child: u32,
+        before: Option<u32>,
+    ) -> std::result::Result<(), ProtocolError> {
+        if parent == child {
+            return Err(ProtocolError::new("a node cannot contain itself"));
+        }
+        if self.node(parent).is_none() || self.node(child).is_none() {
+            return Err(ProtocolError::new(format!(
+                "cannot insert missing node {child} into {parent}"
+            )));
+        }
+        if before == Some(child) && self.node(child).and_then(|node| node.parent) == Some(parent) {
+            return Ok(());
+        }
+        if let Some(anchor) = before
+            && self.node(anchor).and_then(|node| node.parent) != Some(parent)
+        {
+            return Err(ProtocolError::new(format!(
+                "anchor {anchor} is not a child of {parent}"
+            )));
+        }
+
+        let mut ancestor = Some(parent);
+        for _ in 0..MAX_TREE_DEPTH {
+            let Some(id) = ancestor else {
+                break;
+            };
+            if id == child {
+                return Err(ProtocolError::new("insertion would create a cycle"));
+            }
+            ancestor = self.node(id).and_then(|node| node.parent);
+        }
+        if ancestor.is_some() {
+            return Err(ProtocolError::new(format!(
+                "tree depth exceeds {MAX_TREE_DEPTH}"
+            )));
+        }
+
+        if let Some(previous_parent) = self.node(child).and_then(|node| node.parent) {
+            self.edit(previous_parent)?
+                .children
+                .retain(|candidate| *candidate != child);
+        }
+        let index = before
+            .and_then(|anchor| {
+                self.node(parent)?
+                    .children
+                    .iter()
+                    .position(|candidate| *candidate == anchor)
+            })
+            .unwrap_or_else(|| self.node(parent).map_or(0, |node| node.children.len()));
+        self.edit(parent)?.children.insert(index, child);
+        self.edit(child)?.parent = Some(parent);
+        Ok(())
+    }
+
+    pub(super) fn remove(
+        &mut self,
+        parent: u32,
+        child: u32,
+    ) -> std::result::Result<(), ProtocolError> {
+        if child == ROOT_NODE {
+            return Err(ProtocolError::new("the root node cannot be removed"));
+        }
+        if self.node(child).and_then(|node| node.parent) != Some(parent) {
+            return Err(ProtocolError::new(format!(
+                "node {child} is not a child of {parent}"
+            )));
+        }
+        self.edit(parent)?
+            .children
+            .retain(|candidate| *candidate != child);
+
+        let mut pending = vec![child];
+        let mut removed = 0_usize;
+        while let Some(id) = pending.pop() {
+            removed += 1;
+            if removed > MAX_NODES {
+                return Err(ProtocolError::new("removed subtree exceeds the node limit"));
+            }
+            let children = self
+                .node(id)
+                .map(|node| node.children.clone())
+                .unwrap_or_default();
+            pending.extend(children);
+            self.overlay.insert(id, None);
+        }
+        Ok(())
+    }
+
+    pub(super) fn finish(
+        self,
+    ) -> std::result::Result<HashMap<u32, Option<NativeNode>>, ProtocolError> {
+        let removed = self.overlay.values().filter(|node| node.is_none()).count();
+        let inserted = self
+            .overlay
+            .iter()
+            .filter(|(id, node)| node.is_some() && !self.base.nodes.contains_key(id))
+            .count();
+        let final_len = self
+            .base
+            .nodes
+            .len()
+            .saturating_sub(removed)
+            .saturating_add(inserted);
+        if final_len > MAX_NODES + 1 {
+            return Err(ProtocolError::new(format!(
+                "tree cannot contain more than {MAX_NODES} application nodes"
+            )));
+        }
+        Ok(self.overlay)
+    }
+}
+
+pub(super) fn commit_overlay(
+    tree: &mut NativeTree,
+    overlay: HashMap<u32, Option<NativeNode>>,
+) -> u32 {
+    for (id, node) in overlay {
+        match node {
+            Some(node) => {
+                tree.nodes.insert(id, node);
+            }
+            None => {
+                tree.nodes.remove(&id);
+            }
+        }
+    }
+    tree.revision = tree.revision.wrapping_add(1).max(1);
+    tree.revision
+}
+
+pub(super) fn apply_mutations(
+    tree: &mut NativeTree,
+    mutations: Vec<Mutation>,
+) -> std::result::Result<u32, ProtocolError> {
+    let mut transaction = TreeTransaction::new(tree);
+    for mutation in mutations {
+        match mutation {
+            Mutation::Create { id, tag, text } => transaction.create(id, tag, text)?,
+            Mutation::SetProperty { id, key, value } => transaction.set_property(id, key, value)?,
+            Mutation::ReplaceText { id, text } => transaction.replace_text(id, text)?,
+            Mutation::Insert {
+                parent,
+                child,
+                before,
+            } => transaction.insert(parent, child, before)?,
+            Mutation::Remove { parent, child } => transaction.remove(parent, child)?,
+            Mutation::Cleanup { parent, children } => {
+                for child in children {
+                    if transaction.node(child).is_some() {
+                        transaction.remove(parent, child)?;
+                    }
+                }
+            }
+        }
+    }
+    let overlay = transaction.finish()?;
+    Ok(commit_overlay(tree, overlay))
+}
+
+#[derive(Debug)]
+pub(super) struct ProtocolError(String);
+
+impl ProtocolError {
+    pub(super) fn new(reason: impl Into<String>) -> Self {
+        Self(reason.into())
+    }
+}
+
+impl fmt::Display for ProtocolError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+pub(super) struct Reader<'a> {
+    pub(super) bytes: &'a [u8],
+    pub(super) offset: usize,
+}
+
+impl<'a> Reader<'a> {
+    pub(super) fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    pub(super) fn take(&mut self, length: usize) -> std::result::Result<&'a [u8], ProtocolError> {
+        let end = self
+            .offset
+            .checked_add(length)
+            .filter(|end| *end <= self.bytes.len())
+            .ok_or_else(|| ProtocolError::new("truncated mutation batch"))?;
+        let value = &self.bytes[self.offset..end];
+        self.offset = end;
+        Ok(value)
+    }
+
+    pub(super) fn u8(&mut self) -> std::result::Result<u8, ProtocolError> {
+        Ok(self.take(1)?[0])
+    }
+
+    pub(super) fn u16(&mut self) -> std::result::Result<u16, ProtocolError> {
+        Ok(u16::from_le_bytes(self.take(2)?.try_into().unwrap()))
+    }
+
+    pub(super) fn u32(&mut self) -> std::result::Result<u32, ProtocolError> {
+        Ok(u32::from_le_bytes(self.take(4)?.try_into().unwrap()))
+    }
+
+    pub(super) fn f32(&mut self) -> std::result::Result<f32, ProtocolError> {
+        let value = f32::from_le_bytes(self.take(4)?.try_into().unwrap());
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(ProtocolError::new("property numbers must be finite"))
+        }
+    }
+
+    pub(super) fn string(&mut self) -> std::result::Result<Arc<str>, ProtocolError> {
+        let length = self.u32()? as usize;
+        if length > MAX_STRING_BYTES {
+            return Err(ProtocolError::new(format!(
+                "strings cannot exceed {MAX_STRING_BYTES} bytes"
+            )));
+        }
+        let value = std::str::from_utf8(self.take(length)?)
+            .map_err(|_| ProtocolError::new("strings must contain valid UTF-8"))?;
+        Ok(Arc::from(value))
+    }
+
+    pub(super) fn finished(&self) -> bool {
+        self.offset == self.bytes.len()
+    }
+}
+
+pub(super) fn decode_batch(bytes: &[u8]) -> std::result::Result<Vec<Mutation>, ProtocolError> {
+    if bytes.len() > MAX_BATCH_BYTES {
+        return Err(ProtocolError::new(format!(
+            "one mutation batch cannot exceed {MAX_BATCH_BYTES} bytes"
+        )));
+    }
+    let mut reader = Reader::new(bytes);
+    if reader.take(4)? != PROTOCOL_MAGIC {
+        return Err(ProtocolError::new("invalid mutation batch magic"));
+    }
+    let version = reader.u16()?;
+    if version != PROTOCOL_VERSION {
+        return Err(ProtocolError::new(format!(
+            "unsupported mutation protocol version {version}"
+        )));
+    }
+    let count = reader.u32()? as usize;
+    if count > MAX_MUTATIONS {
+        return Err(ProtocolError::new(format!(
+            "one batch cannot contain more than {MAX_MUTATIONS} mutations"
+        )));
+    }
+    let mut mutations = Vec::with_capacity(count.min(4_096));
+    for _ in 0..count {
+        let mutation = match reader.u8()? {
+            1 => Mutation::Create {
+                id: reader.u32()?,
+                tag: NodeTag::decode(reader.u8()?)?,
+                text: Arc::from(""),
+            },
+            2 => Mutation::Create {
+                id: reader.u32()?,
+                tag: NodeTag::Text,
+                text: reader.string()?,
+            },
+            3 => Mutation::Create {
+                id: reader.u32()?,
+                tag: NodeTag::Sentinel,
+                text: Arc::from(""),
+            },
+            4 => {
+                let id = reader.u32()?;
+                let key = reader.u16()?;
+                let value = match reader.u8()? {
+                    0 => None,
+                    1 => Some(PropertyValue::Bool(match reader.u8()? {
+                        0 => false,
+                        1 => true,
+                        value => {
+                            return Err(ProtocolError::new(format!(
+                                "invalid boolean byte {value}"
+                            )));
+                        }
+                    })),
+                    2 => Some(PropertyValue::Number(reader.f32()?)),
+                    3 => Some(PropertyValue::Color(reader.u32()?)),
+                    4 => Some(PropertyValue::String(reader.string()?)),
+                    value => {
+                        return Err(ProtocolError::new(format!(
+                            "unknown property value tag {value}"
+                        )));
+                    }
+                };
+                Mutation::SetProperty { id, key, value }
+            }
+            5 => Mutation::ReplaceText {
+                id: reader.u32()?,
+                text: reader.string()?,
+            },
+            6 => {
+                let parent = reader.u32()?;
+                let child = reader.u32()?;
+                let anchor = reader.u32()?;
+                Mutation::Insert {
+                    parent,
+                    child,
+                    before: (anchor != NO_ANCHOR).then_some(anchor),
+                }
+            }
+            7 => Mutation::Remove {
+                parent: reader.u32()?,
+                child: reader.u32()?,
+            },
+            8 => {
+                let parent = reader.u32()?;
+                let count = reader.u32()? as usize;
+                if count > MAX_MUTATIONS {
+                    return Err(ProtocolError::new(
+                        "cleanup list exceeds the mutation limit",
+                    ));
+                }
+                let mut children = Vec::with_capacity(count.min(4_096));
+                for _ in 0..count {
+                    children.push(reader.u32()?);
+                }
+                Mutation::Cleanup { parent, children }
+            }
+            opcode => {
+                return Err(ProtocolError::new(format!(
+                    "unknown mutation opcode {opcode}"
+                )));
+            }
+        };
+        mutations.push(mutation);
+    }
+    if !reader.finished() {
+        return Err(ProtocolError::new("mutation batch has trailing bytes"));
+    }
+    Ok(mutations)
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct QueuedEvent {
+    pub(super) kind: &'static str,
+    pub(super) window: u32,
+    pub(super) target: u32,
+    pub(super) value: Option<Arc<str>>,
+}
+
+pub(super) type EventQueue = Rc<RefCell<VecDeque<QueuedEvent>>>;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct NativeListConfig {
+    pub(super) estimated_item_height: f32,
+    pub(super) overscan: usize,
+    pub(super) alignment: ListAlignment,
+    pub(super) follow_mode: FollowMode,
+}
+
+impl NativeListConfig {
+    pub(super) fn from_node(node: &NativeNode) -> Self {
+        let estimated_item_height = node
+            .number(property::ESTIMATED_ITEM_HEIGHT)
+            .unwrap_or(160.0)
+            .clamp(1.0, 1_048_576.0);
+        let overscan = node.number(property::OVERSCAN).unwrap_or(2.0).max(0.0) as usize;
+        let alignment = match node.string(property::LIST_ALIGNMENT) {
+            Some("bottom") => ListAlignment::Bottom,
+            _ => ListAlignment::Top,
+        };
+        let follow_mode = match node.string(property::FOLLOW_MODE) {
+            Some("tail") => FollowMode::Tail,
+            _ => FollowMode::Normal,
+        };
+        Self {
+            estimated_item_height,
+            overscan,
+            alignment,
+            follow_mode,
+        }
+    }
+
+    pub(super) fn create_state(self, item_count: usize) -> ListState {
+        ListState::new(item_count, self.estimated_item_height)
+            .with_overscan(self.overscan)
+            .with_alignment(self.alignment)
+            .with_follow_mode(self.follow_mode)
+    }
+}
+
+pub(super) struct NativeListState {
+    pub(super) config: NativeListConfig,
+    pub(super) children: Vec<u32>,
+    pub(super) list: ListState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct NativeTerminalConfig {
+    pub(super) options: TerminalOptions,
+}
+
+impl NativeTerminalConfig {
+    pub(super) fn from_node(node: &NativeNode) -> std::result::Result<Self, String> {
+        let arguments = node
+            .string(property::TERMINAL_ARGUMENTS)
+            .map(|value| {
+                serde_json::from_str::<Vec<String>>(value)
+                    .map_err(|error| format!("invalid terminal arguments: {error}"))
+            })
+            .transpose()?
+            .unwrap_or_default()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let environment = node
+            .string(property::TERMINAL_ENVIRONMENT)
+            .map(|value| {
+                serde_json::from_str::<BTreeMap<String, String>>(value)
+                    .map_err(|error| format!("invalid terminal environment: {error}"))
+            })
+            .transpose()?
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(key, value)| (key.into(), value.into()))
+            .collect();
+        let max_scrollback = node
+            .number(property::TERMINAL_SCROLLBACK)
+            .unwrap_or(10_000.0)
+            .max(0.0) as usize;
+        Ok(Self {
+            options: TerminalOptions {
+                program: node
+                    .string(property::TERMINAL_PROGRAM)
+                    .filter(|program| !program.is_empty())
+                    .map(Into::into),
+                arguments,
+                working_directory: node
+                    .string(property::TERMINAL_WORKING_DIRECTORY)
+                    .filter(|directory| !directory.is_empty())
+                    .map(PathBuf::from),
+                environment,
+                max_scrollback,
+                ..TerminalOptions::default()
+            },
+        })
+    }
+}
+
+pub(super) struct NativeTerminalState {
+    pub(super) config: std::result::Result<NativeTerminalConfig, Arc<str>>,
+    pub(super) terminal: Option<Terminal>,
+    pub(super) spawn_error: Option<Arc<str>>,
+    pub(super) last_event: Option<Arc<str>>,
+}
+
+pub(super) struct NativeSvgState {
+    pub(super) source: Arc<str>,
+    pub(super) parsed: std::result::Result<Svg, Arc<str>>,
+}
+
+impl NativeSvgState {
+    pub(super) fn new(source: Arc<str>) -> Self {
+        let parsed = Svg::from_svg(source.as_ref()).map_err(|error| Arc::from(error.to_string()));
+        Self { source, parsed }
+    }
+
+    pub(super) fn sync(&mut self, source: &str) {
+        if self.source.as_ref() == source {
+            return;
+        }
+        *self = Self::new(Arc::from(source));
+    }
+
+    pub(super) fn element(&self) -> Element {
+        match &self.parsed {
+            Ok(svg) => svg_element(svg),
+            Err(_) => div().hidden(),
+        }
+    }
+}
+
+impl NativeTerminalState {
+    pub(super) fn new(node: &NativeNode, cx: &ViewContext<'_, NativeView>) -> Self {
+        let config = NativeTerminalConfig::from_node(node).map_err(Arc::from);
+        let (terminal, spawn_error) = match &config {
+            Ok(config) => match Terminal::spawn(config.options.clone(), cx.window_invalidator()) {
+                Ok(terminal) => (Some(terminal), None),
+                Err(error) => (None, Some(Arc::from(error.to_string()))),
+            },
+            Err(_) => (None, None),
+        };
+        Self {
+            config,
+            terminal,
+            spawn_error,
+            last_event: None,
+        }
+    }
+
+    pub(super) fn sync(&mut self, node: &NativeNode, cx: &ViewContext<'_, NativeView>) {
+        let next = NativeTerminalConfig::from_node(node).map_err(Arc::from);
+        if self.config == next {
+            return;
+        }
+        *self = Self::new(node, cx);
+    }
+
+    pub(super) fn error(&self) -> Option<&str> {
+        match (&self.config, &self.terminal, &self.spawn_error) {
+            (Err(error), _, _) => Some(error),
+            (Ok(_), None, Some(error)) => Some(error),
+            (Ok(_), None, None) => Some("could not start terminal session"),
+            (Ok(_), Some(_), _) => None,
+        }
+    }
+}
+
+impl NativeListState {
+    pub(super) fn new(node: &NativeNode) -> Self {
+        let config = NativeListConfig::from_node(node);
+        Self {
+            config,
+            children: node.children.clone(),
+            list: config.create_state(node.children.len()),
+        }
+    }
+
+    pub(super) fn sync(&mut self, node: &NativeNode) {
+        let config = NativeListConfig::from_node(node);
+        if self.config != config {
+            self.config = config;
+            self.children.clone_from(&node.children);
+            self.list = config.create_state(self.children.len());
+            return;
+        }
+        if self.children == node.children {
+            return;
+        }
+        let stable_prefix =
+            self.children.starts_with(&node.children) || node.children.starts_with(&self.children);
+        if stable_prefix {
+            self.list.set_item_count(node.children.len());
+        } else {
+            self.list.reset(node.children.len());
+        }
+        self.children.clone_from(&node.children);
+    }
+}

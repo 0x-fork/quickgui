@@ -1,8 +1,8 @@
 use std::{thread, time::Duration};
 
 use quickgui::{
-    AnimatedImage, AnimatedImageFrame, AnimationRepeat, App, Color, Element, Image, ImageResource,
-    ObjectFit, View, ViewContext, div, img, text,
+    AnimatedImage, AnimatedImageFrame, AnimationRepeat, Application, Color, Element, Image,
+    ImageResource, ObjectFit, View, ViewContext, div, img, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
@@ -17,15 +17,18 @@ fn main() -> Result<(), quickgui::AppError> {
         Ok::<_, &'static str>(delayed_animation.clone())
     });
 
-    App::new(AnimationDemo {
-        looping,
-        finite,
-        delayed,
+    Application::new().run(move |cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — event-driven animated images")
+                .size(1080.0, 560.0)
+                .reduce_motion(reduce_motion),
+            AnimationDemo {
+                looping,
+                finite,
+                delayed,
+            },
+        );
     })
-    .title("QuickGUI — event-driven animated images")
-    .size(1080.0, 560.0)
-    .reduce_motion(reduce_motion)
-    .run()
 }
 
 struct AnimationDemo {

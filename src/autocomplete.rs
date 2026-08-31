@@ -1198,7 +1198,8 @@ fn bounded_validation_message(message: Arc<str>) -> (Option<Arc<str>>, bool) {
 mod tests {
     use super::*;
     use crate::{
-        App, Color, IntoElement, MouseDownEvent, button, combobox_key_bindings, text, text_input,
+        Application, Color, IntoElement, MouseDownEvent, WindowOptions, button,
+        combobox_key_bindings, text, text_input,
     };
 
     fn options() -> [PickerItem<&'static str>; 4] {
@@ -1273,12 +1274,13 @@ mod tests {
 
     #[test]
     fn free_form_value_survives_escape_and_unmatched_return_propagates() {
-        let (mut cx, owner) = App::new(AutocompleteOwner::new(
-            AutocompleteSelectionBehavior::CompleteInput,
-        ))
-        .bind_keys(combobox_key_bindings())
-        .into_test_context()
-        .unwrap();
+        let (mut cx, owner) = Application::new()
+            .bind_keys(combobox_key_bindings())
+            .into_test_context(
+                WindowOptions::default(),
+                AutocompleteOwner::new(AutocompleteSelectionBehavior::CompleteInput),
+            )
+            .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.simulate_input(window, "custom value").unwrap();
@@ -1324,9 +1326,9 @@ mod tests {
                 Arc::<str>::from("ap"),
             ),
         ] {
-            let (mut cx, owner) = App::new(AutocompleteOwner::new(behavior))
+            let (mut cx, owner) = Application::new()
                 .bind_keys(combobox_key_bindings())
-                .into_test_context()
+                .into_test_context(WindowOptions::default(), AutocompleteOwner::new(behavior))
                 .unwrap();
             let window = owner.window_handle();
             cx.focus(window, "fruit").unwrap();
@@ -1349,12 +1351,13 @@ mod tests {
 
     #[test]
     fn never_key_child_row_click_commits_without_moving_owner_input_focus() {
-        let (mut cx, owner) = App::new(AutocompleteOwner::new(
-            AutocompleteSelectionBehavior::CompleteInput,
-        ))
-        .bind_keys(combobox_key_bindings())
-        .into_test_context()
-        .unwrap();
+        let (mut cx, owner) = Application::new()
+            .bind_keys(combobox_key_bindings())
+            .into_test_context(
+                WindowOptions::default(),
+                AutocompleteOwner::new(AutocompleteSelectionBehavior::CompleteInput),
+            )
+            .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();
@@ -1388,12 +1391,13 @@ mod tests {
 
     #[test]
     fn owner_outside_press_closes_without_rewriting_free_form_text() {
-        let (mut cx, owner) = App::new(AutocompleteOwner::new(
-            AutocompleteSelectionBehavior::CompleteInput,
-        ))
-        .bind_keys(combobox_key_bindings())
-        .into_test_context()
-        .unwrap();
+        let (mut cx, owner) = Application::new()
+            .bind_keys(combobox_key_bindings())
+            .into_test_context(
+                WindowOptions::default(),
+                AutocompleteOwner::new(AutocompleteSelectionBehavior::CompleteInput),
+            )
+            .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.simulate_input(window, "custom").unwrap();
@@ -1414,12 +1418,13 @@ mod tests {
 
     #[test]
     fn open_source_replacement_updates_the_same_child_and_rejects_invalid_input() {
-        let (mut cx, owner) = App::new(AutocompleteOwner::new(
-            AutocompleteSelectionBehavior::CompleteInput,
-        ))
-        .bind_keys(combobox_key_bindings())
-        .into_test_context()
-        .unwrap();
+        let (mut cx, owner) = Application::new()
+            .bind_keys(combobox_key_bindings())
+            .into_test_context(
+                WindowOptions::default(),
+                AutocompleteOwner::new(AutocompleteSelectionBehavior::CompleteInput),
+            )
+            .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();
@@ -1520,12 +1525,13 @@ mod tests {
         );
         assert!(popover.list.visible_rows().len() <= 7);
 
-        let (mut cx, owner) = App::new(AutocompleteOwner::new(
-            AutocompleteSelectionBehavior::CompleteInput,
-        ))
-        .bind_keys(combobox_key_bindings())
-        .into_test_context()
-        .unwrap();
+        let (mut cx, owner) = Application::new()
+            .bind_keys(combobox_key_bindings())
+            .into_test_context(
+                WindowOptions::default(),
+                AutocompleteOwner::new(AutocompleteSelectionBehavior::CompleteInput),
+            )
+            .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
         cx.click(window, "fruit").unwrap();

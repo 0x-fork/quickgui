@@ -57,7 +57,7 @@ advertised CPU speed limit; unavailable Linux thermal trip points likewise remai
 
 ## Runtime transitions
 
-Register `App::on_power_event` or `Application::on_power_event` for event-driven transitions.
+Register `Application::on_power_event` for event-driven transitions.
 `PowerEvent` covers suspend/resume, lock/unlock, shutdown preparation, power-source changes,
 thermal pressure, low-power mode, and CPU speed-limit changes. Each backend emits only transitions
 its native notification source provides. `ShutdownRequested` is advisory and deliberately has no

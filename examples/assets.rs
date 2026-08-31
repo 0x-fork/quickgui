@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use quickgui::{App, Assets, BundledAssets, Color, Svg, View, ViewContext, button, div, svg, text};
+use quickgui::{
+    Application, Assets, BundledAssets, Color, Svg, View, ViewContext, button, div, svg, text,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bundle = BundledAssets::new()
@@ -10,11 +12,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let icon = assets.svg("icons/bolt.svg")?;
     let message = load_message(&assets)?;
 
-    App::new(AssetsDemo { icon, message })
-        .assets(assets)
-        .title("QuickGUI — bundled assets")
-        .size(620.0, 420.0)
-        .run()?;
+    Application::new().assets(assets).run(move |cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — bundled assets").size(620.0, 420.0),
+            AssetsDemo { icon, message },
+        );
+    })?;
     Ok(())
 }
 

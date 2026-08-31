@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, Element, Event, EventContext, KeyBinding, Menu, MenuItem, View, ViewContext,
-    button, div, text,
+    Application, Color, Element, Event, EventContext, KeyBinding, Menu, MenuItem, View,
+    ViewContext, button, div, text,
 };
 
 quickgui::actions!(
@@ -28,9 +28,7 @@ fn app_menus(sidebar_visible: bool) -> Vec<Menu> {
 }
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(ActionDemo::new())
-        .title("QuickGUI — Actions and contextual keymaps")
-        .size(760.0, 480.0)
+    Application::new()
         .bind_keys([
             KeyBinding::new("platform-s", Save, Some("Editor")),
             KeyBinding::new("platform-b", ToggleSidebar, Some("Workspace")),
@@ -39,7 +37,13 @@ fn main() -> Result<(), quickgui::AppError> {
             KeyBinding::new("platform-i", InspectPath, Some("Editor")),
         ])
         .menus(app_menus(true))
-        .run()
+        .run(|cx| {
+            cx.open_window(
+                quickgui::WindowOptions::new("QuickGUI — Actions and contextual keymaps")
+                    .size(760.0, 480.0),
+                ActionDemo::new(),
+            );
+        })
 }
 
 struct ActionDemo {

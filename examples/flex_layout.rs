@@ -1,14 +1,18 @@
 use quickgui::{
-    App, Color, Element, FontWeight, IntoElement, TitleBarStyle, View, ViewContext, div, text,
+    Application, Color, Element, FontWeight, IntoElement, TitleBarStyle, View, ViewContext, div,
+    text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(FlexLayoutDemo)
-        .title("QuickGUI — Web Flex Layout")
-        .size(940.0, 660.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Web Flex Layout")
+                .size(940.0, 660.0)
+                .title_bar_style(TitleBarStyle::HiddenInset)
+                .traffic_light_position(16.0, 13.0),
+            FlexLayoutDemo,
+        );
+    })
 }
 
 struct FlexLayoutDemo;

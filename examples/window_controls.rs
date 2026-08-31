@@ -1,22 +1,23 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    App, AppConfig, AsyncContextError, AsyncViewContext, Color, Element, Rect, Task, TitleBarStyle,
+    Application, AsyncContextError, AsyncViewContext, Color, Element, Rect, Task, TitleBarStyle,
     View, ViewContext, WindowBounds, WindowCommandError, WindowHandle, WindowKind, WindowOptions,
     button, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(WindowLauncher::default())
-        .config(
-            AppConfig::new("QuickGUI — Window controls")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Window controls")
                 .size(760.0, 650.0)
                 .minimum_size(620.0, 520.0)
                 .title_bar_style(TitleBarStyle::HiddenInset)
                 .traffic_light_position(16.0, 14.0)
                 .background(Color::rgb8(15, 17, 22)),
-        )
-        .run()
+            WindowLauncher::default(),
+        );
+    })
 }
 
 #[derive(Default)]
@@ -41,8 +42,8 @@ impl WindowLauncher {
             options = options.title_bar_style(TitleBarStyle::Hidden);
         }
         let handle = cx.open_window(
-            ControlledWindow::new(label.clone(), kind, delayed_show),
             options,
+            ControlledWindow::new(label.clone(), kind, delayed_show),
         );
         self.last_window = Some(handle);
         self.status = if delayed_show {

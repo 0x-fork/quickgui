@@ -8,19 +8,23 @@ system character palette, and optionally participate in macOS system tabs. The e
 documented for completeness, but native system-tab acceptance is explicitly deferred beyond 0.1:
 
 ```rust
-use quickgui::{App, WindowOptions};
+use quickgui::{Application, WindowOptions};
 
-App::new(Editor::new("notes.md"))
-    .document_path("notes.md")
-    .document_edited(false)
-    .tabbing_identifier("com.example.editor.workspace")
-    .run()?;
+Application::new().run(|cx| {
+    cx.open_window(
+        WindowOptions::default()
+            .document_path("notes.md")
+            .document_edited(false)
+            .tabbing_identifier("com.example.editor.workspace"),
+        Editor::new("notes.md"),
+    );
+})?;
 
 let second = cx.open_window(
-    Editor::new("draft.md"),
     WindowOptions::new("Draft")
         .document_path("draft.md")
         .tabbing_identifier("com.example.editor.workspace"),
+    Editor::new("draft.md"),
 );
 ```
 

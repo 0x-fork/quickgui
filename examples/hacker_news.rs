@@ -8,8 +8,8 @@ use std::{
 };
 
 use quickgui::{
-    App, Color, Element, ElementId, Event, EventContext, Key, ListState, TitleBarStyle, View,
-    ViewContext, VirtualList, button, div, text,
+    Application, Color, Element, ElementId, Event, EventContext, Key, ListState, TitleBarStyle,
+    View, ViewContext, VirtualList, button, div, text,
 };
 use serde::Deserialize;
 
@@ -37,12 +37,15 @@ fn main() -> Result<(), quickgui::AppError> {
         .compact()
         .init();
 
-    App::new(HackerNews::new())
-        .title("QuickGUI — Hacker News")
-        .size(1_280.0, 800.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Hacker News")
+                .size(1_280.0, 800.0)
+                .title_bar_style(TitleBarStyle::HiddenInset)
+                .traffic_light_position(16.0, 13.0),
+            HackerNews::new(),
+        );
+    })
 }
 
 struct Story {

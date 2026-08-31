@@ -259,7 +259,7 @@ fn derived_dialog_id(parent: ElementId, tag: u64) -> ElementId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{App, Color, IntoElement, View, ViewContext, button, div, text};
+    use crate::{Color, IntoElement, TestAppContext, View, ViewContext, button, div, text};
 
     #[test]
     fn parts_add_exact_behavior_without_appearance() {
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn controlled_dialog_traps_tabs_restores_focus_and_sleeps() {
-        let (mut cx, view) = App::new(DialogView::default()).into_test_context().unwrap();
+        let (mut cx, view) = TestAppContext::new(DialogView::default()).unwrap();
         let window = view.window_handle();
         cx.click(window, "dialog-trigger").unwrap();
         assert_eq!(cx.focused(window).unwrap(), Some("dialog-first".into()));

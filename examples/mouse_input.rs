@@ -1,16 +1,19 @@
 use std::sync::Arc;
 
-use quickgui::{App, AppConfig, Color, IntoElement, MouseButton, View, ViewContext, div, text};
+use quickgui::{
+    Application, Color, IntoElement, MouseButton, View, ViewContext, WindowOptions, div, text,
+};
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(MouseDemo::default())
-        .config(
-            AppConfig::new("QuickGUI — Desktop mouse dispatch")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Desktop mouse dispatch")
                 .size(760.0, 520.0)
                 .minimum_size(560.0, 420.0)
                 .background(Color::rgb8(13, 16, 22)),
-        )
-        .run()
+            MouseDemo::default(),
+        );
+    })
 }
 
 struct MouseDemo {

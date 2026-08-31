@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use quickgui::{
-    AnyAction, App, Color, Element, EventContext, FocusHandle, HighlightStyle, IntoElement,
+    AnyAction, Application, Color, Element, EventContext, FocusHandle, HighlightStyle, IntoElement,
     KeyBinding, PickerItem, PickerLayout, PickerState, StyledText, TitleBarStyle, View,
     ViewContext, button, div, picker_key_bindings, text, text_input,
 };
@@ -133,13 +133,15 @@ fn main() -> Result<(), quickgui::AppError> {
         KeyBinding::new("platform-shift-t", ToggleTheme, Some("Workspace")),
     ]);
 
-    App::new(CommandPaletteDemo::new())
-        .title("QuickGUI — Command Palette")
-        .size(900.0, 620.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
-        .bind_keys(bindings)
-        .run()
+    Application::new().bind_keys(bindings).run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Command Palette")
+                .size(900.0, 620.0)
+                .title_bar_style(TitleBarStyle::HiddenInset)
+                .traffic_light_position(16.0, 13.0),
+            CommandPaletteDemo::new(),
+        );
+    })
 }
 
 struct CommandPaletteDemo {

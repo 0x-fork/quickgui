@@ -34,15 +34,18 @@ until their native stable-identity adapters are implemented.
 Target automatic placement with the same fluent window API used for root and child windows:
 
 ```rust
-App::new(Workspace::default())
-    .display(display_id)
-    .run()?;
+Application::new().run(|cx| {
+    cx.open_window(
+        WindowOptions::default().display(display_id),
+        Workspace::default(),
+    );
+})?;
 
 cx.open_window(
-    Inspector::default(),
     WindowOptions::new("Inspector")
         .size(640.0, 480.0)
         .display(display_id),
+    Inspector::default(),
 );
 ```
 

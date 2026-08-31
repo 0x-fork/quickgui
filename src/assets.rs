@@ -372,7 +372,7 @@ impl AssetSource for BundledAssets {
     }
 }
 
-/// One custom font declaration accepted by [`crate::App::font`].
+/// One custom font declaration accepted by [`crate::Application::font`].
 #[derive(Clone, Debug)]
 pub enum FontSource {
     Bytes(AssetBytes),

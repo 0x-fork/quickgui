@@ -1,17 +1,18 @@
 use quickgui::{
-    App, AppConfig, Color, Element, IntoElement, Size, View, ViewContext, container_query, div,
-    text,
+    Application, Color, Element, IntoElement, Size, View, ViewContext, WindowOptions,
+    container_query, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(ResponsiveDashboard)
-        .config(
-            AppConfig::new("QuickGUI — container queries")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — container queries")
                 .size(980.0, 680.0)
                 .minimum_size(360.0, 420.0)
                 .background(Color::rgb8(12, 16, 24)),
-        )
-        .run()
+            ResponsiveDashboard,
+        );
+    })
 }
 
 struct ResponsiveDashboard;

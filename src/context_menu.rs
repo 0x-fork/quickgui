@@ -271,7 +271,7 @@ impl ContextMenuState {
                 Rc::clone(&open_root_renderer),
                 Rc::clone(&open_item_renderer),
             );
-            let handle = cx.open_window(popover, root_window_options(layout, event.position, size));
+            let handle = cx.open_window(root_window_options(layout, event.position, size), popover);
             access(view).popover = Some(handle);
             cx.invalidate();
         });
@@ -787,8 +787,8 @@ fn finite_clamped(value: f32, minimum: f32, maximum: f32, fallback: f32) -> f32 
 mod tests {
     use super::*;
     use crate::{
-        App, Color, IntoElement, Modifiers, TestAppContext, View, WindowKind, div,
-        popover_menu_key_bindings, text,
+        Application, Color, IntoElement, Modifiers, TestAppContext, View, WindowKind,
+        WindowOptions, div, popover_menu_key_bindings, text,
     };
 
     #[derive(Clone, Debug, Eq, PartialEq)]
@@ -921,9 +921,9 @@ mod tests {
 
     #[test]
     fn secondary_click_opens_at_the_pointer_and_commands_close_exactly() {
-        let (mut cx, owner) = App::new(Owner::default())
+        let (mut cx, owner) = Application::new()
             .bind_keys(popover_menu_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), Owner::default())
             .unwrap();
         let owner_window = owner.window_handle();
         let point = Point::new(120.0, 140.0);

@@ -1,19 +1,20 @@
 use quickgui::{
-    App, AppConfig, Color, GesturePhase, IntoElement, Point, PressureStage, TouchId, TouchPhase,
-    View, ViewContext, div, text,
+    Application, Color, GesturePhase, IntoElement, Point, PressureStage, TouchId, TouchPhase, View,
+    ViewContext, WindowOptions, div, text,
 };
 
 const MAX_DEMO_TOUCHES: usize = 10;
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(GestureDemo::default())
-        .config(
-            AppConfig::new("QuickGUI — Native gesture input")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Native gesture input")
                 .size(820.0, 680.0)
                 .minimum_size(640.0, 520.0)
                 .background(Color::rgb8(14, 17, 23)),
-        )
-        .run()
+            GestureDemo::default(),
+        );
+    })
 }
 
 #[derive(Clone, Copy, Debug, Default)]

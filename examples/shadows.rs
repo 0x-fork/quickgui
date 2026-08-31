@@ -1,10 +1,12 @@
-use quickgui::{App, BoxShadow, Color, Element, View, ViewContext, button, div, text};
+use quickgui::{Application, BoxShadow, Color, Element, View, ViewContext, button, div, text};
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(ShadowDemo)
-        .title("QuickGUI — analytic GPU shadows")
-        .size(1120.0, 720.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — analytic GPU shadows").size(1120.0, 720.0),
+            ShadowDemo,
+        );
+    })
 }
 
 struct ShadowDemo;

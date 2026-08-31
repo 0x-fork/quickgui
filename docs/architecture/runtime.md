@@ -4,11 +4,11 @@
 
 ## Application and window ownership
 
-The windowless `Application` builder is the core lifecycle boundary for embedders. Its
-`AppRunner` becomes ready on the first native event-loop turn without requiring a placeholder
-window, and `open_window` reserves a stable handle before native creation. `App::new(view)` remains
-the Rust convenience API that supplies the first view up front. Closing an empty application does
-not accidentally trigger `LastWindowClosed`; that policy begins after a native window has opened.
+The windowless `Application` builder is the core lifecycle boundary for embedders. `run` receives
+the live `App` context on the first native event-loop turn, and `App::open_window` reserves a stable
+handle before native creation. Application-wide configuration therefore remains independent from
+each window's `WindowOptions`. Closing an empty application does not accidentally trigger
+`LastWindowClosed`; that policy begins after a native window has opened.
 
 The application runtime owns a registry keyed by Winit's native `WindowId` plus a second map from
 public `WindowHandle` values. A handle is allocated before native creation, so an event callback
@@ -118,8 +118,9 @@ An orderly relaunch is retained as one fully resolved process request rather tha
 an event callback. The exit path first performs the ordinary child-first close callbacks, then
 cancels foreground work, closes background/image worker queues without waiting on blocked
 application I/O, and retires native process integrations including the single-instance guard.
-Blocking `App::run` drops the completed runtime before spawning; externally pumped runners finalize
-the same services at the exit-producing pump and retain only the spawned process ID for inspection.
+Blocking `Application::run` drops the completed runtime before spawning; externally pumped runners
+finalize the same services at the exit-producing pump and retain only the spawned process ID for
+inspection.
 
 `UNUserNotificationCenter` is created only for a bundled application and installed before launch
 when response handling is configured. The first notification starts one authorization request;
@@ -186,7 +187,7 @@ separately bounded [foreground executor](scheduling.md#foreground-tasks).
 
 The application owns one main-thread `TypeId -> Box<dyn Any>` store behind a cloneable
 `Rc<RefCell<_>>` handle. `Global` is an empty `'static` marker: a concrete type can appear once,
-does not need `Send` or `Sync`, and may be installed before launch with `App::global`. Event
+does not need `Send` or `Sync`, and may be installed before launch with `Application::global`. Event
 callbacks can synchronously read, default, replace, mutate, or remove values through
 `EventContext`; overlapping borrows fail loudly instead of adding locks or runtime aliasing.
 

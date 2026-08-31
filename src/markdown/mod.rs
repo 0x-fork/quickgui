@@ -783,7 +783,7 @@ mod tests {
     use super::*;
 
     #[cfg(target_os = "macos")]
-    use crate::{App, View, ViewContext};
+    use crate::{Application, View, ViewContext, WindowOptions};
 
     #[cfg(target_os = "macos")]
     struct WrappedMarkdownView(Markdown);
@@ -856,9 +856,11 @@ mod tests {
         let markdown = Markdown::with_text(
             "This is a deliberately long Markdown paragraph that must wrap across several lines.",
         );
-        let (mut cx, view) = App::new(WrappedMarkdownView(markdown))
-            .size(180.0, 140.0)
-            .into_test_context()
+        let (mut cx, view) = Application::new()
+            .into_test_context(
+                WindowOptions::default().size(180.0, 140.0),
+                WrappedMarkdownView(markdown),
+            )
             .unwrap();
         let bounds = cx
             .visual(view.window_handle())

@@ -1,16 +1,19 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, Drag, DragOrigin, Element, Entity, Event, EventContext, EventEmitter, Global,
-    Subscription, View, ViewContext, WindowHandle, WindowOptions, button, div, text,
+    Application, Color, Drag, DragOrigin, Element, Entity, Event, EventContext, EventEmitter,
+    Global, Subscription, View, ViewContext, WindowHandle, WindowOptions, button, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(Launcher::default())
+    Application::new()
         .global(AppAppearance::default())
-        .title("QuickGUI — Multi-window")
-        .size(700.0, 620.0)
-        .run()
+        .run(|cx| {
+            cx.open_window(
+                WindowOptions::new("QuickGUI — Multi-window").size(700.0, 620.0),
+                Launcher::default(),
+            );
+        })
 }
 
 #[derive(Default)]
@@ -210,11 +213,11 @@ impl View for Launcher {
             this.opened += 1;
             let number = this.opened;
             let handle = cx.open_window(
-                Inspector::new(number, this.workspace.clone()),
                 WindowOptions::new(format!("Inspector {number}"))
                     .size(560.0, 500.0)
                     .minimum_size(400.0, 340.0)
                     .background(Color::rgb8(20, 22, 27)),
+                Inspector::new(number, this.workspace.clone()),
             );
             this.last_inspector = Some(handle);
             cx.invalidate();

@@ -1,23 +1,24 @@
 use std::time::Duration;
 
 use quickgui::{
-    Animation, AnimationExt as _, AnimationPhase, App, AppConfig, Color, Element, ElementId,
-    IntoElement, SpringAnimation, SpringConfig, TitleBarStyle, View, ViewContext, bounce, button,
-    div, ease_in_out, text,
+    Animation, AnimationExt as _, AnimationPhase, Application, Color, Element, ElementId,
+    IntoElement, SpringAnimation, SpringConfig, TitleBarStyle, View, ViewContext, WindowOptions,
+    bounce, button, div, ease_in_out, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(AnimationDemo::default())
-        .config(
-            AppConfig::new("QuickGUI — declarative motion")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — declarative motion")
                 .size(900.0, 650.0)
                 .minimum_size(720.0, 560.0)
                 .title_bar_style(TitleBarStyle::HiddenInset)
                 .traffic_light_position(16.0, 14.0)
                 .background(Color::rgb8(16, 18, 23))
                 .reduce_motion(std::env::var_os("QUICKGUI_REDUCE_MOTION").is_some()),
-        )
-        .run()
+            AnimationDemo::default(),
+        );
+    })
 }
 
 #[derive(Default)]

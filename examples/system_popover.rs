@@ -1,18 +1,20 @@
 use quickgui::{
-    AnchorPlacement, App, AppConfig, Color, Element, IntoElement, PopoverMenu, PopoverMenuItem,
+    AnchorPlacement, Application, Color, Element, IntoElement, PopoverMenu, PopoverMenuItem,
     PopoverMenuItemKind, PopoverMenuItemState, SystemPopover, View, ViewContext, WindowHandle,
-    button, div, popover_menu_key_bindings, text,
+    WindowOptions, button, div, popover_menu_key_bindings, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(PopoverLauncher::default())
+    Application::new()
         .bind_keys(popover_menu_key_bindings())
-        .config(
-            AppConfig::new("QuickGUI — SystemPopover")
-                .size(720.0, 480.0)
-                .background(Color::rgb8(17, 19, 24)),
-        )
-        .run()
+        .run(|cx| {
+            cx.open_window(
+                WindowOptions::new("QuickGUI — SystemPopover")
+                    .size(720.0, 480.0)
+                    .background(Color::rgb8(17, 19, 24)),
+                PopoverLauncher::default(),
+            );
+        })
 }
 
 #[derive(Default)]

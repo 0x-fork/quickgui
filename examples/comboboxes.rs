@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, ComboboxOptionState, ComboboxPopoverLayout, ComboboxState, HighlightStyle,
+    Application, Color, ComboboxOptionState, ComboboxPopoverLayout, ComboboxState, HighlightStyle,
     IntoElement, PickerItem, SelectPopoverLayout, SelectState, StyledText, TitleBarStyle, View,
     ViewContext, combobox_key_bindings, div, select_key_bindings, text, text_input,
 };
@@ -9,14 +9,18 @@ use quickgui::{
 const SYMBOLS: usize = 20_000;
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(ComboboxGallery::new())
-        .title("QuickGUI — Select and constrained combobox")
-        .size(920.0, 660.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
+    Application::new()
         .bind_keys(select_key_bindings())
         .bind_keys(combobox_key_bindings())
-        .run()
+        .run(|cx| {
+            cx.open_window(
+                quickgui::WindowOptions::new("QuickGUI — Select and constrained combobox")
+                    .size(920.0, 660.0)
+                    .title_bar_style(TitleBarStyle::HiddenInset)
+                    .traffic_light_position(16.0, 13.0),
+                ComboboxGallery::new(),
+            );
+        })
 }
 
 struct ComboboxGallery {

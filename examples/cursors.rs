@@ -1,5 +1,6 @@
 use quickgui::{
-    App, AppConfig, Color, CursorStyle, Element, IntoElement, View, ViewContext, div, text,
+    Application, Color, CursorStyle, Element, IntoElement, View, ViewContext, WindowOptions, div,
+    text,
 };
 
 const CURSORS: [(&str, &str, CursorStyle); 21] = [
@@ -59,14 +60,15 @@ const CURSORS: [(&str, &str, CursorStyle); 21] = [
 ];
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(CursorGallery)
-        .config(
-            AppConfig::new("QuickGUI — native cursors")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — native cursors")
                 .size(900.0, 700.0)
                 .minimum_size(660.0, 480.0)
                 .background(Color::rgb8(14, 17, 23)),
-        )
-        .run()
+            CursorGallery,
+        );
+    })
 }
 
 struct CursorGallery;

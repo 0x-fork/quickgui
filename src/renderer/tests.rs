@@ -1,0 +1,1583 @@
+use super::*;
+use crate::{
+    BoxShadow, Color, CustomShader, CustomShaderPrimitive, FontFeatureTag, HighlightStyle, Image,
+    ImagePrimitive, PathBuilder, PathPrimitive, StyledText, Svg, SvgPrimitive,
+};
+
+fn fixture_font_system() -> FontSystem {
+    let mut database = glyphon::cosmic_text::fontdb::Database::new();
+    database
+        .load_font_data(include_bytes!("../../tests/fixtures/fonts/Inter-Regular.ttf").to_vec());
+    database
+        .load_font_data(include_bytes!("../../tests/fixtures/fonts/NotoSansHebrew.ttf").to_vec());
+    FontSystem::new_with_locale_and_db("en-US".to_owned(), database)
+}
+
+fn fixture_terminal_font_system() -> FontSystem {
+    let mut database = glyphon::cosmic_text::fontdb::Database::new();
+    database.load_font_data(
+        include_bytes!("../../examples/herdr-gui/assets/JetBrainsMonoNerdFontMono-Regular.ttf")
+            .to_vec(),
+    );
+    FontSystem::new_with_locale_and_db("en-US".to_owned(), database)
+}
+
+#[test]
+fn application_font_system_handle_is_shared_without_a_lock() {
+    let fonts = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    assert!(Rc::ptr_eq(&fonts, &fonts.clone()));
+}
+
+#[test]
+fn advanced_shaping_uses_ordered_custom_fallbacks_before_platform_fonts() {
+    fn shaped_families(buffer: &Buffer, font_system: &FontSystem) -> Vec<(usize, String)> {
+        buffer
+            .layout_runs()
+            .flat_map(|run| run.glyphs.iter())
+            .map(|glyph| {
+                (
+                    glyph.start,
+                    font_system.db().face(glyph.font_id).unwrap().families[0]
+                        .0
+                        .clone(),
+                )
+            })
+            .collect()
+    }
+
+    let mut font_system = fixture_font_system();
+    let missing_then_noto = TextStyle::new(16.0, Color::WHITE)
+        .family(FontFamily::named("Missing QuickGUI Test Primary"))
+        .font_fallbacks(FontFallbacks::from_fonts([
+            "Missing QuickGUI Test Fallback",
+            "Noto Sans Hebrew",
+            "Inter",
+        ]));
+    let mut buffer = Buffer::new(&mut font_system, Metrics::new(16.0, 22.0));
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        "A",
+        &missing_then_noto,
+        None,
+        None,
+        1.0,
+    );
+    assert_eq!(
+        shaped_families(&buffer, &font_system),
+        vec![(0, "Noto Sans Hebrew".to_owned())]
+    );
+
+    let inter_then_noto = TextStyle::new(16.0, Color::WHITE)
+        .family(FontFamily::named("Missing QuickGUI Test Primary"))
+        .font_fallbacks(FontFallbacks::from_fonts(["Inter", "Noto Sans Hebrew"]));
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        "Aא",
+        &inter_then_noto,
+        None,
+        None,
+        1.0,
+    );
+    let families = shaped_families(&buffer, &font_system);
+    assert!(families.contains(&(0, "Inter".to_owned())));
+    assert!(families.contains(&(1, "Noto Sans Hebrew".to_owned())));
+}
+
+#[test]
+fn basic_shaping_preserves_independent_glyphs_and_uses_declared_fallbacks() {
+    let mut font_system = fixture_font_system();
+    let style = TextStyle::new(16.0, Color::WHITE)
+        .family(FontFamily::named("Inter"))
+        .font_fallbacks(FontFallbacks::from_fonts(["Noto Sans Hebrew"]))
+        .shaping(TextShaping::Basic);
+    let mut buffer = Buffer::new(&mut font_system, Metrics::new(16.0, 22.0));
+    configure_text_buffer(&mut buffer, &mut font_system, "Aא", &style, None, None, 1.0);
+
+    let families = buffer
+        .layout_runs()
+        .flat_map(|run| run.glyphs.iter())
+        .map(|glyph| {
+            (
+                glyph.start,
+                glyph.glyph_id,
+                font_system.db().face(glyph.font_id).unwrap().families[0]
+                    .0
+                    .clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(families.len(), 2);
+    assert_eq!((families[0].0, families[0].2.as_str()), (0, "Inter"));
+    assert_eq!(
+        (families[1].0, families[1].2.as_str()),
+        (1, "Noto Sans Hebrew")
+    );
+    assert!(families.iter().all(|(_, glyph_id, _)| *glyph_id != 0));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn basic_shaping_uses_the_platform_emoji_fallback() {
+    let mut font_system = create_font_system();
+    font_system
+        .db_mut()
+        .load_font_data(include_bytes!("../../tests/fixtures/fonts/Inter-Regular.ttf").to_vec());
+    let style = TextStyle::new(16.0, Color::WHITE)
+        .family(FontFamily::named("Inter"))
+        .shaping(TextShaping::Basic);
+    let mut buffer = Buffer::new(&mut font_system, Metrics::new(16.0, 22.0));
+    configure_text_buffer(&mut buffer, &mut font_system, "🐳", &style, None, None, 1.0);
+
+    let glyph = buffer
+        .layout_runs()
+        .flat_map(|run| run.glyphs.iter())
+        .next()
+        .expect("emoji glyph");
+    let face = font_system.db().face(glyph.font_id).expect("emoji face");
+    assert_ne!(glyph.glyph_id, 0);
+    assert!(
+        face.families
+            .iter()
+            .any(|(family, _)| family == "Apple Color Emoji")
+    );
+    assert!(
+        SwashCache::new()
+            .get_image_uncached(&mut font_system, glyph.physical((0.0, 0.0), 1.0).cache_key,)
+            .is_some()
+    );
+}
+
+#[test]
+fn opentype_features_affect_plain_and_rich_text_shaping() {
+    fn glyph_ids(
+        font_system: &mut FontSystem,
+        style: &TextStyle,
+        highlights: Option<&[TextHighlight]>,
+        content: &str,
+    ) -> Vec<(usize, u16)> {
+        let mut buffer = Buffer::new(font_system, Metrics::new(16.0, 22.0));
+        configure_text_buffer(
+            &mut buffer,
+            font_system,
+            content,
+            style,
+            highlights,
+            None,
+            1.0,
+        );
+        buffer
+            .layout_runs()
+            .flat_map(|run| run.glyphs.iter())
+            .map(|glyph| (glyph.metadata, glyph.glyph_id))
+            .collect()
+    }
+
+    let mut font_system = fixture_font_system();
+    let enabled = TextStyle::new(16.0, Color::WHITE).family(FontFamily::named("Inter"));
+    let disabled = enabled
+        .clone()
+        .font_features(FontFeatures::new().disable(FontFeatureTag::CONTEXTUAL_ALTERNATES));
+    let enabled_ids = glyph_ids(&mut font_system, &enabled, None, "|>")
+        .into_iter()
+        .map(|(_, glyph_id)| glyph_id)
+        .collect::<Vec<_>>();
+    let disabled_ids = glyph_ids(&mut font_system, &disabled, None, "|>")
+        .into_iter()
+        .map(|(_, glyph_id)| glyph_id)
+        .collect::<Vec<_>>();
+    assert_ne!(enabled_ids, disabled_ids);
+
+    let highlighted = StyledText::new("|>|>").with_highlights([(
+        2..4,
+        HighlightStyle::default()
+            .font_features(FontFeatures::new().disable(FontFeatureTag::CONTEXTUAL_ALTERNATES)),
+    )]);
+    let rich_ids = glyph_ids(
+        &mut font_system,
+        &enabled,
+        Some(highlighted.highlights()),
+        highlighted.content(),
+    );
+    assert_eq!(
+        rich_ids
+            .iter()
+            .filter_map(|(metadata, glyph_id)| (*metadata == 0).then_some(*glyph_id))
+            .collect::<Vec<_>>(),
+        enabled_ids
+    );
+    assert_eq!(
+        rich_ids
+            .iter()
+            .filter_map(|(metadata, glyph_id)| (*metadata == 1).then_some(*glyph_id))
+            .collect::<Vec<_>>(),
+        disabled_ids
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_opentype_bytes_register_in_the_application_font_database() {
+    let Ok(bytes) = std::fs::read("/System/Library/Fonts/SFNSMono.ttf") else {
+        return;
+    };
+    create_shared_font_system(&Assets::default(), &[FontSource::from(bytes)]).unwrap();
+}
+
+#[test]
+fn surface_format_prefers_srgb() {
+    assert_eq!(
+        preferred_surface_format(&[TextureFormat::Rgba8Unorm, TextureFormat::Bgra8UnormSrgb]),
+        Some(TextureFormat::Bgra8UnormSrgb)
+    );
+}
+
+#[test]
+fn surface_alpha_modes_keep_opaque_and_transparent_paths_explicit() {
+    let modes = [
+        CompositeAlphaMode::Opaque,
+        CompositeAlphaMode::PostMultiplied,
+        CompositeAlphaMode::PreMultiplied,
+    ];
+    assert_eq!(
+        opaque_surface_alpha_mode(&modes),
+        Some(CompositeAlphaMode::Opaque)
+    );
+    assert_eq!(
+        transparent_surface_alpha_mode(&modes),
+        Some(CompositeAlphaMode::PreMultiplied)
+    );
+    assert_eq!(
+        transparent_surface_alpha_mode(&[
+            CompositeAlphaMode::Opaque,
+            CompositeAlphaMode::PostMultiplied,
+        ]),
+        Some(CompositeAlphaMode::PostMultiplied)
+    );
+    assert_eq!(
+        transparent_surface_alpha_mode(&[CompositeAlphaMode::Opaque]),
+        None
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn offscreen_gpu_pipelines_apply_one_shared_subtree_opacity() {
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let mut scene = Scene::new();
+    scene.clear(Color::BLACK);
+    let previous = scene.multiply_opacity(0.5);
+
+    scene.push_quad(Quad::new(Rect::new(0.0, 0.0, 16.0, 16.0), Color::WHITE));
+    let image = Image::from_rgba(1, 1, Arc::<[u8]>::from([255, 255, 255, 255])).unwrap();
+    scene.push_image(ImagePrimitive::new(image, Rect::new(16.0, 0.0, 16.0, 16.0)));
+    let svg = Svg::from_svg(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="white"/></svg>"#,
+    )
+    .unwrap();
+    scene.push_svg(SvgPrimitive::new(
+        svg,
+        Rect::new(32.0, 0.0, 16.0, 16.0),
+        Color::WHITE,
+    ));
+    let mut path = PathBuilder::fill();
+    path.move_to(Point::new(0.0, 0.0));
+    path.line_to(Point::new(16.0, 0.0));
+    path.line_to(Point::new(16.0, 16.0));
+    path.line_to(Point::new(0.0, 16.0));
+    path.close();
+    scene.push_path(PathPrimitive::new(path.build().unwrap(), Color::WHITE).translate(48.0, 0.0));
+    let shader = CustomShader::new(
+        "fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> { return vec4<f32>(1.0, 1.0, 1.0, 1.0 + input.uv.x * 0.0); }",
+    )
+    .unwrap();
+    scene.push_custom_shader(CustomShaderPrimitive::new(
+        shader,
+        Rect::new(64.0, 0.0, 16.0, 16.0),
+    ));
+    scene.restore_opacity(previous);
+    scene.finish();
+
+    let snapshot = renderer
+        .render_to_snapshot(&scene, Size::new(80.0, 16.0), 1.0)
+        .unwrap();
+    let samples = [8, 24, 40, 56, 72].map(|x| snapshot.pixel(x, 8).unwrap());
+    for sample in samples {
+        assert!(sample[0] > 170 && sample[0] < 205, "{sample:?}");
+        assert_eq!(sample[0], sample[1]);
+        assert_eq!(sample[1], sample[2]);
+        assert_eq!(sample[3], 255);
+    }
+    for sample in samples.windows(2) {
+        assert!(sample[0][0].abs_diff(sample[1][0]) <= 2, "{samples:?}");
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn adjacent_square_quads_do_not_show_internal_seams() {
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let mut scene = Scene::new();
+    scene.clear(Color::BLACK);
+
+    // Terminal cell backgrounds commonly land between physical pixels. They are still one
+    // continuous opaque surface, so rasterizing each square cell must not expose its edges.
+    // JetBrains Mono's declared advance is 0.6em, which is also the terminal grid metric.
+    let cell_width = 14.0 * 0.6;
+    let cell_height = 20.5;
+    let fill = Color::rgb8(225, 226, 231);
+    for row in 0..2 {
+        for column in 0..5 {
+            scene.push_quad(Quad::new(
+                Rect::new(
+                    column as f32 * cell_width,
+                    row as f32 * cell_height,
+                    cell_width,
+                    cell_height,
+                ),
+                fill,
+            ));
+        }
+    }
+    scene.finish();
+
+    let snapshot = renderer
+        .render_to_snapshot(&scene, Size::new(cell_width * 5.0, cell_height * 2.0), 2.0)
+        .unwrap();
+    let interior = snapshot.pixel(4, 4).unwrap();
+    for column in 1..5 {
+        let boundary_x = (column as f32 * cell_width * 2.0).floor() as u32;
+        assert_eq!(
+            snapshot.pixel(boundary_x, 10).unwrap(),
+            interior,
+            "vertical cell edge at x={boundary_x} must be invisible"
+        );
+    }
+    let boundary_y = (cell_height * 2.0) as u32;
+    assert_eq!(
+        snapshot.pixel(10, boundary_y).unwrap(),
+        interior,
+        "horizontal row edge at y={boundary_y} must be invisible"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn oversized_target_keeps_primitive_clips_in_logical_viewport_space() {
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let mut scene = Scene::new();
+    scene.clear(Color::BLACK);
+
+    // Model the live-resize path: layout and projection use a 64px current viewport while
+    // Metal retains a 128px render target. Drawable-pixel clipping would incorrectly discard
+    // every primitive below y=32 logical after projection doubles its target position.
+    scene.push_quad(Quad::new(Rect::new(0.0, 40.0, 16.0, 16.0), Color::WHITE));
+    let image = Image::from_rgba(1, 1, Arc::<[u8]>::from([255, 255, 255, 255])).unwrap();
+    scene.push_image(ImagePrimitive::new(
+        image,
+        Rect::new(16.0, 40.0, 16.0, 16.0),
+    ));
+    let svg = Svg::from_svg(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="white"/></svg>"#,
+    )
+    .unwrap();
+    scene.push_svg(SvgPrimitive::new(
+        svg,
+        Rect::new(32.0, 40.0, 16.0, 16.0),
+        Color::WHITE,
+    ));
+    let shader = CustomShader::new(
+        "fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> { return vec4<f32>(1.0, 1.0, 1.0, 1.0 + input.uv.x * 0.0); }",
+    )
+    .unwrap();
+    scene.push_custom_shader(CustomShaderPrimitive::new(
+        shader,
+        Rect::new(48.0, 40.0, 16.0, 16.0),
+    ));
+    scene.finish();
+
+    let snapshot = renderer
+        .render_to_snapshot_with_target(&scene, Size::new(64.0, 64.0), 1.0, (128, 128))
+        .unwrap();
+    let samples = [16, 48, 80, 112].map(|x| snapshot.pixel(x, 96).unwrap());
+    for sample in samples {
+        assert!(sample[0] > 240, "{sample:?}");
+        assert!(sample[1] > 240, "{sample:?}");
+        assert!(sample[2] > 240, "{sample:?}");
+        assert_eq!(sample[3], 255);
+    }
+}
+
+#[test]
+fn surface_capacity_grows_geometrically_and_never_shrinks() {
+    assert_eq!(
+        grow_surface_capacity((900, 640), (760, 520), 16_384),
+        (900, 640)
+    );
+    assert_eq!(
+        grow_surface_capacity((900, 640), (920, 650), 16_384),
+        (1_350, 960)
+    );
+    assert_eq!(
+        grow_surface_capacity((1_350, 960), (1_180, 720), 16_384),
+        (1_350, 960)
+    );
+    assert_eq!(
+        grow_surface_capacity((12_000, 12_000), (16_000, 15_000), 16_384),
+        (16_384, 16_384)
+    );
+}
+
+#[test]
+fn text_clip_rounds_outward() {
+    let bounds = physical_text_bounds(Rect::new(1.1, 2.2, 3.3, 4.4), 2.0);
+    assert_eq!(
+        (bounds.left, bounds.top, bounds.right, bounds.bottom),
+        (2, 4, 9, 14)
+    );
+}
+
+#[test]
+fn text_layout_width_is_retained_only_when_wrapping_or_alignment_needs_it() {
+    assert_eq!(
+        canonical_text_width(TextWrap::None, TextAlign::Left, false, Some(640.0)),
+        None
+    );
+    assert_eq!(
+        canonical_text_width(TextWrap::None, TextAlign::Center, false, Some(640.0)),
+        Some(640.0)
+    );
+    assert_eq!(
+        canonical_text_width(TextWrap::None, TextAlign::Right, false, Some(640.0)),
+        Some(640.0)
+    );
+    assert_eq!(
+        canonical_text_width(TextWrap::None, TextAlign::Justify, false, Some(640.0)),
+        Some(640.0)
+    );
+    assert_eq!(
+        canonical_text_width(TextWrap::Word, TextAlign::Left, false, Some(640.0)),
+        Some(640.0)
+    );
+    assert_eq!(
+        canonical_text_width(TextWrap::Glyph, TextAlign::Left, false, Some(640.0)),
+        Some(640.0)
+    );
+    assert_eq!(
+        canonical_text_width(TextWrap::None, TextAlign::Left, true, Some(640.0)),
+        Some(640.0)
+    );
+}
+
+#[test]
+fn text_layout_keys_allow_reflow_only_for_width_changes() {
+    let content: Arc<str> = Arc::from("stable wrapped text");
+    let key = TextLayoutKey {
+        content,
+        highlights: None,
+        width: Some(320.0),
+        font_size: 14.0,
+        line_height: 20.0,
+        monospace_width: None,
+        family: FontFamily::SansSerif,
+        features: FontFeatures::new(),
+        fallbacks: None,
+        weight: glyphon::Weight::NORMAL,
+        font_style: GlyphStyle::Normal,
+        font_thicken: false,
+        underline: TextUnderline::None,
+        underline_color: None,
+        underline_wavy: false,
+        underline_thickness: 1.0,
+        strikethrough: false,
+        strikethrough_color: None,
+        align: TextAlign::Left,
+        wrap: TextWrap::Word,
+        text_overflow: None,
+        line_clamp: None,
+        shaping: TextShaping::Advanced,
+        scale: 2.0,
+    };
+    let mut narrower = key.clone();
+    narrower.width = Some(180.0);
+    assert!(key.same_except_width(&narrower));
+
+    let mut different_style = narrower.clone();
+    different_style.font_size = 15.0;
+    assert!(!key.same_except_width(&different_style));
+
+    let mut optically_thick = key.clone();
+    optically_thick.font_thicken = true;
+    assert!(!key.same_except_width(&optically_thick));
+
+    let mut fixed_cells = key.clone();
+    fixed_cells.monospace_width = Some(8.54);
+    assert!(!key.same_except_width(&fixed_cells));
+
+    let mut italic = key.clone();
+    italic.font_style = GlyphStyle::Italic;
+    assert!(!key.same_except_width(&italic));
+
+    let mut different_features = key.clone();
+    different_features.features =
+        FontFeatures::new().disable(FontFeatureTag::CONTEXTUAL_ALTERNATES);
+    assert!(!key.same_except_width(&different_features));
+
+    let mut different_fallbacks = key.clone();
+    different_fallbacks.fallbacks = Some(FontFallbacks::from_fonts(["Noto Sans Hebrew"]));
+    assert!(!key.same_except_width(&different_fallbacks));
+
+    let mut underlined = key.clone();
+    underlined.underline = TextUnderline::Single;
+    underlined.underline_color = Some(Color::rgb8(56, 189, 248));
+    assert!(!key.same_except_width(&underlined));
+
+    let mut wavy = underlined.clone();
+    wavy.underline_wavy = true;
+    assert!(!underlined.same_except_width(&wavy));
+
+    let mut thick = underlined.clone();
+    thick.underline_thickness = 4.0;
+    assert!(!underlined.same_except_width(&thick));
+
+    let mut different_content = narrower;
+    different_content.content = Arc::from("different wrapped text");
+    assert!(!key.same_except_width(&different_content));
+
+    let mut overflowing = key.clone();
+    overflowing.text_overflow = Some(TextOverflow::ellipsis());
+    let mut overflowing_narrower = overflowing.clone();
+    overflowing_narrower.width = Some(180.0);
+    assert!(overflowing.same_except_width(&overflowing_narrower));
+
+    let mut custom = key.clone();
+    custom.text_overflow = Some(TextOverflow::Truncate(Arc::from("...")));
+    let mut custom_narrower = custom.clone();
+    custom_narrower.width = Some(180.0);
+    assert!(!custom.same_except_width(&custom_narrower));
+}
+
+#[test]
+fn fixed_monospace_width_controls_glyph_and_background_cells() {
+    let content: Arc<str> = Arc::from("ABCDE");
+    // The terminal grid must use the bundled font's declared 0.6em advance.
+    let cell_width = 14.0 * 0.6;
+    let scale = 2.0;
+    let styled =
+        StyledText::new(content.clone()).with_highlights((0..content.len()).map(|index| {
+            (
+                index..index + 1,
+                HighlightStyle::default().background(if index % 2 == 0 {
+                    Color::rgb8(225, 226, 231)
+                } else {
+                    Color::rgb8(128, 128, 128)
+                }),
+            )
+        }));
+    let style = TextStyle::new(14.0, Color::BLACK)
+        .family(FontFamily::named("JetBrainsMono Nerd Font Mono"))
+        .line_height(20.5)
+        .monospace_width(cell_width)
+        .wrap(TextWrap::None)
+        .shaping(TextShaping::Basic);
+    let mut font_system = fixture_terminal_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size * scale, style.line_height * scale),
+    );
+
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &style,
+        Some(styled.highlights()),
+        None,
+        scale,
+    );
+
+    assert_eq!(buffer.monospace_width(), Some(cell_width * scale));
+    let run = buffer.layout_runs().next().expect("one terminal row");
+    let expected_width = content.len() as f32 * cell_width * scale;
+    assert!(
+        (run.line_w - expected_width).abs() < 0.01,
+        "expected {expected_width}, got {}",
+        run.line_w,
+    );
+    for cells in run.glyphs.windows(2) {
+        assert!((cells[1].x - cells[0].x - cell_width * scale).abs() < 0.01);
+    }
+
+    let geometry = collect_styled_text_geometry(
+        &buffer,
+        styled.highlights(),
+        &style,
+        scale,
+        0.0..1_000.0,
+        None,
+    );
+    assert_eq!(geometry.backgrounds.len(), content.len());
+    for cells in geometry.backgrounds.windows(2) {
+        assert!((cells[0].rect.right() - cells[1].rect.x).abs() < 0.01);
+    }
+    assert!((geometry.backgrounds.last().unwrap().rect.right() - cell_width * 5.0).abs() < 0.01);
+}
+
+#[test]
+fn font_thicken_preserves_weight_and_outline_geometry() {
+    let scale = 2.0;
+    let style = TextStyle::new(14.0, Color::BLACK)
+        .family(FontFamily::named("JetBrainsMono Nerd Font Mono"))
+        .font_thicken(true)
+        .wrap(TextWrap::None)
+        .shaping(TextShaping::Basic);
+    let mut font_system = fixture_terminal_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size * scale, style.line_height * scale),
+    );
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        "M",
+        &style,
+        None,
+        None,
+        scale,
+    );
+
+    let glyph = buffer
+        .layout_runs()
+        .flat_map(|run| run.glyphs.iter())
+        .next()
+        .expect("one terminal glyph");
+    assert_eq!(glyph.font_weight, glyphon::Weight::NORMAL);
+    let thick_key = glyph.physical((0.0, 0.0), 1.0).cache_key;
+    assert!(thick_key.flags.contains(CacheKeyFlags::FONT_THICKEN));
+
+    let mut normal_key = thick_key;
+    normal_key.flags.remove(CacheKeyFlags::FONT_THICKEN);
+    let mut swash = SwashCache::new();
+    let normal_outline = swash
+        .get_outline_commands_uncached(&mut font_system, normal_key)
+        .expect("regular glyph outline");
+    let thick_outline = swash
+        .get_outline_commands_uncached(&mut font_system, thick_key)
+        .expect("optically thick glyph outline");
+    assert_eq!(thick_outline, normal_outline);
+
+    let normal = swash
+        .get_image_uncached(&mut font_system, normal_key)
+        .expect("regular glyph mask");
+    let thick = swash
+        .get_image_uncached(&mut font_system, thick_key)
+        .expect("thickened glyph mask");
+    assert_eq!(thick.content, normal.content);
+    assert!(thick.placement.width <= normal.placement.width + 2);
+    assert!(thick.placement.height <= normal.placement.height + 2);
+    let normal_x = usize::try_from(normal.placement.left - thick.placement.left)
+        .expect("thick mask contains the regular mask's left edge");
+    let normal_y = usize::try_from(thick.placement.top - normal.placement.top)
+        .expect("thick mask contains the regular mask's top edge");
+    for row in 0..normal.placement.height as usize {
+        for column in 0..normal.placement.width as usize {
+            let normal_alpha = normal.data[row * normal.placement.width as usize + column];
+            let thick_alpha =
+                thick.data[(normal_y + row) * thick.placement.width as usize + normal_x + column];
+            assert!(thick_alpha >= normal_alpha);
+        }
+    }
+    let normal_coverage = normal
+        .data
+        .iter()
+        .map(|value| u64::from(*value))
+        .sum::<u64>();
+    let thick_coverage = thick
+        .data
+        .iter()
+        .map(|value| u64::from(*value))
+        .sum::<u64>();
+    assert!(
+        thick_coverage > normal_coverage,
+        "expected thickened coverage {thick_coverage} to exceed regular coverage {normal_coverage}",
+    );
+}
+
+#[test]
+fn fixed_monospace_width_keeps_fallback_symbols_on_the_terminal_grid() {
+    let content: Arc<str> = Arc::from("■⬝■⬝");
+    let cell_width = 14.0 * 0.6;
+    let scale = 2.0;
+    let styled =
+        StyledText::new(content.clone()).with_highlights(content.char_indices().enumerate().map(
+            |(index, (start, character))| {
+                (
+                    start..start + character.len_utf8(),
+                    HighlightStyle::default().color(if index % 2 == 0 {
+                        Color::rgb8(153, 102, 204)
+                    } else {
+                        Color::rgb8(174, 157, 197)
+                    }),
+                )
+            },
+        ));
+    let style = TextStyle::new(14.0, Color::BLACK)
+        .family(FontFamily::named("JetBrainsMono Nerd Font Mono"))
+        .line_height(20.5)
+        .monospace_width(cell_width)
+        .wrap(TextWrap::None)
+        .shaping(TextShaping::Basic);
+    let mut font_system = create_font_system();
+    font_system.db_mut().load_font_data(
+        include_bytes!("../../examples/herdr-gui/assets/JetBrainsMonoNerdFontMono-Regular.ttf")
+            .to_vec(),
+    );
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size * scale, style.line_height * scale),
+    );
+
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &style,
+        Some(styled.highlights()),
+        None,
+        scale,
+    );
+
+    let run = buffer.layout_runs().next().expect("one terminal row");
+    assert_eq!(run.glyphs.len(), 4);
+    let expected_width = 4.0 * cell_width * scale;
+    assert!(
+        (run.line_w - expected_width).abs() < 0.01,
+        "terminal row should measure {expected_width}, got {}",
+        run.line_w,
+    );
+    for (column, glyph) in run.glyphs.iter().enumerate() {
+        let expected_x = column as f32 * cell_width * scale;
+        assert!(
+            (glyph.x - expected_x).abs() < 0.01,
+            "terminal column {column} should start at {expected_x}, got {}",
+            glyph.x,
+        );
+        assert!(
+            (glyph.w - cell_width * scale).abs() < 0.01,
+            "terminal column {column} should occupy one cell, got {}",
+            glyph.w,
+        );
+    }
+}
+
+#[test]
+fn unicode_text_projection_maps_retained_ranges_and_ellipsis_to_original_bytes() {
+    let content: Arc<str> = Arc::from("alpha🙂beta界gamma");
+    let prefix_end = content.find("beta").unwrap() + "beta".len();
+    let suffix_start = content.find("gamma").unwrap();
+    let projection = build_text_projection(
+        &content,
+        None,
+        &Arc::from("…"),
+        TruncationPlacement::Middle {
+            prefix_end,
+            suffix_start,
+        },
+    );
+
+    assert_eq!(projection.content.as_ref(), "alpha🙂beta…gamma");
+    let ellipsis_start = projection.content.find('…').unwrap();
+    assert_eq!(projection.display_to_original(ellipsis_start), prefix_end);
+    assert_eq!(
+        projection.display_to_original(ellipsis_start + "…".len()),
+        suffix_start
+    );
+    assert_eq!(
+        projection.original_to_display(content.find('界').unwrap()),
+        ellipsis_start
+    );
+    assert_eq!(
+        projection.display_ranges_for_original(0..content.len()),
+        vec![0..projection.content.len()]
+    );
+}
+
+#[test]
+fn custom_affix_projection_remaps_styled_ranges_without_splitting_unicode() {
+    let content: Arc<str> = Arc::from("prefix🙂hidden界suffix");
+    let suffix_start = content.find("suffix").unwrap();
+    let styled = StyledText::new(content.clone()).with_highlights([
+        (0.."prefix".len(), HighlightStyle::default().font_bold()),
+        (
+            suffix_start..content.len(),
+            HighlightStyle::default().underline(),
+        ),
+    ]);
+    let projection = build_text_projection(
+        &content,
+        Some(styled.shared_highlights()),
+        &Arc::from("[...]"),
+        TruncationPlacement::Middle {
+            prefix_end: "prefix".len(),
+            suffix_start,
+        },
+    );
+
+    assert_eq!(projection.content.as_ref(), "prefix[...]suffix");
+    let highlights = projection.highlights.as_deref().unwrap();
+    assert_eq!(highlights.len(), 2);
+    assert_eq!(highlights[0].range, 0.."prefix[...]".len());
+    assert_eq!(&projection.content[highlights[1].range.clone()], "suffix");
+    assert_eq!(
+        projection.display_ranges_for_original(suffix_start..content.len()),
+        vec!["prefix[...]".len()..projection.content.len()]
+    );
+}
+
+#[test]
+fn standard_ellipsis_uses_cosmic_texts_single_reflowable_original_buffer() {
+    let content: Arc<str> =
+        Arc::from("A very long filename with emoji 🙂 and an important-final-suffix.quickgui");
+    let mut font_system = create_font_system();
+    for (overflow, ellipsize) in [
+        (
+            TextOverflow::ellipsis(),
+            Ellipsize::End(EllipsizeHeightLimit::Lines(1)),
+        ),
+        (
+            TextOverflow::ellipsis_start(),
+            Ellipsize::Start(EllipsizeHeightLimit::Lines(1)),
+        ),
+        (
+            TextOverflow::ellipsis_middle(),
+            Ellipsize::Middle(EllipsizeHeightLimit::Lines(1)),
+        ),
+    ] {
+        let style = TextStyle::new(14.0, Color::WHITE)
+            .wrap(TextWrap::None)
+            .text_overflow(overflow);
+        let (projection, buffer) =
+            prepare_text_buffer(&mut font_system, &content, None, &style, Some(150.0), 1.0);
+        assert!(Arc::ptr_eq(&projection.content, &content));
+        assert!(matches!(projection.mapping, TextProjection::Identity));
+        assert_eq!(buffer.ellipsize(), ellipsize);
+        assert!(text_buffer_fits(&buffer, 150.0, 1, 1.0));
+    }
+}
+
+#[test]
+fn custom_overflow_affixes_use_the_unicode_safe_visible_projection() {
+    let content: Arc<str> =
+        Arc::from("A very long filename with emoji 🙂 and an important-final-suffix.quickgui");
+    let mut font_system = create_font_system();
+    for (overflow, expected_start, expected_end, expected_affix) in [
+        (TextOverflow::Truncate(Arc::from("...")), "A", "...", "..."),
+        (
+            TextOverflow::TruncateStart(Arc::from("...")),
+            "...",
+            "quickgui",
+            "...",
+        ),
+        (
+            TextOverflow::TruncateMiddle(Arc::from("[...]")),
+            "A",
+            "gui",
+            "[...]",
+        ),
+    ] {
+        let style = TextStyle::new(14.0, Color::WHITE)
+            .wrap(TextWrap::None)
+            .text_overflow(overflow);
+        let (projection, buffer) =
+            prepare_text_buffer(&mut font_system, &content, None, &style, Some(150.0), 1.0);
+        assert!(projection.content.contains(expected_affix));
+        assert!(
+            projection.content.starts_with(expected_start),
+            "projected {:?} did not start with {expected_start:?}",
+            projection.content
+        );
+        assert!(
+            projection.content.ends_with(expected_end),
+            "projected {:?} did not end with {expected_end:?}",
+            projection.content
+        );
+        assert!(projection.content.len() < content.len());
+        assert_eq!(buffer.ellipsize(), Ellipsize::None);
+        assert!(text_buffer_fits(&buffer, 150.0, 1, 1.0));
+    }
+}
+
+#[test]
+fn multiline_ellipsis_fits_the_requested_line_clamp() {
+    let content: Arc<str> = Arc::from(
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron",
+    );
+    let style = TextStyle::new(14.0, Color::WHITE)
+        .line_height(20.0)
+        .wrap(TextWrap::Word)
+        .text_overflow(TextOverflow::ellipsis())
+        .line_clamp(2);
+    let mut font_system = create_font_system();
+    let (projection, buffer) =
+        prepare_text_buffer(&mut font_system, &content, None, &style, Some(110.0), 1.0);
+
+    assert!(Arc::ptr_eq(&projection.content, &content));
+    assert_eq!(
+        buffer.ellipsize(),
+        Ellipsize::End(EllipsizeHeightLimit::Lines(2))
+    );
+    assert!(buffer.layout_runs().count() <= 2);
+    assert!(text_buffer_fits(&buffer, 110.0, 2, 1.0));
+}
+
+#[test]
+fn fitting_overflow_text_keeps_the_original_shared_content() {
+    let content: Arc<str> = Arc::from("Short label");
+    let style = TextStyle::new(14.0, Color::WHITE)
+        .wrap(TextWrap::None)
+        .text_overflow(TextOverflow::ellipsis());
+    let mut font_system = create_font_system();
+    let (projection, buffer) =
+        prepare_text_buffer(&mut font_system, &content, None, &style, Some(400.0), 1.0);
+
+    assert!(Arc::ptr_eq(&projection.content, &content));
+    assert!(matches!(projection.mapping, TextProjection::Identity));
+    assert!(text_buffer_fits(&buffer, 400.0, 1, 1.0));
+}
+
+#[test]
+fn width_only_reflow_preserves_the_shaped_glyph_cache() {
+    let content = "Resize reuses shaped glyphs while recomputing wrapped line placement";
+    let style = TextStyle::new(14.0, Color::WHITE)
+        .line_height(20.0)
+        .wrap(TextWrap::Word);
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        content,
+        &style,
+        None,
+        Some(480.0),
+        1.0,
+    );
+    let wide_lines = buffer.layout_runs().count();
+    let shaped_line = buffer.lines[0]
+        .shape_opt()
+        .expect("configuration shapes the first paragraph") as *const _
+        as usize;
+
+    reflow_text_buffer(&mut buffer, &mut font_system, Some(90.0), 1.0);
+
+    assert_eq!(buffer.size(), (Some(90.0), None));
+    assert!(buffer.layout_runs().count() > wide_lines);
+    assert_eq!(
+        buffer.lines[0]
+            .shape_opt()
+            .expect("relayout retains the shaped paragraph") as *const _ as usize,
+        shaped_line
+    );
+}
+
+#[test]
+fn text_alignment_changes_shaped_line_origins_with_one_bounded_buffer() {
+    let mut font_system = create_font_system();
+    let mut origin = |align| {
+        let style = TextStyle::new(14.0, Color::WHITE)
+            .wrap(TextWrap::None)
+            .align(align);
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(style.font_size, style.line_height),
+        );
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            "Align me",
+            &style,
+            None,
+            Some(240.0),
+            1.0,
+        );
+        buffer
+            .cursor_position(&Cursor::new(0, 0))
+            .expect("the line has a caret origin")
+            .0
+    };
+
+    let left = origin(TextAlign::Left);
+    let center = origin(TextAlign::Center);
+    let right = origin(TextAlign::Right);
+    assert!(left < center, "centered text must move right of left text");
+    assert!(
+        center < right,
+        "right text must move right of centered text"
+    );
+    assert_eq!(glyph_alignment(TextAlign::Justify), GlyphAlign::Justified);
+}
+
+#[test]
+fn multiline_layout_maps_carets_hits_and_selection_per_line() {
+    let content = "first line\nsecond line";
+    let style = TextStyle::new(14.0, Color::WHITE).line_height(20.0);
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        content,
+        &style,
+        None,
+        Some(240.0),
+        1.0,
+    );
+
+    let second_line = content.find("second").expect("second line exists");
+    let caret = text_cursor_for_byte_index(content, second_line + 3);
+    let (_, caret_y) = buffer.cursor_position(&caret).expect("caret is laid out");
+    assert!(caret_y >= style.line_height);
+    let hit = buffer
+        .hit(0.0, caret_y + style.line_height * 0.5)
+        .expect("second line is hittable");
+    assert_eq!(hit.line, 1);
+    assert_eq!(byte_index_for_text_cursor(content, hit), second_line);
+
+    let selection_start = text_cursor_for_byte_index(content, 2);
+    let selection_end = text_cursor_for_byte_index(content, content.len() - 2);
+    let highlighted_lines = buffer
+        .layout_runs()
+        .filter(|run| !text_selection_spans(run, selection_start, selection_end).is_empty())
+        .count();
+    assert_eq!(highlighted_lines, 2);
+
+    let trailing_newline = "first line\n";
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        trailing_newline,
+        &style,
+        None,
+        Some(240.0),
+        1.0,
+    );
+    let trailing_caret = text_cursor_for_byte_index(trailing_newline, trailing_newline.len());
+    let (_, trailing_y) = buffer
+        .cursor_position(&trailing_caret)
+        .expect("a trailing empty line has caret geometry");
+    assert!(trailing_y >= style.line_height);
+
+    let wrapped = "alpha beta gamma delta epsilon";
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        wrapped,
+        &style,
+        None,
+        Some(60.0),
+        1.0,
+    );
+    assert!(buffer.layout_runs().count() >= 3);
+    let gamma = wrapped.find("gamma").expect("gamma exists");
+    let wrapped_caret = text_cursor_for_byte_index(wrapped, gamma + 2);
+    let (wrapped_x, wrapped_y) = buffer
+        .cursor_position(&wrapped_caret)
+        .expect("a wrapped caret has visual-line geometry");
+    assert!(wrapped_y >= style.line_height);
+    let wrapped_hit = buffer
+        .hit(wrapped_x, wrapped_y + style.line_height * 0.5)
+        .expect("the wrapped visual line is hittable");
+    let wrapped_index = byte_index_for_text_cursor(wrapped, wrapped_hit);
+    assert!((gamma..=gamma + "gamma".len()).contains(&wrapped_index));
+}
+
+#[test]
+fn styled_text_uses_one_wrapped_buffer_for_glyphs_backgrounds_and_decorations() {
+    let content: Arc<str> = Arc::from("status ready deprecated");
+    let ready = content.find("ready").unwrap();
+    let deprecated = content.find("deprecated").unwrap();
+    let styled = StyledText::new(content.clone()).with_highlights([
+        (
+            0..6,
+            HighlightStyle::default()
+                .background(Color::rgba8(30, 64, 175, 96))
+                .font_semibold(),
+        ),
+        (
+            ready..ready + "ready".len(),
+            HighlightStyle::default()
+                .color(Color::rgb8(56, 189, 248))
+                .double_underline(),
+        ),
+        (
+            deprecated..content.len(),
+            HighlightStyle::default()
+                .italic()
+                .strikethrough_color(Color::rgb8(248, 113, 113)),
+        ),
+    ]);
+    let style = TextStyle::new(14.0, Color::WHITE).line_height(20.0);
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &style,
+        Some(styled.highlights()),
+        Some(90.0),
+        1.0,
+    );
+
+    assert!(buffer.layout_runs().count() >= 2);
+    let metadata: HashSet<_> = buffer
+        .layout_runs()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.metadata))
+        .collect();
+    assert!(metadata.contains(&1));
+    assert!(metadata.contains(&2));
+    assert!(metadata.contains(&3));
+
+    let geometry = collect_styled_text_geometry(
+        &buffer,
+        styled.highlights(),
+        &style,
+        1.0,
+        0.0..1_000.0,
+        None,
+    );
+    assert!(!geometry.backgrounds.is_empty());
+    assert!(geometry.decorations.len() >= 3);
+    assert_eq!(geometry.backgrounds[0].color, Color::rgba8(30, 64, 175, 96));
+
+    let clipped = collect_styled_text_geometry(
+        &buffer,
+        styled.highlights(),
+        &style,
+        1.0,
+        10_000.0..10_020.0,
+        None,
+    );
+    assert!(clipped.backgrounds.is_empty());
+    assert!(clipped.decorations.is_empty());
+}
+
+#[test]
+fn inherited_base_text_decorations_use_the_same_bounded_buffer() {
+    let content: Arc<str> = Arc::from("inherited decoration");
+    let underline = Color::rgb8(56, 189, 248);
+    let strike = Color::rgb8(248, 113, 113);
+    let style = TextStyle::new(16.0, Color::WHITE)
+        .line_height(24.0)
+        .font_style(GlyphStyle::Italic)
+        .underline_color(underline)
+        .strikethrough_color(strike);
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &style,
+        None,
+        Some(240.0),
+        1.0,
+    );
+    let geometry = collect_styled_text_geometry(&buffer, &[], &style, 1.0, 0.0..1_000.0, None);
+
+    assert!(geometry.backgrounds.is_empty());
+    assert!(geometry.decorations.len() >= 2);
+    assert!(
+        geometry
+            .decorations
+            .iter()
+            .any(|decoration| decoration.color == underline)
+    );
+    assert!(
+        geometry
+            .decorations
+            .iter()
+            .any(|decoration| decoration.color == strike)
+    );
+}
+
+#[test]
+fn custom_underline_geometry_preserves_waves_thickness_and_zero() {
+    let content: Arc<str> = Arc::from("diagnostic underline");
+    let accent = Color::rgb8(248, 113, 113);
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(&mut font_system, Metrics::new(16.0, 24.0));
+
+    let wavy = TextStyle::new(16.0, Color::TRANSPARENT)
+        .line_height(24.0)
+        .underline_color(accent)
+        .text_decoration_4()
+        .text_decoration_wavy();
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &wavy,
+        None,
+        Some(240.0),
+        2.0,
+    );
+    let geometry = collect_styled_text_geometry(&buffer, &[], &wavy, 2.0, 0.0..1_000.0, None);
+    assert_eq!(geometry.decorations.len(), 1);
+    let decoration = geometry.decorations[0];
+    assert_eq!(decoration.color, accent);
+    assert!(matches!(
+        decoration.kind,
+        TextPaintKind::WavyUnderline {
+            thickness,
+            amplitude,
+            wavelength,
+            ..
+        } if thickness == 4.0 && amplitude == 4.0 && wavelength == 16.0
+    ));
+
+    let solid = wavy.clone().text_decoration_solid().text_decoration_2();
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &solid,
+        None,
+        Some(240.0),
+        2.0,
+    );
+    let geometry = collect_styled_text_geometry(&buffer, &[], &solid, 2.0, 0.0..1_000.0, None);
+    assert_eq!(geometry.decorations.len(), 1);
+    assert_eq!(geometry.decorations[0].kind, TextPaintKind::Solid);
+    assert_eq!(geometry.decorations[0].rect.height, 2.0);
+
+    let zero = solid.text_decoration_0();
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &zero,
+        None,
+        Some(240.0),
+        2.0,
+    );
+    let geometry = collect_styled_text_geometry(&buffer, &[], &zero, 2.0, 0.0..1_000.0, None);
+    assert!(geometry.decorations.is_empty());
+}
+
+#[test]
+fn highlighted_wavy_ranges_split_an_inherited_solid_decoration_span() {
+    let content: Arc<str> = Arc::from("solid wavy");
+    let wavy_start = content.find("wavy").unwrap();
+    let styled = StyledText::new(content.clone()).with_highlights([(
+        wavy_start..content.len(),
+        HighlightStyle::default()
+            .text_decoration_wavy()
+            .text_decoration_2(),
+    )]);
+    let style = TextStyle::new(16.0, Color::WHITE).underline();
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &style,
+        Some(styled.highlights()),
+        Some(240.0),
+        1.0,
+    );
+    let geometry = collect_styled_text_geometry(
+        &buffer,
+        styled.highlights(),
+        &style,
+        1.0,
+        0.0..1_000.0,
+        None,
+    );
+    assert!(
+        geometry
+            .decorations
+            .iter()
+            .any(|decoration| decoration.kind == TextPaintKind::Solid)
+    );
+    assert!(geometry.decorations.iter().any(|decoration| matches!(
+        decoration.kind,
+        TextPaintKind::WavyUnderline { thickness: 2.0, .. }
+    )));
+}
+
+#[test]
+fn styled_multiline_selection_respects_exact_byte_range() {
+    let content: Arc<str> =
+        Arc::from("fn render() {\n    let state = \"GPU cached\";\n    deprecated_api();\n}");
+    let selected_start = content.find("GPU cached").unwrap();
+    let selected_end = selected_start + "GPU cached".len();
+    let deprecated = content.find("deprecated_api").unwrap();
+    let styled = StyledText::new(content.clone()).with_highlights([
+        (0..2, HighlightStyle::default().font_bold()),
+        (
+            selected_start..selected_end,
+            HighlightStyle::default().background(Color::rgba8(14, 116, 144, 72)),
+        ),
+        (
+            deprecated..deprecated + "deprecated_api".len(),
+            HighlightStyle::default().strikethrough(),
+        ),
+    ]);
+    let style = TextStyle::new(14.0, Color::WHITE)
+        .family(FontFamily::Monospace)
+        .wrap(TextWrap::None)
+        .line_height(22.0);
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &style,
+        Some(styled.highlights()),
+        Some(640.0),
+        1.0,
+    );
+
+    let start = text_cursor_for_byte_index(&content, selected_start);
+    let end = text_cursor_for_byte_index(&content, selected_end);
+    let selections = buffer
+        .layout_runs()
+        .flat_map(|run| {
+            let line_width = run.line_w;
+            text_selection_spans(&run, start, end)
+                .into_iter()
+                .map(move |(_, width)| (run.line_i, width, line_width))
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(selections.len(), 1);
+    assert_eq!(selections[0].0, 1);
+    assert!(selections[0].1 < selections[0].2);
+}
+
+#[test]
+fn background_color_only_changes_reuse_the_shaped_highlight_key() {
+    use std::collections::hash_map::DefaultHasher;
+
+    let cool = StyledText::new("cached").with_highlights([(
+        0..6,
+        HighlightStyle::default().background(Color::rgb8(14, 116, 144)),
+    )]);
+    let warm = StyledText::new("cached").with_highlights([(
+        0..6,
+        HighlightStyle::default().background(Color::rgb8(190, 24, 93)),
+    )]);
+    let cool = Some(cool.shared_highlights().clone());
+    let warm = Some(warm.shared_highlights().clone());
+
+    assert!(highlights_equal(&cool, &warm));
+    let mut cool_hash = DefaultHasher::new();
+    hash_highlights(&cool, &mut cool_hash);
+    let mut warm_hash = DefaultHasher::new();
+    hash_highlights(&warm, &mut warm_hash);
+    assert_eq!(cool_hash.finish(), warm_hash.finish());
+
+    let foreground = StyledText::new("cached").with_highlights([(
+        0..6,
+        HighlightStyle::default().color(Color::rgb8(14, 116, 144)),
+    )]);
+    assert!(!highlights_equal(
+        &cool,
+        &Some(foreground.shared_highlights().clone())
+    ));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_font_fallback_excludes_the_unscalable_gb18030_bitmap_face() {
+    let font_system = create_font_system();
+    assert!(
+        font_system
+            .db()
+            .faces()
+            .all(|face| face.post_script_name != "GB18030Bitmap")
+    );
+}
+
+#[test]
+fn multiline_monospaced_styled_text_keeps_rasterizable_glyphs_on_every_line() {
+    let content: Arc<str> = Arc::from("first red\nsecond blue\nthird 東京 مرحبا 🙂");
+    let red = content.find("red").unwrap();
+    let blue = content.find("blue").unwrap();
+    let styled = StyledText::new(content.clone()).with_highlights([
+        (
+            red..red + 3,
+            HighlightStyle::default()
+                .color(Color::rgb8(248, 113, 113))
+                .background(Color::rgba8(127, 29, 29, 96)),
+        ),
+        (
+            blue..blue + 4,
+            HighlightStyle::default()
+                .color(Color::rgb8(96, 165, 250))
+                .underline(),
+        ),
+    ]);
+    let style = TextStyle::new(14.0, Color::WHITE)
+        .family(FontFamily::Monospace)
+        .line_height(22.0);
+    let mut font_system = create_font_system();
+    let mut buffer = Buffer::new(
+        &mut font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        &content,
+        &style,
+        Some(styled.highlights()),
+        Some(400.0),
+        1.0,
+    );
+
+    let runs: Vec<_> = buffer.layout_runs().collect();
+    assert_eq!(runs.len(), 3);
+    assert_eq!(
+        runs.iter().map(|run| run.text).collect::<Vec<_>>(),
+        ["first red", "second blue", "third 東京 مرحبا 🙂"]
+    );
+    assert!(runs.iter().all(|run| run.line_w.is_finite()));
+    assert!(runs.iter().all(|run| !run.glyphs.is_empty()));
+
+    let mut swash = SwashCache::new();
+    for run in runs {
+        for glyph in run.glyphs.iter().filter(|glyph| glyph.w > 0.0) {
+            assert!(glyph.x.is_finite() && glyph.w.is_finite());
+            assert!(
+                swash
+                    .get_image_uncached(
+                        &mut font_system,
+                        glyph.physical((0.0, 0.0), 1.0).cache_key,
+                    )
+                    .is_some(),
+                "every fallback glyph in a monospaced rich-text buffer must rasterize"
+            );
+        }
+    }
+}
+
+#[test]
+fn basic_text_fragments_isolate_changing_numeric_fields() {
+    let fragments: Vec<_> = BasicTextFragments::new("Row 014440    The quick brown fox").collect();
+    assert_eq!(
+        fragments,
+        ["Row ", "01", "44", "40", "    The quick brown fox"]
+    );
+}
+
+#[test]
+fn basic_text_fragmentation_requires_explicit_safe_shaping() {
+    let content = "Row 014440    The quick brown fox";
+    let mut style = TextStyle::new(14.0, Color::WHITE).wrap(TextWrap::None);
+    assert!(!should_fragment_basic_text(content, &style));
+    style.shaping = TextShaping::Basic;
+    assert!(should_fragment_basic_text(content, &style));
+    assert!(!should_fragment_basic_text(
+        content,
+        &style.clone().align(TextAlign::Center)
+    ));
+    assert!(!should_fragment_basic_text("short 123", &style));
+    assert!(!should_fragment_basic_text(
+        "Row 014440\tThe quick brown fox",
+        &style
+    ));
+}
+
+#[test]
+fn dilation_expands_and_collapses_around_the_original_center() {
+    let rect = Rect::new(10.0, 20.0, 100.0, 50.0);
+    assert_eq!(dilate_rect(rect, 3.0), Rect::new(7.0, 17.0, 106.0, 56.0));
+    assert_eq!(dilate_rect(rect, -60.0), Rect::new(60.0, 45.0, 0.0, 0.0));
+}
+
+#[test]
+fn one_wavy_underline_span_is_one_analytic_shape_instance() {
+    let underline = WavyUnderline::new(
+        Rect::new(10.0, 20.0, 120.0, 6.0),
+        23.0,
+        1.5,
+        2.0,
+        6.0,
+        Color::rgb8(248, 113, 113),
+    );
+    let instance = wavy_underline_instance(&underline, Rect::new(0.0, 0.0, 200.0, 100.0));
+    assert_eq!(instance.geometry, [10.0, 20.0, 120.0, 6.0]);
+    assert_eq!(instance.subject, [1.5, 0.0, 0.0, 0.0]);
+    assert_eq!(instance.params, [SHAPE_MODE_WAVY_UNDERLINE, 23.0, 2.0, 6.0]);
+}
+
+#[test]
+fn drop_shadow_geometry_includes_offset_spread_and_three_sigma_margin() {
+    let shadow = Shadow::new(
+        Rect::new(10.0, 20.0, 100.0, 50.0),
+        BoxShadow::new(4.0, 6.0, Color::WHITE)
+            .blur_radius(10.0)
+            .spread_radius(3.0),
+    )
+    .radius(8.0);
+    let instance = shadow_instance(&shadow, Rect::new(-100.0, -100.0, 500.0, 500.0)).unwrap();
+    assert_eq!(instance.subject, [11.0, 23.0, 106.0, 56.0]);
+    assert_eq!(instance.geometry, [-5.0, 7.0, 138.0, 88.0]);
+    assert_eq!(instance.params, [SHAPE_MODE_DROP_SHADOW, 8.0, 0.0, 10.0]);
+}
+
+#[test]
+fn inset_shadow_uses_a_spread_contracting_translated_hole() {
+    let shadow = Shadow::new(
+        Rect::new(10.0, 20.0, 100.0, 50.0),
+        BoxShadow::new(2.0, 3.0, Color::WHITE)
+            .blur_radius(4.0)
+            .spread_radius(5.0)
+            .inset(true),
+    )
+    .radius(8.0);
+    let instance = shadow_instance(&shadow, Rect::new(0.0, 0.0, 500.0, 500.0)).unwrap();
+    assert_eq!(instance.geometry, [10.0, 20.0, 100.0, 50.0]);
+    assert_eq!(instance.subject, [17.0, 28.0, 90.0, 40.0]);
+    assert_eq!(instance.params, [SHAPE_MODE_INSET_SHADOW, 3.0, 8.0, 4.0]);
+}

@@ -1,10 +1,10 @@
 use std::{path::PathBuf, time::Duration};
 
 use quickgui::{
-    App, AppConfig, AsyncViewContext, Color, Element, Event, Global, IntoElement,
-    PathPromptOptions, PlatformError, PlatformResponse, PromptButton, PromptLevel, SavePathOptions,
-    SystemNotification, SystemNotificationAction, Task, TitleBarStyle, View, ViewContext, button,
-    div, text,
+    Application, AsyncViewContext, Color, Element, Event, Global, IntoElement, PathPromptOptions,
+    PlatformError, PlatformResponse, PromptButton, PromptLevel, SavePathOptions,
+    SystemNotification, SystemNotificationAction, Task, TitleBarStyle, View, ViewContext,
+    WindowOptions, button, div, text,
 };
 
 const NOTIFICATION_TAG: &str = "quickgui-platform-services";
@@ -14,8 +14,7 @@ struct ApplicationStatus(String);
 impl Global for ApplicationStatus {}
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(PlatformServices::default())
-        .config(platform_window_options())
+    Application::new()
         .global(ApplicationStatus(
             "No application lifecycle callback received yet.".to_owned(),
         ))
@@ -32,7 +31,7 @@ fn main() -> Result<(), quickgui::AppError> {
                 );
             });
             if !had_visible_windows {
-                cx.open_window(PlatformServices::default(), platform_window_options());
+                cx.open_window(platform_window_options(), PlatformServices::default());
             }
         })
         .on_system_wake(|cx| {
@@ -53,11 +52,13 @@ fn main() -> Result<(), quickgui::AppError> {
                 );
             });
         })
-        .run()
+        .run(|cx| {
+            cx.open_window(platform_window_options(), PlatformServices::default());
+        })
 }
 
-fn platform_window_options() -> AppConfig {
-    AppConfig::new("QuickGUI — Platform services")
+fn platform_window_options() -> WindowOptions {
+    WindowOptions::new("QuickGUI — Platform services")
         .size(780.0, 620.0)
         .minimum_size(620.0, 500.0)
         .title_bar_style(TitleBarStyle::HiddenInset)

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, CustomShader, Element, Event, EventContext, ShaderParameters, View, ViewContext,
-    button, custom_shader, div, text,
+    Application, Color, CustomShader, Element, Event, EventContext, ShaderParameters, View,
+    ViewContext, button, custom_shader, div, text,
 };
 
 const AURORA: &str = r#"
@@ -26,10 +26,13 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
 "#;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    App::new(ShaderDemo::new()?)
-        .title("QuickGUI — Custom GPU shaders")
-        .size(900.0, 680.0)
-        .run()?;
+    let view = ShaderDemo::new()?;
+    Application::new().run(move |cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Custom GPU shaders").size(900.0, 680.0),
+            view,
+        );
+    })?;
     Ok(())
 }
 

@@ -8,7 +8,7 @@ Views use regular Rust with JSX-like composition, composable Tailwind-style spac
 
 ```rust
 use quickgui::{
-    App, Color, EventContext, IntoElement, View, ViewContext, div, text,
+    Application, Color, EventContext, IntoElement, View, ViewContext, WindowOptions, div, text,
 };
 
 struct Counter {
@@ -49,10 +49,12 @@ impl View for Counter {
 }
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(Counter { count: 0 })
-        .title("Counter")
-        .size(480.0, 320.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("Counter").size(480.0, 320.0),
+            Counter { count: 0 },
+        );
+    })
 }
 ```
 

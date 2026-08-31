@@ -122,7 +122,7 @@ impl AppRunner {
     /// Acquire the process-local endpoint for an application identifier.
     ///
     /// The first process returns `true` and receives later launches through
-    /// [`App::on_second_instance`]. A later process forwards its arguments and working directory,
+    /// [`Application::on_second_instance`]. A later process forwards its arguments and working directory,
     /// waits for acknowledgement, and returns `false`.
     pub fn request_single_instance_lock(
         &mut self,

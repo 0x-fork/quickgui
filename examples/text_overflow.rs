@@ -1,4 +1,4 @@
-use quickgui::{App, Color, IntoElement, View, ViewContext, div, text};
+use quickgui::{Application, Color, IntoElement, View, ViewContext, div, text};
 
 const LONG_PATH: &str =
     "/Users/egoist/dev/quickgui/examples/a-very-long-directory/important-file.rs";
@@ -92,8 +92,10 @@ impl View for TextOverflowExample {
 }
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(TextOverflowExample)
-        .title("QuickGUI Text Overflow")
-        .size(840.0, 600.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI Text Overflow").size(840.0, 600.0),
+            TextOverflowExample,
+        );
+    })
 }

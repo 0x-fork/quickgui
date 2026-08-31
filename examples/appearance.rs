@@ -1,22 +1,23 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, AppConfig, Color, Element, Event, IntoElement, TitleBarStyle, View, ViewContext,
-    WindowAppearance, button, div, text,
+    Application, Color, Element, Event, IntoElement, TitleBarStyle, View, ViewContext,
+    WindowAppearance, WindowOptions, button, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(AppearanceDemo::default())
-        .config(
-            AppConfig::new("QuickGUI — Native appearance")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Native appearance")
                 .size(760.0, 560.0)
                 .minimum_size(620.0, 460.0)
                 .title_bar_style(TitleBarStyle::HiddenInset)
                 .traffic_light_position(16.0, 14.0)
                 .follow_system_appearance()
                 .background(Color::rgb8(20, 23, 29)),
-        )
-        .run()
+            AppearanceDemo::default(),
+        );
+    })
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

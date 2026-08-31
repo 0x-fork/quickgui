@@ -1,14 +1,17 @@
 use quickgui::{
-    App, Background, Color, Element, FillOptions, FillRule, GradientColorSpace, LineCap, LineJoin,
-    LinearGradient, ObjectFit, Path, PathBuilder, PathStyle, Point, Rect, Size, StrokeOptions,
-    View, ViewContext, canvas, div, linear_color_stop, path, text,
+    Application, Background, Color, Element, FillOptions, FillRule, GradientColorSpace, LineCap,
+    LineJoin, LinearGradient, ObjectFit, Path, PathBuilder, PathStyle, Point, Rect, Size,
+    StrokeOptions, View, ViewContext, canvas, div, linear_color_stop, path, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(PathDemo::new())
-        .title("QuickGUI — retained paths and canvas")
-        .size(1080.0, 760.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — retained paths and canvas")
+                .size(1080.0, 760.0),
+            PathDemo::new(),
+        );
+    })
 }
 
 struct PathDemo {

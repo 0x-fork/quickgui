@@ -1,15 +1,18 @@
 use quickgui::{
-    App, Color, Element, ObjectFit, Svg, SvgTransform, View, ViewContext, button, div, svg, text,
+    Application, Color, Element, ObjectFit, Svg, SvgTransform, View, ViewContext, button, div, svg,
+    text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(SvgDemo {
-        spark: Svg::from_svg(SPARK_ICON).expect("the embedded spark SVG is valid"),
-        orbit: Svg::from_svg(ORBIT_ICON).expect("the embedded orbit SVG is valid"),
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — retained SVG icons").size(1040.0, 700.0),
+            SvgDemo {
+                spark: Svg::from_svg(SPARK_ICON).expect("the embedded spark SVG is valid"),
+                orbit: Svg::from_svg(ORBIT_ICON).expect("the embedded orbit SVG is valid"),
+            },
+        );
     })
-    .title("QuickGUI — retained SVG icons")
-    .size(1040.0, 700.0)
-    .run()
 }
 
 struct SvgDemo {

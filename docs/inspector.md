@@ -16,9 +16,12 @@ overlay renderer are all absent from the build. Enabling the feature does not op
 itself:
 
 ```rust
-App::new(Editor::new())
-    .inspector(true) // optional initial state
-    .run()?;
+Application::new().run(|cx| {
+    cx.open_window(
+        WindowOptions::default().inspector(true), // optional initial state
+        Editor::new(),
+    );
+})?;
 ```
 
 An event or action callback can control the current or another window:

@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use quickgui::{
-    Animation, AnimationExt as _, AnimationPhase, App, Color, Drag, DragOrigin, DroppedFiles,
-    DroppedText, DroppedUrl, Element, Event, EventContext, ExternalDragOperation,
+    Animation, AnimationExt as _, AnimationPhase, Application, Color, Drag, DragOrigin,
+    DroppedFiles, DroppedText, DroppedUrl, Element, Event, EventContext, ExternalDragOperation,
     ExternalDragPayload, ExternalDragText, ExternalDragUrl, FileDragPaths, View, ViewContext, div,
     ease_out_quint, text,
 };
@@ -11,10 +11,12 @@ fn main() -> Result<(), quickgui::AppError> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    App::new(DragDropDemo::default())
-        .title("QuickGUI — Typed drag and drop")
-        .size(820.0, 560.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Typed drag and drop").size(820.0, 560.0),
+            DragDropDemo::default(),
+        );
+    })
 }
 
 #[derive(Clone)]

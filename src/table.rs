@@ -747,7 +747,7 @@ fn finite_clamped(value: f32, minimum: f32, maximum: f32, fallback: f32) -> f32 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{App, Color, View, text};
+    use crate::{Application, Color, View, WindowOptions, text};
 
     #[test]
     fn layout_and_state_stay_bounded_and_preserve_logical_scroll_on_geometry_changes() {
@@ -839,8 +839,10 @@ mod tests {
 
     #[test]
     fn table_uses_composite_focus_keyboard_sort_click_and_idle_paths() {
-        let app = App::new(TableView::default()).bind_keys(table_key_bindings());
-        let (mut cx, view) = app.into_test_context().unwrap();
+        let (mut cx, view) = Application::new()
+            .bind_keys(table_key_bindings())
+            .into_test_context(WindowOptions::default(), TableView::default())
+            .unwrap();
         let window = view.window_handle();
 
         cx.simulate_keystrokes(window, "tab down right enter")

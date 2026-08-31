@@ -9,15 +9,18 @@ Enable the test-only API for downstream tests without adding it to production bu
 quickgui = { version = "0.1", features = ["test-support"] }
 ```
 
-`TestAppContext` consumes the ordinary `App` builder and reuses its concrete views, retained
+`TestAppContext` consumes the ordinary `Application` configuration plus explicit root
+`WindowOptions` and reuses its concrete views, retained
 element identity/focus/form/input state, listener registry, actions, keymap, globals, entities,
 window ownership, and foreground executor. It creates no Winit event loop, native window, WGPU
 adapter, background worker, accessibility service, timer thread, or polling loop for ordinary
 semantic tests:
 
 ```rust
-let (mut cx, counter) = App::new(Counter { count: 0 })
-    .into_test_context()?;
+let (mut cx, counter) = Application::new().into_test_context(
+    WindowOptions::default(),
+    Counter { count: 0 },
+)?;
 let window = counter.window_handle();
 
 cx.click(window, "increment")?;

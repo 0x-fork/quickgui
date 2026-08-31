@@ -1,19 +1,20 @@
 use std::time::Duration;
 
 use quickgui::{
-    App, AppConfig, AsyncContextError, AsyncViewContext, Color, Element, EventContext, Task, View,
-    ViewContext, button, div, text,
+    Application, AsyncContextError, AsyncViewContext, Color, Element, EventContext, Task, View,
+    ViewContext, WindowOptions, button, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(ForegroundTasksDemo::default())
-        .config(
-            AppConfig::new("QuickGUI — Foreground tasks")
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Foreground tasks")
                 .size(760.0, 520.0)
                 .minimum_size(560.0, 420.0)
                 .background(Color::rgb8(16, 18, 23)),
-        )
-        .run()
+            ForegroundTasksDemo::default(),
+        );
+    })
 }
 
 struct ForegroundTasksDemo {

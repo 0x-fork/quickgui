@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, AutocompleteOptionState, AutocompletePopoverLayout, AutocompleteSelectionBehavior,
+    Application, AutocompleteOptionState, AutocompletePopoverLayout, AutocompleteSelectionBehavior,
     AutocompleteState, Color, HighlightStyle, IntoElement, PickerItem, StyledText, TitleBarStyle,
     View, ViewContext, combobox_key_bindings, div, text, text_input,
 };
@@ -9,13 +9,17 @@ use quickgui::{
 const SYMBOLS: usize = 20_000;
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(AutocompleteGallery::new())
-        .title("QuickGUI — Free-form autocomplete")
-        .size(900.0, 620.0)
-        .title_bar_style(TitleBarStyle::HiddenInset)
-        .traffic_light_position(16.0, 13.0)
+    Application::new()
         .bind_keys(combobox_key_bindings())
-        .run()
+        .run(|cx| {
+            cx.open_window(
+                quickgui::WindowOptions::new("QuickGUI — Free-form autocomplete")
+                    .size(900.0, 620.0)
+                    .title_bar_style(TitleBarStyle::HiddenInset)
+                    .traffic_light_position(16.0, 13.0),
+                AutocompleteGallery::new(),
+            );
+        })
 }
 
 struct AutocompleteGallery {

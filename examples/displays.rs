@@ -10,8 +10,9 @@ use std::{
 };
 
 use quickgui::{
-    App, AsyncContextError, AsyncViewContext, Color, Display, DisplayId, Element, EventContext,
-    IntoElement, Rect, Size, View, ViewContext, WindowOptions, WindowState, button, div, text,
+    Application, AsyncContextError, AsyncViewContext, Color, Display, DisplayId, Element,
+    EventContext, IntoElement, Rect, Size, View, ViewContext, WindowOptions, WindowState, button,
+    div, text,
 };
 use serde::Serialize;
 
@@ -35,20 +36,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     let acceptance_enabled = env_flag(DISPLAY_ACCEPTANCE_ENV);
     let acceptance_root_display = acceptance_enabled.then(native_primary_display_id).flatten();
     let failed = Arc::new(AtomicBool::new(false));
-    let app = App::new(DisplayBrowser::new(
-        acceptance_enabled,
-        acceptance_root_display,
-        Arc::clone(&failed),
-    ))
-    .title("QuickGUI — Displays")
-    .size(720.0, 560.0)
-    .focus(!acceptance_enabled)
-    .show(!acceptance_enabled);
-    let app = match acceptance_root_display {
-        Some(display) => app.display(display),
-        None => app,
+    let options = quickgui::WindowOptions::new("QuickGUI — Displays")
+        .size(720.0, 560.0)
+        .focus(!acceptance_enabled)
+        .show(!acceptance_enabled);
+    let options = match acceptance_root_display {
+        Some(display) => options.display(display),
+        None => options,
     };
-    app.run()
+    let view_failed = Arc::clone(&failed);
+    Application::new()
+        .run(move |cx| {
+            cx.open_window(
+                options,
+                DisplayBrowser::new(acceptance_enabled, acceptance_root_display, view_failed),
+            );
+        })
         .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
     if failed.load(Ordering::Relaxed) {
         return Err(Box::new(DisplayAcceptanceFailed));
@@ -394,17 +397,17 @@ impl DisplayBrowser {
                 task_cx
                     .update(move |this, cx| {
                         let handle = cx.open_window(
-                            TargetWindow::acceptance(
-                                child_target.clone(),
-                                title.clone(),
-                                child_result,
-                            ),
-                            WindowOptions::new(title)
+                            WindowOptions::new(title.clone())
                                 .size(ACCEPTANCE_WINDOW_SIZE.width, ACCEPTANCE_WINDOW_SIZE.height)
                                 .display(child_target.id())
                                 .background(Color::rgb8(20, 22, 27))
                                 .focus(false)
                                 .show(false),
+                            TargetWindow::acceptance(
+                                child_target.clone(),
+                                title.clone(),
+                                child_result,
+                            ),
                         );
                         let Some(acceptance) = this.acceptance.as_mut() else {
                             cx.close_window_handle(handle);
@@ -726,11 +729,11 @@ impl View for DisplayBrowser {
             let name: Arc<str> = Arc::from(display.name());
             let open = cx.listener(format!("open-display-{}", id.get()), move |_this, cx| {
                 cx.open_window(
-                    TargetWindow::manual(id, name.clone()),
                     WindowOptions::new(format!("Window on display {}", id.get()))
                         .size(560.0, 360.0)
                         .display(id)
                         .background(Color::rgb8(20, 22, 27)),
+                    TargetWindow::manual(id, name.clone()),
                 );
             });
             cards.push(Self::display_card(display, open));

@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, App, BoxShadow, Color, Element, EventContext, IntoElement,
-    Popover, PopoverKind, View, ViewContext, WindowAppearance, button, div, text,
+    AccessibilityRole, AnchorPlacement, Application, BoxShadow, Color, Element, EventContext,
+    IntoElement, Popover, PopoverKind, View, ViewContext, WindowAppearance, button, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(PopoverGallery::default())
-        .title("QuickGUI — Controlled popovers")
-        .size(900.0, 620.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Controlled popovers").size(900.0, 620.0),
+            PopoverGallery::default(),
+        );
+    })
 }
 
 #[derive(Default)]

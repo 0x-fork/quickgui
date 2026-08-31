@@ -1,13 +1,15 @@
-use quickgui::{App, Color, Element, Image, ObjectFit, View, ViewContext, div, img, text};
+use quickgui::{Application, Color, Element, Image, ObjectFit, View, ViewContext, div, img, text};
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(ImageDemo {
-        landscape: generated_image(640, 360),
-        thumbnail: generated_image(120, 68),
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — GPU images").size(1040.0, 680.0),
+            ImageDemo {
+                landscape: generated_image(640, 360),
+                thumbnail: generated_image(120, 68),
+            },
+        );
     })
-    .title("QuickGUI — GPU images")
-    .size(1040.0, 680.0)
-    .run()
 }
 
 struct ImageDemo {

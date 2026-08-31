@@ -501,7 +501,7 @@ impl SystemPopover {
         title: impl Into<String>,
         view: V,
     ) -> Result<WindowHandle, WindowCommandError> {
-        cx.open_system_popover(anchor, view, self.window_options(title))
+        cx.open_system_popover(anchor, self.window_options(title), view)
     }
 }
 
@@ -541,8 +541,8 @@ mod tests {
     use super::*;
     use crate::element::AnchorTarget;
     use crate::{
-        App, AppConfig, AppRegion, Event, IntoElement, TestAppContext, View, ViewContext,
-        WindowBounds, WindowKind,
+        AppRegion, Application, Event, IntoElement, TestAppContext, View, ViewContext,
+        WindowBounds, WindowKind, WindowOptions,
     };
 
     #[test]
@@ -781,13 +781,13 @@ mod tests {
     #[test]
     fn system_popover_uses_retained_trigger_bounds_and_may_cross_the_parent_edge() {
         let parent_bounds = Rect::new(100.0, 100.0, 320.0, 240.0);
-        let (mut cx, launcher) = App::new(SystemPopoverLauncher::default())
-            .config(
-                AppConfig::new("Anchor parent")
+        let (mut cx, launcher) = Application::new()
+            .into_test_context(
+                WindowOptions::new("Anchor parent")
                     .window_bounds(WindowBounds::Windowed(parent_bounds))
                     .without_minimum_size(),
+                SystemPopoverLauncher::default(),
             )
-            .into_test_context()
             .unwrap();
         let parent = launcher.window_handle();
 

@@ -1,9 +1,9 @@
 use std::{ops::Range, sync::Arc};
 
 use quickgui::{
-    App, Color, Font, FontFallbacks, FontFamily, FontFeatureTag, FontFeatures, HighlightStyle,
-    KeyBinding, Menu, MenuItem, OsAction, StyledText, TitleBarStyle, View, ViewContext, button,
-    div, font, styled_text, styled_text_area, text, text_area,
+    Application, Color, Font, FontFallbacks, FontFamily, FontFeatureTag, FontFeatures,
+    HighlightStyle, KeyBinding, Menu, MenuItem, OsAction, StyledText, TitleBarStyle, View,
+    ViewContext, button, div, font, styled_text, styled_text_area, text, text_area,
 };
 
 quickgui::actions!(edit, [Cut, Copy, Paste, SelectAll]);
@@ -25,24 +25,28 @@ const SAMPLE: &str = r#"fn render_status(cache_hits: usize) -> &'static str {
 }"#;
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(StyledTextDemo {
-        warm: false,
-        editable: Arc::from(SAMPLE),
-        pasted: Arc::from(""),
-        code_font: code_font(),
-    })
-    .title("QuickGUI — Styled text")
-    .size(820.0, 620.0)
-    .title_bar_style(TitleBarStyle::HiddenInset)
-    .traffic_light_position(16.0, 13.0)
-    .bind_keys([
-        KeyBinding::new("platform-x", Cut, None),
-        KeyBinding::new("platform-c", Copy, None),
-        KeyBinding::new("platform-v", Paste, None),
-        KeyBinding::new("platform-a", SelectAll, None),
-    ])
-    .menu(edit_menu())
-    .run()
+    Application::new()
+        .bind_keys([
+            KeyBinding::new("platform-x", Cut, None),
+            KeyBinding::new("platform-c", Copy, None),
+            KeyBinding::new("platform-v", Paste, None),
+            KeyBinding::new("platform-a", SelectAll, None),
+        ])
+        .menu(edit_menu())
+        .run(|cx| {
+            cx.open_window(
+                quickgui::WindowOptions::new("QuickGUI — Styled text")
+                    .size(820.0, 620.0)
+                    .title_bar_style(TitleBarStyle::HiddenInset)
+                    .traffic_light_position(16.0, 13.0),
+                StyledTextDemo {
+                    warm: false,
+                    editable: Arc::from(SAMPLE),
+                    pasted: Arc::from(""),
+                    code_font: code_font(),
+                },
+            );
+        })
 }
 
 struct StyledTextDemo {

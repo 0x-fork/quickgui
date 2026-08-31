@@ -1,7 +1,7 @@
 use std::{path::PathBuf, thread, time::Duration};
 
 use quickgui::{
-    App, Color, Element, Image, ImageResource, ObjectFit, View, ViewContext, div, img, text,
+    Application, Color, Element, Image, ImageResource, ObjectFit, View, ViewContext, div, img, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
@@ -13,17 +13,22 @@ fn main() -> Result<(), quickgui::AppError> {
         .join("examples")
         .join("assets")
         .join("missing-image.png");
-    App::new(ResourceDemo {
-        fast: ImageResource::custom(|| Ok::<_, &'static str>(generated_image(640, 360, 24))),
-        delayed: ImageResource::custom(move || {
-            thread::sleep(Duration::from_millis(delayed_ms));
-            Ok::<_, &'static str>(generated_image(640, 360, 92))
-        }),
-        missing: ImageResource::from_path(missing_path),
+    Application::new().run(move |cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — asynchronous image resources")
+                .size(1080.0, 560.0),
+            ResourceDemo {
+                fast: ImageResource::custom(|| {
+                    Ok::<_, &'static str>(generated_image(640, 360, 24))
+                }),
+                delayed: ImageResource::custom(move || {
+                    thread::sleep(Duration::from_millis(delayed_ms));
+                    Ok::<_, &'static str>(generated_image(640, 360, 92))
+                }),
+                missing: ImageResource::from_path(missing_path),
+            },
+        );
     })
-    .title("QuickGUI — asynchronous image resources")
-    .size(1080.0, 560.0)
-    .run()
 }
 
 struct ResourceDemo {

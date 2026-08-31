@@ -531,7 +531,8 @@ fn combobox_autocomplete<T>(state: &mut ComboboxState<T>) -> &mut AutocompleteSt
 mod tests {
     use super::*;
     use crate::{
-        App, Color, MouseDownEvent, View, button, combobox_key_bindings, div, text, text_input,
+        Application, Color, MouseDownEvent, View, WindowOptions, button, combobox_key_bindings,
+        div, text, text_input,
     };
     use std::{cell::Cell, rc::Rc};
 
@@ -603,9 +604,9 @@ mod tests {
 
     #[test]
     fn arbitrary_edits_never_commit_and_every_dismissal_restores_the_committed_label() {
-        let (mut cx, owner) = App::new(Owner::new())
+        let (mut cx, owner) = Application::new()
             .bind_keys(combobox_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), Owner::new())
             .unwrap();
         let window = owner.window_handle();
         assert_eq!(
@@ -673,9 +674,9 @@ mod tests {
 
     #[test]
     fn tab_and_owner_outside_press_restore_without_stealing_normal_focus_movement() {
-        let (mut cx, owner) = App::new(Owner::new())
+        let (mut cx, owner) = Application::new()
             .bind_keys(combobox_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), Owner::new())
             .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
@@ -728,9 +729,9 @@ mod tests {
 
     #[test]
     fn never_key_child_click_commits_a_declared_value_and_keeps_owner_input_focus() {
-        let (mut cx, owner) = App::new(Owner::new())
+        let (mut cx, owner) = Application::new()
             .bind_keys(combobox_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), Owner::new())
             .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
@@ -765,9 +766,9 @@ mod tests {
 
     #[test]
     fn open_source_replacement_reuses_child_and_stable_selection_survives_absence() {
-        let (mut cx, owner) = App::new(Owner::new())
+        let (mut cx, owner) = Application::new()
             .bind_keys(combobox_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), Owner::new())
             .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();
@@ -913,9 +914,9 @@ mod tests {
 
     #[test]
     fn large_sources_mount_visible_rows_without_value_clones_and_settled_windows_sleep() {
-        let (mut cx, owner) = App::new(LargeOwner::new())
+        let (mut cx, owner) = Application::new()
             .bind_keys(combobox_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), LargeOwner::new())
             .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "large-combobox").unwrap();
@@ -963,9 +964,9 @@ mod tests {
 
     #[test]
     fn owner_accessibility_proxy_keeps_committed_selection_distinct_from_active_preview() {
-        let (mut cx, owner) = App::new(Owner::new())
+        let (mut cx, owner) = Application::new()
             .bind_keys(combobox_key_bindings())
-            .into_test_context()
+            .into_test_context(WindowOptions::default(), Owner::new())
             .unwrap();
         let window = owner.window_handle();
         cx.focus(window, "fruit").unwrap();

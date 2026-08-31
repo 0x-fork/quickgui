@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, Color, Element, ElementId, Event, EventContext, Fieldset, View, ViewContext, button, div,
-    form, text, text_area, text_input,
+    Application, Color, Element, ElementId, Event, EventContext, Fieldset, View, ViewContext,
+    button, div, form, text, text_area, text_input,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(FocusDemo::new())
-        .title("QuickGUI — Focus and accessibility")
-        .size(720.0, 680.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Focus and accessibility").size(720.0, 680.0),
+            FocusDemo::new(),
+        );
+    })
 }
 
 struct FocusDemo {

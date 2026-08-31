@@ -986,7 +986,7 @@ fn finite_clamped(value: f32, minimum: f32, maximum: f32, fallback: f32) -> f32 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{App, View, text};
+    use crate::{Application, View, WindowOptions, text};
 
     fn sample_nodes() -> Vec<TreeNode<usize>> {
         vec![
@@ -1204,8 +1204,10 @@ mod tests {
 
     #[test]
     fn tree_uses_composite_focus_click_keyboard_activation_and_idle_paths() {
-        let app = App::new(TreeView::default()).bind_keys(tree_key_bindings());
-        let (mut cx, view) = app.into_test_context().unwrap();
+        let (mut cx, view) = Application::new()
+            .bind_keys(tree_key_bindings())
+            .into_test_context(WindowOptions::default(), TreeView::default())
+            .unwrap();
         let window = view.window_handle();
 
         cx.simulate_keystrokes(window, "tab right down down right right enter")

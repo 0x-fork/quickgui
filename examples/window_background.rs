@@ -1,24 +1,25 @@
 use std::sync::Arc;
 
 use quickgui::{
-    App, AppConfig, Color, Element, IntoElement, TitleBarStyle, View, ViewContext,
-    WindowBackgroundAppearance, button, div, text,
+    Application, Color, Element, IntoElement, TitleBarStyle, View, ViewContext,
+    WindowBackgroundAppearance, WindowOptions, button, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(BackgroundDemo {
-        mode: WindowBackgroundAppearance::Blurred,
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("QuickGUI — Window background")
+                .size(760.0, 560.0)
+                .minimum_size(620.0, 460.0)
+                .title_bar_style(TitleBarStyle::HiddenInset)
+                .traffic_light_position(16.0, 14.0)
+                .window_background(WindowBackgroundAppearance::Blurred)
+                .background(Color::rgba8(13, 17, 25, 198)),
+            BackgroundDemo {
+                mode: WindowBackgroundAppearance::Blurred,
+            },
+        );
     })
-    .config(
-        AppConfig::new("QuickGUI — Window background")
-            .size(760.0, 560.0)
-            .minimum_size(620.0, 460.0)
-            .title_bar_style(TitleBarStyle::HiddenInset)
-            .traffic_light_position(16.0, 14.0)
-            .window_background(WindowBackgroundAppearance::Blurred)
-            .background(Color::rgba8(13, 17, 25, 198)),
-    )
-    .run()
 }
 
 struct BackgroundDemo {

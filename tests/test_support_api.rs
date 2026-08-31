@@ -1,9 +1,9 @@
 #![cfg(feature = "test-support")]
 
 use quickgui::{
-    App, EventContext, IntoElement, Key, KeyBinding, KeyboardLayout, Keystroke, Modifiers,
+    Application, EventContext, IntoElement, Key, KeyBinding, KeyboardLayout, Keystroke, Modifiers,
     TestAppContext, TestAppError, View, ViewContext, VisualSnapshot, VisualTolerance, WindowHandle,
-    button, text,
+    WindowOptions, button, text,
 };
 
 quickgui::actions!(test_support_api, [LocalizedCommand]);
@@ -22,12 +22,12 @@ impl View for Counter {
 
 #[test]
 fn downstream_crates_can_use_the_feature_gated_test_api() {
-    let (mut cx, counter) = App::new(Counter(0))
+    let (mut cx, counter) = Application::new()
         .bind_keys([KeyBinding::new("platform-[", LocalizedCommand, None).use_key_equivalents()])
         .on_keyboard_layout_change(|layout, cx| {
             assert_eq!(layout, cx.keyboard_layout());
         })
-        .into_test_context()
+        .into_test_context(WindowOptions::default(), Counter(0))
         .unwrap();
 
     cx.click(counter.window_handle(), "increment").unwrap();

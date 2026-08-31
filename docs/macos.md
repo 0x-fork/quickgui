@@ -45,16 +45,18 @@ cx.show_system_notification(notification)?;
 // cx.dismiss_system_notification("background-build")?;
 ```
 
-Native application events are configured once on `App`, outside any particular window:
+Native application events are configured once on `Application`, outside any particular window:
 
 ```rust
-App::new(view)
+Application::new()
     .on_open_urls(|urls, cx| update_workspace(urls, cx))
     .on_reopen(|had_visible_windows, cx| reopen(had_visible_windows, cx))
     .on_system_wake(|cx| reconnect(cx))
     .on_system_notification_response(|response, cx| activate(response, cx))
     .on_window_closed(|window, cx| record_closed_window(window, cx))
-    .run()?;
+    .run(|cx| {
+        cx.open_window(WindowOptions::default(), view);
+    })?;
 ```
 
 Those callbacks receive an application-wide `EventContext` with no current window. They can
@@ -155,10 +157,14 @@ lights. Its implicit AppKit drag area is disabled; layout boxes explicitly opt i
 `drag` and `no-drag` regions:
 
 ```rust
-App::new(view)
-    .title_bar_style(TitleBarStyle::HiddenInset)
-    .traffic_light_position(16.0, 13.0)
-    .run()?;
+Application::new().run(|cx| {
+    cx.open_window(
+        WindowOptions::default()
+            .title_bar_style(TitleBarStyle::HiddenInset)
+            .traffic_light_position(16.0, 13.0),
+        view,
+    );
+})?;
 
 div()
     .h(64.0)

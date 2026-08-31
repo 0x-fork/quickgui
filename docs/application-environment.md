@@ -7,13 +7,15 @@ package metadata before startup and the runtime resolves one immutable path snap
 identifier:
 
 ```rust
-use quickgui::{App, AppInfo};
+use quickgui::{Application, AppInfo, WindowOptions};
 
 let info = AppInfo::new("Example", "1.2.3", "dev.example.desktop")?;
 
-App::new(MyView::default())
+Application::new()
     .app_info(info)
-    .run()?;
+    .run(|cx| {
+        cx.open_window(WindowOptions::default(), MyView::default());
+    })?;
 ```
 
 `AppInfo` rejects empty, padded, multiline, NUL-containing, or oversized values. The identifier is
@@ -34,10 +36,12 @@ before launch:
 ```rust
 let paths = info.paths()?.with_resource_dir("/opt/example/resources");
 
-App::new(MyView::default())
+Application::new()
     .app_info(info)
     .app_paths(paths)
-    .run()?;
+    .run(|cx| {
+        cx.open_window(WindowOptions::default(), MyView::default());
+    })?;
 ```
 
 Overrides replace only the immutable snapshot; they do not mutate process environment variables or

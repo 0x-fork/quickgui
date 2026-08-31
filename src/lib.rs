@@ -302,7 +302,7 @@ pub use quickgui_system::{
     UpdateProgress, WindowsUpdateInstallMode, default_update_target,
 };
 pub use runtime::{
-    App, AppConfig, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
+    App, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
     DesktopIntegrationSupport, DismissListener, Drag, DragListener, DropListener,
     FormInvalidListener, FormSubmitListener, GlobalShortcutEvent, HoverListener, InputListener,
     KeyDownListener, KeyUpListener, MAX_ACTION_LISTENERS_PER_WINDOW, MAX_APPLICATION_WINDOWS,
@@ -399,7 +399,9 @@ pub use visual_test::{
     VisualTestError, VisualTolerance,
 };
 
-/// Run a view with the default application configuration.
+/// Run one window with the default application and window configuration.
 pub fn run<V: View>(view: V) -> Result<(), AppError> {
-    App::new(view).run()
+    Application::new().run(move |cx| {
+        cx.open_window(WindowOptions::default(), view);
+    })
 }

@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, App, Color, Element, EventContext, FocusHandle, View,
-    ViewContext, button, div, overlay, text,
+    AccessibilityRole, AnchorPlacement, Application, Color, Element, EventContext, FocusHandle,
+    View, ViewContext, button, div, overlay, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(OverlayDemo::default())
-        .title("QuickGUI — Web-style overlays")
-        .size(760.0, 520.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Web-style overlays").size(760.0, 520.0),
+            OverlayDemo::default(),
+        );
+    })
 }
 
 #[derive(Default)]

@@ -1,17 +1,19 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    App, Color, Element, Event, EventContext, Tab, Tabs, TabsState, Transition, View, ViewContext,
-    div, text,
+    Application, Color, Element, Event, EventContext, Tab, Tabs, TabsState, Transition, View,
+    ViewContext, div, text,
 };
 
 const COLOR_TRANSITION: Duration = Duration::from_millis(100);
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(TabsDemo::default())
-        .title("QuickGUI — Tabs")
-        .size(840.0, 680.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            quickgui::WindowOptions::new("QuickGUI — Tabs").size(840.0, 680.0),
+            TabsDemo::default(),
+        );
+    })
 }
 
 #[derive(Clone, Copy)]

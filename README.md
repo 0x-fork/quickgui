@@ -30,7 +30,9 @@ The current focus is production-quality macOS behavior with low idle CPU and bou
 Views are ordinary Rust with JSX-like composition and Tailwind-style helpers:
 
 ```rust
-use quickgui::{App, Color, EventContext, IntoElement, View, ViewContext, div, text};
+use quickgui::{
+    Application, Color, EventContext, IntoElement, View, ViewContext, WindowOptions, div, text,
+};
 
 struct Counter {
     count: usize,
@@ -69,10 +71,12 @@ impl View for Counter {
 }
 
 fn main() -> Result<(), quickgui::AppError> {
-    App::new(Counter { count: 0 })
-        .title("Counter")
-        .size(480.0, 320.0)
-        .run()
+    Application::new().run(|cx| {
+        cx.open_window(
+            WindowOptions::new("Counter").size(480.0, 320.0),
+            Counter { count: 0 },
+        );
+    })
 }
 ```
 

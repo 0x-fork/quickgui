@@ -7,7 +7,7 @@ window, and image-decode worker. `BundledAssets` is the default in-memory implem
 resources compiled with `include_bytes!`:
 
 ```rust
-use quickgui::{App, Assets, BundledAssets};
+use quickgui::{Application, Assets, BundledAssets, WindowOptions};
 
 let bundle = BundledAssets::new()
     .with("icons/logo.svg", include_bytes!("../assets/logo.svg"))?
@@ -15,14 +15,17 @@ let bundle = BundledAssets::new()
     .with("fonts/Inter-Regular.ttf", include_bytes!("../assets/Inter-Regular.ttf"))?;
 let assets = Assets::new(bundle);
 
-App::new(MyView::new(assets.svg("icons/logo.svg")?))
+let view = MyView::new(assets.svg("icons/logo.svg")?);
+Application::new()
     .assets(assets)
     .font("fonts/Inter-Regular.ttf")
-    .run()?;
+    .run(move |cx| {
+        cx.open_window(WindowOptions::default(), view);
+    })?;
 ```
 
-`App::with_assets(bundle)` is a shorter form when application code does not need the `Assets`
-handle before startup. Static byte slices remain borrowed; owned bytes use one shared allocation.
+`Application::with_assets(bundle)` is a shorter form when application code does not need the
+`Assets` handle before startup. Static byte slices remain borrowed; owned bytes use one shared allocation.
 Asset paths are normalized relative UTF-8 paths, so absolute paths, backslashes, empty segments,
 `.` and `..` are rejected.
 
@@ -72,12 +75,14 @@ construction. Retain the resulting `Svg`; do not parse it in every render.
 Register OpenType fonts before `run` with either bytes or an asset path:
 
 ```rust
-use quickgui::{App, FontFallbacks, FontFeatureTag, FontFeatures, font, text};
+use quickgui::{Application, FontFallbacks, FontFeatureTag, FontFeatures, WindowOptions, font, text};
 
-App::new(MyView)
+Application::new()
     .font(include_bytes!("../assets/Inter-Regular.ttf"))
     .font("fonts/Inter-Bold.ttf")
-    .run()?;
+    .run(|cx| {
+        cx.open_window(WindowOptions::default(), MyView);
+    })?;
 
 let heading = text("Fast, quiet UI")
     .font(

@@ -1,13 +1,13 @@
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, App, AutocompleteListState, AutocompleteOptionState,
-    AutocompletePopoverLayout, AutocompleteState, CONTEXT_MENU_SUBMENU_AIM_DELAY,
-    CONTEXT_MENU_SUBMENU_HOVER_DELAY, Checkbox, ComboboxListState, ComboboxOptionState,
-    ComboboxPopoverLayout, ComboboxState, ContextMenuLayout, ContextMenuState, Dialog, FontFallbacks,
-    Accordion, AccordionState, Collapsible, Field, Fieldset, FontFamily, FontFeatureTag,
-    FontFeatures, IntoElement, PickerItem, PickerLayout,
-    PickerState, Popover, PopoverKind, PopoverMenu, PopoverMenuItem, Radio, RadioGroup, SelectState,
-    Switch, TableColumn, TableLayout, TableState, ToggleState, TreeLayout, TreeNode, TreeState, View,
-    ViewContext, checkbox, combobox_key_bindings, div, font, radio, radio_group, switch, text,
+    AccessibilityRole, Accordion, AccordionState, AnchorPlacement, Application,
+    AutocompleteListState, AutocompleteOptionState, AutocompletePopoverLayout, AutocompleteState,
+    CONTEXT_MENU_SUBMENU_AIM_DELAY, CONTEXT_MENU_SUBMENU_HOVER_DELAY, Checkbox, Collapsible,
+    ComboboxListState, ComboboxOptionState, ComboboxPopoverLayout, ComboboxState,
+    ContextMenuLayout, ContextMenuState, Dialog, Field, Fieldset, FontFallbacks, FontFamily,
+    FontFeatureTag, FontFeatures, IntoElement, PickerItem, PickerLayout, PickerState, Popover,
+    PopoverKind, PopoverMenu, PopoverMenuItem, Radio, RadioGroup, SelectState, Switch, TableColumn,
+    TableLayout, TableState, ToggleState, TreeLayout, TreeNode, TreeState, View, ViewContext,
+    WindowOptions, checkbox, combobox_key_bindings, div, font, radio, radio_group, switch, text,
     text_input,
 };
 
@@ -42,10 +42,8 @@ impl PackagedApp {
             .expect("packaged PickerState API should accept a valid bounded source")
             .with_layout(PickerLayout::new(36.0).max_visible_rows(4)),
             table: TableState::new(2).with_layout(TableLayout::new(30.0, 28.0)),
-            tree: TreeState::new([
-                TreeNode::new("src", "src", "directory")
-                    .child(TreeNode::new("lib", "lib.rs", "file")),
-            ])
+            tree: TreeState::new([TreeNode::new("src", "src", "directory")
+                .child(TreeNode::new("lib", "lib.rs", "file"))])
             .expect("packaged TreeState API should accept a valid bounded source")
             .with_layout(TreeLayout::new(28.0)),
         }
@@ -119,12 +117,7 @@ impl View for PackagedApp {
             &columns,
             Self::table,
             |header| div().child(header.column.label().clone()),
-            |cell| {
-                div().child(format!(
-                    "{}:{}",
-                    cell.position.row, cell.position.column
-                ))
-            },
+            |cell| div().child(format!("{}:{}", cell.position.row, cell.position.column)),
             |_view, _position, _cx| {},
         );
         let tree = self.tree.element(
@@ -237,13 +230,23 @@ fn main() {
         .expect("packaged bounded accordion state");
     let accordion = Accordion::new("packaged-accordion").keep_mounted(true);
     let accordion_item = accordion.item_from_state("packaged-one", 0, &accordion_state);
-    let _accordion_root = accordion.root_part(div().child(accordion_item.root_part(
-        div()
-            .child(accordion_item.header_part(
-                div().child(accordion_item.trigger_part(div()).child("Packaged accordion item")),
-            ))
-            .children(accordion_item.panel_part(text("Packaged accordion panel"))),
-    )));
+    let _accordion_root = accordion.root_part(
+        div().child(
+            accordion_item.root_part(
+                div()
+                    .child(
+                        accordion_item.header_part(
+                            div().child(
+                                accordion_item
+                                    .trigger_part(div())
+                                    .child("Packaged accordion item"),
+                            ),
+                        ),
+                    )
+                    .children(accordion_item.panel_part(text("Packaged accordion panel"))),
+            ),
+        ),
+    );
     let _select = SelectState::new([
         PickerItem::new("System", "system").id("system"),
         PickerItem::new("Dark", "dark").id("dark"),
@@ -279,7 +282,7 @@ fn main() {
             dialog.description_part(text("Packaged description")),
         ]),
     ]);
-    let _app = App::new(PackagedApp::new())
-        .bind_keys(combobox_key_bindings())
-        .inspector(false);
+    let _application = Application::new().bind_keys(combobox_key_bindings());
+    let _window = WindowOptions::default().inspector(false);
+    let _view = PackagedApp::new();
 }
