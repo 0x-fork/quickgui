@@ -172,14 +172,21 @@ function AlertDialogExample() {
   );
 }
 
-new Window({
-  title: "QuickGUI Alert Dialogs",
-  width: 680,
-  height: 500,
-  minimumWidth: 540,
-  minimumHeight: 420,
-  background: "#0b0e14",
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 16, y: 14 },
-  renderer: createRenderer(() => <AlertDialogExample />),
+function openMainWindow() {
+  new Window({
+    title: "QuickGUI Alert Dialogs",
+    width: 680,
+    height: 500,
+    minimumWidth: 540,
+    minimumHeight: 420,
+    background: "#0b0e14",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 14 },
+    renderer: createRenderer(() => <AlertDialogExample />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();

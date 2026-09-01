@@ -1,5 +1,41 @@
 use super::*;
 
+#[cfg(target_os = "macos")]
+struct HostAutoreleasePool {
+    context: *mut core::ffi::c_void,
+}
+
+#[cfg(target_os = "macos")]
+impl HostAutoreleasePool {
+    fn new() -> Self {
+        // SAFETY: `runAppHost` owns the process main thread until the native loop exits. No pool
+        // created by Bun can be popped across this one while that blocking call is active.
+        let context = unsafe { objc2::ffi::objc_autoreleasePoolPush() };
+        Self { context }
+    }
+
+    fn drain_and_replace(&mut self) {
+        // AppKit can autorelease an NSWindow or its delegate after an inner Winit pool has already
+        // drained. Rotate the host-level pool after each pump so those final references never fall
+        // through to Bun's process-lifetime pool.
+        unsafe {
+            objc2::ffi::objc_autoreleasePoolPop(self.context);
+            self.context = objc2::ffi::objc_autoreleasePoolPush();
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for HostAutoreleasePool {
+    fn drop(&mut self) {
+        // SAFETY: The host loop is entered and left on the same process main thread, and all Winit
+        // callback-local pools have drained before the loop returns.
+        unsafe {
+            objc2::ffi::objc_autoreleasePoolPop(self.context);
+        }
+    }
+}
+
 #[derive(Default)]
 pub(super) struct Registry {
     pub(super) next_id: u32,
@@ -434,6 +470,8 @@ pub fn run_app_host(on_ready: Option<Function<'_, (), ()>>) -> Result<i32> {
 pub(super) fn run_app_host_loop(
     on_ready: Option<&Function<'_, (), ()>>,
 ) -> std::result::Result<i32, String> {
+    #[cfg(target_os = "macos")]
+    let mut autorelease_pool = HostAutoreleasePool::new();
     let mut active_app = None;
     let mut runtime: Option<NativeRuntime> = None;
     let mut ready_reported = false;
@@ -618,12 +656,16 @@ pub(super) fn run_app_host_loop(
         }
 
         let Some(runtime) = runtime.as_mut() else {
+            #[cfg(target_os = "macos")]
+            autorelease_pool.drain_and_replace();
             continue;
         };
         runtime.sync_closed_windows();
         HOST.publish_events(runtime.drain_events());
 
         let Some(runner) = runtime.runner.as_mut() else {
+            #[cfg(target_os = "macos")]
+            autorelease_pool.drain_and_replace();
             continue;
         };
         let status = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runner.pump(None)))
@@ -642,6 +684,8 @@ pub(super) fn run_app_host_loop(
         }
         runtime.sync_closed_windows();
         HOST.publish_events(runtime.drain_events());
+        #[cfg(target_os = "macos")]
+        autorelease_pool.drain_and_replace();
         if let AppRunStatus::Exited(code) = status {
             let code = code.max(0);
             HOST.publish_exit(code);

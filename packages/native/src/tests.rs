@@ -92,6 +92,7 @@ fn app_configuration_updates_preserve_embedded_identity_and_paths() {
         ..NativeAppOptions::default()
     })
     .expect("valid initial application configuration");
+    assert_eq!(quit_mode, QuitMode::Default);
     let initial_paths = paths.clone().expect("identity resolves application paths");
 
     let (info, paths, quit_mode) = update_native_app_configuration(

@@ -3348,6 +3348,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "objc2 0.5.2",
  "quickgui",
  "serde",
  "serde_json",

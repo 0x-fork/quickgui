@@ -17,15 +17,22 @@ import { createSignal } from "solid-js";
 
 await app.whenReady();
 
-new Window({
-  title: "QuickGUI SwiftUI",
-  width: 480,
-  height: 320,
-  minimumWidth: 320,
-  minimumHeight: 220,
-  background: "#ffffff",
-  renderer: createRenderer(() => <Demo />),
+function openMainWindow() {
+  new Window({
+    title: "QuickGUI SwiftUI",
+    width: 480,
+    height: 320,
+    minimumWidth: 320,
+    minimumHeight: 220,
+    background: "#ffffff",
+    renderer: createRenderer(() => <Demo />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();
 
 function Demo() {
   const [open, setOpen] = createSignal(false);

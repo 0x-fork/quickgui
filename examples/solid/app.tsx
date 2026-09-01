@@ -3,17 +3,25 @@ import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
 await app.whenReady();
-new Window({
-  title: "QuickGUI + Solid 2",
-  width: 760,
-  height: 520,
-  minimumWidth: 520,
-  minimumHeight: 360,
-  background: "#090d16",
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 16, y: 13 },
-  renderer: createRenderer(() => <Counter />),
+
+function openMainWindow() {
+  new Window({
+    title: "QuickGUI + Solid 2",
+    width: 760,
+    height: 520,
+    minimumWidth: 520,
+    minimumHeight: 360,
+    background: "#090d16",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 13 },
+    renderer: createRenderer(() => <Counter />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();
 
 function openDetailsWindow() {
   new Window({

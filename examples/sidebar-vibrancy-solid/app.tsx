@@ -32,20 +32,27 @@ const visualEffectStates = [
 
 await app.whenReady();
 
-new Window({
-  title: "QuickGUI Sidebar Vibrancy",
-  width: 860,
-  height: 620,
-  minimumWidth: 700,
-  minimumHeight: 480,
-  background: "transparent",
-  vibrancy: "sidebar",
-  visualEffectState: "followWindow",
-  appearance: "light",
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 16, y: 19 },
-  renderer: createRenderer(() => <SidebarVibrancyExample />),
+function openMainWindow() {
+  new Window({
+    title: "QuickGUI Sidebar Vibrancy",
+    width: 860,
+    height: 620,
+    minimumWidth: 700,
+    minimumHeight: 480,
+    background: "transparent",
+    vibrancy: "sidebar",
+    visualEffectState: "followWindow",
+    appearance: "light",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 19 },
+    renderer: createRenderer(() => <SidebarVibrancyExample />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();
 
 function SidebarVibrancyExample() {
   const window = Window.getCurrentWindow();

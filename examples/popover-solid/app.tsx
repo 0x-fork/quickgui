@@ -261,14 +261,21 @@ function PopoverExample() {
   );
 }
 
-new Window({
-  title: "QuickGUI Solid Popovers",
-  width: 760,
-  height: 540,
-  minimumWidth: 620,
-  minimumHeight: 480,
-  background: "#0b0f17",
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 16, y: 14 },
-  renderer: createRenderer(() => <PopoverExample />),
+function openMainWindow() {
+  new Window({
+    title: "QuickGUI Solid Popovers",
+    width: 760,
+    height: 540,
+    minimumWidth: 620,
+    minimumHeight: 480,
+    background: "#0b0f17",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 14 },
+    renderer: createRenderer(() => <PopoverExample />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();

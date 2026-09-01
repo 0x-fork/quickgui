@@ -50,13 +50,21 @@ function Counter() {
   );
 }
 
-await app.whenReady();
-const mainWindow = new Window({
-  title: "Counter",
-  width: 480,
-  height: 320,
-  renderer: createRenderer(() => <Counter />),
+function openMainWindow() {
+  return new Window({
+    title: "Counter",
+    width: 480,
+    height: 320,
+    renderer: createRenderer(() => <Counter />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+
+await app.whenReady();
+const mainWindow = openMainWindow();
 ```
 
 The singleton `app` establishes the application context for its JavaScript Worker while the CLI
@@ -84,8 +92,10 @@ function openSettings() {
 }
 ```
 
-Closing a `Window` automatically disposes its Solid renderer root. Closing the last window ends the
-current JavaScript host run.
+Closing a `Window` automatically disposes its Solid renderer root. With the default quit mode,
+macOS keeps the application resident after its last window closes, while Windows and Linux end the
+JavaScript host run. A macOS `reopen` listener must construct a replacement window and renderer
+root when the user clicks the Dock icon.
 
 `Window.getCurrentWindow()` returns the window whose renderer or native event callback is running.
 Read it during component setup and retain the result for asynchronous work; it intentionally throws

@@ -197,7 +197,6 @@ mod property {
     pub const SWIFT_UI_IS_PRESENTED: u16 = 125;
     pub const SWIFT_UI_ATTACHMENT_ANCHOR: u16 = 126;
     pub const SWIFT_UI_ARROW_EDGE: u16 = 127;
-    pub const SWIFT_UI_PRESENTATION_LISTENER: u16 = 128;
     pub const BORDER_TOP_WIDTH: u16 = 129;
     pub const BORDER_RIGHT_WIDTH: u16 = 130;
     pub const BORDER_BOTTOM_WIDTH: u16 = 131;

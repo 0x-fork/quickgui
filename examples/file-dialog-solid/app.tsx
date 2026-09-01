@@ -182,12 +182,19 @@ function FileDialogExample() {
   );
 }
 
-new Window({
-  title: "QuickGUI File Dialogs",
-  width: 720,
-  height: 520,
-  minimumWidth: 560,
-  minimumHeight: 440,
-  background: "#0b0e14",
-  renderer: createRenderer(() => <FileDialogExample />),
+function openMainWindow() {
+  new Window({
+    title: "QuickGUI File Dialogs",
+    width: 720,
+    height: 520,
+    minimumWidth: 560,
+    minimumHeight: 440,
+    background: "#0b0e14",
+    renderer: createRenderer(() => <FileDialogExample />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();

@@ -2,14 +2,22 @@ import { app, Window } from "@quickgui/native";
 import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 
-await app.whenReady();
-new Window({
-  title: {{APP_NAME}},
-  width: 720,
-  height: 480,
-  background: "#0b1020",
-  renderer: createRenderer(() => <Counter />),
+function openMainWindow() {
+  new Window({
+    title: {{APP_NAME}},
+    width: 720,
+    height: 480,
+    background: "#0b1020",
+    renderer: createRenderer(() => <Counter />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+
+await app.whenReady();
+openMainWindow();
 
 function Counter() {
   const [count, setCount] = createSignal(0);

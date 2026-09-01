@@ -397,12 +397,19 @@ if (!primary) {
   process.exit(0);
 }
 
-new Window({
-  title: appName,
-  width: 760,
-  height: 640,
-  minimumWidth: 620,
-  minimumHeight: 520,
-  background: "#0b0e14",
-  renderer: createRenderer(() => <SystemApiExample />),
+function openMainWindow() {
+  new Window({
+    title: appName,
+    width: 760,
+    height: 640,
+    minimumWidth: 620,
+    minimumHeight: 520,
+    background: "#0b0e14",
+    renderer: createRenderer(() => <SystemApiExample />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();

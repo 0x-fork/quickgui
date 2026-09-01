@@ -44,15 +44,22 @@ function HerdrGui() {
   );
 }
 
-new Window({
-  title: "Herdr GUI",
-  width: 1220,
-  height: 780,
-  minimumWidth: 860,
-  minimumHeight: 560,
-  background: themeFor(initialAppearance === "light" ? "light" : "dark").app,
-  appearance: initialAppearance,
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 15, y: 14 },
-  renderer: createRenderer(() => <HerdrGui />),
+function openMainWindow() {
+  new Window({
+    title: "Herdr GUI",
+    width: 1220,
+    height: 780,
+    minimumWidth: 860,
+    minimumHeight: 560,
+    background: themeFor(initialAppearance === "light" ? "light" : "dark").app,
+    appearance: initialAppearance,
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 15, y: 14 },
+    renderer: createRenderer(() => <HerdrGui />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();

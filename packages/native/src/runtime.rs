@@ -911,7 +911,7 @@ pub(crate) fn native_font_data(options: &NativeAppOptions) -> Option<Vec<Arc<[u8
 pub(crate) fn native_app_configuration(
     options: NativeAppOptions,
 ) -> std::result::Result<(Option<AppInfo>, Option<AppPaths>, QuitMode), String> {
-    update_native_app_configuration(None, None, QuitMode::LastWindowClosed, options)
+    update_native_app_configuration(None, None, QuitMode::default(), options)
 }
 
 pub(crate) fn update_native_app_configuration(

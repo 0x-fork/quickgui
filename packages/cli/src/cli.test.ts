@@ -257,7 +257,10 @@ test("project initialization renders a complete Solid scaffold", async () => {
   expect(applicationSource).toContain('from "@quickgui/native"');
   expect(applicationSource).toContain('from "@quickgui/solid"');
   expect(applicationSource).toContain("await app.whenReady()");
+  expect(applicationSource).toContain('app.on("reopen"');
+  expect(applicationSource).toContain("if (!hasVisibleWindows) openMainWindow()");
   expect(applicationSource).toContain("renderer: createRenderer(");
+  expect(applicationSource).not.toContain("quitMode");
   expect(applicationSource).not.toContain("app.run()");
   expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".quickgui");
   expect(readFileSync(join(project, "README.md"), "utf8")).not.toContain("{{");

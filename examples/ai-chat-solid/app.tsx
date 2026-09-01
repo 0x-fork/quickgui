@@ -938,15 +938,22 @@ const stopButtonStyle = {
   color: "#fecaca",
 };
 
-new Window({
-  title: "QuickGUI AI Chat",
-  width: 1080,
-  height: 720,
-  minimumWidth: 760,
-  minimumHeight: 480,
-  background: "#0b0d12",
-  titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 16, y: 15 },
-  renderer: createRenderer(() => <Chat />),
+function openMainWindow() {
+  new Window({
+    title: "QuickGUI AI Chat",
+    width: 1080,
+    height: 720,
+    minimumWidth: 760,
+    minimumHeight: 480,
+    background: "#0b0d12",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 15 },
+    renderer: createRenderer(() => <Chat />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
 });
+openMainWindow();
 app.on("quit", flushHistoryPersist);
