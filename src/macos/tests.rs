@@ -191,11 +191,27 @@ fn native_drop_strings_are_bounded_on_utf8_scalar_boundaries() {
 }
 
 #[test]
-fn traffic_light_top_left_coordinates_convert_to_appkit_space() {
+fn traffic_light_layout_keeps_top_left_inset_across_window_resizes() {
+    let original_titlebar = NSRect::new(NSPoint::new(0.0, 572.0), NSSize::new(800.0, 28.0));
+    let (initial_titlebar, initial_buttons) =
+        traffic_light_layout(Point::new(16.0, 13.0), 600.0, original_titlebar, 14.0, 20.0);
     assert_eq!(
-        traffic_light_origin(Point::new(16.0, 6.0), 28.0, 14.0, 16.0),
-        NSPoint::new(16.0, 8.0)
+        initial_titlebar,
+        NSRect::new(NSPoint::new(0.0, 560.0), NSSize::new(800.0, 40.0))
     );
+    assert_eq!(
+        initial_buttons,
+        [
+            NSPoint::new(16.0, 13.0),
+            NSPoint::new(36.0, 13.0),
+            NSPoint::new(56.0, 13.0),
+        ]
+    );
+
+    let (resized_titlebar, resized_buttons) =
+        traffic_light_layout(Point::new(16.0, 13.0), 700.0, initial_titlebar, 14.0, 20.0);
+    assert_eq!(resized_titlebar.origin.y, 660.0);
+    assert_eq!(resized_buttons, initial_buttons);
 }
 
 #[test]

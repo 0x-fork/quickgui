@@ -131,8 +131,8 @@ use crate::macos::{
     MacExternalDragMonitor, MacExternalDragSession, MacFirstFrameGuard, MacMouseDownEvent,
     MacNativeDropHost, MacNativeDropOffer, MacNativeDropPayload, MacNativeDropPending,
     MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPlatformDialogFocus,
-    MacPopoverMonitor, MacTypedDragPayload, MacTypedDragRegistry, MacVibrancyHost,
-    MacWindowTabAction, capture_left_mouse_down, configure_document_window,
+    MacPopoverMonitor, MacTrafficLightHost, MacTypedDragPayload, MacTypedDragRegistry,
+    MacVibrancyHost, MacWindowTabAction, capture_left_mouse_down, configure_document_window,
     configure_gpu_window_resize, configure_window_kind,
     current_cursor_screen_position as macos_cursor_screen_position, current_pointer_position,
     dismiss_window_relation, is_window_fullscreen, is_window_maximized, perform_window_close,
@@ -489,6 +489,8 @@ struct RuntimeWindow {
     native_host: Option<MacNativeHost>,
     #[cfg(target_os = "macos")]
     vibrancy_host: Option<MacVibrancyHost>,
+    #[cfg(target_os = "macos")]
+    _traffic_light_host: Option<MacTrafficLightHost>,
     #[cfg(target_os = "macos")]
     native_drop_host: MacNativeDropHost,
     #[cfg(target_os = "macos")]

@@ -39,11 +39,13 @@ use objc2_app_kit::{
     NSPasteboardTypeString, NSPasteboardTypeURL, NSPasteboardWriting, NSPopUpMenuWindowLevel,
     NSResponder, NSSavePanel, NSScreen, NSTitlePosition, NSView, NSViewLayerContentsRedrawPolicy,
     NSWindow, NSWindowAnimationBehavior, NSWindowButton, NSWindowCollectionBehavior,
-    NSWindowOrderingMode, NSWindowStyleMask, NSWindowTabGroup, NSWindowTabbingMode, NSWorkspace,
+    NSWindowDidResizeNotification, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTabGroup,
+    NSWindowTabbingMode, NSWorkspace,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSArray, NSCopying, NSFileManager, NSObject, NSPoint, NSRange, NSRect,
-    NSSize, NSString, NSStringEncodingConversionOptions, NSURL, NSUTF8StringEncoding, NSUUID,
+    MainThreadMarker, NSArray, NSCopying, NSFileManager, NSNotification, NSNotificationCenter,
+    NSObject, NSPoint, NSRange, NSRect, NSSize, NSString, NSStringEncodingConversionOptions, NSURL,
+    NSUTF8StringEncoding, NSUUID,
 };
 use winit::{
     event_loop::EventLoopProxy,
@@ -87,15 +89,15 @@ pub(crate) use popover::MacPopoverMonitor;
 pub(crate) use vibrancy::MacVibrancyHost;
 pub(crate) use windowing::{
     MacFirstFrameGuard, MacPlatformDialog, MacPlatformDialogContext, MacPlatformDialogFocus,
-    MacWindowTabAction, configure_document_window, configure_gpu_window_resize,
-    configure_window_kind, current_cursor_screen_position, current_pointer_position,
-    dismiss_window_relation, is_window_fullscreen, is_window_maximized, native_file_url,
-    perform_window_close, perform_window_drag, perform_window_tab_action, position_system_popover,
-    position_traffic_lights, present_native_prompt, present_window_relation,
-    set_window_document_edited, set_window_focusable, set_window_movable, set_window_opacity,
-    set_window_represented_file, set_window_tabbing_identifier, set_window_visibility,
-    set_window_visible_on_all_workspaces, shell_open_path, shell_open_url, shell_reveal_path,
-    shell_trash_path, show_character_palette, window_tab_state,
+    MacTrafficLightHost, MacWindowTabAction, configure_document_window,
+    configure_gpu_window_resize, configure_window_kind, current_cursor_screen_position,
+    current_pointer_position, dismiss_window_relation, is_window_fullscreen, is_window_maximized,
+    native_file_url, perform_window_close, perform_window_drag, perform_window_tab_action,
+    position_system_popover, position_traffic_lights, present_native_prompt,
+    present_window_relation, set_window_document_edited, set_window_focusable, set_window_movable,
+    set_window_opacity, set_window_represented_file, set_window_tabbing_identifier,
+    set_window_visibility, set_window_visible_on_all_workspaces, shell_open_path, shell_open_url,
+    shell_reveal_path, shell_trash_path, show_character_palette, window_tab_state,
 };
 
 use drag_drop::point_outside_ns_rect;
@@ -110,7 +112,7 @@ use drag_drop::{
 #[cfg(test)]
 use popover::should_consume_popover_anchor_press;
 #[cfg(test)]
-use windowing::traffic_light_origin;
+use windowing::traffic_light_layout;
 
 #[cfg(test)]
 mod tests;

@@ -92,7 +92,7 @@ function SidebarVibrancyExample() {
             height: 52,
             flexShrink: 0,
             alignItems: "center",
-            paddingLeft: 84,
+            paddingLeft: 90,
             paddingRight: 14,
             appRegion: "drag",
           }}

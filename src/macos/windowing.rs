@@ -757,8 +757,9 @@ pub(crate) fn perform_window_drag(
 /// Move the standard AppKit window controls while preserving their native spacing and behavior.
 ///
 /// QuickGUI positions the close button from the top-left in logical points, matching web-style
-/// window APIs. AppKit uses a bottom-left coordinate system, so the vertical coordinate is
-/// converted using the native content-layout rect rather than a hard-coded titlebar height.
+/// window APIs. AppKit lays the standard buttons out inside a private titlebar container and can
+/// reset their frames when that container is resized. Keep the container pinned to the top of the
+/// window and place the buttons inside it so the configured inset survives AppKit layout passes.
 pub(crate) fn position_traffic_lights(window: &Arc<Window>, position: Point) -> Result<(), String> {
     MainThreadMarker::new()
         .ok_or_else(|| "traffic lights must be positioned on the AppKit main thread".to_owned())?;
@@ -791,21 +792,39 @@ pub(crate) fn position_traffic_lights(window: &Arc<Window>, position: Point) -> 
 
     let close_frame = NSView::frame(&close);
     let minimize_frame = NSView::frame(&minimize);
-    let spacing = minimize_frame.origin.x - close_frame.origin.x;
-    if !spacing.is_finite() || spacing <= 0.0 {
+    let button_step = minimize_frame.origin.x - close_frame.origin.x;
+    if !button_step.is_finite() || button_step <= 0.0 {
         return Err("AppKit returned invalid traffic-light spacing".to_owned());
     }
-    let frame = window.frame();
-    let content_layout = unsafe { window.contentLayoutRect() };
-    let titlebar_height = frame.size.height - content_layout.size.height;
-    if !titlebar_height.is_finite() || titlebar_height <= 0.0 {
-        return Err("AppKit returned an invalid titlebar height".to_owned());
+    if !close_frame.size.height.is_finite() || close_frame.size.height <= 0.0 {
+        return Err("AppKit returned an invalid traffic-light height".to_owned());
     }
 
-    let mut x = f64::from(position.x);
-    for button in [Some(close), Some(minimize), zoom].into_iter().flatten() {
+    let button_container = unsafe { close.superview() }
+        .ok_or_else(|| "AppKit returned no traffic-light button container".to_owned())?;
+    let titlebar_container = unsafe { button_container.superview() }
+        .ok_or_else(|| "AppKit returned no traffic-light titlebar container".to_owned())?;
+    let window_height = window.frame().size.height;
+    if !window_height.is_finite() || window_height <= 0.0 {
+        return Err("AppKit returned an invalid window height".to_owned());
+    }
+    let (titlebar_frame, button_origins) = traffic_light_layout(
+        position,
+        window_height,
+        titlebar_container.frame(),
+        close_frame.size.height,
+        button_step,
+    );
+
+    unsafe {
+        titlebar_container.setFrame(titlebar_frame);
+    }
+    for (button, origin) in [Some(close), Some(minimize), zoom]
+        .into_iter()
+        .zip(button_origins)
+        .filter_map(|(button, origin)| button.map(|button| (button, origin)))
+    {
         let button_frame = NSView::frame(&button);
-        let origin = traffic_light_origin(position, titlebar_height, button_frame.size.height, x);
         if (button_frame.origin.x - origin.x).abs() > 0.01
             || (button_frame.origin.y - origin.y).abs() > 0.01
         {
@@ -813,18 +832,85 @@ pub(crate) fn position_traffic_lights(window: &Arc<Window>, position: Point) -> 
                 NSView::setFrameOrigin(&button, origin);
             }
         }
-        x += spacing;
+        unsafe {
+            button.updateTrackingAreas();
+        }
+    }
+    unsafe {
+        titlebar_container.updateTrackingAreas();
     }
     Ok(())
 }
 
-pub(super) fn traffic_light_origin(
+/// Own the native resize callback that keeps one window's custom traffic-light inset stable.
+///
+/// Winit queues `WindowEvent::Resized` from its content view's frame-change callback. AppKit can
+/// perform another private titlebar layout after that callback, so restoring the controls from the
+/// queued event alone is not authoritative. Observe the native window notification, matching
+/// GPUI's `windowDidResize:` lifecycle, and perform the titlebar layout before the notification
+/// finishes.
+pub(crate) struct MacTrafficLightHost {
+    notifications: Retained<NSNotificationCenter>,
+    observer: Retained<NSObject>,
+}
+
+impl MacTrafficLightHost {
+    pub(crate) fn new(window: &Arc<Window>, position: Point) -> Result<Self, String> {
+        position_traffic_lights(window, position)?;
+        let native_window = appkit_window(window)?;
+        let weak_window = Arc::downgrade(window);
+        let block = RcBlock::new(move |_notification: NonNull<NSNotification>| {
+            let Some(window) = weak_window.upgrade() else {
+                return;
+            };
+            if let Err(error) = position_traffic_lights(&window, position) {
+                tracing::warn!(%error, "could not restore the configured traffic-light position from the native resize callback");
+            }
+        });
+        let notifications = unsafe { NSNotificationCenter::defaultCenter() };
+        let observer = unsafe {
+            notifications.addObserverForName_object_queue_usingBlock(
+                Some(NSWindowDidResizeNotification),
+                Some(native_window.as_ref()),
+                None,
+                &block,
+            )
+        };
+        Ok(Self {
+            notifications,
+            observer,
+        })
+    }
+}
+
+impl Drop for MacTrafficLightHost {
+    fn drop(&mut self) {
+        unsafe {
+            self.notifications.removeObserver(self.observer.as_ref());
+        }
+    }
+}
+
+pub(super) fn traffic_light_layout(
     position: Point,
-    titlebar_height: f64,
+    window_height: f64,
+    mut titlebar_frame: NSRect,
     button_height: f64,
-    x: f64,
-) -> NSPoint {
-    NSPoint::new(x, titlebar_height - f64::from(position.y) - button_height)
+    button_step: f64,
+) -> (NSRect, [NSPoint; 3]) {
+    let x = f64::from(position.x);
+    let y = f64::from(position.y);
+    let titlebar_height = button_height + y * 2.0;
+    titlebar_frame.size.height = titlebar_height;
+    titlebar_frame.origin.y = window_height - titlebar_height;
+    (
+        titlebar_frame,
+        [
+            NSPoint::new(x, y),
+            NSPoint::new(x + button_step, y),
+            NSPoint::new(x + button_step * 2.0, y),
+        ],
+    )
 }
 
 /// Covers an ordered-on-screen AppKit window until WGPU presents its first frame.

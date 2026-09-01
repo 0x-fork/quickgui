@@ -408,12 +408,16 @@ impl Runtime {
             None => None,
         };
         #[cfg(target_os = "macos")]
-        if let Some(position) = self.config.traffic_light_position
-            && let Err(error) = position_traffic_lights(&window, position)
-        {
-            self.fail(event_loop, AppError::Platform(error));
-            return;
-        }
+        let traffic_light_host = match self.config.traffic_light_position {
+            Some(position) => match MacTrafficLightHost::new(&window, position) {
+                Ok(host) => Some(host),
+                Err(error) => {
+                    self.fail(event_loop, AppError::Platform(error));
+                    return;
+                }
+            },
+            None => None,
+        };
         #[cfg(target_os = "macos")]
         let native_drop_host = match MacNativeDropHost::new(
             &window,
@@ -517,6 +521,8 @@ impl Runtime {
             native_host: None,
             #[cfg(target_os = "macos")]
             vibrancy_host,
+            #[cfg(target_os = "macos")]
+            _traffic_light_host: traffic_light_host,
             #[cfg(target_os = "macos")]
             native_drop_host,
             #[cfg(target_os = "macos")]
