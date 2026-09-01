@@ -177,9 +177,11 @@ function SystemApiExample() {
 
         <View style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
           {action("App environment", async () => {
-            const info = app.getInfo();
-            const system = app.getSystemInfo();
-            const paths = app.getPaths();
+            const [info, system, paths] = await Promise.all([
+              app.getInfo(),
+              app.getSystemInfo(),
+              app.getPaths(),
+            ]);
             return `${info?.name ?? "QuickGUI"} ${info?.version ?? ""} · ${system.name} ${system.version ?? ""} · ${paths?.configDir ?? "no config directory"}`;
           })}
           {action("Rich clipboard", async () => {
@@ -206,12 +208,15 @@ function SystemApiExample() {
             return `Clipboard representations: ${item?.entries.map((entry) => entry.type).join(", ") ?? "none"}`;
           })}
           {action("Displays", async () => {
-            const displays = Screen.getAllDisplays();
-            const cursor = Screen.getCursorScreenPoint();
-            return `${displays.length} display(s), primary ${Screen.getPrimaryDisplay()?.name ?? "unknown"}, cursor ${Math.round(cursor.x)},${Math.round(cursor.y)}`;
+            const [displays, primary, cursor] = await Promise.all([
+              Screen.getAllDisplays(),
+              Screen.getPrimaryDisplay(),
+              Screen.getCursorScreenPoint(),
+            ]);
+            return `${displays.length} display(s), primary ${primary?.name ?? "unknown"}, cursor ${Math.round(cursor.x)},${Math.round(cursor.y)}`;
           })}
           {action("Preferences", async () => {
-            const preferences = SystemPreferences.getCurrent();
+            const preferences = await SystemPreferences.getCurrent();
             return `${preferences.colorScheme} appearance · reduce motion ${preferences.reduceMotion ?? "unknown"} · screen reader ${preferences.screenReader ?? "unknown"}`;
           })}
           {action("Permissions", async () => {
@@ -236,24 +241,24 @@ function SystemApiExample() {
             return "Preventing application suspension until clicked again or the window closes.";
           })}
           {action("Window state", async () => {
-            const state = window.getState();
+            const state = await window.getState();
             return `${Math.round(state.bounds.width)}×${Math.round(state.bounds.height)} · ${state.appearance} · ${state.focused ? "focused" : "unfocused"} · ${state.windowLevel}`;
           })}
           {action("Toggle opacity", async () => {
-            if (!Desktop.getSupport().windowOpacity) return "Window opacity is unsupported here.";
+            if (!(await Desktop.getSupport()).windowOpacity) return "Window opacity is unsupported here.";
             dimmed = !dimmed;
             window.setOpacity(dimmed ? 0.82 : 1);
             return `Window opacity is now ${dimmed ? "82%" : "100%"}.`;
           })}
           {action("Desktop support", async () => {
-            const supported = Object.entries(Desktop.getSupport())
+            const supported = Object.entries(await Desktop.getSupport())
               .filter(([, enabled]) => enabled)
               .map(([name]) => name);
             return `${supported.length} compiled integrations · ${supported.slice(0, 6).join(", ")}`;
           })}
           {action("About panel", async () => {
-            if (!Desktop.getSupport().nativeAboutPanel) return "A native About panel is unsupported here.";
-            const info = app.getInfo();
+            if (!(await Desktop.getSupport()).nativeAboutPanel) return "A native About panel is unsupported here.";
+            const info = await app.getInfo();
             Desktop.showAboutPanel({
               applicationName: appName,
               ...(info ? { applicationVersion: info.version } : {}),
@@ -262,14 +267,14 @@ function SystemApiExample() {
             return "Opened the native About panel.";
           })}
           {action("Executable icon", async () => {
-            if (!Desktop.getSupport().fileIcons) return "Native file icons are unsupported here.";
-            const executable = app.getPaths()?.executable;
+            if (!(await Desktop.getSupport()).fileIcons) return "Native file icons are unsupported here.";
+            const executable = (await app.getPaths())?.executable;
             if (!executable) return "No executable path is available.";
             const icon = await Desktop.getFileIcon(executable, "normal");
             return `Loaded a ${icon.width}×${icon.height} native file icon.`;
           })}
           {action("Dock badge", async () => {
-            if (!Desktop.getSupport().dockBadges) return "Dock badges are unsupported here.";
+            if (!(await Desktop.getSupport()).dockBadges) return "Dock badges are unsupported here.";
             dockBadgeVisible = !dockBadgeVisible;
             Desktop.setDockBadge(dockBadgeVisible ? "1" : undefined);
             return `Dock badge ${dockBadgeVisible ? "set" : "cleared"}.`;

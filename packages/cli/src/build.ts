@@ -102,7 +102,6 @@ export const nativeExports = [
   "isAutoStartEnabled",
   "isAutoStartSupported",
   "isAppReady",
-  "isHostedAppReady",
   "isProtocolRegistered",
   "isSecureStorageSupported",
   "performGlobalShortcutAction",

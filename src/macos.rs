@@ -74,6 +74,7 @@ pub(crate) use file_dialog::{present_native_open_panel, present_native_save_pane
 mod drag_drop;
 mod native_host;
 mod popover;
+mod vibrancy;
 mod windowing;
 
 pub(crate) use drag_drop::{
@@ -83,6 +84,7 @@ pub(crate) use drag_drop::{
 };
 pub(crate) use native_host::MacNativeHost;
 pub(crate) use popover::MacPopoverMonitor;
+pub(crate) use vibrancy::MacVibrancyHost;
 pub(crate) use windowing::{
     MacFirstFrameGuard, MacPlatformDialog, MacPlatformDialogContext, MacPlatformDialogFocus,
     MacWindowTabAction, configure_document_window, configure_gpu_window_resize,

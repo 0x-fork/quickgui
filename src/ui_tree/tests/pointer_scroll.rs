@@ -153,8 +153,8 @@ fn layout_hit_testing_clears_moved_hover_before_paint() {
         started + Duration::from_millis(70),
     )
     .unwrap();
-    assert_eq!(scene.quads().len(), 1);
-    assert_eq!(scene.quads()[0].fill, hover_color);
+    assert_eq!(scene.edge_quads().len(), 1);
+    assert_eq!(scene.edge_quads()[0].fill, hover_color);
 
     tree.set_root(declaration(true), viewport, 1.0, &mut renderer)
         .unwrap();
@@ -169,7 +169,7 @@ fn layout_hit_testing_clears_moved_hover_before_paint() {
         started + Duration::from_millis(71),
     )
     .unwrap();
-    assert!(scene.quads().is_empty());
+    assert!(scene.edge_quads().is_empty());
 }
 
 #[test]

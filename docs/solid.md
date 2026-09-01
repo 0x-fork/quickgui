@@ -211,6 +211,26 @@ for the currently bridged QuickGUI layout, text, paint, overflow, cursor, positi
 `appRegion` properties. Native events are flushed at a Solid 2 event boundary before the retained
 mutation batch is submitted.
 
+Borders can be set per edge, and shadows use CSS `box-shadow` order and syntax:
+
+```tsx
+<View
+  style={{
+    borderColor: "#dfe5ed",
+    borderTopWidth: 1,
+    borderRightWidth: 0,
+    borderBottomWidth: 2,
+    borderLeftWidth: 0,
+    boxShadow: "0 18px 45px -24px rgba(15, 23, 42, 0.35), inset 0 1px white",
+  }}
+/>
+```
+
+`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, and `borderLeftWidth` independently
+override `borderWidth` and share `borderColor`. `boxShadow` accepts up to eight comma-separated
+drop or `inset` shadows with two to four numeric or `px` lengths; an omitted color uses the
+element's current text color. Use `boxShadow: "none"` to clear the list.
+
 `Input` and `TextArea` are controlled native editors. Update their `value` from `event.value` in
 `onInput`; Return on a single-line `Input` invokes `onSubmit`. Use `<Input type="password">` for a
 masked secure field, then switch the controlled `type` to `"text"` for an explicit reveal action.
@@ -231,6 +251,11 @@ heights, preserves the scroll anchor, and can follow an appended chat tail:
 
 The runnable source and CLI configuration are in
 [`examples/solid`](../examples/solid).
+
+The [sidebar vibrancy example](../examples/sidebar-vibrancy-solid) keeps the Solid root and sidebar
+transparent and switches among every Electron-compatible macOS semantic material through the
+Rust-core window API while leaving the main content pane opaque. Its dividers use individual edge
+borders, and its content card uses `boxShadow`.
 
 The [Solid AI chat example](../examples/ai-chat-solid) adds Vercel AI SDK/DeepSeek streaming, a
 `SystemPopover` provider-settings surface with a revealable password field, controlled input,

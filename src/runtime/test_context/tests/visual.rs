@@ -79,6 +79,57 @@ fn visual_context_uses_production_layout_and_offscreen_wgpu_capture() {
 }
 
 #[cfg(target_os = "macos")]
+struct RightBorderVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for RightBorderVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex_row()
+            .bg(Color::rgb8(237, 237, 238))
+            .child(
+                div()
+                    .id("border-sidebar")
+                    .w(20.0)
+                    .h_full()
+                    .flex_none()
+                    .border_right(1.0, Color::rgb8(204, 204, 204)),
+            )
+            .child(
+                div()
+                    .id("border-content")
+                    .flex_1()
+                    .h_full()
+                    .bg(Color::WHITE),
+            )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn right_border_stays_attached_to_its_fill_at_retina_scale() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(40.0, 20.0),
+            RightBorderVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    visual
+        .assert_element_bounds("border-sidebar", Rect::new(0.0, 0.0, 20.0, 20.0), 0.0)
+        .unwrap();
+    visual
+        .assert_element_bounds("border-content", Rect::new(20.0, 0.0, 20.0, 20.0), 0.0)
+        .unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+    assert_eq!(snapshot.pixel(37, 20), Some([237, 237, 238, 255]));
+    assert_eq!(snapshot.pixel(38, 20), Some([204, 204, 204, 255]));
+    assert_eq!(snapshot.pixel(39, 20), Some([204, 204, 204, 255]));
+    assert_eq!(snapshot.pixel(40, 20), Some([255, 255, 255, 255]));
+}
+
+#[cfg(target_os = "macos")]
 struct WavyUnderlineVisualView;
 
 #[cfg(target_os = "macos")]

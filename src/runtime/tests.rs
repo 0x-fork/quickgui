@@ -271,6 +271,27 @@ fn window_background_builder_retains_the_compositor_policy() {
     );
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_vibrancy_builders_require_alpha_without_enabling_legacy_blur() {
+    let options = WindowOptions::new("Materials")
+        .window_background(WindowBackgroundAppearance::Blurred)
+        .macos_vibrancy(MacOsVibrancy::Sidebar)
+        .macos_visual_effect_state(MacOsVisualEffectState::Active);
+    assert_eq!(options.macos_vibrancy, Some(MacOsVibrancy::Sidebar));
+    assert_eq!(
+        options.macos_visual_effect_state,
+        MacOsVisualEffectState::Active
+    );
+    assert!(options.uses_transparent_surface());
+    assert!(!options.uses_legacy_background_blur());
+
+    let options = options.without_macos_vibrancy();
+    assert_eq!(options.macos_vibrancy, None);
+    assert!(options.uses_transparent_surface());
+    assert!(options.uses_legacy_background_blur());
+}
+
 #[test]
 fn focused_top_level_presentation_activates_the_application_but_popovers_do_not() {
     for kind in [WindowKind::Normal, WindowKind::Floating, WindowKind::Dialog] {

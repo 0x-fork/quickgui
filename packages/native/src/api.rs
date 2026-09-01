@@ -197,14 +197,11 @@ pub fn destroy_app(app: u32) -> Result<bool> {
 pub fn create_hosted_app(options: Option<NativeAppOptions>) -> Result<u32> {
     let app = HOST.allocate_app().map_err(Error::from_reason)?;
     HOST.set_app(app).map_err(Error::from_reason)?;
-    let reply = Arc::new(SyncReply::new());
     HOST.enqueue(HostCommand::CreateApp {
         app,
         options: options.unwrap_or_default(),
-        reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)?;
     Ok(app)
 }
 
@@ -214,15 +211,15 @@ pub fn create_hosted_window(
     options: Option<NativeWindowOptions>,
     initial_batch: Option<Buffer>,
 ) -> Result<u32> {
-    let reply = Arc::new(SyncReply::new());
+    let window = HOST.allocate_window().map_err(Error::from_reason)?;
     HOST.enqueue(HostCommand::CreateWindow {
         app,
+        window,
         options: options.unwrap_or_default(),
         initial_batch: initial_batch.map_or_else(Vec::new, |batch| batch.to_vec()),
-        reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(window)
 }
 
 #[napi]
@@ -233,17 +230,17 @@ pub fn create_hosted_system_popover(
     options: Option<NativeWindowOptions>,
     initial_batch: Option<Buffer>,
 ) -> Result<u32> {
-    let reply = Arc::new(SyncReply::new());
+    let popover = HOST.allocate_window().map_err(Error::from_reason)?;
     HOST.enqueue(HostCommand::CreateSystemPopover {
         app,
+        window: popover,
         parent,
         anchor,
         options: options.unwrap_or_default(),
         initial_batch: initial_batch.map_or_else(Vec::new, |batch| batch.to_vec()),
-        reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(popover)
 }
 
 #[cfg(target_os = "macos")]
@@ -256,18 +253,18 @@ pub fn create_hosted_embedded_view(
     options: Option<NativeWindowOptions>,
     initial_batch: Option<Buffer>,
 ) -> Result<u32> {
-    let reply = Arc::new(SyncReply::new());
+    let embedded = HOST.allocate_window().map_err(Error::from_reason)?;
     HOST.enqueue(HostCommand::CreateEmbeddedView {
         app,
+        window: embedded,
         parent,
         match_horizontal,
         match_vertical,
         options: options.unwrap_or_default(),
         initial_batch: initial_batch.map_or_else(Vec::new, |batch| batch.to_vec()),
-        reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(embedded)
 }
 
 #[napi]
@@ -287,38 +284,43 @@ pub fn apply_hosted_batch(app: u32, window: u32, batch: Buffer) -> Result<u32> {
 }
 
 #[napi]
-pub fn close_hosted_window(app: u32, window: u32) -> Result<bool> {
-    let reply = Arc::new(SyncReply::new());
-    HOST.enqueue(HostCommand::CloseWindow {
-        app,
-        window,
-        reply: Arc::clone(&reply),
-    })
-    .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+pub fn close_hosted_window(app: u32, window: u32) -> Result<()> {
+    HOST.enqueue(HostCommand::CloseWindow { app, window })
+        .map_err(Error::from_reason)
 }
 
 #[napi]
-pub fn focus_hosted_node(app: u32, window: u32, node: u32) -> Result<bool> {
-    let reply = Arc::new(SyncReply::new());
-    HOST.enqueue(HostCommand::FocusNode {
-        app,
-        window,
-        node,
-        reply: Arc::clone(&reply),
-    })
-    .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+pub fn focus_hosted_node(app: u32, window: u32, node: u32) -> Result<()> {
+    HOST.enqueue(HostCommand::FocusNode { app, window, node })
+        .map_err(Error::from_reason)
 }
 
-#[napi]
+#[doc(hidden)]
+pub struct HostedUnitTask {
+    reply: Arc<HostReply<()>>,
+}
+
+impl Task for HostedUnitTask {
+    type Output = ();
+    type JsValue = ();
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.reply.wait().map_err(Error::from_reason)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+#[napi(ts_return_type = "Promise<void>")]
 pub fn show_hosted_alert_dialog(
     app: u32,
     window: Option<u32>,
     request: u32,
     options: NativeDialogOptions,
-) -> Result<()> {
-    let reply = Arc::new(SyncReply::new());
+) -> Result<AsyncTask<HostedUnitTask>> {
+    let reply = Arc::new(HostReply::new(app));
     HOST.enqueue(HostCommand::ShowAlertDialog {
         app,
         window,
@@ -327,17 +329,17 @@ pub fn show_hosted_alert_dialog(
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(AsyncTask::new(HostedUnitTask { reply }))
 }
 
-#[napi]
+#[napi(ts_return_type = "Promise<void>")]
 pub fn show_hosted_open_dialog(
     app: u32,
     window: Option<u32>,
     request: u32,
     options: NativeOpenDialogOptions,
-) -> Result<()> {
-    let reply = Arc::new(SyncReply::new());
+) -> Result<AsyncTask<HostedUnitTask>> {
+    let reply = Arc::new(HostReply::new(app));
     HOST.enqueue(HostCommand::ShowOpenDialog {
         app,
         window,
@@ -346,17 +348,17 @@ pub fn show_hosted_open_dialog(
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(AsyncTask::new(HostedUnitTask { reply }))
 }
 
-#[napi]
+#[napi(ts_return_type = "Promise<void>")]
 pub fn show_hosted_save_dialog(
     app: u32,
     window: Option<u32>,
     request: u32,
     options: NativeSaveDialogOptions,
-) -> Result<()> {
-    let reply = Arc::new(SyncReply::new());
+) -> Result<AsyncTask<HostedUnitTask>> {
+    let reply = Arc::new(HostReply::new(app));
     HOST.enqueue(HostCommand::ShowSaveDialog {
         app,
         window,
@@ -365,45 +367,29 @@ pub fn show_hosted_save_dialog(
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(AsyncTask::new(HostedUnitTask { reply }))
 }
 
-#[napi]
-pub fn start_hosted_app(app: u32) -> Result<()> {
+#[napi(ts_return_type = "Promise<void>")]
+pub fn start_hosted_app(app: u32) -> Result<AsyncTask<HostedUnitTask>> {
     prepare_hosted_app(app)
 }
 
-#[napi]
-pub fn prepare_hosted_app(app: u32) -> Result<()> {
-    let reply = Arc::new(SyncReply::new());
+#[napi(ts_return_type = "Promise<void>")]
+pub fn prepare_hosted_app(app: u32) -> Result<AsyncTask<HostedUnitTask>> {
+    let reply = Arc::new(HostReply::new(app));
     HOST.enqueue(HostCommand::PrepareApp {
         app,
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(AsyncTask::new(HostedUnitTask { reply }))
 }
 
 #[napi]
-pub fn is_hosted_app_ready(app: u32) -> Result<bool> {
-    let reply = Arc::new(SyncReply::new());
-    HOST.enqueue(HostCommand::IsAppReady {
-        app,
-        reply: Arc::clone(&reply),
-    })
-    .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
-}
-
-#[napi]
-pub fn destroy_hosted_app(app: u32) -> Result<bool> {
-    let reply = Arc::new(SyncReply::new());
-    HOST.enqueue(HostCommand::DestroyApp {
-        app,
-        reply: Arc::clone(&reply),
-    })
-    .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+pub fn destroy_hosted_app(app: u32) -> Result<()> {
+    HOST.enqueue(HostCommand::DestroyApp { app })
+        .map_err(Error::from_reason)
 }
 
 #[doc(hidden)]
@@ -464,105 +450,92 @@ pub(super) fn run_app_host_loop(
 
         while let Some(command) = commands.pop_front() {
             match command {
-                HostCommand::CreateApp {
-                    app,
-                    options,
-                    reply,
-                } => {
-                    let result = if runtime.is_some() {
-                        Err("a QuickGUI native host can own only one app".to_owned())
-                    } else {
-                        match NativeRuntime::new(options) {
-                            Ok(created) => {
-                                active_app = Some(app);
-                                runtime = Some(created);
-                                Ok(())
-                            }
-                            Err(error) => Err(error),
-                        }
-                    };
-                    reply.complete(result);
+                HostCommand::CreateApp { app, options } => {
+                    if runtime.is_some() {
+                        return Err("a QuickGUI native host can own only one app".to_owned());
+                    }
+                    runtime = Some(NativeRuntime::new(options)?);
+                    active_app = Some(app);
                 }
                 HostCommand::CreateWindow {
                     app,
+                    window,
                     options,
                     initial_batch,
-                    reply,
                 } => {
-                    reply.complete(with_hosted_runtime(
-                        active_app,
-                        runtime.as_mut(),
-                        app,
-                        |runtime| runtime.create_window(options, &initial_batch),
-                    ));
+                    with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
+                        runtime
+                            .create_window_with_id(window, options, &initial_batch)
+                            .map(|_| ())
+                    })?;
                 }
                 HostCommand::CreateSystemPopover {
                     app,
+                    window,
                     parent,
                     anchor,
                     options,
                     initial_batch,
-                    reply,
                 } => {
-                    reply.complete(with_hosted_runtime(
-                        active_app,
-                        runtime.as_mut(),
-                        app,
-                        |runtime| {
-                            runtime.create_system_popover(parent, anchor, options, &initial_batch)
-                        },
-                    ));
+                    with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
+                        runtime
+                            .create_system_popover_with_id(
+                                window,
+                                parent,
+                                anchor,
+                                options,
+                                &initial_batch,
+                            )
+                            .map(|_| ())
+                    })?;
                 }
                 #[cfg(target_os = "macos")]
                 HostCommand::CreateEmbeddedView {
                     app,
+                    window,
                     parent,
                     match_horizontal,
                     match_vertical,
                     options,
                     initial_batch,
-                    reply,
                 } => {
-                    reply.complete(with_hosted_runtime(
-                        active_app,
-                        runtime.as_mut(),
-                        app,
-                        |runtime| {
-                            runtime.create_embedded_view(
+                    with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
+                        runtime
+                            .create_embedded_view_with_id(
+                                window,
                                 parent,
                                 match_horizontal,
                                 match_vertical,
                                 options,
                                 &initial_batch,
                             )
-                        },
-                    ));
+                            .map(|_| ())
+                    })?;
                 }
                 HostCommand::ApplyBatch { app, window, batch } => {
                     with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
                         runtime.apply_batch(window, &batch)
                     })?;
                 }
-                HostCommand::CloseWindow { app, window, reply } => {
-                    reply.complete(with_hosted_runtime(
-                        active_app,
-                        runtime.as_mut(),
-                        app,
-                        |runtime| Ok(runtime.close_window(window)),
-                    ));
+                HostCommand::Mutation { app, command } => {
+                    let result =
+                        with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
+                            runtime.execute_system_command(command)
+                        })?;
+                    if !matches!(result, system::SystemCommandResult::Unit) {
+                        return Err("a hosted mutation returned a value".to_owned());
+                    }
                 }
-                HostCommand::FocusNode {
-                    app,
-                    window,
-                    node,
-                    reply,
-                } => {
-                    reply.complete(with_hosted_runtime(
-                        active_app,
-                        runtime.as_mut(),
-                        app,
-                        |runtime| runtime.focus_node(window, node),
-                    ));
+                HostCommand::CloseWindow { app, window } => {
+                    with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
+                        runtime.close_window(window);
+                        Ok(())
+                    })?;
+                }
+                HostCommand::FocusNode { app, window, node } => {
+                    with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
+                        runtime.focus_node(window, node).map(|_| ())
+                    })?;
                 }
                 HostCommand::ShowAlertDialog {
                     app,
@@ -635,22 +608,10 @@ pub(super) fn run_app_host_loop(
                     }
                     reply.complete(result);
                 }
-                HostCommand::IsAppReady { app, reply } => {
-                    reply.complete(with_hosted_runtime(
-                        active_app,
-                        runtime.as_mut(),
-                        app,
-                        |runtime| Ok(runtime.is_ready()),
-                    ));
-                }
-                HostCommand::DestroyApp { app, reply } => {
-                    let result = if active_app == Some(app) && runtime.is_some() {
+                HostCommand::DestroyApp { app } => {
+                    if active_app == Some(app) && runtime.is_some() {
                         HOST.publish_exit(0);
-                        Ok(true)
-                    } else {
-                        Ok(false)
-                    };
-                    reply.complete(result);
+                    }
                     return Ok(0);
                 }
             }

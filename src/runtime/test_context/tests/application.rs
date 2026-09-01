@@ -908,3 +908,70 @@ fn background_appearance_commands_update_retained_state_once() {
     );
     assert_eq!(cx.render_count(window).unwrap(), initial_renders + 2);
 }
+
+struct VibrancyView {
+    rendered: Option<MacOsVibrancy>,
+    effect_state: MacOsVisualEffectState,
+}
+
+impl View for VibrancyView {
+    fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let state = cx.window_state();
+        self.rendered = state.macos_vibrancy;
+        self.effect_state = state.macos_visual_effect_state;
+        div()
+    }
+}
+
+#[test]
+fn macos_vibrancy_commands_update_retained_state_once() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().macos_vibrancy(MacOsVibrancy::Sidebar),
+            VibrancyView {
+                rendered: None,
+                effect_state: MacOsVisualEffectState::Inactive,
+            },
+        )
+        .unwrap();
+    let window = view.window_handle();
+
+    assert_eq!(
+        cx.window_state(window).unwrap().macos_vibrancy,
+        Some(MacOsVibrancy::Sidebar)
+    );
+    let initial_renders = cx.render_count(window).unwrap();
+
+    cx.update(view, |_view, cx| {
+        cx.set_macos_window_vibrancy(Some(MacOsVibrancy::UnderWindow))
+            .unwrap();
+        cx.set_macos_visual_effect_state(MacOsVisualEffectState::Active)
+            .unwrap();
+    })
+    .unwrap();
+    assert_eq!(
+        cx.read(view, |view| (view.rendered, view.effect_state))
+            .unwrap(),
+        (
+            Some(MacOsVibrancy::UnderWindow),
+            MacOsVisualEffectState::Active
+        )
+    );
+    assert_eq!(cx.render_count(window).unwrap(), initial_renders + 1);
+
+    cx.update(view, |_view, cx| {
+        cx.set_macos_window_vibrancy(Some(MacOsVibrancy::UnderWindow))
+            .unwrap();
+        cx.set_macos_visual_effect_state(MacOsVisualEffectState::Active)
+            .unwrap();
+    })
+    .unwrap();
+    assert_eq!(cx.render_count(window).unwrap(), initial_renders + 1);
+
+    cx.update(view, |_view, cx| {
+        cx.set_macos_window_vibrancy(None).unwrap();
+    })
+    .unwrap();
+    assert_eq!(cx.read(view, |view| view.rendered).unwrap(), None);
+    assert_eq!(cx.render_count(window).unwrap(), initial_renders + 2);
+}

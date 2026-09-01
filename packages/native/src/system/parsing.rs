@@ -134,6 +134,9 @@ impl From<WindowState> for NativeWindowState {
                 WindowBackgroundAppearance::Blurred => "blurred",
             }
             .to_owned(),
+            vibrancy: state.macos_vibrancy.map(macos_vibrancy_name),
+            visual_effect_state: macos_visual_effect_state_name(state.macos_visual_effect_state)
+                .to_owned(),
             focused: state.focused,
             focusable: state.focusable,
             visible: state.visible,
@@ -326,16 +329,137 @@ pub(super) fn direct_command(app: u32, command: SystemCommand) -> Result<SystemC
     with_app_mut(app, |runtime| runtime.execute_system_command(command))
 }
 
-pub(super) fn hosted_command(app: u32, command: SystemCommand) -> Result<SystemCommandResult> {
-    let reply = Arc::new(SyncReply::new());
+pub(super) fn hosted_command(
+    app: u32,
+    command: SystemCommand,
+) -> Result<Arc<HostReply<SystemCommandResult>>> {
+    let reply = Arc::new(HostReply::new(app));
     HOST.enqueue(HostCommand::System {
         app,
         command,
         reply: Arc::clone(&reply),
     })
     .map_err(Error::from_reason)?;
-    reply.wait().map_err(Error::from_reason)
+    Ok(reply)
 }
+
+pub(super) fn enqueue_hosted_mutation(app: u32, command: SystemCommand) -> Result<()> {
+    HOST.enqueue(HostCommand::Mutation { app, command })
+        .map_err(Error::from_reason)
+}
+
+macro_rules! hosted_system_task {
+    ($name:ident, $output:ty, $expect:ident) => {
+        #[doc(hidden)]
+        pub struct $name {
+            pub(super) reply: Arc<HostReply<SystemCommandResult>>,
+        }
+
+        impl Task for $name {
+            type Output = $output;
+            type JsValue = $output;
+
+            fn compute(&mut self) -> Result<Self::Output> {
+                let result = self.reply.wait().map_err(Error::from_reason)?;
+                $expect(result)
+            }
+
+            fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+                Ok(output)
+            }
+        }
+    };
+}
+
+hosted_system_task!(HostedUnitCommandTask, (), expect_unit);
+hosted_system_task!(HostedBooleanCommandTask, bool, expect_boolean);
+hosted_system_task!(
+    HostedAppInfoCommandTask,
+    Option<NativeAppInfo>,
+    expect_app_info
+);
+hosted_system_task!(
+    HostedAppPathsCommandTask,
+    Option<NativeAppPaths>,
+    expect_app_paths
+);
+hosted_system_task!(
+    HostedSystemInfoCommandTask,
+    NativeSystemInfo,
+    expect_system_info
+);
+hosted_system_task!(
+    HostedWindowRegistryCommandTask,
+    NativeWindowRegistry,
+    expect_window_registry
+);
+hosted_system_task!(HostedPointCommandTask, NativePoint, expect_point);
+hosted_system_task!(
+    HostedDesktopIntegrationSupportCommandTask,
+    NativeDesktopIntegrationSupport,
+    expect_desktop_integration_support
+);
+hosted_system_task!(
+    HostedSystemPreferencesCommandTask,
+    NativeSystemPreferences,
+    expect_system_preferences
+);
+hosted_system_task!(
+    HostedDisplaysCommandTask,
+    Vec<NativeDisplay>,
+    expect_displays
+);
+hosted_system_task!(
+    HostedKeyboardLayoutCommandTask,
+    NativeKeyboardLayout,
+    expect_keyboard_layout
+);
+hosted_system_task!(
+    HostedWindowStateCommandTask,
+    NativeWindowState,
+    expect_window_state
+);
+hosted_system_task!(
+    HostedClipboardCommandTask,
+    Option<NativeClipboardItem>,
+    expect_clipboard
+);
+
+macro_rules! hosted_task_constructor {
+    ($name:ident, $task:ident) => {
+        pub(super) fn $name(app: u32, command: SystemCommand) -> Result<AsyncTask<$task>> {
+            Ok(AsyncTask::new($task {
+                reply: hosted_command(app, command)?,
+            }))
+        }
+    };
+}
+
+hosted_task_constructor!(hosted_unit_command, HostedUnitCommandTask);
+hosted_task_constructor!(hosted_boolean_command, HostedBooleanCommandTask);
+hosted_task_constructor!(hosted_app_info_command, HostedAppInfoCommandTask);
+hosted_task_constructor!(hosted_app_paths_command, HostedAppPathsCommandTask);
+hosted_task_constructor!(hosted_system_info_command, HostedSystemInfoCommandTask);
+hosted_task_constructor!(
+    hosted_window_registry_command,
+    HostedWindowRegistryCommandTask
+);
+hosted_task_constructor!(hosted_point_command, HostedPointCommandTask);
+hosted_task_constructor!(
+    hosted_desktop_integration_support_command,
+    HostedDesktopIntegrationSupportCommandTask
+);
+hosted_task_constructor!(
+    hosted_system_preferences_command,
+    HostedSystemPreferencesCommandTask
+);
+hosted_task_constructor!(hosted_displays_command, HostedDisplaysCommandTask);
+hosted_task_constructor!(
+    hosted_keyboard_layout_command,
+    HostedKeyboardLayoutCommandTask
+);
+hosted_task_constructor!(hosted_window_state_command, HostedWindowStateCommandTask);
+hosted_task_constructor!(hosted_clipboard_command, HostedClipboardCommandTask);
 
 pub(super) fn expect_displays(result: SystemCommandResult) -> Result<Vec<NativeDisplay>> {
     match result {
@@ -588,7 +712,50 @@ pub(super) fn parse_window_action(
                 None => return Err("set-background-appearance requires a value".to_owned()),
             },
         )),
+        "set-vibrancy" => Ok(WindowAction::SetMacOsVibrancy(
+            value
+                .as_deref()
+                .filter(|value| !value.is_empty())
+                .map(parse_macos_vibrancy)
+                .transpose()?,
+        )),
+        "set-visual-effect-state" => Ok(WindowAction::SetMacOsVisualEffectState(
+            parse_macos_visual_effect_state(
+                value
+                    .as_deref()
+                    .ok_or_else(|| "set-visual-effect-state requires a value".to_owned())?,
+            )?,
+        )),
         action => Err(format!("unknown native window action `{action}`")),
+    }
+}
+
+fn macos_vibrancy_name(vibrancy: MacOsVibrancy) -> String {
+    match vibrancy {
+        MacOsVibrancy::AppearanceBased => "appearance-based",
+        MacOsVibrancy::Titlebar => "titlebar",
+        MacOsVibrancy::Selection => "selection",
+        MacOsVibrancy::Menu => "menu",
+        MacOsVibrancy::Popover => "popover",
+        MacOsVibrancy::Sidebar => "sidebar",
+        MacOsVibrancy::Header => "header",
+        MacOsVibrancy::Sheet => "sheet",
+        MacOsVibrancy::Window => "window",
+        MacOsVibrancy::Hud => "hud",
+        MacOsVibrancy::FullscreenUi => "fullscreen-ui",
+        MacOsVibrancy::Tooltip => "tooltip",
+        MacOsVibrancy::Content => "content",
+        MacOsVibrancy::UnderWindow => "under-window",
+        MacOsVibrancy::UnderPage => "under-page",
+    }
+    .to_owned()
+}
+
+fn macos_visual_effect_state_name(state: MacOsVisualEffectState) -> &'static str {
+    match state {
+        MacOsVisualEffectState::FollowWindow => "followWindow",
+        MacOsVisualEffectState::Active => "active",
+        MacOsVisualEffectState::Inactive => "inactive",
     }
 }
 

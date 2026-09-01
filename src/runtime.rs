@@ -131,11 +131,12 @@ use crate::macos::{
     MacExternalDragMonitor, MacExternalDragSession, MacFirstFrameGuard, MacMouseDownEvent,
     MacNativeDropHost, MacNativeDropOffer, MacNativeDropPayload, MacNativeDropPending,
     MacNativeHost, MacPlatformDialog, MacPlatformDialogContext, MacPlatformDialogFocus,
-    MacPopoverMonitor, MacTypedDragPayload, MacTypedDragRegistry, MacWindowTabAction,
-    capture_left_mouse_down, configure_document_window, configure_gpu_window_resize,
-    configure_window_kind, current_cursor_screen_position as macos_cursor_screen_position,
-    current_pointer_position, dismiss_window_relation, is_window_fullscreen, is_window_maximized,
-    perform_window_close, perform_window_drag, perform_window_tab_action, position_system_popover,
+    MacPopoverMonitor, MacTypedDragPayload, MacTypedDragRegistry, MacVibrancyHost,
+    MacWindowTabAction, capture_left_mouse_down, configure_document_window,
+    configure_gpu_window_resize, configure_window_kind,
+    current_cursor_screen_position as macos_cursor_screen_position, current_pointer_position,
+    dismiss_window_relation, is_window_fullscreen, is_window_maximized, perform_window_close,
+    perform_window_drag, perform_window_tab_action, position_system_popover,
     position_traffic_lights, present_native_open_panel, present_native_prompt,
     present_native_save_panel, present_window_relation, set_window_document_edited,
     set_window_focusable, set_window_movable, set_window_opacity, set_window_represented_file,
@@ -486,6 +487,8 @@ struct RuntimeWindow {
     image_assets: ImageAssetCache,
     #[cfg(target_os = "macos")]
     native_host: Option<MacNativeHost>,
+    #[cfg(target_os = "macos")]
+    vibrancy_host: Option<MacVibrancyHost>,
     #[cfg(target_os = "macos")]
     native_drop_host: MacNativeDropHost,
     #[cfg(target_os = "macos")]
@@ -1414,6 +1417,8 @@ fn runtime_window_state(
         scale_factor: state.scale_factor,
         appearance: state.appearance,
         background_appearance: config.window_background,
+        macos_vibrancy: config.macos_vibrancy,
+        macos_visual_effect_state: config.macos_visual_effect_state,
         focused: state.focused,
         focusable: config.focusable,
         visible: state.visible,

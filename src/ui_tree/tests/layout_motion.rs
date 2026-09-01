@@ -397,7 +397,7 @@ fn transition_test_style(background: Color, radius: f32) -> TransitionPaintStyle
     TransitionPaintStyle {
         background,
         border_color: Color::TRANSPARENT,
-        border_width: 0.0,
+        border_widths: Insets::default(),
         radius,
         opacity: 1.0,
         text_color: None,
@@ -782,9 +782,9 @@ fn nested_opacity_multiplies_subtrees_and_restores_for_following_siblings() {
 
     let mut scene = Scene::new();
     tree.paint(&mut scene, &mut renderer).unwrap();
-    assert_eq!(scene.quads().len(), 2);
-    assert_eq!(scene.quads()[0].fill.a, 0.25);
-    assert_eq!(scene.quads()[1].fill.a, 1.0);
+    assert_eq!(scene.edge_quads().len(), 2);
+    assert_eq!(scene.edge_quads()[0].fill.a, 0.25);
+    assert_eq!(scene.edge_quads()[1].fill.a, 1.0);
     assert_eq!(scene.current_opacity(), 1.0);
 }
 

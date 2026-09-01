@@ -67,6 +67,17 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/sidebar-vibrancy-solid": {
+      "name": "quickgui-solid-sidebar-vibrancy-example",
+      "dependencies": {
+        "@quickgui/native": "workspace:*",
+        "@quickgui/solid": "workspace:*",
+        "solid-js": "2.0.0-rc.3",
+      },
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/solid": {
       "name": "quickgui-solid-example",
       "dependencies": {
@@ -1184,6 +1195,8 @@
     "quickgui-solid-file-dialog-example": ["quickgui-solid-file-dialog-example@workspace:examples/file-dialog-solid"],
 
     "quickgui-solid-popover-example": ["quickgui-solid-popover-example@workspace:examples/popover-solid"],
+
+    "quickgui-solid-sidebar-vibrancy-example": ["quickgui-solid-sidebar-vibrancy-example@workspace:examples/sidebar-vibrancy-solid"],
 
     "quickgui-solid-system-api-example": ["quickgui-solid-system-api-example@workspace:examples/system-api-solid"],
 

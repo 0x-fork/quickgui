@@ -113,16 +113,18 @@ impl NativeRuntime {
         options: NativeWindowOptions,
         initial_batch: &[u8],
     ) -> std::result::Result<u32, String> {
+        let id = self.allocate_window_id()?;
+        self.create_window_with_id(id, options, initial_batch)
+    }
+
+    pub(super) fn create_window_with_id(
+        &mut self,
+        id: u32,
+        options: NativeWindowOptions,
+        initial_batch: &[u8],
+    ) -> std::result::Result<u32, String> {
         self.sync_closed_windows();
-        if self.windows.len() >= MAX_WINDOWS {
-            return Err(format!(
-                "an application cannot own more than {MAX_WINDOWS} windows"
-            ));
-        }
-        let id = self.next_window_id.max(1);
-        self.next_window_id = id
-            .checked_add(1)
-            .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?;
+        self.claim_window_id(id)?;
         let config = window_config(&options)?;
         let mut window = NativeWindowRuntime {
             config,
@@ -159,12 +161,20 @@ impl NativeRuntime {
         options: NativeWindowOptions,
         initial_batch: &[u8],
     ) -> std::result::Result<u32, String> {
+        let id = self.allocate_window_id()?;
+        self.create_system_popover_with_id(id, parent, anchor, options, initial_batch)
+    }
+
+    pub(super) fn create_system_popover_with_id(
+        &mut self,
+        id: u32,
+        parent: u32,
+        anchor: u32,
+        options: NativeWindowOptions,
+        initial_batch: &[u8],
+    ) -> std::result::Result<u32, String> {
         self.sync_closed_windows();
-        if self.windows.len() >= MAX_WINDOWS {
-            return Err(format!(
-                "an application cannot own more than {MAX_WINDOWS} windows"
-            ));
-        }
+        self.claim_window_id(id)?;
         let parent_handle = {
             let parent_window = self
                 .windows
@@ -179,10 +189,6 @@ impl NativeRuntime {
                 .handle
                 .ok_or_else(|| "a system popover requires a running parent window".to_owned())?
         };
-        let id = self.next_window_id.max(1);
-        self.next_window_id = id
-            .checked_add(1)
-            .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?;
         let config = system_popover_config(&options)?;
         let mut window = NativeWindowRuntime {
             config,
@@ -225,22 +231,35 @@ impl NativeRuntime {
         options: NativeWindowOptions,
         initial_batch: &[u8],
     ) -> std::result::Result<u32, String> {
+        let id = self.allocate_window_id()?;
+        self.create_embedded_view_with_id(
+            id,
+            parent,
+            match_horizontal,
+            match_vertical,
+            options,
+            initial_batch,
+        )
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) fn create_embedded_view_with_id(
+        &mut self,
+        id: u32,
+        parent: u32,
+        match_horizontal: bool,
+        match_vertical: bool,
+        options: NativeWindowOptions,
+        initial_batch: &[u8],
+    ) -> std::result::Result<u32, String> {
         self.sync_closed_windows();
-        if self.windows.len() >= MAX_WINDOWS {
-            return Err(format!(
-                "an application cannot own more than {MAX_WINDOWS} windows"
-            ));
-        }
+        self.claim_window_id(id)?;
         let parent_handle = self
             .windows
             .get(&parent)
             .ok_or_else(|| format!("unknown QuickGUI parent window {parent}"))?
             .handle
             .ok_or_else(|| "an embedded view requires a running parent window".to_owned())?;
-        let id = self.next_window_id.max(1);
-        self.next_window_id = id
-            .checked_add(1)
-            .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?;
         let config = window_config(&options)?;
         let mut window = NativeWindowRuntime {
             config,
@@ -273,6 +292,33 @@ impl NativeRuntime {
         self.windows.insert(id, window);
         self.window_order.push(id);
         Ok(id)
+    }
+
+    fn allocate_window_id(&mut self) -> std::result::Result<u32, String> {
+        let id = self.next_window_id.max(1);
+        self.next_window_id = id
+            .checked_add(1)
+            .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?;
+        Ok(id)
+    }
+
+    fn claim_window_id(&mut self, id: u32) -> std::result::Result<(), String> {
+        if id == 0 {
+            return Err("QuickGUI window ids must be nonzero".to_owned());
+        }
+        if self.windows.len() >= MAX_WINDOWS {
+            return Err(format!(
+                "an application cannot own more than {MAX_WINDOWS} windows"
+            ));
+        }
+        if self.windows.contains_key(&id) {
+            return Err(format!("QuickGUI window id {id} is already in use"));
+        }
+        self.next_window_id = self.next_window_id.max(
+            id.checked_add(1)
+                .ok_or_else(|| "QuickGUI window id space exhausted".to_owned())?,
+        );
+        Ok(())
     }
 
     pub(super) fn prepare(&mut self) -> std::result::Result<(), String> {
@@ -1061,6 +1107,12 @@ pub(super) fn window_config(
             value => return Err(format!("unknown window appearance `{value}`")),
         };
     }
+    if let Some(vibrancy) = options.vibrancy.as_deref() {
+        config = config.macos_vibrancy(parse_macos_vibrancy(vibrancy)?);
+    }
+    if let Some(state) = options.visual_effect_state.as_deref() {
+        config = config.macos_visual_effect_state(parse_macos_visual_effect_state(state)?);
+    }
     if let Some(kind) = options.kind.as_deref() {
         config = config.window_kind(match kind {
             "normal" => WindowKind::Normal,
@@ -1191,6 +1243,38 @@ pub(super) fn window_config(
         config = config.traffic_light_position(x, y);
     }
     Ok(config)
+}
+
+pub(crate) fn parse_macos_vibrancy(value: &str) -> std::result::Result<MacOsVibrancy, String> {
+    match value {
+        "appearance-based" | "appearanceBased" => Ok(MacOsVibrancy::AppearanceBased),
+        "titlebar" => Ok(MacOsVibrancy::Titlebar),
+        "selection" => Ok(MacOsVibrancy::Selection),
+        "menu" => Ok(MacOsVibrancy::Menu),
+        "popover" => Ok(MacOsVibrancy::Popover),
+        "sidebar" => Ok(MacOsVibrancy::Sidebar),
+        "header" => Ok(MacOsVibrancy::Header),
+        "sheet" => Ok(MacOsVibrancy::Sheet),
+        "window" => Ok(MacOsVibrancy::Window),
+        "hud" => Ok(MacOsVibrancy::Hud),
+        "fullscreen-ui" | "fullscreenUi" => Ok(MacOsVibrancy::FullscreenUi),
+        "tooltip" => Ok(MacOsVibrancy::Tooltip),
+        "content" => Ok(MacOsVibrancy::Content),
+        "under-window" | "underWindow" => Ok(MacOsVibrancy::UnderWindow),
+        "under-page" | "underPage" => Ok(MacOsVibrancy::UnderPage),
+        value => Err(format!("unknown macOS vibrancy type `{value}`")),
+    }
+}
+
+pub(crate) fn parse_macos_visual_effect_state(
+    value: &str,
+) -> std::result::Result<MacOsVisualEffectState, String> {
+    match value {
+        "followWindow" | "follow-window" => Ok(MacOsVisualEffectState::FollowWindow),
+        "active" => Ok(MacOsVisualEffectState::Active),
+        "inactive" => Ok(MacOsVisualEffectState::Inactive),
+        value => Err(format!("unknown macOS visual effect state `{value}`")),
+    }
 }
 
 pub(super) fn optional_finite(

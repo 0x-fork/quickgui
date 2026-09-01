@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 17;
+export const PROTOCOL_VERSION = 18;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -151,6 +151,11 @@ export const enum PropertyCode {
   SwiftUIAttachmentAnchor = 126,
   SwiftUIArrowEdge = 127,
   SwiftUIPresentationListener = 128,
+  BorderTopWidth = 129,
+  BorderRightWidth = 130,
+  BorderBottomWidth = 131,
+  BorderLeftWidth = 132,
+  BoxShadow = 133,
 }
 
 export type NativePropertyValue = boolean | number | string | null;

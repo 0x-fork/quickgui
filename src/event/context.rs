@@ -1,4 +1,5 @@
 use super::*;
+use crate::{MacOsVibrancy, MacOsVisualEffectState};
 
 /// Commands emitted while a [`crate::View`] handles an event.
 #[derive(Debug, Default)]
@@ -1604,6 +1605,42 @@ impl EventContext {
         appearance: WindowBackgroundAppearance,
     ) -> Result<(), WindowCommandError> {
         self.push_window_command(WindowCommand::SetBackgroundAppearance(handle, appearance))
+    }
+
+    /// Set or remove the current window's macOS semantic vibrancy material.
+    pub fn set_macos_window_vibrancy(
+        &mut self,
+        vibrancy: Option<MacOsVibrancy>,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_macos_window_vibrancy_handle(handle, vibrancy)
+    }
+
+    /// Set or remove a target window's macOS semantic vibrancy material.
+    pub fn set_macos_window_vibrancy_handle(
+        &mut self,
+        handle: WindowHandle,
+        vibrancy: Option<MacOsVibrancy>,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetMacOsVibrancy(handle, vibrancy))
+    }
+
+    /// Change how the current macOS vibrancy material follows window activity.
+    pub fn set_macos_visual_effect_state(
+        &mut self,
+        state: MacOsVisualEffectState,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_macos_visual_effect_state_handle(handle, state)
+    }
+
+    /// Change how a target window's macOS vibrancy material follows window activity.
+    pub fn set_macos_visual_effect_state_handle(
+        &mut self,
+        handle: WindowHandle,
+        state: MacOsVisualEffectState,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetMacOsVisualEffectState(handle, state))
     }
 
     /// Open or close the retained-tree inspector for the current window.

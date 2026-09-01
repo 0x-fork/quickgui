@@ -26,8 +26,8 @@ impl Element {
     }
 
     pub fn border(mut self, width: f32, color: Color) -> Self {
-        let width = width.max(0.0);
-        self.visual.border_width = width;
+        let width = finite_nonnegative(width);
+        self.visual.border_widths = Insets::all(width);
         self.visual.border_color = Some(color);
         self.layout.border = TaffyRect {
             left: LengthPercentage::length(width),
@@ -36,6 +36,74 @@ impl Element {
             bottom: LengthPercentage::length(width),
         };
         self
+    }
+
+    /// Set the widths of the inside border in top, right, bottom, left order.
+    pub fn border_widths(mut self, widths: Insets) -> Self {
+        let widths = Insets {
+            top: finite_nonnegative(widths.top),
+            right: finite_nonnegative(widths.right),
+            bottom: finite_nonnegative(widths.bottom),
+            left: finite_nonnegative(widths.left),
+        };
+        self.visual.border_widths = widths;
+        self.layout.border = TaffyRect {
+            left: LengthPercentage::length(widths.left),
+            right: LengthPercentage::length(widths.right),
+            top: LengthPercentage::length(widths.top),
+            bottom: LengthPercentage::length(widths.bottom),
+        };
+        self
+    }
+
+    /// Set the shared color used by every non-zero border edge.
+    pub fn border_color(mut self, color: Color) -> Self {
+        self.visual.border_color = Some(color);
+        self
+    }
+
+    pub fn border_top_width(mut self, width: f32) -> Self {
+        let width = finite_nonnegative(width);
+        self.visual.border_widths.top = width;
+        self.layout.border.top = LengthPercentage::length(width);
+        self
+    }
+
+    pub fn border_right_width(mut self, width: f32) -> Self {
+        let width = finite_nonnegative(width);
+        self.visual.border_widths.right = width;
+        self.layout.border.right = LengthPercentage::length(width);
+        self
+    }
+
+    pub fn border_bottom_width(mut self, width: f32) -> Self {
+        let width = finite_nonnegative(width);
+        self.visual.border_widths.bottom = width;
+        self.layout.border.bottom = LengthPercentage::length(width);
+        self
+    }
+
+    pub fn border_left_width(mut self, width: f32) -> Self {
+        let width = finite_nonnegative(width);
+        self.visual.border_widths.left = width;
+        self.layout.border.left = LengthPercentage::length(width);
+        self
+    }
+
+    pub fn border_top(self, width: f32, color: Color) -> Self {
+        self.border_top_width(width).border_color(color)
+    }
+
+    pub fn border_right(self, width: f32, color: Color) -> Self {
+        self.border_right_width(width).border_color(color)
+    }
+
+    pub fn border_bottom(self, width: f32, color: Color) -> Self {
+        self.border_bottom_width(width).border_color(color)
+    }
+
+    pub fn border_left(self, width: f32, color: Color) -> Self {
+        self.border_left_width(width).border_color(color)
     }
 
     pub fn rounded(mut self, radius: f32) -> Self {

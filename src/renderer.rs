@@ -35,13 +35,13 @@ use crate::{
     AssetError, Assets, Color as UiColor, FontFallbacks, FontFamily, FontFeatures, FontSource,
     MAX_TEXT_HIGHLIGHTS, PerformanceProfile, Point, Quad, Rect, RenderStats, Scene, ScenePlane,
     Size, TextAlign, TextHighlight, TextId, TextOverflow, TextShaping, TextStyle, TextUnderline,
-    TextWrap, WindowBackgroundAppearance,
+    TextWrap,
     assets::resolve_fonts,
     custom_shader_renderer::CustomShaderRenderer,
     font::{glyph_family, normalize_fallbacks},
     image_renderer::ImageRenderer,
     path_renderer::PathRenderer,
-    scene::{PrimitiveRef, Shadow, ShapeRef, WavyUnderline},
+    scene::{EdgeQuad, PrimitiveRef, Shadow, ShapeRef, WavyUnderline},
     svg_renderer::SvgRenderer,
 };
 
@@ -503,6 +503,7 @@ const SHAPE_MODE_QUAD: f32 = 0.0;
 const SHAPE_MODE_DROP_SHADOW: f32 = 1.0;
 const SHAPE_MODE_INSET_SHADOW: f32 = 2.0;
 const SHAPE_MODE_WAVY_UNDERLINE: f32 = 3.0;
+const SHAPE_MODE_EDGE_QUAD: f32 = 4.0;
 const SHADOW_SIGMA_PER_BLUR_RADIUS: f32 = 0.5;
 const SHADOW_MARGIN_SIGMAS: f32 = 3.0;
 
@@ -704,6 +705,18 @@ impl ShapeRenderer {
                         quads += 1;
                         quad_instance(quad, clip)
                     }
+                    ShapeRef::EdgeQuad(index) => {
+                        let quad = &layer.edge_quads()[index];
+                        let clip = quad.clip.unwrap_or(viewport);
+                        let Some(clip) = clip.intersection(viewport) else {
+                            continue;
+                        };
+                        if !quad.rect.intersects(clip) {
+                            continue;
+                        }
+                        quads += 1;
+                        edge_quad_instance(quad, clip)
+                    }
                     ShapeRef::WavyUnderline(index) => {
                         let underline = &layer.wavy_underlines()[index];
                         let clip = underline.clip.unwrap_or(viewport);
@@ -821,6 +834,22 @@ fn quad_instance(quad: &Quad, clip: Rect) -> ShapeInstance {
             0.0,
         ],
         subject: rect_array(quad.rect),
+    }
+}
+
+fn edge_quad_instance(quad: &EdgeQuad, clip: Rect) -> ShapeInstance {
+    ShapeInstance {
+        geometry: rect_array(quad.rect),
+        primary: quad.fill.as_array(),
+        secondary: quad.border_color.as_array(),
+        clip: clip_array(clip),
+        params: [SHAPE_MODE_EDGE_QUAD, quad.radius.max(0.0), 0.0, 0.0],
+        subject: [
+            quad.border_widths.top.max(0.0),
+            quad.border_widths.right.max(0.0),
+            quad.border_widths.bottom.max(0.0),
+            quad.border_widths.left.max(0.0),
+        ],
     }
 }
 

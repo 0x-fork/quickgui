@@ -328,8 +328,8 @@ fn derived_tabs_id(scope: ElementId, value: ElementId, tag: u64) -> ElementId {
 mod tests {
     use super::*;
     use crate::{
-        AppRegion, Color, CursorStyle, IntoElement, TestAppContext, UserSelect, View, ViewContext,
-        button, div, text,
+        AppRegion, Color, CursorStyle, Insets, IntoElement, TestAppContext, UserSelect, View,
+        ViewContext, button, div, text,
     };
 
     #[test]
@@ -370,7 +370,7 @@ mod tests {
                 loop_focus: false,
             })
         );
-        assert_eq!(list.visual.border_width, 2.0);
+        assert_eq!(list.visual.border_widths, Insets::all(2.0));
         assert!(list.key_listeners.is_none());
 
         let active = tabs.tab("overview");

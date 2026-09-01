@@ -252,6 +252,20 @@ impl TestAppContext {
                     state.dirty = true;
                 }
             }
+            WindowCommand::SetMacOsVibrancy(_, vibrancy) => {
+                if state.config.macos_vibrancy != vibrancy {
+                    state.config.macos_vibrancy = vibrancy;
+                    state.state.macos_vibrancy = vibrancy;
+                    state.dirty = true;
+                }
+            }
+            WindowCommand::SetMacOsVisualEffectState(_, effect_state) => {
+                if state.config.macos_visual_effect_state != effect_state {
+                    state.config.macos_visual_effect_state = effect_state;
+                    state.state.macos_visual_effect_state = effect_state;
+                    state.dirty = true;
+                }
+            }
             #[cfg(feature = "inspector")]
             WindowCommand::SetInspector(_, open) => {
                 if state.inspector.is_some() != open {

@@ -1,6 +1,89 @@
 use super::*;
 
 #[test]
+fn hosted_void_mutations_are_fire_and_forget_host_commands() {
+    let host = HostCoordinator::new();
+    host.enqueue(HostCommand::Mutation {
+        app: 7,
+        command: system::SystemCommand::WindowAction {
+            window: 11,
+            action: system::WindowAction::SetMacOsVibrancy(Some(MacOsVibrancy::Sidebar)),
+        },
+    })
+    .expect("a window mutation fits the host queue");
+    host.enqueue(HostCommand::Mutation {
+        app: 7,
+        command: system::SystemCommand::SetDockBadge(Some("3".to_owned())),
+    })
+    .expect("an application mutation fits the host queue");
+
+    let mut commands = host.take_commands().expect("the host queue is readable");
+    match commands
+        .pop_front()
+        .expect("the window mutation was queued")
+    {
+        HostCommand::Mutation {
+            app,
+            command:
+                system::SystemCommand::WindowAction {
+                    window,
+                    action: system::WindowAction::SetMacOsVibrancy(vibrancy),
+                },
+        } => {
+            assert_eq!(app, 7);
+            assert_eq!(window, 11);
+            assert_eq!(vibrancy, Some(MacOsVibrancy::Sidebar));
+        }
+        _ => panic!("the mutation must not be wrapped in a synchronous system command"),
+    }
+    match commands
+        .pop_front()
+        .expect("the application mutation was queued")
+    {
+        HostCommand::Mutation {
+            app,
+            command: system::SystemCommand::SetDockBadge(value),
+        } => {
+            assert_eq!(app, 7);
+            assert_eq!(value.as_deref(), Some("3"));
+        }
+        _ => panic!("the mutation must not carry a synchronous reply"),
+    }
+    assert!(commands.is_empty());
+}
+
+#[test]
+fn hosted_window_creation_uses_a_preallocated_handle_without_a_reply() {
+    let host = HostCoordinator::new();
+    let window = host
+        .allocate_window()
+        .expect("the worker can allocate a hosted window handle");
+    host.enqueue(HostCommand::CreateWindow {
+        app: 7,
+        window,
+        options: NativeWindowOptions::default(),
+        initial_batch: Vec::new(),
+    })
+    .expect("window creation fits the host queue");
+
+    let mut commands = host.take_commands().expect("the host queue is readable");
+    match commands.pop_front().expect("window creation was queued") {
+        HostCommand::CreateWindow {
+            app,
+            window: queued_window,
+            initial_batch,
+            ..
+        } => {
+            assert_eq!(app, 7);
+            assert_eq!(queued_window, window);
+            assert!(initial_batch.is_empty());
+        }
+        _ => panic!("hosted creation must use a no-reply command"),
+    }
+    assert!(commands.is_empty());
+}
+
+#[test]
 fn app_configuration_updates_preserve_embedded_identity_and_paths() {
     let (info, paths, quit_mode) = native_app_configuration(NativeAppOptions {
         name: Some("QuickGUI Test".to_owned()),
@@ -50,6 +133,50 @@ fn app_configuration_updates_preserve_embedded_identity_and_paths() {
         Some(overridden.as_path())
     );
     assert_eq!(quit_mode, QuitMode::Explicit);
+}
+
+#[test]
+fn window_configuration_maps_every_electron_compatible_macos_vibrancy_type() {
+    let materials = [
+        ("appearance-based", MacOsVibrancy::AppearanceBased),
+        ("titlebar", MacOsVibrancy::Titlebar),
+        ("selection", MacOsVibrancy::Selection),
+        ("menu", MacOsVibrancy::Menu),
+        ("popover", MacOsVibrancy::Popover),
+        ("sidebar", MacOsVibrancy::Sidebar),
+        ("header", MacOsVibrancy::Header),
+        ("sheet", MacOsVibrancy::Sheet),
+        ("window", MacOsVibrancy::Window),
+        ("hud", MacOsVibrancy::Hud),
+        ("fullscreen-ui", MacOsVibrancy::FullscreenUi),
+        ("tooltip", MacOsVibrancy::Tooltip),
+        ("content", MacOsVibrancy::Content),
+        ("under-window", MacOsVibrancy::UnderWindow),
+        ("under-page", MacOsVibrancy::UnderPage),
+    ];
+
+    for (name, expected) in materials {
+        let config = window_config(&NativeWindowOptions {
+            vibrancy: Some(name.to_owned()),
+            visual_effect_state: Some("inactive".to_owned()),
+            ..NativeWindowOptions::default()
+        })
+        .expect("Electron-compatible vibrancy material maps into the Rust core");
+        assert_eq!(config.macos_vibrancy, Some(expected));
+        assert_eq!(
+            config.macos_visual_effect_state,
+            MacOsVisualEffectState::Inactive
+        );
+    }
+
+    assert!(
+        window_config(&NativeWindowOptions {
+            vibrancy: Some("glass".to_owned()),
+            ..NativeWindowOptions::default()
+        })
+        .unwrap_err()
+        .contains("unknown macOS vibrancy type")
+    );
 }
 
 struct BatchWriter {

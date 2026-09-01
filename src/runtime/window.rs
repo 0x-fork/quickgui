@@ -89,6 +89,7 @@ impl WindowBackgroundAppearance {
         matches!(self, Self::Blurred)
     }
 
+    #[cfg(test)]
     pub(super) const fn changes_from(self, previous: Self) -> WindowBackgroundChanges {
         WindowBackgroundChanges {
             transparency: self.is_transparent() != previous.is_transparent(),
@@ -97,10 +98,45 @@ impl WindowBackgroundAppearance {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct WindowBackgroundChanges {
     pub(super) transparency: bool,
     pub(super) blur: bool,
+}
+
+/// Semantic macOS material rendered behind transparent application pixels.
+///
+/// The variants intentionally match Electron's current `vibrancy` vocabulary while retaining a
+/// typed Rust-core source of truth. On macOS QuickGUI projects these values through one
+/// `NSVisualEffectView`; other platforms retain the requested state without installing a native
+/// effect.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MacOsVibrancy {
+    AppearanceBased,
+    Titlebar,
+    Selection,
+    Menu,
+    Popover,
+    Sidebar,
+    Header,
+    Sheet,
+    Window,
+    Hud,
+    FullscreenUi,
+    Tooltip,
+    Content,
+    UnderWindow,
+    UnderPage,
+}
+
+/// Whether a macOS vibrancy material follows the window's active state.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum MacOsVisualEffectState {
+    #[default]
+    FollowWindow,
+    Active,
+    Inactive,
 }
 
 /// Native window titlebar presentation.
@@ -226,6 +262,9 @@ pub struct WindowState {
     pub scale_factor: f32,
     pub appearance: WindowAppearance,
     pub background_appearance: WindowBackgroundAppearance,
+    /// Active macOS semantic vibrancy material, when requested.
+    pub macos_vibrancy: Option<MacOsVibrancy>,
+    pub macos_visual_effect_state: MacOsVisualEffectState,
     pub focused: bool,
     /// Whether the native window is permitted to receive keyboard focus.
     pub focusable: bool,
@@ -457,6 +496,10 @@ pub struct WindowOptions {
     pub background: Color,
     /// Native compositor treatment behind transparent application pixels.
     pub window_background: WindowBackgroundAppearance,
+    /// macOS semantic material behind the alpha-capable application surface.
+    pub macos_vibrancy: Option<MacOsVibrancy>,
+    /// Activity-state policy for [`Self::macos_vibrancy`].
+    pub macos_visual_effect_state: MacOsVisualEffectState,
     pub performance_profile: PerformanceProfile,
     /// Explicit native light/dark preference. `None` follows the current system appearance.
     pub preferred_appearance: Option<WindowAppearance>,
@@ -530,6 +573,8 @@ impl Default for WindowOptions {
             tabbing_identifier: None,
             background: Color::rgb8(18, 18, 20),
             window_background: WindowBackgroundAppearance::Opaque,
+            macos_vibrancy: None,
+            macos_visual_effect_state: MacOsVisualEffectState::FollowWindow,
             performance_profile: PerformanceProfile::Balanced,
             preferred_appearance: None,
             title_bar_style: TitleBarStyle::Default,
@@ -728,6 +773,32 @@ impl WindowOptions {
 
     pub fn window_background(mut self, appearance: WindowBackgroundAppearance) -> Self {
         self.window_background = appearance;
+        self
+    }
+
+    pub(super) const fn uses_transparent_surface(&self) -> bool {
+        self.window_background.is_transparent()
+            || (cfg!(target_os = "macos") && self.macos_vibrancy.is_some())
+    }
+
+    pub(super) const fn uses_legacy_background_blur(&self) -> bool {
+        self.window_background.is_blurred()
+            && !(cfg!(target_os = "macos") && self.macos_vibrancy.is_some())
+    }
+
+    /// Apply one Electron-compatible semantic vibrancy material on macOS.
+    pub fn macos_vibrancy(mut self, vibrancy: MacOsVibrancy) -> Self {
+        self.macos_vibrancy = Some(vibrancy);
+        self
+    }
+
+    pub fn without_macos_vibrancy(mut self) -> Self {
+        self.macos_vibrancy = None;
+        self
+    }
+
+    pub fn macos_visual_effect_state(mut self, state: MacOsVisualEffectState) -> Self {
+        self.macos_visual_effect_state = state;
         self
     }
 
@@ -1331,6 +1402,8 @@ pub(crate) enum WindowCommand {
     SetCursorPosition(WindowHandle, Point),
     SetAppearance(WindowHandle, Option<WindowAppearance>),
     SetBackgroundAppearance(WindowHandle, WindowBackgroundAppearance),
+    SetMacOsVibrancy(WindowHandle, Option<MacOsVibrancy>),
+    SetMacOsVisualEffectState(WindowHandle, MacOsVisualEffectState),
     #[cfg(feature = "inspector")]
     SetInspector(WindowHandle, bool),
     #[cfg(feature = "inspector")]
@@ -1386,6 +1459,8 @@ impl WindowCommand {
             | Self::SetCursorPosition(handle, _)
             | Self::SetAppearance(handle, _)
             | Self::SetBackgroundAppearance(handle, _)
+            | Self::SetMacOsVibrancy(handle, _)
+            | Self::SetMacOsVisualEffectState(handle, _)
             | Self::RequestAttention(handle) => *handle,
             #[cfg(feature = "inspector")]
             Self::SetInspector(handle, _) | Self::ToggleInspector(handle) => *handle,

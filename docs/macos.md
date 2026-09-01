@@ -145,6 +145,52 @@ Use translucent scene colors to expose the effect and run the native sample with
 cargo run --release --example window_background
 ```
 
+## Vibrancy materials
+
+`MacOsVibrancy` is the platform-specific material layer above the portable background policy. It
+supports the complete Electron-compatible set: `AppearanceBased`, `Titlebar`, `Selection`, `Menu`,
+`Popover`, `Sidebar`, `Header`, `Sheet`, `Window`, `Hud`, `FullscreenUi`, `Tooltip`, `Content`,
+`UnderWindow`, and `UnderPage`. `MacOsVisualEffectState` selects `FollowWindow`, `Active`, or
+`Inactive` activity behavior.
+
+```rust
+use quickgui::{MacOsVibrancy, MacOsVisualEffectState, WindowOptions};
+
+let options = WindowOptions::new("Workspace")
+    .background(quickgui::Color::TRANSPARENT)
+    .macos_vibrancy(MacOsVibrancy::Sidebar)
+    .macos_visual_effect_state(MacOsVisualEffectState::FollowWindow);
+```
+
+The JavaScript API follows Electron's names directly:
+
+```ts
+const window = new Window({
+  background: "transparent",
+  vibrancy: "sidebar",
+  visualEffectState: "followWindow",
+  renderer,
+});
+
+window.setVibrancy("under-window");
+window.setVisualEffectState("active");
+window.setVibrancy(); // remove the material
+```
+
+Enabling vibrancy makes the existing Metal surface alpha-capable and places its stable Winit view
+above one `NSVisualEffectView` sibling using behind-window blending. Changing the material or
+activity state mutates that view in place; disabling vibrancy restores the original content view
+and the portable `WindowBackgroundAppearance` policy. These transitions add no polling or idle
+frame source. Scene pixels still need alpha—normally a transparent window background and a
+translucent sidebar—to reveal the material.
+
+The interactive Solid example exposes every material and effect state:
+
+```console
+cd examples/sidebar-vibrancy-solid
+bun run dev
+```
+
 ## macOS window chrome
 
 Represented file URLs, native edited-state indication, the character palette, and AppKit system

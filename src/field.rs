@@ -296,7 +296,9 @@ fn bounded_validation_message(message: Arc<str>) -> (Option<Arc<str>>, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Color, TestAppContext, View, ViewContext, checkbox, div, text, text_input};
+    use crate::{
+        Color, Insets, TestAppContext, View, ViewContext, checkbox, div, text, text_input,
+    };
 
     #[test]
     fn parts_preserve_application_appearance_and_wire_exact_state() {
@@ -339,7 +341,7 @@ mod tests {
             control.accessibility.relations.described_by_secondary(),
             Some(field.error_id())
         );
-        assert_eq!(control.visual.border_width, 3.0);
+        assert_eq!(control.visual.border_widths, Insets::all(3.0));
 
         assert!(
             !field

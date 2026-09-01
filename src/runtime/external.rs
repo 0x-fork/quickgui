@@ -674,6 +674,25 @@ impl AppRunner {
         )
     }
 
+    pub fn set_macos_window_vibrancy(
+        &mut self,
+        handle: WindowHandle,
+        vibrancy: Option<MacOsVibrancy>,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetMacOsVibrancy(handle, vibrancy))
+    }
+
+    pub fn set_macos_visual_effect_state(
+        &mut self,
+        handle: WindowHandle,
+        state: MacOsVisualEffectState,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetMacOsVisualEffectState(handle, state),
+        )
+    }
+
     fn queue_window_command(
         &mut self,
         handle: WindowHandle,

@@ -492,8 +492,8 @@ fn derived_disclosure_id(scope: ElementId, value: ElementId, tag: u64) -> Elemen
 mod tests {
     use super::*;
     use crate::{
-        AppRegion, Color, CursorStyle, IntoElement, TestAppContext, UserSelect, View, ViewContext,
-        div, text,
+        AppRegion, Color, CursorStyle, Insets, IntoElement, TestAppContext, UserSelect, View,
+        ViewContext, div, text,
     };
 
     #[test]
@@ -523,7 +523,7 @@ mod tests {
         assert_eq!(trigger.cursor_style, Some(CursorStyle::Arrow));
         assert_eq!(trigger.app_region, Some(AppRegion::NoDrag));
         assert_eq!(trigger.user_select, UserSelect::None);
-        assert_eq!(trigger.visual.border_width, 2.0);
+        assert_eq!(trigger.visual.border_widths, Insets::all(2.0));
         assert!(trigger.transition.is_none());
 
         let panel = disclosure

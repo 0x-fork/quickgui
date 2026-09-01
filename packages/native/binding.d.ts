@@ -24,13 +24,13 @@ export declare function clearHostedRecentDocuments(app: number): void
 
 export declare function clearRecentDocuments(app: number): void
 
-export declare function closeHostedWindow(app: number, window: number): boolean
+export declare function closeHostedWindow(app: number, window: number): void
 
 export declare function closeWindow(app: number, window: number): boolean
 
 export declare function configureApp(app: number, options: NativeAppOptions): void
 
-export declare function configureHostedApp(app: number, options: NativeAppOptions): void
+export declare function configureHostedApp(app: number, options: NativeAppOptions): Promise<void>
 
 export declare function createApp(options?: NativeAppOptions | undefined | null): number
 
@@ -54,11 +54,11 @@ export declare function deleteSecureStorage(service: string, account: string): P
 
 export declare function destroyApp(app: number): boolean
 
-export declare function destroyHostedApp(app: number): boolean
+export declare function destroyHostedApp(app: number): void
 
 export declare function disableAutoStart(options: NativeAutoStartOptions): Promise<void>
 
-export declare function dismissHostedNotification(app: number, tag: string): void
+export declare function dismissHostedNotification(app: number, tag: string): Promise<void>
 
 export declare function dismissNotification(app: number, tag: string): void
 
@@ -66,9 +66,9 @@ export declare function enableAutoStart(options: NativeAutoStartOptions): Promis
 
 export declare function exitApp(app: number): boolean
 
-export declare function exitHostedApp(app: number): boolean
+export declare function exitHostedApp(app: number): Promise<boolean>
 
-export declare function focusHostedNode(app: number, window: number, node: number): boolean
+export declare function focusHostedNode(app: number, window: number, node: number): void
 
 export declare function focusNode(app: number, window: number, node: number): boolean
 
@@ -82,25 +82,25 @@ export declare function getDesktopIntegrationSupport(app: number): NativeDesktop
 
 export declare function getDisplays(app: number): Array<NativeDisplay>
 
-export declare function getHostedAppInfo(app: number): NativeAppInfo | null
+export declare function getHostedAppInfo(app: number): Promise<NativeAppInfo | null>
 
-export declare function getHostedAppPaths(app: number): NativeAppPaths | null
+export declare function getHostedAppPaths(app: number): Promise<NativeAppPaths | null>
 
-export declare function getHostedCursorScreenPosition(app: number): NativePoint
+export declare function getHostedCursorScreenPosition(app: number): Promise<NativePoint>
 
-export declare function getHostedDesktopIntegrationSupport(app: number): NativeDesktopIntegrationSupport
+export declare function getHostedDesktopIntegrationSupport(app: number): Promise<NativeDesktopIntegrationSupport>
 
-export declare function getHostedDisplays(app: number): Array<NativeDisplay>
+export declare function getHostedDisplays(app: number): Promise<Array<NativeDisplay>>
 
-export declare function getHostedKeyboardLayout(app: number): NativeKeyboardLayout
+export declare function getHostedKeyboardLayout(app: number): Promise<NativeKeyboardLayout>
 
-export declare function getHostedSystemInfo(app: number): NativeSystemInfo
+export declare function getHostedSystemInfo(app: number): Promise<NativeSystemInfo>
 
-export declare function getHostedSystemPreferences(app: number): NativeSystemPreferences
+export declare function getHostedSystemPreferences(app: number): Promise<NativeSystemPreferences>
 
-export declare function getHostedWindowRegistry(app: number): NativeWindowRegistry
+export declare function getHostedWindowRegistry(app: number): Promise<NativeWindowRegistry>
 
-export declare function getHostedWindowState(app: number, window: number): NativeWindowState
+export declare function getHostedWindowState(app: number, window: number): Promise<NativeWindowState>
 
 export declare function getKeyboardLayout(app: number): NativeKeyboardLayout
 
@@ -136,8 +136,6 @@ export declare function isAppReady(app: number): boolean
 export declare function isAutoStartEnabled(options: NativeAutoStartOptions): Promise<boolean>
 
 export declare function isAutoStartSupported(): boolean
-
-export declare function isHostedAppReady(app: number): boolean
 
 export declare function isProtocolRegistered(options: NativeProtocolRegistrationOptions): Promise<boolean>
 
@@ -513,6 +511,8 @@ export interface NativeWindowOptions {
   background?: number
   performanceProfile?: string
   appearance?: string
+  vibrancy?: string
+  visualEffectState?: string
   titleBarStyle?: string
   kind?: string
   focus?: boolean
@@ -582,6 +582,8 @@ export interface NativeWindowState {
   scaleFactor: number
   appearance: string
   backgroundAppearance: string
+  vibrancy?: string
+  visualEffectState: string
   focused: boolean
   focusable: boolean
   visible: boolean
@@ -622,11 +624,11 @@ export interface NativeWindowState {
 
 export declare function performGlobalShortcutAction(app: number, request: number, action: string, registration?: number | undefined | null, accelerator?: string | undefined | null): void
 
-export declare function performHostedGlobalShortcutAction(app: number, request: number, action: string, registration?: number | undefined | null, accelerator?: string | undefined | null): void
+export declare function performHostedGlobalShortcutAction(app: number, request: number, action: string, registration?: number | undefined | null, accelerator?: string | undefined | null): Promise<void>
 
-export declare function performHostedNotificationPermissionRequest(app: number, request: number, prompt: boolean): void
+export declare function performHostedNotificationPermissionRequest(app: number, request: number, prompt: boolean): Promise<void>
 
-export declare function performHostedShellAction(app: number, request: number, action: string, value: string): void
+export declare function performHostedShellAction(app: number, request: number, action: string, value: string): Promise<void>
 
 export declare function performHostedWindowAction(app: number, window: number, action: string, value?: string | undefined | null): void
 
@@ -642,7 +644,7 @@ export declare function performWindowImageAction(app: number, window: number, ac
 
 export declare function prepareApp(app: number): void
 
-export declare function prepareHostedApp(app: number): void
+export declare function prepareHostedApp(app: number): Promise<void>
 
 export declare function protocolVersion(): number
 
@@ -651,27 +653,27 @@ export declare function pumpApp(app: number, timeoutMs?: number | undefined | nu
 
 export declare function readClipboard(app: number): NativeClipboardItem | null
 
-export declare function readHostedClipboard(app: number): NativeClipboardItem | null
+export declare function readHostedClipboard(app: number): Promise<NativeClipboardItem | null>
 
 export declare function registerProtocol(options: NativeProtocolRegistrationOptions): Promise<void>
 
 export declare function relaunchApp(app: number, options: NativeRelaunchOptions): boolean
 
-export declare function relaunchHostedApp(app: number, options: NativeRelaunchOptions): boolean
+export declare function relaunchHostedApp(app: number, options: NativeRelaunchOptions): Promise<boolean>
 
-export declare function releaseHostedSingleInstanceLock(app: number): boolean
+export declare function releaseHostedSingleInstanceLock(app: number): Promise<boolean>
 
 export declare function releaseSingleInstanceLock(app: number): boolean
 
-export declare function removeHostedTrayIcon(app: number, request: number, id: number): void
+export declare function removeHostedTrayIcon(app: number, request: number, id: number): Promise<void>
 
 export declare function removeTrayIcon(app: number, request: number, id: number): void
 
 export declare function requestFileIcon(app: number, request: number, path: string, size: string): void
 
-export declare function requestHostedFileIcon(app: number, request: number, path: string, size: string): void
+export declare function requestHostedFileIcon(app: number, request: number, path: string, size: string): Promise<void>
 
-export declare function requestHostedSingleInstanceLock(app: number, identifier: string): boolean
+export declare function requestHostedSingleInstanceLock(app: number, identifier: string): Promise<boolean>
 
 export declare function requestPermission(kind: string): Promise<string>
 
@@ -695,9 +697,9 @@ export declare function setHostedDockIcon(app: number, icon?: NativeImageSource 
 
 export declare function setHostedDockMenu(app: number, menu?: string | undefined | null): void
 
-export declare function setHostedTrayIcon(app: number, request: number, options: NativeTrayIconOptions): void
+export declare function setHostedTrayIcon(app: number, request: number, options: NativeTrayIconOptions): Promise<void>
 
-export declare function setHostedUserTasks(app: number, request: number, tasks: Array<NativeUserTask>): void
+export declare function setHostedUserTasks(app: number, request: number, tasks: Array<NativeUserTask>): Promise<void>
 
 export declare function setSecureStorage(service: string, account: string, secret: Buffer): Promise<void>
 
@@ -711,15 +713,15 @@ export declare function showAlertDialog(app: number, window: number | undefined 
 
 export declare function showHostedAboutPanel(app: number, options: NativeAboutPanelOptions): void
 
-export declare function showHostedAlertDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): void
+export declare function showHostedAlertDialog(app: number, window: number | undefined | null, request: number, options: NativeDialogOptions): Promise<void>
 
-export declare function showHostedNotification(app: number, options: NativeNotificationOptions): void
+export declare function showHostedNotification(app: number, options: NativeNotificationOptions): Promise<void>
 
-export declare function showHostedOpenDialog(app: number, window: number | undefined | null, request: number, options: NativeOpenDialogOptions): void
+export declare function showHostedOpenDialog(app: number, window: number | undefined | null, request: number, options: NativeOpenDialogOptions): Promise<void>
 
-export declare function showHostedSaveDialog(app: number, window: number | undefined | null, request: number, options: NativeSaveDialogOptions): void
+export declare function showHostedSaveDialog(app: number, window: number | undefined | null, request: number, options: NativeSaveDialogOptions): Promise<void>
 
-export declare function showHostedTrayMenu(app: number, request: number, id: number): void
+export declare function showHostedTrayMenu(app: number, request: number, id: number): Promise<void>
 
 export declare function showNotification(app: number, options: NativeNotificationOptions): void
 
@@ -733,7 +735,7 @@ export declare function stageUpdate(update: NativeAvailableUpdate, destinationDi
 
 export declare function startApp(app: number): void
 
-export declare function startHostedApp(app: number): void
+export declare function startHostedApp(app: number): Promise<void>
 
 export declare function supportsDynamicProtocolRegistration(): boolean
 
@@ -747,4 +749,4 @@ export declare function waitForHostedEvents(app: number): Promise<HostedAppUpdat
 
 export declare function writeClipboard(app: number, item: NativeClipboardItem): void
 
-export declare function writeHostedClipboard(app: number, item: NativeClipboardItem): void
+export declare function writeHostedClipboard(app: number, item: NativeClipboardItem): Promise<void>

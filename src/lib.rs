@@ -314,14 +314,15 @@ pub use runtime::{
     MAX_TRAY_ENCODED_ICON_BYTES, MAX_TRAY_ICON_DIMENSION, MAX_TRAY_ICONS, MAX_TRAY_MENU_DEPTH,
     MAX_TRAY_MENU_ITEMS, MAX_TRAY_TEXT_BYTES, MAX_WINDOW_COMMANDS_PER_EVENT,
     MAX_WINDOW_DOCUMENT_PATH_BYTES, MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION,
-    MAX_WINDOW_TABBING_IDENTIFIER_BYTES, MAX_WINDOW_TITLE_BYTES, MouseDownListener,
-    MouseExitListener, MouseMoveListener, MousePressureListener, MouseUpListener,
-    PerformanceProfile, PinchListener, PointerListener, PowerEvent, QuitMode, QuitReason,
-    QuitRequest, RotationListener, ScrollWheelListener, SmartMagnifyListener, SubmitListener,
-    TaskbarProgressState, TitleBarStyle, TouchListener, TrayEvent, TrayEventKind, TrayIconImage,
-    TrayIconOptions, TrayMenuItem, TrayMouseButton, View, ViewContext, WindowAppearance,
-    WindowBackgroundAppearance, WindowBounds, WindowCommandError, WindowHandle, WindowInvalidator,
-    WindowKind, WindowLevel, WindowOptions, WindowRegistry, WindowState, WindowTabState,
+    MAX_WINDOW_TABBING_IDENTIFIER_BYTES, MAX_WINDOW_TITLE_BYTES, MacOsVibrancy,
+    MacOsVisualEffectState, MouseDownListener, MouseExitListener, MouseMoveListener,
+    MousePressureListener, MouseUpListener, PerformanceProfile, PinchListener, PointerListener,
+    PowerEvent, QuitMode, QuitReason, QuitRequest, RotationListener, ScrollWheelListener,
+    SmartMagnifyListener, SubmitListener, TaskbarProgressState, TitleBarStyle, TouchListener,
+    TrayEvent, TrayEventKind, TrayIconImage, TrayIconOptions, TrayMenuItem, TrayMouseButton, View,
+    ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowCommandError,
+    WindowHandle, WindowInvalidator, WindowKind, WindowLevel, WindowOptions, WindowRegistry,
+    WindowState, WindowTabState,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime::{AppRunStatus, AppRunner, AppRunnerWaker};

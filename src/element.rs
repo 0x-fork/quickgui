@@ -709,7 +709,7 @@ impl fmt::Debug for InputConstraints {
 pub(crate) struct VisualStyle {
     pub background: Option<Color>,
     pub border_color: Option<Color>,
-    pub border_width: f32,
+    pub border_widths: Insets,
     pub radius: f32,
     pub shadows: Option<Arc<[BoxShadow]>>,
     pub opacity: f32,
@@ -720,7 +720,7 @@ impl Default for VisualStyle {
         Self {
             background: None,
             border_color: None,
-            border_width: 0.0,
+            border_widths: Insets::default(),
             radius: 0.0,
             shadows: None,
             opacity: 1.0,

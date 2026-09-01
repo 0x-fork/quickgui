@@ -1,4 +1,5 @@
 use super::*;
+use crate::{MacOsVibrancy, MacOsVisualEffectState};
 
 fn test_typed_payload(value: Arc<dyn Any>) -> MacTypedDragPayload {
     let value_type = value.as_ref().type_id();
@@ -195,4 +196,37 @@ fn traffic_light_top_left_coordinates_convert_to_appkit_space() {
         traffic_light_origin(Point::new(16.0, 6.0), 28.0, 14.0, 16.0),
         NSPoint::new(16.0, 8.0)
     );
+}
+
+#[test]
+fn electron_compatible_vibrancy_values_map_to_exact_appkit_materials() {
+    use super::vibrancy::{native_effect_state, native_material};
+
+    let materials = [
+        (MacOsVibrancy::AppearanceBased, 0),
+        (MacOsVibrancy::Titlebar, 3),
+        (MacOsVibrancy::Selection, 4),
+        (MacOsVibrancy::Menu, 5),
+        (MacOsVibrancy::Popover, 6),
+        (MacOsVibrancy::Sidebar, 7),
+        (MacOsVibrancy::Header, 10),
+        (MacOsVibrancy::Sheet, 11),
+        (MacOsVibrancy::Window, 12),
+        (MacOsVibrancy::Hud, 13),
+        (MacOsVibrancy::FullscreenUi, 15),
+        (MacOsVibrancy::Tooltip, 17),
+        (MacOsVibrancy::Content, 18),
+        (MacOsVibrancy::UnderWindow, 21),
+        (MacOsVibrancy::UnderPage, 22),
+    ];
+    for (vibrancy, expected) in materials {
+        assert_eq!(native_material(vibrancy).0, expected);
+    }
+
+    assert_eq!(
+        native_effect_state(MacOsVisualEffectState::FollowWindow).0,
+        0
+    );
+    assert_eq!(native_effect_state(MacOsVisualEffectState::Active).0, 1);
+    assert_eq!(native_effect_state(MacOsVisualEffectState::Inactive).0, 2);
 }

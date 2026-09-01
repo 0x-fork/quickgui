@@ -179,7 +179,7 @@ impl Element {
         };
         element.visual.background = Some(Color::rgb8(28, 30, 35));
         element.visual.border_color = Some(Color::rgb8(70, 74, 85));
-        element.visual.border_width = 1.0;
+        element.visual.border_widths = Insets::all(1.0);
         element.visual.radius = 8.0;
         element.focus = ElementStateStyle::default().border(2.0, Color::rgb8(94, 234, 212));
         element.invalid_style =

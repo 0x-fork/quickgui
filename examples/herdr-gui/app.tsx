@@ -15,7 +15,7 @@ import { themeFor } from "./theme.ts";
 
 await app.whenReady();
 
-const appPaths = app.getPaths();
+const appPaths = await app.getPaths();
 const homePath = appPaths?.homeDir ?? process.cwd();
 const stateFile = appPaths?.dataDir
   ? join(appPaths.dataDir, "herdr-gui-state.json")

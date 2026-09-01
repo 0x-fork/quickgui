@@ -82,6 +82,64 @@ describe("Solid universal host", () => {
     expect(button.properties.get(PropertyCode.Transition)).toBe(90);
   });
 
+  test("projects independent border edges and CSS-like box shadows", () => {
+    const panel = createComponent(View, {
+      style: {
+        color: "#445566",
+        borderWidth: 1,
+        borderTopWidth: 0,
+        borderRightWidth: "2px",
+        borderBottomWidth: 3,
+        borderLeftWidth: "4px",
+        borderColor: "#11223380",
+        boxShadow:
+          "0 8px 24px -8px rgba(15, 23, 42, 0.35), inset 0 1px 0 currentColor",
+      },
+    });
+
+    expect(panel.properties.get(PropertyCode.BorderWidth)).toBe(1);
+    expect(panel.properties.get(PropertyCode.BorderTopWidth)).toBe(0);
+    expect(panel.properties.get(PropertyCode.BorderRightWidth)).toBe(2);
+    expect(panel.properties.get(PropertyCode.BorderBottomWidth)).toBe(3);
+    expect(panel.properties.get(PropertyCode.BorderLeftWidth)).toBe(4);
+    expect(panel.properties.get(PropertyCode.BorderColor)).toBe(0x80332211);
+    expect(
+      JSON.parse(String(panel.properties.get(PropertyCode.BoxShadow))),
+    ).toEqual([
+      {
+        offsetX: 0,
+        offsetY: 8,
+        blurRadius: 24,
+        spreadRadius: -8,
+        color: 0x592a170f,
+        inset: false,
+      },
+      {
+        offsetX: 0,
+        offsetY: 1,
+        blurRadius: 0,
+        spreadRadius: 0,
+        color: null,
+        inset: true,
+      },
+    ]);
+  });
+
+  test("rejects invalid CSS-like box shadows", () => {
+    const negativeBlur = createElement("view");
+    expect(() => setProp(negativeBlur, "boxShadow", "0 2px -1px black")).toThrow(
+      "blur radius cannot be negative",
+    );
+    const tooMany = createElement("view");
+    expect(() =>
+      setProp(
+        tooMany,
+        "boxShadow",
+        Array(9).fill("0 1px black").join(", "),
+      ),
+    ).toThrow("at most 8 shadows");
+  });
+
   test("projects modal input, focus, dismissal, and accessibility to the native core", () => {
     const prompt = createComponent(TextArea, {
       autoFocus: true,

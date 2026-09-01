@@ -198,6 +198,35 @@ fn axis_padding_utilities_compose_like_tailwind() {
 }
 
 #[test]
+fn border_edge_widths_update_paint_and_layout_independently() {
+    let color = Color::rgb8(71, 85, 105);
+    let element = div()
+        .border(1.0, color)
+        .border_top_width(2.0)
+        .border_right_width(3.0)
+        .border_bottom_width(4.0)
+        .border_left_width(5.0);
+
+    assert_eq!(
+        element.visual.border_widths,
+        Insets {
+            top: 2.0,
+            right: 3.0,
+            bottom: 4.0,
+            left: 5.0,
+        }
+    );
+    assert_eq!(element.visual.border_color, Some(color));
+    assert_eq!(element.layout.border.top, LengthPercentage::length(2.0));
+    assert_eq!(element.layout.border.right, LengthPercentage::length(3.0));
+    assert_eq!(element.layout.border.bottom, LengthPercentage::length(4.0));
+    assert_eq!(element.layout.border.left, LengthPercentage::length(5.0));
+
+    let reset = element.border(6.0, Color::WHITE);
+    assert_eq!(reset.visual.border_widths, Insets::all(6.0));
+}
+
+#[test]
 fn grid_helpers_match_gpui_tracks_and_css_placements() {
     let grid = div()
         .grid()

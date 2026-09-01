@@ -1023,6 +1023,8 @@ fn test_window_state(
             .map_or(1.0, Display::scale_factor),
         appearance: options.preferred_appearance.unwrap_or_default(),
         background_appearance: options.window_background,
+        macos_vibrancy: options.macos_vibrancy,
+        macos_visual_effect_state: options.macos_visual_effect_state,
         focused,
         focusable: options.focusable,
         visible: options.show,

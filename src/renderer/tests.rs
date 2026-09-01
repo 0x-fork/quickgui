@@ -376,6 +376,97 @@ fn adjacent_square_quads_do_not_show_internal_seams() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn edge_quad_paints_each_border_width_independently() {
+    use crate::Insets;
+    use crate::scene::{EdgeQuad, PaintLayerKey};
+
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let mut scene = Scene::new();
+    scene.clear(Color::BLACK);
+    scene.push_edge_quad_in(
+        PaintLayerKey::default(),
+        EdgeQuad::new(Rect::new(4.0, 4.0, 24.0, 24.0), Color::rgb8(16, 64, 160)).border(
+            Insets {
+                top: 2.0,
+                right: 0.0,
+                bottom: 4.0,
+                left: 3.0,
+            },
+            Color::rgb8(240, 32, 24),
+        ),
+    );
+    scene.finish();
+
+    let snapshot = renderer
+        .render_to_snapshot(&scene, Size::new(32.0, 32.0), 1.0)
+        .unwrap();
+    let top = snapshot.pixel(16, 5).unwrap();
+    let left = snapshot.pixel(5, 16).unwrap();
+    let bottom = snapshot.pixel(16, 26).unwrap();
+    for sample in [top, left, bottom] {
+        assert!(
+            sample[0] > 200
+                && u16::from(sample[0]) > u16::from(sample[1]) * 3
+                && u16::from(sample[0]) > u16::from(sample[2]) * 2,
+            "{sample:?}"
+        );
+    }
+
+    let center = snapshot.pixel(16, 16).unwrap();
+    let borderless_right = snapshot.pixel(26, 16).unwrap();
+    for sample in [center, borderless_right] {
+        assert!(
+            sample[2] > 130 && u16::from(sample[2]) > u16::from(sample[0]) * 4,
+            "{sample:?}"
+        );
+    }
+    assert_eq!(snapshot.pixel(1, 1).unwrap(), [0, 0, 0, 255]);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn square_edge_border_has_no_partially_transparent_inner_seam() {
+    use crate::Insets;
+    use crate::scene::{EdgeQuad, PaintLayerKey};
+
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let mut scene = Scene::new();
+    scene.clear(Color::TRANSPARENT);
+    scene.push_edge_quad_in(
+        PaintLayerKey::default(),
+        EdgeQuad::new(Rect::new(0.0, 0.0, 254.0, 8.0), Color::TRANSPARENT).border(
+            Insets {
+                top: 0.0,
+                right: 1.0,
+                bottom: 0.0,
+                left: 0.0,
+            },
+            Color::rgb8(204, 204, 204),
+        ),
+    );
+    scene.finish();
+
+    let snapshot = renderer
+        .render_to_snapshot(&scene, Size::new(256.0, 8.0), 2.0)
+        .unwrap();
+    assert_eq!(snapshot.pixel(505, 8).unwrap(), [0, 0, 0, 0]);
+    assert_eq!(snapshot.pixel(506, 8).unwrap(), [204, 204, 204, 255]);
+    assert_eq!(snapshot.pixel(507, 8).unwrap(), [204, 204, 204, 255]);
+    assert_eq!(snapshot.pixel(508, 8).unwrap(), [0, 0, 0, 0]);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn oversized_target_keeps_primitive_clips_in_logical_viewport_space() {
     let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
     let mut renderer = pollster::block_on(OffscreenRenderer::new(

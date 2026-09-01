@@ -92,8 +92,16 @@ const properties: Record<string, PropertyEntry> = {
   },
   opacity: { code: PropertyCode.Opacity },
   borderWidth: { code: PropertyCode.BorderWidth },
+  borderTopWidth: { code: PropertyCode.BorderTopWidth },
+  borderRightWidth: { code: PropertyCode.BorderRightWidth },
+  borderBottomWidth: { code: PropertyCode.BorderBottomWidth },
+  borderLeftWidth: { code: PropertyCode.BorderLeftWidth },
   borderColor: { code: PropertyCode.BorderColor, color: true },
   borderRadius: { code: PropertyCode.BorderRadius },
+  boxShadow: {
+    code: PropertyCode.BoxShadow,
+    normalize: normalizeBoxShadow,
+  },
   fontSize: { code: PropertyCode.FontSize },
   fontFamily: { code: PropertyCode.FontFamily },
   fontWeight: { code: PropertyCode.FontWeight },
@@ -471,10 +479,125 @@ function splitCssList(value: string): string[] {
   return values.filter(Boolean);
 }
 
+const MAX_BOX_SHADOWS_PER_ELEMENT = 8;
+
+type EncodedBoxShadow = {
+  offsetX: number;
+  offsetY: number;
+  blurRadius: number;
+  spreadRadius: number;
+  color: number | null;
+  inset: boolean;
+};
+
+function normalizeBoxShadow(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  if (typeof value !== "string") {
+    throw new TypeError("QuickGUI boxShadow must use the CSS box-shadow shorthand");
+  }
+  const shorthand = value.trim();
+  if (shorthand === "" || shorthand.toLowerCase() === "none") return null;
+
+  const declarations = splitCssList(shorthand);
+  if (declarations.length > MAX_BOX_SHADOWS_PER_ELEMENT) {
+    throw new TypeError(
+      `QuickGUI boxShadow supports at most ${MAX_BOX_SHADOWS_PER_ELEMENT} shadows`,
+    );
+  }
+  return JSON.stringify(declarations.map(parseBoxShadowDeclaration));
+}
+
+function parseBoxShadowDeclaration(declaration: string): EncodedBoxShadow {
+  const lengths: number[] = [];
+  let color: number | null = null;
+  let hasColor = false;
+  let inset = false;
+
+  for (const token of splitCssTokens(declaration)) {
+    if (token.toLowerCase() === "inset") {
+      if (inset) throw new TypeError("QuickGUI boxShadow repeats `inset`");
+      inset = true;
+      continue;
+    }
+    const length = parseShadowLength(token);
+    if (length !== undefined) {
+      if (lengths.length === 4) {
+        throw new TypeError(
+          "QuickGUI boxShadow accepts two to four length values",
+        );
+      }
+      lengths.push(length);
+      continue;
+    }
+    if (hasColor) {
+      throw new TypeError("QuickGUI boxShadow accepts one color per shadow");
+    }
+    hasColor = true;
+    if (token.toLowerCase() !== "currentcolor") {
+      color = parseColor(token);
+    }
+  }
+
+  if (lengths.length < 2) {
+    throw new TypeError(
+      "QuickGUI boxShadow requires horizontal and vertical offsets",
+    );
+  }
+  const blurRadius = lengths[2] ?? 0;
+  if (blurRadius < 0) {
+    throw new TypeError("QuickGUI boxShadow blur radius cannot be negative");
+  }
+  return {
+    offsetX: lengths[0]!,
+    offsetY: lengths[1]!,
+    blurRadius,
+    spreadRadius: lengths[3] ?? 0,
+    color,
+    inset,
+  };
+}
+
+function splitCssTokens(value: string): string[] {
+  const tokens: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (character === "(") depth += 1;
+    else if (character === ")") {
+      depth -= 1;
+      if (depth < 0) {
+        throw new TypeError("QuickGUI boxShadow has unbalanced parentheses");
+      }
+    } else if (/\s/.test(character) && depth === 0) {
+      const token = value.slice(start, index).trim();
+      if (token) tokens.push(token);
+      start = index + 1;
+    }
+  }
+  if (depth !== 0) {
+    throw new TypeError("QuickGUI boxShadow has unbalanced parentheses");
+  }
+  const token = value.slice(start).trim();
+  if (token) tokens.push(token);
+  return tokens;
+}
+
+function parseShadowLength(value: string): number | undefined {
+  const match = value.match(
+    /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:px)?$/i,
+  );
+  if (!match) return undefined;
+  const length = Number(match[1]);
+  return Number.isFinite(length) ? length : undefined;
+}
+
 function isLengthProperty(code: PropertyCode): boolean {
   return (
     (code >= PropertyCode.Gap && code <= PropertyCode.MarginLeft) ||
     code === PropertyCode.BorderWidth ||
+    (code >= PropertyCode.BorderTopWidth &&
+      code <= PropertyCode.BorderLeftWidth) ||
     code === PropertyCode.BorderRadius ||
     code === PropertyCode.FontSize ||
     code === PropertyCode.LineHeight ||
@@ -1218,8 +1341,13 @@ export namespace JSX {
     transition?: string;
     opacity?: number;
     borderWidth?: number | string;
+    borderTopWidth?: number | string;
+    borderRightWidth?: number | string;
+    borderBottomWidth?: number | string;
+    borderLeftWidth?: number | string;
     borderColor?: number | string;
     borderRadius?: number | string;
+    boxShadow?: string;
     fontSize?: number | string;
     fontFamily?: string;
     fontWeight?: number | string;

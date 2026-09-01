@@ -5,7 +5,7 @@ impl GpuRenderer {
         window: Arc<Window>,
         event_loop: &ActiveEventLoop,
         profile: PerformanceProfile,
-        background_appearance: WindowBackgroundAppearance,
+        transparent: bool,
         font_system: SharedFontSystem,
         shared: Option<&GpuContext>,
     ) -> Result<Self, RendererInitError> {
@@ -46,7 +46,7 @@ impl GpuRenderer {
         let opaque_alpha_mode = opaque_surface_alpha_mode(&capabilities.alpha_modes)
             .ok_or(RendererInitError::IncompatibleSurface)?;
         let transparent_alpha_mode = transparent_surface_alpha_mode(&capabilities.alpha_modes);
-        let alpha_mode = if background_appearance.is_transparent() {
+        let alpha_mode = if transparent {
             transparent_alpha_mode.ok_or(RendererInitError::TransparentSurfaceUnsupported)?
         } else {
             opaque_alpha_mode

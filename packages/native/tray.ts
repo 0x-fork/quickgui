@@ -111,18 +111,27 @@ function operation(
     return new Promise<void>((resolve, reject) => {
       pendingRequests.set(request, { resolve, reject });
       try {
+        let acceptance: Promise<void> | undefined;
         if (action === "set") {
           if (!options) throw new Error("setting a tray icon requires options");
-          if (current.hosted) binding.setHostedTrayIcon(current.appId, request, options);
+          if (current.hosted) {
+            acceptance = binding.setHostedTrayIcon(current.appId, request, options);
+          }
           else binding.setTrayIcon(current.appId, request, options);
         } else if (action === "remove") {
-          if (current.hosted) binding.removeHostedTrayIcon(current.appId, request, id);
+          if (current.hosted) {
+            acceptance = binding.removeHostedTrayIcon(current.appId, request, id);
+          }
           else binding.removeTrayIcon(current.appId, request, id);
         } else if (current.hosted) {
-          binding.showHostedTrayMenu(current.appId, request, id);
+          acceptance = binding.showHostedTrayMenu(current.appId, request, id);
         } else {
           binding.showTrayMenu(current.appId, request, id);
         }
+        void acceptance?.catch((error) => {
+          if (!pendingRequests.delete(request)) return;
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
       } catch (error) {
         pendingRequests.delete(request);
         reject(error instanceof Error ? error : new Error(String(error)));

@@ -46,7 +46,7 @@ use crate::{
     },
     image::fit_image,
     renderer::{TextLayoutEngine, TextPaintKind, TextPaintRect},
-    scene::{PaintLayerKey, WavyUnderline},
+    scene::{EdgeQuad, PaintLayerKey, WavyUnderline},
     spring::{ElementSpring, SpringConfig, SpringPlayback, SpringState},
     text_input::{
         TextInputState, accessibility_byte_index, accessibility_character_index,
@@ -764,7 +764,7 @@ impl TransitionShadowList {
 struct TransitionPaintStyle {
     background: Color,
     border_color: Color,
-    border_width: f32,
+    border_widths: Insets,
     radius: f32,
     opacity: f32,
     text_color: Option<Color>,
@@ -786,10 +786,10 @@ impl TransitionPaintStyle {
             } else {
                 to.border_color
             },
-            border_width: if selected(TransitionProperties::BORDER_WIDTH) {
-                f32::interpolate(from.border_width, to.border_width, phase).max(0.0)
+            border_widths: if selected(TransitionProperties::BORDER_WIDTH) {
+                interpolate_insets(from.border_widths, to.border_widths, phase)
             } else {
-                to.border_width
+                to.border_widths
             },
             radius: if selected(TransitionProperties::BORDER_RADIUS) {
                 f32::interpolate(from.radius, to.radius, phase).max(0.0)
@@ -835,7 +835,7 @@ impl TransitionPaintStyle {
             || (properties.contains(TransitionProperties::BORDER_COLOR)
                 && self.border_color != other.border_color)
             || (properties.contains(TransitionProperties::BORDER_WIDTH)
-                && self.border_width != other.border_width)
+                && self.border_widths != other.border_widths)
             || (properties.contains(TransitionProperties::BORDER_RADIUS)
                 && self.radius != other.radius)
             || (properties.contains(TransitionProperties::OPACITY) && self.opacity != other.opacity)
@@ -844,6 +844,15 @@ impl TransitionPaintStyle {
                     != other.text_color.unwrap_or(other.text_fallback)))
             || (properties.contains(TransitionProperties::BOX_SHADOW)
                 && self.shadows != other.shadows)
+    }
+}
+
+fn interpolate_insets(from: Insets, to: Insets, phase: f32) -> Insets {
+    Insets {
+        top: f32::interpolate(from.top, to.top, phase).max(0.0),
+        right: f32::interpolate(from.right, to.right, phase).max(0.0),
+        bottom: f32::interpolate(from.bottom, to.bottom, phase).max(0.0),
+        left: f32::interpolate(from.left, to.left, phase).max(0.0),
     }
 }
 

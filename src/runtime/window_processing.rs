@@ -688,19 +688,27 @@ impl Runtime {
                 WindowCommand::SetBackgroundAppearance(_, appearance) => {
                     if entry.config.window_background != appearance {
                         let previous = entry.config.window_background;
-                        let changes = appearance.changes_from(previous);
-                        let surface_change = if changes.transparency {
-                            state.renderer.set_transparent(appearance.is_transparent())
+                        #[cfg(target_os = "macos")]
+                        let vibrancy_active = entry.config.macos_vibrancy.is_some();
+                        #[cfg(not(target_os = "macos"))]
+                        let vibrancy_active = false;
+                        let previous_transparent = previous.is_transparent() || vibrancy_active;
+                        let next_transparent = appearance.is_transparent() || vibrancy_active;
+                        let previous_blur = previous.is_blurred() && !vibrancy_active;
+                        let next_blur = appearance.is_blurred() && !vibrancy_active;
+                        let transparency_changed = previous_transparent != next_transparent;
+                        let surface_change = if transparency_changed {
+                            state.renderer.set_transparent(next_transparent)
                         } else {
                             Ok(false)
                         };
                         match surface_change {
                             Ok(_) => {
-                                if changes.transparency {
-                                    state.window.set_transparent(appearance.is_transparent());
+                                if transparency_changed {
+                                    state.window.set_transparent(next_transparent);
                                 }
-                                if changes.blur {
-                                    state.window.set_blur(appearance.is_blurred());
+                                if previous_blur != next_blur {
+                                    state.window.set_blur(next_blur);
                                 }
                                 entry.config.window_background = appearance;
                                 state_changed = true;
@@ -710,6 +718,98 @@ impl Runtime {
                                 tracing::warn!(%error, "could not change window background appearance");
                             }
                         }
+                    }
+                }
+                WindowCommand::SetMacOsVibrancy(_, vibrancy) => {
+                    if entry.config.macos_vibrancy != vibrancy {
+                        #[cfg(target_os = "macos")]
+                        {
+                            let previous_vibrancy = entry.config.macos_vibrancy;
+                            let previous_transparent =
+                                entry.config.window_background.is_transparent()
+                                    || previous_vibrancy.is_some();
+                            let next_transparent = entry.config.window_background.is_transparent()
+                                || vibrancy.is_some();
+                            let previous_blur = entry.config.window_background.is_blurred()
+                                && previous_vibrancy.is_none();
+                            let next_blur =
+                                entry.config.window_background.is_blurred() && vibrancy.is_none();
+                            let transparency_changed = previous_transparent != next_transparent;
+                            let surface_change = if transparency_changed {
+                                state.renderer.set_transparent(next_transparent)
+                            } else {
+                                Ok(false)
+                            };
+                            match surface_change {
+                                Ok(_) => {
+                                    if transparency_changed {
+                                        state.window.set_transparent(next_transparent);
+                                    }
+                                    if previous_blur != next_blur {
+                                        state.window.set_blur(next_blur);
+                                    }
+                                    let native_result = match vibrancy {
+                                        Some(vibrancy) => {
+                                            if let Some(host) = &state.vibrancy_host {
+                                                host.set_vibrancy(vibrancy);
+                                                Ok(())
+                                            } else {
+                                                MacVibrancyHost::new(
+                                                    &state.window,
+                                                    vibrancy,
+                                                    entry.config.macos_visual_effect_state,
+                                                )
+                                                .map(|host| state.vibrancy_host = Some(host))
+                                            }
+                                        }
+                                        None => {
+                                            state.vibrancy_host = None;
+                                            Ok(())
+                                        }
+                                    };
+                                    match native_result {
+                                        Ok(()) => {
+                                            entry.config.macos_vibrancy = vibrancy;
+                                            state_changed = true;
+                                            force_redraw = true;
+                                        }
+                                        Err(error) => {
+                                            if transparency_changed {
+                                                if let Err(rollback_error) = state
+                                                    .renderer
+                                                    .set_transparent(previous_transparent)
+                                                {
+                                                    tracing::warn!(%rollback_error, "could not roll back the macOS vibrancy surface mode");
+                                                }
+                                                state.window.set_transparent(previous_transparent);
+                                            }
+                                            if previous_blur != next_blur {
+                                                state.window.set_blur(previous_blur);
+                                            }
+                                            tracing::warn!(%error, "could not change macOS vibrancy");
+                                        }
+                                    }
+                                }
+                                Err(error) => {
+                                    tracing::warn!(%error, "could not enable the transparent surface required by macOS vibrancy");
+                                }
+                            }
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            entry.config.macos_vibrancy = vibrancy;
+                            state_changed = true;
+                        }
+                    }
+                }
+                WindowCommand::SetMacOsVisualEffectState(_, effect_state) => {
+                    if entry.config.macos_visual_effect_state != effect_state {
+                        #[cfg(target_os = "macos")]
+                        if let Some(host) = &state.vibrancy_host {
+                            host.set_state(effect_state);
+                        }
+                        entry.config.macos_visual_effect_state = effect_state;
+                        state_changed = true;
                     }
                 }
                 #[cfg(feature = "inspector")]

@@ -838,12 +838,13 @@ pub(crate) struct MacFirstFrameGuard {
     revealed: bool,
 }
 
-/// Temporarily removes the Winit content view from its still-hidden window.
+/// Temporarily removes the AppKit content root from its still-hidden window.
 ///
 /// WGPU's Metal backend deliberately skips drawable acquisition when the hosting `NSWindow` is
-/// occluded. A detached layer has no hosting window, so it can receive and retain the complete
-/// first drawable without ever ordering a partial window onscreen. Drop always reattaches the
-/// exact retained view to the same window and leaves the window frame untouched.
+/// occluded. A detached layer has no hosting window, so it can receive and retain the complete first
+/// drawable without ever ordering a partial window onscreen. The root is normally the Winit view;
+/// when vibrancy is active it is the `NSVisualEffectView` that owns that same Winit view. Drop always
+/// reattaches the exact retained root to the same window and leaves the window frame untouched.
 pub(crate) struct MacDetachedContent {
     window: Retained<NSWindow>,
     content: Retained<NSView>,
@@ -900,8 +901,13 @@ impl MacFirstFrameGuard {
             .window
             .contentView()
             .ok_or_else(|| "the AppKit window has no content view to pre-present".to_owned())?;
-        if !std::ptr::eq(content.as_ref(), self.parent.as_ref()) {
-            return Err("the Winit view is no longer the AppKit window's content view".to_owned());
+        if self
+            .parent
+            .window()
+            .as_ref()
+            .is_none_or(|window| !std::ptr::eq(window.as_ref(), self.window.as_ref()))
+        {
+            return Err("the Winit view is no longer attached to its AppKit window".to_owned());
         }
         self.window.setContentView(None);
         if self.parent.window().is_some() {

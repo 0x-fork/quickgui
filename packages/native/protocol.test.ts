@@ -30,8 +30,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, and pointer capture under protocol v17", () => {
-    expect(PROTOCOL_VERSION).toBe(17);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v18", () => {
+    expect(PROTOCOL_VERSION).toBe(18);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -50,6 +50,15 @@ describe("binary mutation protocol", () => {
     batch.setProperty(4, PropertyCode.DismissOnEscape, false);
     batch.setProperty(4, PropertyCode.DismissOnPointerOutside, true);
     batch.setProperty(4, PropertyCode.DismissListener, true);
+    batch.setProperty(4, PropertyCode.BorderTopWidth, 1);
+    batch.setProperty(4, PropertyCode.BorderRightWidth, 2);
+    batch.setProperty(4, PropertyCode.BorderBottomWidth, 3);
+    batch.setProperty(4, PropertyCode.BorderLeftWidth, 4);
+    batch.setProperty(
+      4,
+      PropertyCode.BoxShadow,
+      '[{"offsetX":0,"offsetY":8,"blurRadius":24,"spreadRadius":-8,"color":4278190080,"inset":false}]',
+    );
     batch.createElement(5, NativeNodeTag.Terminal);
     batch.setProperty(5, PropertyCode.TerminalProgram, "/bin/zsh");
     batch.setProperty(
@@ -120,7 +129,7 @@ describe("binary mutation protocol", () => {
     batch.setProperty(10, PropertyCode.SwiftUIPresentationListener, true);
     batch.createElement(11, NativeNodeTag.SwiftUIPopoverTrigger);
     batch.createElement(12, NativeNodeTag.SwiftUIPopoverContent);
-    expect(batch.mutationCount).toBe(67);
+    expect(batch.mutationCount).toBe(72);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 });

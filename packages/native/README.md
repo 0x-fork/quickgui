@@ -19,12 +19,20 @@ Electron-shaped result objects. The file-dialog backend uses QuickGUI's AppKit p
 buttons. Linux file dialogs prefer XDG Desktop Portals (with RFD's Zenity fallback), while Linux
 alert dialogs require Zenity because the portal API has no standardized message-dialog surface.
 
+The Worker never synchronously waits for the native main thread. Window and application mutations
+enqueue bounded commands and return immediately; constructors allocate stable local handles before
+enqueueing native creation. Getters, lifecycle results, and request acceptance use Promises backed
+by asynchronous native tasks.
+
 System services are core-first and exported from this package: singleton `app` lifecycle,
 identity, paths, system information, relaunch, and single-instance locking; `Appearance`,
 `AutoStart`, `Clipboard`, `DeepLink`, `Desktop`, `GlobalShortcut`, `Keyboard`, `Menu`,
 `Notifications`, `Permissions`, `PowerAssertion`, `PowerMonitor`, `Screen`, `SecureStorage`,
 `Shell`, `SystemPreferences`, `Tray`, `Updater`, and imperative `Window` controls. The updater
 discovers, stages, re-verifies, and installs supported native artifacts through the Rust core.
+On macOS, `WindowOptions.vibrancy` and `Window.setVibrancy()` expose every current
+Electron-compatible semantic `NSVisualEffectView` material. `visualEffectState` and
+`setVisualEffectState()` select `followWindow`, `active`, or `inactive` activity behavior.
 
 Most applications should depend on this package and [`@quickgui/solid`](../solid/README.md)
 directly. Import `app`, `Window`, dialogs, and platform APIs here, await `app.whenReady()`, then pass

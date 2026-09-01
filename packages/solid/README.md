@@ -105,6 +105,10 @@ The [file-dialog example](../../examples/file-dialog-solid/app.tsx) demonstrates
 open-folder, and save-destination panels with explicit cancellation results.
 The [popover example](../../examples/popover-solid/app.tsx) compares the shared
 `Root`/`Trigger`/`Content` JSX API of `SystemPopover` and the retained in-window `Popover`.
+The [sidebar vibrancy example](../../examples/sidebar-vibrancy-solid/app.tsx) switches every
+Electron-compatible macOS vibrancy material behind a transparent Solid sidebar and opaque content
+pane, leaving the native material unobstructed. It also demonstrates `borderTopWidth`,
+`borderRightWidth`, `borderBottomWidth`, and CSS-like `boxShadow` styles backed by the Rust core.
 The [system API example](../../examples/system-api-solid/app.tsx) demonstrates core-owned shell,
 app environment, clipboard, display, notification, menu, tray, shortcut, single-instance,
 deep-link, secure-storage, autostart, permission, preference, desktop, power, window, and updater

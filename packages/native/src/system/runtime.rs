@@ -377,6 +377,12 @@ impl NativeRuntime {
                     WindowAction::SetBackgroundAppearance(appearance) => {
                         runner.set_window_background_appearance(handle, appearance)
                     }
+                    WindowAction::SetMacOsVibrancy(vibrancy) => {
+                        runner.set_macos_window_vibrancy(handle, vibrancy)
+                    }
+                    WindowAction::SetMacOsVisualEffectState(state) => {
+                        runner.set_macos_visual_effect_state(handle, state)
+                    }
                 }
                 .map_err(|error| error.to_string())?;
                 Ok(SystemCommandResult::Unit)

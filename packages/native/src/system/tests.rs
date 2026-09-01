@@ -45,6 +45,24 @@ fn window_actions_parse_exact_values() {
     ));
     assert!(parse_window_action("set-fullscreen", Some("yes".to_owned())).is_err());
     assert!(parse_window_action("missing", None).is_err());
+
+    assert!(matches!(
+        parse_window_action("set-vibrancy", Some("under-page".to_owned())),
+        Ok(WindowAction::SetMacOsVibrancy(Some(
+            MacOsVibrancy::UnderPage
+        )))
+    ));
+    assert!(matches!(
+        parse_window_action("set-vibrancy", None),
+        Ok(WindowAction::SetMacOsVibrancy(None))
+    ));
+    assert!(matches!(
+        parse_window_action("set-visual-effect-state", Some("active".to_owned())),
+        Ok(WindowAction::SetMacOsVisualEffectState(
+            MacOsVisualEffectState::Active
+        ))
+    ));
+    assert!(parse_window_action("set-vibrancy", Some("glass".to_owned())).is_err());
 }
 
 #[test]

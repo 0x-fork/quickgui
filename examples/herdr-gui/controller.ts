@@ -184,14 +184,24 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
   );
 
   const stopAppearance = Appearance.onChange((next) => setAppearance(next));
+  const updateWindowMetrics = (state: Awaited<ReturnType<Window["getState"]>>) => {
+    sectionDragHeight = Math.max(state.viewportSize.height - 40, 320);
+  };
+  const stopWindowState = window.onStateChange(updateWindowMetrics);
   onCleanup(() => {
     disposed = true;
     stopAppearance();
+    stopWindowState();
     if (persistenceTimer) clearTimeout(persistenceTimer);
   });
   queueMicrotask(() => {
     if (disposed || window.closed) return;
-    setAppearance(Appearance.getCurrent(window));
+    void Appearance.getCurrent(window)
+      .then((value) => {
+        if (!disposed && !window.closed) setAppearance(value);
+      })
+      .catch(() => {});
+    void window.getState().then(updateWindowMetrics).catch(() => {});
   });
 
   void captureShellEnvironment().then(async (environment) => {
@@ -569,10 +579,6 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
     if (pointer.button !== "left") return;
     if (pointer.phase === "down") {
       sectionDragStart = sidebarSectionRatio();
-      sectionDragHeight = Math.max(
-        window.getState().viewportSize.height - 40,
-        320,
-      );
       return;
     }
     if (pointer.phase === "move") {

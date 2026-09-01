@@ -16,20 +16,21 @@ use napi_derive::napi;
 use quickgui::{
     AboutPanelOptions, AppInfo, AppPaths, ClipboardEntry, ClipboardImage, ClipboardImageFormat,
     ClipboardItem, ClipboardString, DesktopIntegrationSupport, Display, Displays, ExternalPaths,
-    FileIconResponse, FileIconSize, Image, KeyboardLayout, Menu, NotificationPermissionResponse,
-    NotificationPermissionStatus, PermissionKind, PermissionManager, PermissionStatus, Point,
-    PowerAssertion, PowerAssertionKind, PowerMonitor as CorePowerMonitor, PowerState, Rect,
-    RelaunchOptions, ShellResponse, Size, SystemColor, SystemColorRole, SystemInfo,
-    SystemNotification, SystemNotificationAction, SystemNotificationAttachment,
-    SystemNotificationSound, SystemPreferences, TaskbarProgressState, UserTask, WindowAppearance,
-    WindowBackgroundAppearance, WindowBounds, WindowLevel, WindowState,
+    FileIconResponse, FileIconSize, Image, KeyboardLayout, MacOsVibrancy, MacOsVisualEffectState,
+    Menu, NotificationPermissionResponse, NotificationPermissionStatus, PermissionKind,
+    PermissionManager, PermissionStatus, Point, PowerAssertion, PowerAssertionKind,
+    PowerMonitor as CorePowerMonitor, PowerState, Rect, RelaunchOptions, ShellResponse, Size,
+    SystemColor, SystemColorRole, SystemInfo, SystemNotification, SystemNotificationAction,
+    SystemNotificationAttachment, SystemNotificationSound, SystemPreferences, TaskbarProgressState,
+    UserTask, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowLevel, WindowState,
 };
 use serde::Deserialize;
 
 use super::{
-    HOST, HostCommand, NativeAppOptions, NativeImageSource, NativeRuntime, QueuedEvent, ROOT_NODE,
-    SyncReply, native_font_data, native_image, update_native_app_configuration, with_app_mut,
+    HOST, HostCommand, HostReply, NativeAppOptions, NativeImageSource, NativeRuntime, QueuedEvent,
+    ROOT_NODE, native_font_data, native_image, update_native_app_configuration, with_app_mut,
 };
+use crate::runtime::{parse_macos_vibrancy, parse_macos_visual_effect_state};
 
 mod bindings;
 pub(crate) mod menu;
@@ -280,6 +281,8 @@ pub struct NativeWindowState {
     pub scale_factor: f64,
     pub appearance: String,
     pub background_appearance: String,
+    pub vibrancy: Option<String>,
+    pub visual_effect_state: String,
     pub focused: bool,
     pub focusable: bool,
     pub visible: bool,
@@ -506,6 +509,8 @@ pub(super) enum WindowAction {
     SetDocumentEdited(bool),
     SetAppearance(Option<WindowAppearance>),
     SetBackgroundAppearance(WindowBackgroundAppearance),
+    SetMacOsVibrancy(Option<MacOsVibrancy>),
+    SetMacOsVisualEffectState(MacOsVisualEffectState),
 }
 
 pub(super) enum ShellAction {

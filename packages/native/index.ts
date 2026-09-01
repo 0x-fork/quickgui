@@ -179,6 +179,8 @@ export type {
   TrayMenuSubmenuItem,
   WindowState,
   WindowBackgroundAppearance,
+  MacOSVibrancy,
+  MacOSVisualEffectState,
   WindowKind,
   WindowLevel,
   CursorGrabMode,
@@ -194,6 +196,8 @@ import type {
   NotificationResponse,
   TaskbarProgressState,
   WindowBackgroundAppearance,
+  MacOSVibrancy,
+  MacOSVisualEffectState,
   WindowKind,
   WindowLevel,
   WindowState,
@@ -249,6 +253,10 @@ export interface WindowOptions {
   tabbingIdentifier?: string;
   background?: ColorValue;
   backgroundAppearance?: WindowBackgroundAppearance;
+  /** Electron-compatible macOS `NSVisualEffectView` semantic material. */
+  vibrancy?: MacOSVibrancy;
+  /** Defaults to `followWindow`. Used when `vibrancy` is enabled. */
+  visualEffectState?: MacOSVisualEffectState;
   performanceProfile?: PerformanceProfile;
   appearance?: AppearancePreference;
   titleBarStyle?: "default" | "hidden" | "hiddenInset";
@@ -480,6 +488,7 @@ class App {
   readonly nativeId: number;
   readonly windows = new Map<number, Window>();
   #running = false;
+  #ready = false;
   #destroyed = false;
   readonly #readyPromise: Promise<void>;
   #nextDialogRequest = 1;
@@ -503,22 +512,21 @@ class App {
       ? binding.createHostedApp(initialOptions)
       : binding.createApp(initialOptions);
     activeApp = this;
-    this.#readyPromise = Promise.resolve().then(() => {
+    this.#readyPromise = Promise.resolve().then(async () => {
       this.#assertAlive();
-      if (hostedRuntime) binding.prepareHostedApp(this.nativeId);
+      if (hostedRuntime) await binding.prepareHostedApp(this.nativeId);
       else binding.prepareApp(this.nativeId);
-      if (!this.isReady()) {
+      if (!hostedRuntime && !binding.isAppReady(this.nativeId)) {
         throw new Error("the native QuickGUI application did not become ready");
       }
+      this.#ready = true;
       this.#emitAppEvent("ready", undefined);
     });
   }
 
   isReady(): boolean {
     this.#assertAlive();
-    return hostedRuntime
-      ? binding.isHostedAppReady(this.nativeId)
-      : binding.isAppReady(this.nativeId);
+    return this.#ready;
   }
 
   whenReady(): Promise<void> {
@@ -526,25 +534,25 @@ class App {
   }
 
   /** Patch core-owned identity, paths, and quit policy before the first readiness turn. */
-  configure(options: AppOptions): void {
+  async configure(options: AppOptions): Promise<void> {
     this.#assertAlive();
     const native = nativeAppOptions(options);
-    if (hostedRuntime) binding.configureHostedApp(this.nativeId, native);
+    if (hostedRuntime) await binding.configureHostedApp(this.nativeId, native);
     else binding.configureApp(this.nativeId, native);
   }
 
-  getInfo(): AppInfo | undefined {
+  async getInfo(): Promise<AppInfo | undefined> {
     this._assertReady();
     const info = hostedRuntime
-      ? binding.getHostedAppInfo(this.nativeId)
+      ? await binding.getHostedAppInfo(this.nativeId)
       : binding.getAppInfo(this.nativeId);
     return info ? { ...info } : undefined;
   }
 
-  getPaths(): AppPaths | undefined {
+  async getPaths(): Promise<AppPaths | undefined> {
     this._assertReady();
     const paths = hostedRuntime
-      ? binding.getHostedAppPaths(this.nativeId)
+      ? await binding.getHostedAppPaths(this.nativeId)
       : binding.getAppPaths(this.nativeId);
     if (!paths) return undefined;
     const result: AppPaths = {
@@ -570,10 +578,10 @@ class App {
     return result;
   }
 
-  getSystemInfo(): SystemInfo {
+  async getSystemInfo(): Promise<SystemInfo> {
     this._assertReady();
     const info = hostedRuntime
-      ? binding.getHostedSystemInfo(this.nativeId)
+      ? await binding.getHostedSystemInfo(this.nativeId)
       : binding.getSystemInfo(this.nativeId);
     const result: SystemInfo = {
       operatingSystem: info.operatingSystem as SystemInfo["operatingSystem"],
@@ -594,19 +602,13 @@ class App {
 
   getWindows(): readonly Window[] {
     this._assertReady();
-    const registry = hostedRuntime
-      ? binding.getHostedWindowRegistry(this.nativeId)
-      : binding.getWindowRegistry(this.nativeId);
-    return registry.windows.flatMap((id) => {
-      const window = this.windows.get(id);
-      return window ? [window] : [];
-    });
+    return [...this.windows.values()];
   }
 
-  getActiveWindow(): Window | undefined {
+  async getActiveWindow(): Promise<Window | undefined> {
     this._assertReady();
     const registry = hostedRuntime
-      ? binding.getHostedWindowRegistry(this.nativeId)
+      ? await binding.getHostedWindowRegistry(this.nativeId)
       : binding.getWindowRegistry(this.nativeId);
     return registry.activeWindow === undefined
       ? undefined
@@ -711,7 +713,7 @@ class App {
       return exitCode;
     } finally {
       this.#running = false;
-      this.releaseSingleInstanceLock();
+      await this.releaseSingleInstanceLock();
     }
   }
 
@@ -727,30 +729,32 @@ class App {
     }
     this._assertReady();
     const acquired = hostedRuntime
-      ? binding.requestHostedSingleInstanceLock(this.nativeId, identifier)
+      ? await binding.requestHostedSingleInstanceLock(this.nativeId, identifier)
       : binding.requestSingleInstanceLock(this.nativeId, identifier);
     if (acquired) this.#singleInstanceIdentifier = identifier;
     return acquired;
   }
 
-  releaseSingleInstanceLock(): void {
-    if (!this.#singleInstanceIdentifier || this.#destroyed) return;
-    if (hostedRuntime) binding.releaseHostedSingleInstanceLock(this.nativeId);
-    else binding.releaseSingleInstanceLock(this.nativeId);
-    this.#singleInstanceIdentifier = undefined;
+  async releaseSingleInstanceLock(): Promise<boolean> {
+    if (!this.#singleInstanceIdentifier || this.#destroyed) return false;
+    const released = hostedRuntime
+      ? await binding.releaseHostedSingleInstanceLock(this.nativeId)
+      : binding.releaseSingleInstanceLock(this.nativeId);
+    if (released) this.#singleInstanceIdentifier = undefined;
+    return released;
   }
 
   /** Request an orderly native shutdown. Returns false after shutdown already began. */
-  quit(): boolean {
+  async quit(): Promise<boolean> {
     this.#assertAlive();
     this._assertReady();
     return hostedRuntime
-      ? binding.exitHostedApp(this.nativeId)
+      ? await binding.exitHostedApp(this.nativeId)
       : binding.exitApp(this.nativeId);
   }
 
   /** Schedule a replacement process after ordinary child-first native teardown. */
-  relaunch(options: RelaunchOptions = {}): boolean {
+  async relaunch(options: RelaunchOptions = {}): Promise<boolean> {
     this.#assertAlive();
     this._assertReady();
     const native: binding.NativeRelaunchOptions = {};
@@ -763,7 +767,7 @@ class App {
       native.workingDirectory = options.workingDirectory;
     }
     return hostedRuntime
-      ? binding.relaunchHostedApp(this.nativeId, native)
+      ? await binding.relaunchHostedApp(this.nativeId, native)
       : binding.relaunchApp(this.nativeId, native);
   }
 
@@ -772,7 +776,7 @@ class App {
     const error = new Error("the QuickGUI app was destroyed");
     this.#rejectDialogs(undefined, error);
     rejectPendingSystemRequests(error);
-    this.releaseSingleInstanceLock();
+    void this.releaseSingleInstanceLock().catch(() => {});
     if (hostedRuntime) binding.destroyHostedApp(this.nativeId);
     else binding.destroyApp(this.nativeId);
     this.#destroyed = true;
@@ -804,11 +808,19 @@ class App {
       type = "systemWake";
       payload = undefined;
     } else if (event.kind === "keyboard-layout-change") {
-      type = "keyboardLayoutChange";
       const layout = hostedRuntime
         ? binding.getHostedKeyboardLayout(this.nativeId)
-        : binding.getKeyboardLayout(this.nativeId);
-      payload = { id: layout.id, name: layout.name };
+        : Promise.resolve(binding.getKeyboardLayout(this.nativeId));
+      void layout
+        .then((value) => {
+          if (this.#destroyed) return;
+          this.#emitAppEvent("keyboardLayoutChange", {
+            id: value.id,
+            name: value.name,
+          });
+        })
+        .catch(() => {});
+      return true;
     } else if (event.kind === "notification-response") {
       type = "notificationResponse";
       try {
@@ -888,10 +900,11 @@ class App {
 
   _closeWindow(window: Window): void {
     if (this.#destroyed || window.closed) return;
-    const closed = hostedRuntime
-      ? binding.closeHostedWindow(this.nativeId, window.nativeId)
-      : binding.closeWindow(this.nativeId, window.nativeId);
-    if (closed) this._didCloseWindow(window);
+    if (hostedRuntime) {
+      binding.closeHostedWindow(this.nativeId, window.nativeId);
+    } else if (binding.closeWindow(this.nativeId, window.nativeId)) {
+      this._didCloseWindow(window);
+    }
   }
 
   _didCloseWindow(window: Window): void {
@@ -1020,7 +1033,7 @@ class App {
   #requestDialog<T>(
     window: Window | undefined,
     kind: DialogEventKind,
-    invoke: (request: number) => void,
+    invoke: (request: number) => void | Promise<void>,
     result: (event: binding.NativeEvent) => T,
   ): Promise<T> {
     this.#assertAlive();
@@ -1041,7 +1054,10 @@ class App {
         reject,
       });
       try {
-        invoke(request);
+        void Promise.resolve(invoke(request)).catch((error) => {
+          if (!this.#pendingDialogs.delete(request)) return;
+          reject(asError(error));
+        });
       } catch (error) {
         this.#pendingDialogs.delete(request);
         reject(asError(error));
@@ -1218,6 +1234,10 @@ export class Window {
     }
     if (options.appearance !== undefined)
       nativeOptions.appearance = options.appearance;
+    if (options.vibrancy !== undefined)
+      nativeOptions.vibrancy = options.vibrancy;
+    if (options.visualEffectState !== undefined)
+      nativeOptions.visualEffectState = options.visualEffectState;
     if (options.titleBarStyle !== undefined)
       nativeOptions.titleBarStyle = options.titleBarStyle;
     if (options.kind !== undefined) nativeOptions.kind = options.kind;
@@ -1426,7 +1446,7 @@ export class Window {
     this.app._closeWindow(this);
   }
 
-  getState(): WindowState {
+  getState(): Promise<WindowState> {
     return getNativeWindowState(this);
   }
 
@@ -1624,12 +1644,22 @@ export class Window {
     performNativeWindowAction(this, "set-background-appearance", appearance);
   }
 
+  setVibrancy(vibrancy?: MacOSVibrancy): void {
+    performNativeWindowAction(this, "set-vibrancy", vibrancy);
+  }
+
+  setVisualEffectState(state: MacOSVisualEffectState): void {
+    performNativeWindowAction(this, "set-visual-effect-state", state);
+  }
+
   _focusNode(node: NativeNode): boolean {
     if (this.#closed || node.host !== this) return false;
     this.flush();
-    return hostedRuntime
-      ? binding.focusHostedNode(this.app.nativeId, this.nativeId, node.id)
-      : binding.focusNode(this.app.nativeId, this.nativeId, node.id);
+    if (hostedRuntime) {
+      binding.focusHostedNode(this.app.nativeId, this.nativeId, node.id);
+      return true;
+    }
+    return binding.focusNode(this.app.nativeId, this.nativeId, node.id);
   }
 
   flush(): number | undefined {

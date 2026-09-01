@@ -80,5 +80,6 @@ materials, contrast, and transparency are separate visual/composition capabiliti
 pretend palette variants; native child views continue to inherit the effective `NSWindow`
 appearance. `WindowBackgroundAppearance` currently exposes the portable semantic subset QuickGUI
 can implement honestly—opaque, transparent, and blurred. Windows-only Mica names are intentionally
-not presented as macOS features; platform-specific material controls can extend this boundary
-without changing light/dark palette semantics.
+not presented as macOS features. `MacOsVibrancy` separately projects Electron-compatible semantic
+materials through one core-owned `NSVisualEffectView`, preserving the light/dark palette boundary,
+the stable Winit/Metal rendering view, and the damage-driven scheduler.

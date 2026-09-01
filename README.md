@@ -152,6 +152,15 @@ cd examples/popover-solid
 bun run dev
 ```
 
+The sidebar vibrancy example switches among every Electron-compatible macOS semantic material and
+all three visual-effect activity states while keeping a translucent Solid sidebar and opaque
+content pane:
+
+```console
+cd examples/sidebar-vibrancy-solid
+bun run dev
+```
+
 The core-first system API example covers app environment, rich clipboard, displays, desktop
 integrations, permissions, preferences, power, native menus, notifications, tray icons, shortcuts,
 window controls, and updater metadata:

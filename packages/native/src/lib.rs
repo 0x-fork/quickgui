@@ -20,10 +20,11 @@ use napi::{
 use napi_derive::napi;
 use quickgui::{
     AccessibilityRole, AnchorPlacement, AppInfo, AppPaths, AppRegion, AppRunStatus, AppRunner,
-    AppRunnerWaker, Application as QuickGuiApplication, Color, CursorGrabMode, CursorStyle,
-    DisplayId, Element, ElementId, FollowMode, FontWeight, Image, IntoElement, ListAlignment,
-    ListState, Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase, Popover, QuitMode,
-    Svg, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, TaskbarProgressState, Terminal, TerminalOptions,
+    AppRunnerWaker, Application as QuickGuiApplication, BoxShadow, Color, CursorGrabMode,
+    CursorStyle, DisplayId, Element, ElementId, FollowMode, FontWeight, Image, Insets, IntoElement,
+    ListAlignment, ListState, MAX_BOX_SHADOWS_PER_ELEMENT, MacOsVibrancy, MacOsVisualEffectState,
+    Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase, Popover, QuitMode, Svg,
+    SystemPopover, TERMINAL_ANSI_COLOR_COUNT, TaskbarProgressState, Terminal, TerminalOptions,
     TerminalPaddingColor, TerminalStatus, TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle,
     Transition, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowHandle,
     WindowKind, WindowLevel, WindowOptions, button, div, svg as svg_element, text, text_area,
@@ -55,7 +56,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 17;
+const PROTOCOL_VERSION: u16 = 18;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -197,7 +198,12 @@ mod property {
     pub const SWIFT_UI_ATTACHMENT_ANCHOR: u16 = 126;
     pub const SWIFT_UI_ARROW_EDGE: u16 = 127;
     pub const SWIFT_UI_PRESENTATION_LISTENER: u16 = 128;
-    pub const LAST: u16 = SWIFT_UI_PRESENTATION_LISTENER;
+    pub const BORDER_TOP_WIDTH: u16 = 129;
+    pub const BORDER_RIGHT_WIDTH: u16 = 130;
+    pub const BORDER_BOTTOM_WIDTH: u16 = 131;
+    pub const BORDER_LEFT_WIDTH: u16 = 132;
+    pub const BOX_SHADOW: u16 = 133;
+    pub const LAST: u16 = BOX_SHADOW;
 }
 
 #[derive(Default)]
@@ -268,6 +274,8 @@ pub struct NativeWindowOptions {
     pub background: Option<u32>,
     pub performance_profile: Option<String>,
     pub appearance: Option<String>,
+    pub vibrancy: Option<String>,
+    pub visual_effect_state: Option<String>,
     pub title_bar_style: Option<String>,
     pub kind: Option<String>,
     pub focus: Option<bool>,
@@ -354,14 +362,16 @@ pub struct HostedAppUpdate {
     pub exit_code: Option<i32>,
 }
 
-struct SyncReply<T> {
+struct HostReply<T> {
+    app: u32,
     value: Mutex<Option<std::result::Result<T, String>>>,
     ready: Condvar,
 }
 
-impl<T> SyncReply<T> {
-    fn new() -> Self {
+impl<T> HostReply<T> {
+    fn new(app: u32) -> Self {
         Self {
+            app,
             value: Mutex::new(None),
             ready: Condvar::new(),
         }
@@ -375,7 +385,14 @@ impl<T> SyncReply<T> {
     fn wait(&self) -> std::result::Result<T, String> {
         let mut value = lock(&self.value);
         while value.is_none() {
-            value = wait(&self.ready, value);
+            if let Some(error) = HOST.failure_for(self.app) {
+                return Err(error);
+            }
+            value = self
+                .ready
+                .wait_timeout(value, Duration::from_millis(50))
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
         }
         value
             .take()
@@ -387,86 +404,82 @@ enum HostCommand {
     CreateApp {
         app: u32,
         options: NativeAppOptions,
-        reply: Arc<SyncReply<()>>,
     },
     CreateWindow {
         app: u32,
+        window: u32,
         options: NativeWindowOptions,
         initial_batch: Vec<u8>,
-        reply: Arc<SyncReply<u32>>,
     },
     CreateSystemPopover {
         app: u32,
+        window: u32,
         parent: u32,
         anchor: u32,
         options: NativeWindowOptions,
         initial_batch: Vec<u8>,
-        reply: Arc<SyncReply<u32>>,
     },
     #[cfg(target_os = "macos")]
     CreateEmbeddedView {
         app: u32,
+        window: u32,
         parent: u32,
         match_horizontal: bool,
         match_vertical: bool,
         options: NativeWindowOptions,
         initial_batch: Vec<u8>,
-        reply: Arc<SyncReply<u32>>,
     },
     ApplyBatch {
         app: u32,
         window: u32,
         batch: Vec<u8>,
     },
+    Mutation {
+        app: u32,
+        command: system::SystemCommand,
+    },
     CloseWindow {
         app: u32,
         window: u32,
-        reply: Arc<SyncReply<bool>>,
     },
     FocusNode {
         app: u32,
         window: u32,
         node: u32,
-        reply: Arc<SyncReply<bool>>,
     },
     ShowAlertDialog {
         app: u32,
         window: Option<u32>,
         request: u32,
         options: NativeDialogOptions,
-        reply: Arc<SyncReply<()>>,
+        reply: Arc<HostReply<()>>,
     },
     ShowOpenDialog {
         app: u32,
         window: Option<u32>,
         request: u32,
         options: NativeOpenDialogOptions,
-        reply: Arc<SyncReply<()>>,
+        reply: Arc<HostReply<()>>,
     },
     ShowSaveDialog {
         app: u32,
         window: Option<u32>,
         request: u32,
         options: NativeSaveDialogOptions,
-        reply: Arc<SyncReply<()>>,
+        reply: Arc<HostReply<()>>,
     },
     #[cfg_attr(test, allow(dead_code))]
     System {
         app: u32,
         command: system::SystemCommand,
-        reply: Arc<SyncReply<system::SystemCommandResult>>,
+        reply: Arc<HostReply<system::SystemCommandResult>>,
     },
     PrepareApp {
         app: u32,
-        reply: Arc<SyncReply<()>>,
-    },
-    IsAppReady {
-        app: u32,
-        reply: Arc<SyncReply<bool>>,
+        reply: Arc<HostReply<()>>,
     },
     DestroyApp {
         app: u32,
-        reply: Arc<SyncReply<bool>>,
     },
 }
 
@@ -483,6 +496,7 @@ struct HostState {
 
 struct HostCoordinator {
     next_app: AtomicU32,
+    next_window: AtomicU32,
     state: Mutex<HostState>,
     changed: Condvar,
 }
@@ -491,6 +505,7 @@ impl HostCoordinator {
     fn new() -> Self {
         Self {
             next_app: AtomicU32::new(1),
+            next_window: AtomicU32::new(1),
             state: Mutex::new(HostState::default()),
             changed: Condvar::new(),
         }
@@ -505,6 +520,15 @@ impl HostCoordinator {
             .map_err(|_| "QuickGUI hosted app id space exhausted".to_owned())?
             .max(1);
         Ok(app)
+    }
+
+    fn allocate_window(&self) -> std::result::Result<u32, String> {
+        self.next_window
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| {
+                id.checked_add(1).filter(|next| *next != 0)
+            })
+            .map(|id| id.max(1))
+            .map_err(|_| "QuickGUI hosted window id space exhausted".to_owned())
     }
 
     fn enqueue(&self, command: HostCommand) -> std::result::Result<(), String> {
@@ -575,6 +599,17 @@ impl HostCoordinator {
 
     fn set_waker(&self, waker: AppRunnerWaker) {
         lock(&self.state).waker = Some(waker);
+    }
+
+    fn failure_for(&self, app: u32) -> Option<String> {
+        let state = lock(&self.state);
+        if state.app != Some(app) {
+            return Some(format!("unknown QuickGUI hosted app {app}"));
+        }
+        state.failure.clone().or_else(|| {
+            (!state.running && state.exit_code.is_some())
+                .then(|| "the QuickGUI hosted application has exited".to_owned())
+        })
     }
 
     fn publish_events(&self, events: impl IntoIterator<Item = NativeEvent>) {

@@ -3,8 +3,8 @@ use std::sync::{Arc, LazyLock};
 use glyphon::{Style as GlyphStyle, Weight};
 
 use crate::{
-    Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Image, Path,
-    Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline, Vector,
+    Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Image, Insets,
+    Path, Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline, Vector,
     font::{assert_valid_font_family, normalize_fallbacks},
     paint_order::{BoundsOrderTree, valid_bounds},
 };
@@ -395,6 +395,51 @@ impl Quad {
     }
 
     pub fn clip(mut self, clip: Rect) -> Self {
+        self.clip = Some(clip);
+        self
+    }
+}
+
+/// A framework element quad whose inside border can use a different width on each edge.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct EdgeQuad {
+    pub(crate) rect: Rect,
+    pub(crate) fill: Color,
+    pub(crate) radius: f32,
+    pub(crate) border_widths: Insets,
+    pub(crate) border_color: Color,
+    pub(crate) clip: Option<Rect>,
+}
+
+impl EdgeQuad {
+    pub(crate) fn new(rect: Rect, fill: Color) -> Self {
+        Self {
+            rect,
+            fill,
+            radius: 0.0,
+            border_widths: Insets::default(),
+            border_color: Color::TRANSPARENT,
+            clip: None,
+        }
+    }
+
+    pub(crate) fn radius(mut self, radius: f32) -> Self {
+        self.radius = finite_or_zero(radius).max(0.0);
+        self
+    }
+
+    pub(crate) fn border(mut self, widths: Insets, color: Color) -> Self {
+        self.border_widths = Insets {
+            top: finite_or_zero(widths.top).max(0.0),
+            right: finite_or_zero(widths.right).max(0.0),
+            bottom: finite_or_zero(widths.bottom).max(0.0),
+            left: finite_or_zero(widths.left).max(0.0),
+        };
+        self.border_color = color;
+        self
+    }
+
+    pub(crate) fn clip(mut self, clip: Rect) -> Self {
         self.clip = Some(clip);
         self
     }
@@ -872,6 +917,7 @@ pub(crate) struct PaintLayerKey {
 pub(crate) struct PaintLayer {
     key: PaintLayerKey,
     quads: Vec<Quad>,
+    edge_quads: Vec<EdgeQuad>,
     wavy_underlines: Vec<WavyUnderline>,
     shadows: Vec<Shadow>,
     shapes: Vec<ShapeRef>,
@@ -888,6 +934,7 @@ pub(crate) struct PaintLayer {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ShapeRef {
     Quad(usize),
+    EdgeQuad(usize),
     WavyUnderline(usize),
     Shadow(usize),
 }
@@ -913,6 +960,7 @@ impl PaintLayer {
         Self {
             key,
             quads: Vec::new(),
+            edge_quads: Vec::new(),
             wavy_underlines: Vec::new(),
             shadows: Vec::new(),
             shapes: Vec::new(),
@@ -933,6 +981,10 @@ impl PaintLayer {
 
     pub(crate) fn quads(&self) -> &[Quad] {
         &self.quads
+    }
+
+    pub(crate) fn edge_quads(&self) -> &[EdgeQuad] {
+        &self.edge_quads
     }
 
     pub(crate) fn wavy_underlines(&self) -> &[WavyUnderline] {
@@ -985,6 +1037,7 @@ impl PaintLayer {
 
     fn clear(&mut self) {
         self.quads.clear();
+        self.edge_quads.clear();
         self.wavy_underlines.clear();
         self.shadows.clear();
         self.shapes.clear();
@@ -1015,6 +1068,7 @@ impl Scene {
             layers: vec![PaintLayer {
                 key: PaintLayerKey::default(),
                 quads: Vec::with_capacity(256),
+                edge_quads: Vec::with_capacity(64),
                 wavy_underlines: Vec::with_capacity(32),
                 shadows: Vec::with_capacity(64),
                 shapes: Vec::with_capacity(320),
@@ -1062,6 +1116,21 @@ impl Scene {
             let index = layer.quads.len();
             layer.quads.push(quad);
             let shape = ShapeRef::Quad(index);
+            layer.shapes.push(shape);
+            layer.push_paint(bounds, PrimitiveRef::Shape(shape));
+        }
+    }
+
+    pub(crate) fn push_edge_quad_in(&mut self, key: PaintLayerKey, mut quad: EdgeQuad) {
+        quad.fill = quad.fill.multiply_alpha(self.opacity);
+        quad.border_color = quad.border_color.multiply_alpha(self.opacity);
+        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0)
+            && let Some(bounds) = clipped_paint_bounds(quad.rect, [quad.clip])
+        {
+            let layer = self.layer_mut(key);
+            let index = layer.edge_quads.len();
+            layer.edge_quads.push(quad);
+            let shape = ShapeRef::EdgeQuad(index);
             layer.shapes.push(shape);
             layer.push_paint(bounds, PrimitiveRef::Shape(shape));
         }
@@ -1227,6 +1296,16 @@ impl Scene {
             .take(self.used_layers)
             .find(|layer| layer.key == PaintLayerKey::default())
             .map(PaintLayer::quads)
+            .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn edge_quads(&self) -> &[EdgeQuad] {
+        self.layers
+            .iter()
+            .take(self.used_layers)
+            .find(|layer| layer.key == PaintLayerKey::default())
+            .map(PaintLayer::edge_quads)
             .unwrap_or_default()
     }
 

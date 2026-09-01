@@ -1,4 +1,5 @@
 use super::*;
+use serde::Deserialize;
 
 pub(super) struct NativeView {
     pub(super) window: u32,
@@ -1104,16 +1105,22 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     if let Some(value) = node.number(property::OPACITY) {
         element = element.opacity(value);
     }
-    let border_width = node.number(property::BORDER_WIDTH).unwrap_or(0.0);
-    if border_width > 0.0 {
-        element = element.border(
-            border_width,
+    let border_widths = native_border_widths(node);
+    if border_widths.top > 0.0
+        || border_widths.right > 0.0
+        || border_widths.bottom > 0.0
+        || border_widths.left > 0.0
+    {
+        element = element.border_widths(border_widths).border_color(
             node.color(property::BORDER_COLOR)
                 .unwrap_or(Color::TRANSPARENT),
         );
     }
     if let Some(value) = node.number(property::BORDER_RADIUS) {
         element = element.rounded(value);
+    }
+    if let Some(shadows) = native_box_shadows(node) {
+        element = element.shadows(shadows);
     }
     if let Some(value) = node.number(property::FONT_SIZE) {
         element = element.text_size(value);
@@ -1299,6 +1306,108 @@ pub(super) fn unpack_color(value: u32) -> Color {
         (value >> 16) as u8,
         (value >> 24) as u8,
     )
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NativeBoxShadow {
+    offset_x: f32,
+    offset_y: f32,
+    blur_radius: f32,
+    spread_radius: f32,
+    color: Option<u32>,
+    #[serde(default)]
+    inset: bool,
+}
+
+fn native_border_widths(node: &NativeNode) -> Insets {
+    let border_width = node.number(property::BORDER_WIDTH).unwrap_or(0.0);
+    Insets {
+        top: node
+            .number(property::BORDER_TOP_WIDTH)
+            .unwrap_or(border_width),
+        right: node
+            .number(property::BORDER_RIGHT_WIDTH)
+            .unwrap_or(border_width),
+        bottom: node
+            .number(property::BORDER_BOTTOM_WIDTH)
+            .unwrap_or(border_width),
+        left: node
+            .number(property::BORDER_LEFT_WIDTH)
+            .unwrap_or(border_width),
+    }
+}
+
+fn native_box_shadows(node: &NativeNode) -> Option<Vec<BoxShadow>> {
+    let encoded = node.string(property::BOX_SHADOW)?;
+    let shadows = serde_json::from_str::<Vec<NativeBoxShadow>>(encoded).ok()?;
+    if shadows.len() > MAX_BOX_SHADOWS_PER_ELEMENT {
+        return None;
+    }
+    let current_color = node.color(property::COLOR).unwrap_or(Color::BLACK);
+    Some(
+        shadows
+            .into_iter()
+            .map(|shadow| {
+                BoxShadow::new(
+                    shadow.offset_x,
+                    shadow.offset_y,
+                    shadow.color.map(unpack_color).unwrap_or(current_color),
+                )
+                .blur_radius(shadow.blur_radius)
+                .spread_radius(shadow.spread_radius)
+                .inset(shadow.inset)
+            })
+            .collect(),
+    )
+}
+
+#[cfg(test)]
+mod paint_tests {
+    use super::*;
+
+    #[test]
+    fn native_border_edges_override_the_uniform_width_independently() {
+        let mut node = NativeNode::new(NodeTag::View);
+        node.set_property(property::BORDER_WIDTH, Some(PropertyValue::Number(1.0)));
+        node.set_property(property::BORDER_TOP_WIDTH, Some(PropertyValue::Number(0.0)));
+        node.set_property(
+            property::BORDER_LEFT_WIDTH,
+            Some(PropertyValue::Number(4.0)),
+        );
+
+        assert_eq!(
+            native_border_widths(&node),
+            Insets {
+                top: 0.0,
+                right: 1.0,
+                bottom: 1.0,
+                left: 4.0,
+            }
+        );
+    }
+
+    #[test]
+    fn native_box_shadow_json_uses_explicit_and_current_text_colors() {
+        let mut node = NativeNode::new(NodeTag::View);
+        node.set_property(property::COLOR, Some(PropertyValue::Color(0xff665544)));
+        node.set_property(
+            property::BOX_SHADOW,
+            Some(PropertyValue::String(Arc::from(
+                r#"[{"offsetX":2,"offsetY":3,"blurRadius":8,"spreadRadius":-1,"color":2150834689,"inset":false},{"offsetX":0,"offsetY":1,"blurRadius":0,"spreadRadius":0,"color":null,"inset":true}]"#,
+            ))),
+        );
+
+        let shadows = native_box_shadows(&node).expect("valid box shadows");
+        assert_eq!(shadows.len(), 2);
+        assert_eq!(shadows[0].offset(), quickgui::Vector::new(2.0, 3.0));
+        assert_eq!(shadows[0].blur(), 8.0);
+        assert_eq!(shadows[0].spread(), -1.0);
+        assert_eq!(shadows[0].color(), unpack_color(0x80332201));
+        assert!(!shadows[0].is_inset());
+        assert_eq!(shadows[1].color(), unpack_color(0xff665544));
+        assert!(shadows[1].is_inset());
+    }
 }
 
 pub(super) fn native_font_family(value: &str) -> Option<quickgui::FontFamily> {

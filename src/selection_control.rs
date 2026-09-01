@@ -167,8 +167,8 @@ fn selection_root(root: Element, role: AccessibilityRole, state: ToggleState) ->
 mod tests {
     use super::*;
     use crate::{
-        AppRegion, Color, CursorStyle, EventContext, IntoElement, TestAppContext, UserSelect, View,
-        ViewContext, text,
+        AppRegion, Color, CursorStyle, EventContext, Insets, IntoElement, TestAppContext,
+        UserSelect, View, ViewContext, text,
     };
 
     #[test]
@@ -201,7 +201,7 @@ mod tests {
             checkbox_root.visual.border_color,
             Some(Color::rgb8(7, 8, 9))
         );
-        assert_eq!(checkbox_root.visual.border_width, 3.0);
+        assert_eq!(checkbox_root.visual.border_widths, Insets::all(3.0));
         assert_eq!(checkbox_root.children.len(), 1);
         assert!(checkbox_root.transition.is_none());
 

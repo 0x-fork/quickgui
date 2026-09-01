@@ -108,6 +108,66 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
+    // Framework elements may use a different inside-border width on each edge. Width pairs are
+    // scaled only when they would consume more than the entire box, keeping the inner SDF valid.
+    if input.params.x > 3.5 {
+        let raw_widths = max(input.subject, vec4<f32>(0.0));
+        let horizontal_scale = min(
+            1.0,
+            input.geometry.z / max(raw_widths.y + raw_widths.w, 0.0001),
+        );
+        let vertical_scale = min(
+            1.0,
+            input.geometry.w / max(raw_widths.x + raw_widths.z, 0.0001),
+        );
+        let widths = vec4<f32>(
+            raw_widths.x * vertical_scale,
+            raw_widths.y * horizontal_scale,
+            raw_widths.z * vertical_scale,
+            raw_widths.w * horizontal_scale,
+        );
+        if input.params.y <= 0.0 {
+            // Axis-aligned square edges already receive exact coverage from their triangles. Keep
+            // their inside edges exact too: partially transparent SDF coverage is interpreted as
+            // vibrant content by NSVisualEffectView and produces a bright seam beside the border.
+            let right = input.geometry.x + input.geometry.z;
+            let bottom = input.geometry.y + input.geometry.w;
+            let is_border =
+                (widths.x > 0.0 && logical_position.y < input.geometry.y + widths.x) ||
+                (widths.y > 0.0 && logical_position.x >= right - widths.y) ||
+                (widths.z > 0.0 && logical_position.y >= bottom - widths.z) ||
+                (widths.w > 0.0 && logical_position.x < input.geometry.x + widths.w);
+            let color = select(input.primary, input.secondary, is_border);
+            let alpha = color.a;
+            return vec4<f32>(color.rgb * alpha, alpha);
+        }
+
+        let outer_distance = rounded_rect_distance(
+            logical_position,
+            input.geometry,
+            input.params.y,
+        );
+        let outer = coverage(outer_distance);
+        let inner_rect = vec4<f32>(
+            input.geometry.xy + vec2<f32>(widths.w, widths.x),
+            max(
+                input.geometry.zw - vec2<f32>(widths.w + widths.y, widths.x + widths.z),
+                vec2<f32>(0.0),
+            ),
+        );
+        let maximum_width = max(max(widths.x, widths.y), max(widths.z, widths.w));
+        let inner = coverage(rounded_rect_distance(
+            logical_position,
+            inner_rect,
+            max(input.params.y - maximum_width, 0.0),
+        ));
+        let fill_alpha = input.primary.a * inner;
+        let border_alpha = input.secondary.a * max(outer - inner, 0.0);
+        let alpha = fill_alpha + border_alpha;
+        let rgb = input.primary.rgb * fill_alpha + input.secondary.rgb * border_alpha;
+        return vec4<f32>(rgb, alpha);
+    }
+
     // A complete underline span is one instance. The fragment shader evaluates its wave
     // analytically, so long diagnostics do not create CPU-side path vertices or extra draws.
     if input.params.x > 2.5 {

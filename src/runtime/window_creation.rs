@@ -83,8 +83,8 @@ impl Runtime {
             .with_visible(false)
             .with_resizable(self.config.is_resizable)
             .with_decorations(self.config.decorated)
-            .with_transparent(self.config.window_background.is_transparent())
-            .with_blur(self.config.window_background.is_blurred())
+            .with_transparent(self.config.uses_transparent_surface())
+            .with_blur(self.config.uses_legacy_background_blur())
             .with_content_protected(self.config.content_protected)
             .with_theme(self.config.preferred_appearance.map(to_winit_theme))
             .with_enabled_buttons(window_buttons(&self.config))
@@ -367,7 +367,7 @@ impl Runtime {
             window.clone(),
             event_loop,
             profile,
-            self.config.window_background,
+            self.config.uses_transparent_surface(),
             self.font_system.clone(),
             shared_gpu.as_ref(),
         )) {
@@ -393,6 +393,20 @@ impl Runtime {
             self.fail(event_loop, AppError::Platform(error));
             return;
         }
+        #[cfg(target_os = "macos")]
+        let vibrancy_host = match self.config.macos_vibrancy {
+            Some(vibrancy) => {
+                match MacVibrancyHost::new(&window, vibrancy, self.config.macos_visual_effect_state)
+                {
+                    Ok(host) => Some(host),
+                    Err(error) => {
+                        self.fail(event_loop, AppError::Platform(error));
+                        return;
+                    }
+                }
+            }
+            None => None,
+        };
         #[cfg(target_os = "macos")]
         if let Some(position) = self.config.traffic_light_position
             && let Err(error) = position_traffic_lights(&window, position)
@@ -501,6 +515,8 @@ impl Runtime {
             image_assets: ImageAssetCache::new(handle, self.image_workers.clone()),
             #[cfg(target_os = "macos")]
             native_host: None,
+            #[cfg(target_os = "macos")]
+            vibrancy_host,
             #[cfg(target_os = "macos")]
             native_drop_host,
             #[cfg(target_os = "macos")]

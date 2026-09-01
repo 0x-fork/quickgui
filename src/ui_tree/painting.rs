@@ -1,5 +1,9 @@
 use super::*;
 
+fn has_visible_border(widths: Insets) -> bool {
+    widths.top > 0.0 || widths.right > 0.0 || widths.bottom > 0.0 || widths.left > 0.0
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn paint_selectable_text(
     element: &Element,
@@ -510,12 +514,13 @@ pub(super) fn paint_element(
         .or(focus_state.border_color)
         .or(element.visual.border_color)
         .unwrap_or(Color::TRANSPARENT);
-    let target_border_width = disabled_state
+    let target_border_widths = disabled_state
         .border_width
         .or(interaction_state.border_width)
         .or(invalid_state.border_width)
         .or(focus_state.border_width)
-        .unwrap_or(element.visual.border_width);
+        .map(Insets::all)
+        .unwrap_or(element.visual.border_widths);
     let target_radius = disabled_state
         .radius
         .or(interaction_state.radius)
@@ -550,7 +555,7 @@ pub(super) fn paint_element(
             TransitionPaintStyle {
                 background: sane_transition_color(target_fill, Color::TRANSPARENT),
                 border_color: sane_transition_color(target_border, Color::TRANSPARENT),
-                border_width: target_border_width.max(0.0),
+                border_widths: target_border_widths,
                 radius: target_radius.max(0.0),
                 opacity: target_opacity,
                 text_color: target_state_text_color
@@ -567,9 +572,9 @@ pub(super) fn paint_element(
     let border = sampled_transition
         .as_ref()
         .map_or(target_border, |style| style.border_color);
-    let border_width = sampled_transition
+    let border_widths = sampled_transition
         .as_ref()
-        .map_or(target_border_width, |style| style.border_width);
+        .map_or(target_border_widths, |style| style.border_widths);
     let radius = sampled_transition
         .as_ref()
         .map_or(target_radius, |style| style.radius);
@@ -584,12 +589,12 @@ pub(super) fn paint_element(
         .map_or(target_state_text_color, |style| style.text_color);
     let previous_opacity = scene.multiply_opacity(opacity);
     push_element_shadows(scene, layer, bounds, radius, parent_clip, shadows, false);
-    if fill.a > 0.0 || (border.a > 0.0 && border_width > 0.0) {
-        scene.push_quad_in(
+    if fill.a > 0.0 || (border.a > 0.0 && has_visible_border(border_widths)) {
+        scene.push_edge_quad_in(
             layer,
-            Quad::new(bounds, fill)
+            EdgeQuad::new(bounds, fill)
                 .radius(radius)
-                .border(border_width, border)
+                .border(border_widths, border)
                 .clip(parent_clip),
         );
     }

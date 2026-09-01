@@ -106,6 +106,23 @@ export type WindowLevel = "always-on-bottom" | "normal" | "always-on-top";
 export type CursorGrabMode = "none" | "confined" | "locked";
 export type TaskbarProgressState = "none" | "normal" | "indeterminate" | "paused" | "error";
 export type WindowBackgroundAppearance = "opaque" | "transparent" | "blurred";
+export type MacOSVibrancy =
+  | "appearance-based"
+  | "titlebar"
+  | "selection"
+  | "menu"
+  | "popover"
+  | "sidebar"
+  | "header"
+  | "sheet"
+  | "window"
+  | "hud"
+  | "fullscreen-ui"
+  | "tooltip"
+  | "content"
+  | "under-window"
+  | "under-page";
+export type MacOSVisualEffectState = "followWindow" | "active" | "inactive";
 export type ImageSource =
   | string
   | {
@@ -125,6 +142,8 @@ export interface WindowState {
   scaleFactor: number;
   appearance: AppearanceMode;
   backgroundAppearance: WindowBackgroundAppearance;
+  vibrancy?: MacOSVibrancy;
+  visualEffectState: MacOSVisualEffectState;
   focused: boolean;
   focusable: boolean;
   visible: boolean;
@@ -472,10 +491,10 @@ function windowContext(window?: Window): { context: AppContext; window: Window }
   return resolveWindow(window);
 }
 
-function nativeDisplays(): binding.NativeDisplay[] {
+async function nativeDisplays(): Promise<binding.NativeDisplay[]> {
   const current = context();
   return current.hosted
-    ? binding.getHostedDisplays(current.appId)
+    ? await binding.getHostedDisplays(current.appId)
     : binding.getDisplays(current.appId);
 }
 
@@ -493,10 +512,10 @@ function normalizeDisplay(display: binding.NativeDisplay): Display {
   return normalized;
 }
 
-function nativeKeyboardLayout(): KeyboardLayout {
+async function nativeKeyboardLayout(): Promise<KeyboardLayout> {
   const current = context();
   const layout = current.hosted
-    ? binding.getHostedKeyboardLayout(current.appId)
+    ? await binding.getHostedKeyboardLayout(current.appId)
     : binding.getKeyboardLayout(current.appId);
   return { id: layout.id, name: layout.name };
 }
@@ -509,6 +528,7 @@ function normalizeWindowState(state: binding.NativeWindowState): WindowState {
     scaleFactor: state.scaleFactor,
     appearance: state.appearance === "dark" ? "dark" : "light",
     backgroundAppearance: state.backgroundAppearance as WindowBackgroundAppearance,
+    visualEffectState: state.visualEffectState as MacOSVisualEffectState,
     focused: state.focused,
     focusable: state.focusable,
     visible: state.visible,
@@ -545,6 +565,9 @@ function normalizeWindowState(state: binding.NativeWindowState): WindowState {
       truncated: state.nativeTabsTruncated,
     },
   };
+  if (state.vibrancy !== undefined) {
+    normalized.vibrancy = state.vibrancy as MacOSVibrancy;
+  }
   if (state.displayId !== undefined) normalized.displayId = state.displayId;
   if (state.minimumWidth !== undefined && state.minimumHeight !== undefined) {
     normalized.minimumSize = { width: state.minimumWidth, height: state.minimumHeight };
@@ -561,10 +584,10 @@ function normalizeWindowState(state: binding.NativeWindowState): WindowState {
   return normalized;
 }
 
-export function getNativeWindowState(window: Window): WindowState {
+export async function getNativeWindowState(window: Window): Promise<WindowState> {
   const { context: current, window: resolved } = windowContext(window);
   const state = current.hosted
-    ? binding.getHostedWindowState(current.appId, resolved.nativeId)
+    ? await binding.getHostedWindowState(current.appId, resolved.nativeId)
     : binding.getWindowState(current.appId, resolved.nativeId);
   return normalizeWindowState(state);
 }
@@ -719,11 +742,24 @@ const pendingGlobalShortcutRequests = new Map<
 let nextGlobalShortcutRequest = 1;
 let nextGlobalShortcutRegistration = 1;
 
+function watchHostedRequestAcceptance<T extends { reject: (error: Error) => void }>(
+  operation: Promise<void>,
+  request: number,
+  pending: Map<number, T>,
+): void {
+  void operation.catch((error) => {
+    const requestState = pending.get(request);
+    if (!requestState) return;
+    pending.delete(request);
+    requestState.reject(error instanceof Error ? error : new Error(String(error)));
+  });
+}
+
 export const Clipboard = Object.freeze({
   async read(): Promise<ClipboardItem | undefined> {
     const current = context();
     const item = current.hosted
-      ? binding.readHostedClipboard(current.appId)
+      ? await binding.readHostedClipboard(current.appId)
       : binding.readClipboard(current.appId);
     return item ? clipboardItem(item) : undefined;
   },
@@ -731,7 +767,7 @@ export const Clipboard = Object.freeze({
   async write(item: ClipboardItem): Promise<void> {
     const current = context();
     const native = nativeClipboardItem(item);
-    if (current.hosted) binding.writeHostedClipboard(current.appId, native);
+    if (current.hosted) await binding.writeHostedClipboard(current.appId, native);
     else binding.writeClipboard(current.appId, native);
   },
 
@@ -778,7 +814,11 @@ function shellRequest(action: string, value: string): Promise<void> {
       });
       try {
         if (current.hosted) {
-          binding.performHostedShellAction(current.appId, request, action, value);
+          watchHostedRequestAcceptance(
+            binding.performHostedShellAction(current.appId, request, action, value),
+            request,
+            pendingShellRequests,
+          );
         } else {
           binding.performShellAction(current.appId, request, action, value);
         }
@@ -855,13 +895,13 @@ export const Notifications = Object.freeze({
       }));
     }
     if (options.deliverAt !== undefined) native.deliveryAtMs = options.deliverAt.getTime();
-    if (current.hosted) binding.showHostedNotification(current.appId, native);
+    if (current.hosted) await binding.showHostedNotification(current.appId, native);
     else binding.showNotification(current.appId, native);
   },
 
   async dismiss(tag: string): Promise<void> {
     const current = context();
-    if (current.hosted) binding.dismissHostedNotification(current.appId, tag);
+    if (current.hosted) await binding.dismissHostedNotification(current.appId, tag);
     else binding.dismissNotification(current.appId, tag);
   },
 
@@ -891,10 +931,14 @@ function notificationPermissionRequest(prompt: boolean): Promise<NotificationPer
       pendingNotificationPermissionRequests.set(request, { resolve, reject });
       try {
         if (current.hosted) {
-          binding.performHostedNotificationPermissionRequest(
-            current.appId,
+          watchHostedRequestAcceptance(
+            binding.performHostedNotificationPermissionRequest(
+              current.appId,
+              request,
+              prompt,
+            ),
             request,
-            prompt,
+            pendingNotificationPermissionRequests,
           );
         } else {
           binding.performNotificationPermissionRequest(current.appId, request, prompt);
@@ -1037,12 +1081,16 @@ function globalShortcutOperation(
       pendingGlobalShortcutRequests.set(request, { resolve, reject });
       try {
         if (current.hosted) {
-          binding.performHostedGlobalShortcutAction(
-            current.appId,
+          watchHostedRequestAcceptance(
+            binding.performHostedGlobalShortcutAction(
+              current.appId,
+              request,
+              action,
+              registration,
+              accelerator,
+            ),
             request,
-            action,
-            registration,
-            accelerator,
+            pendingGlobalShortcutRequests,
           );
         } else {
           binding.performGlobalShortcutAction(
@@ -1121,18 +1169,20 @@ export const GlobalShortcut = Object.freeze({
 });
 
 export const Screen = Object.freeze({
-  getAllDisplays(): Display[] {
-    return nativeDisplays().map(normalizeDisplay);
+  async getAllDisplays(): Promise<Display[]> {
+    return (await nativeDisplays()).map(normalizeDisplay);
   },
 
-  getPrimaryDisplay(): Display | undefined {
-    return this.getAllDisplays().find((display) => display.primary);
+  async getPrimaryDisplay(): Promise<Display | undefined> {
+    return (await this.getAllDisplays()).find((display) => display.primary);
   },
 
-  getDisplayNearestPoint(point: { x: number; y: number }): Display | undefined {
+  async getDisplayNearestPoint(
+    point: { x: number; y: number },
+  ): Promise<Display | undefined> {
     let nearest: Display | undefined;
     let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const display of this.getAllDisplays()) {
+    for (const display of await this.getAllDisplays()) {
       const right = display.bounds.x + display.bounds.width;
       const bottom = display.bounds.y + display.bounds.height;
       const dx = point.x < display.bounds.x ? display.bounds.x - point.x : Math.max(0, point.x - right);
@@ -1146,10 +1196,10 @@ export const Screen = Object.freeze({
     return nearest;
   },
 
-  getCursorScreenPoint(): { x: number; y: number } {
+  async getCursorScreenPoint(): Promise<{ x: number; y: number }> {
     const current = context();
     const point = current.hosted
-      ? binding.getHostedCursorScreenPosition(current.appId)
+      ? await binding.getHostedCursorScreenPosition(current.appId)
       : binding.getCursorScreenPosition(current.appId);
     return { x: point.x, y: point.y };
   },
@@ -1162,10 +1212,10 @@ export const Screen = Object.freeze({
 
 /** Compile-time native integration availability for the current target. */
 export const Desktop = Object.freeze({
-  getSupport(): DesktopIntegrationSupport {
+  async getSupport(): Promise<DesktopIntegrationSupport> {
     const current = context();
     const support = current.hosted
-      ? binding.getHostedDesktopIntegrationSupport(current.appId)
+      ? await binding.getHostedDesktopIntegrationSupport(current.appId)
       : binding.getDesktopIntegrationSupport(current.appId);
     return { ...support };
   },
@@ -1229,7 +1279,16 @@ export const Desktop = Object.freeze({
         pendingFileIconRequests.set(request, { resolve, reject });
         try {
           if (current.hosted) {
-            binding.requestHostedFileIcon(current.appId, request, resolvePath(path), size);
+            watchHostedRequestAcceptance(
+              binding.requestHostedFileIcon(
+                current.appId,
+                request,
+                resolvePath(path),
+                size,
+              ),
+              request,
+              pendingFileIconRequests,
+            );
           } else {
             binding.requestFileIcon(current.appId, request, resolvePath(path), size);
           }
@@ -1267,8 +1326,13 @@ export const Desktop = Object.freeze({
       return new Promise((resolve, reject) => {
         pendingUserTaskRequests.set(request, { resolve, reject });
         try {
-          if (current.hosted) binding.setHostedUserTasks(current.appId, request, native);
-          else binding.setUserTasks(current.appId, request, native);
+          if (current.hosted) {
+            watchHostedRequestAcceptance(
+              binding.setHostedUserTasks(current.appId, request, native),
+              request,
+              pendingUserTaskRequests,
+            );
+          } else binding.setUserTasks(current.appId, request, native);
         } catch (error) {
           pendingUserTaskRequests.delete(request);
           reject(error instanceof Error ? error : new Error(String(error)));
@@ -1281,8 +1345,8 @@ export const Desktop = Object.freeze({
 });
 
 export const Appearance = Object.freeze({
-  getCurrent(window?: Window): AppearanceMode {
-    return getNativeWindowState(windowContext(window).window).appearance;
+  async getCurrent(window?: Window): Promise<AppearanceMode> {
+    return (await getNativeWindowState(windowContext(window).window)).appearance;
   },
 
   onChange(listener: (appearance: AppearanceMode, window: Window) => void): () => void {
@@ -1292,7 +1356,7 @@ export const Appearance = Object.freeze({
 });
 
 export const Keyboard = Object.freeze({
-  getLayout(): KeyboardLayout {
+  getLayout(): Promise<KeyboardLayout> {
     return nativeKeyboardLayout();
   },
 
@@ -1361,10 +1425,10 @@ export const PowerMonitor = Object.freeze({
   },
 });
 
-function nativeSystemPreferences(): binding.NativeSystemPreferences {
+async function nativeSystemPreferences(): Promise<binding.NativeSystemPreferences> {
   const current = context();
   return current.hosted
-    ? binding.getHostedSystemPreferences(current.appId)
+    ? await binding.getHostedSystemPreferences(current.appId)
     : binding.getSystemPreferences(current.appId);
 }
 
@@ -1408,8 +1472,8 @@ function normalizeSystemPreferences(
 
 /** Core-retained appearance and accessibility settings. */
 export const SystemPreferences = Object.freeze({
-  getCurrent(): SystemPreferencesSnapshot {
-    return normalizeSystemPreferences(nativeSystemPreferences());
+  async getCurrent(): Promise<SystemPreferencesSnapshot> {
+    return normalizeSystemPreferences(await nativeSystemPreferences());
   },
 
   onChange(listener: (preferences: SystemPreferencesSnapshot) => void): () => void {
@@ -1515,8 +1579,11 @@ export function dispatchSystemEvent(
     return true;
   }
   if (event.kind === "system-preferences-change") {
-    const preferences = SystemPreferences.getCurrent();
-    for (const listener of systemPreferencesListeners) listener(preferences);
+    void SystemPreferences.getCurrent()
+      .then((preferences) => {
+        for (const listener of systemPreferencesListeners) listener(preferences);
+      })
+      .catch(() => {});
     return true;
   }
   if (event.kind === "notification-response") {
@@ -1582,13 +1649,19 @@ export function dispatchSystemEvent(
     return true;
   }
   if (event.kind === "screen-change") {
-    const displays = Screen.getAllDisplays();
-    for (const listener of screenListeners) listener(displays);
+    void Screen.getAllDisplays()
+      .then((displays) => {
+        for (const listener of screenListeners) listener(displays);
+      })
+      .catch(() => {});
     return true;
   }
   if (event.kind === "keyboard-layout-change") {
-    const layout = Keyboard.getLayout();
-    for (const listener of keyboardListeners) listener(layout);
+    void Keyboard.getLayout()
+      .then((layout) => {
+        for (const listener of keyboardListeners) listener(layout);
+      })
+      .catch(() => {});
     return true;
   }
   if (event.kind === "appearance-change") {
@@ -1603,8 +1676,11 @@ export function dispatchSystemEvent(
     if (!window) return true;
     const listeners = windowStateListeners.get(event.window);
     if (!listeners?.size) return true;
-    const state = getNativeWindowState(window);
-    for (const listener of listeners) listener(state);
+    void getNativeWindowState(window)
+      .then((state) => {
+        for (const listener of listeners) listener(state);
+      })
+      .catch(() => {});
     return true;
   }
   return false;
