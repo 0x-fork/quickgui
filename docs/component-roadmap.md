@@ -27,7 +27,12 @@ caller-owned controls, popover roots, and option parts. `ContextMenuState` likew
 caller-owned target, popover root, and rows while retaining only structural geometry and behavior.
 `Tabs` decorates caller-owned root/list/tab/indicator/panel parts and leaves indicator geometry and
 motion to the application. `PickerState`, `TableState`, and `TreeState` invoke caller-owned
-input/header/row/cell renderers and retain only bounded virtual layout geometry. `Field` and
+input/header/row/cell renderers and retain only bounded virtual layout geometry; the table hands its
+header renderer a behavior-only column-resize handle and its cell renderer an editing flag, and the
+tree hands its row renderer a behavior-only disclosure and a loading-placeholder flag, so multiple
+selection, column resizing and reordering, inline editing, and lazy children add no presentation.
+`DateFieldState` and `TimeFieldState` decorate caller-owned root and segment parts with civil-date
+validation, typed entry, and spin-button semantics. `Field` and
 `Fieldset` decorate caller-owned parts
 with stable label/description/error relationships, native label activation, controlled validity,
 and explicit disabled propagation. `Collapsible` and `Accordion` decorate caller-owned
@@ -75,11 +80,14 @@ Status terms here are intentionally strict:
 | Autocomplete | Behavior present | `AutocompleteState` accepts caller-owned input/popover/option parts, preserves arbitrary bounded text, supports optional completion or action-only commits, async/filter-none source replacement, visible-only results, a never-key overflow child, owner-IME focus, and an owner-tree accessibility proxy. Complete live IME, VoiceOver, edge placement, and repeated-open resource acceptance. |
 | Avatar | Primitive only | Compose image, fallback, accessible name, and load state without visual defaults. |
 | Button | Behavior present | Preserve the semantic `button()` root; keep presentation application-owned. |
+| Calendar | Behavior present | `CalendarState` supplies a bounded six-week month grid with roving day focus, arrow/Home/End/Page navigation that follows focus across month boundaries, declared week-start weekday, selection bounds that refuse selection rather than movement, and caller-owned grid/week/day parts with exact Grid/Row/GridCell semantics. Complete live VoiceOver and application-styled selection acceptance. |
 | Checkbox | Behavior present | `Checkbox` supplies an unstyled caller-owned root plus accessibility-hidden indicator part with exact checked/mixed semantics. Complete live VoiceOver and application-styled disabled/focus acceptance. |
 | Checkbox Group | Primitive only | Add group labeling, validation, controlled values, and keyboard/accessibility coverage. |
 | Collapsible | Behavior present | `Collapsible` supplies caller-owned root/trigger/panel parts, controlled open/disabled state, exact mounted-panel relationships, default unmounting or explicit `display: none` retention, ordinary button keyboard behavior, and zero idle source. Complete live VoiceOver and application-styled open/closed acceptance. |
 | Combobox | Behavior present | `ComboboxState` accepts caller-owned input/popover/option parts, constrains commits to enabled declared items, restores committed labels on every dismissal, retains stable selections across externally filtered absence, and uses the never-key overflow child plus owner-tree accessibility proxy. Complete live IME, VoiceOver, edge placement, and repeated-open resource acceptance. |
 | Context Menu | Behavior present | `ContextMenuState` composes secondary-click point anchoring, a separate overflow-capable child surface, exact close synchronization, delayed hover, an actual-placement safe pointer corridor for right/left submenus, nested `PopoverMenu` models, caller-owned parts, and typed owner actions. The automated gate covers 128 bounded repeated native lifecycles; complete live VoiceOver, human-visible appearance, nested placement, and mixed-scale acceptance. |
+| Date Field | Behavior present | `DateFieldState` supplies segmented `CivilDate` editing with leap-year validation, configurable YMD/DMY/MDY order, typed-digit entry with automatic advance, wrapping arrow steps, per-segment placeholders, min/max validity, caller-owned root/segment parts, and one spin button per segment inside a group root. Complete live VoiceOver segment announcement and application-styled focus/invalid acceptance. |
+| Time Field | Behavior present | `TimeFieldState` projects one retained 24-hour `CivilTime` through 12- or 24-hour hour/minute/second/AM-PM segments sharing the date field's typed actions, entry, and spin-button semantics. Complete live VoiceOver and application-styled acceptance. |
 | Dialog | Behavior present | `Dialog` supplies caller-owned portal/backdrop/popover/title/description/close parts, nested focus containment, independent dismissal, restoration, and exact modal semantics. Complete live VoiceOver/backdrop/native-view acceptance; keep native dialog-window roles separate. |
 | Drawer | Missing | Build after dialog focus and backdrop behavior is live accepted. |
 | Field | Behavior present | `Field` supplies caller-owned root/label/control/description/error parts, stable relationships, normal or passive labels, required/invalid/disabled state, bounded validation copy, and controlled touched/dirty/filled render state. Complete live VoiceOver label activation, error wording/order, and application-styled state acceptance. |
@@ -87,7 +95,7 @@ Status terms here are intentionally strict:
 | Form | Behavior present | Preserve controlled fields, nearest-form submission, and first-invalid focus. |
 | Input | Behavior present | Keep editing/IME behavior reusable while removing visual defaults from the component contract. |
 | Menu | Behavior present | Native `Menu` remains the app menu; unstyled `PopoverMenu` provides bounded items, toggles, exact group-label/separator semantics, keyboard/typeahead behavior, owner-window actions, submenu composition, and an owner-controlled hover hook used by the native context-menu aim policy. Complete live VoiceOver acceptance. |
-| Menubar | Platform only | Native macOS menubar exists; add an in-window menubar only for a demonstrated product need. |
+| Menubar | Behavior present | `MenubarState` supplies caller-owned root and trigger parts, a single roving Tab stop, wrapping arrow navigation that keeps switching while a menu is open, open-on-click, closed-bar-safe hover switching, Escape closing without leaving the bar, and exact menubar/menu-item semantics over ordinary `PopoverMenu` surfaces. Complete live VoiceOver and application-styled open/focus acceptance; native `Menu` remains the platform application menu. |
 | Meter | Missing | Add semantic bounded-value behavior independently of presentation. |
 | Navigation Menu | Missing | Defer until menu, tabs, and disclosure contracts are stable. |
 | Number Field | Missing | Build on input constraints with locale-aware parsing and step behavior. |

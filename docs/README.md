@@ -22,10 +22,12 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 - [Collapsible and accordion](disclosures.md) — controlled unstyled disclosure parts, current Tab/Enter/Space behavior, exact heading/region relationships, bounded open values, and mounting policy.
 - [Tabs](tabs.md) — controlled unstyled in-window tab parts, manual or automatic activation, horizontal or vertical roving focus, panel mounting, and exact accessibility relationships.
 - [Popovers and popover menus](popovers.md) — controlled in-window overlays, cross-edge native WGPU hosts, unstyled menu parts, typed owner actions, nesting, placement, and popover accessibility.
+- [In-window menubar](menubar.md) — roving menubar triggers over `PopoverMenu` surfaces, open-on-click, hover switching, Escape/arrow navigation, and menubar accessibility.
 - [Context menus](context-menus.md) — unstyled cursor-point triggers, native overflow surfaces, popover-menu composition, exact lifecycle, nested actions, and resource bounds.
 - [Select, autocomplete, and combobox](select-and-autocomplete.md) — three distinct unstyled value contracts with overflow-capable native children, never-key owner-IME behavior, accessibility portals, async source replacement, validation, and bounded virtualization.
 - [Dialogs](dialogs.md) — unstyled modal portal/backdrop/popover/title/description/close parts, nested focus containment, independent dismissal, restoration, and exact accessibility.
 - [Unstyled component roadmap](component-roadmap.md) — Base UI-derived component inventory, behavior/presentation boundary, dependency order, and current gaps.
+- [Date and time fields](date-and-time.md) — segmented civil date/time editors, leap-year validation, typed-digit entry with automatic advance, wrapping arrow steps, 12/24-hour presentation, a bounded month grid with roving day focus, and spin-button/grid accessibility.
 - [Virtual tables and trees](data-collections.md) — controlled sortable grids, bounded hierarchies, composite keyboard focus, collection accessibility, and visible-only mounting.
 - [Application assets and custom fonts](assets-and-fonts.md) — bounded bundled resources, stable image handles, view access, and startup font registration.
 - [Clipboard](clipboard.md) — bounded text and metadata, encoded images, native file lists, macOS Find pasteboard, and deterministic tests.

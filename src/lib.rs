@@ -10,6 +10,7 @@ mod animation;
 mod assets;
 mod autocomplete;
 mod background;
+mod calendar;
 mod canvas;
 mod clipboard;
 mod color;
@@ -19,6 +20,7 @@ mod context_menu;
 mod cursor;
 mod custom_shader;
 mod custom_shader_renderer;
+mod date_field;
 mod dialog;
 mod disclosure;
 mod display;
@@ -53,6 +55,7 @@ mod macos_menu;
 mod macos_shell;
 mod markdown;
 mod menu;
+mod menubar;
 mod metrics;
 #[cfg(target_os = "macos")]
 mod native_view;
@@ -113,6 +116,12 @@ pub use autocomplete::{
     MAX_AUTOCOMPLETE_VISIBLE_ROWS,
 };
 pub use background::{BackgroundTaskError, MAX_PENDING_BACKGROUND_TASKS, TaskSpawnError};
+pub use calendar::{
+    CALENDAR_WEEK_DAYS, Calendar, CalendarNextDay, CalendarNextMonth, CalendarNextWeek,
+    CalendarNextYear, CalendarPreviousDay, CalendarPreviousMonth, CalendarPreviousWeek,
+    CalendarPreviousYear, CalendarSelect, CalendarState, CalendarWeekEnd, CalendarWeekStart,
+    CalendarWeekday, MAX_CALENDAR_WEEKS, calendar, calendar_key_bindings,
+};
 pub use canvas::Canvas;
 pub use clipboard::{
     ClipboardBookmark, ClipboardData, ClipboardEntry, ClipboardError, ClipboardImage,
@@ -143,6 +152,14 @@ pub use custom_shader::{
 pub use custom_shader_renderer::{
     MAX_CUSTOM_SHADER_INSTANCES_PER_FRAME, MAX_CUSTOM_SHADER_PIPELINES_PER_WINDOW,
 };
+pub use date_field::{
+    CivilDate, CivilPeriod, CivilTime, DateField, DateFieldClearSegment, DateFieldDecrement,
+    DateFieldIncrement, DateFieldNextSegment, DateFieldOrder, DateFieldPreviousSegment,
+    DateFieldSegment, DateFieldSegmentMaximum, DateFieldSegmentMinimum, DateFieldState,
+    DateSegment, MAX_CIVIL_YEAR, MAX_DATE_FIELD_PLACEHOLDER_BYTES, MIN_CIVIL_YEAR, TimeField,
+    TimeFieldSegment, TimeFieldState, TimeSegment, TimeSegments, date_field,
+    date_field_key_bindings, time_field, time_field_key_bindings,
+};
 pub use dialog::{Dialog, DialogKind};
 pub use disclosure::{
     Accordion, AccordionItem, AccordionItemState, AccordionState, AccordionStateError, Collapsible,
@@ -154,13 +171,14 @@ pub use display::{
 #[cfg(target_os = "macos")]
 pub use element::native_view;
 pub use element::{
-    AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AccessibilitySortDirection,
-    AnchorPlacement, AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack,
-    IntoElement, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
-    MAX_CONTAINER_QUERY_DEPTH, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
-    MAX_MOUSE_LISTENERS_PER_ELEMENT, ToggleState, UserSelect, Visibility, button, canvas,
-    container_query, custom_shader, div, form, img, overlay, path, styled_text_area,
-    styled_text_input, submit_button, svg, text, text_area, text_input,
+    AccessibilityAutoComplete, AccessibilityLive, AccessibilityOrientation, AccessibilityPopover,
+    AccessibilityRole, AccessibilitySortDirection, AccessibilityValueRange, AnchorPlacement,
+    AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack, IntoElement,
+    MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
+    MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT, MAX_MOUSE_LISTENERS_PER_ELEMENT, ToggleState,
+    UserSelect, Visibility, button, canvas, container_query, custom_shader, div, form, img,
+    overlay, path, styled_text_area, styled_text_input, submit_button, svg, text, text_area,
+    text_input,
 };
 pub use entity::{
     Entity, EntityId, EventEmitter, MAX_ENTITY_EVENT_DELIVERIES_PER_TURN,
@@ -233,6 +251,10 @@ pub use menu::{
     MAX_NATIVE_MENU_DEPTH, MAX_NATIVE_MENU_ITEMS, MAX_NATIVE_MENU_TEXT_BYTES,
     MAX_NATIVE_MENU_TOTAL_TEXT_BYTES, Menu, MenuError, MenuIcon, MenuItem, MenuItemMark, OsAction,
     OsMenu, SystemMenuType,
+};
+pub use menubar::{
+    MAX_MENUBAR_MENUS, Menubar, MenubarClose, MenubarFirst, MenubarItem, MenubarLast, MenubarNext,
+    MenubarOpen, MenubarPrevious, MenubarState, menubar, menubar_key_bindings,
 };
 pub use metrics::{FrameMetrics, RenderStats};
 #[cfg(target_os = "macos")]
@@ -372,10 +394,15 @@ pub use swift_ui::{
     SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor, SwiftUiQuickGuiHost,
 };
 pub use table::{
-    MAX_TABLE_COLUMNS, MAX_TABLE_ROWS, TableActivate, TableCellPosition, TableCellState,
-    TableColumn, TableColumnAlign, TableFirstRow, TableHeaderState, TableLastRow, TableLayout,
+    MAX_TABLE_COLUMN_WIDTH, MAX_TABLE_COLUMNS, MAX_TABLE_ROWS, MAX_TABLE_SELECTION_RANGES,
+    MIN_TABLE_COLUMN_WIDTH, TABLE_COLUMN_RESIZE_STEP, TableActivate, TableCancelEdit,
+    TableCellPosition, TableCellState, TableColumn, TableColumnAlign, TableCommitEdit,
+    TableEditEnded, TableExtendSelectionDown, TableExtendSelectionUp, TableFirstRow,
+    TableHeaderState, TableLastRow, TableLayout, TableMoveColumnLeft, TableMoveColumnRight,
     TableNextColumn, TableNextRow, TablePageDown, TablePageUp, TablePreviousColumn,
-    TablePreviousRow, TableSort, TableSortDirection, TableState, table_key_bindings,
+    TablePreviousRow, TableResizeColumnLarger, TableResizeColumnSmaller, TableSelectAll,
+    TableSelection, TableSelectionChanged, TableSelectionMode, TableSort, TableSortDirection,
+    TableState, TableToggleSelection, table_key_bindings,
 };
 pub use tabs::{Tab, TabState, Tabs, TabsOrientation, TabsState};
 #[cfg(feature = "terminal")]
@@ -392,10 +419,10 @@ pub use tooltip::{
 };
 pub use transition::{MAX_STYLE_TRANSITIONS_PER_WINDOW, Transition, TransitionProperties};
 pub use tree::{
-    MAX_TREE_DEPTH, MAX_TREE_LABEL_BYTES, MAX_TREE_NODES, MAX_TREE_TEXT_BYTES, TreeActivate,
-    TreeCollapseOrParent, TreeError, TreeExpandOrChild, TreeFirst, TreeLast, TreeLayout, TreeNext,
-    TreeNode, TreePageDown, TreePageUp, TreePrevious, TreeRow, TreeState, TreeToggle,
-    tree_key_bindings,
+    DEFAULT_TREE_LOADING_LABEL, MAX_TREE_DEPTH, MAX_TREE_LABEL_BYTES, MAX_TREE_NODES,
+    MAX_TREE_TEXT_BYTES, TreeActivate, TreeCollapseOrParent, TreeError, TreeExpandOrChild,
+    TreeFirst, TreeLast, TreeLayout, TreeLoadChildren, TreeNext, TreeNode, TreePageDown,
+    TreePageUp, TreePrevious, TreeRow, TreeState, TreeToggle, tree_key_bindings,
 };
 pub use ui_tree::{MAX_FOCUSED_EVENT_PATH, MAX_MOUSE_EVENT_PATH, MAX_STATIC_TEXT_COPY_BYTES};
 pub use virtual_list::{

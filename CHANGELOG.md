@@ -4,6 +4,44 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+### Framework
+
+- Added unstyled segmented `DateField` and `TimeField` editors over plain `CivilDate`/`CivilTime`
+  values with no date dependency: proleptic Gregorian validation including leap years, configurable
+  year/month/day order, 12- or 24-hour presentation over one retained 24-hour value, typed-digit
+  entry that advances as soon as no further digit fits, wrapping arrow steps, Home/End segment
+  bounds, Backspace clearing, bounded per-segment placeholders, `min`/`max` validity reported without
+  rewriting typed text, caller-owned root and segment parts, `date_field_key_bindings()` and
+  `time_field_key_bindings()`, and one native spin button per segment inside a group root.
+- Added `CalendarState`, a bounded month grid with roving day focus: at most `MAX_CALENDAR_WEEKS`
+  mounted week rows whatever the month, a declared week-start weekday, arrow/Home/End/Page/Shift-Page
+  navigation that follows focus across month and year boundaries, selection bounds that refuse the
+  selection rather than the movement, caller-owned grid/week/day parts, `calendar_key_bindings()`,
+  and exact grid, row, and grid-cell accessibility.
+- Added bounded multiple row selection to `TableState`: `TableSelection` retains merged inclusive
+  ranges rather than one entry per row, Shift extends from an anchor, the platform modifier toggles
+  one row, Space and Command-A work from the keyboard, rows project `selected` state, a multiple
+  selection grid projects `multiselectable`, and a real change dispatches the typed
+  `TableSelectionChanged` action.
+- Added caller-placed column-resize handles, keyboard column reordering, and an inline-edit hook to
+  `TableState`. The header renderer receives a behavior-only handle carrying captured pointer drag,
+  Left/Right resizing in its own key context, declared minimum widths, and splitter semantics;
+  Alt-Left and Alt-Right move the active column through a retained display order that keeps declared
+  cell positions stable; `begin_edit` gives one cell its own key context and reports Return and
+  Escape as the typed `TableEditEnded` action.
+- Added lazy tree children: `TreeNode::pending(true)` mounts exactly one bounded loading placeholder
+  row on first expansion, dispatches the typed `TreeLoadChildren` action once, and
+  `TreeState::set_children` validates depth, node budget, label bytes, and duplicate IDs before
+  splicing atomically, preserving selection, expansion, and the logical scroll anchor or leaving the
+  tree untouched.
+- Added an unstyled in-window `Menubar` over `PopoverMenu` surfaces: caller-owned root and trigger
+  parts, one roving Tab stop over at most `MAX_MENUBAR_MENUS` menus, wrapping Left/Right navigation
+  that switches menus rather than closing while one is open, Home/End, Down/Return/Space opening,
+  Escape closing without leaving the bar, hover switching only while the bar is open, and exact
+  menubar/menu-item accessibility. Native `Menu` remains the platform application menu.
+- Added `Element::accessibility_multiselectable`, projected as the native multiselectable state, so
+  a grid can announce that it accepts more than one selected descendant.
+
 ## 0.1.1 - 2026-08-31
 
 ### JavaScript tooling

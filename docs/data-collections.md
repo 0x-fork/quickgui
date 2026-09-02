@@ -5,8 +5,8 @@
 QuickGUI's reusable table and tree are controlled components above the existing retained
 `ListState` path. The application owns records and business state; the component owns bounded
 selection, expansion, sorting declarations, focus, and scroll state. Both expose one composite Tab
-stop, mount only the viewport plus overscan, and create no timer, polling task, or idle scheduler
-source.
+stop — plus the column-resize handles an application chooses to mount — mount only the viewport plus
+overscan, and create no timer, polling task, or idle scheduler source.
 
 Run the combined gallery with:
 
@@ -84,7 +84,70 @@ padding, dividers, typography, radii, or focus paint.
 Install `table_key_bindings()` on the application. Arrow keys move the active cell, Page Up and
 Page Down move by the current viewport, Command-Up and Command-Down select the first and last row,
 and Return activates the selected cell. Clicking a cell selects it and returns focus to the table's
-single composite focus target.
+composite focus target. Mounted column-resize handles are the only additional Tab stops, and they
+exist only when the application chooses to place them.
+
+### Row selection
+
+`TableSelectionMode::Multiple` turns on Shift ranges, platform-modified toggles, and Select All;
+the default `Single` keeps the selection on the active row. `TableSelection` retains merged
+inclusive ranges rather than one entry per row, so Select All over a million rows costs one range.
+
+```rust
+let mut table = TableState::new(rows).with_selection_mode(TableSelectionMode::Multiple);
+table.select_row(4);          // plain click or arrow move
+table.select_row_range(9);    // Shift extends from the anchor
+table.toggle_row_selection(6); // Command or Control toggles one row
+assert_eq!(table.selection().ranges(), [(4, 5), (7, 9)]);
+```
+
+An unmodified press selects one row and anchors future ranges there; Shift replaces the selection
+with the anchor-to-row range; Command or Control toggles exactly one row. From the keyboard, Space
+toggles the active row, Shift-Up and Shift-Down extend from the anchor, and Command-A selects
+every row. Rows project `selected` state and a multiple-selection grid projects
+`multiselectable`, so assistive technology announces the difference.
+
+After any interaction that actually changed the selection, the table dispatches
+`TableSelectionChanged` through the focused path; bind an ordinary action listener on the table root
+and read `TableState::selection()`. A gesture that changes nothing dispatches nothing and
+invalidates nothing. `TableState::selection_version()` is the same signal as a counter.
+
+### Column widths and order
+
+`TableColumn::width(px)` makes one column resizable and lays it out as a fixed pixel track: without
+a retained width the resize behavior would not exist. `minimum_width(px)` refuses to shrink past a
+declared floor. The header renderer receives `TableHeaderState::resize_handle`, a
+behavior-decorated, appearance-free element carrying the captured pointer drag, the keyboard resize
+actions, the platform column-resize cursor, and splitter semantics with the column's live width as
+its numeric value. The application decides where the handle sits, how wide its hit area is, and how
+it is painted — exactly like the tree's disclosure element.
+
+A retained width survives every rebuild, including a declaration that adds or removes columns, so a
+frame never discards a user's drag. `TableState::set_column_width` and `resize_column` apply the
+same clamping programmatically.
+
+Alt-Left and Alt-Right move the active column through the display order.
+`TableState::column_order()` reports the declared indices in display order and
+`move_column(index, delta)` applies a move programmatically. `TableCellPosition::column` always
+indexes the caller's declared column slice, never the display order, so an application reading a
+position never has to undo a user's reordering; `TableCellState::display_column` and
+`TableHeaderState::display_index` carry the visual position, and that is what the accessibility
+projection uses. QuickGUI deliberately does not implement pointer-drag reordering: it would need
+header geometry the framework does not retain, and an application that wants it can drive
+`move_column` from its own drag.
+
+### Inline editing
+
+`begin_edit(position, column_count)` opens an editor over one cell and makes it active. The cell
+renderer receives `TableCellState::editing` and mounts the application's own editor; QuickGUI gives
+that cell its own key context and nothing else, so the editor's value, validation, and appearance
+stay application-owned. Focus the editor when the edit begins — `auto_focus()` on a freshly mounted
+input, or an explicit focus request — because the key context follows focus.
+
+Return commits and Escape abandons. Both close the editor, return focus to the table, and dispatch
+`TableEditEnded { position, committed }` through the focused path. Those bindings live in the
+editor's deeper key context, so Return and Escape keep their ordinary meaning everywhere else in the
+table.
 
 Sortable headers update `TableState::sort()`. QuickGUI deliberately does not retain or copy row
 records: compare that declaration with the sort already applied by the view, reorder the
@@ -155,6 +218,30 @@ branch or enters its first enabled child, Left collapses it or selects its paren
 branch, Page Up/Page Down and Command-Up/Command-Down navigate by viewport or edge, and Return
 activates the selected stable node ID.
 
+### Lazy children
+
+`TreeNode::pending(true)` declares a branch whose children have not been loaded. It expands like any
+other branch; the first expansion mounts exactly one placeholder row and dispatches
+`TreeLoadChildren { node }` through the focused path. The tree owns no loader, task, or timer: it
+asks once and waits.
+
+```rust
+let load = cx.action_listener("project-tree", |view: &mut Files, action: &TreeLoadChildren, cx| {
+    view.tree.set_children(action.node, view.fetch(action.node))?;
+    cx.invalidate();
+});
+```
+
+The placeholder is reported through `TreeRow::is_loading()`, carries the tree's bounded loading
+label, sits one level under its branch, and is never selectable by pointer or keyboard.
+`TreeState::with_loading_label` replaces the default accessible name.
+
+`set_children` validates the payload — depth, node budget, label bytes, duplicate IDs across the
+whole tree — before any live state changes, then splices it in one step. A rejected payload leaves
+the tree exactly as it was; a successful one clears the pending flag, removes the placeholder, and
+preserves selection, expansion, and the logical scroll anchor. Loading an empty list turns the
+branch into an ordinary leaf. A branch that already has children refuses a second splice.
+
 `TreeState::set_nodes` validates a replacement before changing live state. On success it preserves
 selection, expansion, and the logical top scroll anchor by stable ID when those nodes still exist;
 on validation failure the old tree is unchanged. Expansion rebuilds only compact visible-index
@@ -168,10 +255,17 @@ expanded state.
 
 - One table accepts at most `MAX_TABLE_ROWS` (1,000,000) logical rows and
   `MAX_TABLE_COLUMNS` grid columns. It retains no row records.
+- One selection retains at most `MAX_TABLE_SELECTION_RANGES` (1,024) disjoint ranges. A toggle that
+  would fragment it further is refused and leaves the selection unchanged.
+- A resizable column stays between its declared minimum, at least `MIN_TABLE_COLUMN_WIDTH` (24 px),
+  and `MAX_TABLE_COLUMN_WIDTH` (4,096 px); one keyboard step is `TABLE_COLUMN_RESIZE_STEP` (8 px).
+- A table retains one display-order entry and one width entry per column, one optional edited cell,
+  and one selection-version counter. It creates no timer or idle source for any of them.
 - One tree accepts at most `MAX_TREE_NODES` (1,000,000), depth `MAX_TREE_DEPTH` (256),
   `MAX_TREE_LABEL_BYTES` (64 KiB) per label, and `MAX_TREE_TEXT_BYTES` (16 MiB) in total.
 - Tree identity lookup is a compact sorted stable-ID index. Expansion state is a bit vector; visible
-  and reverse-visible positions use 32-bit indices.
+  and reverse-visible positions use 32-bit indices. A loading placeholder is encoded in the free top
+  bit of one visible index, so lazy loading adds no vector and at most one mounted row per branch.
 - Header, cell, and tree-row render callbacks run only for mounted content. Scrolling reuses `ListState`, its
   captured native-style scrollbar, and its existing mount and metric ceilings.
 - `TableLayout` and `TreeLayout` retain only finite bounded virtualization geometry. All visible
