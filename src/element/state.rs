@@ -426,6 +426,12 @@ impl Element {
         self
     }
 
+    /// Expose whether a collection accepts more than one selected descendant.
+    pub fn accessibility_multiselectable(mut self, multiselectable: bool) -> Self {
+        self.accessibility.multiselectable = multiselectable;
+        self
+    }
+
     /// Expose a controlled checked, unchecked, or mixed state to assistive technology.
     pub fn toggle_state(mut self, state: impl Into<ToggleState>) -> Self {
         self.accessibility.toggled = Some(state.into());

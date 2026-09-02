@@ -1298,6 +1298,7 @@ pub(crate) struct AccessibilityStyle {
     pub orientation: Option<AccessibilityOrientation>,
     pub live: Option<AccessibilityLive>,
     pub value_range: Option<Box<AccessibilityValueRange>>,
+    pub multiselectable: bool,
 }
 
 /// Retained keyboard policy for an unstyled tab list.

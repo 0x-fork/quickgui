@@ -333,6 +333,9 @@ pub(super) fn build_accessibility_nodes(
     if element.accessibility.modal {
         node.set_modal();
     }
+    if element.accessibility.multiselectable {
+        node.set_multiselectable();
+    }
     let collection = element.accessibility.collection;
     if let Some(value) = collection.row_count() {
         node.set_row_count(value);
