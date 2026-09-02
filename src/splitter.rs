@@ -1,6 +1,6 @@
 use crate::{
     AccessibilityOrientation, AccessibilityRole, AccessibilityValueRange, CursorStyle, Element,
-    ElementId, KeyBinding, PointerEvent, ViewContext,
+    ElementId, KeyBinding, PointerEvent, StateAccessor, ViewContext,
 };
 
 /// Maximum panes managed by one splitter.
@@ -564,30 +564,48 @@ impl SplitterHandle {
         handle: Element,
         access: fn(&mut V) -> &mut SplitterState,
     ) -> Element {
+        self.key_part_with(cx, handle, StateAccessor::from(access))
+    }
+
+    /// Attach the typed splitter keyboard actions against a per-instance state accessor.
+    ///
+    /// A host that renders many declared splitters through one view passes an accessor that
+    /// captures which [`SplitterState`] this handle belongs to.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        handle: Element,
+        access_source: StateAccessor<V, SplitterState>,
+    ) -> Element {
         let id = self.handle_id();
         let index = self.index;
+        let access = access_source.clone();
         let increase = cx.action_listener(id, move |view, _: &SplitterIncrease, cx| {
-            if access(view).step(index, true) {
+            if access.get(view).step(index, true) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let decrease = cx.action_listener(id, move |view, _: &SplitterDecrease, cx| {
-            if access(view).step(index, false) {
+            if access.get(view).step(index, false) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let minimum = cx.action_listener(id, move |view, _: &SplitterMinimum, cx| {
-            if access(view).to_minimum(index) {
+            if access.get(view).to_minimum(index) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let maximum = cx.action_listener(id, move |view, _: &SplitterMaximum, cx| {
-            if access(view).to_maximum(index) {
+            if access.get(view).to_maximum(index) {
                 cx.invalidate();
             }
         });
+        let access = access_source;
         let collapse = cx.action_listener(id, move |view, _: &SplitterCollapse, cx| {
-            if access(view).toggle_collapse(index) {
+            if access.get(view).toggle_collapse(index) {
                 cx.invalidate();
             }
         });
@@ -627,6 +645,7 @@ mod tests {
 
     fn drag(delta: f32) -> PointerEvent {
         PointerEvent {
+            size: crate::Size::ZERO,
             phase: PointerPhase::Move,
             position: Point::new(0.0, 0.0),
             origin: Point::new(0.0, 0.0),

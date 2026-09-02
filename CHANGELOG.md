@@ -40,6 +40,21 @@ All notable user-facing changes to QuickGUI are recorded here.
   `RenderStats::skipped_layer_effects`, alongside `compositing_layers`, `layer_passes`,
   `blur_passes`, and `layer_texture_bytes`. A scene that declares no layer effect keeps its former
   cost exactly: no pipeline compiled, no texture allocated, no extra pass recorded.
+- Added `StateAccessor<V, State>`, a cloneable per-instance accessor from a view to one component's
+  retained state, and a `*_with` entry point that takes it on every unstyled component that
+  registers listeners: `SelectState::element_with`, `AutocompleteState::element_with`,
+  `ComboboxState::element_with`, `PickerState::element_with`, `TableState::element_with`,
+  `TreeState::element_with`, `ContextMenuState::element_with`, and `key_part_with` on `Slider`,
+  `SliderThumb`, `SplitterHandle`, `ToolbarEntry`, `ToggleGroupEntry`, `ToastParts`,
+  `DateFieldSegment`, `TimeFieldSegment`, `Calendar`, and `MenubarItem`. The existing
+  `fn(&mut V) -> &mut State` methods stay, now as thin wrappers, so applications, examples, and
+  tests are unchanged. The accessor is one erased reference-counted closure rather than a generic
+  parameter, so a view can declare many instances of one component without multiplying the
+  component code or the listener set each mounted instance registers, and without adding an idle
+  source.
+- Added `PointerEvent::size`, the captured element's own laid-out size in logical pixels, so slider,
+  splitter, and custom drag arithmetic uses the extent the core's layout already decided instead of
+  re-deriving it. It is `Size::ZERO` before an event is localized to an element.
 - Added a bounded `CrashReporter` behind the default `crash-reporter` feature: a panic hook that
   writes a size-limited JSON report atomically, an async-signal-safe native fatal-fault path
   (`SIGSEGV`/`SIGBUS`/`SIGILL`/`SIGFPE`/`SIGABRT` through `sigaction`, `SetUnhandledExceptionFilter`
@@ -340,6 +355,19 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 
 ### JavaScript tooling
+- Added declared `Slider`, `Splitter`, `Toolbar`, and `ToggleGroup` compound components to
+  `@quickgui/solid`, bumping the mutation protocol to v21 with the new `values`, `items`, `step`,
+  `largeStep`, and `componentchange`-listener properties. Bounds, values, pane constraints, and the
+  ordered navigation model travel as one bounded declaration, and the hosted view reaches each
+  declared instance's retained state through a per-instance `StateAccessor`, so many controls in one
+  window stay independent. The Rust core keeps ownership of clamping, step snapping, thumb ordering,
+  captured pointer arithmetic, pane-size conservation, wrapping arrow navigation, disabled-item
+  skipping, and the single roving Tab stop; results reach JavaScript only as an asynchronous
+  `componentchange` payload decoded by `onValueChange`, `onSizesChange`, `onActiveChange`, or
+  `componentChangeFromEvent`. The binding installs the core's slider, splitter, toolbar, and
+  toggle-group key bindings once, and bounds every declaration: unparsable JSON declares nothing,
+  duplicate item values keep the first occurrence, and lists past `MAX_COMPONENT_VALUES` (64) or
+  `MAX_COMPONENT_ITEMS` (256) are truncated rather than reaching a core that would panic.
 - Added declared `PopoverMenu` and `ContextMenu` compound components to `@quickgui/solid`. Rows are
   one bounded JSON model rather than JSX children, so the Rust core keeps ownership of validation,
   highlighting, typeahead, checkbox/radio policy, submenu models, work-area placement, and the

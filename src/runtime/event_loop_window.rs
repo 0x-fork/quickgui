@@ -379,6 +379,8 @@ impl Runtime {
                         (
                             capture.target,
                             PointerEvent {
+                                // The captured element localizes the event before delivery.
+                                size: Size::ZERO,
                                 phase: PointerPhase::Move,
                                 position: point,
                                 origin: capture.origin,
@@ -761,6 +763,8 @@ impl Runtime {
                                 (
                                     capture.target,
                                     PointerEvent {
+                                        // The captured element localizes the event before delivery.
+                                        size: Size::ZERO,
                                         phase: PointerPhase::Up,
                                         position,
                                         origin: capture.origin,
@@ -920,6 +924,8 @@ impl Runtime {
                                     Some((
                                         target,
                                         PointerEvent {
+                                            // The captured element localizes the event before delivery.
+                                            size: Size::ZERO,
                                             phase: PointerPhase::Down,
                                             position,
                                             origin: position,
@@ -945,6 +951,8 @@ impl Runtime {
                                     (
                                         capture.target,
                                         PointerEvent {
+                                            // The captured element localizes the event before delivery.
+                                            size: Size::ZERO,
                                             phase: PointerPhase::Up,
                                             position,
                                             origin: capture.origin,
@@ -1405,6 +1413,8 @@ impl Runtime {
                             Some((
                                 capture.target,
                                 PointerEvent {
+                                    // The captured element localizes the event before delivery.
+                                    size: Size::ZERO,
                                     phase: PointerPhase::Cancel,
                                     position: capture.position,
                                     origin: capture.origin,

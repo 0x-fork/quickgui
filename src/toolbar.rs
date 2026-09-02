@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     AccessibilityOrientation, AccessibilityRole, Element, ElementId, FocusHandle, KeyBinding,
-    ViewContext, div,
+    StateAccessor, ViewContext, div,
 };
 
 /// Maximum items retained in one toolbar declaration.
@@ -309,6 +309,19 @@ impl<'a> ToolbarEntry<'a> {
         item: Element,
         access: fn(&mut V) -> &mut ToolbarState,
     ) -> Element {
+        self.key_part_with(cx, item, StateAccessor::from(access))
+    }
+
+    /// Attach the typed toolbar navigation against a per-instance state accessor.
+    ///
+    /// A host that renders many declared toolbars through one view passes an accessor that
+    /// captures which [`ToolbarState`] this item belongs to.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        item: Element,
+        access_source: StateAccessor<V, ToolbarState>,
+    ) -> Element {
         let id = self.item_id();
         let root = self.toolbar.root_id;
         let value = self.item.value;
@@ -316,31 +329,35 @@ impl<'a> ToolbarEntry<'a> {
         let items: Arc<[ToolbarItem]> = Arc::from(self.toolbar.items);
 
         let next_items = items.clone();
+        let access = access_source.clone();
         let next = cx.action_listener(id, move |view, _: &ToolbarNext, cx| {
             move_focus(
                 view,
                 cx,
-                access,
+                &access,
                 root,
                 neighbor_value(&next_items, value, true, loop_focus),
             );
         });
         let previous_items = items.clone();
+        let access = access_source.clone();
         let previous = cx.action_listener(id, move |view, _: &ToolbarPrevious, cx| {
             move_focus(
                 view,
                 cx,
-                access,
+                &access,
                 root,
                 neighbor_value(&previous_items, value, false, loop_focus),
             );
         });
         let first_items = items.clone();
+        let access = access_source.clone();
         let first = cx.action_listener(id, move |view, _: &ToolbarFirst, cx| {
-            move_focus(view, cx, access, root, edge_value(&first_items, false));
+            move_focus(view, cx, &access, root, edge_value(&first_items, false));
         });
+        let access = access_source;
         let last = cx.action_listener(id, move |view, _: &ToolbarLast, cx| {
-            move_focus(view, cx, access, root, edge_value(&items, true));
+            move_focus(view, cx, &access, root, edge_value(&items, true));
         });
 
         item.on_action(next)
@@ -353,14 +370,14 @@ impl<'a> ToolbarEntry<'a> {
 fn move_focus<V: 'static>(
     view: &mut V,
     cx: &mut crate::EventContext,
-    access: fn(&mut V) -> &mut ToolbarState,
+    access: &StateAccessor<V, ToolbarState>,
     root: ElementId,
     target: Option<ElementId>,
 ) {
     let Some(target) = target else {
         return;
     };
-    let changed = access(view).focus(target);
+    let changed = access.get(view).focus(target);
     cx.focus(FocusHandle::new(derived_toolbar_id(root, target)));
     if changed {
         cx.invalidate();

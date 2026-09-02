@@ -80,6 +80,7 @@ mod slider;
 mod spell;
 mod splitter;
 mod spring;
+mod state_accessor;
 mod styled_text;
 mod svg;
 mod svg_renderer;
@@ -472,6 +473,7 @@ pub use splitter::{
     SplitterState, splitter_key_bindings,
 };
 pub use spring::{SpringAnimation, SpringConfig, SpringPlayback, SpringState, SpringTarget};
+pub use state_accessor::StateAccessor;
 pub use styled_text::{
     HighlightStyle, MAX_HIGHLIGHT_FONT_FAMILY_BYTES, MAX_TEXT_HIGHLIGHTS, StyledText,
     TextHighlight, TextUnderline, styled_text,

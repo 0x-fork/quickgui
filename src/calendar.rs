@@ -1,6 +1,6 @@
 use crate::{
     AccessibilityRole, CivilDate, Element, ElementId, FocusHandle, KeyBinding, MAX_CIVIL_YEAR,
-    MIN_CIVIL_YEAR, ViewContext, div,
+    MIN_CIVIL_YEAR, StateAccessor, ViewContext, div,
 };
 
 /// Maximum week rows one month grid mounts.
@@ -476,67 +476,93 @@ impl Calendar {
         cell: Element,
         access: fn(&mut V) -> &mut CalendarState,
     ) -> Element {
+        self.key_part_with(cx, day, cell, StateAccessor::from(access))
+    }
+
+    /// Attach the typed calendar actions against a per-instance state accessor.
+    ///
+    /// A host that renders many declared calendars through one view passes an accessor that
+    /// captures which [`CalendarState`] this day cell belongs to.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        day: CivilDate,
+        cell: Element,
+        access_source: StateAccessor<V, CalendarState>,
+    ) -> Element {
         let id = self.day_id(day);
         let calendar = self;
+        let access = access_source.clone();
         let previous_day = cx.action_listener(id, move |view, _: &CalendarPreviousDay, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_days(-1)
             });
         });
+        let access = access_source.clone();
         let next_day = cx.action_listener(id, move |view, _: &CalendarNextDay, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_days(1)
             });
         });
+        let access = access_source.clone();
         let previous_week = cx.action_listener(id, move |view, _: &CalendarPreviousWeek, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_days(-(CALENDAR_WEEK_DAYS as i64))
             });
         });
+        let access = access_source.clone();
         let next_week = cx.action_listener(id, move |view, _: &CalendarNextWeek, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_days(CALENDAR_WEEK_DAYS as i64)
             });
         });
+        let access = access_source.clone();
         let week_start = cx.action_listener(id, move |view, _: &CalendarWeekStart, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.focus_week_edge(false)
             });
         });
+        let access = access_source.clone();
         let week_end = cx.action_listener(id, move |view, _: &CalendarWeekEnd, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.focus_week_edge(true)
             });
         });
+        let access = access_source.clone();
         let previous_month = cx.action_listener(id, move |view, _: &CalendarPreviousMonth, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_months(-1)
             });
         });
+        let access = access_source.clone();
         let next_month = cx.action_listener(id, move |view, _: &CalendarNextMonth, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_months(1)
             });
         });
+        let access = access_source.clone();
         let previous_year = cx.action_listener(id, move |view, _: &CalendarPreviousYear, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_months(-12)
             });
         });
+        let access = access_source.clone();
         let next_year = cx.action_listener(id, move |view, _: &CalendarNextYear, cx| {
-            move_calendar_focus(view, cx, access, calendar, day, |state| {
+            move_calendar_focus(view, cx, &access, calendar, day, |state| {
                 state.move_focus_months(12)
             });
         });
+        let access = access_source.clone();
         let select = cx.action_listener(id, move |view, _: &CalendarSelect, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_day(day);
             if state.select_focused() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let clicked = cx.listener(id, move |view, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_day(day);
             if state.select(day) {
                 cx.invalidate();
@@ -561,12 +587,12 @@ impl Calendar {
 fn move_calendar_focus<V: 'static>(
     view: &mut V,
     cx: &mut crate::EventContext,
-    access: fn(&mut V) -> &mut CalendarState,
+    access: &StateAccessor<V, CalendarState>,
     calendar: Calendar,
     day: CivilDate,
     mutate: impl FnOnce(&mut CalendarState) -> bool,
 ) {
-    let state = access(view);
+    let state = access.get(view);
     state.focus_day(day);
     if mutate(state) {
         let focused = state.focused_day();

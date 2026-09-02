@@ -33,8 +33,12 @@ import {
   RadioGroup,
   Switch,
   Shader,
+  Slider,
+  Splitter,
   Tabs,
   Toggle,
+  ToggleGroup,
+  Toolbar,
   SystemPopover,
   Svg,
   Terminal,
@@ -1566,5 +1570,218 @@ describe("Solid universal host", () => {
       "drop kinds",
     );
     expect(() => setProp(invalid, "draggable", 7)).toThrow("declare its payload");
+  });
+});
+
+describe("declared range, ordering, and roving-focus components", () => {
+  test("declares slider bounds and adopts the value the core reports", async () => {
+    await app.whenReady();
+    let reported: readonly number[] | undefined;
+    const window = new Window({
+      title: "Slider",
+      renderer: createRenderer(() => [
+        createComponent(Slider.Root, {
+          scope: "volume",
+          defaultValue: [10, 60],
+          min: 0,
+          max: 100,
+          step: 5,
+          largeStep: 25,
+          orientation: "horizontal",
+          onValueChange: (values: readonly number[]) => {
+            reported = values;
+          },
+          get children() {
+            return [
+              createComponent(Slider.Track, {
+                scope: "volume",
+                get children() {
+                  return createComponent(Slider.Range, { scope: "volume" });
+                },
+              }),
+              createComponent(Slider.Thumb, { scope: "volume", itemIndex: 0 }),
+              createComponent(Slider.Thumb, { scope: "volume", itemIndex: 1 }),
+            ];
+          },
+        }),
+      ]),
+    });
+
+    const root = window.root.children[0]!;
+    const track = root.children[0]!;
+    const upper = root.children[2]!;
+    expect(root.properties.get(PropertyCode.Part)).toBe("slider");
+    expect(root.properties.get(PropertyCode.Scope)).toBe("volume");
+    expect(root.properties.get(PropertyCode.Values)).toBe("[10,60]");
+    expect(root.properties.get(PropertyCode.Minimum)).toBe(0);
+    expect(root.properties.get(PropertyCode.Maximum)).toBe(100);
+    expect(root.properties.get(PropertyCode.Step)).toBe(5);
+    expect(root.properties.get(PropertyCode.LargeStep)).toBe(25);
+    expect(root.properties.get(PropertyCode.ComponentChangeListener)).toBe(true);
+    expect(track.properties.get(PropertyCode.Part)).toBe("slider-track");
+    expect(track.children[0]!.properties.get(PropertyCode.Part)).toBe("slider-range");
+    expect(upper.properties.get(PropertyCode.Part)).toBe("slider-thumb");
+    expect(upper.properties.get(PropertyCode.ItemIndex)).toBe(1);
+
+    // The core decides the snapped, ordered result; the renderer only adopts it.
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({ values: [10, 90] }),
+    );
+    expect(reported).toEqual([10, 90]);
+    expect(root.properties.get(PropertyCode.Values)).toBe("[10,90]");
+    window.close();
+  });
+
+  test("declares splitter panes and toolbar and toggle-group navigation models", async () => {
+    await app.whenReady();
+    let sizes: readonly number[] | undefined;
+    let active: string | undefined;
+    let pressed: readonly string[] | undefined;
+    const window = new Window({
+      title: "Components",
+      renderer: createRenderer(() => [
+        createComponent(Splitter.Root, {
+          scope: "panes",
+          defaultValue: [200, 200],
+          panes: [{ min: 80 }, { min: 80, collapsible: true }],
+          step: 16,
+          onSizesChange: (next: readonly number[]) => {
+            sizes = next;
+          },
+          get children() {
+            return [
+              createComponent(Splitter.Pane, { scope: "panes", itemIndex: 0 }),
+              createComponent(Splitter.Handle, { scope: "panes", itemIndex: 0 }),
+              createComponent(Splitter.Pane, { scope: "panes", itemIndex: 1 }),
+            ];
+          },
+        }),
+        createComponent(Toolbar.Root, {
+          scope: "actions",
+          items: [{ value: "cut" }, { value: "copy", disabled: true }],
+          defaultActive: "cut",
+          loopFocus: true,
+          onActiveChange: (next: string | undefined) => {
+            active = next;
+          },
+          get children() {
+            return [
+              createComponent(Toolbar.Item, { scope: "actions", partValue: "cut" }),
+              createComponent(Toolbar.Item, { scope: "actions", partValue: "copy" }),
+            ];
+          },
+        }),
+        createComponent(ToggleGroup.Root, {
+          scope: "align",
+          items: [{ value: "left" }, { value: "right" }],
+          defaultValue: ["left"],
+          variant: "multiple",
+          onValueChange: (next: readonly string[]) => {
+            pressed = next;
+          },
+          get children() {
+            return [
+              createComponent(ToggleGroup.Item, { scope: "align", partValue: "left" }),
+              createComponent(ToggleGroup.Item, { scope: "align", partValue: "right" }),
+            ];
+          },
+        }),
+      ]),
+    });
+
+    const splitter = window.root.children[0]!;
+    const toolbar = window.root.children[1]!;
+    const group = window.root.children[2]!;
+    expect(splitter.properties.get(PropertyCode.Part)).toBe("splitter");
+    expect(splitter.properties.get(PropertyCode.Values)).toBe("[200,200]");
+    expect(splitter.properties.get(PropertyCode.Items)).toBe(
+      '[{"min":80},{"min":80,"collapsible":true}]',
+    );
+    expect(splitter.children[1]!.properties.get(PropertyCode.Part)).toBe("splitter-handle");
+    expect(toolbar.properties.get(PropertyCode.Part)).toBe("toolbar");
+    expect(toolbar.properties.get(PropertyCode.Items)).toBe(
+      '[{"value":"cut"},{"value":"copy","disabled":true}]',
+    );
+    expect(toolbar.properties.get(PropertyCode.ActiveValue)).toBe("cut");
+    expect(toolbar.properties.get(PropertyCode.LoopFocus)).toBe(true);
+    expect(toolbar.children[0]!.properties.get(PropertyCode.PartValue)).toBe("cut");
+    expect(group.properties.get(PropertyCode.Part)).toBe("toggle-group");
+    expect(group.properties.get(PropertyCode.Variant)).toBe("multiple");
+    expect(group.properties.get(PropertyCode.Values)).toBe('["left"]');
+
+    window._dispatchEvent(
+      "componentchange",
+      splitter.id,
+      JSON.stringify({ sizes: [216, 184] }),
+    );
+    window._dispatchEvent(
+      "componentchange",
+      toolbar.id,
+      JSON.stringify({ active: "copy" }),
+    );
+    window._dispatchEvent(
+      "componentchange",
+      group.id,
+      JSON.stringify({ pressed: ["left", "right"] }),
+    );
+    expect(sizes).toEqual([216, 184]);
+    expect(active).toBe("copy");
+    expect(pressed).toEqual(["left", "right"]);
+    expect(splitter.properties.get(PropertyCode.Values)).toBe("[216,184]");
+    expect(toolbar.properties.get(PropertyCode.ActiveValue)).toBe("copy");
+    expect(group.properties.get(PropertyCode.Values)).toBe('["left","right"]');
+    window.close();
+  });
+
+  test("keeps a controlled component declaration authoritative and bounds the payload", async () => {
+    await app.whenReady();
+    const [values, setValues] = createSignal<readonly number[]>([25]);
+    let reported = 0;
+    const window = new Window({
+      title: "Controlled slider",
+      renderer: createRenderer(() => [
+        createComponent(Slider.Root, {
+          scope: "controlled",
+          get value() {
+            return values();
+          },
+          onValueChange: () => {
+            reported += 1;
+          },
+        }),
+      ]),
+    });
+
+    const root = window.root.children[0]!;
+    expect(root.properties.get(PropertyCode.Values)).toBe("[25]");
+    // A reported value never overwrites a controlled declaration on its own.
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({ values: [30] }),
+    );
+    expect(reported).toBe(1);
+    expect(root.properties.get(PropertyCode.Values)).toBe("[25]");
+    setValues([30]);
+    await Promise.resolve();
+    expect(root.properties.get(PropertyCode.Values)).toBe("[30]");
+
+    // A malformed payload is ignored rather than throwing into the renderer.
+    window._dispatchEvent("componentchange", root.id, "{not json");
+    expect(reported).toBe(1);
+
+    expect(() =>
+      solid.componentChangeFromEvent(
+        new QuickGuiEvent("componentchange", root, "{oops"),
+      ),
+    ).not.toThrow();
+    expect(
+      solid.componentChangeFromEvent(
+        new QuickGuiEvent("componentchange", root, '{"values":[1]}'),
+      ),
+    ).toEqual({ values: [1] });
+    window.close();
   });
 });

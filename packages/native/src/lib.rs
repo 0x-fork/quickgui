@@ -19,20 +19,24 @@ use napi::{
 };
 use napi_derive::napi;
 use quickgui::{
-    AccessibilityRole, Accordion, AccordionItem, AnchorPlacement, AppInfo, AppPaths, AppRegion,
-    AppRunStatus, AppRunner, AppRunnerWaker, Application as QuickGuiApplication, BoxShadow,
-    Checkbox, Collapsible, Color, ContextMenuLayout, ContextMenuState, CursorGrabMode, CursorStyle,
-    Dialog as CoreDialog, DialogKind, DisplayId, Element, ElementId, Field, Fieldset, FollowMode,
-    FontWeight, GridTrack, Image, Insets, IntoElement, ListAlignment, ListState,
-    MAX_BOX_SHADOWS_PER_ELEMENT, MacOsVibrancy, MacOsVisualEffectState, Markdown, MarkdownStyle,
-    Meter, PerformanceProfile, Point, PointerPhase, Popover, PopoverKind, PopoverMenu,
-    PopoverMenuActivation, PopoverMenuItem, PopoverMenuItemKind, PopoverMenuItemState, Progress,
-    QuitMode, Radio, RadioGroup, Svg, Switch, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, Tab, Tabs,
-    TaskbarProgressState, Terminal, TerminalOptions, TerminalPaddingColor, TerminalStatus,
-    TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle, Toggle, ToggleState, Tooltip,
-    Transition, TransitionProperties, View, ViewContext, WindowAppearance,
-    WindowBackgroundAppearance, WindowHandle, WindowKind, WindowOptions, button, div,
-    svg as svg_element, text, text_area, text_input,
+    AccessibilityOrientation, AccessibilityRole, Accordion, AccordionItem, AnchorPlacement,
+    AppInfo, AppPaths, AppRegion, AppRunStatus, AppRunner, AppRunnerWaker,
+    Application as QuickGuiApplication, BoxShadow, Checkbox, Collapsible, Color, ContextMenuLayout,
+    ContextMenuState, CursorGrabMode, CursorStyle, Dialog as CoreDialog, DialogKind, DisplayId,
+    Element, ElementId, Field, Fieldset, FollowMode, FontWeight, GridTrack, Image, Insets,
+    IntoElement, ListAlignment, ListState, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_SLIDER_THUMBS,
+    MAX_SPLITTER_PANES, MAX_TOGGLE_GROUP_ITEMS, MAX_TOOLBAR_ITEMS, MacOsVibrancy,
+    MacOsVisualEffectState, Markdown, MarkdownStyle, Meter, PerformanceProfile, Point,
+    PointerPhase, Popover, PopoverKind, PopoverMenu, PopoverMenuActivation, PopoverMenuItem,
+    PopoverMenuItemKind, PopoverMenuItemState, Progress, QuitMode, Radio, RadioGroup, Slider,
+    SliderOrientation, SliderState, Splitter, SplitterOrientation, SplitterState, StateAccessor,
+    Svg, Switch, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, Tab, Tabs, TaskbarProgressState,
+    Terminal, TerminalOptions, TerminalPaddingColor, TerminalStatus, TerminalStyle, TerminalTheme,
+    TextAlign, TitleBarStyle, Toggle, ToggleGroup, ToggleGroupItem, ToggleGroupState, ToggleState,
+    Toolbar, ToolbarItem, ToolbarOrientation, ToolbarState, Tooltip, Transition,
+    TransitionProperties, View, ViewContext, WindowAppearance, WindowBackgroundAppearance,
+    WindowHandle, WindowKind, WindowOptions, button, div, svg as svg_element, text, text_area,
+    text_input,
 };
 use quickgui::{Event, EventContext};
 #[cfg(target_os = "macos")]
@@ -61,7 +65,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 20;
+const PROTOCOL_VERSION: u16 = 21;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -284,7 +288,12 @@ mod property {
     pub const DROP_KINDS: u16 = 200;
     pub const DRAG_LISTENER: u16 = 201;
     pub const DROP_LISTENER: u16 = 202;
-    pub const LAST: u16 = DROP_LISTENER;
+    pub const VALUES: u16 = 203;
+    pub const STEP: u16 = 204;
+    pub const LARGE_STEP: u16 = 205;
+    pub const ITEMS: u16 = 206;
+    pub const COMPONENT_CHANGE_LISTENER: u16 = 207;
+    pub const LAST: u16 = COMPONENT_CHANGE_LISTENER;
 }
 
 #[derive(Default)]
@@ -770,6 +779,7 @@ fn wait<'a, T>(
 }
 
 mod api;
+mod components;
 mod events;
 mod popover_menu;
 mod runtime;
@@ -778,6 +788,7 @@ mod view;
 
 pub use api::*;
 
+use components::*;
 use events::*;
 use popover_menu::*;
 use runtime::*;

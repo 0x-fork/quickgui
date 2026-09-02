@@ -241,10 +241,19 @@ meter range is swapped, and values are clamped into range before they are retain
 ## JavaScript bindings
 
 `Progress.Root` / `Indicator` and `Meter.Root` / `Indicator` declare the value range, thresholds,
-and value text these descriptors own; the Solid renderer contributes no measurement logic. `Slider`,
-`NumberField`, and `Splitter` are not bound yet: their interaction models are retained mutable state
-reached through a non-capturing `fn(&mut V) -> &mut State` accessor, which one hosted view cannot
-provide per declaring node. See [Solid 2 renderer](solid.md#range-and-feedback-parts).
+and value text these descriptors own; the Solid renderer contributes no measurement logic.
+
+`Slider.Root` / `Track` / `Range` / `Thumb` and `Splitter.Root` / `Pane` / `Handle` declare bounds,
+values, step, and pane constraints; the hosted view reaches each declared instance's retained
+`SliderState` or `SplitterState` through a per-instance [`StateAccessor`](view-api.md), so many
+sliders and splitters in one window stay independent. Keyboard stepping, snapping, thumb ordering,
+captured pointer arithmetic, and size conservation all run in the core, and the result reaches
+JavaScript as one asynchronous `onValueChange` or `onSizesChange` payload. `Slider.Track` uses the
+track's own laid-out size, which the core now delivers on `PointerEvent::size`.
+
+`NumberField` is not bound yet: it registers no core listeners of its own, so a binding would have
+to declare a separate stepping and commit surface rather than adopt one. See
+[Solid 2 renderer](solid.md#range-ordering-and-roving-focus-components).
 
 ## Resource contract
 

@@ -377,6 +377,7 @@ fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -484,6 +485,7 @@ fn flex_without_direction_uses_css_row_default() {
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -560,6 +562,7 @@ fn retained_popover_uses_core_placement_dismissal_and_focus_restoration() {
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -635,6 +638,7 @@ fn unanchored_overlay_traps_autofocus_dismisses_and_restores_previous_focus() {
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -749,6 +753,7 @@ fn native_svg_is_parsed_once_until_its_source_changes() {
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -826,6 +831,7 @@ fn native_virtual_list_mounts_only_the_initial_window_and_overscan() {
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -905,6 +911,7 @@ fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -1099,6 +1106,7 @@ fn a_declared_close_interception_holds_the_window_and_reports_it_to_javascript()
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -1170,6 +1178,7 @@ fn component_part_view(window: u32, tree: NativeTree, events: EventQueue) -> Nat
         context_menu: ContextMenuState::new(),
         context_menu_owner: None,
         focused_node: None,
+        components: NativeComponentStates::default(),
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -2710,4 +2719,431 @@ fn a_drag_source_that_also_captures_the_pointer_is_ignored_instead_of_panicking(
         cx.contains_element(view.window_handle(), ElementId::new(node_id as u64))
             .unwrap()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Declared range, ordering, and roving-focus components
+//
+// Two instances of one component are declared in the same hosted window on purpose: the core now
+// reaches each one through a per-instance `StateAccessor`, and these tests fail if a listener
+// resolves the wrong instance.
+// ---------------------------------------------------------------------------
+
+fn component_application() -> quickgui::Application {
+    quickgui::Application::new()
+        .bind_keys(quickgui::slider_key_bindings())
+        .bind_keys(quickgui::splitter_key_bindings())
+        .bind_keys(quickgui::toolbar_key_bindings())
+        .bind_keys(quickgui::toggle_group_key_bindings())
+}
+
+fn insert_component_node(tree: &mut NativeTree, id: u32, parent: u32, node: NativeNode) {
+    tree.nodes.insert(id, node);
+    tree.nodes
+        .get_mut(&parent)
+        .expect("a declared component parent exists")
+        .children
+        .push(id);
+}
+
+/// Take every queued change for one declared instance and return the last one.
+///
+/// The core reports each frame it moved a value, so a two-key gesture leaves two events; the last
+/// one is the value the hosted runtime will commit. Events for other instances stay queued.
+fn component_change(events: &EventQueue, target: u32) -> serde_json::Value {
+    let mut queue = events.borrow_mut();
+    let mut latest = serde_json::Value::Null;
+    let mut remaining = VecDeque::with_capacity(queue.len());
+    while let Some(event) = queue.pop_front() {
+        if event.kind == "componentchange" && event.target == target {
+            latest = serde_json::from_str(event.value.as_deref().unwrap_or("null"))
+                .expect("a component change carries bounded JSON");
+        } else {
+            remaining.push_back(event);
+        }
+    }
+    *queue = remaining;
+    latest
+}
+
+#[test]
+fn declared_sliders_keep_independent_values_and_report_them_asynchronously() {
+    let first_id = 400;
+    let second_id = 401;
+    let mut tree = NativeTree::default();
+    for (id, scope, values) in [(first_id, "left", "[10]"), (second_id, "right", "[60]")] {
+        let mut node = component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "slider",
+            &[
+                (property::SCOPE, scope),
+                (property::VALUES, values),
+                (property::ACCESSIBILITY_LABEL, scope),
+            ],
+            &[(property::COMPONENT_CHANGE_LISTENER, true)],
+        );
+        node.set_property(property::MINIMUM, Some(PropertyValue::Number(0.0)));
+        node.set_property(property::MAXIMUM, Some(PropertyValue::Number(100.0)));
+        node.set_property(property::STEP, Some(PropertyValue::Number(5.0)));
+        insert_component_node(&mut tree, id, ROOT_NODE, node);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(11, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    let left = ElementId::named("left");
+    let right = ElementId::named("right");
+
+    cx.focus(window, left).unwrap();
+    cx.simulate_keystrokes(window, "right right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, first_id),
+        serde_json::json!({ "values": [20.0] })
+    );
+
+    // The second slider never moved, so it reports nothing at all.
+    assert_eq!(
+        component_change(&events, second_id),
+        serde_json::Value::Null
+    );
+
+    cx.focus(window, right).unwrap();
+    cx.simulate_keystrokes(window, "home").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, second_id),
+        serde_json::json!({ "values": [0.0] })
+    );
+
+    // The core keeps the value it decided until JavaScript commits the matching declaration, and
+    // a settled window schedules no extra frame for either instance.
+    let renders = cx.render_count(window).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(cx.render_count(window).unwrap(), renders);
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .sliders
+            .values()
+            .map(|slider| slider.state.value())
+            .sum::<f64>())
+            .unwrap(),
+        20.0
+    );
+}
+
+#[test]
+fn declared_range_slider_thumbs_move_independently_through_the_core() {
+    let root_id = 410;
+    let lower_id = 411;
+    let upper_id = 412;
+    let mut tree = NativeTree::default();
+    let mut root = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "slider",
+        &[(property::SCOPE, "price"), (property::VALUES, "[20,80]")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    root.set_property(property::MINIMUM, Some(PropertyValue::Number(0.0)));
+    root.set_property(property::MAXIMUM, Some(PropertyValue::Number(100.0)));
+    root.set_property(property::STEP, Some(PropertyValue::Number(10.0)));
+    insert_component_node(&mut tree, root_id, ROOT_NODE, root);
+    for (id, index) in [(lower_id, 0.0), (upper_id, 1.0)] {
+        let mut thumb = component_part_node(
+            NodeTag::View,
+            root_id,
+            "slider-thumb",
+            &[(property::SCOPE, "price")],
+            &[],
+        );
+        thumb.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(index)));
+        insert_component_node(&mut tree, id, root_id, thumb);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(12, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    let slider = Slider::new(
+        ElementId::named("price"),
+        &SliderState::range(0.0, 100.0, &[20.0, 80.0]),
+    );
+
+    cx.focus(window, slider.thumb_id(1)).unwrap();
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "values": [20.0, 90.0] })
+    );
+
+    cx.focus(window, slider.thumb_id(0)).unwrap();
+    cx.simulate_keystrokes(window, "left").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "values": [10.0, 90.0] })
+    );
+}
+
+#[test]
+fn declared_splitter_handles_conserve_sizes_and_report_them() {
+    let root_id = 420;
+    let handle_id = 421;
+    let mut tree = NativeTree::default();
+    let mut root = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "splitter",
+        &[
+            (property::SCOPE, "panes"),
+            (property::VALUES, "[200,200]"),
+            (property::ITEMS, r#"[{"min":80},{"min":80}]"#),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    root.set_property(property::STEP, Some(PropertyValue::Number(16.0)));
+    insert_component_node(&mut tree, root_id, ROOT_NODE, root);
+    let mut handle = component_part_node(
+        NodeTag::View,
+        root_id,
+        "splitter-handle",
+        &[(property::SCOPE, "panes")],
+        &[],
+    );
+    handle.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, handle_id, root_id, handle);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(13, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    let splitter = Splitter::new(
+        ElementId::named("panes"),
+        &SplitterState::new(SplitterOrientation::Horizontal, &[200.0, 200.0]),
+    );
+
+    cx.focus(window, splitter.handle_id(0)).unwrap();
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    // The core conserves the total across the drag, so both sizes travel back together.
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "sizes": [216.0, 184.0] })
+    );
+}
+
+#[test]
+fn declared_toolbars_and_toggle_groups_rove_and_report_per_instance() {
+    let toolbar_id = 430;
+    let toolbar_item_ids = [431_u32, 432];
+    let group_id = 440;
+    let group_item_ids = [441_u32, 442];
+    let mut tree = NativeTree::default();
+
+    let toolbar = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "toolbar",
+        &[
+            (property::SCOPE, "actions"),
+            (
+                property::ITEMS,
+                r#"[{"value":"cut"},{"value":"copy"},{"value":"cut"}]"#,
+            ),
+            (property::ACTIVE_VALUE, "cut"),
+        ],
+        &[
+            (property::COMPONENT_CHANGE_LISTENER, true),
+            (property::LOOP_FOCUS, true),
+        ],
+    );
+    insert_component_node(&mut tree, toolbar_id, ROOT_NODE, toolbar);
+    for (id, value) in toolbar_item_ids.iter().zip(["cut", "copy"]) {
+        let item = component_part_node(
+            NodeTag::Button,
+            toolbar_id,
+            "toolbar-item",
+            &[(property::SCOPE, "actions"), (property::PART_VALUE, value)],
+            &[],
+        );
+        insert_component_node(&mut tree, *id, toolbar_id, item);
+    }
+
+    let group = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "toggle-group",
+        &[
+            (property::SCOPE, "align"),
+            (property::ITEMS, r#"[{"value":"left"},{"value":"right"}]"#),
+            (property::VALUES, r#"["left"]"#),
+            (property::VARIANT, "multiple"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    insert_component_node(&mut tree, group_id, ROOT_NODE, group);
+    for (id, value) in group_item_ids.iter().zip(["left", "right"]) {
+        let item = component_part_node(
+            NodeTag::Button,
+            group_id,
+            "toggle-group-item",
+            &[(property::SCOPE, "align"), (property::PART_VALUE, value)],
+            &[],
+        );
+        insert_component_node(&mut tree, *id, group_id, item);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(14, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+
+    // The duplicate declared toolbar value is dropped rather than panicking the core.
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .toolbars
+            .values()
+            .map(|toolbar| toolbar.items.len())
+            .sum::<usize>())
+            .unwrap(),
+        2
+    );
+
+    let toolbar_state = ToolbarState::new(ElementId::named("cut"));
+    let items = [
+        ToolbarItem::new(ElementId::named("cut")),
+        ToolbarItem::new(ElementId::named("copy")),
+    ];
+    let bar = Toolbar::new(ElementId::named("actions"), &toolbar_state, &items);
+    cx.focus(window, bar.item_id(ElementId::named("cut")))
+        .unwrap();
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, toolbar_id),
+        serde_json::json!({ "active": "copy" })
+    );
+    // Moving the toolbar's roving stop never touches the toggle group declared beside it.
+    assert_eq!(component_change(&events, group_id), serde_json::Value::Null);
+
+    let group_state = ToggleGroupState::multiple();
+    let group_items = [
+        ToggleGroupItem::new(ElementId::named("left")),
+        ToggleGroupItem::new(ElementId::named("right")),
+    ];
+    let group = ToggleGroup::new(ElementId::named("align"), &group_state, &group_items);
+    cx.click(window, group.item_id(ElementId::named("right")))
+        .unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, group_id),
+        serde_json::json!({ "pressed": ["left", "right"] })
+    );
+}
+
+#[test]
+fn malformed_component_declarations_are_bounded_instead_of_panicking() {
+    let slider_id = 450;
+    let splitter_id = 451;
+    let toolbar_id = 452;
+    let mut tree = NativeTree::default();
+    insert_component_node(
+        &mut tree,
+        slider_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "slider",
+            &[(property::SCOPE, "broken"), (property::VALUES, "{oops")],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        splitter_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "splitter",
+            &[
+                (property::SCOPE, "single"),
+                (property::VALUES, "[10]"),
+                (property::ITEMS, "not json"),
+            ],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        toolbar_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "toolbar",
+            &[(property::SCOPE, "empty"), (property::ITEMS, "[]")],
+            &[],
+        ),
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(15, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    cx.run_until_idle().unwrap();
+
+    // A malformed declaration still produces one bounded, mounted instance of each component.
+    assert_eq!(
+        cx.read(view, |view| (
+            view.components.sliders.len(),
+            view.components.splitters.len(),
+            view.components.toolbars.len(),
+        ))
+        .unwrap(),
+        (1, 1, 1)
+    );
+    // A splitter needs two panes, so the short declaration falls back instead of panicking.
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .splitters
+            .values()
+            .map(|splitter| splitter.state.sizes().len())
+            .sum::<usize>())
+            .unwrap(),
+        2
+    );
+    assert!(events.borrow().is_empty());
 }

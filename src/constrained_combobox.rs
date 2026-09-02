@@ -3,7 +3,7 @@ use std::{fmt, ops::Range, sync::Arc};
 use crate::{
     AutocompleteListState, AutocompleteOptionState, AutocompletePopoverLayout,
     AutocompleteSelectionBehavior, AutocompleteState, Element, ElementId, EventContext,
-    PickerError, PickerFilterMode, PickerItem, ViewContext, WindowHandle,
+    PickerError, PickerFilterMode, PickerItem, StateAccessor, ViewContext, WindowHandle,
     autocomplete::AutocompleteAccess,
 };
 
@@ -351,6 +351,44 @@ where
         QueryChanged: Fn(&mut V, Arc<str>, &mut EventContext) + Clone + 'static,
         Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
     {
+        self.element_with(
+            cx,
+            id,
+            label,
+            StateAccessor::from(access),
+            input,
+            popover_root,
+            render_option,
+            query_changed,
+            change,
+        )
+    }
+
+    /// Build the constrained combobox against a per-instance retained-state accessor.
+    ///
+    /// A host that renders many declared comboboxes through one view passes an accessor that
+    /// captures which [`ComboboxState`] each registered listener resolves.
+    #[allow(clippy::too_many_arguments)]
+    pub fn element_with<V, PopoverRoot, RenderOption, QueryChanged, Change>(
+        &mut self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        access: StateAccessor<V, ComboboxState<T>>,
+        input: Element,
+        popover_root: PopoverRoot,
+        render_option: RenderOption,
+        query_changed: QueryChanged,
+        change: Change,
+    ) -> Element
+    where
+        V: 'static,
+        T: 'static,
+        PopoverRoot: Fn(ComboboxListState) -> Element + Clone + 'static,
+        RenderOption: Fn(&PickerItem<T>, ComboboxOptionState) -> Element + Clone + 'static,
+        QueryChanged: Fn(&mut V, Arc<str>, &mut EventContext) + Clone + 'static,
+        Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
+    {
         let id = id.into();
         let selected_source = self.selected_source_index();
         let selection_marker = self.selection.as_ref().map(|selection| SelectionMarker {
@@ -380,12 +418,13 @@ where
                 },
             )
         };
-        let inner_access = AutocompleteAccess::new(access, combobox_autocomplete::<T>);
+        let inner_access = AutocompleteAccess::new(access.clone(), combobox_autocomplete::<T>);
 
         let edit_query_changed = query_changed.clone();
+        let edit_access = access.clone();
         let edited = move |view: &mut V, _value: Arc<str>, cx: &mut EventContext| {
             let query = {
-                let state = access(view);
+                let state = edit_access.get(view);
                 let query = state.autocomplete.picker_query().clone();
                 if state.query == query {
                     return;
@@ -397,10 +436,11 @@ where
         };
 
         let commit_query_changed = query_changed.clone();
+        let commit_access = access.clone();
         let committed =
             move |view: &mut V, source_index: usize, value: T, cx: &mut EventContext| {
                 let query_changed = {
-                    let state = access(view);
+                    let state = commit_access.get(view);
                     let Some(item) = state.autocomplete.items().get(source_index) else {
                         return;
                     };
@@ -420,7 +460,7 @@ where
 
         let dismiss_query_changed = query_changed;
         let dismissed = move |view: &mut V, cx: &mut EventContext| {
-            let query_changed = access(view).restore_committed(cx).1;
+            let query_changed = access.get(view).restore_committed(cx).1;
             if query_changed {
                 dismiss_query_changed(view, Arc::from(""), cx);
             }

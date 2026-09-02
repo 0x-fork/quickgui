@@ -1,6 +1,6 @@
 use crate::{
     AccessibilityOrientation, AccessibilityPopover, AccessibilityRole, Element, ElementId,
-    EventContext, FocusHandle, KeyBinding, ViewContext, div,
+    EventContext, FocusHandle, KeyBinding, StateAccessor, ViewContext, div,
 };
 
 /// Maximum top-level menus one in-window menubar manages.
@@ -339,17 +339,33 @@ impl MenubarItem {
         item: Element,
         access: fn(&mut V) -> &mut MenubarState,
     ) -> Element {
+        self.key_part_with(cx, item, StateAccessor::from(access))
+    }
+
+    /// Attach the typed menubar actions against a per-instance state accessor.
+    ///
+    /// A host that renders many declared menubars through one view passes an accessor that
+    /// captures which [`MenubarState`] this trigger belongs to.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        item: Element,
+        access_source: StateAccessor<V, MenubarState>,
+    ) -> Element {
         let id = self.item_id();
         let bar = self.bar;
         let index = self.index;
+        let access = access_source.clone();
         let previous = cx.action_listener(id, move |view, _: &MenubarPrevious, cx| {
-            move_menubar_focus(view, cx, access, bar, index, false);
+            move_menubar_focus(view, cx, &access, bar, index, false);
         });
+        let access = access_source.clone();
         let next = cx.action_listener(id, move |view, _: &MenubarNext, cx| {
-            move_menubar_focus(view, cx, access, bar, index, true);
+            move_menubar_focus(view, cx, &access, bar, index, true);
         });
+        let access = access_source.clone();
         let first = cx.action_listener(id, move |view, _: &MenubarFirst, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_menu(index);
             if state.focus_edge(false) {
                 let focused = state.focused_menu();
@@ -357,8 +373,9 @@ impl MenubarItem {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let last = cx.action_listener(id, move |view, _: &MenubarLast, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_menu(index);
             if state.focus_edge(true) {
                 let focused = state.focused_menu();
@@ -366,28 +383,32 @@ impl MenubarItem {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let open = cx.action_listener(id, move |view, _: &MenubarOpen, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_menu(index);
             if state.open_menu_at(index) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let close = cx.action_listener(id, move |view, _: &MenubarClose, cx| {
-            if access(view).close() {
+            if access.get(view).close() {
                 cx.focus(FocusHandle::new(id));
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let clicked = cx.listener(id, move |view, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_menu(index);
             if state.toggle_menu(index) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let hovered = cx.hover_listener(id, move |view, hovered, cx| {
-            if *hovered && access(view).hover_menu(index) {
+            if *hovered && access.get(view).hover_menu(index) {
                 cx.focus(FocusHandle::new(id));
                 cx.invalidate();
             }
@@ -407,12 +428,12 @@ impl MenubarItem {
 fn move_menubar_focus<V: 'static>(
     view: &mut V,
     cx: &mut EventContext,
-    access: fn(&mut V) -> &mut MenubarState,
+    access: &StateAccessor<V, MenubarState>,
     bar: Menubar,
     index: usize,
     forward: bool,
 ) {
-    let state = access(view);
+    let state = access.get(view);
     state.focus_menu(index);
     if state.move_focus(forward) {
         let focused = state.focused_menu();

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     AccessibilityRole, AccessibilityValueRange, Element, ElementId, FocusHandle, Key, KeyBinding,
-    Modifiers, ViewContext, div,
+    Modifiers, StateAccessor, ViewContext, div,
 };
 
 /// Smallest year one civil date, date field, or calendar accepts.
@@ -1380,25 +1380,41 @@ impl DateFieldSegment {
         element: Element,
         access: fn(&mut V) -> &mut DateFieldState,
     ) -> Element {
+        self.key_part_with(cx, element, StateAccessor::from(access))
+    }
+
+    /// Attach the typed segment actions against a per-instance state accessor.
+    ///
+    /// A host that renders many declared date fields through one view passes an accessor that
+    /// captures which [`DateFieldState`] this segment belongs to.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        element: Element,
+        access_source: StateAccessor<V, DateFieldState>,
+    ) -> Element {
         let id = self.segment_id();
         let segment = self.segment;
+        let access = access_source.clone();
         let increment = cx.action_listener(id, move |view, _: &DateFieldIncrement, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.increment() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let decrement = cx.action_listener(id, move |view, _: &DateFieldDecrement, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.decrement() {
                 cx.invalidate();
             }
         });
         let field = self.field;
+        let access = access_source.clone();
         let next = cx.action_listener(id, move |view, _: &DateFieldNextSegment, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.focus_next() {
                 let focused = state.focused_segment();
@@ -1406,8 +1422,9 @@ impl DateFieldSegment {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let previous = cx.action_listener(id, move |view, _: &DateFieldPreviousSegment, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.focus_previous() {
                 let focused = state.focused_segment();
@@ -1415,27 +1432,31 @@ impl DateFieldSegment {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let clear = cx.action_listener(id, move |view, _: &DateFieldClearSegment, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.clear_segment() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let minimum = cx.action_listener(id, move |view, _: &DateFieldSegmentMinimum, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.to_segment_minimum() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let maximum = cx.action_listener(id, move |view, _: &DateFieldSegmentMaximum, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.to_segment_maximum() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let digits = cx.key_down_listener(id, move |view, event, cx| {
             if event
                 .modifiers
@@ -1450,7 +1471,7 @@ impl DateFieldSegment {
             let Some(character) = value.chars().next() else {
                 return;
             };
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.type_character(character) {
                 let focused = state.focused_segment();
@@ -1462,8 +1483,9 @@ impl DateFieldSegment {
                 cx.stop_propagation();
             }
         });
+        let access = access_source.clone();
         let focus = cx.listener(id, move |view, cx| {
-            if access(view).focus_segment(segment) {
+            if access.get(view).focus_segment(segment) {
                 cx.invalidate();
             }
         });
@@ -1590,25 +1612,41 @@ impl TimeFieldSegment {
         element: Element,
         access: fn(&mut V) -> &mut TimeFieldState,
     ) -> Element {
+        self.key_part_with(cx, element, StateAccessor::from(access))
+    }
+
+    /// Attach the typed segment actions against a per-instance state accessor.
+    ///
+    /// A host that renders many declared time fields through one view passes an accessor that
+    /// captures which [`TimeFieldState`] this segment belongs to.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        element: Element,
+        access_source: StateAccessor<V, TimeFieldState>,
+    ) -> Element {
         let id = self.segment_id();
         let segment = self.segment;
+        let access = access_source.clone();
         let increment = cx.action_listener(id, move |view, _: &DateFieldIncrement, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.increment() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let decrement = cx.action_listener(id, move |view, _: &DateFieldDecrement, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.decrement() {
                 cx.invalidate();
             }
         });
         let field = self.field;
+        let access = access_source.clone();
         let next = cx.action_listener(id, move |view, _: &DateFieldNextSegment, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.focus_next() {
                 let focused = state.focused_segment();
@@ -1616,8 +1654,9 @@ impl TimeFieldSegment {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let previous = cx.action_listener(id, move |view, _: &DateFieldPreviousSegment, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.focus_previous() {
                 let focused = state.focused_segment();
@@ -1625,27 +1664,31 @@ impl TimeFieldSegment {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let clear = cx.action_listener(id, move |view, _: &DateFieldClearSegment, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.clear_segment() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let minimum = cx.action_listener(id, move |view, _: &DateFieldSegmentMinimum, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.to_segment_minimum() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let maximum = cx.action_listener(id, move |view, _: &DateFieldSegmentMaximum, cx| {
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.to_segment_maximum() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let typed = cx.key_down_listener(id, move |view, event, cx| {
             if event
                 .modifiers
@@ -1660,7 +1703,7 @@ impl TimeFieldSegment {
             let Some(character) = value.chars().next() else {
                 return;
             };
-            let state = access(view);
+            let state = access.get(view);
             state.focus_segment(segment);
             if state.type_character(character) {
                 let focused = state.focused_segment();
@@ -1672,8 +1715,9 @@ impl TimeFieldSegment {
                 cx.stop_propagation();
             }
         });
+        let access = access_source.clone();
         let focus = cx.listener(id, move |view, cx| {
-            if access(view).focus_segment(segment) {
+            if access.get(view).focus_segment(segment) {
                 cx.invalidate();
             }
         });

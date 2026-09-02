@@ -159,10 +159,21 @@ Longer text is truncated on a character boundary instead of retained.
 ## JavaScript bindings
 
 `Toggle.Root` / `Indicator` declares the controlled pressed state and adopts the core's toggle-button
-role. `ToggleGroup`, `Toolbar`, and `Toast` are not bound yet: their roving focus and toast lifetime
-run through retained state reached with a non-capturing `fn(&mut V) -> &mut State` accessor, which
-one hosted view cannot provide per declaring node. See
-[Solid 2 renderer](solid.md#range-and-feedback-parts).
+role.
+
+`Toolbar.Root` / `Item` and `ToggleGroup.Root` / `Item` declare the ordered navigation model as one
+bounded `items` list plus the controlled active or pressed values. The hosted view reaches each
+declared instance's retained `ToolbarState` or `ToggleGroupState` through a per-instance
+[`StateAccessor`](view-api.md), so several toolbars and groups in one window keep their own roving
+Tab stop. Wrapping arrow navigation, Home/End, disabled-item skipping, and single-versus-multiple
+selection policy stay in the core; the moved stop and the pressed set travel back as one
+asynchronous `onActiveChange` or `onValueChange` payload. Duplicate declared values keep the first
+occurrence and overflow past the core's own item bound is dropped, so a declaration can never panic
+the core.
+
+`Toast` is not bound yet: its queue needs a push API expressed as a bounded node declaration rather
+than a mutation call, which is a separate declaration format. See
+[Solid 2 renderer](solid.md#range-ordering-and-roving-focus-components).
 
 ## Menubar
 

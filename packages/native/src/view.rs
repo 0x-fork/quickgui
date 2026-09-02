@@ -26,6 +26,11 @@ pub(super) struct NativeView {
     pub(super) context_menu_owner: Option<u32>,
     /// Node that currently holds keyboard focus, so blur is reported exactly once.
     pub(super) focused_node: Option<u32>,
+    /// Retained range, ordering, and roving-focus component instances declared in this window.
+    ///
+    /// These are owned by the view rather than shared through a cell because each declared
+    /// instance is reached through a [`StateAccessor`] that must return `&mut` into the view.
+    pub(super) components: NativeComponentStates,
     #[cfg(target_os = "macos")]
     pub(super) swift_ui_hosts: Rc<RefCell<HashMap<u32, NativeSwiftUiHostState>>>,
     #[cfg(target_os = "macos")]
@@ -160,6 +165,8 @@ impl View for NativeView {
                 .expect("a native binding view must retain its core window handle")
         });
         let tree = self.tree.borrow();
+        self.components.sync(&tree, window, &self.events);
+        let components = &self.components;
         let mut markdown = self.markdown.borrow_mut();
         markdown.retain(|id, _| {
             tree.nodes
@@ -228,6 +235,7 @@ impl View for NativeView {
                 part_ids: &mut part_ids,
                 images: &mut images,
                 shaders: &mut shaders,
+                components,
                 menus: Rc::clone(&self.menus),
                 context_menu,
                 context_menu_owner,
@@ -331,6 +339,8 @@ pub(super) struct NativeElementStates<'a> {
     pub(super) part_ids: &'a mut HashSet<u64>,
     pub(super) images: &'a mut HashMap<u32, NativeImageState>,
     pub(super) shaders: &'a mut HashMap<u32, NativeShaderState>,
+    /// This pass's retained component instances, already reseeded from the declaration.
+    pub(super) components: &'a NativeComponentStates,
     /// Retained popover-menu models, shared with the listeners this pass installs.
     pub(super) menus: NativeMenuStates,
     /// Snapshot of the window's context-menu state for this render pass.
@@ -940,6 +950,7 @@ pub(super) fn build_element(
     // mounted at all. A part that is not mounted contributes no layout, paint, input, or
     // accessibility node, exactly as the Rust component guides describe.
     element = apply_part(element, id, node)?;
+    element = apply_component_part(element, id, node, states.components, cx, listeners_enabled);
     element = apply_controls(element, node, tree);
 
     let part = node.string(property::PART);
@@ -1253,7 +1264,7 @@ pub(super) fn pointer_event_json(event: &quickgui::PointerEvent) -> String {
 ///
 /// The renderer allocates the key; the Rust binding hashes it into the same [`ElementId`] the
 /// core component would have used, so every derived part identity matches without a registry.
-fn native_part_scope(id: u32, node: &NativeNode) -> ElementId {
+pub(super) fn native_part_scope(id: u32, node: &NativeNode) -> ElementId {
     match node
         .string(property::SCOPE)
         .filter(|scope| !scope.is_empty() && scope.len() <= MAX_COMPONENT_VALUE_BYTES)
@@ -1370,6 +1381,9 @@ fn native_fieldset(id: u32, node: &NativeNode) -> Fieldset {
 /// Resolve the identity a component part must mount with, or `None` for an ordinary node.
 pub(super) fn native_part_element_id(id: u32, node: &NativeNode) -> Option<ElementId> {
     let part = node.string(property::PART)?;
+    if let Some(component) = component_part_element_id(id, node) {
+        return Some(component);
+    }
     Some(match part {
         "tabs" | "collapsible" | "accordion" | "fieldset" | "field-control" => {
             native_part_scope(id, node)

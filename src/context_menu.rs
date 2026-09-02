@@ -5,8 +5,8 @@ use crate::{
     ElementId, EventContext, MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION,
     MouseExitEvent, MouseMoveEvent, Point, PopoverConstraintAdjustment, PopoverMenu,
     PopoverMenuItem, PopoverMenuItemKind, PopoverMenuItemState, PopoverOptions, Rect, Size,
-    SystemPopover, Task, View, ViewContext, WindowBackgroundAppearance, WindowHandle,
-    WindowOptions,
+    StateAccessor, SystemPopover, Task, View, ViewContext, WindowBackgroundAppearance,
+    WindowHandle, WindowOptions,
 };
 
 const CONTEXT_MENU_SURFACE_ID_TAG: u64 = 0xa255_e4af_3580_dd21;
@@ -241,10 +241,45 @@ impl ContextMenuState {
         RenderRoot: Fn() -> Element + 'static,
         RenderItem: Fn(&PopoverMenuItem, PopoverMenuItemState) -> Element + 'static,
     {
+        self.element_with(
+            cx,
+            id,
+            StateAccessor::from(access),
+            target,
+            layout,
+            build_menu,
+            render_root,
+            render_item,
+        )
+    }
+
+    /// Attach the cursor-point popover-menu interaction against a per-instance state accessor.
+    ///
+    /// A host that owns one [`ContextMenuState`] per declared target passes an accessor that
+    /// captures which state this target opens into.
+    #[allow(clippy::too_many_arguments)]
+    pub fn element_with<V, BuildMenu, RenderRoot, RenderItem>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        access_source: StateAccessor<V, ContextMenuState>,
+        target: Element,
+        layout: ContextMenuLayout,
+        build_menu: BuildMenu,
+        render_root: RenderRoot,
+        render_item: RenderItem,
+    ) -> Element
+    where
+        V: 'static,
+        BuildMenu: Fn(&mut V, &ContextMenuEvent) -> Option<PopoverMenu> + 'static,
+        RenderRoot: Fn() -> Element + 'static,
+        RenderItem: Fn(&PopoverMenuItem, PopoverMenuItemState) -> Element + 'static,
+    {
         let id = id.into();
+        let access = access_source.clone();
         cx.on_any_child_window_closed(move |view, closed, cx| {
-            if access(view).popover == Some(closed) {
-                access(view).popover = None;
+            if access.get(view).popover == Some(closed) {
+                access.get(view).popover = None;
                 cx.invalidate();
             }
         });
@@ -254,9 +289,10 @@ impl ContextMenuState {
         let open_root_renderer = Rc::clone(&root_renderer);
         let open_item_renderer = Rc::clone(&item_renderer);
         let menu_id = context_menu_surface_id(id);
+        let access = access_source;
         let open = cx.context_menu_listener(id, move |view, event, cx| {
             let menu = build_menu(view, event);
-            if let Some(previous) = access(view).popover.take() {
+            if let Some(previous) = access.get(view).popover.take() {
                 cx.close_window_handle(previous);
             }
             let Some(menu) = menu else {
@@ -272,7 +308,7 @@ impl ContextMenuState {
                 Rc::clone(&open_item_renderer),
             );
             let handle = cx.open_window(root_window_options(layout, event.position, size), popover);
-            access(view).popover = Some(handle);
+            access.get(view).popover = Some(handle);
             cx.invalidate();
         });
 

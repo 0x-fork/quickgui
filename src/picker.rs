@@ -5,7 +5,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     AccessibilityRole, Element, ElementId, EventContext, FocusHandle, IntoElement, KeyBinding,
-    ViewContext, VirtualList, div,
+    StateAccessor, ViewContext, VirtualList, div,
 };
 
 /// Maximum number of source items retained by one picker.
@@ -556,6 +556,41 @@ impl<T> PickerState<T> {
         access: fn(&mut V) -> &mut PickerState<T>,
         input: Element,
         empty: Element,
+        render_row: RenderRow,
+        activate: Activate,
+    ) -> Element
+    where
+        V: 'static,
+        T: Clone + 'static,
+        E: IntoElement,
+        RenderRow: FnMut(PickerMatch<'_, T>) -> E,
+        Activate: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
+    {
+        self.element_with(
+            cx,
+            id,
+            label,
+            StateAccessor::from(access),
+            input,
+            empty,
+            render_row,
+            activate,
+        )
+    }
+
+    /// Build the picker against a per-instance retained-state accessor.
+    ///
+    /// A host that renders many declared pickers through one view passes an accessor that captures
+    /// which [`PickerState`] each registered listener resolves.
+    #[allow(clippy::too_many_arguments)]
+    pub fn element_with<V, E, RenderRow, Activate>(
+        &mut self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        access_source: StateAccessor<V, PickerState<T>>,
+        input: Element,
+        empty: Element,
         mut render_row: RenderRow,
         activate: Activate,
     ) -> Element
@@ -578,44 +613,52 @@ impl<T> PickerState<T> {
             self.list.scroll_to_reveal(selected);
         }
 
+        let access = access_source.clone();
         let query = cx.input_listener(input_id, move |view, value, cx| {
-            if access(view).set_query(value) {
+            if access.get(view).set_query(value) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let previous = cx.action_listener(id, move |view, _: &PickerPrevious, cx| {
-            if access(view).select_previous() {
+            if access.get(view).select_previous() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let next = cx.action_listener(id, move |view, _: &PickerNext, cx| {
-            if access(view).select_next() {
+            if access.get(view).select_next() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let page_up = cx.action_listener(id, move |view, _: &PickerPageUp, cx| {
-            if access(view).select_page_up() {
+            if access.get(view).select_page_up() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let page_down = cx.action_listener(id, move |view, _: &PickerPageDown, cx| {
-            if access(view).select_page_down() {
+            if access.get(view).select_page_down() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let first = cx.action_listener(id, move |view, _: &PickerFirst, cx| {
-            if access(view).select_first() {
+            if access.get(view).select_first() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let last = cx.action_listener(id, move |view, _: &PickerLast, cx| {
-            if access(view).select_last() {
+            if access.get(view).select_last() {
                 cx.invalidate();
             }
         });
         let confirm_activate = activate.clone();
+        let access = access_source.clone();
         let confirm = cx.action_listener(id, move |view, _: &PickerConfirm, cx| {
-            let value = access(view).selected_value().cloned();
+            let value = access.get(view).selected_value().cloned();
             if let Some(value) = value {
                 confirm_activate(view, value, cx);
             }
@@ -661,8 +704,9 @@ impl<T> PickerState<T> {
             if !disabled {
                 let clicked_value = item.value.clone();
                 let clicked_activate = activate.clone();
+                let access = access_source.clone();
                 let clicked = cx.listener(row_id, move |view, cx| {
-                    access(view).select_source(source_index);
+                    access.get(view).select_source(source_index);
                     clicked_activate(view, clicked_value.clone(), cx);
                 });
                 row = row.on_click(clicked);

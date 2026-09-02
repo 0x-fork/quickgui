@@ -16,6 +16,17 @@ QuickGUI ships only unstyled components. A component may own:
 - portal placement, collision handling, dismissal, and pointer occlusion;
 - deterministic accessibility projection, tests, and sleeping-resource ownership.
 
+Every component that retains interaction state exposes two entry points to it. The original
+`fn(&mut V) -> &mut State` methods stay exactly as they were, for an application that owns one
+control per field. Alongside each of them is a `*_with` method taking a
+[`StateAccessor<V, State>`](view-api.md) — one reference-counted closure that may capture which
+instance it addresses. A host that renders many declared controls through a single view, a repeated
+row, or a data-driven collection uses that form. `StateAccessor` is a single erased type rather than
+a generic parameter, so adding it multiplies neither the component code nor the listener set: each
+component registers exactly the listeners it always did, per mounted instance, and adds no idle
+source. `NumberField`, `Progress`, `Meter`, `Toggle`, and the other pure decorators register no
+listeners at all and therefore need no accessor.
+
 The application owns colors, typography, spacing, borders, radii, icons, shadows, density, and
 product motion. Examples may style components, but gallery presentation is not framework API.
 Structural geometry required for behavior—such as popover positioning, a scroll viewport, or an
