@@ -291,7 +291,17 @@ export type MenuRole =
   | "zoom-window"
   | "toggle-fullscreen"
   | "bring-all-to-front"
-  | "show-help";
+  | "show-help"
+  | "paste-and-match-style"
+  | "delete"
+  | "start-speaking"
+  | "stop-speaking"
+  | "select-next-tab"
+  | "select-previous-tab"
+  | "merge-all-windows"
+  | "move-tab-to-new-window"
+  | "toggle-tab-bar"
+  | "toggle-tab-overview";
 export type MenuItemMark = "none" | "check" | "radio";
 
 export interface MenuActionItem {
@@ -302,6 +312,10 @@ export interface MenuActionItem {
   mark?: MenuItemMark;
   icon?: ImageSource;
   role?: MenuRole;
+  /** Electron accelerator syntax, for example `CmdOrCtrl+Shift+S`. */
+  accelerator?: string;
+  /** Keep the item out of the presented native menu without removing its callback. */
+  hidden?: boolean;
   click?: () => void;
 }
 
@@ -313,6 +327,9 @@ export interface MenuRoleItem {
   checked?: boolean;
   mark?: MenuItemMark;
   icon?: ImageSource;
+  /** Electron accelerator syntax, for example `CmdOrCtrl+Shift+S`. */
+  accelerator?: string;
+  hidden?: boolean;
 }
 
 export interface MenuSeparatorItem {
@@ -335,7 +352,7 @@ export interface MenuServicesItem {
 export interface MenuSystemItem {
   type: "system-menu";
   label: string;
-  menu: "services" | "window" | "help";
+  menu: "services" | "window" | "help" | "recent-documents";
 }
 
 export type MenuItem =
@@ -592,6 +609,21 @@ export async function getNativeWindowState(window: Window): Promise<WindowState>
   return normalizeWindowState(state);
 }
 
+/** Declare whether the hosted application intercepts the preventable before-quit phase. */
+export function setNativeQuitInterception(intercepting: boolean): void {
+  const current = context();
+  if (current.hosted) binding.setHostedQuitInterception(current.appId, intercepting);
+  else binding.setQuitInterception(current.appId, intercepting);
+}
+
+/** Ask for a preventable native quit that runs the before-quit and will-quit phases. */
+export async function requestNativeQuit(): Promise<boolean> {
+  const current = context();
+  return current.hosted
+    ? await binding.requestHostedAppQuit(current.appId)
+    : binding.requestAppQuit(current.appId);
+}
+
 export function performNativeWindowAction(
   window: Window,
   action: string,
@@ -792,7 +824,73 @@ export const Clipboard = Object.freeze({
   async clear(): Promise<void> {
     await this.write({ entries: [] });
   },
+
+  /** Every MIME type the current clipboard item can supply. */
+  async availableFormats(): Promise<readonly string[]> {
+    const item = await this.read();
+    if (!item) return [];
+    return item.entries.map(clipboardEntryFormat);
+  },
+
+  /** Whether the current clipboard item carries this MIME type. */
+  async has(format: string): Promise<boolean> {
+    const formats = await this.availableFormats();
+    return formats.includes(format);
+  },
+
+  /** Read one arbitrary representation by MIME type. */
+  async readBuffer(format: string): Promise<Uint8Array | undefined> {
+    const item = await this.read();
+    if (!item) return undefined;
+    for (const entry of item.entries) {
+      if (clipboardEntryFormat(entry) !== format) continue;
+      if (entry.type === "data" || entry.type === "image") return entry.data;
+      if (entry.type === "text") return new TextEncoder().encode(entry.text);
+    }
+    return undefined;
+  },
+
+  /** Atomically replace the clipboard with one arbitrary representation. */
+  async writeBuffer(format: string, data: Uint8Array): Promise<void> {
+    if (format === "text/plain") {
+      await this.writeText(new TextDecoder().decode(data));
+      return;
+    }
+    await this.write({ entries: [{ type: "data", mimeType: format, data }] });
+  },
+
+  /**
+   * Read macOS's shared Find pasteboard. Other platforms report an empty search string.
+   */
+  async readFindText(): Promise<string> {
+    const current = context();
+    const item = current.hosted
+      ? await binding.readHostedFindClipboard(current.appId)
+      : binding.readFindClipboard(current.appId);
+    if (!item) return "";
+    return clipboardItem(item)
+      .entries.filter((entry): entry is ClipboardTextEntry => entry.type === "text")
+      .map((entry) => entry.text)
+      .join("");
+  },
+
+  /** Replace macOS's shared Find pasteboard. An empty string clears it. */
+  async writeFindText(text: string): Promise<void> {
+    const current = context();
+    const native = nativeClipboardItem({
+      entries: text ? [{ type: "text", text }] : [],
+    });
+    if (current.hosted) await binding.writeHostedFindClipboard(current.appId, native);
+    else binding.writeFindClipboard(current.appId, native);
+  },
 });
+
+function clipboardEntryFormat(entry: ClipboardEntry): string {
+  if (entry.type === "text") return "text/plain";
+  if (entry.type === "files") return "text/uri-list";
+  if (entry.type === "bookmark") return "text/x-moz-url";
+  return entry.mimeType;
+}
 
 function allocateShellRequest(): number {
   for (let attempt = 0; attempt <= pendingShellRequests.size; attempt += 1) {
@@ -1014,6 +1112,8 @@ function nativeMenuItems(
         ...(item.mark ? { mark: item.mark } : {}),
         role: item.role,
         ...(item.icon ? { icon: jsonImageSource(item.icon) } : {}),
+        ...(item.accelerator ? { accelerator: item.accelerator } : {}),
+        ...(item.hidden ? { hidden: true } : {}),
       };
     }
     const id = allocateMenuAction(callbacks);
@@ -1027,6 +1127,8 @@ function nativeMenuItems(
       ...(item.mark ? { mark: item.mark } : {}),
       ...(item.role ? { role: item.role } : {}),
       ...(item.icon ? { icon: jsonImageSource(item.icon) } : {}),
+      ...(item.accelerator ? { accelerator: item.accelerator } : {}),
+      ...(item.hidden ? { hidden: true } : {}),
     };
   });
 }

@@ -184,6 +184,14 @@ and `Explicit` mode, QuickGUI stays in `ControlFlow::Wait`; there is no redraw, 
 polling. The `platform_services` example closes its final window, remains resident on macOS, and
 creates a fresh window when its Dock icon is clicked.
 
+`Event::CloseRequested` with `cx.prevent_close()` keeps one window open, and
+`on_before_quit`/`on_will_quit` with `cx.prevent_quit()` hold the two preventable quit phases.
+`AppRunner::request_quit()` gives an embedding runtime the same preventable path that native
+Command-Q takes, while `AppRunner::exit()` keeps bypassing both phases for a forced shutdown. The
+JavaScript host builds `window.onCloseRequested`, `app.on("beforeQuit")`, and
+`app.on("willQuit")` on exactly these hooks; see [Solid and JavaScript
+bindings](solid.md#lifecycle-vetoes-in-javascript).
+
 `cx.relaunch()` adds one prepared replacement process to that same teardown. QuickGUI releases the
 single-instance guard and process integrations after the last close callback, then spawns exactly
 once. See [Relaunch and signed updates](relaunch-and-updates.md) for overrides and updater flow.

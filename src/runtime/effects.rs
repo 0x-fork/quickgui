@@ -569,8 +569,11 @@ impl Runtime {
                             .os_action
                             .is_some_and(|action| self.os_action_available(action)),
                     checked: item.checked,
-                    shortcut: item.action.as_ref().and_then(|action| {
-                        self.keymap.shortcut_for_action_value(action, &contexts)
+                    hidden: item.hidden,
+                    shortcut: item.shortcut.clone().or_else(|| {
+                        item.action.as_ref().and_then(|action| {
+                            self.keymap.shortcut_for_action_value(action, &contexts)
+                        })
                     }),
                 })
                 .collect::<Vec<_>>()
@@ -671,6 +674,24 @@ impl Runtime {
             }
             OsAction::About => cfg!(any(target_os = "macos", target_os = "windows")),
             OsAction::ShowHelp => cfg!(target_os = "macos"),
+            OsAction::PasteAndMatchStyle => input_focused,
+            OsAction::Delete => {
+                input_focused
+                    && window
+                        .expect("input focus requires a current window")
+                        .ui
+                        .selected_input_text()
+                        .is_some_and(|selection| !selection.is_empty())
+            }
+            OsAction::StartSpeaking | OsAction::StopSpeaking => {
+                cfg!(target_os = "macos") && window.is_some()
+            }
+            OsAction::SelectNextTab
+            | OsAction::SelectPreviousTab
+            | OsAction::MergeAllWindows
+            | OsAction::MoveTabToNewWindow
+            | OsAction::ToggleTabBar
+            | OsAction::ToggleTabOverview => cfg!(target_os = "macos") && window.is_some(),
             OsAction::HideApplication
             | OsAction::ShowAllApplications
             | OsAction::Quit
@@ -866,6 +887,46 @@ impl Runtime {
                 self.focus_requests.extend(handles);
                 true
             }
+            // QuickGUI's retained inputs already insert unstyled plain text.
+            OsAction::PasteAndMatchStyle => self.invoke_os_action(event_loop, OsAction::Paste),
+            OsAction::Delete => {
+                if self
+                    .window
+                    .as_ref()
+                    .and_then(|window| window.ui.selected_input_text())
+                    .is_none_or(|selection| selection.is_empty())
+                {
+                    return false;
+                }
+                let result = self
+                    .window
+                    .as_mut()
+                    .map(|window| window.ui.input_backspace())
+                    .unwrap_or_default();
+                self.apply_input_result(event_loop, result, true);
+                true
+            }
+            // Speech synthesis has no retained fallback; AppKit's responder chain owns it.
+            OsAction::StartSpeaking | OsAction::StopSpeaking => false,
+            OsAction::SelectNextTab
+            | OsAction::SelectPreviousTab
+            | OsAction::MergeAllWindows
+            | OsAction::MoveTabToNewWindow
+            | OsAction::ToggleTabBar
+            | OsAction::ToggleTabOverview => {
+                let Some(handle) = self.current_handle() else {
+                    return false;
+                };
+                self.window_commands.push(match action {
+                    OsAction::SelectNextTab => WindowCommand::SelectNextTab(handle),
+                    OsAction::SelectPreviousTab => WindowCommand::SelectPreviousTab(handle),
+                    OsAction::MergeAllWindows => WindowCommand::MergeAllWindows(handle),
+                    OsAction::MoveTabToNewWindow => WindowCommand::MoveTabToNewWindow(handle),
+                    OsAction::ToggleTabBar => WindowCommand::ToggleTabBar(handle),
+                    _ => WindowCommand::ToggleTabOverview(handle),
+                });
+                true
+            }
         }
     }
 
@@ -879,24 +940,27 @@ impl Runtime {
             .as_ref()
             .map(|window| window.ui.key_context_stack())
             .unwrap_or_default();
-        let states =
-            self.menu_actions
-                .iter()
-                .map(|item| MacMenuItemState {
-                    disabled: item.disabled,
-                    action_available: item
-                        .action
+        let states = self
+            .menu_actions
+            .iter()
+            .map(|item| MacMenuItemState {
+                disabled: item.disabled,
+                action_available: item
+                    .action
+                    .as_ref()
+                    .is_some_and(|action| self.action_available(action))
+                    || item
+                        .os_action
+                        .is_some_and(|action| self.os_action_available(action)),
+                checked: item.checked,
+                hidden: item.hidden,
+                shortcut: item.shortcut.clone().or_else(|| {
+                    item.action
                         .as_ref()
-                        .is_some_and(|action| self.action_available(action))
-                        || item
-                            .os_action
-                            .is_some_and(|action| self.os_action_available(action)),
-                    checked: item.checked,
-                    shortcut: item.action.as_ref().and_then(|action| {
-                        self.keymap.shortcut_for_action_value(action, &contexts)
-                    }),
-                })
-                .collect::<Vec<_>>();
+                        .and_then(|action| self.keymap.shortcut_for_action_value(action, &contexts))
+                }),
+            })
+            .collect::<Vec<_>>();
         let native_focus_active = self
             .window
             .as_ref()

@@ -167,6 +167,57 @@ pub fn exit_hosted_app(app: u32) -> Result<AsyncTask<HostedBooleanCommandTask>> 
 }
 
 #[napi]
+pub fn request_app_quit(app: u32) -> Result<bool> {
+    expect_boolean(direct_command(app, SystemCommand::RequestQuit)?)
+}
+
+#[napi(ts_return_type = "Promise<boolean>")]
+pub fn request_hosted_app_quit(app: u32) -> Result<AsyncTask<HostedBooleanCommandTask>> {
+    hosted_boolean_command(app, SystemCommand::RequestQuit)
+}
+
+#[napi]
+pub fn set_quit_interception(app: u32, intercepting: bool) -> Result<()> {
+    expect_unit(direct_command(
+        app,
+        SystemCommand::SetQuitInterception(intercepting),
+    )?)
+}
+
+#[napi]
+pub fn set_hosted_quit_interception(app: u32, intercepting: bool) -> Result<()> {
+    enqueue_hosted_mutation(app, SystemCommand::SetQuitInterception(intercepting))
+}
+
+#[napi]
+pub fn read_find_clipboard(app: u32) -> Result<Option<NativeClipboardItem>> {
+    expect_clipboard(direct_command(app, SystemCommand::ReadFindClipboard)?)
+}
+
+#[napi(ts_return_type = "Promise<NativeClipboardItem | null>")]
+pub fn read_hosted_find_clipboard(app: u32) -> Result<AsyncTask<HostedClipboardCommandTask>> {
+    hosted_clipboard_command(app, SystemCommand::ReadFindClipboard)
+}
+
+#[napi]
+pub fn write_find_clipboard(app: u32, item: NativeClipboardItem) -> Result<()> {
+    let item = clipboard_item(item).map_err(Error::from_reason)?;
+    expect_unit(direct_command(
+        app,
+        SystemCommand::WriteFindClipboard(item),
+    )?)
+}
+
+#[napi(ts_return_type = "Promise<void>")]
+pub fn write_hosted_find_clipboard(
+    app: u32,
+    item: NativeClipboardItem,
+) -> Result<AsyncTask<HostedUnitCommandTask>> {
+    let item = clipboard_item(item).map_err(Error::from_reason)?;
+    hosted_unit_command(app, SystemCommand::WriteFindClipboard(item))
+}
+
+#[napi]
 pub fn relaunch_app(app: u32, options: NativeRelaunchOptions) -> Result<bool> {
     expect_boolean(direct_command(app, SystemCommand::Relaunch(options))?)
 }

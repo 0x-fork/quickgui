@@ -30,6 +30,7 @@ use quickgui::{
     WindowKind, WindowLevel, WindowOptions, button, div, svg as svg_element, text, text_area,
     text_input,
 };
+use quickgui::{Event, EventContext};
 #[cfg(target_os = "macos")]
 use quickgui::{
     MacEmbeddedView, MacSwiftUiHost, SwiftUiButton, SwiftUiButtonBorderShape, SwiftUiButtonRole,

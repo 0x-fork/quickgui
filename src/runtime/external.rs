@@ -18,6 +18,30 @@ impl AppRunner {
         true
     }
 
+    /// Request a preventable application quit.
+    ///
+    /// Unlike [`Self::exit`], this runs the `on_before_quit` and `on_will_quit` phases first, so a
+    /// declared interception can keep the application alive. Returns `false` when shutdown has
+    /// already begun.
+    pub fn request_quit(&mut self) -> bool {
+        if !matches!(self.status, AppRunStatus::Continue)
+            || self.runtime.exit_requested
+            || self.runtime.pending_quit.is_some()
+        {
+            return false;
+        }
+        if self
+            .runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .is_err()
+        {
+            return false;
+        }
+        self.runtime.pending_quit = Some(QuitReason::Explicit);
+        true
+    }
+
     /// Request an orderly relaunch preserving the current process arguments and directory.
     pub fn relaunch(&mut self) -> std::result::Result<bool, crate::SystemIntegrationError> {
         self.relaunch_with(RelaunchOptions::default())
@@ -691,6 +715,103 @@ impl AppRunner {
             handle,
             WindowCommand::SetMacOsVisualEffectState(handle, state),
         )
+    }
+
+    /// Present AppKit's character palette above one mounted window.
+    pub fn show_character_palette(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::ShowCharacterPalette(handle))
+    }
+
+    /// Opt one mounted window into a named native system-tab group, or leave it with `None`.
+    pub fn set_window_tabbing_identifier(
+        &mut self,
+        handle: WindowHandle,
+        identifier: Option<String>,
+    ) -> Result<(), WindowCommandError> {
+        if let Some(identifier) = &identifier {
+            validate_window_tabbing_identifier(identifier)?;
+        }
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetTabbingIdentifier(handle, identifier),
+        )
+    }
+
+    /// Select the next tab in one window's native tab group.
+    pub fn select_next_window_tab(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SelectNextTab(handle))
+    }
+
+    /// Select the previous tab in one window's native tab group.
+    pub fn select_previous_window_tab(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SelectPreviousTab(handle))
+    }
+
+    /// Select one tab by index in a window's native tab group.
+    pub fn select_window_tab(
+        &mut self,
+        handle: WindowHandle,
+        index: usize,
+    ) -> Result<(), WindowCommandError> {
+        if index >= MAX_SYSTEM_WINDOW_TABS {
+            return Err(WindowCommandError::InvalidTabIndex);
+        }
+        self.queue_window_command(handle, WindowCommand::SelectTab(handle, index))
+    }
+
+    /// Merge every window of this application into one native tab group.
+    pub fn merge_all_windows(&mut self, handle: WindowHandle) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::MergeAllWindows(handle))
+    }
+
+    /// Move one window's active native tab into a window of its own.
+    pub fn move_window_tab_to_new_window(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::MoveTabToNewWindow(handle))
+    }
+
+    /// Toggle one window's native tab bar.
+    pub fn toggle_window_tab_bar(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::ToggleTabBar(handle))
+    }
+
+    /// Toggle one window's native tab overview.
+    pub fn toggle_window_tab_overview(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::ToggleTabOverview(handle))
+    }
+
+    /// Read macOS's shared Find pasteboard.
+    #[cfg(target_os = "macos")]
+    pub fn read_from_find_pasteboard(
+        &self,
+    ) -> Result<Option<ClipboardItem>, crate::ClipboardError> {
+        self.runtime.clipboard.read(ClipboardTarget::Find)
+    }
+
+    /// Atomically replace macOS's shared Find pasteboard. An empty item clears it.
+    #[cfg(target_os = "macos")]
+    pub fn write_to_find_pasteboard(
+        &self,
+        item: ClipboardItem,
+    ) -> Result<(), crate::ClipboardError> {
+        self.runtime.clipboard.write(ClipboardTarget::Find, item)
     }
 
     fn queue_window_command(

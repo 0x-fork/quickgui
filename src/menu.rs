@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use std::{fmt, path::Path};
 
-use crate::{Action, AnyAction, Image, ImageError};
+use crate::{Accelerator, Action, AnyAction, Image, ImageError, KeymapError, Keystroke};
 
 /// Maximum action, role, separator, submenu, and system-menu nodes in one native menu tree.
 pub const MAX_NATIVE_MENU_ITEMS: usize = 1_024;
@@ -96,6 +96,11 @@ pub enum SystemMenuType {
     Window,
     /// The operating system's help menu.
     Help,
+    /// The operating system's recent-documents menu.
+    ///
+    /// macOS populates any menu that owns a `clearRecentDocuments:` item, so QuickGUI builds an
+    /// "Open Recent" submenu holding one "Clear Menu" command and lets AppKit fill the rest.
+    RecentDocuments,
 }
 
 /// Commands that should first follow the operating system's native responder chain.
@@ -133,6 +138,26 @@ pub enum OsAction {
     BringAllToFront,
     /// Open the operating system's application help UI where available.
     ShowHelp,
+    /// Paste the clipboard's plain text without its original styling.
+    PasteAndMatchStyle,
+    /// Delete the current selection without writing it to the clipboard.
+    Delete,
+    /// Start the operating system's speech synthesis for the current selection.
+    StartSpeaking,
+    /// Stop the operating system's speech synthesis.
+    StopSpeaking,
+    /// Select the next native window tab.
+    SelectNextTab,
+    /// Select the previous native window tab.
+    SelectPreviousTab,
+    /// Merge every window of this application into one native tab group.
+    MergeAllWindows,
+    /// Move the active native tab into its own window.
+    MoveTabToNewWindow,
+    /// Toggle the native tab bar for the active window.
+    ToggleTabBar,
+    /// Toggle the native tab overview for the active window.
+    ToggleTabOverview,
 }
 
 impl OsAction {
@@ -140,7 +165,16 @@ impl OsAction {
     pub const fn is_text_editing(self) -> bool {
         matches!(
             self,
-            Self::Cut | Self::Copy | Self::Paste | Self::SelectAll | Self::Undo | Self::Redo
+            Self::Cut
+                | Self::Copy
+                | Self::Paste
+                | Self::PasteAndMatchStyle
+                | Self::Delete
+                | Self::SelectAll
+                | Self::Undo
+                | Self::Redo
+                | Self::StartSpeaking
+                | Self::StopSpeaking
         )
     }
 }
@@ -220,6 +254,8 @@ pub enum MenuItem {
         mark: MenuItemMark,
         icon: Option<MenuIcon>,
         disabled: bool,
+        hidden: bool,
+        shortcut: Option<Keystroke>,
     },
     /// A standard operating-system command that does not require an application action type.
     Role {
@@ -229,6 +265,8 @@ pub enum MenuItem {
         mark: MenuItemMark,
         icon: Option<MenuIcon>,
         disabled: bool,
+        hidden: bool,
+        shortcut: Option<Keystroke>,
     },
 }
 
@@ -242,6 +280,8 @@ impl MenuItem {
             mark: MenuItemMark::None,
             icon: None,
             disabled: false,
+            hidden: false,
+            shortcut: None,
         }
     }
 
@@ -254,6 +294,8 @@ impl MenuItem {
             mark: MenuItemMark::None,
             icon: None,
             disabled: false,
+            hidden: false,
+            shortcut: None,
         }
     }
 
@@ -266,6 +308,8 @@ impl MenuItem {
             mark: MenuItemMark::None,
             icon: None,
             disabled: false,
+            hidden: false,
+            shortcut: None,
         }
     }
 
@@ -314,6 +358,62 @@ impl MenuItem {
             Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => {}
         }
         self
+    }
+
+    /// Override the platform key equivalent with an explicit keystroke.
+    ///
+    /// An explicit shortcut wins over the keymap binding QuickGUI would otherwise display.
+    pub fn keystroke(mut self, value: Keystroke) -> Self {
+        match &mut self {
+            Self::Action { shortcut, .. } | Self::Role { shortcut, .. } => *shortcut = Some(value),
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => {}
+        }
+        self
+    }
+
+    /// Override the platform key equivalent with an Electron accelerator string.
+    ///
+    /// Use [`Self::try_accelerator`] when the accelerator comes from data instead of a literal;
+    /// this builder keeps the fluent chain infallible by dropping an unparsable declaration after
+    /// logging it.
+    pub fn accelerator(self, value: impl AsRef<str>) -> Self {
+        let value = value.as_ref();
+        match Accelerator::parse(value) {
+            Ok(stroke) => self.keystroke(stroke),
+            Err(error) => {
+                tracing::warn!(accelerator = value, %error, "ignoring an invalid menu accelerator");
+                self
+            }
+        }
+    }
+
+    /// Override the platform key equivalent, reporting an unparsable accelerator.
+    pub fn try_accelerator(self, value: impl AsRef<str>) -> Result<Self, KeymapError> {
+        Accelerator::parse(value.as_ref()).map(|stroke| self.keystroke(stroke))
+    }
+
+    /// The explicit key equivalent declared for this item, if any.
+    pub fn shortcut(&self) -> Option<&Keystroke> {
+        match self {
+            Self::Action { shortcut, .. } | Self::Role { shortcut, .. } => shortcut.as_ref(),
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => None,
+        }
+    }
+
+    /// Keep a declared item out of the presented native menu without removing its action id.
+    pub fn hidden(mut self, value: bool) -> Self {
+        match &mut self {
+            Self::Action { hidden, .. } | Self::Role { hidden, .. } => *hidden = value,
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => {}
+        }
+        self
+    }
+
+    pub fn is_hidden(&self) -> bool {
+        match self {
+            Self::Action { hidden, .. } | Self::Role { hidden, .. } => *hidden,
+            Self::Separator | Self::Submenu(_) | Self::SystemMenu(_) => false,
+        }
     }
 
     pub fn is_checked(&self) -> bool {
@@ -370,6 +470,11 @@ pub(crate) struct MenuAction {
     pub disabled: bool,
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub checked: bool,
+    /// Explicit key equivalent that outranks keymap derivation for this item.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub shortcut: Option<Keystroke>,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub hidden: bool,
 }
 
 pub(crate) fn collect_menu_actions(menus: &[Menu]) -> Vec<MenuAction> {
@@ -381,23 +486,31 @@ pub(crate) fn collect_menu_actions(menus: &[Menu]) -> Vec<MenuAction> {
                     os_action,
                     disabled,
                     checked,
+                    hidden,
+                    shortcut,
                     ..
                 } => actions.push(MenuAction {
                     action: Some(action.clone()),
                     os_action: *os_action,
                     disabled: *disabled,
                     checked: *checked,
+                    shortcut: shortcut.clone(),
+                    hidden: *hidden,
                 }),
                 MenuItem::Role {
                     role,
                     disabled,
                     checked,
+                    hidden,
+                    shortcut,
                     ..
                 } => actions.push(MenuAction {
                     action: None,
                     os_action: Some(*role),
                     disabled: *disabled,
                     checked: *checked,
+                    shortcut: shortcut.clone(),
+                    hidden: *hidden,
                 }),
                 MenuItem::Submenu(menu) => collect(menu, actions),
                 MenuItem::Separator | MenuItem::SystemMenu(_) => {}
@@ -527,6 +640,58 @@ mod tests {
         assert_eq!(actions[0].os_action, Some(OsAction::MinimizeWindow));
         assert_eq!(menus[0].items[1].mark(), MenuItemMark::Radio);
         assert!(actions[1].checked);
+    }
+
+    #[test]
+    fn explicit_accelerators_and_hidden_flags_reach_the_collected_actions() {
+        let menus = [Menu::new("File")
+            .item(MenuItem::action("Save As", OpenFile).accelerator("CmdOrCtrl+Shift+S"))
+            .item(
+                MenuItem::role("Close", OsAction::CloseWindow)
+                    .keystroke(Keystroke::parse("cmd-w").unwrap()),
+            )
+            .item(MenuItem::action("Debug", OpenFile).hidden(true))];
+
+        let actions = collect_menu_actions(&menus);
+        assert_eq!(actions.len(), 3);
+        assert_eq!(
+            actions[0].shortcut,
+            Some(crate::Accelerator::parse("CmdOrCtrl+Shift+S").unwrap())
+        );
+        assert_eq!(
+            actions[1].shortcut,
+            Some(Keystroke::parse("cmd-w").unwrap())
+        );
+        assert_eq!(actions[2].shortcut, None);
+        assert!(!actions[0].hidden);
+        assert!(actions[2].hidden);
+        assert!(menus[0].items[2].is_hidden());
+        assert_eq!(
+            menus[0].items[1].shortcut(),
+            Some(&Keystroke::parse("cmd-w").unwrap())
+        );
+    }
+
+    #[test]
+    fn invalid_accelerators_are_reported_and_never_silently_bound() {
+        assert!(
+            MenuItem::action("Save", OpenFile)
+                .try_accelerator("Cmd+Nonsense")
+                .is_err()
+        );
+        // The infallible builder keeps the chain usable and simply declares no shortcut.
+        assert_eq!(
+            MenuItem::action("Save", OpenFile)
+                .accelerator("Cmd+Nonsense")
+                .shortcut(),
+            None
+        );
+        assert!(
+            MenuItem::separator()
+                .accelerator("Cmd+S")
+                .shortcut()
+                .is_none()
+        );
     }
 
     #[test]

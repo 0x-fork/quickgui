@@ -221,6 +221,7 @@ pub use keyboard::{
     KeyboardLayout, KeyboardLayoutError, MAX_KEYBOARD_LAYOUT_ID_BYTES,
     MAX_KEYBOARD_LAYOUT_NAME_BYTES,
 };
+pub use keymap::{Accelerator, MAX_ACCELERATOR_BYTES};
 pub use keymap::{
     ContextPredicate, KeyBinding, KeyContext, Keymap, KeymapError, KeymapMatch, Keystroke,
 };

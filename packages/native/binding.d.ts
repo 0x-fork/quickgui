@@ -653,6 +653,22 @@ export declare function pumpApp(app: number, timeoutMs?: number | undefined | nu
 
 export declare function readClipboard(app: number): NativeClipboardItem | null
 
+export declare function readFindClipboard(app: number): NativeClipboardItem | null
+
+export declare function readHostedFindClipboard(app: number): Promise<NativeClipboardItem | null>
+
+export declare function requestAppQuit(app: number): boolean
+
+export declare function requestHostedAppQuit(app: number): Promise<boolean>
+
+export declare function setQuitInterception(app: number, intercepting: boolean): void
+
+export declare function setHostedQuitInterception(app: number, intercepting: boolean): void
+
+export declare function writeFindClipboard(app: number, item: NativeClipboardItem): void
+
+export declare function writeHostedFindClipboard(app: number, item: NativeClipboardItem): Promise<void>
+
 export declare function readHostedClipboard(app: number): Promise<NativeClipboardItem | null>
 
 export declare function registerProtocol(options: NativeProtocolRegistrationOptions): Promise<void>

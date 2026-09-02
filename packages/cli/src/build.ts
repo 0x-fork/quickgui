@@ -119,8 +119,12 @@ export const nativeExports = [
   "prepareHostedApp",
   "pumpApp",
   "readClipboard",
+  "readFindClipboard",
   "readHostedClipboard",
+  "readHostedFindClipboard",
   "registerProtocol",
+  "requestAppQuit",
+  "requestHostedAppQuit",
   "relaunchApp",
   "relaunchHostedApp",
   "releaseHostedSingleInstanceLock",
@@ -138,6 +142,8 @@ export const nativeExports = [
   "setDockIcon",
   "setDockMenu",
   "setHostedApplicationMenu",
+  "setHostedQuitInterception",
+  "setQuitInterception",
   "setHostedDockBadge",
   "setHostedDockIcon",
   "setHostedDockMenu",
@@ -167,7 +173,9 @@ export const nativeExports = [
   "unregisterProtocol",
   "verifyUpdate",
   "writeClipboard",
+  "writeFindClipboard",
   "writeHostedClipboard",
+  "writeHostedFindClipboard",
 ] as const;
 
 const nativeBindingShimSuffix = ".quickgui-binding-shim.js";

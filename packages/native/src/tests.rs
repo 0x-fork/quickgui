@@ -913,3 +913,173 @@ fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
             .any(|event| event.kind == "terminal" && event.target == terminal_id)
     );
 }
+
+#[test]
+fn close_interception_is_declared_ahead_of_the_native_decision() {
+    crate::runtime::reset_interception_state();
+    assert!(!crate::runtime::intercepts_close(4));
+
+    let action = crate::system::parse_window_action("set-close-interception", Some("true".into()))
+        .expect("the hosted window action parses");
+    assert!(matches!(
+        action,
+        system::WindowAction::SetCloseInterception(true)
+    ));
+
+    crate::runtime::set_close_interception(4, true);
+    assert!(crate::runtime::intercepts_close(4));
+    assert!(!crate::runtime::intercepts_close(5));
+
+    // Withdrawing the last listener lets native closes proceed again.
+    crate::runtime::set_close_interception(4, false);
+    assert!(!crate::runtime::intercepts_close(4));
+    crate::runtime::reset_interception_state();
+}
+
+#[test]
+fn hosted_close_interception_travels_as_a_fire_and_forget_mutation() {
+    let host = HostCoordinator::new();
+    host.enqueue(HostCommand::Mutation {
+        app: 3,
+        command: system::SystemCommand::WindowAction {
+            window: 9,
+            action: system::WindowAction::SetCloseInterception(true),
+        },
+    })
+    .expect("a close-interception declaration fits the host queue");
+
+    let mut commands = host.take_commands().expect("the host queue is readable");
+    match commands.pop_front().expect("the declaration was queued") {
+        HostCommand::Mutation {
+            app,
+            command:
+                system::SystemCommand::WindowAction {
+                    window,
+                    action: system::WindowAction::SetCloseInterception(intercepting),
+                },
+        } => {
+            assert_eq!(app, 3);
+            assert_eq!(window, 9);
+            assert!(intercepting);
+        }
+        _ => panic!("close interception must never wait on a synchronous reply"),
+    }
+    assert!(commands.is_empty());
+}
+
+#[test]
+fn quit_interception_is_declared_before_the_before_quit_phase() {
+    crate::runtime::reset_interception_state();
+    assert!(!crate::runtime::intercepts_quit());
+    crate::runtime::set_quit_interception(true);
+    assert!(crate::runtime::intercepts_quit());
+    crate::runtime::reset_interception_state();
+    assert!(!crate::runtime::intercepts_quit());
+}
+
+#[test]
+fn quit_reasons_reach_javascript_with_stable_names() {
+    for (reason, name) in [
+        (quickgui::QuitReason::Explicit, "explicit"),
+        (quickgui::QuitReason::Relaunch, "relaunch"),
+        (quickgui::QuitReason::LastWindowClosed, "last-window-closed"),
+        (quickgui::QuitReason::OperatingSystem, "operating-system"),
+    ] {
+        assert_eq!(crate::runtime::quit_reason_name(reason), name);
+    }
+}
+
+#[test]
+fn window_tab_and_character_palette_actions_parse_from_the_hosted_boundary() {
+    for (action, expected) in [
+        (
+            "show-character-palette",
+            system::WindowAction::ShowCharacterPalette,
+        ),
+        ("select-next-tab", system::WindowAction::SelectNextTab),
+        (
+            "select-previous-tab",
+            system::WindowAction::SelectPreviousTab,
+        ),
+        ("merge-all-windows", system::WindowAction::MergeAllWindows),
+        (
+            "move-tab-to-new-window",
+            system::WindowAction::MoveTabToNewWindow,
+        ),
+        ("toggle-tab-bar", system::WindowAction::ToggleTabBar),
+        (
+            "toggle-tab-overview",
+            system::WindowAction::ToggleTabOverview,
+        ),
+    ] {
+        let parsed = crate::system::parse_window_action(action, None)
+            .unwrap_or_else(|error| panic!("{action} parses: {error}"));
+        assert_eq!(
+            std::mem::discriminant(&parsed),
+            std::mem::discriminant(&expected),
+            "action {action}"
+        );
+    }
+
+    assert!(matches!(
+        crate::system::parse_window_action("select-tab", Some("3".into())).unwrap(),
+        system::WindowAction::SelectTab(3)
+    ));
+    assert!(crate::system::parse_window_action("select-tab", Some("-1".into())).is_err());
+    assert!(crate::system::parse_window_action("select-tab", None).is_err());
+
+    assert!(matches!(
+        crate::system::parse_window_action("set-tabbing-identifier", Some("docs".into())).unwrap(),
+        system::WindowAction::SetTabbingIdentifier(Some(identifier)) if identifier == "docs"
+    ));
+    assert!(matches!(
+        crate::system::parse_window_action("set-tabbing-identifier", Some(String::new())).unwrap(),
+        system::WindowAction::SetTabbingIdentifier(None)
+    ));
+}
+
+#[test]
+fn a_declared_close_interception_holds_the_window_and_reports_it_to_javascript() {
+    crate::runtime::reset_interception_state();
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = NativeView {
+        window: 21,
+        handles: None,
+        tree: Rc::new(RefCell::new(NativeTree::default())),
+        events: Rc::clone(&events),
+        markdown: Rc::new(RefCell::new(HashMap::new())),
+        svgs: Rc::new(RefCell::new(HashMap::new())),
+        lists: Rc::new(RefCell::new(HashMap::new())),
+        terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
+    };
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+
+    // While interception is declared the native close is held and reported to JavaScript.
+    crate::runtime::set_close_interception(21, true);
+    assert!(!cx.simulate_close_requested(window).unwrap());
+    assert_eq!(
+        events
+            .borrow()
+            .iter()
+            .filter(|event| event.kind == "close-requested" && event.window == 21)
+            .count(),
+        1
+    );
+
+    // Withdrawing the last listener lets the next native close proceed with no extra event.
+    crate::runtime::set_close_interception(21, false);
+    assert!(cx.simulate_close_requested(window).unwrap());
+    assert_eq!(
+        events
+            .borrow()
+            .iter()
+            .filter(|event| event.kind == "close-requested")
+            .count(),
+        1
+    );
+    crate::runtime::reset_interception_state();
+}

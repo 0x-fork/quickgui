@@ -94,6 +94,64 @@ scoped to one window. `show_native_popup_menu` projects the same model at a scre
 menus reuse the same typed action registry, while Windows application and popup menus use the native
 menu host. No clean menu installs a polling source or animation frame.
 
+### Accelerators
+
+A menu item's key equivalent normally comes from the keymap binding that dispatches its action.
+`MenuItem::accelerator` and `MenuItem::keystroke` declare an explicit override that outranks the
+derived binding, and `MenuItem::try_accelerator` reports an unparsable string instead of dropping it.
+
+```rust
+use quickgui::{Accelerator, Menu, MenuItem, OsAction};
+
+let file = Menu::new("File")
+    .item(MenuItem::action("Save As…", SaveAs).accelerator("CmdOrCtrl+Shift+S"))
+    .item(MenuItem::role("Close Window", OsAction::CloseWindow).keystroke(
+        Accelerator::parse("CommandOrControl+W").expect("a valid accelerator"),
+    ))
+    .item(MenuItem::action("Reload Fixtures", ReloadFixtures).hidden(true));
+```
+
+`Accelerator::parse` accepts Electron's accelerator grammar and returns QuickGUI's `Keystroke`:
+
+- Modifiers: `CommandOrControl`/`CmdOrCtrl` (Command on macOS, Control elsewhere), `Command`/`Cmd`,
+  `Control`/`Ctrl`, `Alt`/`Option`, `AltGr`, `Shift`, `Super`/`Meta`.
+- Keys: `A`–`Z`, `0`–`9`, `F1`–`F24`, `Plus`, `Space`, `Tab`, `Capslock`, `Numlock`, `Scrolllock`,
+  `Backspace`, `Delete`, `Insert`, `Return`/`Enter`, `Up`/`Down`/`Left`/`Right`, `Home`/`End`,
+  `PageUp`/`PageDown`, `Escape`/`Esc`, `VolumeUp`/`VolumeDown`/`VolumeMute`, `MediaNextTrack`,
+  `MediaPreviousTrack`, `MediaStop`, `MediaPlayPause`, `PrintScreen`, `num0`–`num9`, `numdec`,
+  `numadd`, `numsub`, `nummult`, `numdiv`, and any single punctuation character.
+
+Accelerators are bounded by `MAX_ACCELERATOR_BYTES`. Keypad names resolve to the character the
+platform prints for that key, matching how Electron renders keypad menu accelerators. The lock,
+media, volume, and print-screen keys have no `Key` identity in QuickGUI and parse to `Key::Other`:
+the declaration stays valid, and platforms that cannot render them simply show no key equivalent.
+
+On macOS the resolved keystroke becomes the item's `NSMenuItem` key equivalent and modifier mask,
+replacing both the keymap-derived binding and any AppKit standard binding a role would otherwise
+use. On Windows `muda` renders the accelerator after a tab in the item label and registers the
+matching Win32 accelerator-table entry, so the printed shortcut and the dispatched command always
+agree; keys a Win32 accelerator table cannot name keep the label and lose only the rendered
+shortcut.
+
+`MenuItem::hidden` keeps a declared item out of the presented menu without removing it from the
+declaration, so its action id and collection order stay stable across menu revisions. macOS sets
+`NSMenuItem.hidden`; Windows has no hidden flag, so the item is omitted from the Win32 menu.
+
+### Roles and system submenus
+
+Beyond the editing, application, window, and help commands, `OsAction` also covers
+`PasteAndMatchStyle`, `Delete`, `StartSpeaking`, `StopSpeaking`, `SelectNextTab`,
+`SelectPreviousTab`, `MergeAllWindows`, `MoveTabToNewWindow`, `ToggleTabBar`, and
+`ToggleTabOverview`. Each first follows the platform responder chain; when no native responder
+accepts it, QuickGUI falls back to the retained implementation — plain-text paste and selection
+delete for the focused input, and the matching window-tab command for the tab roles. Speech
+synthesis has no retained fallback and stays an AppKit responder command.
+
+`SystemMenuType::RecentDocuments` declares an operating-system-populated recent-documents submenu.
+QuickGUI builds a menu holding one "Clear Menu" item whose action is `clearRecentDocuments:`, which
+is how `NSDocumentController` recognizes the menu and fills it from the recent-documents list that
+`add_recent_document` maintains.
+
 ## Notifications and deep links
 
 `SystemNotification` supports subtitles, action buttons, inline replies, default/silent/named sound,
