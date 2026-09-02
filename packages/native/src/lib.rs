@@ -31,7 +31,7 @@ use quickgui::{
     TaskbarProgressState, Terminal, TerminalOptions, TerminalPaddingColor, TerminalStatus,
     TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle, Toggle, ToggleState, Tooltip,
     Transition, TransitionProperties, View, ViewContext, WindowAppearance,
-    WindowBackgroundAppearance, WindowHandle, WindowKind, WindowLevel, WindowOptions, button, div,
+    WindowBackgroundAppearance, WindowHandle, WindowKind, WindowOptions, button, div,
     svg as svg_element, text, text_area, text_input,
 };
 use quickgui::{Event, EventContext};
