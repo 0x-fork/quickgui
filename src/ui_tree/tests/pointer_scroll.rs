@@ -8,6 +8,7 @@ fn nested_targeted_listeners_bubble_but_overlays_do_not_click_through() {
     let blocker = ElementId::new(92);
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let region = |id, source, blocks_pointer| HitRegion {
+        transform: None,
         id,
         bounds,
         clip: bounds,
@@ -73,6 +74,7 @@ fn retained_paint_hover_tracks_rebuilt_layout_under_a_stationary_pointer() {
     let original_bounds = Rect::new(0.0, 0.0, 32.0, 32.0);
     let moved_bounds = Rect::new(80.0, 0.0, 32.0, 32.0);
     let region = |id, bounds, source| HitRegion {
+        transform: None,
         id,
         bounds,
         clip: bounds,
@@ -180,6 +182,7 @@ fn desktop_mouse_dispatch_is_bounded_ordered_and_hover_tracks_layout() {
     let outside = ElementId::new(102);
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let region = |id, source| HitRegion {
+        transform: None,
         id,
         bounds,
         clip: bounds,
@@ -257,6 +260,7 @@ fn desktop_mouse_dispatch_is_bounded_ordered_and_hover_tracks_layout() {
     tree.hit_regions.push(region(child, 1));
     let outside_bounds = Rect::new(200.0, 200.0, 40.0, 40.0);
     tree.hit_regions.push(HitRegion {
+        transform: None,
         bounds: outside_bounds,
         clip: outside_bounds,
         ..region(outside, 2)
@@ -319,11 +323,13 @@ fn desktop_mouse_dispatch_is_bounded_ordered_and_hover_tracks_layout() {
 
     let blocker = ElementId::new(103);
     tree.hit_regions.push(HitRegion {
+        transform: None,
         bounds: outside_bounds,
         clip: outside_bounds,
         ..region(outside, 2)
     });
     tree.hit_regions.push(HitRegion {
+        transform: None,
         blocks_pointer: true,
         ..region(blocker, 3)
     });
@@ -732,6 +738,7 @@ fn topmost_no_drag_and_overlay_scrollbar_override_drag_region() {
         source,
     };
     let hit_region = |id, app_region, source| HitRegion {
+        transform: None,
         id: ElementId::new(id),
         bounds,
         clip: bounds,
@@ -773,6 +780,7 @@ fn overlay_pointer_blockers_hide_lower_layer_cursors_and_targets() {
     let mut tree = UiTree::new();
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id: ElementId::new(1),
         bounds,
         clip: bounds,
@@ -792,6 +800,7 @@ fn overlay_pointer_blockers_hide_lower_layer_cursors_and_targets() {
         },
     });
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id: ElementId::new(2),
         bounds,
         clip: bounds,
@@ -807,6 +816,7 @@ fn overlay_pointer_blockers_hide_lower_layer_cursors_and_targets() {
         app_region: None,
         order: PaintOrder {
             layer: PaintLayerKey {
+                group: 0,
                 plane: crate::ScenePlane::Overlay,
                 z_index: 0,
             },
@@ -825,6 +835,7 @@ fn dismissible_overlay_resets_the_cursor_over_inert_background_content() {
     let mut tree = UiTree::new();
     let viewport = Rect::new(0.0, 0.0, 100.0, 100.0);
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id: ElementId::new(1),
         bounds: viewport,
         clip: viewport,
@@ -844,6 +855,7 @@ fn dismissible_overlay_resets_the_cursor_over_inert_background_content() {
         },
     });
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id: ElementId::new(2),
         bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
         clip: viewport,
@@ -859,6 +871,7 @@ fn dismissible_overlay_resets_the_cursor_over_inert_background_content() {
         app_region: None,
         order: PaintOrder {
             layer: PaintLayerKey {
+                group: 0,
                 plane: crate::ScenePlane::Overlay,
                 z_index: 0,
             },
@@ -873,6 +886,7 @@ fn dismissible_overlay_resets_the_cursor_over_inert_background_content() {
         restore_focus: None,
         order: PaintOrder {
             layer: PaintLayerKey {
+                group: 0,
                 plane: crate::ScenePlane::Overlay,
                 z_index: 0,
             },
@@ -942,6 +956,7 @@ fn explicit_arrow_resets_a_lower_cursor_without_blocking_pointer_hits() {
     let mut tree = UiTree::new();
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let region = |id, cursor_style, source| HitRegion {
+        transform: None,
         id: ElementId::new(id),
         bounds,
         clip: bounds,
@@ -978,6 +993,7 @@ fn cursor_state_overrides_resolve_live_without_repainting_the_hit_region() {
     let id = ElementId::new(1);
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id,
         bounds,
         clip: bounds,
@@ -1057,6 +1073,7 @@ fn pointer_listeners_capture_the_top_hit_without_clicking_through() {
     let mut tree = UiTree::new();
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id: ElementId::new(1),
         bounds,
         clip: bounds,
@@ -1076,6 +1093,7 @@ fn pointer_listeners_capture_the_top_hit_without_clicking_through() {
         },
     });
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id: ElementId::new(2),
         bounds,
         clip: bounds,

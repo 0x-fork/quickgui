@@ -126,7 +126,11 @@ pub(super) fn topmost_focus_trap(root: &Element) -> Option<ElementId> {
         } else {
             element.z_index.unwrap_or(0)
         };
-        let layer = PaintLayerKey { plane, z_index };
+        let layer = PaintLayerKey {
+            plane,
+            z_index,
+            group: parent_layer.group,
+        };
         let order = PaintOrder {
             layer,
             source: *source,

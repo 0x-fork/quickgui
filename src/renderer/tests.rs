@@ -2024,3 +2024,123 @@ fn a_text_shadow_paints_bounded_offset_copies_beneath_the_run() {
     assert_eq!(clamped.offset_y, -TextShadow::MAX_OFFSET);
     assert_eq!(clamped.blur, 0.0);
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_scene_without_layer_effects_never_touches_the_compositor() {
+    use crate::scene::PaintLayerKey;
+
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let mut scene = Scene::new();
+    scene.clear(Color::BLACK);
+    scene.push_quad(Quad::new(Rect::new(0.0, 0.0, 16.0, 16.0), Color::WHITE));
+    scene.finish();
+    renderer
+        .render_to_snapshot(&scene, Size::new(32.0, 32.0), 1.0)
+        .unwrap();
+    assert!(
+        renderer.compositor().is_idle(),
+        "a scene with no layer effects compiled a pipeline or allocated a texture"
+    );
+    let idle = renderer.last_composite();
+    assert_eq!(idle.layers, 0);
+    assert_eq!(idle.layer_passes, 0);
+    assert_eq!(idle.blur_passes, 0);
+    assert_eq!(idle.layer_texture_bytes, 0);
+    assert_eq!(idle.skipped_layer_effects, 0);
+
+    // One group is enough to allocate, and the textures are retained for the next frame.
+    let mut grouped = Scene::new();
+    grouped.clear(Color::BLACK);
+    let handle = grouped
+        .begin_group(
+            PaintLayerKey::default(),
+            Rect::new(0.0, 0.0, 16.0, 16.0),
+            Rect::new(0.0, 0.0, 32.0, 32.0),
+            crate::LayerEffects {
+                transform: crate::Transform2D::rotate_degrees(30.0),
+                ..Default::default()
+            },
+        )
+        .expect("the first group fits every bound");
+    grouped.push_quad_in(
+        handle.content_key(),
+        Quad::new(Rect::new(0.0, 0.0, 16.0, 16.0), Color::WHITE),
+    );
+    grouped.end_group(handle);
+    grouped.finish();
+    renderer
+        .render_to_snapshot(&grouped, Size::new(32.0, 32.0), 1.0)
+        .unwrap();
+    let first = renderer.last_composite();
+    assert_eq!(first.layers, 1);
+    assert_eq!(first.layer_passes, 1);
+    assert_eq!(first.blur_passes, 0);
+    // One 32x32 group texture plus the shared destination capture.
+    let retained = renderer.compositor().retained_bytes();
+    assert!(retained > 0 && retained <= crate::MAX_LAYER_TEXTURE_BYTES);
+    assert_eq!(first.layer_texture_bytes, retained);
+
+    renderer
+        .render_to_snapshot(&grouped, Size::new(32.0, 32.0), 1.0)
+        .unwrap();
+    assert_eq!(
+        renderer.compositor().retained_bytes(),
+        retained,
+        "a settled window must reuse its retained group textures instead of allocating again"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_blurred_group_records_two_separable_passes_and_stays_inside_its_budget() {
+    use crate::scene::PaintLayerKey;
+
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let mut scene = Scene::new();
+    scene.clear(Color::BLACK);
+    let handle = scene
+        .begin_group(
+            PaintLayerKey::default(),
+            Rect::new(4.0, 4.0, 16.0, 16.0),
+            Rect::new(0.0, 0.0, 32.0, 32.0),
+            crate::LayerEffects {
+                blur: 4.0,
+                ..Default::default()
+            },
+        )
+        .expect("the first group fits every bound");
+    scene.push_quad_in(
+        handle.content_key(),
+        Quad::new(Rect::new(4.0, 4.0, 16.0, 16.0), Color::WHITE),
+    );
+    scene.end_group(handle);
+    scene.finish();
+    let snapshot = renderer
+        .render_to_snapshot(&scene, Size::new(32.0, 32.0), 1.0)
+        .unwrap();
+    let stats = renderer.last_composite();
+    assert_eq!(stats.layers, 1);
+    assert_eq!(stats.layer_passes, 1);
+    assert_eq!(stats.blur_passes, 2, "a separable Gaussian is two passes");
+    assert!(stats.layer_texture_bytes <= crate::MAX_LAYER_TEXTURE_BYTES);
+    // The blur really spread past the quad's own edge and falls off outwards.
+    let inside = snapshot.pixel(12, 12).unwrap()[0];
+    let just_outside = snapshot.pixel(2, 12).unwrap()[0];
+    let far_outside = snapshot.pixel(30, 12).unwrap()[0];
+    assert!(just_outside > 0, "the blur did not spread past the edge");
+    assert!(
+        far_outside < just_outside && just_outside < inside,
+        "the blur must fall off outwards: {inside} {just_outside} {far_outside}"
+    );
+}

@@ -62,6 +62,9 @@ use crate::{
     element::{Direction, ScrollSnapStyle, SnapAlign, SnapStrictness},
 };
 
+// Compositing layers: transforms, subtree filters, backdrop effects, and blend modes.
+use crate::{LayerEffects, Transform2D, scene::GroupHandle};
+
 #[cfg(target_os = "macos")]
 use crate::{ScenePlane, native_view::NativeViewPlacement};
 
@@ -190,6 +193,11 @@ pub(crate) struct HitRegion {
     pub(crate) blocks_pointer: bool,
     pub(crate) app_region: Option<AppRegion>,
     pub(crate) order: PaintOrder,
+    /// Accumulated window-space transform of the compositing groups this region paints inside.
+    ///
+    /// `bounds` and `clip` stay in the untransformed layout space they were measured in, so a
+    /// pointer position is inverse-mapped through this before it is tested.
+    pub(crate) transform: Option<Transform2D>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -203,8 +211,20 @@ struct CursorStateStyles {
 }
 
 impl HitRegion {
+    /// Map a window point into this region's own coordinate system.
+    ///
+    /// Returns `None` when the accumulated transform collapses an axis, which makes the subtree
+    /// invisible and therefore untargetable.
+    pub(crate) fn local_point(&self, point: Point) -> Option<Point> {
+        match self.transform {
+            None => Some(point),
+            Some(transform) => transform.inverse().map(|inverse| inverse.apply(point)),
+        }
+    }
+
     fn contains(self, point: Point) -> bool {
-        self.bounds.contains(point) && self.clip.contains(point)
+        self.local_point(point)
+            .is_some_and(|point| self.bounds.contains(point) && self.clip.contains(point))
     }
 }
 

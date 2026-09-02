@@ -1022,6 +1022,7 @@ impl DragPreview {
             PaintLayerKey {
                 plane: crate::ScenePlane::Overlay,
                 z_index: i16::MAX,
+                group: 0,
             },
             scene,
             renderer,
@@ -1109,6 +1110,7 @@ impl TooltipOverlay {
             PaintLayerKey {
                 plane: crate::ScenePlane::Overlay,
                 z_index: i16::MAX - 1,
+                group: 0,
             },
             scene,
             renderer,

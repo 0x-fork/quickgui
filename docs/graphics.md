@@ -138,10 +138,172 @@ CSS, the matrix is applied to encoded sRGB rather than the framework's linear-li
 and the shader converts in and out around it. `grayscale(true)` is exactly
 `filters([Filter::Grayscale(1.0)])`.
 
-Filters apply to an element's own raster content: an image element's pixels and any `bg_image`
-tiles on the same element. They deliberately do not descend into children, because a subtree
-filter requires an offscreen group texture. Blur and drop-shadow filters are absent for the same
-reason; use `.shadow(...)` for elevation.
+A colour-filter chain on its own applies to an element's own raster content: an image element's
+pixels and any `bg_image` tiles on the same element. It does not descend into children, because a
+subtree filter needs an offscreen group texture — which `Filter::Blur`, `Filter::DropShadow`, a
+transform, a backdrop effect, or a blend mode do allocate. See
+[Compositing layers](#compositing-layers) below.
+
+See `cargo run --release --example effects`.
+
+## Compositing layers
+
+Everything an element can declare that cannot be expressed as one more instanced primitive makes
+that element a **compositing group**: its whole subtree renders into a bounded offscreen texture
+first, and the texture is then composited back into its parent. Text is rasterized into that
+texture by Glyphon like everything else, so it rotates, blurs, and blends with the shapes around it
+instead of staying stubbornly upright.
+
+An element becomes a group when it declares any of:
+
+- a transform that is not a pure translation,
+- `Filter::Blur` or `Filter::DropShadow`,
+- `backdrop_blur` or `backdrop_filter`,
+- a blend mode other than `BlendMode::Normal`.
+
+Nothing else allocates. A window whose view declares none of these records exactly the passes and
+draws it always did: no pipeline is compiled, no texture allocated, no pass added.
+
+### Transforms
+
+```rust
+use quickgui::{Transform2D, div, text};
+
+div().rotate_degrees(-3.0).child(text("Tilted, text and all"));
+
+div().scale_uniform(1.05).hover(|style| style.scale_uniform(1.1));
+
+div()
+    .transform_origin(0.0, 0.0)
+    .transform(Transform2D::skew_degrees(12.0, 0.0).then(Transform2D::scale(1.0, 0.9)));
+
+// A pure translation is a paint offset, not a layer: it costs nothing.
+div().translate(0.0, -2.0);
+```
+
+`Transform2D` is an affine 2-D matrix in CSS `matrix(a, b, c, d, tx, ty)` order, with `translate`,
+`scale`, `scale_uniform`, `rotate_degrees`, `rotate_radians`, `skew_degrees`, `then`, `compose`,
+`inverse`, `apply`, `transform_rect`, `around`, and `lerp`. Every constructor sanitizes: a
+non-finite component, or one past `Transform2D::MAX_COMPONENT` (1e6), yields the identity rather
+than a poisoned frame. `Element::transform_origin(x, y)` moves the point the transform acts around,
+as a fraction of the element's border box; the default is its centre, `(0.5, 0.5)`.
+
+Like CSS, a transform never affects layout. The element keeps its untransformed box, and that is
+what `element_bounds` and anchoring report. Painting and hit testing both follow the transform:
+pointer positions are inverse-mapped through the accumulated group matrix, so clicks, hover, drag,
+and cursor declarations all land on the rotated or scaled pixels the user can see. A transform that
+collapses an axis (`scale(0.0, 1.0)`) has no inverse, so its subtree paints as nothing and receives
+no pointer input.
+
+`ElementStateStyle` carries `transform`, `transform_origin`, `translate`, `rotate_degrees`,
+`scale`, and `scale_uniform`, so `hover`, `active`, `focus`, `disabled`, `invalid`, `dragging`, and
+`drag_over` can move a subtree without any relayout. A state transform is swapped, not
+interpolated: `Element::transition` still covers background, border, radius, shadow, and opacity
+only. `Transform2D::lerp` interpolates component-wise for applications that drive a transform from
+an `Animation` themselves.
+
+**Not supported**: a transform does not move a mounted macOS `NSView`, which AppKit positions in
+window coordinates. Drag-selection of static text and the IME caret area are resolved in the
+untransformed layout space, so selecting text by dragging inside a rotated or scaled subtree is not
+correct; ordinary clicks, hover, drag sources, drop targets, and cursor declarations are.
+
+### Subtree filters
+
+```rust
+use quickgui::{Color, Filter, div};
+
+div().blur(6.0);
+div().drop_shadow(0.0, 8.0, 16.0, Color::rgba8(0, 0, 0, 90));
+div().filters([Filter::Blur(4.0), Filter::Grayscale(1.0)]);
+```
+
+`Filter::Blur(radius)` is a separable Gaussian whose `radius` is the standard deviation in logical
+pixels, clamped to `MAX_BLUR_RADIUS` (64). Several blurs in one chain compose additively in
+variance. `Filter::DropShadow` follows the subtree's real painted alpha rather than the element's
+rounded box, so text and images cast their own silhouette; its `blur` argument is the CSS
+`drop-shadow()` length and half of it is the standard deviation. Use `Element::shadow` when an
+analytic rounded-rectangle shadow is what you want — it stays a single instanced primitive.
+
+A colour-filter chain on its own is still the cheap per-primitive `ColorMatrix` described above and
+applies only to the element's own raster content. Once anything else has already opened a group,
+the same chain applies to the whole composited subtree, as CSS specifies.
+
+The Gaussian retains three standard deviations of support and evaluates at most 48 taps per axis;
+a wider support strides its taps so the largest accepted radius costs the same at any scale factor.
+
+### Backdrop effects
+
+```rust
+use quickgui::{Filter, div};
+
+div()
+    .rounded_xl()
+    .backdrop_blur(12.0)
+    .backdrop_filter([Filter::Saturate(1.6), Filter::Brightness(1.1)]);
+```
+
+A backdrop effect copies the region of the target already painted behind the element, filters the
+copy, and draws it clipped to the element's rounded rectangle before the element's own background.
+The copy travels through the element's own transform, so a rotated frosted panel samples a rotated
+backdrop, as CSS specifies.
+
+This needs the render target to be readable. QuickGUI configures the window surface with
+`COPY_SRC` when the adapter advertises it; where it does not, the element paints without its
+backdrop and the frame counts it in `RenderStats::skipped_layer_effects`. Combining a backdrop
+effect with a non-normal blend mode on the same element is not supported: the blend reads the
+destination as it was before the backdrop was drawn.
+
+### Blend modes
+
+```rust
+use quickgui::{BlendMode, div};
+
+div().blend_mode(BlendMode::Multiply);
+```
+
+`BlendMode` covers `Normal`, `Multiply`, `Screen`, `Darken`, `Lighten`, `Overlay`, `Difference`,
+`Exclusion`, `HardLight`, `ColorDodge`, and `ColorBurn`. Every one of them evaluates the full
+separable Porter-Duff form in premultiplied colour, so a partially transparent source over a
+partially transparent backdrop is correct rather than merely correct over opaque pixels — none of
+these modes is an approximation that only holds where the destination is opaque.
+
+One deliberate difference from CSS: the blend functions are evaluated in QuickGUI's linear-light
+working space, the same space every other colour in the framework lives in, rather than in encoded
+sRGB. Colour *filters* still match CSS by converting to encoded sRGB around their matrix.
+
+`Normal` and `Screen` reach that exactly through fixed-function blend state and never read the
+destination. `Screen` is `Cs + Cb(1 - Cs)`, which is exactly the premultiplied separable formula.
+Every other mode needs the destination as an operand, so the renderer ends the current pass, copies
+the target into a bounded scratch texture, and resumes; `BlendMode::reads_destination` reports
+which ones do. Those modes carry the same surface requirement, and the same honest degradation, as
+backdrop effects.
+
+### Bounds and degradation
+
+| Bound | Value | Meaning |
+| --- | --- | --- |
+| `MAX_LAYERS_PER_FRAME` | 8 | Compositing groups opened in one frame |
+| `MAX_LAYER_DEPTH` | 4 | Nesting depth of compositing groups |
+| `MAX_LAYER_TEXTURE_BYTES` | 128 MiB | Offscreen texture retained per window |
+| `MAX_BLUR_RADIUS` | 64 logical px | Largest Gaussian standard deviation |
+| `Transform2D::MAX_COMPONENT` | 1e6 | Largest matrix component |
+
+Group textures are allocated at the window's full physical resolution. That is deliberate: text is
+prepared by Glyphon at absolute window coordinates and every instanced renderer bakes one
+window-sized projection into a shared uniform before any pass begins, so a group-sized texture
+would need each of them to learn a per-layer origin. Paying in memory instead keeps the whole
+per-frame preparation path unchanged — and bounded, because `MAX_LAYER_TEXTURE_BYTES` caps what one
+window retains and evicts least-recently-used first.
+
+Every bound degrades the same way: the element paints **directly into its parent and without its
+effect**, and the frame reports it in `RenderStats::skipped_layer_effects`. Nothing is dropped
+silently and nothing grows without limit. `RenderStats` also carries `compositing_layers`,
+`layer_passes`, `blur_passes`, and `layer_texture_bytes`.
+
+Group textures are retained between frames and reused whenever a group keeps its identity and the
+window keeps its size, so a settled window re-renders into the same allocations instead of
+reallocating. The group's contents are re-recorded each frame; a content-signature cache that would
+let an unchanged group skip its pass entirely is not implemented.
 
 See `cargo run --release --example effects`.
 

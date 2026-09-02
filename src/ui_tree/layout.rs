@@ -1183,6 +1183,12 @@ pub(super) struct LayoutFrame {
     pub containing_block: Rect,
     /// Painted viewport of the nearest ancestor scroll container, or the window viewport.
     pub scroll_viewport: Rect,
+    /// Accumulated window-space transform of the enclosing compositing groups.
+    ///
+    /// Layout is never transformed; this only maps a painted point back into the coordinate
+    /// system that `origin_x`/`origin_y` and every recorded bound are expressed in, so pointer
+    /// input can be inverse-mapped through a rotated or scaled subtree.
+    pub transform: Transform2D,
 }
 
 impl LayoutFrame {
@@ -1194,6 +1200,7 @@ impl LayoutFrame {
             mirror: false,
             containing_block: viewport,
             scroll_viewport: viewport,
+            transform: Transform2D::IDENTITY,
         }
     }
 }
@@ -1336,6 +1343,7 @@ pub(super) fn child_frame(
         } else {
             parent.scroll_viewport
         },
+        transform: parent.transform,
     }
 }
 

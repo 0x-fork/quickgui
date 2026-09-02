@@ -45,6 +45,9 @@ use crate::{
     scene::sane_text_spacing,
 };
 
+// Compositing layers: transforms, subtree filters, backdrop effects, and blend modes.
+use crate::{BlendMode, DropShadow, Point, Transform2D};
+
 #[cfg(target_os = "macos")]
 use crate::native_view::MacNativeView;
 #[cfg(target_os = "macos")]
@@ -1021,6 +1024,14 @@ pub(crate) struct VisualStyle {
     pub outline: Option<Outline>,
     pub shadows: Option<Arc<[BoxShadow]>>,
     pub opacity: f32,
+    /// A subtree transform. Anything but a whole-pixel translation opens a compositing group.
+    pub transform: Transform2D,
+    /// Where the transform acts, as a fraction of the element's border box.
+    pub transform_origin: Point,
+    /// Color filters applied to what is already painted behind this element.
+    pub backdrop: Filters,
+    /// How this element's subtree combines with what is already painted behind it.
+    pub blend: BlendMode,
 }
 
 impl VisualStyle {
@@ -1045,6 +1056,10 @@ impl Default for VisualStyle {
             outline: None,
             shadows: None,
             opacity: 1.0,
+            transform: Transform2D::IDENTITY,
+            transform_origin: Point::new(0.5, 0.5),
+            backdrop: Filters::none(),
+            blend: BlendMode::Normal,
         }
     }
 }
@@ -1062,6 +1077,8 @@ pub struct ElementStateStyle {
     pub(crate) shadows: Option<Arc<[BoxShadow]>>,
     pub(crate) opacity: Option<f32>,
     pub(crate) cursor_style: Option<CursorStyle>,
+    pub(crate) transform: Option<Transform2D>,
+    pub(crate) transform_origin: Option<Point>,
 }
 
 impl ElementStateStyle {
@@ -1103,6 +1120,42 @@ impl ElementStateStyle {
         self.background = Some(color);
         self.background_gradient = None;
         self
+    }
+
+    /// Transform the subtree while this state is active.
+    ///
+    /// Layout never moves; only paint and hit testing do, so a hover lift or press shrink costs
+    /// no relayout. A transform in a state overrides the element's own
+    /// [`Element::transform`](crate::Element::transform).
+    pub fn transform(mut self, transform: Transform2D) -> Self {
+        self.transform = Some(transform);
+        self
+    }
+
+    /// Move the point this state's transform acts around, as a fraction of the border box.
+    pub fn transform_origin(mut self, x: f32, y: f32) -> Self {
+        self.transform_origin = Some(Point::new(x, y));
+        self
+    }
+
+    /// Translate the subtree by logical pixels while this state is active.
+    pub fn translate(self, x: f32, y: f32) -> Self {
+        self.transform(Transform2D::translate(x, y))
+    }
+
+    /// Rotate the subtree around its transform origin while this state is active.
+    pub fn rotate_degrees(self, degrees: f32) -> Self {
+        self.transform(Transform2D::rotate_degrees(degrees))
+    }
+
+    /// Scale the subtree around its transform origin while this state is active.
+    pub fn scale(self, x: f32, y: f32) -> Self {
+        self.transform(Transform2D::scale(x, y))
+    }
+
+    /// Scale the subtree uniformly around its transform origin while this state is active.
+    pub fn scale_uniform(self, scale: f32) -> Self {
+        self.transform(Transform2D::scale_uniform(scale))
     }
 
     /// Replace the background with a bounded multi-stop gradient while this state is active.

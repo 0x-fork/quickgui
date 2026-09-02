@@ -63,6 +63,60 @@ vertices after rich-run color resolution. Opacity changes therefore do not affec
 shaping, raster identities, tessellation, batching, or idle scheduling, and require no offscreen
 subtree texture.
 
+Compositing layers extend that paint traversal with the one thing scoped opacity deliberately
+avoids: an offscreen subtree texture. An element that declares a transform beyond a pure
+translation, a `Filter::Blur` or `Filter::DropShadow`, a backdrop effect, or a blend mode other than
+`Normal` becomes a *compositing group*. `Scene::begin_group` records the group's box, the clip that
+applies to its composited result, and its effect parameters, then hands back the layer key its
+subtree paints into. That key is `(plane, z_index, group)`: because `group` is the least
+significant term, a group still sorts against its siblings by its own `z_index` instead of floating
+above them, while every descendant layer — including a descendant's own `z_index` layer — stays
+distinguishable from the parent's, which is what keeps a CSS stacking context's contents inside it.
+The composite itself is one more primitive in the parent layer's cross-primitive paint order, so it
+interleaves with siblings exactly as a quad would. Ancestor opacity is captured by the group and
+applied once to the composited result rather than to each primitive.
+
+`src/renderer/compositor.rs` owns the pass sequencing, and both `gpu.rs` and the headless
+`offscreen.rs` call the same `Compositor::render_scene`, so a screenshot test exercises the
+production path. It plans a frame in three phases. First it claims textures for each group,
+deepest first, from a bounded least-recently-used pool; a group that cannot be served drops its
+effect. Then it builds every composite and blur draw and flattens each target's layers into an
+ordered step list. Finally it records passes: each group's own pass (clearing to transparent),
+then its two separable Gaussian passes, and last the target's pass, which is split wherever a step
+needs the destination copied first.
+
+Group textures are allocated at the window's full physical resolution. Text is prepared by Glyphon
+at absolute window coordinates and its vertex buffers are built before any pass begins; the shape,
+image, SVG, path, and application-shader renderers likewise bake one window-sized projection into a
+shared uniform. A group-sized texture would require every one of them to learn a per-layer origin,
+so the compositor pays in memory instead and keeps the entire per-frame preparation path unchanged
+— which is also why text rotates, blurs, and blends with its parent for free. `MAX_LAYER_TEXTURE_BYTES`
+(128 MiB per window) bounds the cost, `MAX_LAYERS_PER_FRAME` (8) and `MAX_LAYER_DEPTH` (4) bound the
+count, and `MAX_BLUR_RADIUS` (64 logical pixels) bounds the convolution, whose support is three
+standard deviations evaluated in at most 48 strided taps per axis. Exceeding any bound paints the
+subtree directly into its parent without the effect and reports it in
+`RenderStats::skipped_layer_effects`, alongside `compositing_layers`, `layer_passes`, `blur_passes`,
+and `layer_texture_bytes`.
+
+A scene with no groups records exactly the passes and draws it always did: `render_scene` takes a
+zero-group fast path that compiles no pipeline, allocates no texture, and adds no pass. Group
+textures are retained across frames and reused whenever a group keeps its identity and the window
+keeps its size; their contents are re-recorded each frame, because no content signature is
+computed.
+
+Backdrop filters and destination-reading blend modes need the target back. The window surface is
+configured with `COPY_SRC` when the adapter advertises it; the whole target is then copied into a
+shared scratch texture between passes. `Normal` and `Screen` reach their exact result through
+fixed-function blend state and never copy; every other blend mode evaluates the separable
+Porter-Duff form in premultiplied colour from the copy and writes the final result with a replacing
+blend state, so it is exact over transparent destinations too.
+
+Hit testing follows paint. `LayoutFrame` carries the accumulated window-space transform of the
+enclosing groups, each `HitRegion` records it, and a pointer position is inverse-mapped through it
+before the region's untransformed bounds and clip are tested. Layout itself is never transformed,
+so Taffy, measurement, anchoring, and reported element bounds are unchanged; a pure translation is
+folded into the painted box instead of opening a group at all.
+
 The current renderer has six specialized primitive renderers. Windows using the same performance
 profile share a compatible WGPU instance, adapter, device, and queue; a surface-incompatible window
 falls back to its own context. Compatible windows also share the immutable format-matched shape

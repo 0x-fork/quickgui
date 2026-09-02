@@ -52,8 +52,19 @@ impl GpuRenderer {
             opaque_alpha_mode
         };
         let physical_size = window.inner_size();
+        // Backdrop filters and destination-reading blend modes copy the presented image back into
+        // a bounded scratch texture. Ask for `COPY_SRC` when the surface advertises it; when it
+        // does not, those effects degrade to painting without the effect.
+        let surface_usage = if capabilities
+            .usages
+            .contains(TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC)
+        {
+            TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC
+        } else {
+            TextureUsages::RENDER_ATTACHMENT
+        };
         let config = SurfaceConfiguration {
-            usage: TextureUsages::RENDER_ATTACHMENT,
+            usage: surface_usage,
             format,
             width: physical_size.width.max(1),
             height: physical_size.height.max(1),
@@ -116,6 +127,7 @@ impl GpuRenderer {
             composition_active: false,
             #[cfg(target_os = "macos")]
             overlay_active: false,
+            compositor: Compositor::default(),
             window,
         })
     }
@@ -654,89 +666,62 @@ impl GpuRenderer {
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("quickgui frame encoder"),
             });
-        {
-            let clear = scene.background();
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("quickgui main pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(wgpu::Color {
-                            r: clear.r as f64,
-                            g: clear.g as f64,
-                            b: clear.b as f64,
-                            a: clear.a as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            for (layer, paint_layer) in scene.paint_layers().iter().enumerate() {
-                if composed && paint_layer.key().plane != ScenePlane::Base {
-                    continue;
-                }
-                for order in 0..=paint_layer.max_order() {
-                    self.shapes.render_order(&mut pass, layer, order);
-                    if let Some(path) = &self.path {
-                        path.render_order(&mut pass, layer, order);
-                    }
-                    if let Some(custom_shader) = &self.custom_shader {
-                        custom_shader.render_order(&mut pass, layer, order);
-                    }
-                    if let Some(image) = &self.image {
-                        image.render_order(&mut pass, layer, order);
-                    }
-                    if let Some(svg) = &self.svg {
-                        svg.render_order(&mut pass, layer, order);
-                    }
-                    self.text.render_order(&mut pass, layer, order)?;
-                }
-            }
-        }
-        if let Some(view) = &overlay_view {
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("quickgui overlay pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            for (layer, paint_layer) in scene.paint_layers().iter().enumerate() {
-                if paint_layer.key().plane != ScenePlane::Overlay {
-                    continue;
-                }
-                for order in 0..=paint_layer.max_order() {
-                    self.shapes.render_order(&mut pass, layer, order);
-                    if let Some(path) = &self.path {
-                        path.render_order(&mut pass, layer, order);
-                    }
-                    if let Some(custom_shader) = &self.custom_shader {
-                        custom_shader.render_order(&mut pass, layer, order);
-                    }
-                    if let Some(image) = &self.image {
-                        image.render_order(&mut pass, layer, order);
-                    }
-                    if let Some(svg) = &self.svg {
-                        svg.render_order(&mut pass, layer, order);
-                    }
-                    self.text.render_order(&mut pass, layer, order)?;
-                }
-            }
+        let target_copyable = self.config.usage.contains(TextureUsages::COPY_SRC);
+        let composite_stats = {
+            let renderers = SceneRenderers {
+                shapes: &self.shapes,
+                path: self.path.as_ref(),
+                custom_shader: self.custom_shader.as_ref(),
+                image: self.image.as_ref(),
+                svg: self.svg.as_ref(),
+                text: &self.text,
+            };
+            self.compositor.render_scene(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                scene,
+                &renderers,
+                &view,
+                Some(&frame.texture),
+                Some(scene.background()),
+                CompositeFrame {
+                    width: physical_size.width,
+                    height: physical_size.height,
+                    scale: scale_factor,
+                    format: self.config.format,
+                    target_copyable,
+                    plane: composed.then_some(ScenePlane::Base),
+                },
+            )?
+        };
+        if let Some(overlay) = &overlay_view {
+            let renderers = SceneRenderers {
+                shapes: &self.shapes,
+                path: self.path.as_ref(),
+                custom_shader: self.custom_shader.as_ref(),
+                image: self.image.as_ref(),
+                svg: self.svg.as_ref(),
+                text: &self.text,
+            };
+            self.compositor.render_scene(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                scene,
+                &renderers,
+                overlay,
+                overlay_frame.as_ref().map(|frame| &frame.texture),
+                Some(crate::Color::TRANSPARENT),
+                CompositeFrame {
+                    width: physical_size.width,
+                    height: physical_size.height,
+                    scale: scale_factor,
+                    format: self.config.format,
+                    target_copyable,
+                    plane: Some(ScenePlane::Overlay),
+                },
+            )?;
         }
 
         self.window.pre_present_notify();
@@ -777,12 +762,19 @@ impl GpuRenderer {
                 + custom_shader_stats.draw_calls
                 + image_stats.draw_calls
                 + svg_stats.draw_calls
-                + text_draw_calls,
+                + text_draw_calls
+                + composite_stats.layers
+                + composite_stats.blur_passes,
             reshaped_text_areas: reshaped,
             retained_text_areas,
             retained_text_layouts,
             retained_text_renderers,
             cached_text_areas: text_count.saturating_sub(reshaped),
+            compositing_layers: composite_stats.layers,
+            layer_passes: composite_stats.layer_passes,
+            blur_passes: composite_stats.blur_passes,
+            layer_texture_bytes: composite_stats.layer_texture_bytes,
+            skipped_layer_effects: composite_stats.skipped_layer_effects,
         }))
     }
 
