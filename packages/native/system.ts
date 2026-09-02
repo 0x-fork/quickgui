@@ -112,6 +112,26 @@ export type WindowLevel =
   | "status"
   | "pop-up-menu"
   | "screen-saver";
+/**
+ * A stacking level named the Electron way.
+ *
+ * `window.setAlwaysOnTop` accepts these alongside QuickGUI's kebab-case names; both resolve to the
+ * same core `WindowLevel`.
+ */
+export type ElectronWindowLevel =
+  | "normal"
+  | "floating"
+  | "torn-off-menu"
+  | "tornOffMenu"
+  | "modal-panel"
+  | "modalPanel"
+  | "main-menu"
+  | "mainMenu"
+  | "status"
+  | "pop-up-menu"
+  | "popUpMenu"
+  | "screen-saver"
+  | "screenSaver";
 export type CursorGrabMode = "none" | "confined" | "locked";
 export type TaskbarProgressState = "none" | "normal" | "indeterminate" | "paused" | "error";
 export type WindowBackgroundAppearance = "opaque" | "transparent" | "blurred";
@@ -968,7 +988,47 @@ export const Shell = Object.freeze({
   trashItem(path: string): Promise<void> {
     return shellRequest("trash-path", resolvePath(path));
   },
+
+  /** Play the operating system's alert sound. */
+  beep(): void {
+    appMutation("beep");
+  },
 });
+
+/**
+ * Application-level control of the installed spell-check provider.
+ *
+ * Per-input `spellcheck` and `autocorrect` behavior is a component property; these two calls are
+ * the application-wide dictionary operations a context menu performs.
+ */
+export const SpellChecker = Object.freeze({
+  /** Add one word to the user dictionary. */
+  learnWord(word: string): void {
+    appMutation("learn-word", validateSpellWord(word));
+  },
+
+  /** Ignore one word for the remainder of the shared checking session. */
+  ignoreWord(word: string): void {
+    appMutation("ignore-word", validateSpellWord(word));
+  },
+});
+
+/** Longest word accepted by the application-level dictionary calls. */
+const MAX_SPELL_WORD_BYTES = 256;
+
+function validateSpellWord(word: string): string {
+  if (
+    typeof word !== "string" ||
+    word.length === 0 ||
+    word.includes("\0") ||
+    new TextEncoder().encode(word).length > MAX_SPELL_WORD_BYTES
+  ) {
+    throw new TypeError(
+      `a spell-check word must be nonempty, NUL-free, and at most ${MAX_SPELL_WORD_BYTES} UTF-8 bytes`,
+    );
+  }
+  return word;
+}
 
 /** Operating-system notifications delivered outside QuickGUI windows. */
 export const Notifications = Object.freeze({
@@ -1167,6 +1227,17 @@ export const Menu = Object.freeze({
     applicationMenuActionIds = new Set(serialized.actionIds);
     // Application menu actions live until the next replacement; keep the disposer represented
     // by their exact ids so window and Dock menu callbacks remain independently owned.
+  },
+
+  /**
+   * Present a platform-native popup menu owned by one window.
+   *
+   * `x` and `y` are window-local logical pixels from the top-left; omit both to use the current
+   * cursor position. The promise resolves once the menu closes, whether an item was chosen or the
+   * user dismissed it, and the item callbacks are released with it.
+   */
+  popup(items: readonly MenuItem[], options: PopupMenuOptions = {}): Promise<void> {
+    return showNativePopupMenu(items, options);
   },
 });
 
@@ -1759,6 +1830,14 @@ export function dispatchSystemEvent(
     menuCallbacks.get(event.target)?.();
     return true;
   }
+  if (event.kind === "app-service" || event.kind === "popup-menu") {
+    const pending = pendingAppServiceRequests.get(event.target);
+    if (!pending) return true;
+    pendingAppServiceRequests.delete(event.target);
+    if (event.error !== undefined) pending.reject(new Error(event.error));
+    else pending.resolve(event.value);
+    return true;
+  }
   if (event.kind === "screen-change") {
     void Screen.getAllDisplays()
       .then((displays) => {
@@ -1836,5 +1915,298 @@ function parsePowerEvent(value: string | undefined): PowerEvent | undefined {
     }
   } catch {
     return undefined;
+  }
+}
+
+/** Persistable window geometry and display identity. */
+export interface WindowRestoreState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+  fullscreen: boolean;
+  /** Process-level display identifier captured with the bounds, when one was known. */
+  displayId?: string;
+  /** Stable physical display identity, when the platform exposes one. */
+  displayUuid?: string;
+  scaleFactor: number;
+}
+
+/** How the application appears in the Dock and application switcher. */
+export type ActivationPolicy = "regular" | "accessory" | "prohibited";
+/** Urgency of a request for the user's attention. */
+export type DockAttentionType = "critical" | "informational";
+
+const pendingAppServiceRequests = new Map<
+  number,
+  { resolve: (value: string | undefined) => void; reject: (error: Error) => void }
+>();
+let nextAppServiceRequest = 1;
+/** The last Dock visibility JavaScript asked for; the platform exposes no query. */
+let dockVisible = true;
+
+/** Read one window's persistable geometry and display identity. */
+export async function getNativeWindowRestoreState(window: Window): Promise<WindowRestoreState> {
+  const { context: current, window: resolved } = windowContext(window);
+  const state = current.hosted
+    ? await binding.getHostedWindowRestoreState(current.appId, resolved.nativeId)
+    : binding.getWindowRestoreState(current.appId, resolved.nativeId);
+  const restore: WindowRestoreState = {
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
+    maximized: state.maximized,
+    fullscreen: state.fullscreen,
+    scaleFactor: state.scaleFactor,
+  };
+  if (state.displayId !== undefined) restore.displayId = state.displayId;
+  if (state.displayUuid !== undefined) restore.displayUuid = state.displayUuid;
+  return restore;
+}
+
+/** Convert a persisted restore state into the shape the native window options accept. */
+export function nativeWindowRestoreState(
+  state: WindowRestoreState,
+): binding.NativeWindowRestoreState {
+  const native: binding.NativeWindowRestoreState = {
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
+    maximized: state.maximized,
+    fullscreen: state.fullscreen,
+    scaleFactor: state.scaleFactor,
+  };
+  if (state.displayId !== undefined) native.displayId = state.displayId;
+  if (state.displayUuid !== undefined) native.displayUuid = state.displayUuid;
+  return native;
+}
+
+/**
+ * Start one application-shell service and resolve when the operating system answers.
+ *
+ * The native side never blocks the application thread; the outcome returns as an `app-service`
+ * event carrying this request id.
+ */
+function appServiceRequest(action: string, value?: string): Promise<string | undefined> {
+  try {
+    const current = context();
+    const request = allocateBoundedId(nextAppServiceRequest, pendingAppServiceRequests);
+    nextAppServiceRequest = request >= 0xffff_ffff ? 1 : request + 1;
+    return new Promise<string | undefined>((resolve, reject) => {
+      pendingAppServiceRequests.set(request, { resolve, reject });
+      try {
+        if (current.hosted) {
+          watchHostedRequestAcceptance(
+            binding.performHostedAppService(current.appId, request, action, value),
+            request,
+            pendingAppServiceRequests,
+          );
+        } else {
+          binding.performAppService(current.appId, request, action, value);
+        }
+      } catch (error) {
+        pendingAppServiceRequests.delete(request);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  } catch (error) {
+    return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
+/** Apply one fire-and-forget application-shell mutation. */
+function appMutation(action: string, value?: string): void {
+  const current = context();
+  if (current.hosted) binding.performHostedAppMutation(current.appId, action, value);
+  else binding.performAppMutation(current.appId, action, value);
+}
+
+/** Change how the application appears in the Dock and application switcher. */
+export async function setNativeActivationPolicy(policy: ActivationPolicy): Promise<void> {
+  await appServiceRequest("set-activation-policy", policy);
+  if (policy !== "regular") dockVisible = false;
+}
+
+/** Bring the application forward, optionally stealing focus from the frontmost application. */
+export function activateNativeApplication(steal: boolean): void {
+  appMutation("activate", steal ? "true" : "false");
+}
+
+export function hideNativeApplication(): void {
+  appMutation("hide");
+}
+
+export function unhideNativeApplication(): void {
+  appMutation("unhide");
+}
+
+/** Route keystrokes straight to this process, bypassing input monitoring. */
+export function setNativeSecureKeyboardEntry(enabled: boolean): void {
+  appMutation("set-secure-keyboard-entry", enabled ? "true" : "false");
+}
+
+/** Bounce the Dock tile and resolve with the identifier that cancels a critical bounce. */
+export async function requestNativeDockAttention(
+  type: DockAttentionType = "informational",
+): Promise<number> {
+  const value = await appServiceRequest("request-dock-attention", type);
+  const id = Number(value);
+  return Number.isFinite(id) ? id : 0;
+}
+
+export function cancelNativeDockAttention(id: number): void {
+  if (!Number.isInteger(id)) {
+    throw new TypeError("a dock attention request id must be an integer");
+  }
+  appMutation("cancel-dock-attention", String(id));
+}
+
+export async function setNativeDockVisible(visible: boolean): Promise<void> {
+  await appServiceRequest("set-dock-visible", visible ? "true" : "false");
+  dockVisible = visible;
+}
+
+/** The last Dock visibility this process asked for. */
+export function nativeDockVisible(): boolean {
+  return dockVisible;
+}
+
+/** Whether this process can relocate its bundle into an `/Applications` directory. */
+export async function getNativeApplicationsFolderSupport(): Promise<{
+  supported: boolean;
+  alreadyInstalled: boolean;
+}> {
+  const current = context();
+  const support = current.hosted
+    ? await binding.getHostedApplicationsFolderSupport(current.appId)
+    : binding.getApplicationsFolderSupport(current.appId);
+  return { supported: support.supported, alreadyInstalled: support.alreadyInstalled };
+}
+
+/** Move the running application bundle into `/Applications`. */
+export async function moveNativeApplicationToApplicationsFolder(): Promise<boolean> {
+  return (await appServiceRequest("move-to-applications-folder")) === "true";
+}
+
+/** Whether this process is running from an installed application bundle. */
+export function nativeApplicationPackaged(): boolean {
+  return binding.isApplicationPackaged();
+}
+
+/** Exit the application with an explicit process exit code. */
+export async function exitNativeAppWithCode(code: number): Promise<boolean> {
+  if (!Number.isInteger(code)) {
+    throw new TypeError("a process exit code must be an integer");
+  }
+  const current = context();
+  return current.hosted
+    ? await binding.exitHostedAppWithCode(current.appId, code)
+    : binding.exitAppWithCode(current.appId, code);
+}
+
+const windowMenuDisposers = new Map<number, () => void>();
+
+/** Replace or clear one window's native menu declaration. */
+export function setNativeWindowMenu(
+  window: Window,
+  definitions: readonly MenuDefinition[] | null,
+): void {
+  const { context: current, window: resolved } = windowContext(window);
+  const serialized = definitions === null ? undefined : serializeNativeMenu(definitions);
+  if (current.hosted) {
+    binding.performHostedWindowAction(
+      current.appId,
+      resolved.nativeId,
+      "set-menu",
+      serialized?.json,
+    );
+  } else {
+    binding.performWindowAction(current.appId, resolved.nativeId, "set-menu", serialized?.json);
+  }
+  windowMenuDisposers.get(resolved.nativeId)?.();
+  const dispose = serialized?.install();
+  if (dispose) windowMenuDisposers.set(resolved.nativeId, dispose);
+  else windowMenuDisposers.delete(resolved.nativeId);
+}
+
+/** @internal Release the menu callbacks a closed window owned. */
+export function releaseNativeWindowMenu(nativeId: number): void {
+  windowMenuDisposers.get(nativeId)?.();
+  windowMenuDisposers.delete(nativeId);
+}
+
+/** Where a native popup menu opens, in window-local logical pixels from the top-left. */
+export interface PopupMenuOptions {
+  window?: Window;
+  x?: number;
+  y?: number;
+}
+
+/** Present a native popup menu and resolve once it closes. */
+function showNativePopupMenu(
+  items: readonly MenuItem[],
+  options: PopupMenuOptions = {},
+): Promise<void> {
+  try {
+    const { context: current, window: resolved } = windowContext(options.window);
+    if ((options.x === undefined) !== (options.y === undefined)) {
+      throw new TypeError("a native popup menu position requires both x and y");
+    }
+    if (
+      (options.x !== undefined && !Number.isFinite(options.x)) ||
+      (options.y !== undefined && !Number.isFinite(options.y))
+    ) {
+      throw new TypeError("a native popup menu position must be finite");
+    }
+    const serialized = serializeNativeMenu([{ label: "Popup", items: [...items] }]);
+    const request = allocateBoundedId(nextAppServiceRequest, pendingAppServiceRequests);
+    nextAppServiceRequest = request >= 0xffff_ffff ? 1 : request + 1;
+    return new Promise<void>((resolve, reject) => {
+      const dispose = serialized.install();
+      pendingAppServiceRequests.set(request, {
+        resolve: () => {
+          dispose();
+          resolve();
+        },
+        reject: (error) => {
+          dispose();
+          reject(error);
+        },
+      });
+      try {
+        if (current.hosted) {
+          watchHostedRequestAcceptance(
+            binding.showHostedWindowPopupMenu(
+              current.appId,
+              request,
+              resolved.nativeId,
+              serialized.json,
+              options.x,
+              options.y,
+            ),
+            request,
+            pendingAppServiceRequests,
+          );
+        } else {
+          binding.showWindowPopupMenu(
+            current.appId,
+            request,
+            resolved.nativeId,
+            serialized.json,
+            options.x,
+            options.y,
+          );
+        }
+      } catch (error) {
+        pendingAppServiceRequests.delete(request);
+        dispose();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  } catch (error) {
+    return Promise.reject(error instanceof Error ? error : new Error(String(error)));
   }
 }

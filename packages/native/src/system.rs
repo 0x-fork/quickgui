@@ -401,9 +401,114 @@ pub struct NativeUserTask {
     pub icon_index: Option<i32>,
 }
 
+/// Whether this process can relocate its bundle into an `/Applications` directory.
+#[derive(Clone)]
+#[napi(object)]
+pub struct NativeApplicationsFolderSupport {
+    pub supported: bool,
+    pub already_installed: bool,
+}
+
+/// Persistable window geometry and display identity.
+///
+/// `displayUuid` is the textual form of the stable physical display identity, so a stored state
+/// survives a reboot that renumbers process-level display ids.
+#[derive(Clone)]
+#[napi(object)]
+pub struct NativeWindowRestoreState {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub maximized: bool,
+    pub fullscreen: bool,
+    pub display_id: Option<String>,
+    pub display_uuid: Option<String>,
+    pub scale_factor: f64,
+}
+
+/// One application-shell service requested by JavaScript.
+///
+/// Requests that the operating system answers asynchronously complete through an `app-service`
+/// event carrying the same request id; the rest resolve to `SystemCommandResult::Unit` at once.
+pub(super) enum AppServiceAction {
+    SetActivationPolicy(quickgui::ActivationPolicy),
+    RequestDockAttention(quickgui::DockAttention),
+    SetDockVisible(bool),
+    MoveToApplicationsFolder,
+}
+
+/// One fire-and-forget application-shell mutation requested by JavaScript.
+pub(super) enum AppMutationAction {
+    Activate(bool),
+    Hide,
+    Unhide,
+    CancelDockAttention(i64),
+    SetSecureKeyboardEntry(bool),
+    Beep,
+    /// Add one word to the user dictionary through the installed spell-check provider.
+    LearnWord(String),
+    /// Ignore one word for the remainder of the shared checking session.
+    IgnoreWord(String),
+}
+
+/// Maximum UTF-8 bytes accepted for a learned or ignored word.
+const MAX_SPELL_WORD_BYTES: usize = 256;
+
+pub(super) fn validate_spell_word(word: String) -> std::result::Result<String, String> {
+    if word.is_empty() || word.len() > MAX_SPELL_WORD_BYTES || word.contains('\0') {
+        return Err(format!(
+            "a spell-check word must be nonempty, NUL-free, and at most {MAX_SPELL_WORD_BYTES} UTF-8 bytes"
+        ));
+    }
+    Ok(word)
+}
+
+thread_local! {
+    /// Live critical Dock bounces, keyed by the identifier JavaScript observed.
+    ///
+    /// The core's request identity is opaque, so the resolved value is retained here and looked up
+    /// again when JavaScript cancels the bounce.
+    static DOCK_ATTENTION_REQUESTS: std::cell::RefCell<HashMap<i64, quickgui::DockAttentionRequest>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
+/// Maximum simultaneously retained Dock attention requests.
+const MAX_DOCK_ATTENTION_REQUESTS: usize = 64;
+
+pub(super) fn retain_dock_attention_request(request: quickgui::DockAttentionRequest) {
+    DOCK_ATTENTION_REQUESTS.with_borrow_mut(|requests| {
+        if requests.len() < MAX_DOCK_ATTENTION_REQUESTS {
+            requests.insert(request.get(), request);
+        }
+    });
+}
+
+pub(super) fn take_dock_attention_request(id: i64) -> Option<quickgui::DockAttentionRequest> {
+    DOCK_ATTENTION_REQUESTS.with_borrow_mut(|requests| requests.remove(&id))
+}
+
+pub(super) fn reset_dock_attention_requests() {
+    DOCK_ATTENTION_REQUESTS.with_borrow_mut(HashMap::clear);
+}
+
 pub(super) enum SystemCommand {
     ConfigureApp(NativeAppOptions),
     Exit,
+    ExitWithCode(i32),
+    GetApplicationsFolderSupport,
+    GetWindowRestoreState(u32),
+    AppService {
+        request: u32,
+        action: AppServiceAction,
+    },
+    AppMutation(AppMutationAction),
+    WindowPopupMenu {
+        request: u32,
+        window: u32,
+        menu: String,
+        position: Option<Point>,
+    },
     Relaunch(NativeRelaunchOptions),
     GetAppInfo,
     GetAppPaths,
@@ -517,6 +622,20 @@ pub(super) enum WindowAction {
     SetMacOsVisualEffectState(MacOsVisualEffectState),
     /// Ask the core to hand `Event::CloseRequested` to JavaScript instead of closing.
     SetCloseInterception(bool),
+    MoveTop,
+    /// Order this window above another hosted window, named by its hosted window id.
+    MoveAbove(u32),
+    SetIgnoreMouseEvents(bool, bool),
+    SetWindowEnabled(bool),
+    SetAspectRatio(Option<Size>),
+    SetWindowButtonVisibility(bool),
+    SetAlwaysOnTop(bool, Option<WindowLevel>),
+    /// Replace this window's native menu declaration, or inherit the application menus again.
+    SetMenu(Option<String>),
+    /// Declare the constraint applied when the core asks for a `WillResize` answer.
+    SetResizePolicy(Option<String>),
+    /// Declare the constraint applied when the core asks for a `WillMove` answer.
+    SetMovePolicy(Option<String>),
     ShowCharacterPalette,
     SetTabbingIdentifier(Option<String>),
     SelectNextTab,
@@ -548,7 +667,70 @@ pub(super) enum SystemCommandResult {
     Displays(Vec<NativeDisplay>),
     KeyboardLayout(NativeKeyboardLayout),
     WindowState(NativeWindowState),
+    WindowRestoreState(NativeWindowRestoreState),
+    ApplicationsFolderSupport(NativeApplicationsFolderSupport),
     Clipboard(Option<ClipboardItem>),
+}
+
+/// A native application-shell or popup-menu operation whose outcome arrives asynchronously.
+pub(super) enum AppServiceResponse {
+    Unit(quickgui::PlatformResponse<()>),
+    Boolean(quickgui::PlatformResponse<bool>),
+    DockAttention(quickgui::PlatformResponse<quickgui::DockAttentionRequest>),
+}
+
+pub(super) struct PendingAppService {
+    request: u32,
+    kind: &'static str,
+    response: AppServiceResponse,
+}
+
+impl PendingAppService {
+    pub(super) fn new(request: u32, kind: &'static str, response: AppServiceResponse) -> Self {
+        Self {
+            request,
+            kind,
+            response,
+        }
+    }
+
+    pub(super) fn request(&self) -> u32 {
+        self.request
+    }
+
+    pub(super) fn poll(&mut self, context: &mut Context<'_>) -> Poll<super::NativeEvent> {
+        let (value, error) = match &mut self.response {
+            AppServiceResponse::Unit(response) => match Pin::new(response).poll(context) {
+                Poll::Ready(Ok(())) => (None, None),
+                Poll::Ready(Err(error)) => (None, Some(error.to_string())),
+                Poll::Pending => return Poll::Pending,
+            },
+            AppServiceResponse::Boolean(response) => match Pin::new(response).poll(context) {
+                Poll::Ready(Ok(value)) => (Some(value.to_string()), None),
+                Poll::Ready(Err(error)) => (None, Some(error.to_string())),
+                Poll::Pending => return Poll::Pending,
+            },
+            AppServiceResponse::DockAttention(response) => match Pin::new(response).poll(context) {
+                Poll::Ready(Ok(value)) => {
+                    retain_dock_attention_request(value);
+                    (Some(value.get().to_string()), None)
+                }
+                Poll::Ready(Err(error)) => (None, Some(error.to_string())),
+                Poll::Pending => return Poll::Pending,
+            },
+        };
+        Poll::Ready(super::NativeEvent {
+            kind: self.kind.to_owned(),
+            window: 0,
+            target: self.request,
+            value,
+            paths: None,
+            data: None,
+            width: None,
+            height: None,
+            error,
+        })
+    }
 }
 
 #[derive(Default)]
@@ -778,8 +960,11 @@ impl PendingUserTasks {
 mod parsing;
 mod runtime;
 
-pub(crate) use parsing::parse_window_action;
 use parsing::*;
+pub(crate) use parsing::{
+    parse_app_mutation_action, parse_app_service_action, parse_move_policy, parse_resize_policy,
+    parse_window_action, parse_window_level, parse_window_restore_state, window_level_name,
+};
 
 #[cfg(test)]
 mod tests;

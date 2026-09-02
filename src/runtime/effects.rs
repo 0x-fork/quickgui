@@ -381,7 +381,7 @@ impl Runtime {
         }
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         for popup in native_popup_menus {
-            if !self.show_current_native_popup_menu(event_loop, popup) {
+            if !self.show_current_native_popup_menu(event_loop, popup, None) {
                 return false;
             }
         }
@@ -709,8 +709,12 @@ impl Runtime {
         &mut self,
         event_loop: &ActiveEventLoop,
         request: crate::event::NativePopupMenuRequest,
+        responder: Option<crate::platform::PlatformResponder<()>>,
     ) -> bool {
         if self.pending_native_popup_menus.len() == MAX_PENDING_NATIVE_POPUP_MENUS {
+            if let Some(responder) = &responder {
+                responder.complete(Err(PlatformError::PendingQueueFull));
+            }
             self.fail(
                 event_loop,
                 AppError::View(format!(
@@ -720,6 +724,9 @@ impl Runtime {
             return false;
         }
         let Some(handle) = self.current_handle() else {
+            if let Some(responder) = &responder {
+                responder.complete(Err(PlatformError::Unavailable));
+            }
             return false;
         };
         let actions = collect_menu_actions(std::slice::from_ref(&request.menu));
@@ -766,6 +773,7 @@ impl Runtime {
             PendingNativePopupMenu {
                 window: handle,
                 actions,
+                responder,
             },
         );
 
@@ -773,7 +781,10 @@ impl Runtime {
         tray::install_native_menu_handlers(self.event_proxy.clone());
         let result = {
             let Some(window) = self.window.as_ref() else {
-                self.pending_native_popup_menus.remove(&popup_id);
+                complete_native_popup_menu(
+                    self.pending_native_popup_menus.remove(&popup_id),
+                    Err(PlatformError::Unavailable),
+                );
                 return false;
             };
             #[cfg(target_os = "macos")]
@@ -801,13 +812,16 @@ impl Runtime {
         let shown = match result {
             Ok(shown) => shown,
             Err(error) => {
-                self.pending_native_popup_menus.remove(&popup_id);
+                complete_native_popup_menu(
+                    self.pending_native_popup_menus.remove(&popup_id),
+                    Err(PlatformError::Unavailable),
+                );
                 self.fail(event_loop, AppError::Platform(error));
                 return false;
             }
         };
         if !shown {
-            self.pending_native_popup_menus.remove(&popup_id);
+            complete_native_popup_menu(self.pending_native_popup_menus.remove(&popup_id), Ok(()));
             return true;
         }
         if self
@@ -815,9 +829,59 @@ impl Runtime {
             .send_event(RuntimeEvent::NativePopupMenuClosed(popup_id))
             .is_err()
         {
-            self.pending_native_popup_menus.remove(&popup_id);
+            complete_native_popup_menu(self.pending_native_popup_menus.remove(&popup_id), Ok(()));
         }
         true
+    }
+
+    /// Show a native popup menu owned by one window from outside any effect cycle.
+    ///
+    /// The window is activated exactly as a targeted action is, so the popup resolves against the
+    /// same `EventContext`-scoped state an in-view `show_native_popup_menu` call would see.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pub(super) fn show_external_native_popup_menu(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        request: crate::runtime::ExternalPopupMenuRequest,
+    ) -> bool {
+        let crate::runtime::ExternalPopupMenuRequest {
+            window,
+            menu,
+            position,
+            responder,
+        } = request;
+        let Some(window_id) = self.window_handles.get(&window).copied() else {
+            responder.complete(Err(PlatformError::Unavailable));
+            return true;
+        };
+        if !self.activate_window(window_id) {
+            responder.complete(Err(PlatformError::Unavailable));
+            return true;
+        }
+        let shown = self.show_current_native_popup_menu(
+            event_loop,
+            crate::event::NativePopupMenuRequest { menu, position },
+            Some(responder),
+        );
+        self.deactivate_window();
+        shown
+    }
+
+    /// Replace or clear one window's native menu declaration from outside any effect cycle.
+    pub(super) fn replace_external_window_menus(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        request: crate::runtime::ExternalWindowMenus,
+    ) -> bool {
+        let Some(window_id) = self.window_handles.get(&request.window).copied() else {
+            return true;
+        };
+        if !self.activate_window(window_id) {
+            return true;
+        }
+        let replaced = self.replace_current_window_menus(event_loop, request.menus);
+        self.deactivate_window();
+        replaced
     }
 
     pub(super) fn os_action_available(&self, action: OsAction) -> bool {
@@ -1170,5 +1234,54 @@ impl Runtime {
             self.sync_native_menu_state();
             self.deactivate_window();
         }
+    }
+}
+
+/// Complete one retained popup menu's external responder, if the request declared one.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn complete_native_popup_menu(
+    popup: Option<PendingNativePopupMenu>,
+    result: Result<(), PlatformError>,
+) {
+    if let Some(responder) = popup.and_then(|popup| popup.responder) {
+        responder.complete(result);
+    }
+}
+
+/// Append one externally declared request to a bounded deferred queue.
+///
+/// Deferred `AppRunner` menu work is retained until the runtime reaches a window-scoped effect
+/// cycle, so the queue carries the same public bound as the retained popup-menu table.
+pub(super) fn queue_deferred_menu_request<T>(
+    queue: &mut VecDeque<T>,
+    request: T,
+) -> Result<(), PlatformError> {
+    if queue.len() >= MAX_PENDING_NATIVE_POPUP_MENUS {
+        return Err(PlatformError::PendingQueueFull);
+    }
+    queue.push_back(request);
+    Ok(())
+}
+
+#[cfg(test)]
+mod deferred_menu_tests {
+    use super::*;
+
+    #[test]
+    fn deferred_menu_requests_stop_at_the_public_popup_menu_bound() {
+        let mut queue = VecDeque::new();
+        for index in 0..MAX_PENDING_NATIVE_POPUP_MENUS {
+            queue_deferred_menu_request(&mut queue, index)
+                .expect("the queue accepts requests below its bound");
+        }
+        assert_eq!(queue.len(), MAX_PENDING_NATIVE_POPUP_MENUS);
+        assert!(matches!(
+            queue_deferred_menu_request(&mut queue, MAX_PENDING_NATIVE_POPUP_MENUS),
+            Err(PlatformError::PendingQueueFull)
+        ));
+        assert_eq!(queue.len(), MAX_PENDING_NATIVE_POPUP_MENUS);
+        queue.pop_front();
+        queue_deferred_menu_request(&mut queue, MAX_PENDING_NATIVE_POPUP_MENUS)
+            .expect("draining one entry frees exactly one slot");
     }
 }

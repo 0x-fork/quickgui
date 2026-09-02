@@ -1473,3 +1473,384 @@ fn in_window_dialog_parts_mount_only_while_open_and_dismiss_through_the_core() {
             .unwrap()
     );
 }
+
+#[test]
+fn window_stacking_and_input_actions_parse_into_bounded_core_commands() {
+    let action =
+        crate::system::parse_window_action("move-top", None).expect("move-top needs no payload");
+    assert!(matches!(action, system::WindowAction::MoveTop));
+
+    let action = crate::system::parse_window_action("move-above", Some("12".into()))
+        .expect("move-above names another hosted window");
+    assert!(matches!(action, system::WindowAction::MoveAbove(12)));
+    assert!(crate::system::parse_window_action("move-above", Some("not-a-window".into())).is_err());
+    assert!(crate::system::parse_window_action("move-above", None).is_err());
+
+    let action = crate::system::parse_window_action(
+        "set-ignore-mouse-events",
+        Some("{\"ignore\":true,\"forward\":true}".into()),
+    )
+    .expect("the ignore-mouse-events payload parses");
+    assert!(matches!(
+        action,
+        system::WindowAction::SetIgnoreMouseEvents(true, true)
+    ));
+
+    let action = crate::system::parse_window_action("set-enabled", Some("false".into()))
+        .expect("set-enabled takes a boolean");
+    assert!(matches!(
+        action,
+        system::WindowAction::SetWindowEnabled(false)
+    ));
+
+    let action =
+        crate::system::parse_window_action("set-window-button-visibility", Some("true".into()))
+            .expect("button visibility takes a boolean");
+    assert!(matches!(
+        action,
+        system::WindowAction::SetWindowButtonVisibility(true)
+    ));
+}
+
+#[test]
+fn always_on_top_maps_electron_level_names_onto_the_core_levels() {
+    let action = crate::system::parse_window_action(
+        "set-always-on-top",
+        Some("{\"flag\":true,\"level\":\"screenSaver\"}".into()),
+    )
+    .expect("the always-on-top payload parses");
+    match action {
+        system::WindowAction::SetAlwaysOnTop(flag, level) => {
+            assert!(flag);
+            assert_eq!(level, Some(quickgui::WindowLevel::ScreenSaver));
+        }
+        _ => panic!("set-always-on-top must produce a stacking command"),
+    }
+
+    let action =
+        crate::system::parse_window_action("set-always-on-top", Some("{\"flag\":false}".into()))
+            .expect("turning always-on-top off needs no level");
+    assert!(matches!(
+        action,
+        system::WindowAction::SetAlwaysOnTop(false, None)
+    ));
+
+    assert!(
+        crate::system::parse_window_action(
+            "set-always-on-top",
+            Some("{\"flag\":true,\"level\":\"nope\"}".into())
+        )
+        .is_err()
+    );
+
+    for (name, level) in [
+        ("normal", quickgui::WindowLevel::Normal),
+        ("floating", quickgui::WindowLevel::Floating),
+        ("modalPanel", quickgui::WindowLevel::ModalPanel),
+        ("mainMenu", quickgui::WindowLevel::MainMenu),
+        ("status", quickgui::WindowLevel::Status),
+        ("popUpMenu", quickgui::WindowLevel::PopUpMenu),
+        ("screen-saver", quickgui::WindowLevel::ScreenSaver),
+        ("always-on-bottom", quickgui::WindowLevel::AlwaysOnBottom),
+    ] {
+        assert_eq!(
+            crate::system::parse_window_level(name).expect("a documented level name parses"),
+            level
+        );
+    }
+}
+
+#[test]
+fn resize_and_move_policies_are_declared_ahead_and_bounded() {
+    crate::runtime::reset_interception_state();
+    let action = crate::system::parse_window_action(
+        "set-resize-policy",
+        Some("{\"aspectRatio\":2,\"minimum\":{\"width\":100,\"height\":50}}".into()),
+    )
+    .expect("the resize policy action parses");
+    let policy = match action {
+        system::WindowAction::SetResizePolicy(Some(json)) => {
+            crate::system::parse_resize_policy(&json).expect("a bounded policy is accepted")
+        }
+        _ => panic!("set-resize-policy must carry its declaration"),
+    };
+    assert_eq!(policy.aspect_ratio, Some(2.0));
+    assert_eq!(policy.minimum, Some((100.0, 50.0)));
+
+    // The aspect ratio is applied after the grid step and before the bounds.
+    let constrained = policy
+        .constrain(quickgui::Size::new(400.0, 999.0))
+        .expect("the proposal is narrowed");
+    assert_eq!(constrained, quickgui::Size::new(400.0, 200.0));
+    assert_eq!(policy.constrain(quickgui::Size::new(400.0, 200.0)), None);
+
+    let snapped = crate::system::parse_resize_policy("{\"snap\":{\"width\":25,\"height\":25}}")
+        .expect("a grid step is accepted")
+        .constrain(quickgui::Size::new(413.0, 187.0))
+        .expect("an off-grid proposal is snapped");
+    assert_eq!(snapped, quickgui::Size::new(425.0, 175.0));
+
+    assert!(crate::system::parse_resize_policy("{\"aspectRatio\":0}").is_err());
+    assert!(crate::system::parse_resize_policy("{\"aspectRatio\":100000}").is_err());
+    assert!(
+        crate::system::parse_resize_policy(
+            "{\"minimum\":{\"width\":900,\"height\":10},\"maximum\":{\"width\":100,\"height\":100}}"
+        )
+        .is_err()
+    );
+    assert!(crate::system::parse_resize_policy("{\"snap\":{\"width\":-1,\"height\":4}}").is_err());
+
+    let move_policy =
+        crate::system::parse_move_policy("{\"keepOnScreen\":true}").expect("a move policy parses");
+    assert!(move_policy.keep_on_screen);
+    assert!(
+        !crate::system::parse_move_policy("{}")
+            .expect("an empty move policy is accepted")
+            .keep_on_screen
+    );
+    assert!(crate::system::parse_move_policy("not json").is_err());
+}
+
+#[test]
+fn declared_window_policies_stay_bounded_and_are_released_with_their_window() {
+    crate::runtime::reset_interception_state();
+    let policy = crate::runtime::WindowResizePolicy {
+        aspect_ratio: Some(1.5),
+        ..Default::default()
+    };
+    for window in 0..(MAX_WINDOWS as u32 + 8) {
+        crate::runtime::set_resize_policy(window, Some(policy));
+        crate::runtime::set_move_policy(
+            window,
+            Some(crate::runtime::WindowMovePolicy {
+                keep_on_screen: true,
+            }),
+        );
+    }
+    assert!(crate::runtime::retained_window_policy_counts() <= (MAX_WINDOWS, MAX_WINDOWS));
+
+    crate::runtime::forget_window_policies(0);
+    // An empty declaration withdraws the policy instead of retaining a no-op entry.
+    crate::runtime::set_resize_policy(1, Some(crate::runtime::WindowResizePolicy::default()));
+    crate::runtime::set_move_policy(1, None);
+    crate::runtime::reset_interception_state();
+    assert_eq!(crate::runtime::retained_window_policy_counts(), (0, 0));
+}
+
+#[test]
+fn keep_on_screen_clamps_only_positions_outside_the_work_area() {
+    let id = quickgui::DisplayId::new(1);
+    let displays = quickgui::Displays::new(
+        vec![
+            quickgui::Display::new(
+                id,
+                "Primary",
+                quickgui::Rect::new(0.0, 0.0, 1600.0, 1000.0),
+                quickgui::Rect::new(0.0, 25.0, 1600.0, 975.0),
+                2.0,
+            )
+            .expect("a valid display snapshot"),
+        ],
+        Some(id),
+    )
+    .expect("a single-display snapshot is valid");
+    assert_eq!(
+        crate::runtime::keep_position_on_screen(displays.all(), Point::new(100.0, 200.0)),
+        None
+    );
+    assert_eq!(
+        crate::runtime::keep_position_on_screen(displays.all(), Point::new(-40.0, 0.0)),
+        Some(Point::new(0.0, 25.0))
+    );
+    assert_eq!(
+        crate::runtime::keep_position_on_screen(&[], Point::new(1.0, 1.0)),
+        None
+    );
+}
+
+#[test]
+fn application_shell_services_split_awaited_results_from_fire_and_forget_mutations() {
+    assert!(matches!(
+        crate::system::parse_app_service_action("set-activation-policy", Some("accessory".into()))
+            .expect("an activation policy parses"),
+        system::AppServiceAction::SetActivationPolicy(quickgui::ActivationPolicy::Accessory)
+    ));
+    assert!(
+        crate::system::parse_app_service_action("set-activation-policy", Some("nope".into()))
+            .is_err()
+    );
+    assert!(matches!(
+        crate::system::parse_app_service_action("request-dock-attention", Some("critical".into()))
+            .expect("a dock attention request parses"),
+        system::AppServiceAction::RequestDockAttention(quickgui::DockAttention::Critical)
+    ));
+    assert!(matches!(
+        crate::system::parse_app_service_action("move-to-applications-folder", None)
+            .expect("the applications-folder move parses"),
+        system::AppServiceAction::MoveToApplicationsFolder
+    ));
+    assert!(crate::system::parse_app_service_action("beep", None).is_err());
+
+    assert!(matches!(
+        crate::system::parse_app_mutation_action("activate", Some("true".into()))
+            .expect("activation parses"),
+        system::AppMutationAction::Activate(true)
+    ));
+    assert!(matches!(
+        crate::system::parse_app_mutation_action("beep", None).expect("beep parses"),
+        system::AppMutationAction::Beep
+    ));
+    assert!(matches!(
+        crate::system::parse_app_mutation_action("cancel-dock-attention", Some("42".into()))
+            .expect("a cancellation names its request"),
+        system::AppMutationAction::CancelDockAttention(42)
+    ));
+    assert!(crate::system::parse_app_mutation_action("cancel-dock-attention", None).is_err());
+    assert!(
+        crate::system::parse_app_mutation_action("set-dock-visible", Some("true".into())).is_err()
+    );
+}
+
+#[test]
+fn application_dictionary_words_are_bounded_before_they_reach_the_provider() {
+    assert!(matches!(
+        crate::system::parse_app_mutation_action("learn-word", Some("quickgui".into()))
+            .expect("a bounded word is accepted"),
+        system::AppMutationAction::LearnWord(word) if word == "quickgui"
+    ));
+    assert!(matches!(
+        crate::system::parse_app_mutation_action("ignore-word", Some("quickgui".into()))
+            .expect("a bounded word is accepted"),
+        system::AppMutationAction::IgnoreWord(word) if word == "quickgui"
+    ));
+    assert!(crate::system::parse_app_mutation_action("learn-word", None).is_err());
+    assert!(crate::system::parse_app_mutation_action("learn-word", Some(String::new())).is_err());
+    assert!(
+        crate::system::parse_app_mutation_action("ignore-word", Some("a".repeat(257))).is_err()
+    );
+    assert!(
+        crate::system::parse_app_mutation_action("ignore-word", Some("a\0b".to_owned())).is_err()
+    );
+}
+
+#[test]
+fn a_stale_dock_attention_identifier_cancels_nothing() {
+    crate::system::reset_dock_attention_requests();
+    assert!(crate::system::take_dock_attention_request(7).is_none());
+}
+
+#[test]
+fn restore_state_round_trips_through_the_hosted_boundary() {
+    let native = system::NativeWindowRestoreState {
+        x: 120.0,
+        y: 64.0,
+        width: 900.0,
+        height: 600.0,
+        maximized: false,
+        fullscreen: true,
+        display_id: Some("3".to_owned()),
+        display_uuid: Some("00112233-4455-6677-8899-aabbccddeeff".to_owned()),
+        scale_factor: 2.0,
+    };
+    let core = crate::system::parse_window_restore_state(&native)
+        .expect("a well-formed restore state is accepted");
+    assert_eq!(core.width, 900.0);
+    assert!(core.fullscreen);
+    assert_eq!(core.display_id, Some(3));
+    assert_eq!(
+        core.display_uuid,
+        Some([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff
+        ])
+    );
+
+    let round_tripped = system::NativeWindowRestoreState::from(core);
+    assert_eq!(round_tripped.display_uuid, native.display_uuid);
+    assert_eq!(round_tripped.display_id, native.display_id);
+
+    let invalid = system::NativeWindowRestoreState {
+        display_uuid: Some("not-a-uuid".to_owned()),
+        ..native.clone()
+    };
+    assert!(crate::system::parse_window_restore_state(&invalid).is_err());
+    let invalid = system::NativeWindowRestoreState {
+        x: f64::NAN,
+        ..native
+    };
+    assert!(crate::system::parse_window_restore_state(&invalid).is_err());
+}
+
+#[test]
+fn a_popup_menu_reuses_the_application_menu_grammar_and_requires_one_root() {
+    let menu = crate::system::menu::popup_menu(
+        "[{\"label\":\"Context\",\"items\":[{\"type\":\"action\",\"id\":5,\"label\":\"Copy\"}]}]",
+    )
+    .expect("one root menu is accepted");
+    assert_eq!(menu.name.as_ref(), "Context");
+    assert_eq!(menu.items.len(), 1);
+
+    assert!(crate::system::menu::popup_menu("[]").is_err());
+    assert!(
+        crate::system::menu::popup_menu(
+            "[{\"label\":\"A\",\"items\":[]},{\"label\":\"B\",\"items\":[]}]"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn per_window_menus_travel_as_a_fire_and_forget_declaration() {
+    let action = crate::system::parse_window_action(
+        "set-menu",
+        Some("[{\"label\":\"File\",\"items\":[]}]".into()),
+    )
+    .expect("a per-window menu parses");
+    match action {
+        system::WindowAction::SetMenu(Some(json)) => {
+            assert!(crate::system::menu::application_menus(&json).is_ok());
+        }
+        _ => panic!("set-menu must carry its declaration"),
+    }
+    assert!(matches!(
+        crate::system::parse_window_action("set-menu", None)
+            .expect("clearing inherits the app menu"),
+        system::WindowAction::SetMenu(None)
+    ));
+}
+
+#[test]
+fn hosted_popup_menus_resolve_through_an_asynchronous_request_id() {
+    let host = HostCoordinator::new();
+    host.enqueue(HostCommand::System {
+        app: 5,
+        command: system::SystemCommand::WindowPopupMenu {
+            request: 9,
+            window: 2,
+            menu: "[{\"label\":\"Context\",\"items\":[]}]".to_owned(),
+            position: Some(Point::new(10.0, 20.0)),
+        },
+        reply: Arc::new(HostReply::new(5)),
+    })
+    .expect("a popup-menu request fits the host queue");
+
+    let mut commands = host.take_commands().expect("the host queue is readable");
+    match commands.pop_front().expect("the request was queued") {
+        HostCommand::System {
+            command:
+                system::SystemCommand::WindowPopupMenu {
+                    request,
+                    window,
+                    position,
+                    ..
+                },
+            ..
+        } => {
+            assert_eq!(request, 9);
+            assert_eq!(window, 2);
+            assert_eq!(position, Some(Point::new(10.0, 20.0)));
+        }
+        _ => panic!("a popup menu must travel as a system command"),
+    }
+    assert!(commands.is_empty());
+}

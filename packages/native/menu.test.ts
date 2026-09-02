@@ -1,85 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { PROTOCOL_VERSION } from "./protocol.ts";
-
-/**
- * Records every call the JavaScript host makes so the interception, menu, and clipboard paths can
- * be checked without a built native addon.
- */
-type Call = { name: string; args: unknown[] };
-
-const calls: Call[] = [];
-let pendingEvents: Record<string, unknown>[] = [];
-let clipboardItem: { entries: Record<string, unknown>[] } | null = null;
-let findClipboardItem: { entries: Record<string, unknown>[] } | null = null;
-
-function record(name: string, args: unknown[]): void {
-  calls.push({ name, args });
-}
-
-function callsNamed(name: string): Call[] {
-  return calls.filter((call) => call.name === name);
-}
-
-const fakeBinding: Record<string, unknown> = {
-  protocolVersion: () => PROTOCOL_VERSION,
-  createApp: (...args: unknown[]) => {
-    record("createApp", args);
-    return 1;
-  },
-  prepareApp: (...args: unknown[]) => record("prepareApp", args),
-  isAppReady: () => true,
-  destroyApp: (...args: unknown[]) => {
-    record("destroyApp", args);
-    return true;
-  },
-  configureApp: (...args: unknown[]) => record("configureApp", args),
-  createWindow: (...args: unknown[]) => {
-    record("createWindow", args);
-    return 10 + callsNamed("createWindow").length;
-  },
-  applyBatch: (...args: unknown[]) => {
-    record("applyBatch", args);
-    return 0;
-  },
-  focusNode: () => true,
-  closeWindow: (...args: unknown[]) => {
-    record("closeWindow", args);
-    return true;
-  },
-  takeEvents: () => {
-    const events = pendingEvents;
-    pendingEvents = [];
-    return events;
-  },
-  pumpApp: () => -1,
-  performWindowAction: (...args: unknown[]) => record("performWindowAction", args),
-  performWindowImageAction: (...args: unknown[]) =>
-    record("performWindowImageAction", args),
-  setApplicationMenu: (...args: unknown[]) => record("setApplicationMenu", args),
-  setQuitInterception: (...args: unknown[]) => record("setQuitInterception", args),
-  requestAppQuit: (...args: unknown[]) => {
-    record("requestAppQuit", args);
-    return true;
-  },
-  exitApp: (...args: unknown[]) => {
-    record("exitApp", args);
-    return true;
-  },
-  releaseSingleInstanceLock: () => true,
-  readClipboard: () => clipboardItem,
-  writeClipboard: (_app: number, item: { entries: Record<string, unknown>[] }) => {
-    record("writeClipboard", [item]);
-    clipboardItem = item;
-  },
-  readFindClipboard: (...args: unknown[]) => {
-    record("readFindClipboard", args);
-    return findClipboardItem;
-  },
-  writeFindClipboard: (_app: number, item: { entries: Record<string, unknown>[] }) => {
-    record("writeFindClipboard", [item]);
-    findClipboardItem = item;
-  },
-};
+import { callsNamed, fakeBinding, queueEvents } from "./fake-binding.ts";
 
 mock.module("./binding.js", () => fakeBinding);
 
@@ -167,7 +87,7 @@ describe("window close interception", () => {
     expect(declared[0]!.args.slice(2)).toEqual(["set-close-interception", "true"]);
 
     // A held native close reaches the listener instead of closing the window.
-    pendingEvents.push({
+    queueEvents({
       kind: "close-requested",
       window: window.nativeId,
       target: 0,
@@ -194,7 +114,7 @@ describe("window close interception", () => {
     window.onCloseRequested(() => window.close());
     const closes = callsNamed("closeWindow").length;
 
-    pendingEvents.push({
+    queueEvents({
       kind: "close-requested",
       window: window.nativeId,
       target: 0,
@@ -219,7 +139,7 @@ describe("window close interception", () => {
     const window = new Window({ renderer: () => () => {}, title: "Closed" });
     const seen: unknown[] = [];
     window.on("closed", (payload) => seen.push(payload));
-    pendingEvents.push({ kind: "close", window: window.nativeId, target: 0 });
+    queueEvents({ kind: "close", window: window.nativeId, target: 0 });
     app.dispatchEvents();
     expect(seen).toEqual([{ window }]);
     expect(window.closed).toBe(true);
@@ -238,13 +158,13 @@ describe("application quit interception", () => {
     expect(callsNamed("setQuitInterception").slice(before)).toHaveLength(1);
     second();
 
-    pendingEvents.push({
+    queueEvents({
       kind: "before-quit",
       window: 0,
       target: 0,
       value: "operating-system",
     });
-    pendingEvents.push({
+    queueEvents({
       kind: "will-quit",
       window: 0,
       target: 0,
@@ -274,9 +194,12 @@ describe("application quit interception", () => {
   test("exit rejects out-of-range codes and force-quits otherwise", async () => {
     await expect(app.exit(-1)).rejects.toBeInstanceOf(RangeError);
     await expect(app.exit(1.5)).rejects.toBeInstanceOf(RangeError);
-    const exits = callsNamed("exitApp").length;
+    const exits = callsNamed("exitAppWithCode").length;
     expect(await app.exit(3)).toBe(true);
-    expect(callsNamed("exitApp")).toHaveLength(exits + 1);
+    const recorded = callsNamed("exitAppWithCode");
+    expect(recorded).toHaveLength(exits + 1);
+    // The core carries the status through its own teardown instead of the host inventing one.
+    expect(recorded.at(-1)?.args[1]).toBe(3);
   });
 });
 

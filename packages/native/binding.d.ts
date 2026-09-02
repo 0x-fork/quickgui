@@ -66,6 +66,35 @@ export declare function enableAutoStart(options: NativeAutoStartOptions): Promis
 
 export declare function exitApp(app: number): boolean
 
+export declare function exitAppWithCode(app: number, code: number): boolean
+export declare function exitHostedAppWithCode(app: number, code: number): Promise<boolean>
+
+/** Whether this process is running from an installed application bundle. */
+export declare function isApplicationPackaged(): boolean
+
+export declare function getApplicationsFolderSupport(app: number): NativeApplicationsFolderSupport
+
+export declare function getHostedApplicationsFolderSupport(app: number): Promise<NativeApplicationsFolderSupport>
+
+export declare function getWindowRestoreState(app: number, window: number): NativeWindowRestoreState
+
+export declare function getHostedWindowRestoreState(app: number, window: number): Promise<NativeWindowRestoreState>
+
+/** Start one application-shell service whose outcome arrives as an `app-service` event. */
+export declare function performAppService(app: number, request: number, action: string, value?: string | undefined | null): void
+
+export declare function performHostedAppService(app: number, request: number, action: string, value?: string | undefined | null): Promise<void>
+
+/** Apply one fire-and-forget application-shell mutation. */
+export declare function performAppMutation(app: number, action: string, value?: string | undefined | null): void
+
+export declare function performHostedAppMutation(app: number, action: string, value?: string | undefined | null): void
+
+/** Present a native popup menu owned by one window; completion arrives as a `popup-menu` event. */
+export declare function showWindowPopupMenu(app: number, request: number, window: number, menu: string, x?: number | undefined | null, y?: number | undefined | null): void
+
+export declare function showHostedWindowPopupMenu(app: number, request: number, window: number, menu: string, x?: number | undefined | null, y?: number | undefined | null): Promise<void>
+
 export declare function exitHostedApp(app: number): Promise<boolean>
 
 export declare function focusHostedNode(app: number, window: number, node: number): void
@@ -542,6 +571,13 @@ export interface NativeWindowOptions {
   cursorY?: number
   /** Bounded JSON encoding of a per-window native menu. Omitted windows inherit the app menu. */
   menu?: string
+  /**
+   * Persisted geometry and display identity captured with `window.getRestoreState()`.
+   *
+   * The core re-validates every field, so a stale value can never place a window off every
+   * connected display.
+   */
+  restoreState?: NativeWindowRestoreState
   lineScrollPixels?: number
   keySequenceTimeoutMs?: number
   reduceMotion?: boolean
@@ -558,6 +594,30 @@ export interface NativeWindowOptions {
   popoverDismissOnPointerOutside?: boolean
   popoverGrab?: boolean
   popoverAcceptsKeyFocus?: boolean
+}
+
+/** Whether this process can relocate its bundle into an `/Applications` directory. */
+export interface NativeApplicationsFolderSupport {
+  supported: boolean
+  alreadyInstalled: boolean
+}
+
+/**
+ * Persistable window geometry and display identity.
+ *
+ * `displayUuid` is the textual form of the stable physical display identity, so a stored state
+ * survives a reboot that renumbers process-level display ids.
+ */
+export interface NativeWindowRestoreState {
+  x: number
+  y: number
+  width: number
+  height: number
+  maximized: boolean
+  fullscreen: boolean
+  displayId?: string
+  displayUuid?: string
+  scaleFactor: number
 }
 
 export interface NativeWindowRegistry {

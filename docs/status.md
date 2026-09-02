@@ -110,6 +110,30 @@ Implemented now:
   `{ type: "system-menu", menu: "recent-documents" }` submenu, imperative window-tab and
   character-palette commands, and Electron-shaped clipboard `availableFormats`/`has`/`readBuffer`/
   `writeBuffer`/`readFindText`/`writeFindText` helpers over the core's typed entries;
+- JavaScript window lifecycle events — `window.on("minimize"|"restore"|"maximize"|"unmaximize"|
+  "enterFullScreen"|"leaveFullScreen"|"readyToShow"|"occlusionChange"|"levelChange"|"willResize"|
+  "willMove"|"resize"|"move"|"focus"|"blur"|"appearanceChange"|"closed")` and
+  `app.on("activate"|"deactivate")` — where `willResize`/`willMove` are notifications and the
+  narrowing itself is declared ahead as `window.setResizePolicy({ aspectRatio, minimum, maximum,
+  snap })` / `window.setMovePolicy({ keepOnScreen })`, answered synchronously by the core through
+  `constrain_resize`/`constrain_move`;
+- JavaScript window stacking, input, and state commands: `setAlwaysOnTop(flag, level)` over the
+  extended `WindowLevel` with Electron level names, `moveTop`, `moveAbove`, `setIgnoreMouseEvents`,
+  `setEnabled`, `setAspectRatio`, `setWindowButtonVisibility`, `setHasShadow`, and
+  `getRestoreState()` round-tripping into `WindowOptions.restoreState`;
+- JavaScript application shell: `app.setActivationPolicy`, `app.focus({ steal })`, `app.hide()`,
+  `app.show()`, `app.dock.bounce`/`cancelBounce`/`hide`/`show`/`isVisible` alongside the dock badge,
+  icon, and menu, `app.setSecureKeyboardEntryEnabled`, `Shell.beep()`,
+  `app.isInApplicationsFolder()`/`app.moveToApplicationsFolder()`, `app.isPackaged`, and
+  `app.exit(code)` mapped onto the core's `exit_with_code`, with fire-and-forget mutations kept
+  distinct from the operations whose native outcome resolves a Promise;
+- `AppRunner`-level stacking, input-policy, restore-state, and application-shell commands, plus the
+  deferred per-window-menu and native popup-menu requests an externally pumped host needs; both
+  menu queues resolve inside the runtime's own window-scoped effect cycle and carry the public
+  `MAX_PENDING_NATIVE_POPUP_MENUS` bound;
+- JavaScript `Menu.popup(items, { window, x, y })` resolving after the popup closes and
+  `window.setMenu(definitions | null)`, both reusing the application-menu item grammar, plus
+  application-level `SpellChecker.learnWord`/`ignoreWord` over the installed provider;
 - bounded immutable active-display snapshots with global logical work areas, scale/refresh metadata, stable macOS UUIDs, declarative change observation, current-display window state, display-targeted centered placement/fullscreen, disconnect fallback, and deterministic no-polling tests;
 - main-thread `Entity<T>`/`WeakEntity<T>` shared state with retained per-window observation, coalesced bounded notification fan-out, and automatic conditional unsubscribe, plus typed `EventEmitter` delivery with RAII `Subscription` lifetimes and bounded deterministic queues;
 - main-thread application globals with exact typed access, conditional per-window observation, RAII change subscriptions, deterministic deferred delivery, and bounded notification fan-out;

@@ -502,6 +502,42 @@ command bounds.
 `ignore_mouse_events`, `window_enabled`, `aspect_ratio`, and `window_button_visibility` builders so
 a window can start in any of these policies.
 
+## Reaching these from an embedding host
+
+`AppRunner` mirrors the window-scoped commands so an externally pumped host — the Bun binding, a
+test harness, or any embedder driving `pump` itself — reaches them without an `EventContext`:
+
+```rust
+runner.move_window_to_top(handle)?;
+runner.move_window_above(handle, other)?;
+runner.set_window_ignore_mouse_events(handle, true, true)?;
+runner.set_window_enabled(handle, false)?;
+runner.set_window_aspect_ratio(handle, Some(Size::new(16.0, 9.0)))?;
+runner.set_window_button_visibility(handle, false)?;
+runner.set_window_always_on_top(handle, true, Some(WindowLevel::ScreenSaver))?;
+```
+
+Each one queues an ordinary `WindowCommand` under the existing `MAX_PENDING_WINDOW_COMMANDS` bound
+and is applied on the next event-loop turn, so an embedder never mutates a native window from
+outside the application thread. `runner.window_state(handle)` and `runner.displays()` supply the
+`WindowState::restore_state` pair, and `WindowOptions::restore` accepts the result unchanged.
+
+Per-window menus and native popup menus need the runtime's window-scoped `EventContext`, which only
+exists inside an effect cycle, so `AppRunner` declares them and the runtime resolves them during its
+next `process_window_commands` turn:
+
+```rust
+runner.set_window_menus(handle, [Menu::new("Document").action("Export…", Export)])?;
+runner.use_application_menus_for_window(handle)?;
+
+// Resolves once the popup closes, whether an item ran or the user dismissed it.
+let closed = runner.show_window_popup_menu(handle, menu, Some(Point::new(24.0, 48.0)))?;
+```
+
+Both deferred queues carry the `MAX_PENDING_NATIVE_POPUP_MENUS` bound, a popup declared for a window
+that closes first completes with `PlatformError::Unavailable`, and a popup menu declared for an
+unmounted window is rejected before anything is retained.
+
 ## Persisting and restoring window geometry
 
 `WindowRestoreState` is a `serde` `Serialize`/`Deserialize` value an application can store next to

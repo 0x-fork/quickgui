@@ -41,18 +41,39 @@ import {
   type NativeEventType,
 } from "./native-tree.ts";
 import {
+  activateNativeApplication,
+  cancelNativeDockAttention,
   configureSystemContext,
+  Desktop,
   dispatchSystemEvent,
+  exitNativeAppWithCode,
+  getNativeApplicationsFolderSupport,
+  getNativeWindowRestoreState,
   getNativeWindowState,
+  hideNativeApplication,
+  moveNativeApplicationToApplicationsFolder,
+  nativeApplicationPackaged,
+  nativeDockVisible,
   nativeImageSource,
+  nativeWindowRestoreState,
   onNativeWindowStateChange,
   performNativeWindowAction,
   performNativeWindowImageAction,
   rejectPendingSystemRequests,
+  releaseNativeWindowMenu,
   removeNativeWindowStateListeners,
+  requestNativeDockAttention,
   requestNativeQuit,
   serializeNativeMenu,
+  setNativeActivationPolicy,
+  setNativeDockVisible,
   setNativeQuitInterception,
+  setNativeSecureKeyboardEntry,
+  setNativeWindowMenu,
+  unhideNativeApplication,
+  type ActivationPolicy,
+  type DockAttentionType,
+  type WindowRestoreState,
 } from "./system.ts";
 import {
   type SecondInstanceEvent,
@@ -114,6 +135,7 @@ export {
   PowerMonitor,
   PowerAssertion,
   Screen,
+  SpellChecker,
   SystemPreferences,
   Shell,
   Tray,
@@ -188,7 +210,12 @@ export type {
   TrayMenuSeparatorItem,
   TrayMenuSubmenuItem,
   WindowState,
+  WindowRestoreState,
   WindowBackgroundAppearance,
+  ElectronWindowLevel,
+  ActivationPolicy,
+  DockAttentionType,
+  PopupMenuOptions,
   MacOSVibrancy,
   MacOSVisualEffectState,
   WindowKind,
@@ -200,6 +227,7 @@ export type {
 import type {
   AppearancePreference,
   CursorGrabMode,
+  ElectronWindowLevel,
   ImageSource,
   KeyboardLayout,
   MenuDefinition,
@@ -225,6 +253,40 @@ export interface WindowEventMap {
    * Complete it with `window.close()` or `window.destroy()`, or ignore it to keep the window.
    */
   closeRequested: { window: Window };
+  /** The window was minimized to the Dock or taskbar. */
+  minimize: { window: Window };
+  /** The window returned from the Dock or taskbar. */
+  restore: { window: Window };
+  /** The window entered the platform's maximized/zoomed state. */
+  maximize: { window: Window };
+  /** The window left the platform's maximized/zoomed state. */
+  unmaximize: { window: Window };
+  enterFullScreen: { window: Window };
+  leaveFullScreen: { window: Window };
+  /**
+   * The first frame reached the screen.
+   *
+   * A window created with `visible: false` can be shown here without a flash of empty chrome.
+   */
+  readyToShow: { window: Window };
+  /** The compositor started or stopped hiding this window's contents. */
+  occlusionChange: { window: Window; occluded: boolean };
+  /** The effective native stacking level changed. */
+  levelChange: { window: Window; level: WindowLevel };
+  /**
+   * The window manager proposed a new inner size.
+   *
+   * This is a notification: the narrowing itself is declared ahead with
+   * `window.setResizePolicy()`, because the core must answer the platform synchronously.
+   */
+  willResize: { window: Window; size: Size };
+  /** The window manager proposed a new position. See `window.setMovePolicy()`. */
+  willMove: { window: Window; position: Point };
+  resize: { window: Window; size: Size };
+  move: { window: Window; position: Point };
+  focus: { window: Window };
+  blur: { window: Window };
+  appearanceChange: { window: Window; appearance: "light" | "dark" };
 }
 export type WindowRenderer = (window: Window) => () => void;
 export type PopoverPlacement =
@@ -243,6 +305,27 @@ export type PopoverPlacement =
 
 export type PerformanceProfile = "low-power" | "balanced" | "high-performance";
 export type InitialWindowState = "normal" | "maximized" | "fullscreen";
+
+/**
+ * The narrowing applied when the window manager proposes a new inner size.
+ *
+ * The constraint is declared ahead because the core answers the platform synchronously; the
+ * `willResize` event is only a notification of what was proposed.
+ */
+export interface WindowResizePolicy {
+  /** Content `width / height` the resize is snapped to. */
+  aspectRatio?: number;
+  minimum?: Size;
+  maximum?: Size;
+  /** Grid step applied to the proposed inner size before the ratio and bounds. */
+  snap?: Size;
+}
+
+/** The narrowing applied when the window manager proposes a new position. */
+export interface WindowMovePolicy {
+  /** Keep the window's origin inside the work area of the display that contains it. */
+  keepOnScreen?: boolean;
+}
 export interface Size {
   width: number;
   height: number;
@@ -306,6 +389,13 @@ export interface WindowOptions {
   cursorHitTest?: boolean;
   cursorPosition?: Point;
   menu?: readonly MenuDefinition[];
+  /**
+   * Persisted geometry and display identity captured with `window.getRestoreState()`.
+   *
+   * The core re-validates every field, so a stale or hostile value can never place a window off
+   * every connected display.
+   */
+  restoreState?: WindowRestoreState;
   lineScrollPixels?: number;
   keySequenceTimeoutMs?: number;
   reduceMotion?: boolean;
@@ -433,6 +523,10 @@ export interface AppEventMap {
   willQuit: { reason: QuitReason };
   openUrls: readonly string[];
   reopen: { hasVisibleWindows: boolean };
+  /** The application became the frontmost one. */
+  activate: undefined;
+  /** Another application became frontmost. */
+  deactivate: undefined;
   systemWake: undefined;
   keyboardLayoutChange: KeyboardLayout;
   notificationResponse: NotificationResponse;
@@ -699,6 +793,8 @@ class App {
         this._didCloseWindow(window);
       } else if (event.kind === "close-requested") {
         window._didRequestClose();
+      } else if (event.kind.startsWith("window-")) {
+        window._didObserveLifecycle(event.kind, event.value);
       } else {
         window._dispatchEvent(
           event.kind as NativeEventType,
@@ -838,9 +934,111 @@ class App {
     if (!Number.isInteger(code) || code < 0 || code > 255) {
       throw new RangeError("an application exit code must be an integer between 0 and 255");
     }
+    this.#assertAlive();
+    this._assertReady();
     this.#requestedExitCode = code;
-    return await this.quit({ force: true });
+    // The core carries the status through its own teardown, so the process exits with `code`
+    // even when the host is embedded in another runtime.
+    return await exitNativeAppWithCode(code);
   }
+
+  /** Whether this process is running from an installed application bundle. */
+  get isPackaged(): boolean {
+    return nativeApplicationPackaged();
+  }
+
+  /**
+   * Change how the application appears in the Dock and application switcher.
+   *
+   * macOS applies `NSApplicationActivationPolicy`; other platforms reject with an unsupported
+   * platform error.
+   */
+  async setActivationPolicy(policy: ActivationPolicy): Promise<void> {
+    this.#assertAlive();
+    this._assertReady();
+    await setNativeActivationPolicy(policy);
+  }
+
+  /**
+   * Bring the application forward.
+   *
+   * `steal` uses AppKit's ignore-other-apps activation, which takes focus from the frontmost
+   * application. Prefer the default unless the user just asked for this application explicitly.
+   */
+  focus(options: { steal?: boolean } = {}): void {
+    this.#assertAlive();
+    this._assertReady();
+    activateNativeApplication(options.steal ?? false);
+  }
+
+  /** Hide every window of this application. */
+  hide(): void {
+    this.#assertAlive();
+    this._assertReady();
+    hideNativeApplication();
+  }
+
+  /** Reveal an application hidden by `app.hide()`. */
+  show(): void {
+    this.#assertAlive();
+    this._assertReady();
+    unhideNativeApplication();
+  }
+
+  /** Route keystrokes straight to this process, bypassing input monitoring. */
+  setSecureKeyboardEntryEnabled(enabled: boolean): void {
+    this.#assertAlive();
+    this._assertReady();
+    setNativeSecureKeyboardEntry(enabled);
+  }
+
+  /** Whether the running bundle already lives in an `/Applications` directory. */
+  async isInApplicationsFolder(): Promise<boolean> {
+    this.#assertAlive();
+    this._assertReady();
+    return (await getNativeApplicationsFolderSupport()).alreadyInstalled;
+  }
+
+  /**
+   * Move the running application bundle into `/Applications`.
+   *
+   * Resolves to `false` when the bundle is already installed there. QuickGUI never restarts the
+   * process on its own; call `app.relaunch()` after a successful move.
+   */
+  async moveToApplicationsFolder(): Promise<boolean> {
+    this.#assertAlive();
+    this._assertReady();
+    return await moveNativeApplicationToApplicationsFolder();
+  }
+
+  /** macOS Dock tile control, alongside the badge, icon, and menu on `Desktop`. */
+  readonly dock = Object.freeze({
+    setBadge: (value?: string): void => {
+      Desktop.setDockBadge(value);
+    },
+    setIcon: (icon?: ImageSource): void => {
+      Desktop.setDockIcon(icon);
+    },
+    setMenu: (menu?: MenuDefinition): void => {
+      Desktop.setDockMenu(menu);
+    },
+    /**
+     * Bounce the Dock tile and resolve with the identifier that cancels a critical bounce.
+     *
+     * `critical` keeps bouncing until the application is activated or the request is cancelled;
+     * `informational` bounces once.
+     */
+    bounce: (type: DockAttentionType = "informational"): Promise<number> =>
+      requestNativeDockAttention(type),
+    /** Stop an in-flight critical bounce. */
+    cancelBounce: (id: number): void => {
+      cancelNativeDockAttention(id);
+    },
+    hide: (): Promise<void> => setNativeDockVisible(false),
+    show: (): Promise<void> => setNativeDockVisible(true),
+    /** The last Dock visibility this process asked for; the platform exposes no query. */
+    isVisible: (): boolean => nativeDockVisible(),
+  });
 
   /** Schedule a replacement process after ordinary child-first native teardown. */
   async relaunch(options: RelaunchOptions = {}): Promise<boolean> {
@@ -895,6 +1093,9 @@ class App {
       payload = { hasVisibleWindows: event.value === "true" };
     } else if (event.kind === "system-wake") {
       type = "systemWake";
+      payload = undefined;
+    } else if (event.kind === "app-activate" || event.kind === "app-deactivate") {
+      type = event.kind === "app-activate" ? "activate" : "deactivate";
       payload = undefined;
     } else if (event.kind === "before-quit" || event.kind === "will-quit") {
       type = event.kind === "before-quit" ? "beforeQuit" : "willQuit";
@@ -1221,6 +1422,10 @@ export class Window {
   readonly #closeRequestListeners = new Set<WindowCloseRequestListener>();
   #closeIntercepting = false;
   readonly #mountDisposers = new Set<() => void>();
+  readonly #lifecycleListeners = new Map<
+    keyof WindowEventMap,
+    Set<(payload: unknown) => void>
+  >();
 
   /** Return the Window whose renderer or native event callback is currently executing. */
   static getCurrentWindow(): Window {
@@ -1386,6 +1591,9 @@ export class Window {
       nativeOptions.cursorY = options.cursorPosition.y;
     }
     if (serializedMenu !== undefined) nativeOptions.menu = serializedMenu.json;
+    if (options.restoreState !== undefined) {
+      nativeOptions.restoreState = nativeWindowRestoreState(options.restoreState);
+    }
     if (options.lineScrollPixels !== undefined) {
       nativeOptions.lineScrollPixels = options.lineScrollPixels;
     }
@@ -1578,9 +1786,102 @@ export class Window {
     if (type === "closeRequested") {
       return this.onCloseRequested(listener as WindowCloseRequestListener);
     }
-    return this.onClose((window) =>
-      (listener as (payload: WindowEventMap["closed"]) => void)({ window }),
-    );
+    if (type === "closed") {
+      return this.onClose((window) =>
+        (listener as (payload: WindowEventMap["closed"]) => void)({ window }),
+      );
+    }
+    if (this.#closed) return () => {};
+    const listeners = this.#lifecycleListeners.get(type) ?? new Set();
+    const wrapped = (payload: unknown) =>
+      listener(payload as WindowEventMap[K]);
+    listeners.add(wrapped);
+    this.#lifecycleListeners.set(type, listeners);
+    return () => {
+      listeners.delete(wrapped);
+      if (listeners.size === 0) this.#lifecycleListeners.delete(type);
+    };
+  }
+
+  #emitLifecycle<K extends keyof WindowEventMap>(
+    type: K,
+    payload: WindowEventMap[K],
+  ): void {
+    const listeners = this.#lifecycleListeners.get(type);
+    if (!listeners?.size) return;
+    withCurrentWindow(this, () => {
+      for (const listener of [...listeners]) listener(payload);
+    });
+  }
+
+  /** @internal One core window lifecycle notification reached JavaScript. */
+  _didObserveLifecycle(kind: string, value: string | undefined): void {
+    if (this.#closed) return;
+    switch (kind) {
+      case "window-minimize":
+        this.#emitLifecycle(value === "true" ? "minimize" : "restore", {
+          window: this,
+        });
+        return;
+      case "window-maximize":
+        this.#emitLifecycle(value === "true" ? "maximize" : "unmaximize", {
+          window: this,
+        });
+        return;
+      case "window-fullscreen":
+        this.#emitLifecycle(
+          value === "true" ? "enterFullScreen" : "leaveFullScreen",
+          { window: this },
+        );
+        return;
+      case "window-ready-to-show":
+        this.#emitLifecycle("readyToShow", { window: this });
+        return;
+      case "window-occlusion":
+        this.#emitLifecycle("occlusionChange", {
+          window: this,
+          occluded: value === "true",
+        });
+        return;
+      case "window-level":
+        this.#emitLifecycle("levelChange", {
+          window: this,
+          level: (value ?? "normal") as WindowLevel,
+        });
+        return;
+      case "window-focus":
+        this.#emitLifecycle(value === "true" ? "focus" : "blur", {
+          window: this,
+        });
+        return;
+      case "window-appearance":
+        this.#emitLifecycle("appearanceChange", {
+          window: this,
+          appearance: value === "dark" ? "dark" : "light",
+        });
+        return;
+      case "window-will-resize":
+      case "window-resize": {
+        const size = parseWindowSize(value);
+        if (!size) return;
+        this.#emitLifecycle(kind === "window-resize" ? "resize" : "willResize", {
+          window: this,
+          size,
+        });
+        return;
+      }
+      case "window-will-move":
+      case "window-move": {
+        const position = parseWindowPoint(value);
+        if (!position) return;
+        this.#emitLifecycle(kind === "window-move" ? "move" : "willMove", {
+          window: this,
+          position,
+        });
+        return;
+      }
+      default:
+    }
   }
 
   #syncCloseInterception(): void {
@@ -1821,6 +2122,127 @@ export class Window {
     performNativeWindowAction(this, "show-character-palette");
   }
 
+  /**
+   * Raise or restore this window's stacking level.
+   *
+   * `level` names the level applied while `flag` is true and accepts the Electron names
+   * (`floating`, `modalPanel`, `mainMenu`, `status`, `popUpMenu`, `screenSaver`) as well as their
+   * kebab-case forms. Turning it off returns the window to `normal`.
+   */
+  setAlwaysOnTop(flag: boolean, level?: WindowLevel | ElectronWindowLevel): void {
+    performNativeWindowAction(
+      this,
+      "set-always-on-top",
+      JSON.stringify(level === undefined ? { flag } : { flag, level }),
+    );
+  }
+
+  /** Raise this window to the front of its stacking level without activating the app. */
+  moveTop(): void {
+    performNativeWindowAction(this, "move-top");
+  }
+
+  /** Order this window immediately above another open window. */
+  moveAbove(other: Window): void {
+    if (other === this) {
+      throw new RangeError("a window cannot be ordered above itself");
+    }
+    performNativeWindowAction(this, "move-above", String(other.nativeId));
+  }
+
+  /**
+   * Let clicks pass through this window to whatever is behind it.
+   *
+   * `forward` keeps pointer motion and hover events flowing to this window; it is ignored when
+   * `ignore` is false.
+   */
+  setIgnoreMouseEvents(
+    ignore: boolean,
+    options: { forward?: boolean } = {},
+  ): void {
+    performNativeWindowAction(
+      this,
+      "set-ignore-mouse-events",
+      JSON.stringify({ ignore, forward: options.forward ?? false }),
+    );
+  }
+
+  /**
+   * Block or restore every native input event for this window.
+   *
+   * A disabled window stays visible and keeps rendering; it simply stops receiving pointer and
+   * keyboard input, which is the native way to express an application-modal owner.
+   */
+  setEnabled(enabled: boolean): void {
+    performNativeWindowAction(this, "set-enabled", String(enabled));
+  }
+
+  /** Constrain live native resizing to one `width:height` content ratio, or pass null to clear. */
+  setAspectRatio(ratio: Size | null): void {
+    performNativeWindowAction(
+      this,
+      "set-aspect-ratio",
+      ratio === null ? undefined : JSON.stringify(ratio),
+    );
+  }
+
+  /** Show or hide the macOS close/minimize/zoom buttons. */
+  setWindowButtonVisibility(visible: boolean): void {
+    performNativeWindowAction(
+      this,
+      "set-window-button-visibility",
+      String(visible),
+    );
+  }
+
+  /** Electron-compatible alias for `setShadow`. */
+  setHasShadow(shadow: boolean): void {
+    this.setShadow(shadow);
+  }
+
+  /**
+   * Declare how the core narrows a window-manager resize.
+   *
+   * The core answers the platform synchronously, so the constraint is declared ahead instead of
+   * being asked of JavaScript inside the `willResize` event. Pass `null` to withdraw it.
+   */
+  setResizePolicy(policy: WindowResizePolicy | null): void {
+    performNativeWindowAction(
+      this,
+      "set-resize-policy",
+      policy === null ? undefined : JSON.stringify(policy),
+    );
+  }
+
+  /** Declare how the core narrows a window-manager move. Pass `null` to withdraw it. */
+  setMovePolicy(policy: WindowMovePolicy | null): void {
+    performNativeWindowAction(
+      this,
+      "set-move-policy",
+      policy === null ? undefined : JSON.stringify(policy),
+    );
+  }
+
+  /**
+   * Replace this window's native menu declaration, or pass `null` to inherit the app menu.
+   *
+   * On macOS the declaration becomes the process menu bar while this window is active.
+   */
+  setMenu(definitions: readonly MenuDefinition[] | null): void {
+    setNativeWindowMenu(this, definitions);
+  }
+
+  /**
+   * Capture this window's persistable geometry and display identity.
+   *
+   * Store the result and hand it back as `WindowOptions.restoreState` on the next launch. The
+   * rectangle is the windowed restore geometry, so a maximized or fullscreen window still
+   * persists the size it returns to.
+   */
+  getRestoreState(): Promise<WindowRestoreState> {
+    return getNativeWindowRestoreState(this);
+  }
+
   /** Join a named native system-tab group, or leave it by passing no identifier. */
   setTabbingIdentifier(identifier?: string): void {
     performNativeWindowAction(this, "set-tabbing-identifier", identifier ?? "");
@@ -1919,6 +2341,8 @@ export class Window {
     for (const dispose of disposers) dispose();
     this.#batch = new MutationBatch();
     removeNativeWindowStateListeners(this);
+    releaseNativeWindowMenu(this.nativeId);
+    this.#lifecycleListeners.clear();
     this.#closeRequestListeners.clear();
     this.#closeIntercepting = false;
     for (const listener of this.#closeListeners) listener(this);
@@ -2083,6 +2507,38 @@ function quitReason(value: string | undefined): QuitReason {
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+/** Parse one bounded native window-size notification, ignoring anything malformed. */
+function parseWindowSize(value: string | undefined): Size | undefined {
+  const parsed = parseWindowGeometry(value);
+  if (!parsed) return undefined;
+  const { width, height } = parsed;
+  return typeof width === "number" && typeof height === "number"
+    ? { width, height }
+    : undefined;
+}
+
+/** Parse one bounded native window-position notification, ignoring anything malformed. */
+function parseWindowPoint(value: string | undefined): Point | undefined {
+  const parsed = parseWindowGeometry(value);
+  if (!parsed) return undefined;
+  const { x, y } = parsed;
+  return typeof x === "number" && typeof y === "number" ? { x, y } : undefined;
+}
+
+function parseWindowGeometry(
+  value: string | undefined,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export type Application = App;

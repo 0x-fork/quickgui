@@ -167,6 +167,150 @@ pub fn exit_hosted_app(app: u32) -> Result<AsyncTask<HostedBooleanCommandTask>> 
 }
 
 #[napi]
+pub fn exit_app_with_code(app: u32, code: i32) -> Result<bool> {
+    expect_boolean(direct_command(app, SystemCommand::ExitWithCode(code))?)
+}
+
+#[napi(ts_return_type = "Promise<boolean>")]
+pub fn exit_hosted_app_with_code(
+    app: u32,
+    code: i32,
+) -> Result<AsyncTask<HostedBooleanCommandTask>> {
+    hosted_boolean_command(app, SystemCommand::ExitWithCode(code))
+}
+
+/// Whether this process is running from an installed application bundle.
+#[napi]
+pub fn is_application_packaged() -> bool {
+    quickgui::is_application_packaged()
+}
+
+#[napi]
+pub fn get_applications_folder_support(app: u32) -> Result<NativeApplicationsFolderSupport> {
+    expect_applications_folder_support(direct_command(
+        app,
+        SystemCommand::GetApplicationsFolderSupport,
+    )?)
+}
+
+#[napi(ts_return_type = "Promise<NativeApplicationsFolderSupport>")]
+pub fn get_hosted_applications_folder_support(
+    app: u32,
+) -> Result<AsyncTask<HostedApplicationsFolderSupportCommandTask>> {
+    hosted_applications_folder_support_command(app, SystemCommand::GetApplicationsFolderSupport)
+}
+
+#[napi]
+pub fn get_window_restore_state(app: u32, window: u32) -> Result<NativeWindowRestoreState> {
+    expect_window_restore_state(direct_command(
+        app,
+        SystemCommand::GetWindowRestoreState(window),
+    )?)
+}
+
+#[napi(ts_return_type = "Promise<NativeWindowRestoreState>")]
+pub fn get_hosted_window_restore_state(
+    app: u32,
+    window: u32,
+) -> Result<AsyncTask<HostedWindowRestoreStateCommandTask>> {
+    hosted_window_restore_state_command(app, SystemCommand::GetWindowRestoreState(window))
+}
+
+/// Start one application-shell service whose outcome arrives as an `app-service` event.
+#[napi]
+pub fn perform_app_service(
+    app: u32,
+    request: u32,
+    action: String,
+    value: Option<String>,
+) -> Result<()> {
+    let action = parse_app_service_action(&action, value).map_err(Error::from_reason)?;
+    expect_unit(direct_command(
+        app,
+        SystemCommand::AppService { request, action },
+    )?)
+}
+
+#[napi(ts_return_type = "Promise<void>")]
+pub fn perform_hosted_app_service(
+    app: u32,
+    request: u32,
+    action: String,
+    value: Option<String>,
+) -> Result<AsyncTask<HostedUnitCommandTask>> {
+    let action = parse_app_service_action(&action, value).map_err(Error::from_reason)?;
+    hosted_unit_command(app, SystemCommand::AppService { request, action })
+}
+
+/// Apply one fire-and-forget application-shell mutation.
+#[napi]
+pub fn perform_app_mutation(app: u32, action: String, value: Option<String>) -> Result<()> {
+    let action = parse_app_mutation_action(&action, value).map_err(Error::from_reason)?;
+    expect_unit(direct_command(app, SystemCommand::AppMutation(action))?)
+}
+
+#[napi]
+pub fn perform_hosted_app_mutation(app: u32, action: String, value: Option<String>) -> Result<()> {
+    let action = parse_app_mutation_action(&action, value).map_err(Error::from_reason)?;
+    enqueue_hosted_mutation(app, SystemCommand::AppMutation(action))
+}
+
+/// Present a native popup menu owned by one window; completion arrives as a `popup-menu` event.
+#[napi]
+pub fn show_window_popup_menu(
+    app: u32,
+    request: u32,
+    window: u32,
+    menu: String,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<()> {
+    let position = popup_menu_position(x, y)?;
+    expect_unit(direct_command(
+        app,
+        SystemCommand::WindowPopupMenu {
+            request,
+            window,
+            menu,
+            position,
+        },
+    )?)
+}
+
+#[napi(ts_return_type = "Promise<void>")]
+pub fn show_hosted_window_popup_menu(
+    app: u32,
+    request: u32,
+    window: u32,
+    menu: String,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<AsyncTask<HostedUnitCommandTask>> {
+    let position = popup_menu_position(x, y)?;
+    hosted_unit_command(
+        app,
+        SystemCommand::WindowPopupMenu {
+            request,
+            window,
+            menu,
+            position,
+        },
+    )
+}
+
+fn popup_menu_position(x: Option<f64>, y: Option<f64>) -> Result<Option<Point>> {
+    match (x, y) {
+        (None, None) => Ok(None),
+        (Some(x), Some(y)) if x.is_finite() && y.is_finite() => {
+            Ok(Some(Point::new(x as f32, y as f32)))
+        }
+        _ => Err(Error::from_reason(
+            "a native popup menu position requires finite x and y coordinates",
+        )),
+    }
+}
+
+#[napi]
 pub fn request_app_quit(app: u32) -> Result<bool> {
     expect_boolean(direct_command(app, SystemCommand::RequestQuit)?)
 }

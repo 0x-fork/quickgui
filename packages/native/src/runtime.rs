@@ -42,7 +42,257 @@ pub(crate) fn intercepts_quit() -> bool {
 
 pub(crate) fn reset_interception_state() {
     CLOSE_INTERCEPTING_WINDOWS.with_borrow_mut(HashSet::clear);
+    RESIZE_POLICIES.with_borrow_mut(HashMap::clear);
+    MOVE_POLICIES.with_borrow_mut(HashMap::clear);
+    crate::system::reset_dock_attention_requests();
     set_quit_interception(false);
+}
+
+thread_local! {
+    /// Declared-ahead `Event::WillResize` answers, keyed by hosted window id.
+    static RESIZE_POLICIES: RefCell<HashMap<u32, WindowResizePolicy>> =
+        RefCell::new(HashMap::new());
+    /// Declared-ahead `Event::WillMove` answers, keyed by hosted window id.
+    static MOVE_POLICIES: RefCell<HashMap<u32, WindowMovePolicy>> = RefCell::new(HashMap::new());
+}
+
+/// The narrowing JavaScript declared for a window's live native resize.
+///
+/// The core answers `Event::WillResize` synchronously on the application thread, so the policy is
+/// declared ahead instead of being asked of JavaScript during the event.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct WindowResizePolicy {
+    /// Content `width / height` the resize is snapped to.
+    pub(crate) aspect_ratio: Option<f32>,
+    pub(crate) minimum: Option<(f32, f32)>,
+    pub(crate) maximum: Option<(f32, f32)>,
+    /// Grid step applied to the proposed inner size.
+    pub(crate) snap: Option<(f32, f32)>,
+}
+
+/// The narrowing JavaScript declared for a window's live native move.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct WindowMovePolicy {
+    /// Keep the window's origin inside the work area of the display that contains it.
+    pub(crate) keep_on_screen: bool,
+}
+
+impl WindowResizePolicy {
+    pub(crate) fn is_empty(self) -> bool {
+        self == Self::default()
+    }
+
+    /// Narrow one proposed inner size, or return `None` when the proposal already complies.
+    pub(crate) fn constrain(self, proposed: quickgui::Size) -> Option<quickgui::Size> {
+        let mut width = proposed.width;
+        let mut height = proposed.height;
+        if let Some((step_width, step_height)) = self.snap {
+            width = snap_to(width, step_width);
+            height = snap_to(height, step_height);
+        }
+        if let Some(ratio) = self.aspect_ratio {
+            height = width / ratio;
+        }
+        if let Some((minimum_width, minimum_height)) = self.minimum {
+            width = width.max(minimum_width);
+            height = height.max(minimum_height);
+        }
+        if let Some((maximum_width, maximum_height)) = self.maximum {
+            width = width.min(maximum_width);
+            height = height.min(maximum_height);
+        }
+        if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+            return None;
+        }
+        let constrained = quickgui::Size::new(width, height);
+        (constrained != proposed).then_some(constrained)
+    }
+}
+
+fn snap_to(value: f32, step: f32) -> f32 {
+    if !(step.is_finite() && step > 0.0) {
+        return value;
+    }
+    (value / step).round() * step
+}
+
+/// Declare or withdraw one window's resize policy.
+pub(crate) fn set_resize_policy(window: u32, policy: Option<WindowResizePolicy>) {
+    RESIZE_POLICIES.with_borrow_mut(|policies| match policy {
+        Some(policy) if !policy.is_empty() => {
+            if policies.len() < MAX_WINDOWS || policies.contains_key(&window) {
+                policies.insert(window, policy);
+            }
+        }
+        _ => {
+            policies.remove(&window);
+        }
+    });
+}
+
+/// Declare or withdraw one window's move policy.
+pub(crate) fn set_move_policy(window: u32, policy: Option<WindowMovePolicy>) {
+    MOVE_POLICIES.with_borrow_mut(|policies| match policy {
+        Some(policy) if policy.keep_on_screen => {
+            if policies.len() < MAX_WINDOWS || policies.contains_key(&window) {
+                policies.insert(window, policy);
+            }
+        }
+        _ => {
+            policies.remove(&window);
+        }
+    });
+}
+
+/// Retained resize and move policy counts, used to assert the declaration bound.
+#[cfg(test)]
+pub(crate) fn retained_window_policy_counts() -> (usize, usize) {
+    (
+        RESIZE_POLICIES.with_borrow(HashMap::len),
+        MOVE_POLICIES.with_borrow(HashMap::len),
+    )
+}
+
+pub(crate) fn forget_window_policies(window: u32) {
+    RESIZE_POLICIES.with_borrow_mut(|policies| policies.remove(&window));
+    MOVE_POLICIES.with_borrow_mut(|policies| policies.remove(&window));
+}
+
+fn resize_policy(window: u32) -> Option<WindowResizePolicy> {
+    RESIZE_POLICIES.with_borrow(|policies| policies.get(&window).copied())
+}
+
+fn move_policy(window: u32) -> Option<WindowMovePolicy> {
+    MOVE_POLICIES.with_borrow(|policies| policies.get(&window).copied())
+}
+
+/// Clamp one proposed window origin into the work area of the display that contains it.
+pub(crate) fn keep_position_on_screen(
+    displays: &[quickgui::Display],
+    proposed: Point,
+) -> Option<Point> {
+    let display = displays
+        .iter()
+        .find(|display| display.bounds().contains(proposed))
+        .or_else(|| displays.iter().find(|display| display.is_primary()))
+        .or_else(|| displays.first())?;
+    let area = display.visible_bounds();
+    let x = proposed.x.clamp(area.x, (area.x + area.width).max(area.x));
+    let y = proposed.y.clamp(area.y, (area.y + area.height).max(area.y));
+    let clamped = Point::new(x, y);
+    (clamped != proposed).then_some(clamped)
+}
+
+/// Whether one core event is a window-scoped notification the hosted view answers.
+///
+/// Everything else — pointer, keyboard, and drag traffic — leaves the hosted `View::event`
+/// callback immediately, so the retained input path costs one discriminant test per event.
+pub(crate) const fn is_hosted_window_event(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::CloseRequested
+            | Event::Minimized(_)
+            | Event::Maximized(_)
+            | Event::FullscreenChanged(_)
+            | Event::FirstPresented
+            | Event::OcclusionChanged(_)
+            | Event::WindowLevelChanged(_)
+            | Event::Focused(_)
+            | Event::AppearanceChanged(_)
+            | Event::Resized { .. }
+            | Event::Moved { .. }
+            | Event::WillResize { .. }
+            | Event::WillMove { .. }
+    )
+}
+
+/// Forward one core window lifecycle event to JavaScript and answer any declared constraint.
+///
+/// Returns `true` when the event was a window lifecycle event, so the hosted view can keep its
+/// remaining event handling untouched.
+pub(crate) fn handle_window_lifecycle_event(
+    window: u32,
+    event: &Event,
+    cx: &mut EventContext,
+    events: &EventQueue,
+) -> bool {
+    let (kind, value): (&'static str, Option<String>) = match event {
+        Event::Minimized(minimized) => ("window-minimize", Some(minimized.to_string())),
+        Event::Maximized(maximized) => ("window-maximize", Some(maximized.to_string())),
+        Event::FullscreenChanged(fullscreen) => ("window-fullscreen", Some(fullscreen.to_string())),
+        Event::FirstPresented => ("window-ready-to-show", None),
+        Event::OcclusionChanged(occluded) => ("window-occlusion", Some(occluded.to_string())),
+        Event::WindowLevelChanged(level) => (
+            "window-level",
+            Some(crate::system::window_level_name(*level).to_owned()),
+        ),
+        Event::Focused(focused) => ("window-focus", Some(focused.to_string())),
+        Event::AppearanceChanged(appearance) => (
+            "window-appearance",
+            Some(
+                match appearance {
+                    quickgui::WindowAppearance::Light => "light",
+                    quickgui::WindowAppearance::Dark => "dark",
+                }
+                .to_owned(),
+            ),
+        ),
+        Event::Resized { logical_size, .. } => (
+            "window-resize",
+            Some(format!(
+                "{{\"width\":{},\"height\":{}}}",
+                logical_size.width, logical_size.height
+            )),
+        ),
+        Event::Moved {
+            logical_position, ..
+        } => (
+            "window-move",
+            Some(format!(
+                "{{\"x\":{},\"y\":{}}}",
+                logical_position.x, logical_position.y
+            )),
+        ),
+        Event::WillResize { proposed_size } => {
+            if let Some(policy) = resize_policy(window)
+                && let Some(constrained) = policy.constrain(*proposed_size)
+            {
+                let _ = cx.constrain_resize(constrained);
+            }
+            (
+                "window-will-resize",
+                Some(format!(
+                    "{{\"width\":{},\"height\":{}}}",
+                    proposed_size.width, proposed_size.height
+                )),
+            )
+        }
+        Event::WillMove { proposed_position } => {
+            if move_policy(window).is_some_and(|policy| policy.keep_on_screen)
+                && let Some(clamped) = keep_position_on_screen(cx.displays(), *proposed_position)
+            {
+                let _ = cx.constrain_move(clamped);
+            }
+            (
+                "window-will-move",
+                Some(format!(
+                    "{{\"x\":{},\"y\":{}}}",
+                    proposed_position.x, proposed_position.y
+                )),
+            )
+        }
+        _ => return false,
+    };
+    enqueue_event(
+        events,
+        QueuedEvent {
+            kind,
+            window,
+            target: ROOT_NODE,
+            value: value.map(Arc::from),
+        },
+    );
+    true
 }
 
 pub(crate) fn quit_reason_name(reason: quickgui::QuitReason) -> &'static str {
@@ -125,6 +375,7 @@ pub(super) struct NativeRuntime {
     pub(super) pending_user_tasks: Vec<system::PendingUserTasks>,
     pub(super) pending_global_shortcuts: Vec<system::PendingGlobalShortcut>,
     pub(super) pending_tray: Vec<system::PendingTray>,
+    pub(super) pending_app_services: Vec<system::PendingAppService>,
     pub(super) system_observation: system::SystemObservation,
     pub(super) app_info: Option<AppInfo>,
     pub(super) app_paths: Option<AppPaths>,
@@ -153,6 +404,7 @@ impl NativeRuntime {
             pending_user_tasks: Vec::with_capacity(1),
             pending_global_shortcuts: Vec::with_capacity(2),
             pending_tray: Vec::with_capacity(2),
+            pending_app_services: Vec::with_capacity(2),
             system_observation: system::SystemObservation::default(),
             app_info,
             app_paths,
@@ -179,7 +431,18 @@ impl NativeRuntime {
     ) -> std::result::Result<u32, String> {
         self.sync_closed_windows();
         self.claim_window_id(id)?;
-        let config = window_config(&options)?;
+        let mut config = window_config(&options)?;
+        if let Some(state) = &options.restore_state {
+            let state = crate::system::parse_window_restore_state(state)?;
+            let displays = self
+                .runner
+                .as_ref()
+                .map(quickgui::AppRunner::displays)
+                .ok_or_else(|| {
+                    "restoring window geometry requires a running QuickGUI application".to_owned()
+                })?;
+            config = config.restore(&state, &displays);
+        }
         let mut window = NativeWindowRuntime {
             config,
             tree: Rc::new(RefCell::new(native_tree_from_initial_batch(initial_batch)?)),
@@ -398,6 +661,8 @@ impl NativeRuntime {
         let open_url_events = Rc::clone(&self.events);
         let reopen_events = Rc::clone(&self.events);
         let wake_events = Rc::clone(&self.events);
+        let did_become_active_events = Rc::clone(&self.events);
+        let did_resign_active_events = Rc::clone(&self.events);
         let keyboard_events = Rc::clone(&self.events);
         let notification_events = Rc::clone(&self.events);
         let global_shortcut_events = Rc::clone(&self.events);
@@ -442,6 +707,28 @@ impl NativeRuntime {
                         } else {
                             "false"
                         })),
+                    },
+                );
+            })
+            .on_did_become_active(move |_cx| {
+                enqueue_event(
+                    &did_become_active_events,
+                    QueuedEvent {
+                        kind: "app-activate",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: None,
+                    },
+                );
+            })
+            .on_did_resign_active(move |_cx| {
+                enqueue_event(
+                    &did_resign_active_events,
+                    QueuedEvent {
+                        kind: "app-deactivate",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: None,
                     },
                 );
             })
@@ -893,6 +1180,7 @@ impl NativeRuntime {
         }
         for id in &closed {
             self.windows.remove(id);
+            crate::runtime::forget_window_policies(*id);
             #[cfg(target_os = "macos")]
             self.embedded_views.borrow_mut().remove(id);
         }
@@ -909,7 +1197,8 @@ impl NativeRuntime {
                 + self.pending_file_icons.len()
                 + self.pending_user_tasks.len()
                 + self.pending_global_shortcuts.len()
-                + self.pending_tray.len(),
+                + self.pending_tray.len()
+                + self.pending_app_services.len(),
         );
         let waker = Waker::noop();
         let mut context = Context::from_waker(waker);
@@ -969,6 +1258,14 @@ impl NativeRuntime {
             }
         }
         self.pending_tray = still_pending;
+        let mut still_pending = Vec::with_capacity(self.pending_app_services.len());
+        for mut request in std::mem::take(&mut self.pending_app_services) {
+            match request.poll(&mut context) {
+                Poll::Ready(event) => events.push(event),
+                Poll::Pending => still_pending.push(request),
+            }
+        }
+        self.pending_app_services = still_pending;
         events.extend(self.events.borrow_mut().drain(..).map(|event| NativeEvent {
             kind: event.kind.to_owned(),
             window: event.window,
@@ -1242,20 +1539,10 @@ pub(super) fn window_config(
         config = config.content_protected(value);
     }
     if let Some(level) = options.window_level.as_deref() {
-        config = match level {
-            "automatic" => config.automatic_window_level(),
-            "always-on-bottom" | "alwaysOnBottom" => {
-                config.window_level(WindowLevel::AlwaysOnBottom)
-            }
-            "normal" => config.window_level(WindowLevel::Normal),
-            "always-on-top" | "alwaysOnTop" => config.window_level(WindowLevel::AlwaysOnTop),
-            "floating" | "floating" => config.window_level(WindowLevel::Floating),
-            "modal-panel" | "modalPanel" => config.window_level(WindowLevel::ModalPanel),
-            "main-menu" | "mainMenu" => config.window_level(WindowLevel::MainMenu),
-            "status" | "status" => config.window_level(WindowLevel::Status),
-            "pop-up-menu" | "popUpMenu" => config.window_level(WindowLevel::PopUpMenu),
-            "screen-saver" | "screenSaver" => config.window_level(WindowLevel::ScreenSaver),
-            value => return Err(format!("unknown windowLevel `{value}`")),
+        config = if level == "automatic" {
+            config.automatic_window_level()
+        } else {
+            config.window_level(crate::system::parse_window_level(level)?)
         };
     }
     if let Some(value) = options.skip_taskbar {

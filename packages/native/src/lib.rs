@@ -29,8 +29,7 @@ use quickgui::{
     Tab, Tabs, TaskbarProgressState, Terminal, TerminalOptions, TerminalPaddingColor,
     TerminalStatus, TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle, ToggleState, Tooltip,
     Transition, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowHandle,
-    WindowKind, WindowLevel, WindowOptions, button, div, svg as svg_element, text, text_area,
-    text_input,
+    WindowKind, WindowOptions, button, div, svg as svg_element, text, text_area, text_input,
 };
 use quickgui::{Event, EventContext};
 #[cfg(target_os = "macos")]
@@ -336,6 +335,11 @@ pub struct NativeWindowOptions {
     pub cursor_y: Option<f64>,
     /// Bounded JSON encoding of a per-window native menu. Omitted windows inherit the app menu.
     pub menu: Option<String>,
+    /// Persisted geometry and display identity captured with `window.getRestoreState()`.
+    ///
+    /// The core re-validates every field, so a stale value can never place a window off every
+    /// connected display.
+    pub restore_state: Option<system::NativeWindowRestoreState>,
     pub line_scroll_pixels: Option<f64>,
     pub key_sequence_timeout_ms: Option<f64>,
     pub reduce_motion: Option<bool>,
