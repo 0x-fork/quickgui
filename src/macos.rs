@@ -76,6 +76,7 @@ pub(crate) use file_dialog::{present_native_open_panel, present_native_save_pane
 mod drag_drop;
 mod native_host;
 mod popover;
+pub(crate) mod spell;
 mod vibrancy;
 mod windowing;
 

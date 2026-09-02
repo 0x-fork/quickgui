@@ -1,5 +1,10 @@
 use super::*;
 
+use crate::{
+    Autocorrection, Misspelling, PopoverMenuItem, SpellingMenuLabels, TextServiceError,
+    show_definition_for,
+};
+
 impl UiTree {
     pub fn focused_text_input(&self) -> Option<ElementId> {
         self.focused
@@ -480,12 +485,145 @@ impl UiTree {
             return InputResult::default();
         };
         let previous = state.committed_shared_text();
-        let repaint = edit(state);
+        let mut repaint = edit(state);
+        // A settled check whose deadline already elapsed is applied before this edit lands, so an
+        // interaction never observes stale flagged ranges. This adds no timer of its own.
+        repaint |= state.advance_spell_check(Instant::now());
         let committed = state.committed_shared_text();
         let change = (previous != committed).then_some(InputChange {
             id,
             value: committed,
         });
         InputResult { repaint, change }
+    }
+}
+
+/// The result of one settled-check pump.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[allow(dead_code)]
+pub(crate) struct SpellCheckAdvance {
+    /// Whether flagged ranges changed and the window must repaint.
+    pub repaint: bool,
+    /// The next exact deadline across every mounted text input.
+    pub next_deadline: Option<Instant>,
+}
+
+/// Text service commands routed by the window runtime and the context-menu builder.
+///
+/// Each entry point is a complete, tested core capability. Their event-loop and native-menu call
+/// sites live in the runtime and menu modules, which change independently from this file.
+#[allow(dead_code)]
+impl UiTree {
+    /// Run every text input's settled check whose exact deadline has arrived.
+    ///
+    /// This mirrors the tooltip and scrollbar pumps: it never polls, and it reports the next exact
+    /// deadline so the event loop can sleep until then.
+    pub fn advance_spell_check(&mut self, now: Instant) -> SpellCheckAdvance {
+        let mut advance = SpellCheckAdvance::default();
+        for state in self.text_inputs.values_mut() {
+            advance.repaint |= state.advance_spell_check(now);
+            advance.next_deadline = match (advance.next_deadline, state.spell_check_deadline()) {
+                (Some(left), Some(right)) => Some(left.min(right)),
+                (value, None) | (None, value) => value,
+            };
+        }
+        advance
+    }
+
+    /// Flagged ranges retained by the focused text input.
+    pub fn focused_input_misspellings(&self) -> &[Misspelling] {
+        self.focused_text_input()
+            .and_then(|id| self.text_inputs.get(&id))
+            .map_or(&[], TextInputState::misspelled_ranges)
+    }
+
+    /// Build the standard spelling entries for one offset inside the focused text input.
+    pub fn input_spelling_menu_items(
+        &self,
+        offset: usize,
+        labels: SpellingMenuLabels,
+    ) -> Vec<PopoverMenuItem> {
+        self.focused_text_input()
+            .and_then(|id| self.text_inputs.get(&id))
+            .map(|state| state.spelling_menu_items(offset, labels))
+            .unwrap_or_default()
+    }
+
+    /// Apply a [`crate::ReplaceWord`] action to the focused text input.
+    pub fn input_replace_word(&mut self, range: Range<usize>, replacement: &str) -> InputResult {
+        self.edit_focused_input(|state| state.replace_word(range, replacement))
+    }
+
+    /// Apply a [`crate::LearnWord`] action to the focused text input.
+    pub fn input_learn_word(&mut self, word: &str) -> InputResult {
+        self.edit_focused_input(|state| state.learn_word(word))
+    }
+
+    /// Apply an [`crate::IgnoreWord`] action to the focused text input.
+    pub fn input_ignore_word(&mut self, word: &str) -> InputResult {
+        self.edit_focused_input(|state| state.ignore_word(word))
+    }
+
+    /// The autocorrection the focused input most recently applied, for a "Change back" affordance.
+    pub fn focused_input_last_autocorrection(&self) -> Option<&Autocorrection> {
+        self.focused_text_input()
+            .and_then(|id| self.text_inputs.get(&id))
+            .and_then(TextInputState::last_autocorrection)
+    }
+
+    /// Restore the word replaced by the most recent autocorrection.
+    pub fn input_revert_autocorrection(&mut self) -> InputResult {
+        self.edit_focused_input(TextInputState::revert_autocorrection)
+    }
+
+    /// The word or selection a dictionary lookup would define, and its window-local anchor.
+    pub fn input_definition_request(&self) -> Option<(Arc<str>, Point)> {
+        let id = self.focused_text_input()?;
+        let (value, _) = self.text_inputs.get(&id)?.definition_target()?;
+        let anchor = self
+            .text_input_regions
+            .iter()
+            .rev()
+            .find(|region| region.id == id)
+            .map(|region| {
+                Point::new(
+                    region.caret_bounds.x,
+                    region.caret_bounds.y + region.caret_bounds.height,
+                )
+            })
+            .unwrap_or_default();
+        Some((value, anchor))
+    }
+
+    /// Apply a [`crate::LookUpSelection`] action to the focused text input.
+    pub fn input_look_up_selection(&self) -> Result<(), TextServiceError> {
+        let (value, anchor) = self
+            .input_definition_request()
+            .ok_or(TextServiceError::InvalidRequest)?;
+        show_definition_for(&value, anchor)
+    }
+
+    /// Handle a Force Touch force click over the focused text input.
+    ///
+    /// Returns `Ok(())` only when the input opted in with `.lookup_on_force_click(true)` and the
+    /// platform showed a definition popover.
+    pub fn input_force_click_definition(&self) -> Result<(), TextServiceError> {
+        let opted_in = self
+            .focused_text_input()
+            .and_then(|id| self.text_inputs.get(&id))
+            .is_some_and(TextInputState::looks_up_on_force_click);
+        if !opted_in {
+            return Err(TextServiceError::InvalidRequest);
+        }
+        self.input_look_up_selection()
+    }
+
+    /// Whether a focused text input claims application Undo and Redo.
+    ///
+    /// While this is true the input's own bounded history handles both commands and the typed
+    /// [`crate::Undo`]/[`crate::Redo`] actions never reach the application's
+    /// [`crate::UndoManager`].
+    pub fn text_input_claims_undo(&self) -> bool {
+        self.focused_text_input().is_some()
     }
 }

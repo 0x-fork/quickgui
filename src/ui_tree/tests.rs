@@ -134,3 +134,4 @@ mod drag_selection;
 mod focus_accessibility;
 mod layout_motion;
 mod pointer_scroll;
+mod text_services;

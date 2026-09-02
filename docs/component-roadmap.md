@@ -30,7 +30,8 @@ motion to the application. `PickerState`, `TableState`, and `TreeState` invoke c
 input/header/row/cell renderers and retain only bounded virtual layout geometry. `Field` and
 `Fieldset` decorate caller-owned parts
 with stable label/description/error relationships, native label activation, controlled validity,
-and explicit disabled propagation. `Collapsible` and `Accordion` decorate caller-owned
+and explicit disabled propagation. `FindBar` decorates caller-owned find, replace, count, navigation, and dismissal parts while
+`FindState` stays a pure application-owned value. `Collapsible` and `Accordion` decorate caller-owned
 root/trigger/panel and item/header/trigger/panel parts with controlled open state, exact disclosure
 relationships, and optional retained mounting. `Slider`, `Splitter`, `NumberField`, `Progress`,
 `Meter`, `Toolbar`, `Toggle`, `ToggleGroup`, and `ToastViewport` decorate caller-owned parts while
@@ -88,6 +89,7 @@ Status terms here are intentionally strict:
 | Drawer | Missing | Build after dialog focus and backdrop behavior is live accepted. |
 | Field | Behavior present | `Field` supplies caller-owned root/label/control/description/error parts, stable relationships, normal or passive labels, required/invalid/disabled state, bounded validation copy, and controlled touched/dirty/filled render state. Complete live VoiceOver label activation, error wording/order, and application-styled state acceptance. |
 | Fieldset | Behavior present | `Fieldset` supplies caller-owned group/legend/description parts and explicit registry-free disabled propagation through `.field(...)` or `.control_part(...)`. Complete live VoiceOver grouping and disabled-control acceptance. |
+| Find Bar (QuickGUI addition) | Behavior present | `FindBar` decorates caller-owned root/query-input/replace-input/count/next/previous/replace/replace-all/close parts with stable identities, group and button roles, an accessible match count, state-derived disabling, the `FindBar` key context, and Return/Shift+Return/Escape bindings. Bounded literal `FindState` matching, wrap-around navigation, and single-edit replace-all remain application-applied. Complete live VoiceOver and application-styled acceptance. |
 | Form | Behavior present | Preserve controlled fields, nearest-form submission, and first-invalid focus. |
 | Input | Behavior present | Keep editing/IME behavior reusable while removing visual defaults from the component contract. |
 | Menu | Behavior present | Native `Menu` remains the app menu; unstyled `PopoverMenu` provides bounded items, toggles, exact group-label/separator semantics, keyboard/typeahead behavior, owner-window actions, submenu composition, and an owner-controlled hover hook used by the native context-menu aim policy. Complete live VoiceOver acceptance. |

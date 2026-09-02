@@ -115,6 +115,84 @@ impl Element {
         self
     }
 
+    /// Replace every per-input text checking override at once.
+    ///
+    /// Unset fields inherit [`crate::default_text_checking`].
+    pub fn text_checking(mut self, overrides: TextCheckingOverrides) -> Self {
+        self.text_checking_mut("text_checking").text_checking = overrides;
+        self
+    }
+
+    /// Underline unknown words after this input's edits settle.
+    ///
+    /// Checking runs once, 300 ms after the last accepted edit, over at most
+    /// [`crate::MAX_SPELLCHECK_BYTES`] around the caret. A settled input holds no timer.
+    pub fn spellcheck(mut self, enabled: bool) -> Self {
+        self.text_checking_mut("spellcheck")
+            .text_checking
+            .spellcheck = Some(enabled);
+        self
+    }
+
+    /// Ask the checker for grammar problems during the same settled check.
+    pub fn grammar_check(mut self, enabled: bool) -> Self {
+        self.text_checking_mut("grammar_check")
+            .text_checking
+            .grammar_check = Some(enabled);
+        self
+    }
+
+    /// Replace a completed word with the checker's correction at a word boundary.
+    ///
+    /// The correction and the boundary character are applied as one undoable edit, and the applied
+    /// change stays inspectable so an application can offer "Change back".
+    pub fn autocorrect(mut self, enabled: bool) -> Self {
+        self.text_checking_mut("autocorrect")
+            .text_checking
+            .autocorrect = Some(enabled);
+        self
+    }
+
+    /// Convert straight quotes to typographic quotes at insertion time.
+    pub fn smart_quotes(mut self, enabled: bool) -> Self {
+        self.text_checking_mut("smart_quotes")
+            .text_checking
+            .smart_quotes = Some(enabled);
+        self
+    }
+
+    /// Convert `--` to an em dash at insertion time.
+    pub fn smart_dashes(mut self, enabled: bool) -> Self {
+        self.text_checking_mut("smart_dashes")
+            .text_checking
+            .smart_dashes = Some(enabled);
+        self
+    }
+
+    /// Apply the checker's replacement dictionary at insertion time.
+    pub fn text_replacement(mut self, enabled: bool) -> Self {
+        self.text_checking_mut("text_replacement")
+            .text_checking
+            .text_replacement = Some(enabled);
+        self
+    }
+
+    /// Show the dictionary popover when a Force Touch trackpad force-clicks a word.
+    pub fn lookup_on_force_click(mut self, enabled: bool) -> Self {
+        self.text_checking_mut("lookup_on_force_click")
+            .text_checking
+            .lookup_on_force_click = Some(enabled);
+        self
+    }
+
+    #[track_caller]
+    fn text_checking_mut(&mut self, method: &str) -> &mut InputConstraints {
+        let ElementKind::TextInput(input) = &mut self.kind else {
+            panic!("{method} can only be applied to a text input or text area");
+        };
+        &mut input.constraints
+    }
+
     /// Expose that a form control requires a value before submission.
     ///
     /// This projects the native accessibility state only. The application remains responsible for
