@@ -84,6 +84,19 @@ accessibility; use `hidden()` or `invisible()` when those semantics are wanted. 
 as paint data, so changing it does not reshape text, rerasterize SVG masks, or allocate an
 offscreen group texture.
 
+Backgrounds accept more than a solid color. `bg_linear_gradient(angle, stops)`,
+`bg_radial_gradient(stops)`, `bg_radial_gradient_at(shape, center, stops)`,
+`bg_conic_gradient(from_angle, stops)`, and the general `bg_gradient(background)` paint a bounded
+multi-stop gradient; `bg_image(image, size, repeat, position)` and its `bg_image_cover`,
+`bg_image_contain`, and `bg_image_tiled` shorthands paint a raster background behind children.
+Corners round independently with `rounded_tl`/`rounded_tr`/`rounded_br`/`rounded_bl`,
+`rounded_t`/`rounded_b`/`rounded_l`/`rounded_r`, `corner_radii(Corners)`, and `rounded_full()`.
+Borders gain `border_solid()`, `border_dashed()`, and `border_dotted()` on top of the existing
+per-side widths, and `outline(width, color)` with `outline_offset(px)`, `outline_dashed()`,
+`outline_dotted()`, and `outline_none()` draws a ring outside the border box without affecting
+layout. All of these are paint-only: they change no Taffy style and schedule no frame of their own.
+See [Graphics and media](graphics.md) for the exact bounds.
+
 Hover, active, focus, validation, and drag-state variants are paint-only. Add
 `.transition(Duration::from_millis(140))` to interpolate their colors, border, radius, inherited
 text color, opacity, and bounded shadow list without rebuilding the view or rerunning Taffy. Layout

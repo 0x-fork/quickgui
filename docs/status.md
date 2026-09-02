@@ -4,6 +4,17 @@
 
 Implemented now:
 
+- element background gradients: bounded eight-stop linear, radial (circle/ellipse, three ending-shape
+  extents, any center), and conic gradients in linear-sRGB, sRGB, or Oklab, evaluated analytically in
+  the existing instanced shape draw, respecting rounded corners, borders, clipping, subtree opacity,
+  and damage, swappable in hover/active/focus states, and shared with retained path and canvas fills;
+- per-corner radii (`rounded_tl`/`tr`/`br`/`bl`, `rounded_t`/`b`/`l`/`r`, `corner_radii`,
+  `rounded_full`) with CSS uniform-scale reduction, analytic dashed and dotted borders distributed
+  evenly around the whole rounded outline, and `outline`/`outline_offset` rings painted outside the
+  border box without affecting layout;
+- raster element backgrounds with `Auto`/`Cover`/`Contain`/`Fixed` sizing, four repeat modes, and
+  fractional background positions, painted through the existing bounded image primitive and masked
+  by the element's rounded corners;
 - experimental macOS Bun/N-API hosting with an externally pumped main-thread application loop,
   a core-backed singleton application readiness lifecycle, dynamically created `Window` instances,
   independent transactional bounded retained trees,

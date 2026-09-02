@@ -7,10 +7,13 @@ struct ViewUniform {
 struct PathPaint {
     transform: vec4<f32>,
     clip: vec4<f32>,
-    gradient_line: vec4<f32>,
-    color_0: vec4<f32>,
-    color_1: vec4<f32>,
-    stops_mode: vec4<f32>,
+    color: vec4<f32>,
+    // Gradient kind, interpolation space, stop count, and gradient flag.
+    header: vec4<f32>,
+    geometry: vec4<f32>,
+    positions_low: vec4<f32>,
+    positions_high: vec4<f32>,
+    colors: array<vec4<f32>, 8>,
 };
 
 @group(0) @binding(0) var<uniform> view: ViewUniform;
@@ -33,8 +36,8 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let paint = paints[input.paint_index];
-    let logical = input.position * paint.transform.xy + paint.transform.zw;
+    let transform = paints[input.paint_index].transform;
+    let logical = input.position * transform.xy + transform.zw;
     let physical = logical * view.scale;
     let clip_position = vec2<f32>(
         physical.x / view.viewport.x * 2.0 - 1.0,
@@ -139,33 +142,86 @@ fn interpolate_color(first: vec4<f32>, second: vec4<f32>, amount: f32, space: f3
     return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), alpha);
 }
 
-fn path_color(paint: PathPaint, position: vec2<f32>) -> vec4<f32> {
-    if paint.stops_mode.z < 0.5 {
-        return paint.color_0;
+fn path_stop_position(index: u32, paint_index: u32) -> f32 {
+    var source = paints[paint_index].positions_high;
+    if index < 4u {
+        source = paints[paint_index].positions_low;
     }
-    let start = paint.gradient_line.xy;
-    let direction = paint.gradient_line.zw - start;
-    let denominator = dot(direction, direction);
-    var position_on_line = 0.0;
-    if denominator > 0.000001 {
-        position_on_line = clamp(dot(position - start, direction) / denominator, 0.0, 1.0);
+    let lane = index % 4u;
+    if lane == 0u {
+        return source.x;
     }
-    let first_stop = paint.stops_mode.x;
-    let second_stop = paint.stops_mode.y;
-    var amount = 0.0;
-    if position_on_line >= second_stop {
-        amount = 1.0;
-    } else if position_on_line > first_stop && second_stop > first_stop {
-        amount = (position_on_line - first_stop) / (second_stop - first_stop);
+    if lane == 1u {
+        return source.y;
     }
-    return interpolate_color(paint.color_0, paint.color_1, amount, paint.stops_mode.w);
+    if lane == 2u {
+        return source.z;
+    }
+    return source.w;
+}
+
+fn path_gradient_amount(paint_index: u32, position: vec2<f32>) -> f32 {
+    let kind = paints[paint_index].header.x;
+    let geometry = paints[paint_index].geometry;
+    if kind < 0.5 {
+        let start = geometry.xy;
+        let direction = geometry.zw - start;
+        let denominator = dot(direction, direction);
+        if denominator <= 0.000001 {
+            return 0.0;
+        }
+        return clamp(dot(position - start, direction) / denominator, 0.0, 1.0);
+    }
+    if kind < 1.5 {
+        let radii = max(geometry.zw, vec2<f32>(0.000001));
+        return clamp(length((position - geometry.xy) / radii), 0.0, 1.0);
+    }
+    let delta = position - geometry.xy;
+    let angle = atan2(delta.x, -delta.y);
+    return fract((angle - geometry.z) / 6.28318530718 + 1.0);
+}
+
+fn path_color(paint_index: u32, position: vec2<f32>) -> vec4<f32> {
+    let header = paints[paint_index].header;
+    if header.w < 0.5 {
+        return paints[paint_index].color;
+    }
+    let count = u32(max(header.z, 0.0));
+    if count == 0u {
+        return vec4<f32>(0.0);
+    }
+    if count == 1u {
+        return paints[paint_index].colors[0];
+    }
+    let amount = path_gradient_amount(paint_index, position);
+    var previous = path_stop_position(0u, paint_index);
+    if amount <= previous {
+        return paints[paint_index].colors[0];
+    }
+    for (var index = 1u; index < count; index = index + 1u) {
+        let current = path_stop_position(index, paint_index);
+        if amount <= current {
+            var blend = 1.0;
+            if current > previous {
+                blend = (amount - previous) / (current - previous);
+            }
+            return interpolate_color(
+                paints[paint_index].colors[index - 1u],
+                paints[paint_index].colors[index],
+                blend,
+                header.y,
+            );
+        }
+        previous = current;
+    }
+    return paints[paint_index].colors[count - 1u];
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let paint = paints[input.paint_index];
-    if input.logical_position.x < paint.clip.x || input.logical_position.y < paint.clip.y ||
-       input.logical_position.x >= paint.clip.z || input.logical_position.y >= paint.clip.w {
+    let clip = paints[input.paint_index].clip;
+    if input.logical_position.x < clip.x || input.logical_position.y < clip.y ||
+       input.logical_position.x >= clip.z || input.logical_position.y >= clip.w {
         discard;
     }
 
@@ -173,7 +229,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let edge_distance = input.barycentric / derivative;
     let masked_distance = select(vec3<f32>(1000000.0), edge_distance, input.edge_mask > vec3<f32>(0.5));
     let coverage = smoothstep(0.0, 1.0, min(masked_distance.x, min(masked_distance.y, masked_distance.z)));
-    let color = path_color(paint, input.logical_position);
+    let color = path_color(input.paint_index, input.logical_position);
     let alpha = color.a * coverage;
     return vec4<f32>(color.rgb * alpha, alpha);
 }

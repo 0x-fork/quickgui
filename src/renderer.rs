@@ -33,13 +33,14 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 
 use crate::{
     AssetError, Assets, Color as UiColor, FontFallbacks, FontFamily, FontFeatures, FontSource,
-    MAX_TEXT_HIGHLIGHTS, PerformanceProfile, Point, Quad, Rect, RenderStats, Scene, ScenePlane,
-    Size, TextAlign, TextHighlight, TextId, TextOverflow, TextShaping, TextStyle, TextUnderline,
-    TextWrap,
+    Gradient, MAX_GRADIENT_STOPS, MAX_TEXT_HIGHLIGHTS, PerformanceProfile, Point, Quad, Rect,
+    RenderStats, Scene, ScenePlane, Size, TextAlign, TextHighlight, TextId, TextOverflow,
+    TextShaping, TextStyle, TextUnderline, TextWrap,
     assets::resolve_fonts,
     custom_shader_renderer::CustomShaderRenderer,
     font::{glyph_family, normalize_fallbacks},
     image_renderer::ImageRenderer,
+    path::GradientData,
     path_renderer::PathRenderer,
     scene::{EdgeQuad, PrimitiveRef, Shadow, ShapeRef, WavyUnderline},
     svg_renderer::SvgRenderer,
@@ -497,7 +498,40 @@ struct ShapeInstance {
     clip: [f32; 4],
     params: [f32; 4],
     subject: [f32; 4],
+    /// Corner radii ordered top-left, top-right, bottom-right, bottom-left.
+    corners: [f32; 4],
+    /// Gradient index (negative when absent), border style code, unused, unused.
+    effects: [f32; 4],
 }
+
+/// One GPU gradient record, shared by every gradient-capable shader family.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct GpuGradient {
+    header: [f32; 4],
+    geometry: [f32; 4],
+    positions: [[f32; 4]; 2],
+    colors: [[f32; 4]; MAX_GRADIENT_STOPS],
+}
+
+impl From<GradientData> for GpuGradient {
+    fn from(data: GradientData) -> Self {
+        Self {
+            header: data.header,
+            geometry: data.geometry,
+            positions: data.positions,
+            colors: data.colors,
+        }
+    }
+}
+
+/// Largest number of resolved gradients uploaded for one window frame.
+///
+/// Admission follows scene order. A shape whose gradient does not fit falls back to its solid
+/// fill instead of growing the per-frame upload without a bound.
+pub const MAX_GRADIENTS_PER_FRAME: usize = 4_096;
+const INITIAL_GRADIENT_CAPACITY: usize = 16;
+const NO_GRADIENT: f32 = -1.0;
 
 const SHAPE_MODE_QUAD: f32 = 0.0;
 const SHAPE_MODE_DROP_SHADOW: f32 = 1.0;
@@ -511,6 +545,7 @@ const SHADOW_MARGIN_SIGMAS: f32 = 3.0;
 struct ShapePipeline {
     pipeline: Arc<RenderPipeline>,
     bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    gradient_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     format: TextureFormat,
 }
 
@@ -520,11 +555,15 @@ struct ShapeRenderer {
     bind_group: BindGroup,
     instance_buffers: Vec<wgpu::Buffer>,
     instance_capacities: Vec<usize>,
+    gradient_buffers: Vec<wgpu::Buffer>,
+    gradient_capacities: Vec<usize>,
+    gradient_bind_groups: Vec<BindGroup>,
     active_buffer: usize,
     batches: Vec<ShapeBatch>,
     layer_batches: Vec<Range<usize>>,
     pending: Vec<OrderedShape>,
     instances: Vec<ShapeInstance>,
+    gradients: Vec<GpuGradient>,
 }
 
 #[derive(Clone, Copy)]
@@ -553,9 +592,23 @@ impl ShapePipeline {
                 count: None,
             }],
         });
+        let gradient_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("quickgui shape gradient bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("quickgui shape pipeline layout"),
-            bind_group_layouts: &[Some(&bind_group_layout)],
+            bind_group_layouts: &[Some(&bind_group_layout), Some(&gradient_bind_group_layout)],
             immediate_size: 0,
         });
         let shader = device.create_shader_module(wgpu::include_wgsl!("quad.wgsl"));
@@ -589,6 +642,16 @@ impl ShapePipeline {
                 format: VertexFormat::Float32x4,
                 offset: 80,
                 shader_location: 5,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 96,
+                shader_location: 6,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 112,
+                shader_location: 7,
             },
         ];
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -626,6 +689,7 @@ impl ShapePipeline {
         Self {
             pipeline: Arc::new(pipeline),
             bind_group_layout: Arc::new(bind_group_layout),
+            gradient_bind_group_layout: Arc::new(gradient_bind_group_layout),
             format,
         }
     }
@@ -654,17 +718,30 @@ impl ShapeRenderer {
         let instance_buffers = (0..BUFFERED_FRAMES)
             .map(|_| create_shape_instance_buffer(device, INITIAL_SHAPE_CAPACITY))
             .collect();
+        let gradient_buffers: Vec<_> = (0..BUFFERED_FRAMES)
+            .map(|_| create_gradient_buffer(device, INITIAL_GRADIENT_CAPACITY))
+            .collect();
+        let gradient_bind_groups = gradient_buffers
+            .iter()
+            .map(|buffer| {
+                create_gradient_bind_group(device, &pipeline.gradient_bind_group_layout, buffer)
+            })
+            .collect();
         Self {
             pipeline,
             uniform_buffer,
             bind_group,
             instance_buffers,
             instance_capacities: vec![INITIAL_SHAPE_CAPACITY; BUFFERED_FRAMES],
+            gradient_buffers,
+            gradient_capacities: vec![INITIAL_GRADIENT_CAPACITY; BUFFERED_FRAMES],
+            gradient_bind_groups,
             active_buffer: 0,
             batches: Vec::with_capacity(16),
             layer_batches: Vec::with_capacity(4),
             pending: Vec::with_capacity(INITIAL_SHAPE_CAPACITY),
             instances: Vec::with_capacity(INITIAL_SHAPE_CAPACITY),
+            gradients: Vec::with_capacity(INITIAL_GRADIENT_CAPACITY),
         }
     }
 
@@ -683,6 +760,7 @@ impl ShapeRenderer {
         self.batches.clear();
         self.layer_batches.clear();
         self.pending.clear();
+        self.gradients.clear();
         let mut quads = 0;
         let mut shadows = 0;
         for layer in scene.paint_layers() {
@@ -703,7 +781,12 @@ impl ShapeRenderer {
                             continue;
                         }
                         quads += 1;
-                        quad_instance(quad, clip)
+                        let gradient = admit_gradient(
+                            &mut self.gradients,
+                            quad.background.as_ref(),
+                            quad.rect,
+                        );
+                        quad_instance(quad, clip, gradient)
                     }
                     ShapeRef::EdgeQuad(index) => {
                         let quad = &layer.edge_quads()[index];
@@ -715,7 +798,12 @@ impl ShapeRenderer {
                             continue;
                         }
                         quads += 1;
-                        edge_quad_instance(quad, clip)
+                        let gradient = admit_gradient(
+                            &mut self.gradients,
+                            quad.background.as_ref(),
+                            quad.rect,
+                        );
+                        edge_quad_instance(quad, clip, gradient)
                     }
                     ShapeRef::WavyUnderline(index) => {
                         let underline = &layer.wavy_underlines()[index];
@@ -796,6 +884,24 @@ impl ShapeRenderer {
                 bytemuck::cast_slice(&self.instances),
             );
         }
+        let required_gradients = self.gradients.len().max(1);
+        if required_gradients > self.gradient_capacities[self.active_buffer] {
+            let capacity = required_gradients.next_power_of_two();
+            self.gradient_buffers[self.active_buffer] = create_gradient_buffer(device, capacity);
+            self.gradient_bind_groups[self.active_buffer] = create_gradient_bind_group(
+                device,
+                &self.pipeline.gradient_bind_group_layout,
+                &self.gradient_buffers[self.active_buffer],
+            );
+            self.gradient_capacities[self.active_buffer] = capacity;
+        }
+        if !self.gradients.is_empty() {
+            queue.write_buffer(
+                &self.gradient_buffers[self.active_buffer],
+                0,
+                bytemuck::cast_slice(&self.gradients),
+            );
+        }
         (quads, shadows, self.batches.len())
     }
 
@@ -816,12 +922,31 @@ impl ShapeRenderer {
         };
         pass.set_pipeline(&self.pipeline.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.set_bind_group(1, &self.gradient_bind_groups[self.active_buffer], &[]);
         pass.set_vertex_buffer(0, self.instance_buffers[self.active_buffer].slice(..));
         pass.draw(0..6, batch.instances.clone());
     }
 }
 
-fn quad_instance(quad: &Quad, clip: Rect) -> ShapeInstance {
+/// Upload one resolved gradient and return its instance index, or [`NO_GRADIENT`].
+fn admit_gradient(
+    gradients: &mut Vec<GpuGradient>,
+    gradient: Option<&Gradient>,
+    bounds: Rect,
+) -> f32 {
+    let Some(gradient) = gradient else {
+        return NO_GRADIENT;
+    };
+    if gradients.len() >= MAX_GRADIENTS_PER_FRAME {
+        return NO_GRADIENT;
+    }
+    let index = gradients.len() as f32;
+    gradients.push(GradientData::new(gradient, bounds).into());
+    index
+}
+
+fn quad_instance(quad: &Quad, clip: Rect, gradient: f32) -> ShapeInstance {
+    let corners = quad.radius.resolve(quad.rect.width, quad.rect.height);
     ShapeInstance {
         geometry: rect_array(quad.rect),
         primary: quad.fill.as_array(),
@@ -829,27 +954,32 @@ fn quad_instance(quad: &Quad, clip: Rect) -> ShapeInstance {
         clip: clip_array(clip),
         params: [
             SHAPE_MODE_QUAD,
-            quad.radius.max(0.0),
+            corners.maximum(),
             quad.border_width.max(0.0),
             0.0,
         ],
         subject: rect_array(quad.rect),
+        corners: corners.as_array(),
+        effects: [gradient, 0.0, 0.0, 0.0],
     }
 }
 
-fn edge_quad_instance(quad: &EdgeQuad, clip: Rect) -> ShapeInstance {
+fn edge_quad_instance(quad: &EdgeQuad, clip: Rect, gradient: f32) -> ShapeInstance {
+    let corners = quad.radius.resolve(quad.rect.width, quad.rect.height);
     ShapeInstance {
         geometry: rect_array(quad.rect),
         primary: quad.fill.as_array(),
         secondary: quad.border_color.as_array(),
         clip: clip_array(clip),
-        params: [SHAPE_MODE_EDGE_QUAD, quad.radius.max(0.0), 0.0, 0.0],
+        params: [SHAPE_MODE_EDGE_QUAD, corners.maximum(), 0.0, 0.0],
         subject: [
             quad.border_widths.top.max(0.0),
             quad.border_widths.right.max(0.0),
             quad.border_widths.bottom.max(0.0),
             quad.border_widths.left.max(0.0),
         ],
+        corners: corners.as_array(),
+        effects: [gradient, quad.border_style.code(), 0.0, 0.0],
     }
 }
 
@@ -866,6 +996,8 @@ fn wavy_underline_instance(underline: &WavyUnderline, clip: Rect) -> ShapeInstan
             underline.wavelength,
         ],
         subject: [underline.amplitude, 0.0, 0.0, 0.0],
+        corners: [0.0; 4],
+        effects: [NO_GRADIENT, 0.0, 0.0, 0.0],
     }
 }
 
@@ -873,13 +1005,16 @@ fn shadow_instance(shadow: &Shadow, clip: Rect) -> Option<ShapeInstance> {
     let style = shadow.style;
     let blur = style.blur();
     let element_rect = shadow.element_rect;
-    let (geometry, subject, mode, subject_radius, element_radius) = if style.is_inset() {
+    let element_corners = shadow
+        .radius
+        .resolve(element_rect.width, element_rect.height);
+    let (geometry, subject, mode, corners, spread) = if style.is_inset() {
         (
             element_rect,
             dilate_rect(element_rect.translate(style.offset()), -style.spread()),
             SHAPE_MODE_INSET_SHADOW,
-            (shadow.radius - style.spread()).max(0.0),
-            shadow.radius,
+            element_corners,
+            style.spread(),
         )
     } else {
         let subject = dilate_rect(element_rect.translate(style.offset()), style.spread());
@@ -891,7 +1026,7 @@ fn shadow_instance(shadow: &Shadow, clip: Rect) -> Option<ShapeInstance> {
             dilate_rect(subject, margin),
             subject,
             SHAPE_MODE_DROP_SHADOW,
-            shadow.radius,
+            element_corners.resolve(subject.width, subject.height),
             0.0,
         )
     };
@@ -903,8 +1038,10 @@ fn shadow_instance(shadow: &Shadow, clip: Rect) -> Option<ShapeInstance> {
         primary: style.color().as_array(),
         secondary: [0.0; 4],
         clip: clip_array(clip),
-        params: [mode, subject_radius.max(0.0), element_radius.max(0.0), blur],
+        params: [mode, spread, 0.0, blur],
         subject: rect_array(subject),
+        corners: corners.as_array(),
+        effects: [NO_GRADIENT, 0.0, 0.0, 0.0],
     })
 }
 
@@ -945,6 +1082,30 @@ fn create_shape_instance_buffer(device: &Device, capacity: usize) -> wgpu::Buffe
         size: (capacity * mem::size_of::<ShapeInstance>()) as u64,
         usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
+    })
+}
+
+fn create_gradient_buffer(device: &Device, capacity: usize) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("quickgui shape gradient buffer"),
+        size: (capacity * mem::size_of::<GpuGradient>()) as u64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+fn create_gradient_bind_group(
+    device: &Device,
+    layout: &wgpu::BindGroupLayout,
+    buffer: &wgpu::Buffer,
+) -> BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("quickgui shape gradient bind group"),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
     })
 }
 

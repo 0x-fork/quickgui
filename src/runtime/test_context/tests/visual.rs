@@ -731,3 +731,452 @@ fn recursive_effects_fail_at_a_bounded_turn_instead_of_hanging() {
         Err(TestAppError::EffectTurnLimit)
     ));
 }
+
+#[cfg(target_os = "macos")]
+struct LinearGradientVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for LinearGradientVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().id("gradient-band").bg_gradient(
+            crate::Gradient::linear(
+                crate::GradientDirection::ToRight,
+                [Color::BLACK, Color::WHITE],
+            )
+            .color_space(crate::GradientColorSpace::Srgb),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_linear_gradient_interpolates_monotonically_across_the_element() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(64.0, 8.0),
+            LinearGradientVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    visual
+        .assert_element_bounds("gradient-band", Rect::new(0.0, 0.0, 64.0, 8.0), 0.0)
+        .unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+    assert_eq!((snapshot.width(), snapshot.height()), (128, 16));
+
+    let row = 8;
+    let first = snapshot.pixel(0, row).unwrap();
+    let last = snapshot.pixel(127, row).unwrap();
+    assert!(
+        first[0] < 12,
+        "the first stop must stay near black: {first:?}"
+    );
+    assert!(
+        last[0] > 243,
+        "the last stop must stay near white: {last:?}"
+    );
+    // Encoded-sRGB interpolation reaches roughly half intensity at the midpoint.
+    let middle = snapshot.pixel(64, row).unwrap();
+    assert!(
+        (i32::from(middle[0]) - 128).abs() <= 4,
+        "the midpoint must be mid gray: {middle:?}"
+    );
+    let mut previous = 0_u8;
+    for x in 0..snapshot.width() {
+        let pixel = snapshot.pixel(x, row).unwrap();
+        assert!(
+            pixel[0] >= previous,
+            "a left-to-right gradient must never darken at {x}"
+        );
+        assert_eq!(
+            [pixel[1], pixel[2], pixel[3]],
+            [pixel[0], pixel[0], 255],
+            "a black-to-white ramp stays neutral and opaque at {x}"
+        );
+        previous = pixel[0];
+    }
+    // A second capture of the same settled scene is byte identical.
+    let repeat = visual.capture_screenshot().unwrap();
+    assert_eq!(
+        repeat
+            .assert_matches(&snapshot, crate::VisualTolerance::EXACT)
+            .unwrap()
+            .differing_pixels,
+        0
+    );
+}
+
+#[cfg(target_os = "macos")]
+struct RadialConicGradientVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for RadialConicGradientVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex_row()
+            .child(
+                div()
+                    .id("radial")
+                    .w(32.0)
+                    .h(32.0)
+                    .flex_none()
+                    .bg_radial_gradient_at(
+                        crate::RadialGradientShape::Circle,
+                        crate::GradientCenter::CENTER,
+                        [Color::WHITE, Color::BLACK],
+                    ),
+            )
+            .child(
+                div()
+                    .id("conic")
+                    .w(32.0)
+                    .h(32.0)
+                    .flex_none()
+                    .bg_conic_gradient(0.0, [Color::BLACK, Color::WHITE]),
+            )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_radial_and_conic_gradients_use_distinct_geometry() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(64.0, 32.0),
+            RadialConicGradientVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    visual
+        .assert_element_bounds("radial", Rect::new(0.0, 0.0, 32.0, 32.0), 0.0)
+        .unwrap();
+    visual
+        .assert_element_bounds("conic", Rect::new(32.0, 0.0, 32.0, 32.0), 0.0)
+        .unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+
+    // The radial gradient is brightest at its center and dark at the farthest corner.
+    let center = snapshot.pixel(32, 32).unwrap();
+    let corner = snapshot.pixel(1, 1).unwrap();
+    assert!(center[0] > 240, "radial center must stay white: {center:?}");
+    // Linear-light interpolation is the default, so the farthest corner is nearly black.
+    assert!(corner[0] < 70, "radial corner must reach black: {corner:?}");
+    let midway = snapshot.pixel(16, 16).unwrap();
+    assert!(
+        corner[0] < midway[0] && midway[0] < center[0],
+        "a radial ramp must darken with distance: {center:?} {midway:?} {corner:?}"
+    );
+    // Distance, not axis, drives a circular radial gradient.
+    let horizontal = snapshot.pixel(52, 32).unwrap();
+    let vertical = snapshot.pixel(32, 12).unwrap();
+    assert!(
+        i32::from(horizontal[0]).abs_diff(i32::from(vertical[0])) <= 6,
+        "a circle must be radially symmetric: {horizontal:?} {vertical:?}"
+    );
+
+    // The conic gradient sweeps clockwise from the top: up is the first stop, down the last.
+    let up = snapshot.pixel(96, 12).unwrap();
+    let down = snapshot.pixel(96, 52).unwrap();
+    let right = snapshot.pixel(116, 32).unwrap();
+    assert!(up[0] < 40, "the conic sweep must start dark: {up:?}");
+    // Half a turn from the start is the midpoint of a two-stop sweep.
+    assert!(
+        down[0] > 150,
+        "the conic sweep must advance half way opposite the start: {down:?}"
+    );
+    assert!(
+        up[0] < right[0] && right[0] < down[0],
+        "the conic sweep must advance clockwise: {up:?} {right:?} {down:?}"
+    );
+}
+
+#[cfg(target_os = "macos")]
+struct CornerRadiiVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for CornerRadiiVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::WHITE).child(
+            div()
+                .id("corner-card")
+                .size_full()
+                .bg(Color::BLACK)
+                .rounded_tl(16.0)
+                .rounded_br(16.0),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_per_corner_radii_round_only_the_declared_corners() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(32.0, 32.0),
+            CornerRadiiVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    visual
+        .assert_element_bounds("corner-card", Rect::new(0.0, 0.0, 32.0, 32.0), 0.0)
+        .unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+    assert_eq!((snapshot.width(), snapshot.height()), (64, 64));
+
+    // Rounded corners reveal the white parent; square corners stay filled.
+    assert_eq!(snapshot.pixel(1, 1), Some([255, 255, 255, 255]));
+    assert_eq!(snapshot.pixel(62, 62), Some([255, 255, 255, 255]));
+    // Sampled off the diagonal so the square corners are measured on their straight edges.
+    assert_eq!(snapshot.pixel(62, 10), Some([0, 0, 0, 255]));
+    assert_eq!(snapshot.pixel(10, 62), Some([0, 0, 0, 255]));
+    // The rounded corners cut a visible arc rather than one antialiased pixel.
+    assert_eq!(snapshot.pixel(6, 6), Some([255, 255, 255, 255]));
+    assert_eq!(snapshot.pixel(57, 57), Some([255, 255, 255, 255]));
+}
+
+#[cfg(target_os = "macos")]
+struct BorderStyleVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for BorderStyleVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .bg(Color::BLACK)
+            .flex_col()
+            .child(
+                div()
+                    .id("solid-box")
+                    .w_full()
+                    .h(20.0)
+                    .flex_none()
+                    .border(2.0, Color::WHITE),
+            )
+            .child(
+                div()
+                    .id("dashed-box")
+                    .w_full()
+                    .h(20.0)
+                    .flex_none()
+                    .border(2.0, Color::WHITE)
+                    .border_dashed(),
+            )
+            .child(
+                div()
+                    .id("dotted-box")
+                    .w_full()
+                    .h(20.0)
+                    .flex_none()
+                    .border(2.0, Color::WHITE)
+                    .border_dotted(),
+            )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_dashed_and_dotted_borders_leave_evenly_spaced_gaps() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(60.0, 60.0),
+            BorderStyleVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+
+    let bright_in_row = |row: u32| {
+        (0..snapshot.width())
+            .filter(|x| {
+                snapshot
+                    .pixel(*x, row)
+                    .is_some_and(|pixel| pixel[0] > 200 && pixel[1] > 200 && pixel[2] > 200)
+            })
+            .count()
+    };
+    // The first physical row inside each box's top border.
+    let solid = bright_in_row(1);
+    let dashed = bright_in_row(41);
+    let dotted = bright_in_row(81);
+    assert_eq!(
+        solid,
+        snapshot.width() as usize,
+        "a solid border is continuous"
+    );
+    assert!(
+        (30..solid).contains(&dashed),
+        "a dashed border must leave gaps: {dashed} of {solid}"
+    );
+    assert!(
+        dotted < dashed,
+        "dots are shorter than dashes: {dotted} vs {dashed}"
+    );
+    assert!(dotted > 10, "dots must still paint: {dotted}");
+}
+
+#[cfg(target_os = "macos")]
+struct OutlineVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for OutlineVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::WHITE).p(10.0).child(
+            div()
+                .id("outlined")
+                .size_full()
+                .bg(Color::BLACK)
+                .outline(2.0, Color::rgb8(255, 0, 0))
+                .outline_offset(2.0),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_outlines_paint_outside_the_border_box_without_changing_layout() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(WindowOptions::default().size(40.0, 40.0), OutlineVisualView)
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    // The outline never participates in layout.
+    visual
+        .assert_element_bounds("outlined", Rect::new(10.0, 10.0, 20.0, 20.0), 0.0)
+        .unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+
+    let row = 40;
+    // Background, then the offset ring, then the gap, then the element itself.
+    assert_eq!(snapshot.pixel(10, row), Some([255, 255, 255, 255]));
+    assert_eq!(snapshot.pixel(13, row), Some([255, 0, 0, 255]));
+    assert_eq!(snapshot.pixel(18, row), Some([255, 255, 255, 255]));
+    assert_eq!(snapshot.pixel(25, row), Some([0, 0, 0, 255]));
+    // The ring is symmetric on the opposite edge.
+    assert_eq!(snapshot.pixel(66, row), Some([255, 0, 0, 255]));
+}
+
+#[cfg(target_os = "macos")]
+fn quadrant_image() -> crate::Image {
+    crate::Image::from_rgba(
+        2,
+        2,
+        vec![
+            255, 0, 0, 255, // top-left red
+            0, 255, 0, 255, // top-right green
+            0, 0, 255, 255, // bottom-left blue
+            255, 255, 255, 255, // bottom-right white
+        ],
+    )
+    .unwrap()
+}
+
+#[cfg(target_os = "macos")]
+#[track_caller]
+fn assert_pixel_near(snapshot: &crate::VisualSnapshot, x: u32, y: u32, expected: [u8; 4]) {
+    let actual = snapshot
+        .pixel(x, y)
+        .expect("the pixel is inside the capture");
+    for channel in 0..4 {
+        assert!(
+            actual[channel].abs_diff(expected[channel]) <= 8,
+            "pixel ({x}, {y}) is {actual:?}, expected about {expected:?}"
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct BackgroundImageVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for BackgroundImageVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let image = quadrant_image();
+        div()
+            .size_full()
+            .flex_row()
+            .bg(Color::BLACK)
+            .child(div().id("bg-scaled").w(17.0).h(17.0).flex_none().bg_image(
+                image.clone(),
+                crate::BackgroundSize::Fixed(17.0, 17.0),
+                crate::BackgroundRepeat::NoRepeat,
+                crate::BackgroundPosition::TOP_LEFT,
+            ))
+            .child(div().id("bg-tiled").w(16.0).h(16.0).flex_none().bg_image(
+                image,
+                crate::BackgroundSize::Fixed(3.0, 3.0),
+                crate::BackgroundRepeat::Repeat,
+                crate::BackgroundPosition::TOP_LEFT,
+            ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_background_images_scale_tile_and_stay_inside_the_element() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(35.0, 18.0),
+            BackgroundImageVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    visual
+        .assert_element_bounds("bg-scaled", Rect::new(0.0, 0.0, 17.0, 17.0), 0.0)
+        .unwrap();
+    visual
+        .assert_element_bounds("bg-tiled", Rect::new(17.0, 0.0, 16.0, 16.0), 0.0)
+        .unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+    assert_eq!((snapshot.width(), snapshot.height()), (70, 36));
+
+    // One tile stretched over the whole element keeps every source texel in its own quadrant.
+    assert_pixel_near(&snapshot, 8, 8, [255, 0, 0, 255]);
+    assert_pixel_near(&snapshot, 25, 8, [0, 255, 0, 255]);
+    assert_pixel_near(&snapshot, 8, 25, [0, 0, 255, 255]);
+    assert_pixel_near(&snapshot, 25, 25, [255, 255, 255, 255]);
+
+    // Tiling repeats the same texel grid across the element without leaving it.
+    assert_pixel_near(&snapshot, 35, 1, [255, 0, 0, 255]);
+    assert_pixel_near(&snapshot, 38, 1, [0, 255, 0, 255]);
+    assert_pixel_near(&snapshot, 35, 4, [0, 0, 255, 255]);
+    assert_pixel_near(&snapshot, 41, 1, [255, 0, 0, 255]);
+    assert_pixel_near(&snapshot, 44, 4, [255, 255, 255, 255]);
+    // Nothing is painted past the element's own box.
+    assert_eq!(snapshot.pixel(68, 35), Some([0, 0, 0, 255]));
+    assert_eq!(snapshot.pixel(35, 35), Some([0, 0, 0, 255]));
+}
+
+#[cfg(target_os = "macos")]
+struct RoundedBackgroundImageVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for RoundedBackgroundImageVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::BLACK).child(
+            div()
+                .id("rounded-bg")
+                .size_full()
+                .rounded(8.0)
+                .bg_image_cover(quadrant_image()),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_background_images_respect_rounded_corners() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(16.0, 16.0),
+            RoundedBackgroundImageVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+    // The rounded corner masks the raster background back to the black parent.
+    assert_eq!(snapshot.pixel(0, 0), Some([0, 0, 0, 255]));
+    assert_eq!(snapshot.pixel(31, 31), Some([0, 0, 0, 255]));
+    // A covering background still paints its source texels in the middle of the element.
+    assert_pixel_near(&snapshot, 6, 6, [255, 0, 0, 255]);
+    assert_pixel_near(&snapshot, 25, 25, [255, 255, 255, 255]);
+}

@@ -4,6 +4,35 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+### Framework
+
+- Added element background gradients: `bg_linear_gradient`, `bg_radial_gradient`,
+  `bg_radial_gradient_at`, `bg_conic_gradient`, and the general `bg_gradient`, backed by a new
+  `Gradient`/`ColorStops`/`GradientKind` API with `MAX_GRADIENT_STOPS` (8) stops, CSS angles or
+  `GradientDirection`, `RadialGradientShape`/`RadialGradientExtent`/`GradientCenter`, and
+  linear-sRGB, sRGB, or Oklab interpolation. Gradients are evaluated analytically in the existing
+  instanced shape draw, honor rounded corners, borders, clipping, subtree opacity, and damage, and
+  are swappable in hover, active, focus, validation, and drag states through
+  `ElementStateStyle::bg_gradient`. `MAX_GRADIENTS_PER_FRAME` (4,096) bounds the per-frame upload.
+- Extended `Background` so retained paths and canvas fills accept the same multi-stop linear,
+  radial, and conic gradients instead of only two-stop linear gradients.
+- Added per-corner radii: `rounded_tl`, `rounded_tr`, `rounded_br`, `rounded_bl`, `rounded_t`,
+  `rounded_b`, `rounded_l`, `rounded_r`, `corner_radii(Corners)`, and `rounded_full()`. Radii are
+  capped by `MAX_CORNER_RADIUS` and reduced by the CSS uniform-scale rule; element box shadows
+  follow the same per-corner geometry.
+- Added `border_solid()`, `border_dashed()`, and `border_dotted()`. Dash geometry is analytic arc
+  length along the rounded outline, with the period scaled so a whole number of repeats closes the
+  outline.
+- Added `outline(width, color)`, `outline_offset(px)`, `outline_style`, `outline_dashed`,
+  `outline_dotted`, and `outline_none`, plus `ElementStateStyle::outline`/`outline_offset` for
+  focus rings. Outlines are painted outside the border box and never affect layout, bounded by
+  `MAX_OUTLINE_WIDTH` and `MAX_OUTLINE_OFFSET`.
+- Added raster element backgrounds: `bg_image(image, BackgroundSize, BackgroundRepeat,
+  BackgroundPosition)` with `bg_image_cover`, `bg_image_contain`, `bg_image_tiled`, and
+  `bg_image_none`. Tiles reuse the existing bounded image primitive and GPU texture cache, are
+  masked by the element's rounded corners, and are capped by `MAX_BACKGROUND_IMAGE_TILES` (256).
+- Added the `effects` example.
+
 ## 0.1.1 - 2026-08-31
 
 ### JavaScript tooling

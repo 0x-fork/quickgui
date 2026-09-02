@@ -9,7 +9,8 @@ use wgpu::{
 };
 
 use crate::{
-    Background, GradientColorSpace, Rect, Scene,
+    MAX_GRADIENT_STOPS, Rect, Scene,
+    path::GradientData,
     scene::{PathPrimitive, PrimitiveRef},
 };
 
@@ -57,12 +58,15 @@ struct GpuPathPaint {
     transform: [f32; 4],
     /// Logical left, top, right, bottom.
     clip: [f32; 4],
-    /// Logical start XY followed by end XY.
-    gradient_line: [f32; 4],
-    color_0: [f32; 4],
-    color_1: [f32; 4],
-    /// Stop positions followed by paint mode and interpolation mode.
-    stops_mode: [f32; 4],
+    /// Solid fill, used when `header.w` is zero.
+    color: [f32; 4],
+    /// Gradient kind, interpolation space, stop count, and gradient flag.
+    header: [f32; 4],
+    /// Linear start/end XY, radial center and radii, or conic center and start angle.
+    geometry: [f32; 4],
+    /// Stop positions 0..4 followed by 4..8.
+    positions: [[f32; 4]; 2],
+    colors: [[f32; 4]; MAX_GRADIENT_STOPS],
 }
 
 #[derive(Clone, Copy)]
@@ -438,59 +442,31 @@ fn append_path_vertices(
 fn path_paint(primitive: &PathPrimitive, clip: Rect) -> GpuPathPaint {
     let scale = primitive.scale_factors();
     let translation = primitive.translation();
-    let (gradient_line, color_0, color_1, stop_0, stop_1, mode, interpolation) =
-        match primitive.background {
-            Background::Solid(color) => (
-                [0.0; 4],
-                color.as_array(),
-                color.as_array(),
-                0.0,
-                1.0,
-                0.0,
-                0.0,
-            ),
-            Background::LinearGradient(gradient) => {
-                let stops = gradient.stops();
-                (
-                    gradient_line(primitive.render_bounds(), gradient.angle_degrees()),
-                    stops[0].color.as_array(),
-                    stops[1].color.as_array(),
-                    stops[0].position,
-                    stops[1].position,
-                    1.0,
-                    match gradient.interpolation() {
-                        GradientColorSpace::LinearSrgb => 0.0,
-                        GradientColorSpace::Srgb => 1.0,
-                        GradientColorSpace::Oklab => 2.0,
-                    },
-                )
-            }
-        };
-    GpuPathPaint {
+    let mut paint = GpuPathPaint {
         transform: [scale[0], scale[1], translation.x, translation.y],
         clip: [clip.x, clip.y, clip.right(), clip.bottom()],
-        gradient_line,
-        color_0,
-        color_1,
-        stops_mode: [stop_0, stop_1, mode, interpolation],
+        color: [0.0; 4],
+        header: [0.0; 4],
+        geometry: [0.0; 4],
+        positions: [[0.0; 4]; 2],
+        colors: [[0.0; 4]; MAX_GRADIENT_STOPS],
+    };
+    match primitive.background.as_gradient() {
+        None => {
+            let crate::Background::Solid(color) = primitive.background else {
+                unreachable!("a non-gradient background is always solid");
+            };
+            paint.color = color.as_array();
+        }
+        Some(gradient) => {
+            let data = GradientData::new(&gradient, primitive.render_bounds());
+            paint.header = [data.header[0], data.header[1], data.header[2], 1.0];
+            paint.geometry = data.geometry;
+            paint.positions = data.positions;
+            paint.colors = data.colors;
+        }
     }
-}
-
-fn gradient_line(bounds: Rect, angle_degrees: f32) -> [f32; 4] {
-    let radians = angle_degrees.to_radians();
-    let direction = [radians.sin(), -radians.cos()];
-    let center = [
-        bounds.x + bounds.width * 0.5,
-        bounds.y + bounds.height * 0.5,
-    ];
-    let half_length =
-        (direction[0].abs() * bounds.width + direction[1].abs() * bounds.height) * 0.5;
-    [
-        center[0] - direction[0] * half_length,
-        center[1] - direction[1] * half_length,
-        center[0] + direction[0] * half_length,
-        center[1] + direction[1] * half_length,
-    ]
+    paint
 }
 
 fn create_vertex_buffer(device: &Device, capacity: usize) -> wgpu::Buffer {
@@ -555,17 +531,6 @@ mod tests {
     }
 
     #[test]
-    fn css_gradient_angles_span_transformed_bounds() {
-        let bounds = Rect::new(10.0, 20.0, 40.0, 60.0);
-        assert_eq!(gradient_line(bounds, 0.0), [30.0, 80.0, 30.0, 20.0]);
-        let horizontal = gradient_line(bounds, 90.0);
-        assert!((horizontal[0] - 10.0).abs() < 0.001);
-        assert!((horizontal[1] - 50.0).abs() < 0.001);
-        assert!((horizontal[2] - 50.0).abs() < 0.001);
-        assert!((horizontal[3] - 50.0).abs() < 0.001);
-    }
-
-    #[test]
     fn paint_records_preserve_gradient_stops_and_transform() {
         let background = linear_gradient(
             180.0,
@@ -578,7 +543,23 @@ mod tests {
         let paint = path_paint(&primitive, Rect::new(1.0, 2.0, 3.0, 4.0));
         assert_eq!(paint.transform, [2.0, -3.0, 4.0, 5.0]);
         assert_eq!(paint.clip, [1.0, 2.0, 4.0, 6.0]);
-        assert_eq!(paint.stops_mode, [0.2, 0.8, 1.0, 0.0]);
+        assert_eq!(paint.header, [0.0, 0.0, 2.0, 1.0]);
+        assert_eq!(paint.positions[0], [0.2, 0.8, 0.0, 0.0]);
+        assert_eq!(paint.colors[0], Color::BLACK.as_array());
+        assert_eq!(paint.colors[1], Color::WHITE.as_array());
+    }
+
+    #[test]
+    fn multi_stop_path_gradients_upload_every_stop() {
+        let background = crate::Gradient::radial([Color::BLACK, Color::WHITE, Color::TRANSPARENT])
+            .shape(crate::RadialGradientShape::Circle)
+            .color_space(crate::GradientColorSpace::Oklab);
+        let primitive = PathPrimitive::new(triangle(), background);
+        let paint = path_paint(&primitive, Rect::new(0.0, 0.0, 20.0, 10.0));
+        assert_eq!(paint.header, [1.0, 2.0, 3.0, 1.0]);
+        assert_eq!(paint.positions[0], [0.0, 0.5, 1.0, 0.0]);
+        // A circle uses one radius on both axes.
+        assert_eq!(paint.geometry[2], paint.geometry[3]);
     }
 
     #[test]

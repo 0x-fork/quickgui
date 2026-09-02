@@ -3,8 +3,9 @@ use std::sync::{Arc, LazyLock};
 use glyphon::{Style as GlyphStyle, Weight};
 
 use crate::{
-    Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Image, Insets,
-    Path, Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline, Vector,
+    Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Gradient,
+    Image, Insets, Path, Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline,
+    Vector,
     font::{assert_valid_font_family, normalize_fallbacks},
     paint_order::{BoundsOrderTree, valid_bounds},
 };
@@ -360,12 +361,167 @@ impl TextStyle {
     }
 }
 
+/// Per-corner radii ordered top-left, top-right, bottom-right, bottom-left.
+///
+/// A single `f32` converts into equal radii, so existing uniform-radius call sites are unchanged.
+/// [`Corners::resolve`] applies the CSS uniform-scale rule so two radii sharing one edge can never
+/// overlap, which keeps the analytic signed-distance evaluation valid for any declared value.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Corners {
+    pub top_left: f32,
+    pub top_right: f32,
+    pub bottom_right: f32,
+    pub bottom_left: f32,
+}
+
+impl Corners {
+    /// Square corners.
+    pub const ZERO: Self = Self::all(0.0);
+
+    pub const fn all(radius: f32) -> Self {
+        Self {
+            top_left: radius,
+            top_right: radius,
+            bottom_right: radius,
+            bottom_left: radius,
+        }
+    }
+
+    pub const fn new(top_left: f32, top_right: f32, bottom_right: f32, bottom_left: f32) -> Self {
+        Self {
+            top_left,
+            top_right,
+            bottom_right,
+            bottom_left,
+        }
+    }
+
+    /// Round only the two top corners.
+    pub const fn top(radius: f32) -> Self {
+        Self::new(radius, radius, 0.0, 0.0)
+    }
+
+    /// Round only the two bottom corners.
+    pub const fn bottom(radius: f32) -> Self {
+        Self::new(0.0, 0.0, radius, radius)
+    }
+
+    /// Round only the two left corners.
+    pub const fn left(radius: f32) -> Self {
+        Self::new(radius, 0.0, 0.0, radius)
+    }
+
+    /// Round only the two right corners.
+    pub const fn right(radius: f32) -> Self {
+        Self::new(0.0, radius, radius, 0.0)
+    }
+
+    /// Replace non-finite and negative values with zero.
+    pub fn sanitized(self) -> Self {
+        Self {
+            top_left: finite_or_zero(self.top_left).max(0.0),
+            top_right: finite_or_zero(self.top_right).max(0.0),
+            bottom_right: finite_or_zero(self.bottom_right).max(0.0),
+            bottom_left: finite_or_zero(self.bottom_left).max(0.0),
+        }
+    }
+
+    pub fn is_zero(self) -> bool {
+        self.top_left <= 0.0
+            && self.top_right <= 0.0
+            && self.bottom_right <= 0.0
+            && self.bottom_left <= 0.0
+    }
+
+    /// The largest declared radius.
+    pub fn maximum(self) -> f32 {
+        self.top_left
+            .max(self.top_right)
+            .max(self.bottom_right)
+            .max(self.bottom_left)
+    }
+
+    /// Grow every corner by `amount`, clamping at zero. Used by outlines drawn outside the border.
+    pub fn expanded(self, amount: f32) -> Self {
+        Self {
+            top_left: (self.top_left + amount).max(0.0),
+            top_right: (self.top_right + amount).max(0.0),
+            bottom_right: (self.bottom_right + amount).max(0.0),
+            bottom_left: (self.bottom_left + amount).max(0.0),
+        }
+    }
+
+    /// Apply the CSS uniform-scale rule so adjacent radii never exceed their shared edge.
+    pub fn resolve(self, width: f32, height: f32) -> Self {
+        let corners = self.sanitized();
+        let width = finite_or_zero(width).max(0.0);
+        let height = finite_or_zero(height).max(0.0);
+        let mut scale = 1.0_f32;
+        let mut constrain = |sum: f32, extent: f32| {
+            if sum > 0.0 {
+                scale = scale.min(extent / sum);
+            }
+        };
+        constrain(corners.top_left + corners.top_right, width);
+        constrain(corners.bottom_left + corners.bottom_right, width);
+        constrain(corners.top_left + corners.bottom_left, height);
+        constrain(corners.top_right + corners.bottom_right, height);
+        if scale >= 1.0 || !scale.is_finite() {
+            return corners;
+        }
+        Self {
+            top_left: corners.top_left * scale,
+            top_right: corners.top_right * scale,
+            bottom_right: corners.bottom_right * scale,
+            bottom_left: corners.bottom_left * scale,
+        }
+    }
+
+    pub(crate) fn as_array(self) -> [f32; 4] {
+        [
+            self.top_left,
+            self.top_right,
+            self.bottom_right,
+            self.bottom_left,
+        ]
+    }
+}
+
+impl From<f32> for Corners {
+    fn from(radius: f32) -> Self {
+        Self::all(radius)
+    }
+}
+
+/// How a border or outline ring is painted along its perimeter.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum BorderStyle {
+    #[default]
+    Solid,
+    /// Evenly distributed dashes three border widths long, separated by two-width gaps.
+    Dashed,
+    /// Evenly distributed square dots one border width long, separated by one-width gaps.
+    Dotted,
+}
+
+impl BorderStyle {
+    pub(crate) fn code(self) -> f32 {
+        match self {
+            Self::Solid => 0.0,
+            Self::Dashed => 1.0,
+            Self::Dotted => 2.0,
+        }
+    }
+}
+
 /// A filled rounded rectangle with an optional inside border and clip.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Quad {
     pub rect: Rect,
     pub fill: Color,
-    pub radius: f32,
+    /// An optional multi-stop gradient replacing `fill` inside the rounded box.
+    pub background: Option<Gradient>,
+    pub radius: Corners,
     pub border_width: f32,
     pub border_color: Color,
     pub clip: Option<Rect>,
@@ -376,7 +532,8 @@ impl Quad {
         Self {
             rect,
             fill,
-            radius: 0.0,
+            background: None,
+            radius: Corners::ZERO,
             border_width: 0.0,
             border_color: Color::TRANSPARENT,
             clip: None,
@@ -384,7 +541,27 @@ impl Quad {
     }
 
     pub fn radius(mut self, radius: f32) -> Self {
-        self.radius = radius.max(0.0);
+        self.radius = Corners::all(radius.max(0.0));
+        self
+    }
+
+    /// Round each corner independently.
+    pub fn corner_radii(mut self, radii: Corners) -> Self {
+        self.radius = radii.sanitized();
+        self
+    }
+
+    /// Fill with a solid color or a bounded multi-stop gradient resolved against `rect`.
+    pub fn background(mut self, background: impl Into<Background>) -> Self {
+        match background.into() {
+            Background::Solid(color) => {
+                self.fill = color;
+                self.background = None;
+            }
+            other => {
+                self.background = other.as_gradient();
+            }
+        }
         self
     }
 
@@ -405,9 +582,11 @@ impl Quad {
 pub(crate) struct EdgeQuad {
     pub(crate) rect: Rect,
     pub(crate) fill: Color,
-    pub(crate) radius: f32,
+    pub(crate) background: Option<Gradient>,
+    pub(crate) radius: Corners,
     pub(crate) border_widths: Insets,
     pub(crate) border_color: Color,
+    pub(crate) border_style: BorderStyle,
     pub(crate) clip: Option<Rect>,
 }
 
@@ -416,15 +595,27 @@ impl EdgeQuad {
         Self {
             rect,
             fill,
-            radius: 0.0,
+            background: None,
+            radius: Corners::ZERO,
             border_widths: Insets::default(),
             border_color: Color::TRANSPARENT,
+            border_style: BorderStyle::Solid,
             clip: None,
         }
     }
 
-    pub(crate) fn radius(mut self, radius: f32) -> Self {
-        self.radius = finite_or_zero(radius).max(0.0);
+    pub(crate) fn corner_radii(mut self, radii: Corners) -> Self {
+        self.radius = radii.sanitized();
+        self
+    }
+
+    pub(crate) fn background(mut self, gradient: Option<Gradient>) -> Self {
+        self.background = gradient;
+        self
+    }
+
+    pub(crate) fn border_style(mut self, style: BorderStyle) -> Self {
+        self.border_style = style;
         self
     }
 
@@ -564,7 +755,7 @@ fn finite_or_zero(value: f32) -> f32 {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Shadow {
     pub element_rect: Rect,
-    pub radius: f32,
+    pub radius: Corners,
     pub style: BoxShadow,
     pub clip: Option<Rect>,
 }
@@ -573,14 +764,20 @@ impl Shadow {
     pub fn new(element_rect: Rect, style: BoxShadow) -> Self {
         Self {
             element_rect,
-            radius: 0.0,
+            radius: Corners::ZERO,
             style,
             clip: None,
         }
     }
 
     pub fn radius(mut self, radius: f32) -> Self {
-        self.radius = finite_or_zero(radius).max(0.0);
+        self.radius = Corners::all(finite_or_zero(radius).max(0.0));
+        self
+    }
+
+    /// Follow each of the element's corners independently.
+    pub fn corner_radii(mut self, radii: Corners) -> Self {
+        self.radius = radii.sanitized();
         self
     }
 
@@ -1109,7 +1306,13 @@ impl Scene {
     pub(crate) fn push_quad_in(&mut self, key: PaintLayerKey, mut quad: Quad) {
         quad.fill = quad.fill.multiply_alpha(self.opacity);
         quad.border_color = quad.border_color.multiply_alpha(self.opacity);
-        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0)
+        quad.background = quad
+            .background
+            .map(|gradient| gradient.multiply_alpha(self.opacity));
+        let gradient_visible = quad
+            .background
+            .is_some_and(|gradient| gradient.is_visible());
+        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0 || gradient_visible)
             && let Some(bounds) = clipped_paint_bounds(quad.rect, [quad.clip])
         {
             let layer = self.layer_mut(key);
@@ -1124,7 +1327,13 @@ impl Scene {
     pub(crate) fn push_edge_quad_in(&mut self, key: PaintLayerKey, mut quad: EdgeQuad) {
         quad.fill = quad.fill.multiply_alpha(self.opacity);
         quad.border_color = quad.border_color.multiply_alpha(self.opacity);
-        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0)
+        quad.background = quad
+            .background
+            .map(|gradient| gradient.multiply_alpha(self.opacity));
+        let gradient_visible = quad
+            .background
+            .is_some_and(|gradient| gradient.is_visible());
+        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0 || gradient_visible)
             && let Some(bounds) = clipped_paint_bounds(quad.rect, [quad.clip])
         {
             let layer = self.layer_mut(key);
@@ -1475,6 +1684,40 @@ impl Default for Scene {
 mod tests {
     use super::*;
     use crate::Point;
+
+    #[test]
+    fn corner_radii_scale_uniformly_when_a_shared_edge_overflows() {
+        let corners = Corners::new(40.0, 40.0, 0.0, 0.0).resolve(40.0, 100.0);
+        assert_eq!(corners.top_left, 20.0);
+        assert_eq!(corners.top_right, 20.0);
+        assert_eq!(corners.bottom_right, 0.0);
+
+        let fitting = Corners::new(4.0, 8.0, 12.0, 2.0).resolve(200.0, 200.0);
+        assert_eq!(fitting, Corners::new(4.0, 8.0, 12.0, 2.0));
+        assert_eq!(fitting.maximum(), 12.0);
+        assert!(Corners::ZERO.is_zero());
+        assert_eq!(Corners::top(6.0), Corners::new(6.0, 6.0, 0.0, 0.0));
+        assert_eq!(Corners::bottom(6.0), Corners::new(0.0, 0.0, 6.0, 6.0));
+        assert_eq!(Corners::left(6.0), Corners::new(6.0, 0.0, 0.0, 6.0));
+        assert_eq!(Corners::right(6.0), Corners::new(0.0, 6.0, 6.0, 0.0));
+        assert_eq!(Corners::all(f32::NAN).sanitized(), Corners::ZERO);
+        assert_eq!(Corners::all(2.0).expanded(3.0), Corners::all(5.0));
+        assert_eq!(Corners::all(2.0).expanded(-6.0), Corners::ZERO);
+    }
+
+    #[test]
+    fn quad_backgrounds_accept_solid_colors_and_gradients() {
+        let solid =
+            Quad::new(Rect::new(0.0, 0.0, 10.0, 10.0), Color::BLACK).background(Color::WHITE);
+        assert_eq!(solid.fill, Color::WHITE);
+        assert!(solid.background.is_none());
+
+        let gradient = Quad::new(Rect::new(0.0, 0.0, 10.0, 10.0), Color::BLACK)
+            .background(crate::Gradient::conic(0.0, [Color::WHITE, Color::BLACK]))
+            .corner_radii(Corners::new(1.0, 2.0, 3.0, 4.0));
+        assert!(gradient.background.is_some());
+        assert_eq!(gradient.radius, Corners::new(1.0, 2.0, 3.0, 4.0));
+    }
 
     #[test]
     fn named_text_ids_are_stable_and_distinct() {

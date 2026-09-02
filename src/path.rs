@@ -229,10 +229,426 @@ pub fn linear_gradient(
     Background::LinearGradient(LinearGradient::new(angle_degrees, start, end))
 }
 
+/// Largest number of color stops retained by one [`Gradient`].
+///
+/// Additional declared stops are dropped in source order rather than allocating: one gradient is
+/// a fixed-size `Copy` value so it never introduces a per-frame heap allocation.
+pub const MAX_GRADIENT_STOPS: usize = 8;
+
+/// A bounded, ordered list of gradient color stops.
+///
+/// Stops are sanitized, clamped to `0.0..=1.0`, sorted by position, and truncated to
+/// [`MAX_GRADIENT_STOPS`]. Stops without an explicit position are distributed evenly, matching
+/// CSS. An empty list is treated as fully transparent.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColorStops {
+    length: u8,
+    stops: [LinearColorStop; MAX_GRADIENT_STOPS],
+}
+
+impl Default for ColorStops {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl ColorStops {
+    const EMPTY_STOP: LinearColorStop = LinearColorStop {
+        color: Color::TRANSPARENT,
+        position: 0.0,
+    };
+
+    /// A gradient with no stops. It paints nothing.
+    pub const fn empty() -> Self {
+        Self {
+            length: 0,
+            stops: [Self::EMPTY_STOP; MAX_GRADIENT_STOPS],
+        }
+    }
+
+    /// Collect at most [`MAX_GRADIENT_STOPS`] positioned stops in source order.
+    pub fn new(stops: impl IntoIterator<Item = LinearColorStop>) -> Self {
+        let mut collected = Self::empty();
+        for stop in stops {
+            if usize::from(collected.length) == MAX_GRADIENT_STOPS {
+                break;
+            }
+            collected.stops[usize::from(collected.length)] =
+                LinearColorStop::new(stop.color, stop.position);
+            collected.length += 1;
+        }
+        collected.sort();
+        collected
+    }
+
+    /// Collect at most [`MAX_GRADIENT_STOPS`] colors and distribute their positions evenly.
+    pub fn evenly_spaced(colors: impl IntoIterator<Item = Color>) -> Self {
+        let mut collected = Self::empty();
+        for color in colors {
+            if usize::from(collected.length) == MAX_GRADIENT_STOPS {
+                break;
+            }
+            collected.stops[usize::from(collected.length)] = LinearColorStop::new(color, 0.0);
+            collected.length += 1;
+        }
+        let last = collected.length.saturating_sub(1);
+        for index in 0..usize::from(collected.length) {
+            collected.stops[index].position = if last == 0 {
+                0.0
+            } else {
+                index as f32 / f32::from(last)
+            };
+        }
+        collected
+    }
+
+    /// The retained stops in ascending position order.
+    pub fn as_slice(&self) -> &[LinearColorStop] {
+        &self.stops[..usize::from(self.length)]
+    }
+
+    pub fn len(&self) -> usize {
+        usize::from(self.length)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    fn sort(&mut self) {
+        // Insertion sort over at most eight elements keeps stop ordering stable and allocation
+        // free; equal positions preserve declaration order like CSS.
+        let length = usize::from(self.length);
+        for index in 1..length {
+            let mut position = index;
+            while position > 0 && self.stops[position - 1].position > self.stops[position].position
+            {
+                self.stops.swap(position - 1, position);
+                position -= 1;
+            }
+        }
+    }
+
+    fn multiply_alpha(mut self, opacity: f32) -> Self {
+        for index in 0..usize::from(self.length) {
+            self.stops[index].color = self.stops[index].color.multiply_alpha(opacity);
+        }
+        self
+    }
+
+    fn is_visible(&self) -> bool {
+        self.as_slice().iter().any(|stop| stop.color.a > 0.0)
+    }
+}
+
+impl FromIterator<LinearColorStop> for ColorStops {
+    fn from_iter<T: IntoIterator<Item = LinearColorStop>>(stops: T) -> Self {
+        Self::new(stops)
+    }
+}
+
+impl FromIterator<Color> for ColorStops {
+    fn from_iter<T: IntoIterator<Item = Color>>(colors: T) -> Self {
+        Self::evenly_spaced(colors)
+    }
+}
+
+/// A CSS-like named direction for a linear gradient.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GradientDirection {
+    ToTop,
+    ToTopRight,
+    ToRight,
+    ToBottomRight,
+    ToBottom,
+    ToBottomLeft,
+    ToLeft,
+    ToTopLeft,
+}
+
+/// The angle of a linear or conic gradient, in CSS degrees.
+///
+/// `0` points to the top of the element and angles increase clockwise. Both `f32` degrees and a
+/// [`GradientDirection`] convert into this type.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GradientAngle(f32);
+
+impl GradientAngle {
+    pub fn new(degrees: f32) -> Self {
+        Self(finite_or(degrees, 0.0).rem_euclid(360.0))
+    }
+
+    pub const fn degrees(self) -> f32 {
+        self.0
+    }
+}
+
+impl From<f32> for GradientAngle {
+    fn from(degrees: f32) -> Self {
+        Self::new(degrees)
+    }
+}
+
+impl From<GradientDirection> for GradientAngle {
+    fn from(direction: GradientDirection) -> Self {
+        Self(match direction {
+            GradientDirection::ToTop => 0.0,
+            GradientDirection::ToTopRight => 45.0,
+            GradientDirection::ToRight => 90.0,
+            GradientDirection::ToBottomRight => 135.0,
+            GradientDirection::ToBottom => 180.0,
+            GradientDirection::ToBottomLeft => 225.0,
+            GradientDirection::ToLeft => 270.0,
+            GradientDirection::ToTopLeft => 315.0,
+        })
+    }
+}
+
+/// The outline shape of a radial gradient.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RadialGradientShape {
+    /// One radius in both axes.
+    Circle,
+    /// Independent horizontal and vertical radii, matching the element's box.
+    #[default]
+    Ellipse,
+}
+
+/// Where a radial gradient's ending shape is sized to.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RadialGradientExtent {
+    /// The ending shape passes through the box corner furthest from the center.
+    #[default]
+    FarthestCorner,
+    /// The ending shape touches the box side furthest from the center.
+    FarthestSide,
+    /// The ending shape touches the box side closest to the center.
+    ClosestSide,
+}
+
+/// A gradient center expressed as a fraction of the painted box.
+///
+/// `(0.0, 0.0)` is the top-left corner and `(1.0, 1.0)` the bottom-right corner. Values outside
+/// that range are accepted and clamped to `-4.0..=5.0` so an off-box center cannot produce a
+/// degenerate ending shape.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GradientCenter {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Default for GradientCenter {
+    fn default() -> Self {
+        Self::CENTER
+    }
+}
+
+impl GradientCenter {
+    /// The center of the painted box.
+    pub const CENTER: Self = Self { x: 0.5, y: 0.5 };
+
+    pub fn new(x: f32, y: f32) -> Self {
+        Self {
+            x: finite_or(x, 0.5).clamp(-4.0, 5.0),
+            y: finite_or(y, 0.5).clamp(-4.0, 5.0),
+        }
+    }
+}
+
+/// The geometry of a [`Gradient`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GradientKind {
+    /// Interpolates along a line through the box center at `angle`.
+    Linear { angle: GradientAngle },
+    /// Interpolates outward from `center` to an ending `shape` sized by `extent`.
+    Radial {
+        shape: RadialGradientShape,
+        extent: RadialGradientExtent,
+        center: GradientCenter,
+    },
+    /// Interpolates by angle around `center`, starting at `from_angle`.
+    Conic {
+        from_angle: GradientAngle,
+        center: GradientCenter,
+    },
+}
+
+/// A bounded multi-stop linear, radial, or conic gradient.
+///
+/// A gradient is a fixed-size `Copy` value with at most [`MAX_GRADIENT_STOPS`] stops. It is
+/// evaluated analytically on the GPU, so it allocates no texture, ramp cache, or extra draw call
+/// and participates in the same ordered instanced draw as solid quads and paths.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Gradient {
+    kind: GradientKind,
+    stops: ColorStops,
+    color_space: GradientColorSpace,
+}
+
+impl Gradient {
+    /// A linear gradient at `angle`, where `0` degrees points to the top and increases clockwise.
+    pub fn linear(angle: impl Into<GradientAngle>, stops: impl Into<ColorStops>) -> Self {
+        Self {
+            kind: GradientKind::Linear {
+                angle: angle.into(),
+            },
+            stops: stops.into(),
+            color_space: GradientColorSpace::LinearSrgb,
+        }
+    }
+
+    /// A centered elliptical radial gradient sized to the farthest corner.
+    pub fn radial(stops: impl Into<ColorStops>) -> Self {
+        Self {
+            kind: GradientKind::Radial {
+                shape: RadialGradientShape::Ellipse,
+                extent: RadialGradientExtent::FarthestCorner,
+                center: GradientCenter::CENTER,
+            },
+            stops: stops.into(),
+            color_space: GradientColorSpace::LinearSrgb,
+        }
+    }
+
+    /// A conic gradient starting at `from_angle` and sweeping clockwise around the center.
+    pub fn conic(from_angle: impl Into<GradientAngle>, stops: impl Into<ColorStops>) -> Self {
+        Self {
+            kind: GradientKind::Conic {
+                from_angle: from_angle.into(),
+                center: GradientCenter::CENTER,
+            },
+            stops: stops.into(),
+            color_space: GradientColorSpace::LinearSrgb,
+        }
+    }
+
+    /// Override the ending shape of a radial gradient. Other kinds are unchanged.
+    pub fn shape(mut self, shape: RadialGradientShape) -> Self {
+        if let GradientKind::Radial {
+            shape: current_shape,
+            ..
+        } = &mut self.kind
+        {
+            *current_shape = shape;
+        }
+        self
+    }
+
+    /// Override how a radial gradient's ending shape is sized. Other kinds are unchanged.
+    pub fn extent(mut self, extent: RadialGradientExtent) -> Self {
+        if let GradientKind::Radial {
+            extent: current_extent,
+            ..
+        } = &mut self.kind
+        {
+            *current_extent = extent;
+        }
+        self
+    }
+
+    /// Override the center of a radial or conic gradient. Linear gradients are unchanged.
+    pub fn center(mut self, center: GradientCenter) -> Self {
+        match &mut self.kind {
+            GradientKind::Radial {
+                center: current, ..
+            }
+            | GradientKind::Conic {
+                center: current, ..
+            } => *current = center,
+            GradientKind::Linear { .. } => {}
+        }
+        self
+    }
+
+    /// Select the space colors are interpolated in.
+    pub fn color_space(mut self, color_space: GradientColorSpace) -> Self {
+        self.color_space = color_space;
+        self
+    }
+
+    pub const fn kind(self) -> GradientKind {
+        self.kind
+    }
+
+    pub const fn stops(&self) -> &ColorStops {
+        &self.stops
+    }
+
+    pub const fn interpolation(self) -> GradientColorSpace {
+        self.color_space
+    }
+
+    pub(crate) fn multiply_alpha(mut self, opacity: f32) -> Self {
+        self.stops = self.stops.multiply_alpha(opacity);
+        self
+    }
+
+    pub(crate) fn is_visible(&self) -> bool {
+        self.stops.is_visible()
+    }
+}
+
+impl From<LinearGradient> for Gradient {
+    fn from(gradient: LinearGradient) -> Self {
+        let stops = gradient.stops();
+        Self {
+            kind: GradientKind::Linear {
+                angle: GradientAngle::new(gradient.angle_degrees()),
+            },
+            stops: ColorStops::new(stops),
+            color_space: gradient.interpolation(),
+        }
+    }
+}
+
+impl From<Color> for ColorStops {
+    fn from(color: Color) -> Self {
+        Self::evenly_spaced([color])
+    }
+}
+
+impl<const N: usize> From<[LinearColorStop; N]> for ColorStops {
+    fn from(stops: [LinearColorStop; N]) -> Self {
+        Self::new(stops)
+    }
+}
+
+impl<const N: usize> From<[Color; N]> for ColorStops {
+    fn from(colors: [Color; N]) -> Self {
+        Self::evenly_spaced(colors)
+    }
+}
+
+impl From<&[LinearColorStop]> for ColorStops {
+    fn from(stops: &[LinearColorStop]) -> Self {
+        Self::new(stops.iter().copied())
+    }
+}
+
+impl From<&[Color]> for ColorStops {
+    fn from(colors: &[Color]) -> Self {
+        Self::evenly_spaced(colors.iter().copied())
+    }
+}
+
+impl From<Vec<LinearColorStop>> for ColorStops {
+    fn from(stops: Vec<LinearColorStop>) -> Self {
+        Self::new(stops)
+    }
+}
+
+impl From<Vec<Color>> for ColorStops {
+    fn from(colors: Vec<Color>) -> Self {
+        Self::evenly_spaced(colors)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Background {
     Solid(Color),
     LinearGradient(LinearGradient),
+    /// A bounded multi-stop linear, radial, or conic gradient.
+    Gradient(Gradient),
 }
 
 impl Background {
@@ -240,6 +656,7 @@ impl Background {
         match self {
             Self::Solid(color) => color.a > 0.0,
             Self::LinearGradient(gradient) => gradient.stops.iter().any(|stop| stop.color.a > 0.0),
+            Self::Gradient(gradient) => gradient.stops.is_visible(),
         }
     }
 
@@ -252,6 +669,16 @@ impl Background {
                 }
                 Self::LinearGradient(gradient)
             }
+            Self::Gradient(gradient) => Self::Gradient(gradient.multiply_alpha(opacity)),
+        }
+    }
+
+    /// The multi-stop representation used by every gradient-capable renderer.
+    pub(crate) fn as_gradient(self) -> Option<Gradient> {
+        match self {
+            Self::Solid(_) => None,
+            Self::LinearGradient(gradient) => Some(Gradient::from(gradient)),
+            Self::Gradient(gradient) => Some(gradient),
         }
     }
 }
@@ -265,6 +692,146 @@ impl From<Color> for Background {
 impl From<LinearGradient> for Background {
     fn from(gradient: LinearGradient) -> Self {
         Self::LinearGradient(gradient)
+    }
+}
+
+impl From<Gradient> for Background {
+    fn from(gradient: Gradient) -> Self {
+        Self::Gradient(gradient)
+    }
+}
+
+/// GPU-ready packing of one gradient, resolved against the logical box it paints.
+///
+/// Every renderer that evaluates gradients uploads this identical fixed-size record, so linear,
+/// radial, and conic interpolation is defined once on the CPU and once per shader family.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct GradientData {
+    /// Kind, interpolation space, stop count, unused.
+    pub(crate) header: [f32; 4],
+    /// Linear: start XY and end XY. Radial: center XY and radii XY. Conic: center XY, start angle.
+    pub(crate) geometry: [f32; 4],
+    /// Stop positions 0..4 followed by 4..8.
+    pub(crate) positions: [[f32; 4]; 2],
+    pub(crate) colors: [[f32; 4]; MAX_GRADIENT_STOPS],
+}
+
+pub(crate) const GRADIENT_KIND_LINEAR: f32 = 0.0;
+pub(crate) const GRADIENT_KIND_RADIAL: f32 = 1.0;
+pub(crate) const GRADIENT_KIND_CONIC: f32 = 2.0;
+
+/// The logical endpoints of a CSS linear-gradient line spanning `bounds` at `angle_degrees`.
+pub(crate) fn gradient_line(bounds: Rect, angle_degrees: f32) -> [f32; 4] {
+    let radians = angle_degrees.to_radians();
+    let direction = [radians.sin(), -radians.cos()];
+    let center = [
+        bounds.x + bounds.width * 0.5,
+        bounds.y + bounds.height * 0.5,
+    ];
+    let half_length =
+        (direction[0].abs() * bounds.width + direction[1].abs() * bounds.height) * 0.5;
+    [
+        center[0] - direction[0] * half_length,
+        center[1] - direction[1] * half_length,
+        center[0] + direction[0] * half_length,
+        center[1] + direction[1] * half_length,
+    ]
+}
+
+pub(crate) fn interpolation_code(color_space: GradientColorSpace) -> f32 {
+    match color_space {
+        GradientColorSpace::LinearSrgb => 0.0,
+        GradientColorSpace::Srgb => 1.0,
+        GradientColorSpace::Oklab => 2.0,
+    }
+}
+
+impl GradientData {
+    /// Resolve `gradient` against the logical `bounds` it paints.
+    pub(crate) fn new(gradient: &Gradient, bounds: Rect) -> Self {
+        let (kind, geometry) = match gradient.kind() {
+            GradientKind::Linear { angle } => {
+                (GRADIENT_KIND_LINEAR, gradient_line(bounds, angle.degrees()))
+            }
+            GradientKind::Radial {
+                shape,
+                extent,
+                center,
+            } => {
+                let origin = [
+                    bounds.x + bounds.width * center.x,
+                    bounds.y + bounds.height * center.y,
+                ];
+                let left = (origin[0] - bounds.x).abs();
+                let right = (bounds.right() - origin[0]).abs();
+                let top = (origin[1] - bounds.y).abs();
+                let bottom = (bounds.bottom() - origin[1]).abs();
+                let (mut radius_x, mut radius_y) = match extent {
+                    RadialGradientExtent::ClosestSide => (left.min(right), top.min(bottom)),
+                    RadialGradientExtent::FarthestSide | RadialGradientExtent::FarthestCorner => {
+                        (left.max(right), top.max(bottom))
+                    }
+                };
+                radius_x = radius_x.max(f32::EPSILON);
+                radius_y = radius_y.max(f32::EPSILON);
+                if extent == RadialGradientExtent::FarthestCorner {
+                    // The farthest-corner ellipse keeps the farthest-side aspect ratio and is
+                    // scaled until it passes through the corner furthest from the center.
+                    let corner_x = left.max(right);
+                    let corner_y = top.max(bottom);
+                    let scale = ((corner_x / radius_x).powi(2) + (corner_y / radius_y).powi(2))
+                        .max(0.0)
+                        .sqrt();
+                    if scale.is_finite() && scale > 0.0 {
+                        radius_x *= scale;
+                        radius_y *= scale;
+                    }
+                }
+                if shape == RadialGradientShape::Circle {
+                    let radius = match extent {
+                        RadialGradientExtent::ClosestSide => radius_x.min(radius_y),
+                        RadialGradientExtent::FarthestSide => radius_x.max(radius_y),
+                        RadialGradientExtent::FarthestCorner => {
+                            (left.max(right).powi(2) + top.max(bottom).powi(2)).sqrt()
+                        }
+                    }
+                    .max(f32::EPSILON);
+                    radius_x = radius;
+                    radius_y = radius;
+                }
+                (
+                    GRADIENT_KIND_RADIAL,
+                    [origin[0], origin[1], radius_x, radius_y],
+                )
+            }
+            GradientKind::Conic { from_angle, center } => (
+                GRADIENT_KIND_CONIC,
+                [
+                    bounds.x + bounds.width * center.x,
+                    bounds.y + bounds.height * center.y,
+                    from_angle.degrees().to_radians(),
+                    0.0,
+                ],
+            ),
+        };
+        let stops = gradient.stops().as_slice();
+        let mut positions = [[0.0_f32; 4]; 2];
+        let mut colors = [[0.0_f32; 4]; MAX_GRADIENT_STOPS];
+        for (index, stop) in stops.iter().enumerate() {
+            positions[index / 4][index % 4] = stop.position;
+            colors[index] = stop.color.as_array();
+        }
+        Self {
+            header: [
+                kind,
+                interpolation_code(gradient.interpolation()),
+                stops.len() as f32,
+                0.0,
+            ],
+            geometry,
+            positions,
+            colors,
+        }
     }
 }
 
@@ -939,6 +1506,125 @@ pub enum PathError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn color_stops_are_bounded_sorted_and_sanitized() {
+        let stops = ColorStops::new(
+            (0..16).map(|index| LinearColorStop::new(Color::WHITE, 1.0 - index as f32 / 15.0)),
+        );
+        assert_eq!(stops.len(), MAX_GRADIENT_STOPS);
+        let positions: Vec<_> = stops.as_slice().iter().map(|stop| stop.position).collect();
+        assert!(positions.windows(2).all(|pair| pair[0] <= pair[1]));
+
+        let sanitized = ColorStops::new([
+            LinearColorStop::new(Color::BLACK, f32::NAN),
+            LinearColorStop::new(Color::WHITE, 4.0),
+        ]);
+        assert_eq!(sanitized.as_slice()[0].position, 0.0);
+        assert_eq!(sanitized.as_slice()[1].position, 1.0);
+
+        let even = ColorStops::evenly_spaced([Color::BLACK, Color::WHITE, Color::TRANSPARENT]);
+        let positions: Vec<_> = even.as_slice().iter().map(|stop| stop.position).collect();
+        assert_eq!(positions, vec![0.0, 0.5, 1.0]);
+        assert!(ColorStops::empty().is_empty());
+        assert!(!ColorStops::empty().is_visible());
+    }
+
+    #[test]
+    fn gradient_directions_match_css_angles() {
+        assert_eq!(GradientAngle::from(GradientDirection::ToTop).degrees(), 0.0);
+        assert_eq!(
+            GradientAngle::from(GradientDirection::ToRight).degrees(),
+            90.0
+        );
+        assert_eq!(
+            GradientAngle::from(GradientDirection::ToBottom).degrees(),
+            180.0
+        );
+        assert_eq!(GradientAngle::new(-90.0).degrees(), 270.0);
+        assert_eq!(GradientAngle::new(f32::INFINITY).degrees(), 0.0);
+    }
+
+    #[test]
+    fn css_gradient_angles_span_transformed_bounds() {
+        let bounds = Rect::new(10.0, 20.0, 40.0, 60.0);
+        assert_eq!(gradient_line(bounds, 0.0), [30.0, 80.0, 30.0, 20.0]);
+        let horizontal = gradient_line(bounds, 90.0);
+        assert!((horizontal[0] - 10.0).abs() < 0.001);
+        assert!((horizontal[1] - 50.0).abs() < 0.001);
+        assert!((horizontal[2] - 50.0).abs() < 0.001);
+        assert!((horizontal[3] - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn gradient_data_resolves_every_kind_against_its_box() {
+        let bounds = Rect::new(0.0, 0.0, 80.0, 40.0);
+        let linear = GradientData::new(
+            &Gradient::linear(GradientDirection::ToRight, [Color::BLACK, Color::WHITE]),
+            bounds,
+        );
+        assert_eq!(linear.header[0], GRADIENT_KIND_LINEAR);
+        assert_eq!(linear.header[2], 2.0);
+        assert_eq!(linear.geometry[0], 0.0);
+        assert_eq!(linear.geometry[2], 80.0);
+
+        let circle = GradientData::new(
+            &Gradient::radial([Color::WHITE, Color::BLACK]).shape(RadialGradientShape::Circle),
+            bounds,
+        );
+        assert_eq!(circle.header[0], GRADIENT_KIND_RADIAL);
+        assert_eq!(circle.geometry[0], 40.0);
+        assert_eq!(circle.geometry[1], 20.0);
+        // A farthest-corner circle reaches the box corner.
+        assert!((circle.geometry[2] - (40.0_f32.hypot(20.0))).abs() < 0.001);
+        assert_eq!(circle.geometry[2], circle.geometry[3]);
+
+        let side = GradientData::new(
+            &Gradient::radial([Color::WHITE, Color::BLACK])
+                .extent(RadialGradientExtent::FarthestSide),
+            bounds,
+        );
+        assert_eq!([side.geometry[2], side.geometry[3]], [40.0, 20.0]);
+
+        let conic = GradientData::new(
+            &Gradient::conic(90.0, [Color::WHITE, Color::BLACK])
+                .center(GradientCenter::new(0.25, 0.75)),
+            bounds,
+        );
+        assert_eq!(conic.header[0], GRADIENT_KIND_CONIC);
+        assert_eq!([conic.geometry[0], conic.geometry[1]], [20.0, 30.0]);
+        assert!((conic.geometry[2] - std::f32::consts::FRAC_PI_2).abs() < 0.0001);
+    }
+
+    #[test]
+    fn two_stop_linear_gradients_reuse_the_multi_stop_representation() {
+        let background = linear_gradient(
+            45.0,
+            linear_color_stop(Color::BLACK, 0.25),
+            linear_color_stop(Color::WHITE, 0.75),
+        );
+        let gradient = background.as_gradient().unwrap();
+        assert_eq!(gradient.stops().len(), 2);
+        assert_eq!(gradient.stops().as_slice()[0].position, 0.25);
+        assert!(matches!(gradient.kind(), GradientKind::Linear { .. }));
+        assert!(Background::from(Color::WHITE).as_gradient().is_none());
+    }
+
+    #[test]
+    fn gradient_alpha_multiplies_every_stop() {
+        let faded = Background::Gradient(Gradient::linear(0.0, [Color::WHITE, Color::BLACK]))
+            .multiply_alpha(0.5);
+        let gradient = faded.as_gradient().unwrap();
+        assert!(
+            gradient
+                .stops()
+                .as_slice()
+                .iter()
+                .all(|stop| stop.color.a == 0.5)
+        );
+        assert!(faded.is_visible());
+        assert!(!faded.multiply_alpha(0.0).is_visible());
+    }
 
     #[test]
     fn fill_tessellates_once_and_clones_share_identity() {

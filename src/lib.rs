@@ -155,12 +155,14 @@ pub use display::{
 pub use element::native_view;
 pub use element::{
     AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AccessibilitySortDirection,
-    AnchorPlacement, AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack,
-    IntoElement, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
-    MAX_CONTAINER_QUERY_DEPTH, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
-    MAX_MOUSE_LISTENERS_PER_ELEMENT, ToggleState, UserSelect, Visibility, button, canvas,
-    container_query, custom_shader, div, form, img, overlay, path, styled_text_area,
-    styled_text_input, submit_button, svg, text, text_area, text_input,
+    AnchorPlacement, AppRegion, BackgroundImage, BackgroundPosition, BackgroundRepeat,
+    BackgroundSize, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack, IntoElement,
+    MAX_BACKGROUND_IMAGE_TILES, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
+    MAX_CONTAINER_QUERY_DEPTH, MAX_CORNER_RADIUS, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
+    MAX_MOUSE_LISTENERS_PER_ELEMENT, MAX_OUTLINE_OFFSET, MAX_OUTLINE_WIDTH, Outline, ToggleState,
+    UserSelect, Visibility, button, canvas, container_query, custom_shader, div, form, img,
+    overlay, path, styled_text_area, styled_text_input, submit_button, svg, text, text_area,
+    text_input,
 };
 pub use entity::{
     Entity, EntityId, EventEmitter, MAX_ENTITY_EVENT_DELIVERIES_PER_TURN,
@@ -243,6 +245,10 @@ pub use path::{
     MAX_PATH_VERTICES, Path, PathBuilder, PathError, PathStyle, StrokeOptions, linear_color_stop,
     linear_gradient,
 };
+pub use path::{
+    ColorStops, Gradient, GradientAngle, GradientCenter, GradientDirection, GradientKind,
+    MAX_GRADIENT_STOPS, RadialGradientExtent, RadialGradientShape,
+};
 pub use path_renderer::{MAX_GPU_PATH_VERTICES, MAX_GPU_PATHS_PER_FRAME};
 pub use picker::{
     MAX_PICKER_ITEM_TEXT_BYTES, MAX_PICKER_ITEMS, MAX_PICKER_QUERY_BYTES,
@@ -303,6 +309,7 @@ pub use quickgui_system::{
     UpdateCancellation, UpdateClient, UpdateInstallDisposition, UpdateInstallOptions,
     UpdateProgress, WindowsUpdateInstallMode, default_update_target,
 };
+pub use renderer::MAX_GRADIENTS_PER_FRAME;
 pub use runtime::{
     App, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
     DesktopIntegrationSupport, DismissListener, Drag, DragListener, DropListener,
@@ -344,9 +351,10 @@ pub use runtime::{
     MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,
 };
 pub use scene::{
-    BoxShadow, CustomShaderPrimitive, ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS,
-    MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign,
-    TextId, TextOverflow, TextRun, TextShaping, TextStyle, TextWrap, WhiteSpace,
+    BorderStyle, BoxShadow, Corners, CustomShaderPrimitive, ImagePrimitive,
+    MAX_BOX_SHADOW_BLUR_RADIUS, MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane,
+    Shadow, SvgPrimitive, TextAlign, TextId, TextOverflow, TextRun, TextShaping, TextStyle,
+    TextWrap, WhiteSpace,
 };
 pub use select::{
     MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VISIBLE_ROWS, SELECT_TYPEAHEAD_TIMEOUT, SelectListState,

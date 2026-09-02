@@ -1112,7 +1112,7 @@ pub(super) fn push_element_shadows(
     scene: &mut Scene,
     layer: PaintLayerKey,
     bounds: Rect,
-    radius: f32,
+    radius: Corners,
     clip: Rect,
     shadows: &[BoxShadow],
     inset: bool,
@@ -1125,7 +1125,7 @@ pub(super) fn push_element_shadows(
     {
         scene.push_shadow_in(
             layer,
-            Shadow::new(bounds, *shadow).radius(radius).clip(clip),
+            Shadow::new(bounds, *shadow).corner_radii(radius).clip(clip),
         );
     }
 }
