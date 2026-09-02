@@ -151,6 +151,7 @@ pub use disclosure::{
 pub use display::{
     Display, DisplayError, DisplayId, DisplayUuid, Displays, MAX_DISPLAY_NAME_BYTES, MAX_DISPLAYS,
 };
+pub use display::{DisplayEvent, MAX_DISPLAY_COLOR_DEPTH, MAX_DISPLAY_EVENTS};
 #[cfg(target_os = "macos")]
 pub use element::native_view;
 pub use element::{
@@ -202,6 +203,10 @@ pub use global::{
     MAX_OBSERVED_GLOBALS_PER_WINDOW, MAX_PENDING_GLOBAL_NOTIFICATIONS,
 };
 pub use glyphon::{Style as FontStyle, Weight as FontWeight};
+pub use image::{
+    DEFAULT_SYSTEM_IMAGE_POINT_SIZE, DEFAULT_SYSTEM_IMAGE_SCALE, MAX_IMAGE_DATA_URL_BYTES,
+    MAX_IMAGE_REPRESENTATION_SCALE, MAX_IMAGE_REPRESENTATIONS, MIN_IMAGE_REPRESENTATION_SCALE,
+};
 pub use image::{
     Image, ImageError, ImageResource, ImageSource, MAX_DECODED_IMAGE_BYTES,
     MAX_ENCODED_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ObjectFit,
@@ -269,6 +274,11 @@ pub use platform::{
     PlatformResponse, PromptButton, PromptLevel, SavePathOptions, SavePathResponse, ShellResponse,
     SystemNotification, SystemNotificationAction, SystemNotificationActionKind,
     SystemNotificationAttachment, SystemNotificationResponse, SystemNotificationSound, UserTask,
+};
+pub use platform::{
+    ColorPanelMode, MAX_BIOMETRIC_REASON_BYTES, MAX_FILE_PREVIEW_NAME_BYTES,
+    MAX_MESSAGE_BOX_CHECKBOX_BYTES, MAX_SHARE_ITEM_TEXT_BYTES, MAX_SHARE_ITEMS, MessageBoxCheckbox,
+    MessageBoxOptions, MessageBoxResponse, MessageBoxResponseFuture, ShareItem,
 };
 pub use popover::{
     MAX_GRABBING_POPOVERS, PopoverAnchor, PopoverConstraintAdjustment, PopoverGravity,

@@ -93,6 +93,51 @@ services. Recent documents, standard About panels, and native file-icon lookup u
 services through the same bounded platform queue. See
 [Desktop integrations](desktop-integrations.md) for the shared API and target matrix.
 
+### Message boxes, Quick Look, and system panels
+
+`cx.message_box(MessageBoxOptions)` presents an `NSAlert` that also carries a suppression checkbox
+(`setShowsSuppressionButton:`), a custom icon (`setIcon:`), separate message and informative text,
+and explicit default/cancel key equivalents. AppKit gives the first added button the Return
+equivalent, so QuickGUI reassigns every button's key equivalent from the declared
+`default_button`/`cancel_button` indices. The response reports the chosen index and the final
+checkbox state together.
+
+`cx.preview_file(path, display_name)` and `cx.close_file_preview()` drive `QLPreviewPanel` from the
+Quartz framework. QuickGUI owns the `QLPreviewItem` and `QLPreviewPanelDataSource` objects: the
+already-validated path and bounded display name are copied into Foundation objects up front, and the
+data source is retained for exactly as long as the panel is open. Closing the preview clears the
+panel's data source and releases the core-owned object.
+
+`cx.show_color_panel(color, mode)` and `cx.show_font_panel(font)` drive `NSColorPanel` and
+`NSFontManager` through one core-owned responder. `ColorPanelMode::Continuous` installs a
+target/action pair with `setContinuous:YES`; `ColorPanelMode::OnClose` installs no action and
+observes `NSWindowWillCloseNotification` on the panel instead, so a panel that is merely open costs
+nothing. The font panel routes AppKit's `changeFont:` through the same responder, converting the
+retained seed font with `convertFont:` and reporting the resulting family, weight, and slant.
+Colors cross the boundary through the sRGB color space.
+
+`cx.share_items(items, anchor)` builds an `NSSharingServicePicker` from `NSString`, `NSURL`, and
+`NSImage` values and shows it relative to a rectangle inside the current window's content view. The
+anchor is supplied in QuickGUI's top-left logical content coordinates and flipped into AppKit's
+bottom-left view coordinates.
+
+`cx.authenticate_with_biometrics(reason)` uses `LAContext` with
+`LAPolicyDeviceOwnerAuthenticationWithBiometrics`. `canEvaluatePolicy:` is checked first, so a
+machine without usable biometrics reports `PlatformError::Unsupported` before any system prompt.
+The evaluation reply arrives on a background queue, so QuickGUI forwards it through the event loop
+and completes the `PlatformResponse<bool>` on the AppKit main thread.
+
+### Native images
+
+`Image::named_system(name)` resolves an `NSImage` name first and then an SF Symbol through
+`imageWithSystemSymbolName:accessibilityDescription:`, applying an `NSImageSymbolConfiguration`
+point size so the rasterization is large enough, and rasterizes through the same bounded decoder
+every other QuickGUI image uses. `Image::template(true)` reaches `NSImage setTemplate:`, and
+`Image::with_representations` adds each variant's representations to the resulting `NSImage`, so
+Dock, About-panel, message-box, and menu icons all pick the right backing scale. Tray artwork
+carries the same flag through `TrayIconImage::template(bool)`, and `AppRunner::tray_icon_bounds(id)`
+reports a status item's screen rectangle in global logical desktop coordinates.
+
 ## Clipboard and Find pasteboard
 
 Every event callback can synchronously read or replace the general pasteboard with a bounded

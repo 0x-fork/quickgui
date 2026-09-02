@@ -31,6 +31,18 @@ pub struct DesktopIntegrationSupport {
     pub file_icons: bool,
     pub native_about_panel: bool,
     pub user_tasks: bool,
+    /// Message boxes accept a suppression checkbox and a custom icon.
+    pub message_box_checkboxes: bool,
+    /// The operating system exposes a file preview panel.
+    pub file_previews: bool,
+    /// A system color panel can be shown and observed.
+    pub color_panel: bool,
+    /// A system font panel can be shown and observed.
+    pub font_panel: bool,
+    /// A native share sheet can be anchored to the current window.
+    pub share_sheet: bool,
+    /// The operating system can authenticate the current user with biometrics.
+    pub biometric_authentication: bool,
 }
 
 impl DesktopIntegrationSupport {
@@ -95,6 +107,12 @@ impl DesktopIntegrationSupport {
             file_icons: cfg!(any(target_os = "macos", target_os = "windows")),
             native_about_panel: cfg!(any(target_os = "macos", target_os = "windows")),
             user_tasks: cfg!(target_os = "windows"),
+            message_box_checkboxes: cfg!(target_os = "macos"),
+            file_previews: cfg!(target_os = "macos"),
+            color_panel: cfg!(target_os = "macos"),
+            font_panel: cfg!(target_os = "macos"),
+            share_sheet: cfg!(target_os = "macos"),
+            biometric_authentication: cfg!(target_os = "macos"),
         }
     }
 }
@@ -134,6 +152,12 @@ mod tests {
             cfg!(any(target_os = "macos", target_os = "windows"))
         );
         assert_eq!(support.user_tasks, cfg!(target_os = "windows"));
+        assert_eq!(support.message_box_checkboxes, cfg!(target_os = "macos"));
+        assert_eq!(support.file_previews, cfg!(target_os = "macos"));
+        assert_eq!(support.color_panel, cfg!(target_os = "macos"));
+        assert_eq!(support.font_panel, cfg!(target_os = "macos"));
+        assert_eq!(support.share_sheet, cfg!(target_os = "macos"));
+        assert_eq!(support.biometric_authentication, cfg!(target_os = "macos"));
         assert_eq!(
             support.dynamic_protocol_registration,
             crate::ProtocolRegistration::supports_dynamic_registration()

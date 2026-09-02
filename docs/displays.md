@@ -23,11 +23,59 @@ Each `Display` contains:
 - a stable `DisplayUuid` on macOS for persisted monitor preferences;
 - a bounded localized name;
 - full and visible global logical bounds;
-- the native scale factor and optional refresh rate.
+- the native scale factor and optional refresh rate;
+- the clockwise `rotation_degrees` (`0`, `90`, `180`, or `270`);
+- `is_internal`, true for the machine's built-in panel;
+- an optional `color_depth` in bits per pixel.
+
+| Field | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| `rotation_degrees` | `CGDisplayRotation`, converted to a clockwise quarter turn | `0` | `0` |
+| `is_internal` | `CGDisplayIsBuiltin` | `false` | `false` |
+| `color_depth` | `NSBitsPerPixelFromDepth(NSScreen.depth)` | `None` | `None` |
+
+Platforms without a native source report the neutral value shown above rather than guessing.
 
 Do not persist `DisplayId` as a physical-monitor preference. Persist `DisplayUuid`, find its current
 snapshot entry at launch, then use that entry's current ID. Other platforms honestly return no UUID
 until their native stable-identity adapters are implemented.
+
+## Granular display events
+
+`Displays::diff` turns two consecutive snapshots into a bounded, deterministic event list:
+
+```rust
+for event in previous.diff(&next) {
+    match event {
+        DisplayEvent::Added(display) => open_panel_on(display.id()),
+        DisplayEvent::Removed(id) => forget_panel_on(id),
+        DisplayEvent::MetricsChanged(display) => reflow(&display),
+    }
+}
+```
+
+Both snapshots are sorted by `DisplayId`, so the diff is one linear merge: events are emitted in
+ascending identifier order and never exceed `MAX_DISPLAY_EVENTS` (`2 × MAX_DISPLAYS`, 128). A
+display present in both snapshots produces `MetricsChanged` only when an observable field differs,
+including the primary flag.
+
+The runtime computes this diff at the same screen-parameters boundary that refreshes the coarse
+snapshot, and delivers it through one application callback:
+
+```rust
+Application::new()
+    .on_display_event(|event, cx| match event {
+        DisplayEvent::Added(display) => cx.open_window(options_for(&display), Panel::default()),
+        DisplayEvent::Removed(id) => close_panels_on(id, cx),
+        DisplayEvent::MetricsChanged(display) => reflow(&display, cx),
+    })
+    .run(|cx| { /* … */ })?;
+```
+
+The coarse observation keeps working unchanged: a view that read `cx.displays()` still rebuilds when
+the snapshot changes, whether or not a display-event callback is installed. The diff is computed
+only when a callback exists, the pending queue is bounded, and events are drained on the next
+runtime turn. No timer, observer, or polling loop runs while the display topology is stable.
 
 ## Placement
 
@@ -69,6 +117,9 @@ command-line app receives its Dock presence, and reconciles only automatic `.dis
 explicit global bounds remain untouched. System-popover churn performs no monitor query. Unchanged
 snapshots do not invalidate a view. There is no monitor query in `about_to_wait`, no timer, no idle
 frame, and no display polling thread.
+
+`Displays::diff` is a pure function, so display-reconfiguration handling is covered by unit tests
+over synthetic snapshots rather than by driving real hardware.
 
 `TestAppContext` starts with one deterministic display and accepts a validated replacement through
 `simulate_displays_change`. This covers targeting, disconnect fallback, current-display state, and

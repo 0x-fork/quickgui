@@ -4,6 +4,45 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+### Framework
+
+- Added display rotation, built-in-panel, and color-depth metadata to `Display`, a deterministic
+  bounded `Displays::diff`, the granular `DisplayEvent::{Added, Removed, MetricsChanged}` value, and
+  `Application::on_display_event`. The coarse displays-changed observation is unchanged and no timer
+  or polling source was added.
+- Added `EventContext::message_box` with `MessageBoxOptions`: severity, separate `message`/`detail`
+  text, explicit `default_button`/`cancel_button` indices, a suppression `checkbox`, and a custom
+  `icon`. The bounded `MessageBoxResponse` carries the chosen button index and the checkbox state.
+- Added open-panel `can_create_directories`, `resolves_aliases`,
+  `treats_file_packages_as_directories`, and `message` options, and save-panel `name_field_label`
+  and `shows_tag_field` options, each validated before the request is retained.
+- Added `EventContext::preview_file`/`close_file_preview`, `show_color_panel`/`close_color_panel`,
+  `show_font_panel`, `share_items`, and `authenticate_with_biometrics`, plus
+  `Application::on_color_panel_change` and `on_font_panel_change`. Non-macOS targets return
+  `PlatformError::Unsupported` and the new `DesktopIntegrationSupport` flags report it.
+- Added `Image::from_data_url`, `Image::named_system`, `Image::named_system_sized`, `Image::resize`,
+  `Image::crop`, `Image::to_png`, `Image::to_jpeg`, `Image::template`, and
+  `Image::with_representations`, all bounded by existing and new `MAX_*` image constants.
+- Added `AppRunner::tray_icon_bounds` and `TrayIconImage::template`.
+
+### macOS
+
+- Message boxes use `NSAlert` suppression buttons, custom icons, and reassigned key equivalents so
+  an explicit default or cancel index wins over AppKit's first-button default.
+- File previews use `QLPreviewPanel` with a core-owned `QLPreviewItem`/data-source pair retained
+  only while the panel is open.
+- The system color and font panels are driven through one core-owned responder;
+  `ColorPanelMode::OnClose` observes the panel's close notification instead of installing an action,
+  so a closed panel retains no observation.
+- Share sheets use `NSSharingServicePicker` anchored to the current window's content view, and
+  biometric authentication uses `LAContext` with `LAPolicyDeviceOwnerAuthenticationWithBiometrics`,
+  forwarding its background-queue reply through the event loop.
+- `Display` now reports `CGDisplayRotation`, `CGDisplayIsBuiltin`, and
+  `NSBitsPerPixelFromDepth(NSScreen.depth)`.
+- `NSImage` conversion honors QuickGUI template metadata and additional backing-scale
+  representations for Dock, About-panel, message-box, and menu icons, and `Image::named_system`
+  resolves `NSImage` names and SF Symbols.
+
 ## 0.1.1 - 2026-08-31
 
 ### JavaScript tooling

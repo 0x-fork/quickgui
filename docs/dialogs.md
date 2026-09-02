@@ -4,7 +4,10 @@
 
 QuickGUI provides one controlled, unstyled in-window contract for ordinary dialogs and
 consequential alert dialogs. Native AppKit sheets and `NSAlert` remain separate platform APIs for
-workflows that should use system presentation.
+workflows that should use system presentation; they live on `EventContext` as `prompt`,
+`message_box`, `prompt_for_paths`, and `prompt_for_new_path`, and their options, per-OS support
+table, and bounds are documented in
+[Desktop integrations](desktop-integrations.md#message-boxes-and-file-panels).
 
 `Dialog` owns behavior and structural geometry only:
 

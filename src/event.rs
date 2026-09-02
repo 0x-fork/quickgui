@@ -10,10 +10,10 @@ use bitflags::bitflags;
 use thiserror::Error;
 
 use crate::{
-    AboutPanelOptions, Action, AnyAction, AppInfo, AppPaths, Assets, CursorGrabMode, Display,
-    DisplayId, Displays, ElementId, Entity, EntityId, EventEmitter, FileIconResponse, FileIconSize,
-    FocusHandle, Global, Image, KeyboardLayout, Menu, Point, Rect, RelaunchOptions,
-    RelaunchRequest, Size, SystemInfo, SystemIntegrationError, SystemPreferences,
+    AboutPanelOptions, Action, AnyAction, AppInfo, AppPaths, Assets, Color, CursorGrabMode,
+    Display, DisplayId, Displays, ElementId, Entity, EntityId, EventEmitter, FileIconResponse,
+    FileIconSize, FocusHandle, Font, Global, Image, KeyboardLayout, Menu, Point, Rect,
+    RelaunchOptions, RelaunchRequest, Size, SystemInfo, SystemIntegrationError, SystemPreferences,
     TaskbarProgressState, UserTask, Vector, View, WindowHandle, WindowLevel, WindowOptions,
     WindowRegistry,
     clipboard::{ClipboardError, ClipboardItem, ClipboardService, ClipboardTarget},
@@ -21,9 +21,10 @@ use crate::{
     foreground::{AsyncViewContext, ForegroundTaskSpawnError, ForegroundTaskSpawner, Task},
     global::{GlobalStore, MAX_GLOBAL_NOTIFICATIONS_PER_EVENT},
     platform::{
+        ColorPanelMode, MessageBoxOptions, MessageBoxResponseFuture,
         NotificationPermissionResponse, PathPromptOptions, PathPromptResponse, PlatformError,
         PlatformRequest, PlatformResponse, PromptButton, PromptLevel, SavePathOptions,
-        SavePathResponse, ShellResponse, SystemNotification,
+        SavePathResponse, ShareItem, ShellResponse, SystemNotification,
     },
     runtime::{
         MAX_SYSTEM_WINDOW_TABS, WindowAppearance, WindowBackgroundAppearance, WindowCommand,

@@ -55,6 +55,43 @@ move it off latency-sensitive input handling. A decoded image is limited to 4096
 and 128 MiB of decoded texture data, evicting least-recently-used off-screen entries. See
 `cargo run --release --example images` for all five `ObjectFit` modes and GPU grayscale.
 
+### Image transforms, transport, and native metadata
+
+`Image` also owns the pixel operations an application needs before handing artwork to a native
+surface. Every one of them returns a new immutable image; none mutates shared pixels.
+
+| Operation | Behavior | Bounds |
+| --- | --- | --- |
+| `Image::from_data_url(url)` | Decodes a base64 `data:` URL carrying PNG, JPEG, GIF, or WebP | `MAX_IMAGE_DATA_URL_BYTES` (88 MiB of URL text), then `Image::decode`'s limits |
+| `Image::named_system(name)` | macOS `NSImage imageNamed:`, then an SF Symbol, rasterized at 16 pt × 2 | `MAX_IMAGE_DIMENSION` |
+| `Image::named_system_sized(name, point_size, scale)` | The same, at a requested point size and backing scale | `round(point_size × scale) ≤ MAX_IMAGE_DIMENSION` |
+| `image.resize(width, height)` | Bilinear resample to exact pixels | `MAX_IMAGE_DIMENSION`, `MAX_DECODED_IMAGE_BYTES` |
+| `image.crop(rect)` | Whole-pixel copy of an inside rectangle | Must be non-empty and inside the source |
+| `image.to_png()` | PNG encode preserving alpha | — |
+| `image.to_jpeg(quality)` | JPEG encode, compositing alpha over white | `quality` in `1..=100` |
+| `image.template(flag)` | Marks the image for macOS template rendering | — |
+| `image.with_representations([(scale, image)])` | Attaches additional backing-scale variants | `MAX_IMAGE_REPRESENTATIONS`, scales in `0.25..=16` |
+
+`Image::from_data_url` accepts only base64 payloads; a percent-encoded `data:` URL is rejected with
+`ImageError::InvalidDataUrl` rather than being decoded as text. Whitespace inside the payload is
+skipped so wrapped URLs decode.
+
+`template` and `with_representations` carry native metadata rather than changing pixels, but both
+return an image with a fresh cache identity so the renderer never confuses a templated variant with
+its original. QuickGUI honors them at the single AppKit conversion point, so a Dock icon, About-panel
+icon, message-box icon, or menu icon built from a multi-representation template image reaches
+`NSImage` with `setTemplate:` applied and every extra representation added. `named_system` and the
+template flag are macOS-only; other targets report `ImageError::SystemImageUnavailable` and retain
+the flag without acting on it.
+
+```rust
+let icon = Image::from_data_url(&data_url)?
+    .crop(Rect::new(0.0, 0.0, 64.0, 64.0))?
+    .resize(32, 32)?
+    .template(true)
+    .with_representations([(2.0, retina_icon)])?;
+```
+
 SVG icons use the same intrinsic flexbox sizing and `ObjectFit` API. Their color inherits from
 typography, including hover, active, and focus overrides, while transforms remain paint-only:
 

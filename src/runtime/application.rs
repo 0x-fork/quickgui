@@ -731,6 +731,46 @@ impl Application {
         self
     }
 
+    /// Handle granular display additions, removals, and metric changes.
+    ///
+    /// The coarse snapshot exposed by [`EventContext::displays`] keeps working unchanged. This
+    /// callback only describes what moved between two consecutive snapshots, so an application can
+    /// react without re-scanning every display. Events are delivered in ascending
+    /// [`crate::DisplayId`] order and are produced only when the operating system reports a
+    /// reconfiguration; no polling or timer is installed.
+    pub fn on_display_event(
+        mut self,
+        callback: impl FnMut(DisplayEvent, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.display_event = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle a color chosen in the system color panel.
+    ///
+    /// [`crate::ColorPanelMode::Continuous`] reports every intermediate color while the user drags
+    /// inside the panel; [`crate::ColorPanelMode::OnClose`] reports only the final color once the
+    /// panel is dismissed. No timer or observer runs while the panel is closed.
+    pub fn on_color_panel_change(
+        mut self,
+        callback: impl FnMut(Color, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.color_panel_change = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle a font chosen in the system font panel.
+    ///
+    /// QuickGUI's inherited [`Font`] carries no point size, so the reported value describes the
+    /// chosen family, weight, and slant.
+    pub fn on_font_panel_change(
+        mut self,
+        callback: impl FnMut(Font, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.font_panel_change = Some(Box::new(callback));
+        self
+    }
+
     /// Run after a native window and its owned resources have been removed.
     pub fn on_window_closed(
         mut self,

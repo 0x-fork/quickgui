@@ -14,11 +14,14 @@ pub(crate) fn present_native_open_panel(
         panel.setCanChooseFiles(options.files);
         panel.setCanChooseDirectories(options.directories);
         panel.setAllowsMultipleSelection(options.multiple);
-        panel.setCanCreateDirectories(true);
-        panel.setResolvesAliases(false);
+        panel.setCanCreateDirectories(options.can_create_directories);
+        panel.setResolvesAliases(options.resolves_aliases);
+        panel.setTreatsFilePackagesAsDirectories(options.treats_file_packages_as_directories);
         panel.setShowsHiddenFiles(options.shows_hidden_files);
-        if let Some(title) = &options.title {
-            panel.setMessage(Some(&NSString::from_str(title)));
+        // `message` is the panel's explanatory header. `title` predates it and keeps mapping to
+        // the same slot so existing callers are unaffected when no message is supplied.
+        if let Some(message) = options.message.as_deref().or(options.title.as_deref()) {
+            panel.setMessage(Some(&NSString::from_str(message)));
         }
         if let Some(prompt) = &options.prompt {
             panel.setPrompt(Some(&NSString::from_str(prompt)));
@@ -96,9 +99,13 @@ pub(crate) fn present_native_save_panel(
     unsafe {
         panel.setCanCreateDirectories(true);
         panel.setShowsHiddenFiles(options.shows_hidden_files);
+        panel.setShowsTagField(options.shows_tag_field);
         panel.setDirectoryURL(Some(&directory));
         if let Some(title) = &options.title {
             panel.setMessage(Some(&NSString::from_str(title)));
+        }
+        if let Some(label) = &options.name_field_label {
+            panel.setNameFieldLabel(Some(&NSString::from_str(label)));
         }
         if let Some(name) = &options.suggested_name {
             panel.setNameFieldStringValue(&NSString::from_str(name));
