@@ -31,7 +31,7 @@ impl Element {
 
     /// Paint a bounded multi-stop gradient behind this element's children.
     ///
-    /// Accepts any [`Background`], so a solid [`Color`], a two-stop [`LinearGradient`], or a
+    /// Accepts any [`Background`], so a solid [`Color`], a two-stop [`crate::LinearGradient`], or a
     /// multi-stop [`Gradient`] all work. Gradients are evaluated analytically inside the same
     /// rounded, bordered, clipped, and opacity-scaled quad as a solid background: they add no
     /// texture, ramp cache, or extra draw call.
@@ -108,7 +108,7 @@ impl Element {
 
     /// Paint a linear gradient at `angle`, where `0` degrees points to the top of the element.
     ///
-    /// `angle` accepts `f32` degrees or a [`GradientDirection`]. At most
+    /// `angle` accepts `f32` degrees or a [`crate::GradientDirection`]. At most
     /// [`MAX_GRADIENT_STOPS`](crate::MAX_GRADIENT_STOPS) stops are retained; a bare list of
     /// colors is spaced evenly.
     pub fn bg_linear_gradient(

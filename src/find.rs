@@ -49,7 +49,7 @@ pub struct FindClose;
 /// Contextual keyboard behavior for a mounted find bar.
 ///
 /// Return advances, Shift+Return retreats, and Escape closes. Bind them once with
-/// [`crate::ViewContext::keymap`]-style application configuration.
+/// [`crate::Application::bind_keys`]-style application configuration.
 pub fn find_bar_key_bindings() -> [KeyBinding; 3] {
     [
         KeyBinding::new("enter", FindNext, Some(FIND_BAR_KEY_CONTEXT)),
