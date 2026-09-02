@@ -294,6 +294,10 @@ All notable user-facing changes to QuickGUI are recorded here.
   menubar/menu-item accessibility. Native `Menu` remains the platform application menu.
 - Added `Element::accessibility_multiselectable`, projected as the native multiselectable state, so
   a grid can announce that it accepts more than one selected descendant.
+- Added `AutocompleteState::with_value`, the constructor-time equivalent of `set_value` for a state
+  that has never been mounted and therefore owns no popover to synchronize. It applies the same
+  `MAX_AUTOCOMPLETE_VALUE_BYTES` bound and seeds the suggestion query, so a host that builds its
+  state during a render pass — where no `EventContext` exists — can still declare an initial value.
 
 ### macOS
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
@@ -355,6 +359,51 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 
 ### JavaScript tooling
+- Added declared `Select`, `Combobox`, and `Autocomplete` compound components to `@quickgui/solid`,
+  bumping the mutation protocol to v22 with the new `options`, `inputValue`, `filterMode`,
+  `appearance`, and `commit`-listener properties. The option source is one bounded `items` array or
+  a set of child `Option` nodes; the controlled value, the controlled input text, and the filter
+  mode are declared ahead of the core's decision. The core opens its own native popover window and
+  renders every row from the declared `appearance` block, exactly the way a declared `PopoverMenu`
+  renders its rows, so filtering, highlight movement, typeahead, surface placement, dismissal, and
+  commit policy all stay in Rust and reach JavaScript only as an asynchronous `componentchange` or
+  `commit` payload decoded by `onValueChange`, `onInputValueChange`, `onOpenChange`, `onCommit`, or
+  `commitFromEvent`. Because every core mutator that replaces a source, layout, or selection closes
+  a live native popover — something a render pass has no `EventContext` for — the binding rebuilds a
+  picker's retained state only when the declaration changes and the surface is closed, and adopts
+  the deferred declaration on the frame the close already schedules.
+- Added declared `Table` (`Root`/`Header`/`Row`/`Cell`) and `Tree` (`Root`/`Row`) compound
+  components to `@quickgui/solid`, with the new `columns`, `rowCount`, `rowHeight`, `headerHeight`,
+  `selectionMode`, `selection`, `sortColumn`, `sortDirection`, `editing`, `rowIndex`, `columnIndex`,
+  `nodes`, `expanded`, `selectedValue`, `setChildren`, `loadingLabel`, and `disclosure` properties.
+  Both are on-demand: the core owns the virtual window and reports the range it mounted through
+  `onVisibleRangeChange`, so JavaScript declares only the rows on screen for a million-row table.
+  Column resizing and reordering, selection policy, keyboard navigation, expansion, the once-only
+  lazy-children request, and the inline-edit lifetime stay in Rust and travel back as
+  `onSelectionChange`, `onSortChange`, `onActiveCellChange`, `onColumnResize`, `onColumnReorder`,
+  `onEditEnd`, `onExpandedChange`, `onLoadChildren`, and `onActivate` payloads keyed by the caller's
+  own declared identifiers. A declared header, row, or cell carries content only, because an element
+  holds exactly one stable id and the core assigns the grid, tree-item, and active-descendant
+  identities itself.
+- Added declared `NumberField`, `DateField`, `TimeField`, `Calendar`, `Menubar`, and `Toast`
+  compound components to `@quickgui/solid`, with the new `precision`, `civilValue`, `civilMinimum`,
+  `civilMaximum`, `segmentOrder`, `segment`, `firstWeekday`, `menuCount`, and `toasts` properties.
+  Civil values cross the boundary as ISO `YYYY-MM-DD` and `HH:MM[:SS]` strings with no time zone,
+  and a string the core would not accept declares no value at all. The core owns numeric parsing,
+  clamping, formatting, and the bounded press-and-hold stepper repeat — which the binding sleeps on
+  with one `request_repaint_at` rather than a timer of its own — plus segment arithmetic, digit
+  entry, month and year movement, the menubar's roving Tab stop, live-region politeness, and the
+  exact toast auto-dismiss deadline. Pushing a toast is adding an entry to the declared `toasts`
+  list, and every dismissal the core decided, including the timed ones, reaches JavaScript through
+  `onDismiss`.
+- Bounded every new declaration at the JavaScript boundary exactly as the Rust binding bounds it:
+  `MAX_OPTIONS_JSON_BYTES` (512 KiB), `MAX_COLLECTION_JSON_BYTES` (2 MiB), `MAX_DECLARED_OPTIONS`
+  (4,096), `MAX_TABLE_COLUMNS` (512), `MAX_TABLE_ROWS` (1,000,000), `MAX_DECLARED_TREE_NODES`
+  (65,536), `MAX_TOASTS` (8), and `MAX_MENUBAR_MENUS` (64). Malformed JSON declares nothing at all,
+  duplicate option, column, and node identifiers keep their first occurrence, and the binding
+  installs the core's picker, select, combobox, table, tree, date-field, time-field, calendar, and
+  menubar key bindings once so declared components adopt the core's typed actions instead of a
+  JavaScript keyboard implementation.
 - Added declared `Slider`, `Splitter`, `Toolbar`, and `ToggleGroup` compound components to
   `@quickgui/solid`, bumping the mutation protocol to v21 with the new `values`, `items`, `step`,
   `largeStep`, and `componentchange`-listener properties. Bounds, values, pane constraints, and the

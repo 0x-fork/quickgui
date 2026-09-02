@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   app,
+  parseColor,
+  MAX_COLLECTION_JSON_BYTES,
   MAX_COMPONENT_VALUE_BYTES,
+  MAX_OPTIONS_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
@@ -15,10 +18,14 @@ import * as solid from "./index.ts";
 import {
   Accordion,
   AlertDialog,
+  Autocomplete,
   Button,
+  Calendar,
   Checkbox,
   Collapsible,
+  Combobox,
   ContextMenu,
+  DateField,
   Dialog,
   Image,
   Meter,
@@ -26,19 +33,26 @@ import {
   Fieldset,
   Input,
   Markdown,
+  Menubar,
+  NumberField,
   Popover,
   PopoverMenu,
   Progress,
   Radio,
   RadioGroup,
+  Select,
   Switch,
   Shader,
   Slider,
   Splitter,
+  Table,
   Tabs,
+  TimeField,
+  Toast,
   Toggle,
   ToggleGroup,
   Toolbar,
+  Tree,
   SystemPopover,
   Svg,
   Terminal,
@@ -1782,6 +1796,511 @@ describe("declared range, ordering, and roving-focus components", () => {
         new QuickGuiEvent("componentchange", root, '{"values":[1]}'),
       ),
     ).toEqual({ values: [1] });
+    window.close();
+  });
+});
+
+describe("declared option sources, virtual collections, and stateful fields", () => {
+  test("declares a bounded select source and adopts the value the core commits", async () => {
+    await app.whenReady();
+    let value: string | undefined;
+    let open: boolean | undefined;
+    let committed: solid.CommitDetails | undefined;
+    const window = new Window({
+      title: "Select",
+      renderer: createRenderer(() => [
+        createComponent(Select.Root, {
+          scope: "theme",
+          ariaLabel: "Theme",
+          defaultValue: "light",
+          filterMode: "fuzzy",
+          items: [
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark", detail: "⌘D" },
+          ],
+          appearance: { width: 240, rowHeight: 28, background: "#101014" },
+          onValueChange: (next: string | undefined) => {
+            value = next;
+          },
+          onOpenChange: (next: boolean) => {
+            open = next;
+          },
+          onCommit: (details: solid.CommitDetails) => {
+            committed = details;
+          },
+        }),
+      ]),
+    });
+
+    const root = window.root.children[0]!;
+    expect(root.tag).toBe(NativeNodeTag.Button);
+    expect(root.properties.get(PropertyCode.Part)).toBe("select");
+    expect(root.properties.get(PropertyCode.Scope)).toBe("theme");
+    expect(root.properties.get(PropertyCode.ActiveValue)).toBe("light");
+    expect(root.properties.get(PropertyCode.FilterMode)).toBe("fuzzy");
+    expect(root.properties.get(PropertyCode.Options)).toBe(
+      JSON.stringify([
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark", detail: "⌘D" },
+      ]),
+    );
+    // Declared colors travel packed, exactly like every other declared paint value.
+    expect(root.properties.get(PropertyCode.Appearance)).toBe(
+      JSON.stringify({
+        width: 240,
+        rowHeight: 28,
+        background: parseColor("#101014"),
+      }),
+    );
+    expect(root.properties.get(PropertyCode.ComponentChangeListener)).toBe(true);
+    expect(root.properties.get(PropertyCode.CommitListener)).toBe(true);
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({ value: "dark", open: false }),
+    );
+    expect(value).toBe("dark");
+    expect(open).toBe(false);
+    expect(root.properties.get(PropertyCode.ActiveValue)).toBe("dark");
+
+    window._dispatchEvent("commit", root.id, JSON.stringify({ value: "dark" }));
+    expect(committed).toEqual({ value: "dark" });
+    window.close();
+  });
+
+  test("declares combobox and autocomplete inputs with child option nodes", async () => {
+    await app.whenReady();
+    let inputValue: string | undefined;
+    const window = new Window({
+      title: "Pickers",
+      renderer: createRenderer(() => [
+        createComponent(Combobox.Root, {
+          scope: "fruit",
+          inputValue: "ap",
+          placeholder: "Fruit",
+          get children() {
+            return [
+              createComponent(Combobox.Option, {
+                partValue: "apple",
+                label: "Apple",
+                group: "recent",
+              }),
+              createComponent(Combobox.Option, {
+                partValue: "banana",
+                label: "Banana",
+                disabled: true,
+              }),
+            ];
+          },
+        }),
+        createComponent(Autocomplete.Root, {
+          scope: "search",
+          inputValue: "al",
+          filterMode: "none",
+          items: [{ value: "alpha" }],
+          onInputValueChange: (next: string) => {
+            inputValue = next;
+          },
+        }),
+      ]),
+    });
+
+    const combobox = window.root.children[0]!;
+    const autocomplete = window.root.children[1]!;
+    expect(combobox.tag).toBe(NativeNodeTag.Input);
+    expect(combobox.properties.get(PropertyCode.Part)).toBe("combobox");
+    expect(combobox.properties.get(PropertyCode.InputValue)).toBe("ap");
+    expect(combobox.properties.get(PropertyCode.Options)).toBeUndefined();
+    expect(combobox.children).toHaveLength(2);
+    expect(combobox.children[0]!.properties.get(PropertyCode.Part)).toBe("option");
+    expect(combobox.children[0]!.properties.get(PropertyCode.PartValue)).toBe("apple");
+    expect(combobox.children[0]!.properties.get(PropertyCode.Value)).toBe("Apple");
+    expect(combobox.children[0]!.properties.get(PropertyCode.Group)).toBe("recent");
+    expect(combobox.children[1]!.properties.get(PropertyCode.Disabled)).toBe(true);
+    expect(autocomplete.properties.get(PropertyCode.Part)).toBe("autocomplete");
+    expect(autocomplete.properties.get(PropertyCode.FilterMode)).toBe("none");
+
+    window._dispatchEvent(
+      "componentchange",
+      autocomplete.id,
+      JSON.stringify({ inputValue: "alp", open: true }),
+    );
+    expect(inputValue).toBe("alp");
+    window.close();
+  });
+
+  test("declares a virtual table and adopts everything the core decides", async () => {
+    await app.whenReady();
+    let range: solid.VisibleRange | undefined;
+    let selection: readonly (readonly number[])[] | undefined;
+    let sort: solid.TableSortState | undefined;
+    let widths: Readonly<Record<string, number>> | undefined;
+    let order: readonly string[] | undefined;
+    let edit: solid.TableEditEndDetails | undefined;
+    let activated: solid.TableCell | undefined;
+    const window = new Window({
+      title: "Table",
+      renderer: createRenderer(() => [
+        createComponent(Table.Root, {
+          scope: "files",
+          rowCount: 1000,
+          rowHeight: 24,
+          headerHeight: 32,
+          selectionMode: "multiple",
+          selection: [[0, 2]],
+          sort: { column: "name", direction: "descending" },
+          editing: { row: 1, column: 0 },
+          columns: [
+            { id: "name", label: "Name", width: 160, sortable: true },
+            { id: "size", label: "Size", track: "1fr", align: "end" },
+          ],
+          onVisibleRangeChange: (next: solid.VisibleRange) => {
+            range = next;
+          },
+          onSelectionChange: (next: readonly (readonly number[])[]) => {
+            selection = next;
+          },
+          onSortChange: (next: solid.TableSortState | undefined) => {
+            sort = next;
+          },
+          onColumnResize: (next: Readonly<Record<string, number>>) => {
+            widths = next;
+          },
+          onColumnReorder: (next: readonly string[]) => {
+            order = next;
+          },
+          onEditEnd: (next: solid.TableEditEndDetails) => {
+            edit = next;
+          },
+          onActivate: (cell: solid.TableCell) => {
+            activated = cell;
+          },
+          get children() {
+            return [
+              createComponent(Table.Header, { column: "name" }),
+              createComponent(Table.Row, {
+                index: 0,
+                get children() {
+                  return createComponent(Table.Cell, { column: "name" });
+                },
+              }),
+            ];
+          },
+        }),
+      ]),
+    });
+
+    const root = window.root.children[0]!;
+    expect(root.properties.get(PropertyCode.Part)).toBe("table");
+    expect(root.properties.get(PropertyCode.RowCount)).toBe(1000);
+    expect(root.properties.get(PropertyCode.RowHeight)).toBe(24);
+    expect(root.properties.get(PropertyCode.HeaderHeight)).toBe(32);
+    expect(root.properties.get(PropertyCode.SelectionMode)).toBe("multiple");
+    expect(root.properties.get(PropertyCode.Selection)).toBe("[[0,2]]");
+    expect(root.properties.get(PropertyCode.SortColumn)).toBe("name");
+    expect(root.properties.get(PropertyCode.SortDirection)).toBe("descending");
+    expect(root.properties.get(PropertyCode.Editing)).toBe('{"row":1,"column":0}');
+    expect(root.properties.get(PropertyCode.Columns)).toBe(
+      JSON.stringify([
+        { id: "name", label: "Name", width: 160, sortable: true },
+        { id: "size", label: "Size", track: "1fr", align: "end" },
+      ]),
+    );
+    expect(root.children[0]!.properties.get(PropertyCode.Part)).toBe("table-header");
+    expect(root.children[0]!.properties.get(PropertyCode.PartValue)).toBe("name");
+    expect(root.children[1]!.properties.get(PropertyCode.Part)).toBe("table-row");
+    expect(root.children[1]!.properties.get(PropertyCode.RowIndex)).toBe(0);
+    expect(
+      root.children[1]!.children[0]!.properties.get(PropertyCode.Part),
+    ).toBe("table-cell");
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        visibleRange: { start: 12, end: 40 },
+        selectedRanges: [[3, 5]],
+        sort: { column: "size", direction: "ascending" },
+        columnWidths: { name: 168 },
+        columnOrder: ["size", "name"],
+        editEnded: { row: 1, column: 0, committed: true },
+      }),
+    );
+    expect(range).toEqual({ start: 12, end: 40 });
+    expect(selection).toEqual([[3, 5]]);
+    expect(sort).toEqual({ column: "size", direction: "ascending" });
+    expect(widths).toEqual({ name: 168 });
+    expect(order).toEqual(["size", "name"]);
+    expect(edit).toEqual({ row: 1, column: 0, committed: true });
+
+    window._dispatchEvent("commit", root.id, JSON.stringify({ row: 4, column: 1 }));
+    expect(activated).toEqual({ row: 4, column: 1 });
+    window.close();
+  });
+
+  test("declares a lazy virtual tree and adopts the core's expansion and requests", async () => {
+    await app.whenReady();
+    let expanded: readonly string[] | undefined;
+    let requested: string | undefined;
+    let activated: string | undefined;
+    const window = new Window({
+      title: "Tree",
+      renderer: createRenderer(() => [
+        createComponent(Tree.Root, {
+          scope: "explorer",
+          rowHeight: 22,
+          loadingLabel: "Fetching…",
+          disclosure: "trailing",
+          nodes: [
+            { id: "src", label: "src", pending: true },
+            { id: "readme", label: "README" },
+          ],
+          defaultExpanded: [],
+          value: "readme",
+          setChildren: { id: "src", children: [{ id: "main", label: "main.rs" }] },
+          onExpandedChange: (next: readonly string[]) => {
+            expanded = next;
+          },
+          onLoadChildren: (id: string) => {
+            requested = id;
+          },
+          onActivate: (id: string) => {
+            activated = id;
+          },
+          get children() {
+            return createComponent(Tree.Row, { nodeId: "src" });
+          },
+        }),
+      ]),
+    });
+
+    const root = window.root.children[0]!;
+    expect(root.properties.get(PropertyCode.Part)).toBe("tree");
+    expect(root.properties.get(PropertyCode.RowHeight)).toBe(22);
+    expect(root.properties.get(PropertyCode.LoadingLabel)).toBe("Fetching…");
+    expect(root.properties.get(PropertyCode.Disclosure)).toBe("trailing");
+    expect(root.properties.get(PropertyCode.SelectedValue)).toBe("readme");
+    expect(root.properties.get(PropertyCode.Expanded)).toBe("[]");
+    expect(root.properties.get(PropertyCode.SetChildren)).toBe(
+      '{"id":"src","children":[{"id":"main","label":"main.rs"}]}',
+    );
+    expect(root.children[0]!.properties.get(PropertyCode.Part)).toBe("tree-row");
+    expect(root.children[0]!.properties.get(PropertyCode.PartValue)).toBe("src");
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({ expanded: ["src"], loadChildren: "src" }),
+    );
+    expect(expanded).toEqual(["src"]);
+    expect(requested).toBe("src");
+    expect(root.properties.get(PropertyCode.Expanded)).toBe('["src"]');
+
+    window._dispatchEvent("commit", root.id, JSON.stringify({ value: "readme" }));
+    expect(activated).toBe("readme");
+    window.close();
+  });
+
+  test("declares number, date, time, calendar, menubar, and toast declarations", async () => {
+    await app.whenReady();
+    let numeric: number | undefined;
+    let valid = true;
+    let day: string | undefined;
+    let dismissed: readonly string[] | undefined;
+    let openMenu: number | undefined;
+    const window = new Window({
+      title: "Fields",
+      renderer: createRenderer(() => [
+        createComponent(NumberField.Root, {
+          scope: "quantity",
+          defaultValue: 2,
+          min: 0,
+          max: 10,
+          step: 2,
+          precision: 1,
+          onValueChange: (next: number | undefined, isValid: boolean) => {
+            numeric = next;
+            valid = isValid;
+          },
+          get children() {
+            return [
+              createComponent(NumberField.Input, { scope: "quantity" }),
+              createComponent(NumberField.Increment, { scope: "quantity" }),
+              createComponent(NumberField.Decrement, { scope: "quantity" }),
+            ];
+          },
+        }),
+        createComponent(DateField.Root, {
+          scope: "due",
+          defaultValue: "2026-09-03",
+          min: "2000-01-01",
+          format: "mdy",
+          get children() {
+            return createComponent(DateField.Segment, {
+              scope: "due",
+              segment: "year",
+            });
+          },
+        }),
+        createComponent(TimeField.Root, {
+          scope: "alarm",
+          defaultValue: "07:30",
+          hour12: true,
+          showSeconds: true,
+          get children() {
+            return createComponent(TimeField.Segment, {
+              scope: "alarm",
+              segment: "period",
+            });
+          },
+        }),
+        createComponent(Calendar.Root, {
+          scope: "month",
+          defaultValue: "2026-09-03",
+          firstWeekday: 0,
+          onFocusChange: (next: string) => {
+            day = next;
+          },
+          get children() {
+            return createComponent(Calendar.Week, {
+              scope: "month",
+              itemIndex: 0,
+              get children() {
+                return createComponent(Calendar.Day, {
+                  scope: "month",
+                  day: "2026-09-03",
+                });
+              },
+            });
+          },
+        }),
+        createComponent(Menubar.Root, {
+          scope: "bar",
+          count: 2,
+          onOpenChange: (next: number | undefined) => {
+            openMenu = next;
+          },
+          get children() {
+            return createComponent(Menubar.Item, { scope: "bar", itemIndex: 0 });
+          },
+        }),
+        createComponent(Toast.Viewport, {
+          scope: "toasts",
+          toasts: [{ id: "saved", title: "Saved", kind: "success", duration: 4000 }],
+          onDismiss: (ids: readonly string[]) => {
+            dismissed = ids;
+          },
+          get children() {
+            return createComponent(Toast.Root, {
+              scope: "toasts",
+              toastId: "saved",
+              get children() {
+                return [
+                  createComponent(Toast.Title, { scope: "toasts", toastId: "saved" }),
+                  createComponent(Toast.Close, { scope: "toasts", toastId: "saved" }),
+                ];
+              },
+            });
+          },
+        }),
+      ]),
+    });
+
+    const [field, date, time, calendar, menubar, toasts] = window.root.children;
+    expect(field!.properties.get(PropertyCode.Part)).toBe("number-field");
+    expect(field!.properties.get(PropertyCode.Values)).toBe("[2]");
+    expect(field!.properties.get(PropertyCode.Precision)).toBe(1);
+    expect(field!.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "number-field-input",
+    );
+    expect(field!.children[1]!.properties.get(PropertyCode.Part)).toBe(
+      "number-field-increment",
+    );
+
+    expect(date!.properties.get(PropertyCode.CivilValue)).toBe("2026-09-03");
+    expect(date!.properties.get(PropertyCode.CivilMinimum)).toBe("2000-01-01");
+    expect(date!.properties.get(PropertyCode.SegmentOrder)).toBe("mdy");
+    expect(date!.children[0]!.properties.get(PropertyCode.Segment)).toBe("year");
+
+    expect(time!.properties.get(PropertyCode.CivilValue)).toBe("07:30");
+    expect(time!.properties.get(PropertyCode.SegmentOrder)).toBe("h12");
+    expect(time!.properties.get(PropertyCode.Variant)).toBe("seconds");
+    expect(time!.children[0]!.properties.get(PropertyCode.Segment)).toBe("period");
+
+    expect(calendar!.properties.get(PropertyCode.CivilValue)).toBe("2026-09-03");
+    expect(calendar!.properties.get(PropertyCode.FirstWeekday)).toBe(0);
+    expect(calendar!.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "calendar-week",
+    );
+    expect(
+      calendar!.children[0]!.children[0]!.properties.get(PropertyCode.CivilValue),
+    ).toBe("2026-09-03");
+
+    expect(menubar!.properties.get(PropertyCode.MenuCount)).toBe(2);
+    expect(menubar!.properties.get(PropertyCode.Open)).toBe(false);
+    expect(menubar!.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "menubar-item",
+    );
+
+    expect(toasts!.properties.get(PropertyCode.Toasts)).toBe(
+      JSON.stringify([
+        { id: "saved", title: "Saved", kind: "success", duration: 4000 },
+      ]),
+    );
+    expect(toasts!.children[0]!.properties.get(PropertyCode.PartValue)).toBe("saved");
+    expect(
+      toasts!.children[0]!.children[1]!.properties.get(PropertyCode.Part),
+    ).toBe("toast-close");
+
+    window._dispatchEvent(
+      "componentchange",
+      field!.id,
+      JSON.stringify({ value: 42, text: "42", valid: false }),
+    );
+    expect(numeric).toBe(42);
+    expect(valid).toBe(false);
+
+    window._dispatchEvent(
+      "componentchange",
+      calendar!.id,
+      JSON.stringify({ focused: "2026-09-04", month: "2026-09" }),
+    );
+    expect(day).toBe("2026-09-04");
+
+    window._dispatchEvent(
+      "componentchange",
+      menubar!.id,
+      JSON.stringify({ open: 1, focused: 1 }),
+    );
+    expect(openMenu).toBe(1);
+    expect(menubar!.properties.get(PropertyCode.ItemIndex)).toBe(1);
+    expect(menubar!.properties.get(PropertyCode.Open)).toBe(true);
+
+    window._dispatchEvent(
+      "componentchange",
+      toasts!.id,
+      JSON.stringify({ dismissed: ["saved"] }),
+    );
+    expect(dismissed).toEqual(["saved"]);
+    window.close();
+  });
+
+  test("refuses an option or collection declaration past the boundary's own bounds", async () => {
+    await app.whenReady();
+    const window = new Window({ title: "Bounds", renderer: createRenderer(() => []) });
+    const node = createElement("view");
+    insertNode(window.root, node);
+    expect(() =>
+      setProp(node, "options", [
+        { value: "a", label: "x".repeat(MAX_OPTIONS_JSON_BYTES) },
+      ]),
+    ).toThrow(/option source/);
+    expect(() =>
+      setProp(node, "columns", [
+        { id: "a", label: "x".repeat(MAX_COLLECTION_JSON_BYTES) },
+      ]),
+    ).toThrow(/collection/);
     window.close();
   });
 });

@@ -171,15 +171,21 @@ asynchronous `onActiveChange` or `onValueChange` payload. Duplicate declared val
 occurrence and overflow past the core's own item bound is dropped, so a declaration can never panic
 the core.
 
-`Toast` is not bound yet: its queue needs a push API expressed as a bounded node declaration rather
-than a mutation call, which is a separate declaration format. See
-[Solid 2 renderer](solid.md#range-ordering-and-roving-focus-components).
+`Toast.Viewport` / `Root` / `Title` / `Description` / `Action` / `Close` declares the queue itself:
+pushing a toast is adding an entry with a new identifier to the bounded `toasts` list, and dropping
+one dismisses it. The hosted view reaches each declared viewport's retained `ToastManager` through a
+per-instance [`StateAccessor`](view-api.md). The core owns the queue bound, live-region politeness,
+title and description relationships, focused Escape dismissal, and the exact auto-dismiss deadline,
+which the binding sleeps on with one `request_repaint_at` rather than a timer of its own. Every
+dismissal the core decided — including the timed ones — travels back as one asynchronous
+`onDismiss` payload naming the caller's own declared identifiers. See
+[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
 
 ## Menubar
 
-An in-window menubar is not implemented. Native macOS menus remain the application menu; see
-[popovers and popover menus](popovers.md) for the in-window `PopoverMenu` model and
-[the roadmap](component-roadmap.md) for the current status.
+The in-window menubar has its own guide: see [menubar](menubar.md) for the `MenubarState` model and
+its JavaScript binding. Native macOS menus remain the application menu; see
+[popovers and popover menus](popovers.md) for the in-window `PopoverMenu` model.
 
 ## Resource contract
 

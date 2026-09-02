@@ -54,7 +54,8 @@ export type NativeEventType =
   | "dragend"
   | "drop"
   | "filesdropped"
-  | "componentchange";
+  | "componentchange"
+  | "commit";
 
 /** Declared input listeners whose presence is one boolean property. */
 const inputListenerProperties: ReadonlyMap<NativeEventType, PropertyCode> = new Map([
@@ -300,6 +301,14 @@ export function setNativeEventListener(
       node,
       PropertyCode.SelectListener,
       node.listeners.has("menuselect"),
+    );
+  } else if (type === "commit") {
+    // Committing an option, a number, or a collection row is an edge, not a value: the same
+    // commit can repeat while the controlled value never moves, so it travels on its own channel.
+    setNativeProperty(
+      node,
+      PropertyCode.CommitListener,
+      node.listeners.has("commit"),
     );
   } else if (type === "componentchange") {
     // A declared range, ordering, or roving-focus component reports whatever the Rust core

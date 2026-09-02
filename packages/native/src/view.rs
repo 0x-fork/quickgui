@@ -166,7 +166,7 @@ impl View for NativeView {
         });
         let tree = self.tree.borrow();
         self.components.sync(&tree, window, &self.events);
-        let components = &self.components;
+        let components = &mut self.components;
         let mut markdown = self.markdown.borrow_mut();
         markdown.retain(|id, _| {
             tree.nodes
@@ -340,7 +340,10 @@ pub(super) struct NativeElementStates<'a> {
     pub(super) images: &'a mut HashMap<u32, NativeImageState>,
     pub(super) shaders: &'a mut HashMap<u32, NativeShaderState>,
     /// This pass's retained component instances, already reseeded from the declaration.
-    pub(super) components: &'a NativeComponentStates,
+    ///
+    /// Pickers and collections need an exclusive borrow while the core builds their popover or
+    /// virtual scroll container, so the whole set travels as one mutable borrow.
+    pub(super) components: &'a mut NativeComponentStates,
     /// Retained popover-menu models, shared with the listeners this pass installs.
     pub(super) menus: NativeMenuStates,
     /// Snapshot of the window's context-menu state for this render pass.
@@ -723,11 +726,20 @@ pub(super) fn build_element(
     // A component part adopts the Rust descriptor's derived identity so the core's own
     // `aria-controls`/`labelled-by` relationships and mount policy resolve without a JavaScript
     // registry. Ordinary nodes keep their unique node identity on the untouched fast path.
-    let part_element_id = native_part_element_id(id, node);
-    let listeners_enabled = match part_element_id {
-        Some(part_element_id) => states.part_ids.insert(part_element_id.as_u64()),
-        None => true,
-    };
+    let part_element_id = native_part_element_id_with(id, node, states.components);
+    // A declared collection header, row, or cell is content, not identity: the core assigns the
+    // exact grid, tree-item, and active-descendant identity itself, and an element can carry only
+    // one stable id. These nodes therefore mount without one and register no listener of their
+    // own; every interaction on them belongs to the core's own row and cell decorators.
+    let core_owned_identity = matches!(
+        node.string(property::PART),
+        Some(TABLE_HEADER_PART | TABLE_ROW_PART | TABLE_CELL_PART | TREE_ROW_PART)
+    );
+    let listeners_enabled = !core_owned_identity
+        && match part_element_id {
+            Some(part_element_id) => states.part_ids.insert(part_element_id.as_u64()),
+            None => true,
+        };
     let element_id = part_element_id.unwrap_or_else(|| ElementId::new(id as u64));
     let mut element = match node.tag {
         NodeTag::Root => return None,
@@ -737,10 +749,23 @@ pub(super) fn build_element(
         NodeTag::Sentinel => div().hidden(),
         NodeTag::Input => {
             let multiline = node.boolean(property::MULTILINE).unwrap_or(false);
+            // A number field's editing text belongs to the core: it parses, clamps, and reformats
+            // it, so the declared `value` seeds the state instead of overwriting it every frame.
+            let declared_value = match node.string(property::PART) {
+                Some(NUMBER_FIELD_INPUT_PART) => states
+                    .components
+                    .number_fields
+                    .get(&component_key(id, node))
+                    .map_or_else(
+                        || node.string(property::VALUE).unwrap_or_default(),
+                        |field| field.state.text().as_ref(),
+                    ),
+                _ => node.string(property::VALUE).unwrap_or_default(),
+            };
             let mut input = if multiline {
-                text_area(node.string(property::VALUE).unwrap_or_default())
+                text_area(declared_value)
             } else {
-                text_input(node.string(property::VALUE).unwrap_or_default())
+                text_input(declared_value)
             }
             .bg(Color::TRANSPARENT)
             .border(0.0, Color::TRANSPARENT)
@@ -941,8 +966,10 @@ pub(super) fn build_element(
         | NodeTag::SwiftUiPopover
         | NodeTag::SwiftUiPopoverTrigger
         | NodeTag::SwiftUiPopoverContent => return None,
+    };
+    if !core_owned_identity {
+        element = element.id(element_id);
     }
-    .id(element_id);
 
     element = apply_properties(element, node);
     element = apply_tooltip(element, node);
@@ -951,6 +978,30 @@ pub(super) fn build_element(
     // accessibility node, exactly as the Rust component guides describe.
     element = apply_part(element, id, node)?;
     element = apply_component_part(element, id, node, states.components, cx, listeners_enabled);
+    if let Some(part) = node.string(property::PART) {
+        element = apply_field_part(
+            element,
+            part,
+            id,
+            window,
+            node,
+            events,
+            states.components,
+            cx,
+            listeners_enabled,
+        )?;
+        element = apply_picker_part(
+            element,
+            part,
+            id,
+            window,
+            node,
+            events,
+            states.components,
+            cx,
+            listeners_enabled,
+        )?;
+    }
     element = apply_controls(element, node, tree);
 
     let part = node.string(property::PART);
@@ -1102,6 +1153,23 @@ pub(super) fn build_element(
 
     if listeners_enabled {
         element = attach_input_listeners(element, element_id, id, window, events, node, cx);
+    }
+
+    // A declared collection owns its subtree: the binding builds the declared header, row, and
+    // cell elements itself and hands the core finished elements, so the recursion below never
+    // reaches them twice.
+    match node.string(property::PART) {
+        Some(TABLE_PART) => {
+            return Some(build_table(
+                element, id, window, tree, events, states, cx, depth,
+            ));
+        }
+        Some(TREE_PART) => {
+            return Some(build_tree(
+                element, id, window, tree, events, states, cx, depth,
+            ));
+        }
+        _ => {}
     }
 
     match node.tag {
@@ -1378,11 +1446,29 @@ fn native_fieldset(id: u32, node: &NativeNode) -> Fieldset {
         .disabled(node.boolean(property::DISABLED).unwrap_or(false))
 }
 
+/// Resolve a part identity that depends on retained per-instance state, such as a queued toast.
+///
+/// Everything else falls through to [`native_part_element_id`], which needs no state at all.
+pub(super) fn native_part_element_id_with(
+    id: u32,
+    node: &NativeNode,
+    components: &NativeComponentStates,
+) -> Option<ElementId> {
+    let part = node.string(property::PART)?;
+    if let Some(derived) = field_part_element_id(part, id, node, components) {
+        return Some(derived);
+    }
+    native_part_element_id(id, node)
+}
+
 /// Resolve the identity a component part must mount with, or `None` for an ordinary node.
 pub(super) fn native_part_element_id(id: u32, node: &NativeNode) -> Option<ElementId> {
     let part = node.string(property::PART)?;
     if let Some(component) = component_part_element_id(id, node) {
         return Some(component);
+    }
+    if let Some(picker) = picker_part_element_id(part, id, node) {
+        return Some(picker);
     }
     Some(match part {
         "tabs" | "collapsible" | "accordion" | "fieldset" | "field-control" => {

@@ -276,3 +276,26 @@ The framework tests a 100,000-node flat tree in a three-row viewport and require
 seven mounted rows, including overscan, with no measured-height entries created before layout.
 Sorting and full source replacement are intentionally application events rather than per-frame
 work.
+
+## JavaScript bindings
+
+`Table.Root` / `Header` / `Row` / `Cell` and `Tree.Root` / `Row` declare the column list, the row
+count, the node source, the controlled selection, sort, expansion, and inline-edit position. The
+hosted view reaches each declared instance's retained `TableState` or `TreeState` through a
+per-instance [`StateAccessor`](view-api.md), so several collections in one window stay independent.
+
+Both are on-demand. The core owns the virtual window and reports the range it mounted through
+`onVisibleRangeChange`; JavaScript declares exactly those `Row` children, so a million-row table
+declares only the window on screen. Column resizing and reordering, keyboard navigation, selection
+policy, expansion, the lazy-children request, and Return activation stay in the core, and every
+result travels back as one asynchronous payload keyed by the caller's own declared identifiers
+rather than by a positional index a source replacement could invalidate.
+
+A declared header, row, or cell carries content only: an element can hold exactly one stable id and
+the core assigns the grid, tree-item, and active-descendant identities itself, so these nodes mount
+without one and register no listener of their own. An interactive control belongs inside a cell as
+an ordinary child node. Supplying a pending branch's children is a declaration too, spliced
+atomically by the core — an over-deep, oversized, or duplicate payload leaves the tree exactly as it
+was. Declarations are bounded before they reach the core: 2 MiB per column, node, selection, or
+toast source, 512 columns, 65,536 nodes, and a duplicate identifier keeps its first occurrence. See
+the [Solid 2 renderer](solid.md#virtual-tables-and-trees).

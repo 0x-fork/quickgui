@@ -3147,3 +3147,834 @@ fn malformed_component_declarations_are_bounded_instead_of_panicking() {
     );
     assert!(events.borrow().is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// Declared option sources, virtual collections, and the remaining stateful fields
+// ---------------------------------------------------------------------------
+
+/// An application bound to every typed action the newly declared components adopt.
+fn collection_application() -> quickgui::Application {
+    component_application()
+        .bind_keys(quickgui::picker_key_bindings())
+        .bind_keys(quickgui::select_key_bindings())
+        .bind_keys(quickgui::combobox_key_bindings())
+        .bind_keys(quickgui::table_key_bindings())
+        .bind_keys(quickgui::tree_key_bindings())
+        .bind_keys(quickgui::date_field_key_bindings())
+        .bind_keys(quickgui::time_field_key_bindings())
+        .bind_keys(quickgui::calendar_key_bindings())
+        .bind_keys(quickgui::menubar_key_bindings())
+}
+
+/// Take every queued event of one kind for one target and return the last payload.
+fn queued_payload(events: &EventQueue, kind: &str, target: u32) -> serde_json::Value {
+    let mut queue = events.borrow_mut();
+    let mut latest = serde_json::Value::Null;
+    let mut remaining = VecDeque::with_capacity(queue.len());
+    while let Some(event) = queue.pop_front() {
+        if event.kind == kind && event.target == target {
+            latest = serde_json::from_str(event.value.as_deref().unwrap_or("null"))
+                .expect("a declared component event carries bounded JSON");
+        } else {
+            remaining.push_back(event);
+        }
+    }
+    *queue = remaining;
+    latest
+}
+
+/// Merge every queued change for one target, so a multi-frame gesture reads as one payload.
+fn merged_component_change(
+    events: &EventQueue,
+    target: u32,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut queue = events.borrow_mut();
+    let mut merged = serde_json::Map::new();
+    let mut remaining = VecDeque::with_capacity(queue.len());
+    while let Some(event) = queue.pop_front() {
+        if event.kind == "componentchange" && event.target == target {
+            let value: serde_json::Value =
+                serde_json::from_str(event.value.as_deref().unwrap_or("null"))
+                    .expect("a component change carries bounded JSON");
+            if let serde_json::Value::Object(object) = value {
+                merged.extend(object);
+            }
+        } else {
+            remaining.push_back(event);
+        }
+    }
+    *queue = remaining;
+    merged
+}
+
+fn mounted_component_view(
+    tree: NativeTree,
+    events: EventQueue,
+) -> (
+    quickgui::TestAppContext,
+    quickgui::TestWindowHandle<NativeView>,
+) {
+    let view = component_part_view(90, tree, events);
+    quickgui::TestAppContext::from_application(
+        collection_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .expect("the hosted component view mounts")
+}
+
+#[test]
+fn declared_select_options_commit_through_the_core_popover() {
+    let id = 500;
+    let mut tree = NativeTree::default();
+    let node = component_part_node(
+        NodeTag::Button,
+        ROOT_NODE,
+        "select",
+        &[
+            (property::SCOPE, "theme"),
+            (
+                property::OPTIONS,
+                r#"[{"value":"light","label":"Light"},{"value":"dark","label":"Dark"},{"value":"light","label":"Duplicate"}]"#,
+            ),
+            (property::ACCESSIBILITY_LABEL, "Theme"),
+        ],
+        &[
+            (property::COMPONENT_CHANGE_LISTENER, true),
+            (property::COMMIT_LISTENER, true),
+        ],
+    );
+    insert_component_node(&mut tree, id, ROOT_NODE, node);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let trigger = ElementId::named("theme");
+
+    // A duplicate declared value keeps its first occurrence, so the core never sees a source it
+    // would reject for a reason the caller cannot see.
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .selects
+            .values()
+            .map(|select| select.state.items().len())
+            .sum::<usize>())
+            .unwrap(),
+        2
+    );
+
+    cx.click(window, trigger).unwrap();
+    let popover = cx
+        .read(view, |view| {
+            view.components
+                .selects
+                .values()
+                .next()
+                .and_then(|select| select.state.popover_window())
+        })
+        .unwrap()
+        .expect("the core opens its own native popover window");
+    assert_eq!(
+        cx.window_state(popover).unwrap().kind,
+        quickgui::WindowKind::SystemPopover
+    );
+
+    cx.simulate_keystrokes(popover, "down enter").unwrap();
+    cx.run_until_idle().unwrap();
+    assert!(!cx.is_window_open(popover));
+    assert_eq!(
+        queued_payload(&events, "commit", id),
+        serde_json::json!({ "value": "dark" })
+    );
+    let change = merged_component_change(&events, id);
+    assert_eq!(change.get("value"), Some(&serde_json::json!("dark")));
+    assert_eq!(change.get("open"), Some(&serde_json::json!(false)));
+}
+
+#[test]
+fn declared_option_children_and_malformed_sources_never_panic() {
+    let select_id = 510;
+    let option_ids = [511_u32, 512];
+    let malformed_id = 520;
+    let mut tree = NativeTree::default();
+    let select = component_part_node(
+        NodeTag::Button,
+        ROOT_NODE,
+        "select",
+        &[(property::SCOPE, "child-options")],
+        &[],
+    );
+    insert_component_node(&mut tree, select_id, ROOT_NODE, select);
+    for (id, value, label) in [(option_ids[0], "one", "One"), (option_ids[1], "two", "Two")] {
+        let option = component_part_node(
+            NodeTag::Sentinel,
+            select_id,
+            "option",
+            &[(property::PART_VALUE, value), (property::VALUE, label)],
+            &[],
+        );
+        insert_component_node(&mut tree, id, select_id, option);
+    }
+    let malformed = component_part_node(
+        NodeTag::Input,
+        ROOT_NODE,
+        "autocomplete",
+        &[
+            (property::SCOPE, "broken"),
+            (property::OPTIONS, "{not json"),
+            (property::APPEARANCE, "{also not json"),
+        ],
+        &[],
+    );
+    insert_component_node(&mut tree, malformed_id, ROOT_NODE, malformed);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    cx.run_until_idle().unwrap();
+
+    let counts = cx
+        .read(view, |view| {
+            (
+                view.components
+                    .selects
+                    .values()
+                    .map(|select| select.state.items().len())
+                    .sum::<usize>(),
+                view.components
+                    .autocompletes
+                    .values()
+                    .map(|state| state.state.items().len())
+                    .sum::<usize>(),
+            )
+        })
+        .unwrap();
+    assert_eq!(counts, (2, 0));
+    // A declared option contributes no element of its own: every row is painted by the core in
+    // its own window from the declared appearance.
+    assert!(
+        !cx.contains_element(
+            view.window_handle(),
+            ElementId::new(u64::from(option_ids[0]))
+        )
+        .unwrap()
+    );
+}
+
+#[test]
+fn declared_autocomplete_reports_the_free_form_value_the_core_retains() {
+    let id = 530;
+    let mut tree = NativeTree::default();
+    let node = component_part_node(
+        NodeTag::Input,
+        ROOT_NODE,
+        "autocomplete",
+        &[
+            (property::SCOPE, "search"),
+            (
+                property::OPTIONS,
+                r#"[{"value":"alpha","label":"Alpha"},{"value":"beta","label":"Beta"}]"#,
+            ),
+            (property::ACCESSIBILITY_LABEL, "Search"),
+            (property::INPUT_VALUE, "al"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    insert_component_node(&mut tree, id, ROOT_NODE, node);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let control = ElementId::named("search");
+
+    // The declared value seeds the retained state; the core owns every edit after that.
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .autocompletes
+            .values()
+            .next()
+            .map(|state| state.state.value().to_string()))
+            .unwrap(),
+        Some("al".to_owned())
+    );
+
+    cx.focus(window, control).unwrap();
+    cx.simulate_input(window, "p").unwrap();
+    cx.run_until_idle().unwrap();
+    let change = merged_component_change(&events, id);
+    assert_eq!(change.get("inputValue"), Some(&serde_json::json!("alp")));
+}
+
+#[test]
+fn declared_table_renders_visible_cells_and_reports_what_the_core_decides() {
+    let table_id = 600;
+    let header_id = 601;
+    let row_id = 602;
+    let cell_id = 603;
+    let mut tree = NativeTree::default();
+    let mut table = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "table",
+        &[
+            (property::SCOPE, "files"),
+            (
+                property::COLUMNS,
+                r#"[{"id":"name","label":"Name","width":160,"sortable":true},{"id":"size","label":"Size","track":"1fr"},{"id":"name","label":"Duplicate"}]"#,
+            ),
+            (property::SELECTION_MODE, "multiple"),
+            (property::SORT_COLUMN, "name"),
+            (property::SORT_DIRECTION, "descending"),
+        ],
+        &[
+            (property::COMPONENT_CHANGE_LISTENER, true),
+            (property::COMMIT_LISTENER, true),
+        ],
+    );
+    table.set_property(property::ROW_COUNT, Some(PropertyValue::Number(64.0)));
+    table.set_property(property::ROW_HEIGHT, Some(PropertyValue::Number(24.0)));
+    insert_component_node(&mut tree, table_id, ROOT_NODE, table);
+    let header = component_part_node(
+        NodeTag::View,
+        table_id,
+        "table-header",
+        &[(property::PART_VALUE, "name")],
+        &[],
+    );
+    insert_component_node(&mut tree, header_id, table_id, header);
+    let mut row = component_part_node(NodeTag::View, table_id, "table-row", &[], &[]);
+    row.set_property(property::ROW_INDEX, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, row_id, table_id, row);
+    let cell = component_part_node(
+        NodeTag::View,
+        row_id,
+        "table-cell",
+        &[
+            (property::PART_VALUE, "name"),
+            (property::ACCESSIBILITY_LABEL, "first cell"),
+        ],
+        &[],
+    );
+    insert_component_node(&mut tree, cell_id, row_id, cell);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("files");
+    cx.run_until_idle().unwrap();
+
+    // The duplicate declared column identifier is dropped before the core can panic on it, and
+    // the declared sort survives into the retained state.
+    let (columns, sort, rows) = cx
+        .read(view, |view| {
+            let table = view.components.tables.values().next().unwrap();
+            (
+                table.columns.len(),
+                table.state.sort().map(|sort| sort.direction),
+                table.state.row_count(),
+            )
+        })
+        .unwrap();
+    assert_eq!(columns, 2);
+    assert_eq!(sort, Some(quickgui::TableSortDirection::Descending));
+    assert_eq!(rows, 64);
+
+    // The core reports the range it is virtualizing so JavaScript can declare exactly those rows.
+    let change = merged_component_change(&events, table_id);
+    let visible = change
+        .get("visibleRange")
+        .expect("the core reports the range it mounted");
+    assert_eq!(visible.get("start"), Some(&serde_json::json!(0)));
+
+    // The declared cell is mounted by the core's own row renderer, under the core's cell identity.
+    let cell_element = TableState::cell_id(root, TableCellPosition { row: 0, column: 0 });
+    assert!(cx.contains_element(window, cell_element).unwrap());
+
+    cx.focus(window, root).unwrap();
+    cx.simulate_keystrokes(window, "down down").unwrap();
+    cx.run_until_idle().unwrap();
+    let change = merged_component_change(&events, table_id);
+    assert_eq!(
+        change.get("selectedRanges"),
+        Some(&serde_json::json!([[2, 2]]))
+    );
+    assert_eq!(
+        change.get("activeCell"),
+        Some(&serde_json::json!({ "row": 2, "column": 0 }))
+    );
+
+    // Column resizing is the core's own typed action on the handle it hands the declared header,
+    // and the width it decided travels back keyed by the caller's declared identifier.
+    cx.focus(
+        window,
+        TableState::resize_handle_id(root, ElementId::named("name")),
+    )
+    .unwrap();
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    let change = merged_component_change(&events, table_id);
+    assert_eq!(
+        change.get("columnWidths"),
+        Some(&serde_json::json!({
+            "name": 160.0 + quickgui::TABLE_COLUMN_RESIZE_STEP,
+        }))
+    );
+
+    // Reordering is likewise the core's own typed action over the declared display order.
+    cx.focus(window, root).unwrap();
+    cx.simulate_keystrokes(window, "alt-right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        merged_component_change(&events, table_id).get("columnOrder"),
+        Some(&serde_json::json!(["size", "name"]))
+    );
+}
+
+#[test]
+fn declared_tree_expands_through_the_core_and_asks_for_lazy_children() {
+    let tree_id = 620;
+    let row_ids = [621_u32, 622];
+    let mut tree = NativeTree::default();
+    let node = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "tree",
+        &[
+            (property::SCOPE, "explorer"),
+            (
+                property::NODES,
+                r#"[{"id":"src","label":"src","pending":true},{"id":"readme","label":"README"}]"#,
+            ),
+            (property::LOADING_LABEL, "Fetching…"),
+        ],
+        &[
+            (property::COMPONENT_CHANGE_LISTENER, true),
+            (property::COMMIT_LISTENER, true),
+        ],
+    );
+    insert_component_node(&mut tree, tree_id, ROOT_NODE, node);
+    for (id, value) in row_ids.iter().zip(["src", "readme"]) {
+        let row = component_part_node(
+            NodeTag::View,
+            tree_id,
+            "tree-row",
+            &[(property::PART_VALUE, value)],
+            &[],
+        );
+        insert_component_node(&mut tree, *id, tree_id, row);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("explorer");
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .trees
+            .values()
+            .next()
+            .map(|state| state.state.node_count()))
+            .unwrap(),
+        Some(2)
+    );
+
+    // Expanding a pending branch is the core's decision; the binding only forwards the request.
+    cx.click(
+        window,
+        TreeState::<Arc<str>>::disclosure_id(root, ElementId::named("src")),
+    )
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    let change = merged_component_change(&events, tree_id);
+    assert_eq!(change.get("loadChildren"), Some(&serde_json::json!("src")));
+    assert_eq!(change.get("expanded"), Some(&serde_json::json!(["src"])));
+
+    // Supplying the children is a declaration, spliced atomically by the core.
+    cx.update(view, |view, _cx| {
+        view.tree
+            .borrow_mut()
+            .nodes
+            .get_mut(&tree_id)
+            .unwrap()
+            .set_property(
+                property::SET_CHILDREN,
+                Some(PropertyValue::String(Arc::from(
+                    r#"{"id":"src","children":[{"id":"main","label":"main.rs"}]}"#,
+                ))),
+            );
+    })
+    .unwrap();
+    cx.update(view, |_view, cx| cx.invalidate()).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .trees
+            .values()
+            .next()
+            .map(|state| (state.state.node_count(), state.names.len())))
+            .unwrap(),
+        Some((3, 3))
+    );
+}
+
+#[test]
+fn declared_number_field_parses_and_steps_through_the_core() {
+    let field_id = 640;
+    let input_id = 641;
+    let increment_id = 642;
+    let mut tree = NativeTree::default();
+    let mut field = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "number-field",
+        &[(property::SCOPE, "quantity"), (property::VALUES, "[2]")],
+        &[
+            (property::COMPONENT_CHANGE_LISTENER, true),
+            (property::COMMIT_LISTENER, true),
+        ],
+    );
+    field.set_property(property::MINIMUM, Some(PropertyValue::Number(0.0)));
+    field.set_property(property::MAXIMUM, Some(PropertyValue::Number(1000.0)));
+    field.set_property(property::STEP, Some(PropertyValue::Number(2.0)));
+    insert_component_node(&mut tree, field_id, ROOT_NODE, field);
+    let input = component_part_node(
+        NodeTag::Input,
+        field_id,
+        "number-field-input",
+        &[(property::SCOPE, "quantity")],
+        &[(property::COMMIT_LISTENER, true)],
+    );
+    insert_component_node(&mut tree, input_id, field_id, input);
+    let increment = component_part_node(
+        NodeTag::Button,
+        field_id,
+        "number-field-increment",
+        &[(property::SCOPE, "quantity")],
+        &[],
+    );
+    insert_component_node(&mut tree, increment_id, field_id, increment);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("quantity");
+    let field = NumberField::new(root);
+
+    cx.focus(window, field.input_id()).unwrap();
+    cx.simulate_input(window, "4").unwrap();
+    cx.run_until_idle().unwrap();
+    let change = merged_component_change(&events, field_id);
+    // The declared value seeded the editor, so typing appends to the core's retained text.
+    assert_eq!(change.get("text"), Some(&serde_json::json!("24")));
+    assert_eq!(change.get("value"), Some(&serde_json::json!(24.0)));
+    assert_eq!(change.get("valid"), Some(&serde_json::json!(true)));
+
+    cx.simulate_keystrokes(window, "enter").unwrap();
+    cx.run_until_idle().unwrap();
+    // Commit is declared on the input part, which is the control the core submits.
+    assert_eq!(
+        queued_payload(&events, "commit", input_id),
+        serde_json::json!({ "value": 24.0 })
+    );
+
+    // Pressing a stepper arms the core's own bounded repeat and steps exactly once.
+    cx.simulate_mouse_down(
+        window,
+        field.increment_id(),
+        quickgui::MouseDownEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(1.0, 1.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 1,
+            first_mouse: false,
+        },
+    )
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .number_fields
+            .values()
+            .next()
+            .map(|field| field.state.value()))
+            .unwrap(),
+        Some(Some(26.0))
+    );
+    cx.simulate_mouse_up(
+        window,
+        field.increment_id(),
+        quickgui::MouseUpEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(1.0, 1.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 1,
+        },
+    )
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .number_fields
+            .values()
+            .next()
+            .and_then(|field| field.state.repeat_deadline()))
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn declared_toasts_push_and_dismiss_through_the_core_queue() {
+    let viewport_id = 660;
+    let toast_id = 661;
+    let close_id = 662;
+    let mut tree = NativeTree::default();
+    let viewport = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "toast-viewport",
+        &[
+            (property::SCOPE, "toasts"),
+            (
+                property::TOASTS,
+                r#"[{"id":"saved","title":"Saved","kind":"success"},{"id":"","title":"Dropped"}]"#,
+            ),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    insert_component_node(&mut tree, viewport_id, ROOT_NODE, viewport);
+    let toast = component_part_node(
+        NodeTag::View,
+        viewport_id,
+        "toast",
+        &[(property::SCOPE, "toasts"), (property::PART_VALUE, "saved")],
+        &[],
+    );
+    insert_component_node(&mut tree, toast_id, viewport_id, toast);
+    let close = component_part_node(
+        NodeTag::Button,
+        toast_id,
+        "toast-close",
+        &[(property::SCOPE, "toasts"), (property::PART_VALUE, "saved")],
+        &[],
+    );
+    insert_component_node(&mut tree, close_id, toast_id, close);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    // An identifier-less declared toast is dropped instead of queued.
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .toasts
+            .values()
+            .next()
+            .map(|state| state.manager.len()))
+            .unwrap(),
+        Some(1)
+    );
+
+    let close_element = cx
+        .read(view, |view| {
+            let state = view.components.toasts.values().next().unwrap();
+            let entry = state.entry("saved").unwrap();
+            ToastViewport::new(ElementId::named("toasts"))
+                .toast(entry)
+                .close_id()
+        })
+        .unwrap();
+    cx.click(window, close_element).unwrap();
+    cx.run_until_idle().unwrap();
+    let change = merged_component_change(&events, viewport_id);
+    assert_eq!(change.get("dismissed"), Some(&serde_json::json!(["saved"])));
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .toasts
+            .values()
+            .next()
+            .map(|state| state.manager.len()))
+            .unwrap(),
+        Some(0)
+    );
+}
+
+#[test]
+fn declared_date_and_time_segments_step_through_the_core() {
+    let date_id = 680;
+    let year_id = 681;
+    let time_id = 690;
+    let hour_id = 691;
+    let mut tree = NativeTree::default();
+    let date = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "date-field",
+        &[
+            (property::SCOPE, "due"),
+            (property::CIVIL_VALUE, "2026-09-03"),
+            (property::CIVIL_MINIMUM, "2000-01-01"),
+            (property::SEGMENT_ORDER, "mdy"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    insert_component_node(&mut tree, date_id, ROOT_NODE, date);
+    let year = component_part_node(
+        NodeTag::View,
+        date_id,
+        "date-field-segment",
+        &[(property::SCOPE, "due"), (property::SEGMENT, "year")],
+        &[],
+    );
+    insert_component_node(&mut tree, year_id, date_id, year);
+    let time = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "time-field",
+        &[
+            (property::SCOPE, "alarm"),
+            (property::CIVIL_VALUE, "07:30:00"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    insert_component_node(&mut tree, time_id, ROOT_NODE, time);
+    let hour = component_part_node(
+        NodeTag::View,
+        time_id,
+        "time-field-segment",
+        &[(property::SCOPE, "alarm"), (property::SEGMENT, "hour")],
+        &[],
+    );
+    insert_component_node(&mut tree, hour_id, time_id, hour);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .date_fields
+            .values()
+            .next()
+            .map(|field| field.state.segment_order()))
+            .unwrap(),
+        Some(quickgui::DateFieldOrder::MonthDayYear)
+    );
+
+    cx.focus(
+        window,
+        DateField::new(ElementId::named("due")).segment_id(quickgui::DateSegment::Year),
+    )
+    .unwrap();
+    cx.simulate_keystrokes(window, "up").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        merged_component_change(&events, date_id).get("value"),
+        Some(&serde_json::json!("2027-09-03"))
+    );
+
+    cx.focus(
+        window,
+        TimeField::new(ElementId::named("alarm")).segment_id(quickgui::TimeSegment::Hour),
+    )
+    .unwrap();
+    cx.simulate_keystrokes(window, "down").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        merged_component_change(&events, time_id).get("value"),
+        Some(&serde_json::json!("06:30:00"))
+    );
+}
+
+#[test]
+fn declared_calendar_and_menubar_move_focus_through_the_core() {
+    let calendar_id = 700;
+    let day_id = 701;
+    let menubar_id = 710;
+    let menu_ids = [711_u32, 712];
+    let mut tree = NativeTree::default();
+    let calendar = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "calendar",
+        &[
+            (property::SCOPE, "month"),
+            (property::CIVIL_VALUE, "2026-09-03"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    insert_component_node(&mut tree, calendar_id, ROOT_NODE, calendar);
+    let day = component_part_node(
+        NodeTag::View,
+        calendar_id,
+        "calendar-day",
+        &[
+            (property::SCOPE, "month"),
+            (property::CIVIL_VALUE, "2026-09-03"),
+        ],
+        &[],
+    );
+    insert_component_node(&mut tree, day_id, calendar_id, day);
+
+    let mut menubar = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "menubar",
+        &[(property::SCOPE, "bar")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    menubar.set_property(property::MENU_COUNT, Some(PropertyValue::Number(2.0)));
+    insert_component_node(&mut tree, menubar_id, ROOT_NODE, menubar);
+    for (index, id) in menu_ids.iter().enumerate() {
+        let mut item = component_part_node(
+            NodeTag::Button,
+            menubar_id,
+            "menubar-item",
+            &[(property::SCOPE, "bar")],
+            &[],
+        );
+        item.set_property(
+            property::ITEM_INDEX,
+            Some(PropertyValue::Number(index as f32)),
+        );
+        insert_component_node(&mut tree, *id, menubar_id, item);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    let calendar = Calendar::new(ElementId::named("month"));
+    let day = parse_civil_date("2026-09-03").unwrap();
+    cx.focus(window, calendar.day_id(day)).unwrap();
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        merged_component_change(&events, calendar_id).get("focused"),
+        Some(&serde_json::json!("2026-09-04"))
+    );
+
+    let bar = Menubar::new(ElementId::named("bar"));
+    cx.focus(window, bar.item_id(0)).unwrap();
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    let change = merged_component_change(&events, menubar_id);
+    assert_eq!(change.get("focused"), Some(&serde_json::json!(1)));
+
+    cx.simulate_keystrokes(window, "down").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        merged_component_change(&events, menubar_id).get("open"),
+        Some(&serde_json::json!(1))
+    );
+}
