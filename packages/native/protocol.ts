@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 18;
+export const PROTOCOL_VERSION = 19;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -156,7 +156,87 @@ export const enum PropertyCode {
   BorderBottomWidth = 131,
   BorderLeftWidth = 132,
   BoxShadow = 133,
+  Part = 134,
+  Checked = 135,
+  Indeterminate = 136,
+  Scope = 137,
+  PartValue = 138,
+  ActiveValue = 139,
+  Orientation = 140,
+  ActivateOnFocus = 141,
+  LoopFocus = 142,
+  KeepMounted = 143,
+  Open = 144,
+  ItemIndex = 145,
+  HeadingLevel = 146,
+  Required = 147,
+  Invalid = 148,
+  ValidationMessage = 149,
+  Touched = 150,
+  Dirty = 151,
+  Filled = 152,
+  Tooltip = 153,
+  TooltipPlacement = 154,
+  TooltipDelay = 155,
+  TooltipGap = 156,
+  TooltipViewportMargin = 157,
+  Variant = 158,
 }
+
+/**
+ * Compound part names adopted from the Rust core's unstyled part descriptors.
+ *
+ * The renderer declares the part ahead of time on an ordinary `view`/`button` node. The Rust
+ * binding rebuilds the matching core descriptor and applies its exact identity, semantics,
+ * keyboard behavior, and mount policy; the JavaScript layer never reimplements them.
+ */
+export const NativePart = {
+  Checkbox: "checkbox",
+  CheckboxIndicator: "checkbox-indicator",
+  Radio: "radio",
+  RadioIndicator: "radio-indicator",
+  RadioGroup: "radio-group",
+  Switch: "switch",
+  SwitchThumb: "switch-thumb",
+  Tabs: "tabs",
+  TabsList: "tabs-list",
+  Tab: "tab",
+  TabIndicator: "tab-indicator",
+  TabPanel: "tab-panel",
+  Collapsible: "collapsible",
+  CollapsibleTrigger: "collapsible-trigger",
+  CollapsiblePanel: "collapsible-panel",
+  Accordion: "accordion",
+  AccordionItem: "accordion-item",
+  AccordionHeader: "accordion-header",
+  AccordionTrigger: "accordion-trigger",
+  AccordionPanel: "accordion-panel",
+  Field: "field",
+  FieldLabel: "field-label",
+  FieldPassiveLabel: "field-passive-label",
+  FieldControl: "field-control",
+  FieldDescription: "field-description",
+  FieldError: "field-error",
+  Fieldset: "fieldset",
+  FieldsetLegend: "fieldset-legend",
+  FieldsetDescription: "fieldset-description",
+  FieldsetControl: "fieldset-control",
+  DialogTrigger: "dialog-trigger",
+  Dialog: "dialog",
+  DialogBackdrop: "dialog-backdrop",
+  DialogPopup: "dialog-popup",
+  DialogTitle: "dialog-title",
+  DialogDescription: "dialog-description",
+  DialogClose: "dialog-close",
+} as const;
+
+export type NativePartName = (typeof NativePart)[keyof typeof NativePart];
+
+/** Longest compound scope key or item value accepted by the Rust binding. */
+export const MAX_COMPONENT_VALUE_BYTES = 256;
+
+/** Longest tooltip label retained by the Rust binding. */
+export const MAX_TOOLTIP_TEXT_BYTES = 1024;
 
 export type NativePropertyValue = boolean | number | string | null;
 

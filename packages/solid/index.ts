@@ -14,8 +14,12 @@ import {
 import {
   type NativeElementName,
   type NativeEventListener,
+  type NativePartName,
   type PopoverPlacement,
+  MAX_COMPONENT_VALUE_BYTES,
+  MAX_TOOLTIP_TEXT_BYTES,
   NativeNode,
+  NativePart,
   PropertyCode,
   QuickGuiEvent,
   Window,
@@ -189,7 +193,56 @@ const properties: Record<string, PropertyEntry> = {
   isPresented: { code: PropertyCode.SwiftUIIsPresented },
   attachmentAnchor: { code: PropertyCode.SwiftUIAttachmentAnchor },
   arrowEdge: { code: PropertyCode.SwiftUIArrowEdge },
+  part: { code: PropertyCode.Part },
+  scope: { code: PropertyCode.Scope, normalize: normalizeComponentValue },
+  partValue: { code: PropertyCode.PartValue, normalize: normalizeComponentValue },
+  activeValue: { code: PropertyCode.ActiveValue, normalize: normalizeComponentValue },
+  checked: { code: PropertyCode.Checked },
+  indeterminate: { code: PropertyCode.Indeterminate },
+  orientation: { code: PropertyCode.Orientation },
+  activateOnFocus: { code: PropertyCode.ActivateOnFocus },
+  loopFocus: { code: PropertyCode.LoopFocus },
+  keepMounted: { code: PropertyCode.KeepMounted },
+  open: { code: PropertyCode.Open },
+  itemIndex: { code: PropertyCode.ItemIndex },
+  headingLevel: { code: PropertyCode.HeadingLevel },
+  required: { code: PropertyCode.Required },
+  invalid: { code: PropertyCode.Invalid },
+  validationMessage: { code: PropertyCode.ValidationMessage },
+  touched: { code: PropertyCode.Touched },
+  dirty: { code: PropertyCode.Dirty },
+  filled: { code: PropertyCode.Filled },
+  tooltip: { code: PropertyCode.Tooltip, normalize: normalizeTooltipText },
+  tooltipPlacement: { code: PropertyCode.TooltipPlacement },
+  tooltipDelay: { code: PropertyCode.TooltipDelay },
+  tooltipGap: { code: PropertyCode.TooltipGap },
+  tooltipViewportMargin: { code: PropertyCode.TooltipViewportMargin },
+  variant: { code: PropertyCode.Variant },
 };
+
+/**
+ * Property codes whose `false` is a declaration, not an absence.
+ *
+ * The Rust core defaults some of these to `true`, so the renderer must transmit the explicit
+ * negative instead of clearing the property.
+ */
+const explicitFalseProperties = new Set<PropertyCode>([
+  PropertyCode.Disabled,
+  PropertyCode.DismissOnEscape,
+  PropertyCode.DismissOnPointerOutside,
+  PropertyCode.FocusOnPointer,
+  PropertyCode.Checked,
+  PropertyCode.Indeterminate,
+  PropertyCode.ActivateOnFocus,
+  PropertyCode.LoopFocus,
+  PropertyCode.KeepMounted,
+  PropertyCode.Open,
+  PropertyCode.Required,
+  PropertyCode.Invalid,
+  PropertyCode.Touched,
+  PropertyCode.Dirty,
+  PropertyCode.Filled,
+]);
 
 const colorProperties = new Set([
   PropertyCode.BackgroundColor,
@@ -383,14 +436,7 @@ function normalizeValue(
   code: PropertyCode,
 ): boolean | number | string | null {
   if (value === null || value === undefined) return null;
-  if (value === false) {
-    return code === PropertyCode.Disabled ||
-      code === PropertyCode.DismissOnEscape ||
-      code === PropertyCode.DismissOnPointerOutside ||
-      code === PropertyCode.FocusOnPointer
-      ? false
-      : null;
-  }
+  if (value === false) return explicitFalseProperties.has(code) ? false : null;
   if (colorProperties.has(code)) return parseColor(value as number | string);
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (isLengthProperty(code)) return normalizeLength(String(value));
@@ -590,6 +636,32 @@ function parseShadowLength(value: string): number | undefined {
   if (!match) return undefined;
   const length = Number(match[1]);
   return Number.isFinite(length) ? length : undefined;
+}
+
+const textEncoder = new TextEncoder();
+
+function normalizeComponentValue(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const text = String(value);
+  if (text.length === 0) return null;
+  if (textEncoder.encode(text).length > MAX_COMPONENT_VALUE_BYTES) {
+    throw new TypeError(
+      `QuickGUI component scopes and values are limited to ${MAX_COMPONENT_VALUE_BYTES} bytes`,
+    );
+  }
+  return text;
+}
+
+function normalizeTooltipText(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const text = String(value);
+  if (text.length === 0) return null;
+  if (textEncoder.encode(text).length > MAX_TOOLTIP_TEXT_BYTES) {
+    throw new TypeError(
+      `QuickGUI tooltip text is limited to ${MAX_TOOLTIP_TEXT_BYTES} bytes`,
+    );
+  }
+  return text;
 }
 
 function isLengthProperty(code: PropertyCode): boolean {
@@ -1245,6 +1317,1092 @@ export const SystemPopover = Object.assign(SystemPopoverRoot, {
   Content: SystemPopoverContent,
 });
 
+// ---------------------------------------------------------------------------
+// Compound component parts
+//
+// Every part below is one ordinary native node that declares which Rust core part descriptor the
+// binding must rebuild. The core owns identity, semantics, keyboard behavior, and whether an
+// inactive panel is mounted at all; Solid owns only the controlled value, the compound context
+// that saves applications from repeating it, and the unstyled element tree.
+// ---------------------------------------------------------------------------
+
+let nextComponentScope = 1;
+
+/**
+ * Allocate one bounded scope key shared by every part of a compound component instance.
+ *
+ * The Rust binding hashes it into the same `ElementId` the core component would have used, so
+ * derived part identities and accessibility relationships resolve with no registry and no
+ * synchronous question asked of JavaScript.
+ */
+function createComponentScope(prefix: string): string {
+  return `${prefix}-${nextComponentScope++}`;
+}
+
+function createPartNode(
+  element: NativeElementName,
+  props: unknown,
+  part: unknown,
+): NativeNode {
+  const node = universal.createElement(element);
+  universal.spread(
+    node,
+    universal.mergeProps(props as object, part as object) as object,
+  );
+  return node;
+}
+
+function forwardClick(
+  handler: ((event: QuickGuiEvent) => void) | undefined,
+  activate: (event: QuickGuiEvent) => void,
+): (event: QuickGuiEvent) => void {
+  return (event) => {
+    handler?.(event);
+    if (!event.defaultPrevented) activate(event);
+  };
+}
+
+export type CheckedState = boolean | "indeterminate";
+
+/** Controlled, unstyled checkbox root carrying the core's exact on/off/mixed toggle state. */
+export function CheckboxRoot(props: JSX.CheckboxProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<CheckedState>(
+    props.defaultChecked ?? false,
+  );
+  const checked = () => props.checked ?? uncontrolled();
+  return createPartNode(
+    "button",
+    omit(props, "checked", "defaultChecked", "onCheckedChange"),
+    {
+      part: NativePart.Checkbox,
+      get checked() {
+        return checked() === true;
+      },
+      get indeterminate() {
+        return checked() === "indeterminate";
+      },
+      onClick: forwardClick(props.onClick, (event) => {
+        const next = checked() !== true;
+        if (props.checked === undefined) setUncontrolled(next);
+        props.onCheckedChange?.(next, event);
+      }),
+    },
+  );
+}
+
+/** Application-owned checkbox mark, hidden from the control's accessible name by the core. */
+export function CheckboxIndicator(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.CheckboxIndicator });
+}
+
+/** Base-UI-shaped compound parts for a controlled checkbox. */
+export const Checkbox = Object.assign(CheckboxRoot, {
+  Root: CheckboxRoot,
+  Indicator: CheckboxIndicator,
+});
+
+interface RadioGroupContextValue {
+  value: () => string | undefined;
+  select: (value: string, event: QuickGuiEvent) => void;
+}
+
+const RadioGroupContext = createContext<RadioGroupContextValue | null>(null);
+
+/** Semantic radio-group root. The core supplies roving Tab and arrow behavior from the tree. */
+export function RadioGroupRoot(props: JSX.RadioGroupProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue);
+  const value = () => props.value ?? uncontrolled();
+  const context: RadioGroupContextValue = {
+    value,
+    select(next, event) {
+      if (props.value === undefined) setUncontrolled(next);
+      props.onValueChange?.(next, event);
+    },
+  };
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "onValueChange", "children"),
+    {
+      part: NativePart.RadioGroup,
+      get children() {
+        return RadioGroupContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** Controlled radio root. Inside a `RadioGroup` its selection comes from the group value. */
+export function RadioRoot(props: JSX.RadioProps): NativeNode {
+  const group = useContext(RadioGroupContext);
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultChecked ?? false,
+  );
+  const checked = () =>
+    group ? group.value() === props.value : (props.checked ?? uncontrolled());
+  return createPartNode(
+    "button",
+    omit(props, "value", "checked", "defaultChecked", "onCheckedChange"),
+    {
+      part: NativePart.Radio,
+      get checked() {
+        return checked();
+      },
+      get partValue() {
+        return props.value;
+      },
+      onClick: forwardClick(props.onClick, (event) => {
+        if (group) {
+          if (props.value !== undefined) group.select(props.value, event);
+          return;
+        }
+        if (props.checked === undefined) setUncontrolled(true);
+        props.onCheckedChange?.(true, event);
+      }),
+    },
+  );
+}
+
+/** Application-owned radio dot, hidden from the control's accessible name by the core. */
+export function RadioIndicator(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.RadioIndicator });
+}
+
+/** Base-UI-shaped compound parts for a controlled radio button. */
+export const Radio = Object.assign(RadioRoot, {
+  Root: RadioRoot,
+  Indicator: RadioIndicator,
+});
+
+/** Semantic group for related radio roots. */
+export const RadioGroup = Object.assign(RadioGroupRoot, {
+  Root: RadioGroupRoot,
+});
+
+/** Controlled, unstyled switch root/track carrying the core's switch role. */
+export function SwitchRoot(props: JSX.SwitchProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultChecked ?? false,
+  );
+  const checked = () => props.checked ?? uncontrolled();
+  return createPartNode(
+    "button",
+    omit(props, "checked", "defaultChecked", "onCheckedChange"),
+    {
+      part: NativePart.Switch,
+      get checked() {
+        return checked();
+      },
+      onClick: forwardClick(props.onClick, (event) => {
+        const next = !checked();
+        if (props.checked === undefined) setUncontrolled(next);
+        props.onCheckedChange?.(next, event);
+      }),
+    },
+  );
+}
+
+/** Application-owned switch thumb, hidden from the control's accessible name by the core. */
+export function SwitchThumb(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SwitchThumb });
+}
+
+/** Base-UI-shaped compound parts for a controlled switch. */
+export const Switch = Object.assign(SwitchRoot, {
+  Root: SwitchRoot,
+  Thumb: SwitchThumb,
+});
+
+interface TabsContextValue {
+  scope: string;
+  value: () => string | undefined;
+  orientation: () => "horizontal" | "vertical";
+  activation: () => "manual" | "automatic";
+  loop: () => boolean;
+  keepMounted: () => boolean;
+  select: (value: string, event: QuickGuiEvent) => void;
+}
+
+const TabsContext = createContext<TabsContextValue | null>(null);
+const TabValueContext = createContext<(() => string) | null>(null);
+
+function requireTabs(component: string): TabsContextValue {
+  const context = useContext(TabsContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <Tabs.Root>`);
+  }
+  return context;
+}
+
+/** Shared declaration every tab part repeats so the Rust binding decodes it without a registry. */
+function tabsPartProps(context: TabsContextValue): object {
+  return {
+    get scope() {
+      return context.scope;
+    },
+    get activeValue() {
+      return context.value();
+    },
+    get orientation() {
+      return context.orientation();
+    },
+    get activateOnFocus() {
+      return context.activation() === "automatic";
+    },
+    get loopFocus() {
+      return context.loop();
+    },
+    get keepMounted() {
+      return context.keepMounted();
+    },
+  };
+}
+
+/** Controlled, unstyled tab set. The core owns roving focus, arrow keys, and panel mounting. */
+export function TabsRoot(props: JSX.TabsRootProps): NativeNode {
+  const scope = createComponentScope("qg-tabs");
+  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue);
+  const value = () => props.value ?? uncontrolled();
+  const context: TabsContextValue = {
+    scope,
+    value,
+    orientation: () => props.orientation ?? "horizontal",
+    activation: () => props.activation ?? "manual",
+    loop: () => props.loop ?? true,
+    keepMounted: () => props.keepMounted === true,
+    select(next, event) {
+      if (props.value === undefined) setUncontrolled(next);
+      props.onValueChange?.(next, event);
+    },
+  };
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "orientation",
+      "activation",
+      "loop",
+      "keepMounted",
+      "children",
+    ),
+    universal.mergeProps(tabsPartProps(context), {
+      part: NativePart.Tabs,
+      get children() {
+        return TabsContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    }),
+  );
+}
+
+/** Tab-list root. The core attaches its exact arrow/Home/End navigation behavior here. */
+export function TabsList(props: JSX.NativeProps): NativeNode {
+  const context = requireTabs("Tabs.List");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(tabsPartProps(context), { part: NativePart.TabsList }),
+  );
+}
+
+/** One controlled tab. Activation, roles, and the panel relationship come from the core. */
+export function TabsTab(props: JSX.TabsTabProps): NativeNode {
+  const context = requireTabs("Tabs.Tab");
+  const value = () => props.value;
+  return createPartNode(
+    "button",
+    omit(props, "value", "children"),
+    universal.mergeProps(tabsPartProps(context), {
+      part: NativePart.Tab,
+      get partValue() {
+        return props.value;
+      },
+      onClick: forwardClick(props.onClick, (event) =>
+        context.select(props.value, event),
+      ),
+      get children() {
+        return TabValueContext({
+          value,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    }),
+  );
+}
+
+/** Decorative indicator mounted by the core only while its tab is active. */
+export function TabsIndicator(props: JSX.TabsIndicatorProps): NativeNode {
+  const context = requireTabs("Tabs.Indicator");
+  const inherited = useContext(TabValueContext);
+  return createPartNode(
+    "view",
+    omit(props, "value"),
+    universal.mergeProps(tabsPartProps(context), {
+      part: NativePart.TabIndicator,
+      get partValue() {
+        return props.value ?? inherited?.() ?? context.value();
+      },
+    }),
+  );
+}
+
+/** One tab panel. The core omits it, or retains it hidden with `keepMounted`, when inactive. */
+export function TabsPanel(props: JSX.TabsPanelProps): NativeNode {
+  const context = requireTabs("Tabs.Panel");
+  return createPartNode(
+    "view",
+    omit(props, "value"),
+    universal.mergeProps(tabsPartProps(context), {
+      part: NativePart.TabPanel,
+      get partValue() {
+        return props.value;
+      },
+    }),
+  );
+}
+
+/** Base-UI-shaped compound parts for a controlled tab set. */
+export const Tabs = Object.assign(TabsRoot, {
+  Root: TabsRoot,
+  List: TabsList,
+  Tab: TabsTab,
+  Indicator: TabsIndicator,
+  Panel: TabsPanel,
+});
+
+interface CollapsibleContextValue {
+  scope: string;
+  open: () => boolean;
+  disabled: () => boolean;
+  keepMounted: () => boolean;
+  toggle: (event: QuickGuiEvent) => void;
+}
+
+const CollapsibleContext = createContext<CollapsibleContextValue | null>(null);
+
+function requireCollapsible(component: string): CollapsibleContextValue {
+  const context = useContext(CollapsibleContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <Collapsible.Root>`);
+  }
+  return context;
+}
+
+function collapsiblePartProps(context: CollapsibleContextValue): object {
+  return {
+    get scope() {
+      return context.scope;
+    },
+    get open() {
+      return context.open();
+    },
+    get disabled() {
+      return context.disabled();
+    },
+    get keepMounted() {
+      return context.keepMounted();
+    },
+  };
+}
+
+/** Controlled, unstyled disclosure root. */
+export function CollapsibleRoot(props: JSX.CollapsibleRootProps): NativeNode {
+  const scope = createComponentScope("qg-collapsible");
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultOpen ?? false,
+  );
+  const open = () => props.open ?? uncontrolled();
+  const context: CollapsibleContextValue = {
+    scope,
+    open,
+    disabled: () => props.disabled === true,
+    keepMounted: () => props.keepMounted === true,
+    toggle(event) {
+      const next = !open();
+      if (props.open === undefined) setUncontrolled(next);
+      props.onOpenChange?.(next, event);
+    },
+  };
+  return createPartNode(
+    "view",
+    omit(props, "open", "defaultOpen", "onOpenChange", "keepMounted", "children"),
+    universal.mergeProps(collapsiblePartProps(context), {
+      part: NativePart.Collapsible,
+      get children() {
+        return CollapsibleContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    }),
+  );
+}
+
+/** Disclosure button. Expanded state and the panel relationship come from the core. */
+export function CollapsibleTrigger(props: JSX.NativeProps): NativeNode {
+  const context = requireCollapsible("Collapsible.Trigger");
+  return createPartNode(
+    "button",
+    props,
+    universal.mergeProps(collapsiblePartProps(context), {
+      part: NativePart.CollapsibleTrigger,
+      onClick: forwardClick(props.onClick, (event) => context.toggle(event)),
+    }),
+  );
+}
+
+/** Disclosure panel. The core omits it, or retains it hidden with `keepMounted`, when closed. */
+export function CollapsiblePanel(props: JSX.NativeProps): NativeNode {
+  const context = requireCollapsible("Collapsible.Panel");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(collapsiblePartProps(context), {
+      part: NativePart.CollapsiblePanel,
+    }),
+  );
+}
+
+/** Base-UI-shaped compound parts for a controlled disclosure. */
+export const Collapsible = Object.assign(CollapsibleRoot, {
+  Root: CollapsibleRoot,
+  Trigger: CollapsibleTrigger,
+  Panel: CollapsiblePanel,
+});
+
+interface AccordionContextValue {
+  scope: string;
+  isOpen: (value: string) => boolean;
+  toggle: (value: string, event: QuickGuiEvent) => void;
+  disabled: () => boolean;
+  keepMounted: () => boolean;
+  headingLevel: () => number;
+}
+
+interface AccordionItemContextValue {
+  value: () => string;
+  index: () => number;
+  open: () => boolean;
+  disabled: () => boolean;
+}
+
+const AccordionContext = createContext<AccordionContextValue | null>(null);
+const AccordionItemContext = createContext<AccordionItemContextValue | null>(null);
+
+function requireAccordion(component: string): AccordionContextValue {
+  const context = useContext(AccordionContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <Accordion.Root>`);
+  }
+  return context;
+}
+
+function requireAccordionItem(component: string): AccordionItemContextValue {
+  const context = useContext(AccordionItemContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <Accordion.Item>`);
+  }
+  return context;
+}
+
+function accordionItemPartProps(
+  accordion: AccordionContextValue,
+  item: AccordionItemContextValue,
+): object {
+  return {
+    get scope() {
+      return accordion.scope;
+    },
+    get partValue() {
+      return item.value();
+    },
+    get itemIndex() {
+      return item.index();
+    },
+    get open() {
+      return item.open();
+    },
+    get disabled() {
+      return item.disabled();
+    },
+    get keepMounted() {
+      return accordion.keepMounted();
+    },
+    get headingLevel() {
+      return accordion.headingLevel();
+    },
+  };
+}
+
+function accordionOpenValues(value: string | readonly string[] | null | undefined): string[] {
+  if (value === null || value === undefined) return [];
+  return typeof value === "string" ? [value] : [...value];
+}
+
+/** Controlled, unstyled accordion root supporting single or multiple open items. */
+export function AccordionRoot(props: JSX.AccordionRootProps): NativeNode {
+  const scope = createComponentScope("qg-accordion");
+  const [uncontrolled, setUncontrolled] = createSignal<string[]>(
+    accordionOpenValues(props.defaultValue),
+  );
+  const open = () =>
+    props.value === undefined ? uncontrolled() : accordionOpenValues(props.value);
+  const context: AccordionContextValue = {
+    scope,
+    isOpen: (value) => open().includes(value),
+    disabled: () => props.disabled === true,
+    keepMounted: () => props.keepMounted === true,
+    headingLevel: () => props.headingLevel ?? 3,
+    toggle(value, event) {
+      const current = open();
+      const next = current.includes(value)
+        ? current.filter((candidate) => candidate !== value)
+        : props.multiple
+          ? [...current, value]
+          : [value];
+      if (props.value === undefined) setUncontrolled(next);
+      props.onValueChange?.(props.multiple ? next : (next[0] ?? null), event);
+    },
+  };
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "multiple",
+      "keepMounted",
+      "headingLevel",
+      "children",
+    ),
+    {
+      part: NativePart.Accordion,
+      scope,
+      get children() {
+        return AccordionContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** One accordion item. Its trigger, header, and panel identities derive from this value. */
+export function AccordionItem(props: JSX.AccordionItemProps): NativeNode {
+  const accordion = requireAccordion("Accordion.Item");
+  const item: AccordionItemContextValue = {
+    value: () => props.value,
+    index: () => props.index ?? 0,
+    open: () => accordion.isOpen(props.value),
+    disabled: () => props.disabled === true || accordion.disabled(),
+  };
+  return createPartNode(
+    "view",
+    omit(props, "value", "index", "children"),
+    universal.mergeProps(accordionItemPartProps(accordion, item), {
+      part: NativePart.AccordionItem,
+      get children() {
+        return AccordionItemContext({
+          value: item,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    }),
+  );
+}
+
+/** Accordion heading that contains only this item's trigger. */
+export function AccordionHeader(props: JSX.NativeProps): NativeNode {
+  const accordion = requireAccordion("Accordion.Header");
+  const item = requireAccordionItem("Accordion.Header");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(accordionItemPartProps(accordion, item), {
+      part: NativePart.AccordionHeader,
+    }),
+  );
+}
+
+/** Accordion disclosure button for one item. */
+export function AccordionTrigger(props: JSX.NativeProps): NativeNode {
+  const accordion = requireAccordion("Accordion.Trigger");
+  const item = requireAccordionItem("Accordion.Trigger");
+  return createPartNode(
+    "button",
+    props,
+    universal.mergeProps(accordionItemPartProps(accordion, item), {
+      part: NativePart.AccordionTrigger,
+      onClick: forwardClick(props.onClick, (event) =>
+        accordion.toggle(item.value(), event),
+      ),
+    }),
+  );
+}
+
+/** Accordion panel mounted as a named region by the core while its item is open. */
+export function AccordionPanel(props: JSX.NativeProps): NativeNode {
+  const accordion = requireAccordion("Accordion.Panel");
+  const item = requireAccordionItem("Accordion.Panel");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(accordionItemPartProps(accordion, item), {
+      part: NativePart.AccordionPanel,
+    }),
+  );
+}
+
+/** Base-UI-shaped compound parts for a controlled accordion. */
+export const Accordion = Object.assign(AccordionRoot, {
+  Root: AccordionRoot,
+  Item: AccordionItem,
+  Header: AccordionHeader,
+  Trigger: AccordionTrigger,
+  Panel: AccordionPanel,
+});
+
+interface FieldContextValue {
+  scope: string;
+  disabled: () => boolean;
+  invalid: () => boolean;
+  required: () => boolean;
+  touched: () => boolean;
+  dirty: () => boolean;
+  filled: () => boolean;
+  validationMessage: () => string | undefined;
+}
+
+interface FieldsetContextValue {
+  disabled: () => boolean;
+}
+
+const FieldContext = createContext<FieldContextValue | null>(null);
+const FieldsetContext = createContext<FieldsetContextValue | null>(null);
+
+function requireField(component: string): FieldContextValue {
+  const context = useContext(FieldContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <Field.Root>`);
+  }
+  return context;
+}
+
+function fieldPartProps(context: FieldContextValue): object {
+  return {
+    get scope() {
+      return context.scope;
+    },
+    get disabled() {
+      return context.disabled();
+    },
+    get invalid() {
+      return context.invalid();
+    },
+    get required() {
+      return context.required();
+    },
+    get touched() {
+      return context.touched();
+    },
+    get dirty() {
+      return context.dirty();
+    },
+    get filled() {
+      return context.filled();
+    },
+    get validationMessage() {
+      return context.validationMessage();
+    },
+  };
+}
+
+/** Controlled, unstyled labelling and validation composition for one form control. */
+export function FieldRoot(props: JSX.FieldRootProps): NativeNode {
+  const scope = createComponentScope("qg-field");
+  const fieldset = useContext(FieldsetContext);
+  const context: FieldContextValue = {
+    scope,
+    disabled: () => props.disabled === true || fieldset?.disabled() === true,
+    invalid: () => props.invalid === true,
+    required: () => props.required === true,
+    touched: () => props.touched === true,
+    dirty: () => props.dirty === true,
+    filled: () => props.filled === true,
+    validationMessage: () => props.validationMessage,
+  };
+  return createPartNode(
+    "view",
+    omit(props, "children"),
+    universal.mergeProps(fieldPartProps(context), {
+      part: NativePart.Field,
+      get children() {
+        return FieldContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    }),
+  );
+}
+
+/** Visible label. The core forwards its clicks to the control unless `passive` is declared. */
+export function FieldLabel(props: JSX.FieldLabelProps): NativeNode {
+  const context = requireField("Field.Label");
+  return createPartNode(
+    "view",
+    omit(props, "passive"),
+    universal.mergeProps(fieldPartProps(context), {
+      get part() {
+        return props.passive
+          ? NativePart.FieldPassiveLabel
+          : NativePart.FieldLabel;
+      },
+    }),
+  );
+}
+
+/**
+ * The labelled control itself.
+ *
+ * The core part sets this element's identity, so the control must be the part rather than a
+ * wrapper around one. `element` selects which native element the control renders.
+ */
+export function FieldControl(props: JSX.FieldControlProps): NativeNode {
+  const context = requireField("Field.Control");
+  return createPartNode(
+    props.element ?? "input",
+    omit(props, "element"),
+    universal.mergeProps(fieldPartProps(context), {
+      part: NativePart.FieldControl,
+    }),
+  );
+}
+
+/** Supplementary help described to assistive technology by the core. */
+export function FieldDescription(props: JSX.NativeProps): NativeNode {
+  const context = requireField("Field.Description");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(fieldPartProps(context), {
+      part: NativePart.FieldDescription,
+    }),
+  );
+}
+
+/** Visible error. The core removes it from layout while the controlled field is valid. */
+export function FieldError(props: JSX.NativeProps): NativeNode {
+  const context = requireField("Field.Error");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(fieldPartProps(context), {
+      part: NativePart.FieldError,
+    }),
+  );
+}
+
+/** Base-UI-shaped compound parts for one labelled, validated control. */
+export const Field = Object.assign(FieldRoot, {
+  Root: FieldRoot,
+  Label: FieldLabel,
+  Control: FieldControl,
+  Description: FieldDescription,
+  Error: FieldError,
+});
+
+/** Controlled group semantics for related fields. */
+export function FieldsetRoot(props: JSX.FieldsetRootProps): NativeNode {
+  const scope = createComponentScope("qg-fieldset");
+  const context: FieldsetContextValue = {
+    disabled: () => props.disabled === true,
+  };
+  return createPartNode("view", omit(props, "children"), {
+    part: NativePart.Fieldset,
+    scope,
+    get disabled() {
+      return context.disabled();
+    },
+    get children() {
+      return FieldsetContext({
+        value: context,
+        get children() {
+          return props.children as SolidElement;
+        },
+      });
+    },
+  });
+}
+
+/** Group legend named to assistive technology by the core. */
+export function FieldsetLegend(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.FieldsetLegend });
+}
+
+/** Group description named to assistive technology by the core. */
+export function FieldsetDescription(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, {
+    part: NativePart.FieldsetDescription,
+  });
+}
+
+/** Direct group control that inherits the fieldset's disabled state. */
+export function FieldsetControl(props: JSX.FieldControlProps): NativeNode {
+  const context = useContext(FieldsetContext);
+  return createPartNode(props.element ?? "input", omit(props, "element"), {
+    part: NativePart.FieldsetControl,
+    get disabled() {
+      return props.disabled === true || context?.disabled() === true;
+    },
+  });
+}
+
+export type DialogOpenChangeReason = "trigger-press" | "close-press" | "dismiss";
+
+export interface DialogOpenChangeDetails {
+  reason: DialogOpenChangeReason;
+  event: QuickGuiEvent;
+}
+
+interface DialogContextValue {
+  scope: string;
+  variant: "dialog" | "alertdialog";
+  open: () => boolean;
+  dismissOnEscape: () => boolean;
+  dismissOnBackdrop: () => boolean;
+  change: (
+    open: boolean,
+    reason: DialogOpenChangeReason,
+    event: QuickGuiEvent,
+  ) => void;
+}
+
+const DialogContext = createContext<DialogContextValue | null>(null);
+
+function requireDialog(component: string): DialogContextValue {
+  const context = useContext(DialogContext);
+  if (!context) {
+    throw new TypeError(
+      `${component} must be used inside <Dialog.Root> or <AlertDialog.Root>`,
+    );
+  }
+  return context;
+}
+
+function dialogPartProps(context: DialogContextValue): object {
+  return {
+    get scope() {
+      return context.scope;
+    },
+    get variant() {
+      return context.variant;
+    },
+    get open() {
+      return context.open();
+    },
+  };
+}
+
+function createDialogRoot(
+  variant: "dialog" | "alertdialog",
+  props: JSX.DialogRootProps,
+): NativeNode {
+  const scope = createComponentScope(
+    variant === "alertdialog" ? "qg-alert-dialog" : "qg-dialog",
+  );
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultOpen ?? false,
+  );
+  const open = () => props.open ?? uncontrolled();
+  const context: DialogContextValue = {
+    scope,
+    variant,
+    open,
+    dismissOnEscape: () => props.dismissOnEscape ?? true,
+    dismissOnBackdrop: () =>
+      props.dismissOnBackdrop ?? variant !== "alertdialog",
+    change(next, reason, event) {
+      if (props.open === undefined) setUncontrolled(next);
+      props.onOpenChange?.(next, { reason, event });
+    },
+  };
+  return DialogContext({
+    value: context,
+    get children() {
+      return props.children as SolidElement;
+    },
+  }) as unknown as NativeNode;
+}
+
+/** Logical root for a controlled in-window modal dialog. It creates no native element. */
+export function DialogRoot(props: JSX.DialogRootProps): NativeNode {
+  return createDialogRoot("dialog", props);
+}
+
+/** Logical root for a consequential alert dialog whose backdrop does not dismiss by default. */
+export function AlertDialogRoot(props: JSX.DialogRootProps): NativeNode {
+  return createDialogRoot("alertdialog", props);
+}
+
+/** Trigger button carrying the core's dialog popover and expanded accessibility state. */
+export function DialogTrigger(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Trigger");
+  return createPartNode(
+    "button",
+    props,
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.DialogTrigger,
+      onClick: forwardClick(props.onClick, (event) =>
+        context.change(true, "trigger-press", event),
+      ),
+    }),
+  );
+}
+
+/**
+ * Viewport portal, focus trap, and focus-restoration boundary for the dialog.
+ *
+ * The Rust core mounts it only while the dialog is open, so a closed dialog contributes no
+ * overlay, layout, paint, input, or accessibility node.
+ */
+export function DialogPortal(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Portal");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(dialogPartProps(context), { part: NativePart.Dialog }),
+  );
+}
+
+/** Application-owned backdrop filling the portal. */
+export function DialogBackdrop(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Backdrop");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.DialogBackdrop,
+    }),
+  );
+}
+
+/** Modal surface. Escape and backdrop dismissal are decided ahead of time by the core. */
+export function DialogPopup(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Popup");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.DialogPopup,
+      get dismissOnEscape() {
+        return context.dismissOnEscape();
+      },
+      get dismissOnPointerOutside() {
+        return context.dismissOnBackdrop();
+      },
+      onDismiss(event: QuickGuiEvent) {
+        (props as JSX.NativeProps).onDismiss?.(event);
+        if (!event.defaultPrevented) context.change(false, "dismiss", event);
+      },
+    }),
+  );
+}
+
+/** Visible dialog title used as the popup's accessible name. */
+export function DialogTitle(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Title");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.DialogTitle,
+    }),
+  );
+}
+
+/** Visible dialog description used as the popup's accessible description. */
+export function DialogDescription(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Description");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.DialogDescription,
+    }),
+  );
+}
+
+/** Close control. Its accessible name comes from `aria-label`, defaulting to `Close`. */
+export function DialogClose(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Close");
+  return createPartNode(
+    "button",
+    props,
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.DialogClose,
+      onClick: forwardClick(props.onClick, (event) =>
+        context.change(false, "close-press", event),
+      ),
+    }),
+  );
+}
+
+/** Base-UI-shaped compound parts for a controlled in-window modal dialog. */
+export const Dialog = Object.assign(DialogRoot, {
+  Root: DialogRoot,
+  Trigger: DialogTrigger,
+  Portal: DialogPortal,
+  Backdrop: DialogBackdrop,
+  Popup: DialogPopup,
+  Title: DialogTitle,
+  Description: DialogDescription,
+  Close: DialogClose,
+});
+
+/** Compound parts for a consequential alert dialog. */
+export const AlertDialog = Object.assign(AlertDialogRoot, {
+  Root: AlertDialogRoot,
+  Trigger: DialogTrigger,
+  Portal: DialogPortal,
+  Backdrop: DialogBackdrop,
+  Popup: DialogPopup,
+  Title: DialogTitle,
+  Description: DialogDescription,
+  Close: DialogClose,
+});
+
+/** Base-UI-shaped compound parts for a semantic field group. */
+export const Fieldset = Object.assign(FieldsetRoot, {
+  Root: FieldsetRoot,
+  Legend: FieldsetLegend,
+  Description: FieldsetDescription,
+  Control: FieldsetControl,
+});
+
 export function createRenderer(code: () => JSX.Element): WindowRenderer {
   return (window) => {
     const nativeDispose = nativeRender(() => code() as NativeNode, window.root);
@@ -1402,6 +2560,13 @@ export namespace JSX {
     ariaModal?: boolean;
     dismissOnEscape?: boolean;
     dismissOnPointerOutside?: boolean;
+    /** Delayed, pointer-passive native tooltip text shown while this element is hovered. */
+    tooltip?: string;
+    tooltipPlacement?: PopoverPlacement;
+    /** Hover delay in milliseconds, clamped by the Rust core to at most ten seconds. */
+    tooltipDelay?: number;
+    tooltipGap?: number;
+    tooltipViewportMargin?: number;
     hitSlop?: number | string;
     hitSlopTop?: number | string;
     hitSlopRight?: number | string;
@@ -1487,6 +2652,120 @@ export namespace JSX {
     placement?: PopoverPlacement;
     gap?: number;
     viewportMargin?: number;
+  }
+
+  export interface CheckboxProps extends NativeProps {
+    /** Controlled `true`, `false`, or `"indeterminate"` toggle state. */
+    checked?: CheckedState;
+    defaultChecked?: CheckedState;
+    onCheckedChange?: (checked: boolean, event: QuickGuiEvent) => void;
+  }
+
+  export interface RadioGroupProps extends NativeProps {
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string, event: QuickGuiEvent) => void;
+  }
+
+  export interface RadioProps extends NativeProps {
+    /** Value this radio selects in its `RadioGroup`. */
+    value?: string;
+    /** Controlled selection for a radio used without a `RadioGroup`. */
+    checked?: boolean;
+    defaultChecked?: boolean;
+    onCheckedChange?: (checked: boolean, event: QuickGuiEvent) => void;
+  }
+
+  export interface SwitchProps extends NativeProps {
+    checked?: boolean;
+    defaultChecked?: boolean;
+    onCheckedChange?: (checked: boolean, event: QuickGuiEvent) => void;
+  }
+
+  export interface TabsRootProps extends NativeProps {
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string, event: QuickGuiEvent) => void;
+    orientation?: "horizontal" | "vertical";
+    /** `"manual"` activates on Enter or Space; `"automatic"` activates on arrow focus. */
+    activation?: "manual" | "automatic";
+    /** Wrap arrow navigation at the ends of the tab list. Defaults to `true`. */
+    loop?: boolean;
+    /** Retain inactive panels as `display: none` instead of omitting them. */
+    keepMounted?: boolean;
+  }
+
+  export interface TabsTabProps extends NativeProps {
+    value: string;
+  }
+
+  export interface TabsIndicatorProps extends NativeProps {
+    /** Tab this indicator belongs to. Defaults to the enclosing tab, then the active tab. */
+    value?: string;
+  }
+
+  export interface TabsPanelProps extends NativeProps {
+    value: string;
+  }
+
+  export interface CollapsibleRootProps extends NativeProps {
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, event: QuickGuiEvent) => void;
+    keepMounted?: boolean;
+  }
+
+  export interface AccordionRootProps extends NativeProps {
+    /** Open item value, or values when `multiple` is declared. */
+    value?: string | readonly string[] | null;
+    defaultValue?: string | readonly string[] | null;
+    onValueChange?: (
+      value: string | string[] | null,
+      event: QuickGuiEvent,
+    ) => void;
+    multiple?: boolean;
+    keepMounted?: boolean;
+    /** Heading level for each item header, clamped by the core to 1 through 6. */
+    headingLevel?: number;
+  }
+
+  export interface AccordionItemProps extends NativeProps {
+    value: string;
+    /** Caller-visible position projected across this item's parts. */
+    index?: number;
+  }
+
+  export interface FieldRootProps extends NativeProps {
+    invalid?: boolean;
+    required?: boolean;
+    touched?: boolean;
+    dirty?: boolean;
+    filled?: boolean;
+    /** Bounded message retained for form reports and native accessibility. */
+    validationMessage?: string;
+  }
+
+  export interface FieldLabelProps extends NativeProps {
+    /** Name the control without forwarding pointer activation to it. */
+    passive?: boolean;
+  }
+
+  export interface FieldControlProps extends InputProps {
+    /** Native element this control renders. Defaults to `input`. */
+    element?: "input" | "textarea" | "button" | "view" | "text";
+  }
+
+  export interface FieldsetRootProps extends NativeProps {}
+
+  export interface DialogRootProps {
+    children?: unknown;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, details: DialogOpenChangeDetails) => void;
+    /** Dismiss on Escape. Defaults to `true` for both dialog kinds. */
+    dismissOnEscape?: boolean;
+    /** Dismiss on a backdrop press. Defaults to `true`, or `false` for an alert dialog. */
+    dismissOnBackdrop?: boolean;
   }
 
   export interface IntrinsicElements {

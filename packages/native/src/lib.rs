@@ -1,7 +1,7 @@
 use std::{
     any::Any,
     cell::RefCell,
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fmt,
     path::PathBuf,
     rc::Rc,
@@ -19,13 +19,15 @@ use napi::{
 };
 use napi_derive::napi;
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, AppInfo, AppPaths, AppRegion, AppRunStatus, AppRunner,
-    AppRunnerWaker, Application as QuickGuiApplication, BoxShadow, Color, CursorGrabMode,
-    CursorStyle, DisplayId, Element, ElementId, FollowMode, FontWeight, Image, Insets, IntoElement,
-    ListAlignment, ListState, MAX_BOX_SHADOWS_PER_ELEMENT, MacOsVibrancy, MacOsVisualEffectState,
-    Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase, Popover, QuitMode, Svg,
-    SystemPopover, TERMINAL_ANSI_COLOR_COUNT, TaskbarProgressState, Terminal, TerminalOptions,
-    TerminalPaddingColor, TerminalStatus, TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle,
+    AccessibilityRole, Accordion, AccordionItem, AnchorPlacement, AppInfo, AppPaths, AppRegion,
+    AppRunStatus, AppRunner, AppRunnerWaker, Application as QuickGuiApplication, BoxShadow,
+    Checkbox, Collapsible, Color, CursorGrabMode, CursorStyle, Dialog as CoreDialog, DialogKind,
+    DisplayId, Element, ElementId, Field, Fieldset, FollowMode, FontWeight, Image, Insets,
+    IntoElement, ListAlignment, ListState, MAX_BOX_SHADOWS_PER_ELEMENT, MacOsVibrancy,
+    MacOsVisualEffectState, Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase,
+    Popover, QuitMode, Radio, RadioGroup, Svg, Switch, SystemPopover, TERMINAL_ANSI_COLOR_COUNT,
+    Tab, Tabs, TaskbarProgressState, Terminal, TerminalOptions, TerminalPaddingColor,
+    TerminalStatus, TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle, ToggleState, Tooltip,
     Transition, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowHandle,
     WindowKind, WindowLevel, WindowOptions, button, div, svg as svg_element, text, text_area,
     text_input,
@@ -57,7 +59,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 18;
+const PROTOCOL_VERSION: u16 = 19;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -69,6 +71,10 @@ const MAX_QUEUED_EVENTS: usize = 8_192;
 const MAX_HOST_COMMANDS: usize = 8_192;
 const MAX_WINDOWS: usize = 256;
 const NO_ANCHOR: u32 = u32::MAX;
+/// Longest compound scope key or item value accepted from one component part property.
+const MAX_COMPONENT_VALUE_BYTES: usize = 256;
+/// Longest tooltip label retained from one `tooltip` property.
+const MAX_TOOLTIP_TEXT_BYTES: usize = 1_024;
 
 mod property {
     pub const DISPLAY: u16 = 1;
@@ -203,7 +209,32 @@ mod property {
     pub const BORDER_BOTTOM_WIDTH: u16 = 131;
     pub const BORDER_LEFT_WIDTH: u16 = 132;
     pub const BOX_SHADOW: u16 = 133;
-    pub const LAST: u16 = BOX_SHADOW;
+    pub const PART: u16 = 134;
+    pub const CHECKED: u16 = 135;
+    pub const INDETERMINATE: u16 = 136;
+    pub const SCOPE: u16 = 137;
+    pub const PART_VALUE: u16 = 138;
+    pub const ACTIVE_VALUE: u16 = 139;
+    pub const ORIENTATION: u16 = 140;
+    pub const ACTIVATE_ON_FOCUS: u16 = 141;
+    pub const LOOP_FOCUS: u16 = 142;
+    pub const KEEP_MOUNTED: u16 = 143;
+    pub const OPEN: u16 = 144;
+    pub const ITEM_INDEX: u16 = 145;
+    pub const HEADING_LEVEL: u16 = 146;
+    pub const REQUIRED: u16 = 147;
+    pub const INVALID: u16 = 148;
+    pub const VALIDATION_MESSAGE: u16 = 149;
+    pub const TOUCHED: u16 = 150;
+    pub const DIRTY: u16 = 151;
+    pub const FILLED: u16 = 152;
+    pub const TOOLTIP: u16 = 153;
+    pub const TOOLTIP_PLACEMENT: u16 = 154;
+    pub const TOOLTIP_DELAY: u16 = 155;
+    pub const TOOLTIP_GAP: u16 = 156;
+    pub const TOOLTIP_VIEWPORT_MARGIN: u16 = 157;
+    pub const VARIANT: u16 = 158;
+    pub const LAST: u16 = VARIANT;
 }
 
 #[derive(Default)]

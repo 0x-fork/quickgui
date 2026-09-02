@@ -4,6 +4,14 @@
 
 Implemented now:
 
+- JavaScript bindings for the unstyled selection, tab, disclosure, and field descriptors: Solid
+  `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`, `Accordion`, `Field`, and
+  `Fieldset` compound parts declared ahead of time as bounded protocol properties, so the Rust core
+  keeps ownership of part identity, roles, roving/arrow keyboard behavior, label and description
+  relationships, and inactive-panel mount policy; plus controlled Solid `Dialog`/`AlertDialog`
+  in-window modal parts whose overlay portal the core mounts only while open and whose
+  Escape/backdrop dismissal policy is declared ahead of time, and a delayed native `tooltip`
+  property with placement, delay, gap, and viewport-margin controls;
 - experimental macOS Bun/N-API hosting with an externally pumped main-thread application loop,
   a core-backed singleton application readiness lifecycle, dynamically created `Window` instances,
   independent transactional bounded retained trees,

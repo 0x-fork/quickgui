@@ -283,3 +283,30 @@ shift, split, and merge runs until the controlled view supplies its next table; 
 restore the corresponding styles. Run metadata and named-family bytes count toward each input's
 existing 512 KiB history budget, the live table remains capped at 4,096 runs, and highlighting
 runs only after application value changes—never on idle frames.
+
+## Solid: Field and Fieldset
+
+`@quickgui/solid` exposes the field layer as `Field.Root`, `Field.Label`, `Field.Control`,
+`Field.Description`, `Field.Error`, and `Fieldset.Root`, `Fieldset.Legend`,
+`Fieldset.Description`, `Fieldset.Control`.
+
+```tsx
+<Fieldset.Root disabled={saving()}>
+  <Fieldset.Legend>Account</Fieldset.Legend>
+  <Field.Root invalid={!valid()} required validationMessage="Enter an address">
+    <Field.Label>Email</Field.Label>
+    <Field.Control value={email()} placeholder="you@example.com" onInput={update} />
+    <Field.Description>We never share it.</Field.Description>
+    <Field.Error>Enter an address</Field.Error>
+  </Field.Root>
+</Fieldset.Root>
+```
+
+Each `Field.Root` allocates one bounded scope key that every part repeats, so the Rust binding
+rebuilds the same `Field` descriptor and applies the derived root, label, description, error, and
+control identities the core would have used. Because `control_part` owns the control's identity,
+`Field.Control` *is* the control rather than a wrapper; its `element` prop selects the native
+element and defaults to `input`. `Field.Label` forwards clicks to the control unless `passive` is
+declared, a nested `Field.Root` inherits `Fieldset.Root`'s disabled state, and the six controlled
+booleans plus the bounded `validationMessage` pass straight through to `FieldState`. See the
+[Solid renderer guide](solid.md).

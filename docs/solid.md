@@ -5,8 +5,10 @@ QuickGUI includes an experimental Bun host split into two unstyled packages:
 - `@quickgui/native` owns the N-API boundary, application loop, per-window retained trees, binary
   mutation batches, window-routed event queue, and renderer-owned `Window` lifecycle.
 - `@quickgui/solid` owns Solid 2 JSX compilation, fine-grained reactive updates, and the host
-  components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `VirtualList`, and
-  `Popover`/`SystemPopover`, plus the `createRenderer` adapter passed to a native `Window`.
+  components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `VirtualList`,
+  `Popover`/`SystemPopover`, and the compound `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`,
+  `Collapsible`, `Accordion`, `Field`, `Fieldset`, `Dialog`, and `AlertDialog` parts, plus the
+  `createRenderer` adapter passed to a native `Window`.
 
 The renderer does not use a webview or virtual DOM. Solid updates the affected retained native
 nodes, and one binary batch crosses N-API before QuickGUI invalidates the WGPU window.
@@ -216,6 +218,149 @@ const [open, setOpen] = createSignal(false);
 The runnable [`popover-solid` example](../examples/popover-solid) places `SystemPopover` and
 `Popover` side by side so their renderer ownership and window-edge behavior are visible.
 
+## Selection, tab, disclosure, and field parts
+
+The unstyled Rust part descriptors are exposed as Base-UI-shaped compound components. Each part is
+one ordinary native node that declares which core descriptor to rebuild; the Rust core keeps
+ownership of part identity, roles, keyboard behavior, accessibility relationships, and whether an
+inactive panel is mounted at all. JavaScript owns only the controlled value and the element tree,
+so nothing about a component is decided by a synchronous callback across N-API.
+
+| Component | Parts | Controlled props | Core guide |
+| --- | --- | --- | --- |
+| `Checkbox` | `Root`, `Indicator` | `checked` (`true`/`false`/`"indeterminate"`), `defaultChecked`, `onCheckedChange` | [selection controls](selection-controls.md) |
+| `Radio` | `Root`, `Indicator` | `value`, or standalone `checked`/`onCheckedChange` | [selection controls](selection-controls.md) |
+| `RadioGroup` | `Root` | `value`, `defaultValue`, `onValueChange` | [selection controls](selection-controls.md) |
+| `Switch` | `Root`, `Thumb` | `checked`, `defaultChecked`, `onCheckedChange` | [selection controls](selection-controls.md) |
+| `Tabs` | `Root`, `List`, `Tab`, `Indicator`, `Panel` | `value`, `defaultValue`, `onValueChange`, `orientation`, `activation`, `loop`, `keepMounted` | [tabs](tabs.md) |
+| `Collapsible` | `Root`, `Trigger`, `Panel` | `open`, `defaultOpen`, `onOpenChange`, `disabled`, `keepMounted` | [disclosures](disclosures.md) |
+| `Accordion` | `Root`, `Item`, `Header`, `Trigger`, `Panel` | `value`, `defaultValue`, `onValueChange`, `multiple`, `headingLevel`, `keepMounted`, `disabled` | [disclosures](disclosures.md) |
+| `Field` | `Root`, `Label`, `Control`, `Description`, `Error` | `disabled`, `invalid`, `required`, `touched`, `dirty`, `filled`, `validationMessage` | [text and forms](text-and-forms.md) |
+| `Fieldset` | `Root`, `Legend`, `Description`, `Control` | `disabled` | [text and forms](text-and-forms.md) |
+| `Dialog`, `AlertDialog` | `Root`, `Trigger`, `Portal`, `Backdrop`, `Popup`, `Title`, `Description`, `Close` | `open`, `defaultOpen`, `onOpenChange`, `dismissOnEscape`, `dismissOnBackdrop` | [dialogs](dialogs.md) |
+
+```tsx
+const [tab, setTab] = createSignal("overview");
+
+<Tabs.Root value={tab()} onValueChange={setTab} activation="automatic">
+  <Tabs.List style={{ display: "flex", gap: 4 }}>
+    <Tabs.Tab value="overview">
+      Overview
+      <Tabs.Indicator style={{ height: 2, backgroundColor: "#2563eb" }} />
+    </Tabs.Tab>
+    <Tabs.Tab value="usage" disabled>
+      Usage
+    </Tabs.Tab>
+  </Tabs.List>
+  <Tabs.Panel value="overview">
+    <Text>Overview content</Text>
+  </Tabs.Panel>
+  <Tabs.Panel value="usage">
+    <Text>Usage content</Text>
+  </Tabs.Panel>
+</Tabs.Root>
+```
+
+`Tabs.Panel` is not mounted at all while its tab is inactive, so it contributes no layout, paint,
+input, or accessibility node. Declare `keepMounted` on `Tabs.Root` to retain inactive panels as
+`display: none` instead. `Collapsible.Panel` and `Accordion.Panel` follow the same core policy.
+`Tabs.Indicator` mounts only for the active tab and uses the enclosing `Tabs.Tab` value, or an
+explicit `value` prop when positioned in the list instead.
+
+Selection roots are controlled. `onCheckedChange` and `onValueChange` receive the next value and
+the originating `QuickGuiEvent`; the core supplies the click, Space activation, arrow navigation,
+focus, cursor, window-drag exclusion, and toggle/selected accessibility state:
+
+```tsx
+const [notify, setNotify] = createSignal<boolean | "indeterminate">("indeterminate");
+
+<Checkbox.Root checked={notify()} onCheckedChange={setNotify}>
+  <Checkbox.Indicator>{notify() === true ? "✓" : "–"}</Checkbox.Indicator>
+  <Text>Email me about releases</Text>
+</Checkbox.Root>
+
+<RadioGroup.Root value={theme()} onValueChange={setTheme}>
+  <Radio.Root value="light">
+    <Radio.Indicator />
+    <Text>Light</Text>
+  </Radio.Root>
+  <Radio.Root value="dark">
+    <Radio.Indicator />
+    <Text>Dark</Text>
+  </Radio.Root>
+</RadioGroup.Root>
+```
+
+A field's parts all derive their identity from one bounded scope key the renderer allocates, so the
+core resolves label, description, error, and control relationships without a JavaScript registry.
+`Field.Control` *is* the control, not a wrapper around one, because the core part owns that
+element's identity; `element` selects which native element it renders and defaults to `input`:
+
+```tsx
+<Fieldset.Root disabled={saving()}>
+  <Fieldset.Legend>Account</Fieldset.Legend>
+  <Field.Root invalid={!valid()} required validationMessage="Enter an address">
+    <Field.Label>Email</Field.Label>
+    <Field.Control value={email()} placeholder="you@example.com" onInput={update} />
+    <Field.Description>We never share it.</Field.Description>
+    <Field.Error>Enter an address</Field.Error>
+  </Field.Root>
+</Fieldset.Root>
+```
+
+A `Field.Root` inside a `Fieldset.Root` inherits the group's disabled state. `Field.Label` forwards
+its clicks to the control it names; add `passive` for button-like controls that should be named but
+not activated. `Field.Error` is removed from layout by the core while the controlled field is
+valid.
+
+Scope keys and item values are bounded to 256 bytes and the renderer throws a `TypeError` rather
+than sending an oversized declaration across N-API.
+
+## In-window dialogs
+
+`Dialog` and `AlertDialog` compose the Rust core's caller-styled modal surface, which is separate
+from the operating-system alert and file panels in the `Dialog` namespace of `@quickgui/native`.
+`Dialog.Root` is a logical coordinator that creates no native element, and `Dialog.Portal` is the
+viewport overlay root the core mounts only while the dialog is open:
+
+```tsx
+const [open, setOpen] = createSignal(false);
+
+<AlertDialog.Root open={open()} onOpenChange={setOpen}>
+  <AlertDialog.Trigger>Delete project</AlertDialog.Trigger>
+  <AlertDialog.Portal>
+    <AlertDialog.Backdrop style={{ backgroundColor: "#0f172a80" }} />
+    <AlertDialog.Popup>
+      <AlertDialog.Title>Delete project?</AlertDialog.Title>
+      <AlertDialog.Description>This cannot be undone.</AlertDialog.Description>
+      <AlertDialog.Close aria-label="Cancel">Cancel</AlertDialog.Close>
+    </AlertDialog.Popup>
+  </AlertDialog.Portal>
+</AlertDialog.Root>
+```
+
+The dismissal policy is declared ahead of time through `dismissOnEscape` and `dismissOnBackdrop`
+rather than answered by a callback; `AlertDialog` keeps Escape and blocks backdrop dismissal by
+default. `onOpenChange` reports `"trigger-press"`, `"close-press"`, or `"dismiss"`. Explicit
+initial-focus and focus-restoration targets are not bridged yet; the core's focus trap and
+`restore_previous_focus` default apply.
+
+## Tooltips
+
+Any host component accepts a `tooltip` string plus `tooltipPlacement`, `tooltipDelay` (milliseconds,
+clamped by the core to ten seconds), `tooltipGap`, and `tooltipViewportMargin`. The core lays the
+detached tooltip tree out only after the hover delay expires and exposes the same text as the
+trigger's native accessibility description:
+
+```tsx
+<Button tooltip="Rename this workspace" tooltipPlacement="top" tooltipDelay={250}>
+  Rename
+</Button>
+```
+
+Tooltip text is bounded to 1024 bytes. A tooltip whose content is an arbitrary element tree rather
+than text is not bridged yet; the retained mutation protocol has no detached-subtree opcode.
+
 All Solid host components are intentionally unstyled. Their `style` prop uses web-shaped names
 for the currently bridged QuickGUI layout, text, paint, overflow, cursor, positioning, and
 `appRegion` properties. Native events are flushed at a Solid 2 event boundary before the retained
@@ -406,9 +551,12 @@ ownership, retained view/text/button/input/Markdown nodes, variable-height virtu
 inputs, reactive properties and text, click/hover/input/submit/dismiss events, core-backed app and
 window lifecycle, native menus and desktop services, web-shaped Flexbox styling, hidden-inset
 titlebars, traffic-light positioning, declared close and quit interception, menu accelerators and
-system submenus, native window-tab commands, a stable real-`.app` development host, and
-self-contained production packaging on the current macOS target. It is not yet the full Rust
-rendering API surface: additional popover parts such as backdrops and arrows, native child views,
+system submenus, native window-tab commands, controlled selection controls, tab sets, disclosures,
+and field/fieldset composition, controlled in-window dialogs and alert dialogs, delayed native
+tooltips, a stable real-`.app` development host, and self-contained production packaging on the
+current macOS target. It is not yet the full Rust rendering API surface: popover arrows and
+backdrops, context and popover menus, select/combobox/autocomplete, tables and trees, images and
+shaders, CSS Grid layout, keyboard, gesture, and drag-and-drop events, native child views,
 accessibility actions, JavaScript `Menu.popup` and per-window `window.setMenu` (the `AppRunner`
 does not yet expose the `EventContext`-scoped popup and window-menu commands), every native binary
 target, and dedicated JavaScript performance gates still need bindings and acceptance.

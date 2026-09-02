@@ -1083,3 +1083,393 @@ fn a_declared_close_interception_holds_the_window_and_reports_it_to_javascript()
     );
     crate::runtime::reset_interception_state();
 }
+
+/// Build one component-part node with the string, boolean, and numeric properties it declares.
+fn component_part_node(
+    tag: NodeTag,
+    parent: u32,
+    part: &str,
+    strings: &[(u16, &str)],
+    flags: &[(u16, bool)],
+) -> NativeNode {
+    let mut node = NativeNode::new(tag);
+    node.parent = Some(parent);
+    node.set_property(property::PART, Some(PropertyValue::String(Arc::from(part))));
+    node.set_property(property::WIDTH, Some(PropertyValue::Number(120.0)));
+    node.set_property(property::HEIGHT, Some(PropertyValue::Number(32.0)));
+    for (key, value) in strings {
+        node.set_property(*key, Some(PropertyValue::String(Arc::from(*value))));
+    }
+    for (key, value) in flags {
+        node.set_property(*key, Some(PropertyValue::Bool(*value)));
+    }
+    node
+}
+
+fn component_part_view(window: u32, tree: NativeTree, events: EventQueue) -> NativeView {
+    NativeView {
+        window,
+        handles: None,
+        tree: Rc::new(RefCell::new(tree)),
+        events,
+        markdown: Rc::new(RefCell::new(HashMap::new())),
+        svgs: Rc::new(RefCell::new(HashMap::new())),
+        lists: Rc::new(RefCell::new(HashMap::new())),
+        terminals: Rc::new(RefCell::new(HashMap::new())),
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
+        embedded_views: Rc::new(RefCell::new(HashMap::new())),
+    }
+}
+
+#[test]
+fn component_part_properties_decode_core_identities_and_mount_policy() {
+    let tabs = Tabs::new("tabset", "one");
+
+    let inactive_panel = component_part_node(
+        NodeTag::View,
+        0,
+        "tab-panel",
+        &[
+            (property::SCOPE, "tabset"),
+            (property::ACTIVE_VALUE, "one"),
+            (property::PART_VALUE, "two"),
+        ],
+        &[],
+    );
+    assert_eq!(
+        native_part_element_id(5, &inactive_panel),
+        Some(tabs.tab("two").panel_id())
+    );
+    assert!(apply_part(div(), 5, &inactive_panel).is_none());
+
+    let mut retained_panel = inactive_panel.clone();
+    retained_panel.set_property(property::KEEP_MOUNTED, Some(PropertyValue::Bool(true)));
+    assert_eq!(
+        native_part_element_id(5, &retained_panel),
+        Some(tabs.tab("two").panel_id())
+    );
+    assert!(apply_part(div(), 5, &retained_panel).is_some());
+
+    let active_panel = component_part_node(
+        NodeTag::View,
+        0,
+        "tab-panel",
+        &[
+            (property::SCOPE, "tabset"),
+            (property::ACTIVE_VALUE, "one"),
+            (property::PART_VALUE, "one"),
+        ],
+        &[],
+    );
+    assert_eq!(
+        native_part_element_id(6, &active_panel),
+        Some(tabs.tab("one").panel_id())
+    );
+    assert!(apply_part(div(), 6, &active_panel).is_some());
+
+    let closed_panel = component_part_node(
+        NodeTag::View,
+        0,
+        "collapsible-panel",
+        &[(property::SCOPE, "disclosure")],
+        &[(property::OPEN, false)],
+    );
+    assert_eq!(
+        native_part_element_id(7, &closed_panel),
+        Some(Collapsible::new("disclosure", false).panel_id())
+    );
+    assert!(apply_part(div(), 7, &closed_panel).is_none());
+
+    let field_error = component_part_node(
+        NodeTag::View,
+        0,
+        "field-error",
+        &[(property::SCOPE, "email")],
+        &[(property::INVALID, true)],
+    );
+    assert_eq!(
+        native_part_element_id(8, &field_error),
+        Some(Field::new("email").error_id())
+    );
+    assert!(apply_part(div(), 8, &field_error).is_some());
+
+    // An unknown part name keeps the ordinary node identity and decorates nothing.
+    let unknown = component_part_node(NodeTag::View, 0, "not-a-part", &[], &[]);
+    assert_eq!(native_part_element_id(9, &unknown), None);
+    assert!(apply_part(div(), 9, &unknown).is_some());
+
+    // Scopes and item values are bounded; an oversized key falls back to the node identity.
+    let oversized = component_part_node(
+        NodeTag::View,
+        0,
+        "fieldset",
+        &[(property::SCOPE, &"s".repeat(MAX_COMPONENT_VALUE_BYTES + 1))],
+        &[],
+    );
+    assert_eq!(
+        native_part_element_id(10, &oversized),
+        Some(ElementId::new(10))
+    );
+
+    // A tab without a bounded value cannot resolve a core identity and mounts undecorated.
+    let valueless_tab =
+        component_part_node(NodeTag::View, 0, "tab", &[(property::SCOPE, "tabset")], &[]);
+    assert_eq!(native_part_element_id(11, &valueless_tab), None);
+    assert!(apply_part(div(), 11, &valueless_tab).is_some());
+}
+
+#[test]
+fn native_tabs_parts_mount_core_panels_and_roving_arrow_navigation() {
+    let root_id = 100;
+    let list_id = 101;
+    let first_tab_id = 102;
+    let second_tab_id = 103;
+    let first_panel_id = 110;
+    let second_panel_id = 111;
+    let scope = [(property::SCOPE, "tabset"), (property::ACTIVE_VALUE, "one")];
+    let mut tree = NativeTree::default();
+
+    let mut root = component_part_node(NodeTag::View, ROOT_NODE, "tabs", &scope, &[]);
+    root.children
+        .extend([list_id, first_panel_id, second_panel_id]);
+    tree.nodes.insert(root_id, root);
+
+    let mut list = component_part_node(NodeTag::View, root_id, "tabs-list", &scope, &[]);
+    list.children.extend([first_tab_id, second_tab_id]);
+    tree.nodes.insert(list_id, list);
+
+    for (id, value) in [(first_tab_id, "one"), (second_tab_id, "two")] {
+        let mut strings = scope.to_vec();
+        strings.push((property::PART_VALUE, value));
+        tree.nodes.insert(
+            id,
+            component_part_node(NodeTag::Button, list_id, "tab", &strings, &[]),
+        );
+    }
+    for (id, value) in [(first_panel_id, "one"), (second_panel_id, "two")] {
+        let mut strings = scope.to_vec();
+        strings.push((property::PART_VALUE, value));
+        tree.nodes.insert(
+            id,
+            component_part_node(NodeTag::View, root_id, "tab-panel", &strings, &[]),
+        );
+    }
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(root_id);
+
+    let view = component_part_view(6, tree, Rc::new(RefCell::new(VecDeque::new())));
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+
+    let tabs = Tabs::new("tabset", "one");
+    let first = tabs.tab("one");
+    let second = tabs.tab("two");
+    assert!(cx.contains_element(window, first.tab_id()).unwrap());
+    assert!(cx.contains_element(window, second.tab_id()).unwrap());
+    assert!(cx.contains_element(window, first.panel_id()).unwrap());
+    assert!(!cx.contains_element(window, second.panel_id()).unwrap());
+    // The list identity is the core's derived one, not either node id.
+    assert!(cx.contains_element(window, tabs.list_id()).unwrap());
+    assert!(
+        !cx.contains_element(window, ElementId::new(list_id as u64))
+            .unwrap()
+    );
+
+    cx.focus(window, first.tab_id()).unwrap();
+    cx.simulate_keystrokes(window, "right").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(second.tab_id()));
+    cx.simulate_keystrokes(window, "right").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(first.tab_id()));
+}
+
+#[test]
+fn selection_and_field_parts_adopt_core_focus_activation_and_labelling() {
+    let checkbox_id = 120;
+    let plain_id = 121;
+    let field_root_id = 130;
+    let label_id = 131;
+    let control_id = 132;
+    let mut tree = NativeTree::default();
+
+    tree.nodes.insert(
+        checkbox_id,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "checkbox",
+            &[],
+            &[(property::CHECKED, true)],
+        ),
+    );
+    let mut plain = NativeNode::new(NodeTag::View);
+    plain.parent = Some(ROOT_NODE);
+    plain.set_property(property::WIDTH, Some(PropertyValue::Number(120.0)));
+    plain.set_property(property::HEIGHT, Some(PropertyValue::Number(32.0)));
+    tree.nodes.insert(plain_id, plain);
+
+    let field = [(property::SCOPE, "email")];
+    let mut field_root = component_part_node(NodeTag::View, ROOT_NODE, "field", &field, &[]);
+    field_root.children.extend([label_id, control_id]);
+    tree.nodes.insert(field_root_id, field_root);
+    tree.nodes.insert(
+        label_id,
+        component_part_node(NodeTag::View, field_root_id, "field-label", &field, &[]),
+    );
+    tree.nodes.insert(
+        control_id,
+        component_part_node(NodeTag::Input, field_root_id, "field-control", &field, &[]),
+    );
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .extend([checkbox_id, plain_id, field_root_id]);
+
+    let view = component_part_view(7, tree, Rc::new(RefCell::new(VecDeque::new())));
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+
+    // The core checkbox part supplies focus and click behavior the plain view does not have.
+    let checkbox_element = ElementId::new(checkbox_id as u64);
+    cx.focus(window, checkbox_element).unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(checkbox_element));
+    cx.click(window, checkbox_element).unwrap();
+    assert!(cx.focus(window, ElementId::new(plain_id as u64)).is_err());
+
+    // The field label activates the control it names through the core relationship.
+    let field = Field::new("email");
+    assert!(cx.contains_element(window, field.root_id()).unwrap());
+    cx.click(window, field.label_id()).unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(field.control_id()));
+}
+
+#[test]
+fn in_window_dialog_parts_mount_only_while_open_and_dismiss_through_the_core() {
+    let trigger_id = 140;
+    let portal_id = 141;
+    let backdrop_id = 142;
+    let popup_id = 143;
+    let title_id = 144;
+    let close_id = 145;
+    let dialog = [(property::SCOPE, "confirm")];
+    let mut tree = NativeTree::default();
+
+    tree.nodes.insert(
+        trigger_id,
+        component_part_node(
+            NodeTag::Button,
+            ROOT_NODE,
+            "dialog-trigger",
+            &dialog,
+            &[(property::OPEN, true)],
+        ),
+    );
+    let mut portal = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "dialog",
+        &dialog,
+        &[(property::OPEN, true)],
+    );
+    portal.children.extend([backdrop_id, popup_id]);
+    tree.nodes.insert(portal_id, portal);
+    tree.nodes.insert(
+        backdrop_id,
+        component_part_node(
+            NodeTag::View,
+            portal_id,
+            "dialog-backdrop",
+            &dialog,
+            &[(property::OPEN, true)],
+        ),
+    );
+    let mut popup = component_part_node(
+        NodeTag::View,
+        portal_id,
+        "dialog-popup",
+        &dialog,
+        &[
+            (property::OPEN, true),
+            (property::DISMISS_ON_ESCAPE, true),
+            (property::DISMISS_LISTENER, true),
+        ],
+    );
+    popup.children.extend([title_id, close_id]);
+    tree.nodes.insert(popup_id, popup);
+    tree.nodes.insert(
+        title_id,
+        component_part_node(
+            NodeTag::View,
+            popup_id,
+            "dialog-title",
+            &dialog,
+            &[(property::OPEN, true)],
+        ),
+    );
+    tree.nodes.insert(
+        close_id,
+        component_part_node(
+            NodeTag::Button,
+            popup_id,
+            "dialog-close",
+            &dialog,
+            &[(property::OPEN, true)],
+        ),
+    );
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .extend([trigger_id, portal_id]);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(8, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+
+    let core = quickgui::Dialog::new("confirm", true);
+    assert!(cx.contains_element(window, core.root_id()).unwrap());
+    assert!(cx.contains_element(window, core.popover_id()).unwrap());
+    assert!(cx.contains_element(window, core.title_id()).unwrap());
+    assert!(cx.contains_element(window, core.close_id()).unwrap());
+
+    // Escape reaches the core surface and is reported back as one asynchronous dismiss event.
+    cx.focus(window, core.popover_id()).unwrap();
+    cx.simulate_keystrokes(window, "escape").unwrap();
+    let event = events.borrow_mut().pop_front().unwrap();
+    assert_eq!(event.kind, "dismiss");
+    assert_eq!(event.target, popup_id);
+
+    // A closed dialog contributes no portal, backdrop, popup, or title at all.
+    cx.update(view, |view, cx| {
+        let mut tree = view.tree.borrow_mut();
+        for id in [
+            trigger_id,
+            portal_id,
+            backdrop_id,
+            popup_id,
+            title_id,
+            close_id,
+        ] {
+            tree.nodes
+                .get_mut(&id)
+                .unwrap()
+                .set_property(property::OPEN, Some(PropertyValue::Bool(false)));
+        }
+        cx.invalidate();
+    })
+    .unwrap();
+
+    assert!(!cx.contains_element(window, core.root_id()).unwrap());
+    assert!(!cx.contains_element(window, core.popover_id()).unwrap());
+    assert!(!cx.contains_element(window, core.backdrop_id()).unwrap());
+    assert!(!cx.contains_element(window, core.title_id()).unwrap());
+    assert!(
+        cx.contains_element(window, ElementId::new(trigger_id as u64))
+            .unwrap()
+    );
+}

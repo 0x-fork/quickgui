@@ -5,7 +5,6 @@ All notable user-facing changes to QuickGUI are recorded here.
 ## Unreleased
 
 ### Framework
-
 - Added a bounded `CrashReporter` behind the default `crash-reporter` feature: a panic hook that
   writes a size-limited JSON report atomically, an async-signal-safe native fatal-fault path
   (`SIGSEGV`/`SIGBUS`/`SIGILL`/`SIGFPE`/`SIGABRT` through `sigaction`, `SetUnhandledExceptionFilter`
@@ -92,6 +91,7 @@ All notable user-facing changes to QuickGUI are recorded here.
   `AccessibilityOrientation`, `AccessibilityLive`, and `AccessibilityValueRange` with
   `Element::accessibility_orientation`, `accessibility_live`, and `accessibility_value_range`.
 
+
 ### macOS
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
   and the AppKit standard binding for a role, and hidden items set `NSMenuItem.hidden` and no
@@ -118,6 +118,7 @@ All notable user-facing changes to QuickGUI are recorded here.
   by `IsSecureEventInputEnabled` so the process-global counter stays balanced), and `NSBeep`.
 - `on_did_become_active`/`on_did_resign_active` reuse the existing application observer, adding no
   new native observer.
+
 
 
 ### JavaScript tooling
@@ -154,6 +155,23 @@ All notable user-facing changes to QuickGUI are recorded here.
 - Added `Clipboard.availableFormats()`, `Clipboard.has(format)`, `Clipboard.readBuffer(format)`,
   `Clipboard.writeBuffer(format, data)`, `Clipboard.readFindText()`, and
   `Clipboard.writeFindText(text)` over the core's typed clipboard entries.
+
+
+- Added Base-UI-shaped Solid `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`,
+  `Accordion`, `Field`, and `Fieldset` compound parts. Each part is one native node that declares
+  which Rust core part descriptor to rebuild, so the core keeps ownership of part identity, roles,
+  toggle and selected state, roving Tab and arrow navigation, label/description/error
+  relationships, and whether an inactive tab or disclosure panel is mounted at all. Controlled
+  values, scope keys, and item values are declared ahead of time as bounded protocol properties;
+  nothing about a component is answered by a synchronous JavaScript callback.
+- Added Solid `Dialog` and `AlertDialog` compound parts for the Rust core's caller-styled in-window
+  modal surface, separate from the operating-system panels in `@quickgui/native`'s `Dialog`
+  namespace. The overlay portal is mounted by the core only while the dialog is open, and the
+  Escape/backdrop dismissal policy is declared ahead of time instead of answered by a callback.
+- Added a `tooltip` property with `tooltipPlacement`, `tooltipDelay`, `tooltipGap`, and
+  `tooltipViewportMargin` to every Solid host component, projecting the Rust core's delayed,
+  pointer-passive tooltip and its native accessibility description.
+- Raised the mutation protocol to version 19 for the new component-part and tooltip properties.
 
 ## 0.1.1 - 2026-08-31
 

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  MAX_COMPONENT_VALUE_BYTES,
+  MAX_TOOLTIP_TEXT_BYTES,
   MutationBatch,
   NativeNodeTag,
+  NativePart,
   NO_ANCHOR,
   PropertyCode,
   PROTOCOL_VERSION,
@@ -30,8 +33,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v18", () => {
-    expect(PROTOCOL_VERSION).toBe(18);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v19", () => {
+    expect(PROTOCOL_VERSION).toBe(19);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -131,5 +134,62 @@ describe("binary mutation protocol", () => {
     batch.createElement(12, NativeNodeTag.SwiftUIPopoverContent);
     expect(batch.mutationCount).toBe(72);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
+  });
+
+  test("encodes selection, tab, disclosure, field, and tooltip component parts", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.Button);
+    batch.setProperty(1, PropertyCode.Part, NativePart.Checkbox);
+    batch.setProperty(1, PropertyCode.Checked, false);
+    batch.setProperty(1, PropertyCode.Indeterminate, true);
+    batch.createElement(2, NativeNodeTag.Button);
+    batch.setProperty(2, PropertyCode.Part, NativePart.Tab);
+    batch.setProperty(2, PropertyCode.Scope, "qg-tabs-1");
+    batch.setProperty(2, PropertyCode.PartValue, "overview");
+    batch.setProperty(2, PropertyCode.ActiveValue, "overview");
+    batch.setProperty(2, PropertyCode.Orientation, "vertical");
+    batch.setProperty(2, PropertyCode.ActivateOnFocus, true);
+    batch.setProperty(2, PropertyCode.LoopFocus, false);
+    batch.setProperty(2, PropertyCode.KeepMounted, true);
+    batch.createElement(3, NativeNodeTag.View);
+    batch.setProperty(3, PropertyCode.Part, NativePart.AccordionItem);
+    batch.setProperty(3, PropertyCode.Open, true);
+    batch.setProperty(3, PropertyCode.ItemIndex, 2);
+    batch.setProperty(3, PropertyCode.HeadingLevel, 4);
+    batch.createElement(4, NativeNodeTag.Input);
+    batch.setProperty(4, PropertyCode.Part, NativePart.FieldControl);
+    batch.setProperty(4, PropertyCode.Required, true);
+    batch.setProperty(4, PropertyCode.Invalid, true);
+    batch.setProperty(4, PropertyCode.Touched, true);
+    batch.setProperty(4, PropertyCode.Dirty, true);
+    batch.setProperty(4, PropertyCode.Filled, false);
+    batch.setProperty(4, PropertyCode.ValidationMessage, "Enter an address");
+    batch.setProperty(4, PropertyCode.Tooltip, "We never share it");
+    batch.setProperty(4, PropertyCode.TooltipPlacement, "top");
+    batch.setProperty(4, PropertyCode.TooltipDelay, 250);
+    batch.setProperty(4, PropertyCode.TooltipGap, 7);
+    batch.setProperty(4, PropertyCode.TooltipViewportMargin, 8);
+    batch.createElement(5, NativeNodeTag.View);
+    batch.setProperty(5, PropertyCode.Part, NativePart.DialogPopup);
+    batch.setProperty(5, PropertyCode.Variant, "alertdialog");
+    batch.setProperty(5, PropertyCode.Open, true);
+    batch.setProperty(5, PropertyCode.DismissOnEscape, true);
+    batch.setProperty(5, PropertyCode.DismissOnPointerOutside, false);
+
+    expect(batch.mutationCount).toBe(37);
+    expect(batch.finish().byteLength).toBeGreaterThan(10);
+  });
+
+  test("keeps every component part name and bound stable", () => {
+    expect(NativePart.Checkbox).toBe("checkbox");
+    expect(NativePart.TabPanel).toBe("tab-panel");
+    expect(NativePart.CollapsiblePanel).toBe("collapsible-panel");
+    expect(NativePart.AccordionTrigger).toBe("accordion-trigger");
+    expect(NativePart.FieldPassiveLabel).toBe("field-passive-label");
+    expect(NativePart.FieldsetLegend).toBe("fieldset-legend");
+    expect(NativePart.Dialog).toBe("dialog");
+    expect(NativePart.DialogPopup).toBe("dialog-popup");
+    expect(MAX_COMPONENT_VALUE_BYTES).toBe(256);
+    expect(MAX_TOOLTIP_TEXT_BYTES).toBe(1024);
   });
 });
