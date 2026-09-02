@@ -3,8 +3,9 @@ use std::sync::{Arc, LazyLock};
 use glyphon::{Style as GlyphStyle, Weight};
 
 use crate::{
-    Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Image, Insets,
-    Path, Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline, Vector,
+    Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Gradient,
+    Image, Insets, Path, Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline,
+    Vector,
     font::{assert_valid_font_family, normalize_fallbacks},
     paint_order::{BoundsOrderTree, valid_bounds},
 };
@@ -568,12 +569,449 @@ impl TextStyle {
     }
 }
 
+/// Per-corner radii ordered top-left, top-right, bottom-right, bottom-left.
+///
+/// A single `f32` converts into equal radii, so existing uniform-radius call sites are unchanged.
+/// [`Corners::resolve`] applies the CSS uniform-scale rule so two radii sharing one edge can never
+/// overlap, which keeps the analytic signed-distance evaluation valid for any declared value.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Corners {
+    pub top_left: f32,
+    pub top_right: f32,
+    pub bottom_right: f32,
+    pub bottom_left: f32,
+}
+
+impl Corners {
+    /// Square corners.
+    pub const ZERO: Self = Self::all(0.0);
+
+    pub const fn all(radius: f32) -> Self {
+        Self {
+            top_left: radius,
+            top_right: radius,
+            bottom_right: radius,
+            bottom_left: radius,
+        }
+    }
+
+    pub const fn new(top_left: f32, top_right: f32, bottom_right: f32, bottom_left: f32) -> Self {
+        Self {
+            top_left,
+            top_right,
+            bottom_right,
+            bottom_left,
+        }
+    }
+
+    /// Round only the two top corners.
+    pub const fn top(radius: f32) -> Self {
+        Self::new(radius, radius, 0.0, 0.0)
+    }
+
+    /// Round only the two bottom corners.
+    pub const fn bottom(radius: f32) -> Self {
+        Self::new(0.0, 0.0, radius, radius)
+    }
+
+    /// Round only the two left corners.
+    pub const fn left(radius: f32) -> Self {
+        Self::new(radius, 0.0, 0.0, radius)
+    }
+
+    /// Round only the two right corners.
+    pub const fn right(radius: f32) -> Self {
+        Self::new(0.0, radius, radius, 0.0)
+    }
+
+    /// Replace non-finite and negative values with zero.
+    pub fn sanitized(self) -> Self {
+        Self {
+            top_left: finite_or_zero(self.top_left).max(0.0),
+            top_right: finite_or_zero(self.top_right).max(0.0),
+            bottom_right: finite_or_zero(self.bottom_right).max(0.0),
+            bottom_left: finite_or_zero(self.bottom_left).max(0.0),
+        }
+    }
+
+    pub fn is_zero(self) -> bool {
+        self.top_left <= 0.0
+            && self.top_right <= 0.0
+            && self.bottom_right <= 0.0
+            && self.bottom_left <= 0.0
+    }
+
+    /// The largest declared radius.
+    pub fn maximum(self) -> f32 {
+        self.top_left
+            .max(self.top_right)
+            .max(self.bottom_right)
+            .max(self.bottom_left)
+    }
+
+    /// Grow every corner by `amount`, clamping at zero. Used by outlines drawn outside the border.
+    pub fn expanded(self, amount: f32) -> Self {
+        Self {
+            top_left: (self.top_left + amount).max(0.0),
+            top_right: (self.top_right + amount).max(0.0),
+            bottom_right: (self.bottom_right + amount).max(0.0),
+            bottom_left: (self.bottom_left + amount).max(0.0),
+        }
+    }
+
+    /// Apply the CSS uniform-scale rule so adjacent radii never exceed their shared edge.
+    pub fn resolve(self, width: f32, height: f32) -> Self {
+        let corners = self.sanitized();
+        let width = finite_or_zero(width).max(0.0);
+        let height = finite_or_zero(height).max(0.0);
+        let mut scale = 1.0_f32;
+        let mut constrain = |sum: f32, extent: f32| {
+            if sum > 0.0 {
+                scale = scale.min(extent / sum);
+            }
+        };
+        constrain(corners.top_left + corners.top_right, width);
+        constrain(corners.bottom_left + corners.bottom_right, width);
+        constrain(corners.top_left + corners.bottom_left, height);
+        constrain(corners.top_right + corners.bottom_right, height);
+        if scale >= 1.0 || !scale.is_finite() {
+            return corners;
+        }
+        Self {
+            top_left: corners.top_left * scale,
+            top_right: corners.top_right * scale,
+            bottom_right: corners.bottom_right * scale,
+            bottom_left: corners.bottom_left * scale,
+        }
+    }
+
+    pub(crate) fn as_array(self) -> [f32; 4] {
+        [
+            self.top_left,
+            self.top_right,
+            self.bottom_right,
+            self.bottom_left,
+        ]
+    }
+}
+
+impl From<f32> for Corners {
+    fn from(radius: f32) -> Self {
+        Self::all(radius)
+    }
+}
+
+/// How a border or outline ring is painted along its perimeter.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum BorderStyle {
+    #[default]
+    Solid,
+    /// Evenly distributed dashes three border widths long, separated by two-width gaps.
+    Dashed,
+    /// Evenly distributed square dots one border width long, separated by one-width gaps.
+    Dotted,
+}
+
+impl BorderStyle {
+    pub(crate) fn code(self) -> f32 {
+        match self {
+            Self::Solid => 0.0,
+            Self::Dashed => 1.0,
+            Self::Dotted => 2.0,
+        }
+    }
+}
+
+/// Largest number of color filters retained by one element.
+pub const MAX_FILTERS_PER_ELEMENT: usize = 8;
+
+/// A CSS-shaped color filter.
+///
+/// Every variant is expressible as one color matrix, so a whole chain collapses into a single
+/// per-primitive matrix on the CPU and costs one multiply-add in the shader. Filters that need a
+/// convolution or an offscreen group — `blur` and `drop-shadow` — are deliberately absent; use
+/// [`Element::shadow`](crate::Element::shadow) for elevation.
+///
+/// Amounts follow CSS: `1.0` is the unmodified image for `brightness`, `contrast`, and
+/// `saturate`, and `0.0` is the unmodified image for `grayscale`, `invert`, and `sepia`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Filter {
+    Brightness(f32),
+    Contrast(f32),
+    Saturate(f32),
+    Grayscale(f32),
+    Invert(f32),
+    Sepia(f32),
+    /// Rotate hues by the given number of degrees.
+    HueRotate(f32),
+    Opacity(f32),
+}
+
+/// A 4x5 color matrix applied to straight-alpha, encoded-sRGB color.
+///
+/// Matching CSS, filters operate on encoded sRGB rather than the framework's linear-light
+/// working space; the shader converts in and out around the multiply.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColorMatrix([f32; 20]);
+
+impl Default for ColorMatrix {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
+impl ColorMatrix {
+    /// The matrix that leaves color unchanged.
+    pub const IDENTITY: Self = Self([
+        1.0, 0.0, 0.0, 0.0, 0.0, //
+        0.0, 1.0, 0.0, 0.0, 0.0, //
+        0.0, 0.0, 1.0, 0.0, 0.0, //
+        0.0, 0.0, 0.0, 1.0, 0.0,
+    ]);
+
+    pub const fn new(values: [f32; 20]) -> Self {
+        Self(values)
+    }
+
+    pub const fn as_array(self) -> [f32; 20] {
+        self.0
+    }
+
+    pub fn is_identity(self) -> bool {
+        self == Self::IDENTITY
+    }
+
+    /// Apply `self` first and `next` second.
+    pub fn then(self, next: Self) -> Self {
+        let mut combined = [0.0_f32; 20];
+        for row in 0..4 {
+            for column in 0..4 {
+                let mut sum = 0.0;
+                for inner in 0..4 {
+                    sum += next.0[row * 5 + inner] * self.0[inner * 5 + column];
+                }
+                combined[row * 5 + column] = sum;
+            }
+            let mut offset = next.0[row * 5 + 4];
+            for inner in 0..4 {
+                offset += next.0[row * 5 + inner] * self.0[inner * 5 + 4];
+            }
+            combined[row * 5 + 4] = offset;
+        }
+        Self(combined)
+    }
+}
+
+fn finite_amount(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        fallback
+    }
+}
+
+impl From<Filter> for ColorMatrix {
+    fn from(filter: Filter) -> Self {
+        match filter {
+            Filter::Brightness(amount) => {
+                let amount = finite_amount(amount, 1.0);
+                Self([
+                    amount, 0.0, 0.0, 0.0, 0.0, //
+                    0.0, amount, 0.0, 0.0, 0.0, //
+                    0.0, 0.0, amount, 0.0, 0.0, //
+                    0.0, 0.0, 0.0, 1.0, 0.0,
+                ])
+            }
+            Filter::Contrast(amount) => {
+                let amount = finite_amount(amount, 1.0);
+                let offset = 0.5 - amount * 0.5;
+                Self([
+                    amount, 0.0, 0.0, 0.0, offset, //
+                    0.0, amount, 0.0, 0.0, offset, //
+                    0.0, 0.0, amount, 0.0, offset, //
+                    0.0, 0.0, 0.0, 1.0, 0.0,
+                ])
+            }
+            Filter::Saturate(amount) => saturate_matrix(finite_amount(amount, 1.0)),
+            Filter::Grayscale(amount) => saturate_matrix(1.0 - finite_amount(amount, 0.0).min(1.0)),
+            Filter::Invert(amount) => {
+                let amount = finite_amount(amount, 0.0).min(1.0);
+                let scale = 1.0 - 2.0 * amount;
+                Self([
+                    scale, 0.0, 0.0, 0.0, amount, //
+                    0.0, scale, 0.0, 0.0, amount, //
+                    0.0, 0.0, scale, 0.0, amount, //
+                    0.0, 0.0, 0.0, 1.0, 0.0,
+                ])
+            }
+            Filter::Sepia(amount) => {
+                let amount = finite_amount(amount, 0.0).min(1.0);
+                let mix = |full: f32, identity: f32| identity + (full - identity) * amount;
+                Self([
+                    mix(0.393, 1.0),
+                    mix(0.769, 0.0),
+                    mix(0.189, 0.0),
+                    0.0,
+                    0.0, //
+                    mix(0.349, 0.0),
+                    mix(0.686, 1.0),
+                    mix(0.168, 0.0),
+                    0.0,
+                    0.0, //
+                    mix(0.272, 0.0),
+                    mix(0.534, 0.0),
+                    mix(0.131, 1.0),
+                    0.0,
+                    0.0, //
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                ])
+            }
+            Filter::HueRotate(degrees) => {
+                let radians = if degrees.is_finite() {
+                    degrees.to_radians()
+                } else {
+                    0.0
+                };
+                let (sine, cosine) = radians.sin_cos();
+                Self([
+                    0.213 + cosine * 0.787 - sine * 0.213,
+                    0.715 - cosine * 0.715 - sine * 0.715,
+                    0.072 - cosine * 0.072 + sine * 0.928,
+                    0.0,
+                    0.0,
+                    0.213 - cosine * 0.213 + sine * 0.143,
+                    0.715 + cosine * 0.285 + sine * 0.140,
+                    0.072 - cosine * 0.072 - sine * 0.283,
+                    0.0,
+                    0.0,
+                    0.213 - cosine * 0.213 - sine * 0.787,
+                    0.715 - cosine * 0.715 + sine * 0.715,
+                    0.072 + cosine * 0.928 + sine * 0.072,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                ])
+            }
+            Filter::Opacity(amount) => {
+                let amount = finite_amount(amount, 1.0).min(1.0);
+                Self([
+                    1.0, 0.0, 0.0, 0.0, 0.0, //
+                    0.0, 1.0, 0.0, 0.0, 0.0, //
+                    0.0, 0.0, 1.0, 0.0, 0.0, //
+                    0.0, 0.0, 0.0, amount, 0.0,
+                ])
+            }
+        }
+    }
+}
+
+fn saturate_matrix(amount: f32) -> ColorMatrix {
+    // The CSS/SVG luminance-preserving saturation matrix.
+    let (red, green, blue) = (0.213, 0.715, 0.072);
+    ColorMatrix([
+        red + amount * (1.0 - red),
+        green - amount * green,
+        blue - amount * blue,
+        0.0,
+        0.0,
+        red - amount * red,
+        green + amount * (1.0 - green),
+        blue - amount * blue,
+        0.0,
+        0.0,
+        red - amount * red,
+        green - amount * green,
+        blue + amount * (1.0 - blue),
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+    ])
+}
+
+/// A bounded, ordered chain of at most [`MAX_FILTERS_PER_ELEMENT`] color filters.
+///
+/// The chain is collapsed into one [`ColorMatrix`] when it reaches the scene, so the number of
+/// declared filters never affects per-frame GPU work.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Filters {
+    length: u8,
+    filters: [Option<Filter>; MAX_FILTERS_PER_ELEMENT],
+}
+
+impl Filters {
+    pub const fn none() -> Self {
+        Self {
+            length: 0,
+            filters: [None; MAX_FILTERS_PER_ELEMENT],
+        }
+    }
+
+    /// Collect at most [`MAX_FILTERS_PER_ELEMENT`] filters in declaration order.
+    pub fn new(filters: impl IntoIterator<Item = Filter>) -> Self {
+        let mut collected = Self::none();
+        for filter in filters {
+            if usize::from(collected.length) == MAX_FILTERS_PER_ELEMENT {
+                break;
+            }
+            collected.filters[usize::from(collected.length)] = Some(filter);
+            collected.length += 1;
+        }
+        collected
+    }
+
+    /// Append one filter, ignoring it once the chain is full.
+    pub fn push(mut self, filter: Filter) -> Self {
+        if usize::from(self.length) < MAX_FILTERS_PER_ELEMENT {
+            self.filters[usize::from(self.length)] = Some(filter);
+            self.length += 1;
+        }
+        self
+    }
+
+    pub fn len(self) -> usize {
+        usize::from(self.length)
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.length == 0
+    }
+
+    /// Collapse the chain into one color matrix applied in declaration order.
+    pub fn color_matrix(self) -> ColorMatrix {
+        let mut matrix = ColorMatrix::IDENTITY;
+        for filter in self.filters.iter().take(usize::from(self.length)).flatten() {
+            matrix = matrix.then(ColorMatrix::from(*filter));
+        }
+        matrix
+    }
+}
+
+impl FromIterator<Filter> for Filters {
+    fn from_iter<T: IntoIterator<Item = Filter>>(filters: T) -> Self {
+        Self::new(filters)
+    }
+}
+
 /// A filled rounded rectangle with an optional inside border and clip.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Quad {
     pub rect: Rect,
     pub fill: Color,
-    pub radius: f32,
+    /// An optional multi-stop gradient replacing `fill` inside the rounded box.
+    pub background: Option<Gradient>,
+    pub radius: Corners,
     pub border_width: f32,
     pub border_color: Color,
     pub clip: Option<Rect>,
@@ -584,7 +1022,8 @@ impl Quad {
         Self {
             rect,
             fill,
-            radius: 0.0,
+            background: None,
+            radius: Corners::ZERO,
             border_width: 0.0,
             border_color: Color::TRANSPARENT,
             clip: None,
@@ -592,7 +1031,27 @@ impl Quad {
     }
 
     pub fn radius(mut self, radius: f32) -> Self {
-        self.radius = radius.max(0.0);
+        self.radius = Corners::all(radius.max(0.0));
+        self
+    }
+
+    /// Round each corner independently.
+    pub fn corner_radii(mut self, radii: Corners) -> Self {
+        self.radius = radii.sanitized();
+        self
+    }
+
+    /// Fill with a solid color or a bounded multi-stop gradient resolved against `rect`.
+    pub fn background(mut self, background: impl Into<Background>) -> Self {
+        match background.into() {
+            Background::Solid(color) => {
+                self.fill = color;
+                self.background = None;
+            }
+            other => {
+                self.background = other.as_gradient();
+            }
+        }
         self
     }
 
@@ -613,9 +1072,11 @@ impl Quad {
 pub(crate) struct EdgeQuad {
     pub(crate) rect: Rect,
     pub(crate) fill: Color,
-    pub(crate) radius: f32,
+    pub(crate) background: Option<Gradient>,
+    pub(crate) radius: Corners,
     pub(crate) border_widths: Insets,
     pub(crate) border_color: Color,
+    pub(crate) border_style: BorderStyle,
     pub(crate) clip: Option<Rect>,
 }
 
@@ -624,15 +1085,27 @@ impl EdgeQuad {
         Self {
             rect,
             fill,
-            radius: 0.0,
+            background: None,
+            radius: Corners::ZERO,
             border_widths: Insets::default(),
             border_color: Color::TRANSPARENT,
+            border_style: BorderStyle::Solid,
             clip: None,
         }
     }
 
-    pub(crate) fn radius(mut self, radius: f32) -> Self {
-        self.radius = finite_or_zero(radius).max(0.0);
+    pub(crate) fn corner_radii(mut self, radii: Corners) -> Self {
+        self.radius = radii.sanitized();
+        self
+    }
+
+    pub(crate) fn background(mut self, gradient: Option<Gradient>) -> Self {
+        self.background = gradient;
+        self
+    }
+
+    pub(crate) fn border_style(mut self, style: BorderStyle) -> Self {
+        self.border_style = style;
         self
     }
 
@@ -772,7 +1245,7 @@ fn finite_or_zero(value: f32) -> f32 {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Shadow {
     pub element_rect: Rect,
-    pub radius: f32,
+    pub radius: Corners,
     pub style: BoxShadow,
     pub clip: Option<Rect>,
 }
@@ -781,14 +1254,20 @@ impl Shadow {
     pub fn new(element_rect: Rect, style: BoxShadow) -> Self {
         Self {
             element_rect,
-            radius: 0.0,
+            radius: Corners::ZERO,
             style,
             clip: None,
         }
     }
 
     pub fn radius(mut self, radius: f32) -> Self {
-        self.radius = finite_or_zero(radius).max(0.0);
+        self.radius = Corners::all(finite_or_zero(radius).max(0.0));
+        self
+    }
+
+    /// Follow each of the element's corners independently.
+    pub fn corner_radii(mut self, radii: Corners) -> Self {
+        self.radius = radii.sanitized();
         self
     }
 
@@ -806,7 +1285,8 @@ pub struct ImagePrimitive {
     pub source_uv: Rect,
     pub mask: Rect,
     pub radius: f32,
-    pub grayscale: bool,
+    /// A collapsed color-filter chain applied to sampled pixels.
+    pub color_matrix: ColorMatrix,
     pub opacity: f32,
     pub clip: Option<Rect>,
 }
@@ -819,7 +1299,7 @@ impl ImagePrimitive {
             source_uv: Rect::new(0.0, 0.0, 1.0, 1.0),
             mask: destination,
             radius: 0.0,
-            grayscale: false,
+            color_matrix: ColorMatrix::IDENTITY,
             opacity: 1.0,
             clip: None,
         }
@@ -840,8 +1320,18 @@ impl ImagePrimitive {
         self
     }
 
-    pub fn grayscale(mut self, grayscale: bool) -> Self {
-        self.grayscale = grayscale;
+    /// Fully desaturate sampled pixels without creating another decoded image.
+    pub fn grayscale(self, grayscale: bool) -> Self {
+        self.color_matrix(if grayscale {
+            ColorMatrix::from(Filter::Grayscale(1.0))
+        } else {
+            ColorMatrix::IDENTITY
+        })
+    }
+
+    /// Apply a collapsed color-filter chain to sampled pixels.
+    pub fn color_matrix(mut self, matrix: ColorMatrix) -> Self {
+        self.color_matrix = matrix;
         self
     }
 
@@ -1317,7 +1807,13 @@ impl Scene {
     pub(crate) fn push_quad_in(&mut self, key: PaintLayerKey, mut quad: Quad) {
         quad.fill = quad.fill.multiply_alpha(self.opacity);
         quad.border_color = quad.border_color.multiply_alpha(self.opacity);
-        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0)
+        quad.background = quad
+            .background
+            .map(|gradient| gradient.multiply_alpha(self.opacity));
+        let gradient_visible = quad
+            .background
+            .is_some_and(|gradient| gradient.is_visible());
+        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0 || gradient_visible)
             && let Some(bounds) = clipped_paint_bounds(quad.rect, [quad.clip])
         {
             let layer = self.layer_mut(key);
@@ -1332,7 +1828,13 @@ impl Scene {
     pub(crate) fn push_edge_quad_in(&mut self, key: PaintLayerKey, mut quad: EdgeQuad) {
         quad.fill = quad.fill.multiply_alpha(self.opacity);
         quad.border_color = quad.border_color.multiply_alpha(self.opacity);
-        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0)
+        quad.background = quad
+            .background
+            .map(|gradient| gradient.multiply_alpha(self.opacity));
+        let gradient_visible = quad
+            .background
+            .is_some_and(|gradient| gradient.is_visible());
+        if (quad.fill.a > 0.0 || quad.border_color.a > 0.0 || gradient_visible)
             && let Some(bounds) = clipped_paint_bounds(quad.rect, [quad.clip])
         {
             let layer = self.layer_mut(key);
@@ -1738,6 +2240,102 @@ impl Default for Scene {
 mod tests {
     use super::*;
     use crate::Point;
+
+    #[test]
+    fn corner_radii_scale_uniformly_when_a_shared_edge_overflows() {
+        let corners = Corners::new(40.0, 40.0, 0.0, 0.0).resolve(40.0, 100.0);
+        assert_eq!(corners.top_left, 20.0);
+        assert_eq!(corners.top_right, 20.0);
+        assert_eq!(corners.bottom_right, 0.0);
+
+        let fitting = Corners::new(4.0, 8.0, 12.0, 2.0).resolve(200.0, 200.0);
+        assert_eq!(fitting, Corners::new(4.0, 8.0, 12.0, 2.0));
+        assert_eq!(fitting.maximum(), 12.0);
+        assert!(Corners::ZERO.is_zero());
+        assert_eq!(Corners::top(6.0), Corners::new(6.0, 6.0, 0.0, 0.0));
+        assert_eq!(Corners::bottom(6.0), Corners::new(0.0, 0.0, 6.0, 6.0));
+        assert_eq!(Corners::left(6.0), Corners::new(6.0, 0.0, 0.0, 6.0));
+        assert_eq!(Corners::right(6.0), Corners::new(0.0, 6.0, 6.0, 0.0));
+        assert_eq!(Corners::all(f32::NAN).sanitized(), Corners::ZERO);
+        assert_eq!(Corners::all(2.0).expanded(3.0), Corners::all(5.0));
+        assert_eq!(Corners::all(2.0).expanded(-6.0), Corners::ZERO);
+    }
+
+    #[test]
+    fn quad_backgrounds_accept_solid_colors_and_gradients() {
+        let solid =
+            Quad::new(Rect::new(0.0, 0.0, 10.0, 10.0), Color::BLACK).background(Color::WHITE);
+        assert_eq!(solid.fill, Color::WHITE);
+        assert!(solid.background.is_none());
+
+        let gradient = Quad::new(Rect::new(0.0, 0.0, 10.0, 10.0), Color::BLACK)
+            .background(crate::Gradient::conic(0.0, [Color::WHITE, Color::BLACK]))
+            .corner_radii(Corners::new(1.0, 2.0, 3.0, 4.0));
+        assert!(gradient.background.is_some());
+        assert_eq!(gradient.radius, Corners::new(1.0, 2.0, 3.0, 4.0));
+    }
+
+    #[test]
+    fn color_filters_collapse_into_one_bounded_matrix() {
+        assert!(Filters::none().is_empty());
+        assert!(Filters::none().color_matrix().is_identity());
+
+        let saturated = Filters::new((0..32).map(|_| Filter::Grayscale(1.0)));
+        assert_eq!(saturated.len(), MAX_FILTERS_PER_ELEMENT);
+        assert_eq!(
+            Filters::none().push(Filter::Invert(1.0)).len(),
+            1,
+            "a pushed filter is retained"
+        );
+
+        // Identity amounts leave the matrix untouched.
+        assert!(ColorMatrix::from(Filter::Brightness(1.0)).is_identity());
+        assert!(ColorMatrix::from(Filter::Contrast(1.0)).is_identity());
+        assert!(ColorMatrix::from(Filter::Saturate(1.0)).is_identity());
+        assert!(ColorMatrix::from(Filter::Grayscale(0.0)).is_identity());
+        assert!(ColorMatrix::from(Filter::Invert(0.0)).is_identity());
+        assert!(ColorMatrix::from(Filter::Sepia(0.0)).is_identity());
+        assert!(ColorMatrix::from(Filter::Opacity(1.0)).is_identity());
+        // Non-finite amounts fall back to the identity amount instead of poisoning the matrix.
+        assert!(ColorMatrix::from(Filter::Brightness(f32::NAN)).is_identity());
+        assert!(ColorMatrix::from(Filter::HueRotate(f32::INFINITY)).is_identity());
+
+        // Full inversion maps one to zero.
+        let invert = ColorMatrix::from(Filter::Invert(1.0)).as_array();
+        assert!((invert[0] + 1.0).abs() < 0.0001);
+        assert!((invert[4] - 1.0).abs() < 0.0001);
+
+        // Composition applies the first filter first: inverting twice is the identity.
+        let twice = Filters::new([Filter::Invert(1.0), Filter::Invert(1.0)]).color_matrix();
+        for (value, expected) in twice
+            .as_array()
+            .iter()
+            .zip(ColorMatrix::IDENTITY.as_array().iter())
+        {
+            assert!((value - expected).abs() < 0.0001, "{twice:?}");
+        }
+
+        // Opacity only scales alpha.
+        let faded = ColorMatrix::from(Filter::Opacity(0.25)).as_array();
+        assert_eq!(faded[18], 0.25);
+        assert_eq!(faded[0], 1.0);
+    }
+
+    #[test]
+    fn image_primitives_expose_grayscale_through_the_shared_color_matrix() {
+        let image = crate::Image::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap();
+        let primitive = ImagePrimitive::new(image, Rect::new(0.0, 0.0, 4.0, 4.0));
+        assert!(primitive.color_matrix.is_identity());
+        assert!(!primitive.clone().grayscale(true).color_matrix.is_identity());
+        assert!(
+            primitive
+                .clone()
+                .grayscale(true)
+                .grayscale(false)
+                .color_matrix
+                .is_identity()
+        );
+    }
 
     #[test]
     fn named_text_ids_are_stable_and_distinct() {

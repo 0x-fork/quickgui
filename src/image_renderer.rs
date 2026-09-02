@@ -14,6 +14,18 @@ use wgpu::{
     VertexStepMode, util::DeviceExt,
 };
 
+/// Split a 4x5 color matrix into four coefficient rows plus one offset row.
+fn color_matrix_rows(matrix: crate::ColorMatrix) -> [[f32; 4]; 5] {
+    let values = matrix.as_array();
+    [
+        [values[0], values[1], values[2], values[3]],
+        [values[5], values[6], values[7], values[8]],
+        [values[10], values[11], values[12], values[13]],
+        [values[15], values[16], values[17], values[18]],
+        [values[4], values[9], values[14], values[19]],
+    ]
+}
+
 use crate::{Image, Rect, Scene, image::ImageId, scene::PrimitiveRef};
 
 /// Maximum decoded image pixels retained by one renderer on the GPU.
@@ -47,7 +59,10 @@ struct ImageInstance {
     uv: [f32; 4],
     clip: [f32; 4],
     mask: [f32; 4],
-    radius_grayscale_opacity_padding: [f32; 4],
+    /// Corner radius, whether a color filter is present, opacity, unused.
+    radius_filtered_opacity_padding: [f32; 4],
+    /// The 4x5 color matrix, split into five rows of four plus one offset column.
+    color_matrix: [[f32; 4]; 5],
 }
 
 struct CachedImage {
@@ -182,6 +197,31 @@ impl ImageRenderer {
                 format: VertexFormat::Float32x4,
                 offset: 64,
                 shader_location: 4,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 80,
+                shader_location: 5,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 96,
+                shader_location: 6,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 112,
+                shader_location: 7,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 128,
+                shader_location: 8,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 144,
+                shader_location: 9,
             },
         ];
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -342,12 +382,13 @@ impl ImageRenderer {
                             primitive.mask.width,
                             primitive.mask.height,
                         ],
-                        radius_grayscale_opacity_padding: [
+                        radius_filtered_opacity_padding: [
                             primitive.radius,
-                            f32::from(primitive.grayscale),
+                            f32::from(!primitive.color_matrix.is_identity()),
                             primitive.opacity,
                             0.0,
                         ],
+                        color_matrix: color_matrix_rows(primitive.color_matrix),
                     },
                 });
             }

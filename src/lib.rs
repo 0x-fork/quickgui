@@ -166,9 +166,11 @@ pub use element::native_view;
 pub use element::{
     AccessibilityAutoComplete, AccessibilityLive, AccessibilityOrientation, AccessibilityPopover,
     AccessibilityRole, AccessibilitySortDirection, AccessibilityValueRange, AnchorPlacement,
-    AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack, IntoElement,
+    AppRegion, BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, Element,
+    ElementId, ElementStateStyle, FocusHandle, GridTrack, IntoElement, MAX_BACKGROUND_IMAGE_TILES,
     MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
-    MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT, MAX_MOUSE_LISTENERS_PER_ELEMENT, ToggleState,
+    MAX_CORNER_RADIUS, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
+    MAX_MOUSE_LISTENERS_PER_ELEMENT, MAX_OUTLINE_OFFSET, MAX_OUTLINE_WIDTH, Outline, ToggleState,
     UserSelect, Visibility, button, canvas, container_query, custom_shader, div, form, img,
     overlay, path, styled_text_area, styled_text_input, submit_button, svg, text, text_area,
     text_input,
@@ -265,6 +267,10 @@ pub use path::{
     MAX_PATH_VERTICES, Path, PathBuilder, PathError, PathStyle, StrokeOptions, linear_color_stop,
     linear_gradient,
 };
+pub use path::{
+    ColorStops, Gradient, GradientAngle, GradientCenter, GradientDirection, GradientKind,
+    MAX_GRADIENT_STOPS, RadialGradientExtent, RadialGradientShape,
+};
 pub use path_renderer::{MAX_GPU_PATH_VERTICES, MAX_GPU_PATHS_PER_FRAME};
 pub use picker::{
     MAX_PICKER_ITEM_TEXT_BYTES, MAX_PICKER_ITEMS, MAX_PICKER_QUERY_BYTES,
@@ -345,6 +351,7 @@ pub use quickgui_system::{
     CpuUsage, CpuUsageSampler, MAX_CPU_SAMPLE_INTERVAL, ProcessMetrics, SystemMemory,
 };
 // Window lifecycle events, stacking/input policy, and persistable restore geometry.
+pub use renderer::MAX_GRADIENTS_PER_FRAME;
 pub use runtime::{
     App, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
     DesktopIntegrationSupport, DismissListener, Drag, DragListener, DropListener,
@@ -388,9 +395,10 @@ pub use runtime::{
 };
 pub use runtime::{MAX_WINDOW_ASPECT_RATIO, ResolvedWindowRestoreState, WindowRestoreState};
 pub use scene::{
-    BoxShadow, CustomShaderPrimitive, ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS,
-    MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign,
-    TextId, TextOverflow, TextRun, TextShaping, TextStyle, TextWrap, WhiteSpace,
+    BorderStyle, BoxShadow, ColorMatrix, Corners, CustomShaderPrimitive, Filter, Filters,
+    ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS, MAX_BOX_SHADOW_EXTENT, MAX_FILTERS_PER_ELEMENT,
+    PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign, TextId, TextOverflow,
+    TextRun, TextShaping, TextStyle, TextWrap, WhiteSpace,
 };
 // Direction-relative layout, sticky positioning, scroll snapping, and text styling additions.
 pub use element::{Direction, SnapAlign, SnapStrictness, StickyInsets};

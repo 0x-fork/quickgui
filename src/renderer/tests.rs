@@ -1660,7 +1660,8 @@ fn drop_shadow_geometry_includes_offset_spread_and_three_sigma_margin() {
     let instance = shadow_instance(&shadow, Rect::new(-100.0, -100.0, 500.0, 500.0)).unwrap();
     assert_eq!(instance.subject, [11.0, 23.0, 106.0, 56.0]);
     assert_eq!(instance.geometry, [-5.0, 7.0, 138.0, 88.0]);
-    assert_eq!(instance.params, [SHAPE_MODE_DROP_SHADOW, 8.0, 0.0, 10.0]);
+    assert_eq!(instance.params, [SHAPE_MODE_DROP_SHADOW, 0.0, 0.0, 10.0]);
+    assert_eq!(instance.corners, [8.0, 8.0, 8.0, 8.0]);
 }
 
 #[test]
@@ -1676,7 +1677,9 @@ fn inset_shadow_uses_a_spread_contracting_translated_hole() {
     let instance = shadow_instance(&shadow, Rect::new(0.0, 0.0, 500.0, 500.0)).unwrap();
     assert_eq!(instance.geometry, [10.0, 20.0, 100.0, 50.0]);
     assert_eq!(instance.subject, [17.0, 28.0, 90.0, 40.0]);
-    assert_eq!(instance.params, [SHAPE_MODE_INSET_SHADOW, 3.0, 8.0, 4.0]);
+    // The hole's corner radii are derived in the shader from the element radii and the spread.
+    assert_eq!(instance.params, [SHAPE_MODE_INSET_SHADOW, 5.0, 0.0, 4.0]);
+    assert_eq!(instance.corners, [8.0, 8.0, 8.0, 8.0]);
 }
 
 fn shaped_line_width(font_system: &mut FontSystem, content: &str, style: &TextStyle) -> f32 {

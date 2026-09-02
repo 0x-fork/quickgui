@@ -1,5 +1,88 @@
 use super::*;
 
+/// Paint an element's raster background above its fill and behind its children.
+///
+/// Tiles are generated only for the visible intersection of the element and its clip, and the
+/// total is capped by [`MAX_BACKGROUND_IMAGE_TILES`]. Exceeding the cap deliberately paints one
+/// anchored tile instead of emitting an unbounded number of image instances.
+pub(super) fn push_background_image(
+    scene: &mut Scene,
+    layer: PaintLayerKey,
+    bounds: Rect,
+    corners: Corners,
+    clip: Rect,
+    color_matrix: ColorMatrix,
+    background: &BackgroundImage,
+) {
+    if bounds.is_empty() {
+        return;
+    }
+    let Some(visible) = clip.intersection(bounds) else {
+        return;
+    };
+    let Some(tile) = background.tile_size(bounds) else {
+        return;
+    };
+    let anchor_x = bounds.x + (bounds.width - tile.width) * background.position.x;
+    let anchor_y = bounds.y + (bounds.height - tile.height) * background.position.y;
+    let radius = corners.maximum();
+
+    let axis_range = |repeats: bool, anchor: f32, extent: f32, start: f32, end: f32| {
+        if !repeats {
+            return (0_i64, 0_i64);
+        }
+        let first = ((start - anchor) / extent).floor();
+        let last = ((end - anchor) / extent).ceil() - 1.0;
+        if !first.is_finite() || !last.is_finite() {
+            return (0, 0);
+        }
+        let first = first.clamp(-1.0e6, 1.0e6) as i64;
+        let last = last.clamp(-1.0e6, 1.0e6) as i64;
+        (first, last.max(first))
+    };
+    let (first_x, last_x) = axis_range(
+        background.repeat.repeats_x(),
+        anchor_x,
+        tile.width,
+        visible.x,
+        visible.right(),
+    );
+    let (first_y, last_y) = axis_range(
+        background.repeat.repeats_y(),
+        anchor_y,
+        tile.height,
+        visible.y,
+        visible.bottom(),
+    );
+    let columns = (last_x - first_x + 1).max(1);
+    let rows = (last_y - first_y + 1).max(1);
+    let (first_x, last_x, first_y, last_y) =
+        if columns.saturating_mul(rows) > MAX_BACKGROUND_IMAGE_TILES as i64 {
+            (0, 0, 0, 0)
+        } else {
+            (first_x, last_x, first_y, last_y)
+        };
+
+    for row in first_y..=last_y {
+        for column in first_x..=last_x {
+            let destination = Rect::new(
+                anchor_x + column as f32 * tile.width,
+                anchor_y + row as f32 * tile.height,
+                tile.width,
+                tile.height,
+            );
+            scene.push_image_in(
+                layer,
+                ImagePrimitive::new(background.image.clone(), destination)
+                    .mask(bounds)
+                    .radius(radius)
+                    .color_matrix(color_matrix)
+                    .clip(visible),
+            );
+        }
+    }
+}
+
 fn has_visible_border(widths: Insets) -> bool {
     widths.top > 0.0 || widths.right > 0.0 || widths.bottom > 0.0 || widths.left > 0.0
 }
@@ -524,6 +607,18 @@ pub(super) fn paint_element(
         .or(invalid_state.radius)
         .or(focus_state.radius)
         .unwrap_or(element.visual.radius);
+    let target_gradient = disabled_state
+        .background_gradient
+        .or(interaction_state.background_gradient)
+        .or(invalid_state.background_gradient)
+        .or(focus_state.background_gradient)
+        .or(element.visual.background_gradient);
+    let target_outline = disabled_state
+        .outline
+        .or(interaction_state.outline)
+        .or(invalid_state.outline)
+        .or(focus_state.outline)
+        .or(element.visual.outline);
     let target_shadows = disabled_state
         .shadows
         .as_deref()
@@ -585,17 +680,56 @@ pub(super) fn paint_element(
         .as_ref()
         .map_or(target_state_text_color, |style| style.text_color);
     let previous_opacity = scene.multiply_opacity(opacity);
-    push_element_shadows(scene, layer, bounds, radius, parent_clip, shadows, false);
-    if fill.a > 0.0 || (border.a > 0.0 && has_visible_border(border_widths)) {
+    // Explicit per-corner radii replace the single transitionable radius.
+    let corners = element
+        .visual
+        .corner_radii
+        .unwrap_or(Corners::all(radius))
+        .resolve(bounds.width, bounds.height);
+    push_element_shadows(scene, layer, bounds, corners, parent_clip, shadows, false);
+    if fill.a > 0.0
+        || target_gradient.is_some()
+        || (border.a > 0.0 && has_visible_border(border_widths))
+    {
         scene.push_edge_quad_in(
             layer,
             EdgeQuad::new(bounds, fill)
-                .radius(radius)
+                .corner_radii(corners)
+                .background(target_gradient)
                 .border(border_widths, border)
+                .border_style(element.visual.border_style)
                 .clip(parent_clip),
         );
     }
-    push_element_shadows(scene, layer, bounds, radius, parent_clip, shadows, true);
+    push_element_shadows(scene, layer, bounds, corners, parent_clip, shadows, true);
+    if let Some(background_image) = element.visual.background_image.as_deref() {
+        push_background_image(
+            scene,
+            layer,
+            bounds,
+            corners,
+            parent_clip,
+            element.visual.filters.color_matrix(),
+            background_image,
+        );
+    }
+    // The outline ring lives outside the border box and never participates in layout.
+    if let Some(outline) = target_outline
+        && let Some(ring) = outline.ring(bounds)
+    {
+        scene.push_edge_quad_in(
+            layer,
+            EdgeQuad::new(ring, Color::TRANSPARENT)
+                .corner_radii(
+                    corners
+                        .expanded(outline.offset + outline.width)
+                        .resolve(ring.width, ring.height),
+                )
+                .border(Insets::all(outline.width), outline.color)
+                .border_style(outline.style)
+                .clip(parent_clip),
+        );
+    }
 
     let selectable_document_index = selectable_text_indices.get(&element.runtime_id).copied();
     if let Some(region) = element_hit_region(
@@ -781,8 +915,8 @@ pub(super) fn paint_element(
                     ImagePrimitive::new(source.clone(), fitted.destination)
                         .source_uv(fitted.source_uv)
                         .mask(bounds)
-                        .radius(element.visual.radius)
-                        .grayscale(image.grayscale)
+                        .radius(element.visual.corners(element.visual.radius).maximum())
+                        .color_matrix(element.visual.filters.color_matrix())
                         .clip(clip),
                 );
             }
@@ -798,7 +932,7 @@ pub(super) fn paint_element(
                     SvgPrimitive::new(svg.svg.clone(), fitted.destination, color)
                         .source_uv(fitted.source_uv)
                         .mask(bounds)
-                        .radius(element.visual.radius)
+                        .radius(element.visual.corners(element.visual.radius).maximum())
                         .transform(svg.transform)
                         .clip(clip),
                 );
@@ -1128,7 +1262,7 @@ pub(super) fn paint_element(
                     view: view.clone(),
                     bounds,
                     clip,
-                    corner_radius: element.visual.radius,
+                    corner_radius: element.visual.corners(element.visual.radius).maximum(),
                     opacity: scene.current_opacity(),
                     z_index: layer.z_index,
                     source_order: order.source,

@@ -992,3 +992,173 @@ fn box_shadow_lists_fail_at_the_fixed_retention_bound() {
     assert!(std::panic::catch_unwind(|| div().shadows(shadows())).is_err());
     assert!(std::panic::catch_unwind(|| ElementStateStyle::default().shadows(shadows())).is_err());
 }
+
+#[test]
+fn background_gradients_replace_the_solid_fill_and_stay_paint_only() {
+    let element = div().bg(Color::WHITE).bg_linear_gradient(
+        crate::GradientDirection::ToRight,
+        [Color::BLACK, Color::WHITE],
+    );
+    assert!(element.visual.background_gradient.is_some());
+    assert_eq!(element.layout, div().layout);
+
+    // A later solid background clears the gradient again.
+    let solid = element.bg(Color::WHITE);
+    assert!(solid.visual.background_gradient.is_none());
+    assert_eq!(solid.visual.background, Some(Color::WHITE));
+
+    // Passing a solid color through the gradient entry point stays solid.
+    let plain = div().bg_gradient(Color::BLACK);
+    assert!(plain.visual.background_gradient.is_none());
+    assert_eq!(plain.visual.background, Some(Color::BLACK));
+
+    let hovered = div().hover(|style| {
+        style.bg_gradient(crate::Gradient::conic(0.0, [Color::BLACK, Color::WHITE]))
+    });
+    assert!(hovered.hover.background_gradient.is_some());
+    assert!(hovered.has_stateful_paint());
+}
+
+#[test]
+fn per_corner_radii_are_bounded_and_replace_the_uniform_radius() {
+    let element = div().rounded(8.0).rounded_tl(20.0).rounded_br(2.0);
+    let corners = element
+        .visual
+        .corner_radii
+        .expect("per-corner radii are set");
+    assert_eq!(corners, Corners::new(20.0, 8.0, 2.0, 8.0));
+
+    // A later uniform radius clears the per-corner override.
+    let uniform = element.rounded(4.0);
+    assert!(uniform.visual.corner_radii.is_none());
+    assert_eq!(uniform.visual.radius, 4.0);
+
+    assert_eq!(
+        div().rounded_t(6.0).visual.corner_radii,
+        Some(Corners::new(6.0, 6.0, 0.0, 0.0))
+    );
+    assert_eq!(
+        div().rounded_r(6.0).visual.corner_radii,
+        Some(Corners::new(0.0, 6.0, 6.0, 0.0))
+    );
+    assert_eq!(
+        div()
+            .corner_radii(Corners::all(f32::INFINITY))
+            .visual
+            .corner_radii,
+        Some(Corners::ZERO)
+    );
+    assert_eq!(div().rounded(-4.0).visual.radius, 0.0);
+    assert_eq!(div().rounded_full().visual.radius, crate::MAX_CORNER_RADIUS);
+    // Radii are paint-only: no Taffy style changes.
+    assert_eq!(div().rounded_bl(12.0).layout, div().layout);
+}
+
+#[test]
+fn border_styles_and_outlines_are_bounded_and_never_enter_layout() {
+    let dashed = div().border(2.0, Color::WHITE).border_dashed();
+    assert_eq!(dashed.visual.border_style, crate::BorderStyle::Dashed);
+    assert_eq!(
+        div().border_dotted().visual.border_style,
+        crate::BorderStyle::Dotted
+    );
+    assert_eq!(
+        dashed.border_solid().visual.border_style,
+        crate::BorderStyle::Solid
+    );
+
+    let outlined = div()
+        .outline(4.0, Color::WHITE)
+        .outline_offset(3.0)
+        .outline_dashed();
+    let outline = outlined.visual.outline.expect("an outline is set");
+    assert_eq!(outline.width, 4.0);
+    assert_eq!(outline.offset, 3.0);
+    assert_eq!(outline.style, crate::BorderStyle::Dashed);
+    // The outline is not a Taffy border and does not move layout.
+    assert_eq!(outlined.layout, div().layout);
+    assert!(outlined.visual.border_widths == Insets::default());
+    assert!(outlined.outline_none().visual.outline.is_none());
+
+    assert_eq!(
+        div()
+            .outline(f32::INFINITY, Color::WHITE)
+            .visual
+            .outline
+            .unwrap()
+            .width,
+        0.0
+    );
+    assert_eq!(
+        div()
+            .outline(1.0, Color::WHITE)
+            .outline_offset(-100_000.0)
+            .visual
+            .outline
+            .unwrap()
+            .offset,
+        -crate::MAX_OUTLINE_OFFSET
+    );
+
+    // A ring is only produced when it can actually paint.
+    let bounds = Rect::new(10.0, 10.0, 20.0, 20.0);
+    let ring = crate::Outline::new(2.0, Color::WHITE).offset(2.0);
+    assert_eq!(ring.ring(bounds), Some(Rect::new(6.0, 6.0, 28.0, 28.0)));
+    assert!(
+        crate::Outline::new(0.0, Color::WHITE)
+            .ring(bounds)
+            .is_none()
+    );
+    assert!(
+        crate::Outline::new(2.0, Color::TRANSPARENT)
+            .ring(bounds)
+            .is_none()
+    );
+}
+
+#[test]
+fn background_images_resolve_every_sizing_mode_without_touching_layout() {
+    let image = crate::Image::from_rgba(4, 2, vec![255_u8; 4 * 2 * 4]).unwrap();
+    let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
+
+    let auto = crate::BackgroundImage::new(image.clone());
+    assert_eq!(auto.tile_size(bounds).unwrap(), crate::Size::new(4.0, 2.0));
+
+    let mut cover = crate::BackgroundImage::new(image.clone());
+    cover.size = crate::BackgroundSize::Cover;
+    assert_eq!(
+        cover.tile_size(bounds).unwrap(),
+        crate::Size::new(80.0, 40.0)
+    );
+
+    let mut contain = crate::BackgroundImage::new(image.clone());
+    contain.size = crate::BackgroundSize::Contain;
+    assert_eq!(
+        contain.tile_size(bounds).unwrap(),
+        crate::Size::new(40.0, 20.0)
+    );
+
+    let mut fixed = crate::BackgroundImage::new(image.clone());
+    fixed.size = crate::BackgroundSize::Fixed(f32::NAN, 5.0);
+    assert!(fixed.tile_size(bounds).is_none());
+
+    let element = div().bg_image(
+        image,
+        crate::BackgroundSize::Contain,
+        crate::BackgroundRepeat::RepeatX,
+        crate::BackgroundPosition::new(4.0, f32::NAN),
+    );
+    let background = element
+        .visual
+        .background_image
+        .as_deref()
+        .expect("a background image is set");
+    assert_eq!(background.repeat, crate::BackgroundRepeat::RepeatX);
+    assert!(background.repeat.repeats_x() && !background.repeat.repeats_y());
+    assert_eq!(
+        background.position,
+        crate::BackgroundPosition::new(1.0, 0.5)
+    );
+    assert_eq!(element.layout, div().layout);
+    assert!(element.bg_image_none().visual.background_image.is_none());
+}

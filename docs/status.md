@@ -12,6 +12,20 @@ Implemented now:
   in-window modal parts whose overlay portal the core mounts only while open and whose
   Escape/backdrop dismissal policy is declared ahead of time, and a delayed native `tooltip`
   property with placement, delay, gap, and viewport-margin controls;
+- element background gradients: bounded eight-stop linear, radial (circle/ellipse, three ending-shape
+  extents, any center), and conic gradients in linear-sRGB, sRGB, or Oklab, evaluated analytically in
+  the existing instanced shape draw, respecting rounded corners, borders, clipping, subtree opacity,
+  and damage, swappable in hover/active/focus states, and shared with retained path and canvas fills;
+- per-corner radii (`rounded_tl`/`tr`/`br`/`bl`, `rounded_t`/`b`/`l`/`r`, `corner_radii`,
+  `rounded_full`) with CSS uniform-scale reduction, analytic dashed and dotted borders distributed
+  evenly around the whole rounded outline, and `outline`/`outline_offset` rings painted outside the
+  border box without affecting layout;
+- bounded CSS-shaped color filters (`brightness`, `contrast`, `saturate`, `grayscale`, `invert`,
+  `sepia`, `hue-rotate`, `opacity`) collapsed into one color matrix and applied to an element's own
+  image and background-image pixels without an offscreen group texture;
+- raster element backgrounds with `Auto`/`Cover`/`Contain`/`Fixed` sizing, four repeat modes, and
+  fractional background positions, painted through the existing bounded image primitive and masked
+  by the element's rounded corners;
 - experimental macOS Bun/N-API hosting with an externally pumped main-thread application loop,
   a core-backed singleton application readiness lifecycle, dynamically created `Window` instances,
   independent transactional bounded retained trees,

@@ -73,8 +73,8 @@ another. Path, image, SVG, and application-shader renderers are created only whe
 uses that primitive family; an ordinary shape-and-text popover never compiles or allocates those four
 unused paths:
 
-1. Shapes use six shader-generated vertices and one declaration-ordered instance stream. Quads carry logical bounds, fill, inside border, radius, and clip. Drop and inset shadows carry the element box, translated/spread subject box, color, blur radius, and clip. Rounded-corner antialiasing and Gaussian-CDF shadow falloff are analytic in WGSL, so shadows allocate no blur textures or retained cache entries. Outer shadows, the element quad, and inset shadows preserve CSS paint order while every non-empty stacking layer remains one draw call.
-2. Images use six shader-generated vertices and one shared instance upload. Straight-alpha RGBA8 pixels are sampled from sRGB textures, converted to premultiplied linear output in the shader, and masked by the same logical clip and rounded box used for layout. Consecutive primitives with the same image identity share one draw call; texture switches preserve image source order.
+1. Shapes use six shader-generated vertices and one declaration-ordered instance stream. Quads carry logical bounds, fill, inside border, four corner radii, an optional gradient index, a border-style code, and clip. Multi-stop linear, radial, and conic gradients live in one read-only storage buffer indexed per instance and are resolved against the primitive's own rectangle on the CPU, so a gradient adds no texture, ramp cache, or draw call; at most 4,096 gradients are uploaded per frame in scene order and a shape past that bound falls back to its solid fill. Dashed and dotted borders measure arc length along the rounded outline analytically -- straight edges exactly and corners as exact quarter arcs -- and scale their declared period so a whole number of repeats closes the outline. Outlines are one additional instance whose rectangle and radii are the border box grown by the outline offset and width, so they never touch layout. Drop and inset shadows carry the element box, translated/spread subject box, color, blur radius, and clip. Rounded-corner antialiasing and Gaussian-CDF shadow falloff are analytic in WGSL, so shadows allocate no blur textures or retained cache entries. Outer shadows, the element quad, and inset shadows preserve CSS paint order while every non-empty stacking layer remains one draw call.
+2. Images use six shader-generated vertices and one shared instance upload. Element background images reuse this primitive: tiles are generated only for the visible intersection of the element and its clip, masked by the element's rounded rectangle, and capped at 256 tiles per element, so a raster background creates no pipeline, pass, or cache of its own. Straight-alpha RGBA8 pixels are sampled from sRGB textures, converted to premultiplied linear output in the shader, and masked by the same logical clip and rounded box used for layout. A bounded chain of at most eight CSS color filters collapses on the CPU into one 4x5 matrix carried in the 160-byte instance, so filter count never affects GPU work and no offscreen group texture is allocated; matching CSS, the matrix is applied to encoded sRGB and converted back. Consecutive primitives with the same image identity share one draw call; texture switches preserve image source order.
 3. SVGs retain a parsed `resvg` tree and rasterize only an identity-and-physical-size cache miss.
    The GPU stores `R8Unorm` alpha masks, while inherited tint, rounded clipping, translation, and
    rotation remain per-instance shader data. Scale participates in the raster key to preserve edge
@@ -82,9 +82,9 @@ unused paths:
    cache identity.
 4. Paths retain CPU-tessellated Lyon triangles. Each uploaded vertex carries barycentric coordinates,
    a true-boundary mask, and a paint index; WGSL derives edge coverage only for outline edges, so
-   internal triangulation stays opaque without a permanent multisample framebuffer. One storage
-   paint record supplies scale/translation, clip, solid or two-stop linear gradient, and
-   linear-sRGB/sRGB/Oklab interpolation. All paths at one overlap order share one draw.
+   internal triangulation stays opaque without a permanent multisample framebuffer. One 240-byte storage
+   paint record supplies scale/translation, clip, a solid color or the same bounded eight-stop
+   linear/radial/conic gradient used by quads, and linear-sRGB/sRGB/Oklab interpolation. All paths at one overlap order share one draw.
 5. Application shaders retain validated WGSL fragment functions behind a framework-owned vertex
    stage and fragment wrapper. Rect, physical clip, and four `vec4<f32>` parameter slots are
    per-instance data; shaders sharing one retained identity batch at an overlap order. The wrapper
@@ -94,8 +94,9 @@ unused paths:
 Colors are stored in linear-light space. Eight-bit constructors decode sRGB on the CPU, and the sRGB surface performs the output transfer. Shape, image, SVG, path, and application-shader output is premultiplied before using premultiplied-alpha blending. Text wraps at word boundaries by default; intrinsic measurements reserve one physical pixel before a max-content width is fed back as a wrap constraint, preventing rounding-only reflow between layout and paint.
 
 Shape instance uploads rotate across three GPU buffers. Capacity grows geometrically. A shape
-instance is 96 bytes, and shadow overdraw is clipped to the viewport and limited to three Gaussian
-standard deviations. Text layouts are age-evicted every frame and have a hard cap of 256 retained
+instance is 128 bytes, the gradient storage buffer rotates across the same three frames and holds
+192-byte records of at most eight stops, and shadow overdraw is clipped to the viewport and limited
+to three Gaussian standard deviations. Text layouts are age-evicted every frame and have a hard cap of 256 retained
 areas; Glyphon's atlas is trimmed after presentation. The deliberately small layout cache keeps
 long, disjoint scrolling from retaining whole off-screen text buffers while still covering several
 nearby viewports.

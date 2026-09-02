@@ -13,7 +13,122 @@ impl Element {
 
     pub fn bg(mut self, color: Color) -> Self {
         self.visual.background = Some(color);
+        self.visual.background_gradient = None;
         self
+    }
+
+    /// Paint a bounded multi-stop gradient behind this element's children.
+    ///
+    /// Accepts any [`Background`], so a solid [`Color`], a two-stop [`LinearGradient`], or a
+    /// multi-stop [`Gradient`] all work. Gradients are evaluated analytically inside the same
+    /// rounded, bordered, clipped, and opacity-scaled quad as a solid background: they add no
+    /// texture, ramp cache, or extra draw call.
+    pub fn bg_gradient(mut self, gradient: impl Into<Background>) -> Self {
+        match gradient.into() {
+            Background::Solid(color) => {
+                self.visual.background = Some(color);
+                self.visual.background_gradient = None;
+            }
+            other => {
+                self.visual.background_gradient = other.as_gradient();
+            }
+        }
+        self
+    }
+
+    /// Paint a raster image behind this element's children and inside its rounded corners.
+    ///
+    /// The image uses the same bounded GPU texture cache as [`img`](crate::img) elements and is
+    /// painted with the existing image primitive: no additional pipeline, pass, or cache is
+    /// created. Repeated tiles are capped by
+    /// [`MAX_BACKGROUND_IMAGE_TILES`](crate::MAX_BACKGROUND_IMAGE_TILES).
+    pub fn bg_image(
+        mut self,
+        image: impl Into<Image>,
+        size: BackgroundSize,
+        repeat: BackgroundRepeat,
+        position: BackgroundPosition,
+    ) -> Self {
+        self.visual.background_image = Some(Box::new(BackgroundImage {
+            image: image.into(),
+            size,
+            repeat,
+            position: BackgroundPosition::new(position.x, position.y),
+        }));
+        self
+    }
+
+    /// Paint one centered raster background scaled until it covers the element box.
+    pub fn bg_image_cover(self, image: impl Into<Image>) -> Self {
+        self.bg_image(
+            image,
+            BackgroundSize::Cover,
+            BackgroundRepeat::NoRepeat,
+            BackgroundPosition::CENTER,
+        )
+    }
+
+    /// Paint one centered raster background scaled until it fits inside the element box.
+    pub fn bg_image_contain(self, image: impl Into<Image>) -> Self {
+        self.bg_image(
+            image,
+            BackgroundSize::Contain,
+            BackgroundRepeat::NoRepeat,
+            BackgroundPosition::CENTER,
+        )
+    }
+
+    /// Tile a raster background at its decoded pixel size along both axes.
+    pub fn bg_image_tiled(self, image: impl Into<Image>) -> Self {
+        self.bg_image(
+            image,
+            BackgroundSize::Auto,
+            BackgroundRepeat::Repeat,
+            BackgroundPosition::TOP_LEFT,
+        )
+    }
+
+    /// Remove any raster background.
+    pub fn bg_image_none(mut self) -> Self {
+        self.visual.background_image = None;
+        self
+    }
+
+    /// Paint a linear gradient at `angle`, where `0` degrees points to the top of the element.
+    ///
+    /// `angle` accepts `f32` degrees or a [`GradientDirection`]. At most
+    /// [`MAX_GRADIENT_STOPS`](crate::MAX_GRADIENT_STOPS) stops are retained; a bare list of
+    /// colors is spaced evenly.
+    pub fn bg_linear_gradient(
+        self,
+        angle: impl Into<GradientAngle>,
+        stops: impl Into<ColorStops>,
+    ) -> Self {
+        self.bg_gradient(Gradient::linear(angle, stops))
+    }
+
+    /// Paint a centered elliptical radial gradient sized to the element's farthest corner.
+    pub fn bg_radial_gradient(self, stops: impl Into<ColorStops>) -> Self {
+        self.bg_gradient(Gradient::radial(stops))
+    }
+
+    /// Paint a radial gradient with an explicit ending shape and center.
+    pub fn bg_radial_gradient_at(
+        self,
+        shape: RadialGradientShape,
+        center: GradientCenter,
+        stops: impl Into<ColorStops>,
+    ) -> Self {
+        self.bg_gradient(Gradient::radial(stops).shape(shape).center(center))
+    }
+
+    /// Paint a conic gradient sweeping clockwise from `from_angle` around the element's center.
+    pub fn bg_conic_gradient(
+        self,
+        from_angle: impl Into<GradientAngle>,
+        stops: impl Into<ColorStops>,
+    ) -> Self {
+        self.bg_gradient(Gradient::conic(from_angle, stops))
     }
 
     /// Set the opacity of this element and all of its descendants.
@@ -107,7 +222,156 @@ impl Element {
     }
 
     pub fn rounded(mut self, radius: f32) -> Self {
-        self.visual.radius = radius.max(0.0);
+        self.visual.radius = sanitize_corner_radius(radius);
+        self.visual.corner_radii = None;
+        self
+    }
+
+    /// Round each corner independently.
+    ///
+    /// Per-corner radii replace the single [`Element::rounded`] value. They are paint-only and,
+    /// unlike the uniform radius, are not interpolated by style transitions.
+    pub fn corner_radii(mut self, radii: Corners) -> Self {
+        self.visual.corner_radii = Some(Corners {
+            top_left: sanitize_corner_radius(radii.top_left),
+            top_right: sanitize_corner_radius(radii.top_right),
+            bottom_right: sanitize_corner_radius(radii.bottom_right),
+            bottom_left: sanitize_corner_radius(radii.bottom_left),
+        });
+        self
+    }
+
+    fn with_corner(self, apply: impl FnOnce(&mut Corners)) -> Self {
+        let mut corners = self.visual.corners(self.visual.radius);
+        apply(&mut corners);
+        self.corner_radii(corners)
+    }
+
+    /// Round the top-left corner.
+    pub fn rounded_tl(self, radius: f32) -> Self {
+        self.with_corner(|corners| corners.top_left = radius)
+    }
+
+    /// Round the top-right corner.
+    pub fn rounded_tr(self, radius: f32) -> Self {
+        self.with_corner(|corners| corners.top_right = radius)
+    }
+
+    /// Round the bottom-right corner.
+    pub fn rounded_br(self, radius: f32) -> Self {
+        self.with_corner(|corners| corners.bottom_right = radius)
+    }
+
+    /// Round the bottom-left corner.
+    pub fn rounded_bl(self, radius: f32) -> Self {
+        self.with_corner(|corners| corners.bottom_left = radius)
+    }
+
+    /// Round both top corners.
+    pub fn rounded_t(self, radius: f32) -> Self {
+        self.with_corner(|corners| {
+            corners.top_left = radius;
+            corners.top_right = radius;
+        })
+    }
+
+    /// Round both bottom corners.
+    pub fn rounded_b(self, radius: f32) -> Self {
+        self.with_corner(|corners| {
+            corners.bottom_left = radius;
+            corners.bottom_right = radius;
+        })
+    }
+
+    /// Round both left corners.
+    pub fn rounded_l(self, radius: f32) -> Self {
+        self.with_corner(|corners| {
+            corners.top_left = radius;
+            corners.bottom_left = radius;
+        })
+    }
+
+    /// Round both right corners.
+    pub fn rounded_r(self, radius: f32) -> Self {
+        self.with_corner(|corners| {
+            corners.top_right = radius;
+            corners.bottom_right = radius;
+        })
+    }
+
+    /// Round every corner to half of the shorter side, producing a pill or circle.
+    pub fn rounded_full(self) -> Self {
+        self.rounded(MAX_CORNER_RADIUS)
+    }
+
+    /// Select how the inside border is painted along its perimeter.
+    pub fn border_style(mut self, style: BorderStyle) -> Self {
+        self.visual.border_style = style;
+        self
+    }
+
+    /// Paint the inside border as one continuous ring.
+    pub fn border_solid(self) -> Self {
+        self.border_style(BorderStyle::Solid)
+    }
+
+    /// Paint the inside border as evenly distributed dashes.
+    pub fn border_dashed(self) -> Self {
+        self.border_style(BorderStyle::Dashed)
+    }
+
+    /// Paint the inside border as evenly distributed dots.
+    pub fn border_dotted(self) -> Self {
+        self.border_style(BorderStyle::Dotted)
+    }
+
+    /// Paint a ring outside the border box without affecting layout.
+    ///
+    /// The ring follows the element's corner radii, grown by the outline offset and width, and
+    /// is painted after the element's own background and border.
+    pub fn outline(mut self, width: f32, color: Color) -> Self {
+        let offset = self.visual.outline.map_or(0.0, |outline| outline.offset);
+        let style = self
+            .visual
+            .outline
+            .map_or(BorderStyle::Solid, |outline| outline.style);
+        self.visual.outline = Some(Outline::new(width, color).offset(offset).style(style));
+        self
+    }
+
+    /// Set the gap between the border box and the outline ring. Negative values are accepted.
+    pub fn outline_offset(mut self, offset: f32) -> Self {
+        let outline = self
+            .visual
+            .outline
+            .unwrap_or_else(|| Outline::new(0.0, Color::TRANSPARENT));
+        self.visual.outline = Some(outline.offset(offset));
+        self
+    }
+
+    /// Select how the outline ring is painted along its perimeter.
+    pub fn outline_style(mut self, style: BorderStyle) -> Self {
+        let outline = self
+            .visual
+            .outline
+            .unwrap_or_else(|| Outline::new(0.0, Color::TRANSPARENT));
+        self.visual.outline = Some(outline.style(style));
+        self
+    }
+
+    /// Paint the outline as evenly distributed dashes.
+    pub fn outline_dashed(self) -> Self {
+        self.outline_style(BorderStyle::Dashed)
+    }
+
+    /// Paint the outline as evenly distributed dots.
+    pub fn outline_dotted(self) -> Self {
+        self.outline_style(BorderStyle::Dotted)
+    }
+
+    /// Remove the outline ring.
+    pub fn outline_none(mut self) -> Self {
+        self.visual.outline = None;
         self
     }
 
@@ -202,12 +466,64 @@ impl Element {
         self
     }
 
-    /// Render an image in grayscale without creating another decoded image.
-    pub fn grayscale(mut self, grayscale: bool) -> Self {
-        if let ElementKind::Image(image) = &mut self.kind {
-            image.grayscale = grayscale;
+    /// Render this element's raster content in grayscale without decoding another image.
+    ///
+    /// This is `filters([Filter::Grayscale(1.0)])`, or clearing the chain when `false`.
+    pub fn grayscale(self, grayscale: bool) -> Self {
+        if grayscale {
+            self.filters([Filter::Grayscale(1.0)])
+        } else {
+            self.filters([])
         }
+    }
+
+    /// Apply a bounded chain of CSS-shaped color filters to this element's own raster content.
+    ///
+    /// The chain applies to an image element's pixels and to any `bg_image` tiles on the same
+    /// element. It does not descend into children: subtree filters need a compositing layer,
+    /// which QuickGUI deliberately does not allocate. At most
+    /// [`MAX_FILTERS_PER_ELEMENT`](crate::MAX_FILTERS_PER_ELEMENT) filters are retained and the
+    /// whole chain collapses into one color matrix before it reaches the GPU, so the number of
+    /// declared filters never changes per-frame work.
+    pub fn filters(mut self, filters: impl IntoIterator<Item = Filter>) -> Self {
+        self.visual.filters = Filters::new(filters);
         self
+    }
+
+    /// Append one color filter to this element's chain.
+    pub fn filter(mut self, filter: Filter) -> Self {
+        self.visual.filters = self.visual.filters.push(filter);
+        self
+    }
+
+    /// Scale the brightness of this element's raster content. `1.0` leaves it unchanged.
+    pub fn brightness(self, amount: f32) -> Self {
+        self.filter(Filter::Brightness(amount))
+    }
+
+    /// Scale the contrast of this element's raster content. `1.0` leaves it unchanged.
+    pub fn contrast(self, amount: f32) -> Self {
+        self.filter(Filter::Contrast(amount))
+    }
+
+    /// Scale the saturation of this element's raster content. `1.0` leaves it unchanged.
+    pub fn saturate(self, amount: f32) -> Self {
+        self.filter(Filter::Saturate(amount))
+    }
+
+    /// Invert this element's raster content. `0.0` leaves it unchanged.
+    pub fn invert(self, amount: f32) -> Self {
+        self.filter(Filter::Invert(amount))
+    }
+
+    /// Apply a sepia tone to this element's raster content. `0.0` leaves it unchanged.
+    pub fn sepia(self, amount: f32) -> Self {
+        self.filter(Filter::Sepia(amount))
+    }
+
+    /// Rotate the hues of this element's raster content by `degrees`.
+    pub fn hue_rotate(self, degrees: f32) -> Self {
+        self.filter(Filter::HueRotate(degrees))
     }
 
     /// Render a replacement element when an image resource has been loading for 200 ms.
@@ -875,5 +1191,13 @@ impl Element {
     pub fn hyphens(mut self, hyphens: Hyphens) -> Self {
         self.typography.hyphens = Some(hyphens);
         self
+    }
+}
+
+fn sanitize_corner_radius(radius: f32) -> f32 {
+    if radius.is_finite() {
+        radius.clamp(0.0, MAX_CORNER_RADIUS)
+    } else {
+        0.0
     }
 }

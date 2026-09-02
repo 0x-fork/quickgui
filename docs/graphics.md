@@ -2,6 +2,149 @@
 
 [Documentation index](README.md)
 
+## Background gradients
+
+Any element can paint a bounded multi-stop linear, radial, or conic gradient behind its children:
+
+```rust
+use quickgui::{Color, Gradient, GradientCenter, GradientColorSpace, GradientDirection, div};
+
+div()
+    .rounded_xl()
+    .bg_linear_gradient(
+        GradientDirection::ToBottomRight,
+        [Color::rgb8(56, 189, 248), Color::rgb8(129, 140, 248)],
+    );
+
+div().bg_gradient(
+    Gradient::radial([Color::WHITE, Color::rgb8(30, 41, 59)])
+        .center(GradientCenter::new(0.3, 0.25))
+        .color_space(GradientColorSpace::Oklab),
+);
+
+div().bg_conic_gradient(0.0, [Color::rgb8(248, 113, 113), Color::rgb8(56, 189, 248)]);
+```
+
+`bg_linear_gradient(angle, stops)` accepts `f32` CSS degrees — `0` points to the top and angles
+increase clockwise — or a named `GradientDirection`. `bg_radial_gradient(stops)` and
+`bg_radial_gradient_at(shape, center, stops)` cover `RadialGradientShape::{Circle, Ellipse}` and
+`RadialGradientExtent::{FarthestCorner, FarthestSide, ClosestSide}`; the default is a centered
+farthest-corner ellipse. `bg_conic_gradient(from_angle, stops)` sweeps clockwise from the start
+angle. `bg_gradient(...)` takes any `Background`, so a solid `Color`, the two-stop `LinearGradient`
+used by paths, or a full `Gradient` all work, and `ElementStateStyle::bg_gradient` swaps gradients
+in hover, active, focus, validation, and drag states.
+
+Stops come from a `ColorStops` value: a bare list of `Color`s is spaced evenly, while
+`linear_color_stop(color, position)` entries carry explicit positions. Stops are sanitized, clamped
+to `0.0..=1.0`, sorted, and truncated to `MAX_GRADIENT_STOPS` (8). `GradientColorSpace` selects
+linear-sRGB (the default), encoded sRGB, or Oklab interpolation.
+
+Gradients are evaluated analytically in the same instanced shape draw as solid quads. They respect
+rounded corners, inside borders, clipping, subtree opacity, and damage tracking, allocate no ramp
+texture or cache entry, and add no draw call. One gradient is a fixed-size `Copy` value, so a
+gradient never introduces a per-frame heap allocation. `MAX_GRADIENTS_PER_FRAME` (4,096) resolved
+gradients are uploaded per window frame in scene order; a shape past that bound falls back to its
+solid fill rather than growing the upload without a bound.
+
+The same multi-stop representation backs `Background` for retained paths and canvas fills, so
+`path_background(...)` accepts radial and conic gradients too.
+
+## Corner, border, and outline fidelity
+
+```rust
+use quickgui::{Color, Corners, div};
+
+div()
+    .corner_radii(Corners::new(28.0, 4.0, 28.0, 4.0))
+    .border(3.0, Color::rgb8(148, 163, 184))
+    .border_dashed()
+    .outline(2.0, Color::rgb8(250, 204, 21))
+    .outline_offset(3.0)
+```
+
+`rounded_tl`, `rounded_tr`, `rounded_br`, `rounded_bl`, `rounded_t`, `rounded_b`, `rounded_l`,
+`rounded_r`, and `corner_radii(Corners)` set radii independently; `rounded_full()` produces a pill
+or circle. Radii are clamped to `MAX_CORNER_RADIUS` (4,096 logical pixels) and then reduced by the
+CSS uniform-scale rule so two radii sharing an edge can never overlap. Per-corner radii replace the
+single `rounded(...)` value and, unlike it, are not interpolated by style transitions. Element box
+shadows follow the same per-corner geometry.
+
+`border_dashed()` and `border_dotted()` paint the existing per-side border widths as a pattern
+along the element's outline. Dash geometry is analytic: the fragment shader measures arc length
+along the rounded rectangle — straight edges exactly, corners as exact quarter arcs — so dashes stay
+evenly spaced around corners instead of restarting on each side. The declared period is scaled so a
+whole number of repeats fits the outline, which closes both ends of every edge like CSS. A dash is
+three border widths long with two-width gaps; a dot is one width long with one-width gaps. Dash
+gaps reveal the element background, which is painted out to the border box in that case. Dashed
+borders use the widest declared side width for their pattern, so mixed per-side widths share one
+period.
+
+`outline(width, color)` paints a ring outside the border box. It never participates in layout,
+follows the element's corner radii grown by the offset and width, accepts `outline_offset(px)`
+(including negative offsets), supports `outline_dashed()`/`outline_dotted()`, and is available in
+state overrides as `ElementStateStyle::outline`/`outline_offset` — the usual way to draw a focus
+ring without moving anything. Widths are capped at `MAX_OUTLINE_WIDTH` (1,024) and offsets at
+`MAX_OUTLINE_OFFSET` (±1,024). The ring is one extra instance in the same shape draw.
+
+## Background images
+
+```rust
+use quickgui::{BackgroundPosition, BackgroundRepeat, BackgroundSize, div};
+
+div()
+    .rounded_xl()
+    .bg_image(
+        tile.clone(),
+        BackgroundSize::Cover,
+        BackgroundRepeat::NoRepeat,
+        BackgroundPosition::CENTER,
+    );
+
+div().bg_image_tiled(tile);
+```
+
+`BackgroundSize` is `Auto` (the decoded pixel size), `Cover`, `Contain`, or `Fixed(width, height)`.
+`BackgroundRepeat` is `NoRepeat`, `RepeatX`, `RepeatY`, or `Repeat`, and `BackgroundPosition`
+anchors the tile as a fraction of the free space, with the nine usual named constants.
+`bg_image_cover`, `bg_image_contain`, `bg_image_tiled`, and `bg_image_none` are shorthands.
+
+A raster background is painted above the background color or gradient and behind children, using
+the existing image primitive: it shares the same bounded GPU texture cache as `img(...)` elements
+and creates no new pipeline, pass, or cache. Tiles are generated only for the visible intersection
+of the element and its clip and are masked by the element's rounded rectangle. A tiling that would
+exceed `MAX_BACKGROUND_IMAGE_TILES` (256) deliberately falls back to one anchored tile rather than
+emitting an unbounded number of per-frame instances.
+
+## Color filters
+
+```rust
+use quickgui::{Filter, div, img};
+
+img(&photo).grayscale(true);
+
+div()
+    .bg_image_cover(photo.clone())
+    .filters([Filter::Saturate(1.4), Filter::Contrast(1.1), Filter::HueRotate(20.0)]);
+
+img(&photo).brightness(0.8).sepia(0.3);
+```
+
+`Filter` covers `Brightness`, `Contrast`, `Saturate`, `Grayscale`, `Invert`, `Sepia`, `HueRotate`,
+and `Opacity` with CSS amounts, plus the `brightness`, `contrast`, `saturate`, `invert`, `sepia`,
+`hue_rotate`, and `grayscale` shorthands on `Element`. A chain is bounded at
+`MAX_FILTERS_PER_ELEMENT` (8) and collapses on the CPU into one `ColorMatrix`, so the number of
+declared filters never changes per-frame GPU work: the shader performs one 4x5 multiply-add. Like
+CSS, the matrix is applied to encoded sRGB rather than the framework's linear-light working space,
+and the shader converts in and out around it. `grayscale(true)` is exactly
+`filters([Filter::Grayscale(1.0)])`.
+
+Filters apply to an element's own raster content: an image element's pixels and any `bg_image`
+tiles on the same element. They deliberately do not descend into children, because a subtree
+filter requires an offscreen group texture. Blur and drop-shadow filters are absent for the same
+reason; use `.shadow(...)` for elevation.
+
+See `cargo run --release --example effects`.
+
 Box shadows follow web paint order, support offset, blur, positive or negative spread, and inset
 rendering, and stay paint-only in hover/active/focus states:
 
@@ -53,7 +196,7 @@ generated straight-alpha RGBA8 pixels. Decoding is explicit and synchronous so a
 move it off latency-sensitive input handling. A decoded image is limited to 4096 px per axis and
 64 MiB. Clones share immutable pixels and GPU identity. Each renderer retains at most 256 textures
 and 128 MiB of decoded texture data, evicting least-recently-used off-screen entries. See
-`cargo run --release --example images` for all five `ObjectFit` modes and GPU grayscale.
+`cargo run --release --example images` for all five `ObjectFit` modes and GPU color filters.
 
 SVG icons use the same intrinsic flexbox sizing and `ObjectFit` API. Their color inherits from
 typography, including hover, active, and focus overrides, while transforms remain paint-only:

@@ -143,6 +143,39 @@ All notable user-facing changes to QuickGUI are recorded here.
   inputs are never transformed.
 - Added `overflow_x_scroll()` and `overflow_scroll()`.
 
+- Added element background gradients: `bg_linear_gradient`, `bg_radial_gradient`,
+  `bg_radial_gradient_at`, `bg_conic_gradient`, and the general `bg_gradient`, backed by a new
+  `Gradient`/`ColorStops`/`GradientKind` API with `MAX_GRADIENT_STOPS` (8) stops, CSS angles or
+  `GradientDirection`, `RadialGradientShape`/`RadialGradientExtent`/`GradientCenter`, and
+  linear-sRGB, sRGB, or Oklab interpolation. Gradients are evaluated analytically in the existing
+  instanced shape draw, honor rounded corners, borders, clipping, subtree opacity, and damage, and
+  are swappable in hover, active, focus, validation, and drag states through
+  `ElementStateStyle::bg_gradient`. `MAX_GRADIENTS_PER_FRAME` (4,096) bounds the per-frame upload.
+- Extended `Background` so retained paths and canvas fills accept the same multi-stop linear,
+  radial, and conic gradients instead of only two-stop linear gradients.
+- Added per-corner radii: `rounded_tl`, `rounded_tr`, `rounded_br`, `rounded_bl`, `rounded_t`,
+  `rounded_b`, `rounded_l`, `rounded_r`, `corner_radii(Corners)`, and `rounded_full()`. Radii are
+  capped by `MAX_CORNER_RADIUS` and reduced by the CSS uniform-scale rule; element box shadows
+  follow the same per-corner geometry.
+- Added `border_solid()`, `border_dashed()`, and `border_dotted()`. Dash geometry is analytic arc
+  length along the rounded outline, with the period scaled so a whole number of repeats closes the
+  outline.
+- Added `outline(width, color)`, `outline_offset(px)`, `outline_style`, `outline_dashed`,
+  `outline_dotted`, and `outline_none`, plus `ElementStateStyle::outline`/`outline_offset` for
+  focus rings. Outlines are painted outside the border box and never affect layout, bounded by
+  `MAX_OUTLINE_WIDTH` and `MAX_OUTLINE_OFFSET`.
+- Added raster element backgrounds: `bg_image(image, BackgroundSize, BackgroundRepeat,
+  BackgroundPosition)` with `bg_image_cover`, `bg_image_contain`, `bg_image_tiled`, and
+  `bg_image_none`. Tiles reuse the existing bounded image primitive and GPU texture cache, are
+  masked by the element's rounded corners, and are capped by `MAX_BACKGROUND_IMAGE_TILES` (256).
+- Added bounded CSS-shaped color filters: `Filter`, `Filters`, `ColorMatrix`,
+  `MAX_FILTERS_PER_ELEMENT`, `Element::filters`/`filter`, and the `brightness`, `contrast`,
+  `saturate`, `invert`, `sepia`, and `hue_rotate` shorthands. `grayscale(bool)` now routes through
+  the same chain, and `ImagePrimitive::grayscale` is expressed as a `ColorMatrix`. Filters apply to
+  an element's own image and background-image pixels; subtree filters, blur, and drop-shadow are
+  not implemented because they require an offscreen group texture.
+- Added the `effects` example.
+
 ### macOS
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
   and the AppKit standard binding for a role, and hidden items set `NSMenuItem.hidden` and no
@@ -180,6 +213,7 @@ All notable user-facing changes to QuickGUI are recorded here.
   conversion at the AppKit boundary.
 - Added the macOS dictionary popover through `NSView showDefinitionForAttributedString:atPoint:` on
   the key window's content view, positioned at a window-local logical point.
+
 
 
 ### JavaScript tooling

@@ -23,11 +23,13 @@ use taffy::{
 };
 
 use crate::{
-    AnimatedImage, Background, BoxShadow, Canvas, Color, CursorStyle, CustomShader, DispatchPhase,
-    Font, FontFallbacks, FontFamily, FontFeatures, Image, ImageSource, Insets, KeyContext,
-    MAX_VALIDATION_MESSAGE_BYTES, ObjectFit, Path, Rect, ScenePlane, ShaderParameters, StyledText,
-    Svg, SvgTransform, TextAlign, TextCheckingOverrides, TextHighlight, TextOverflow, TextShaping,
-    TextStyle, TextUnderline, TextWrap, Tooltip, Transition, WhiteSpace,
+    AnimatedImage, Background, BorderStyle, BoxShadow, Canvas, Color, ColorStops, Corners,
+    CursorStyle, CustomShader, DispatchPhase, Filter, Filters, Font, FontFallbacks, FontFamily,
+    FontFeatures, Gradient, GradientAngle, GradientCenter, Image, ImageSource, Insets, KeyContext,
+    MAX_VALIDATION_MESSAGE_BYTES, ObjectFit, Path, RadialGradientShape, Rect, ScenePlane,
+    ShaderParameters, StyledText, Svg, SvgTransform, TextAlign, TextCheckingOverrides,
+    TextHighlight, TextOverflow, TextShaping, TextStyle, TextUnderline, TextWrap, Tooltip,
+    Transition, WhiteSpace,
     action::{ActionListenerBinding, MAX_ACTION_LISTENERS_PER_ELEMENT},
     animation::ElementAnimation,
     font::{assert_valid_font_family, normalize_fallbacks},
@@ -73,6 +75,21 @@ macro_rules! spacing_scale_methods {
 
 /// Maximum CSS-like box shadows retained by one element or interaction-state override.
 pub const MAX_BOX_SHADOWS_PER_ELEMENT: usize = 8;
+
+/// Largest accepted outline width in logical pixels.
+pub const MAX_OUTLINE_WIDTH: f32 = 1_024.0;
+/// Largest number of repeated background-image tiles painted for one element.
+///
+/// A tiling that would exceed this bound falls back to a single tile rather than emitting an
+/// unbounded number of per-frame image instances.
+pub const MAX_BACKGROUND_IMAGE_TILES: usize = 256;
+/// Largest accepted absolute outline offset in logical pixels.
+pub const MAX_OUTLINE_OFFSET: f32 = 1_024.0;
+/// Largest accepted corner radius in logical pixels.
+///
+/// Radii are additionally reduced by the CSS uniform-scale rule so two radii sharing one edge
+/// can never overlap.
+pub const MAX_CORNER_RADIUS: f32 = 4_096.0;
 
 /// Maximum explicit grid tracks accepted on either axis.
 ///
@@ -699,7 +716,6 @@ impl fmt::Debug for ContainerQueryElement {
 pub(crate) struct ImageElement {
     pub source: ImageSource,
     pub object_fit: ObjectFit,
-    pub grayscale: bool,
     pub resolved: ImageResolution,
     pub loading: Option<ImageReplacement>,
     pub fallback: Option<ImageReplacement>,
@@ -796,23 +812,237 @@ impl fmt::Debug for InputConstraints {
     }
 }
 
+/// How a background image is scaled inside its element box.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum BackgroundSize {
+    /// Use the decoded pixel size as the logical tile size.
+    #[default]
+    Auto,
+    /// Scale preserving aspect ratio until the tile covers the whole box.
+    Cover,
+    /// Scale preserving aspect ratio until the tile fits inside the box.
+    Contain,
+    /// An explicit logical tile size.
+    Fixed(f32, f32),
+}
+
+/// Which axes a background image tiles along.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum BackgroundRepeat {
+    /// One tile only.
+    #[default]
+    NoRepeat,
+    RepeatX,
+    RepeatY,
+    Repeat,
+}
+
+impl BackgroundRepeat {
+    pub(crate) fn repeats_x(self) -> bool {
+        matches!(self, Self::RepeatX | Self::Repeat)
+    }
+
+    pub(crate) fn repeats_y(self) -> bool {
+        matches!(self, Self::RepeatY | Self::Repeat)
+    }
+}
+
+/// Where a background tile is anchored, as a fraction of the free space in the element box.
+///
+/// `0.0` aligns with the start edge, `0.5` centers, and `1.0` aligns with the end edge. Values
+/// outside `0.0..=1.0` are clamped so a background image can never escape its own tiling grid.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BackgroundPosition {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Default for BackgroundPosition {
+    fn default() -> Self {
+        Self::CENTER
+    }
+}
+
+impl BackgroundPosition {
+    pub const TOP_LEFT: Self = Self { x: 0.0, y: 0.0 };
+    pub const TOP: Self = Self { x: 0.5, y: 0.0 };
+    pub const TOP_RIGHT: Self = Self { x: 1.0, y: 0.0 };
+    pub const LEFT: Self = Self { x: 0.0, y: 0.5 };
+    pub const CENTER: Self = Self { x: 0.5, y: 0.5 };
+    pub const RIGHT: Self = Self { x: 1.0, y: 0.5 };
+    pub const BOTTOM_LEFT: Self = Self { x: 0.0, y: 1.0 };
+    pub const BOTTOM: Self = Self { x: 0.5, y: 1.0 };
+    pub const BOTTOM_RIGHT: Self = Self { x: 1.0, y: 1.0 };
+
+    pub fn new(x: f32, y: f32) -> Self {
+        Self {
+            x: if x.is_finite() {
+                x.clamp(0.0, 1.0)
+            } else {
+                0.5
+            },
+            y: if y.is_finite() {
+                y.clamp(0.0, 1.0)
+            } else {
+                0.5
+            },
+        }
+    }
+}
+
+/// A raster background painted behind an element's children and inside its rounded corners.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BackgroundImage {
+    pub image: Image,
+    pub size: BackgroundSize,
+    pub repeat: BackgroundRepeat,
+    pub position: BackgroundPosition,
+}
+
+impl BackgroundImage {
+    pub fn new(image: Image) -> Self {
+        Self {
+            image,
+            size: BackgroundSize::Auto,
+            repeat: BackgroundRepeat::NoRepeat,
+            position: BackgroundPosition::CENTER,
+        }
+    }
+
+    /// The logical tile size for `bounds`, or `None` when nothing can be painted.
+    pub(crate) fn tile_size(&self, bounds: Rect) -> Option<crate::Size> {
+        let intrinsic = self.image.size();
+        if intrinsic.width <= 0.0 || intrinsic.height <= 0.0 {
+            return None;
+        }
+        let size = match self.size {
+            BackgroundSize::Auto => intrinsic,
+            BackgroundSize::Fixed(width, height) => crate::Size {
+                width: if width.is_finite() {
+                    width.max(0.0)
+                } else {
+                    0.0
+                },
+                height: if height.is_finite() {
+                    height.max(0.0)
+                } else {
+                    0.0
+                },
+            },
+            BackgroundSize::Cover | BackgroundSize::Contain => {
+                if bounds.width <= 0.0 || bounds.height <= 0.0 {
+                    return None;
+                }
+                let horizontal = bounds.width / intrinsic.width;
+                let vertical = bounds.height / intrinsic.height;
+                let scale = if matches!(self.size, BackgroundSize::Cover) {
+                    horizontal.max(vertical)
+                } else {
+                    horizontal.min(vertical)
+                };
+                crate::Size {
+                    width: intrinsic.width * scale,
+                    height: intrinsic.height * scale,
+                }
+            }
+        };
+        (size.width > 0.0 && size.height > 0.0 && size.width.is_finite() && size.height.is_finite())
+            .then_some(size)
+    }
+}
+
+/// A ring painted outside the border box without participating in layout.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Outline {
+    pub width: f32,
+    pub color: Color,
+    /// Gap between the border box and the inner edge of the ring. May be negative.
+    pub offset: f32,
+    pub style: BorderStyle,
+}
+
+impl Outline {
+    /// A solid outline with no offset.
+    pub fn new(width: f32, color: Color) -> Self {
+        Self {
+            width: finite_nonnegative(width).min(MAX_OUTLINE_WIDTH),
+            color,
+            offset: 0.0,
+            style: BorderStyle::Solid,
+        }
+    }
+
+    pub fn offset(mut self, offset: f32) -> Self {
+        self.offset = if offset.is_finite() {
+            offset.clamp(-MAX_OUTLINE_OFFSET, MAX_OUTLINE_OFFSET)
+        } else {
+            0.0
+        };
+        self
+    }
+
+    pub fn style(mut self, style: BorderStyle) -> Self {
+        self.style = style;
+        self
+    }
+
+    /// The ring rectangle for a border box, or `None` when nothing is painted.
+    pub(crate) fn ring(self, bounds: Rect) -> Option<Rect> {
+        if self.width <= 0.0 || self.color.a <= 0.0 {
+            return None;
+        }
+        let grow = self.offset + self.width;
+        let left = bounds.x - grow;
+        let top = bounds.y - grow;
+        let width = bounds.width + grow * 2.0;
+        let height = bounds.height + grow * 2.0;
+        if width <= 0.0 || height <= 0.0 {
+            return None;
+        }
+        Some(Rect::new(left, top, width, height))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct VisualStyle {
     pub background: Option<Color>,
+    /// A bounded multi-stop gradient painted instead of `background`.
+    pub background_gradient: Option<Gradient>,
+    /// A raster background painted above the background color and behind children.
+    pub background_image: Option<Box<BackgroundImage>>,
+    /// A bounded color-filter chain applied to this element's own raster content.
+    pub filters: Filters,
     pub border_color: Option<Color>,
     pub border_widths: Insets,
+    pub border_style: BorderStyle,
     pub radius: f32,
+    /// Per-corner radii. When present they replace `radius` and are not transitioned.
+    pub corner_radii: Option<Corners>,
+    pub outline: Option<Outline>,
     pub shadows: Option<Arc<[BoxShadow]>>,
     pub opacity: f32,
+}
+
+impl VisualStyle {
+    /// The resolved corner radii, preferring explicit per-corner values.
+    pub(crate) fn corners(&self, radius: f32) -> Corners {
+        self.corner_radii.unwrap_or(Corners::all(radius))
+    }
 }
 
 impl Default for VisualStyle {
     fn default() -> Self {
         Self {
             background: None,
+            background_gradient: None,
+            background_image: None,
+            filters: Filters::none(),
             border_color: None,
             border_widths: Insets::default(),
+            border_style: BorderStyle::Solid,
             radius: 0.0,
+            corner_radii: None,
+            outline: None,
             shadows: None,
             opacity: 1.0,
         }
@@ -823,6 +1053,8 @@ impl Default for VisualStyle {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ElementStateStyle {
     pub(crate) background: Option<Color>,
+    pub(crate) background_gradient: Option<Gradient>,
+    pub(crate) outline: Option<Outline>,
     pub(crate) border_color: Option<Color>,
     pub(crate) border_width: Option<f32>,
     pub(crate) radius: Option<f32>,
@@ -869,6 +1101,42 @@ impl ElementStateStyle {
 
     pub fn bg(mut self, color: Color) -> Self {
         self.background = Some(color);
+        self.background_gradient = None;
+        self
+    }
+
+    /// Replace the background with a bounded multi-stop gradient while this state is active.
+    ///
+    /// Gradients are swapped, not interpolated: only the transitionable solid background,
+    /// border, radius, shadow, opacity, and text color values animate.
+    pub fn bg_gradient(mut self, gradient: impl Into<Background>) -> Self {
+        match gradient.into() {
+            Background::Solid(color) => {
+                self.background = Some(color);
+                self.background_gradient = None;
+            }
+            other => {
+                self.background_gradient = other.as_gradient();
+            }
+        }
+        self
+    }
+
+    /// Paint an outline ring outside the border box while this state is active.
+    pub fn outline(mut self, width: f32, color: Color) -> Self {
+        self.outline = Some(Outline::new(width, color));
+        self
+    }
+
+    /// Paint an offset outline ring outside the border box while this state is active.
+    pub fn outline_offset(mut self, width: f32, color: Color, offset: f32) -> Self {
+        self.outline = Some(Outline::new(width, color).offset(offset));
+        self
+    }
+
+    /// Remove any inherited outline while this state is active.
+    pub fn outline_none(mut self) -> Self {
+        self.outline = Some(Outline::new(0.0, Color::TRANSPARENT));
         self
     }
 
@@ -941,6 +1209,8 @@ impl ElementStateStyle {
 
     fn has_paint_overrides(&self) -> bool {
         self.background.is_some()
+            || self.background_gradient.is_some()
+            || self.outline.is_some()
             || self.border_color.is_some()
             || self.border_width.is_some()
             || self.radius.is_some()
