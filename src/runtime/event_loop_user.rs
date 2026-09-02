@@ -54,9 +54,16 @@ impl Runtime {
             return;
         }
         #[cfg(target_os = "macos")]
+        if matches!(&event, RuntimeEvent::ApplicationActivated) {
+            self.invoke_did_become_active(event_loop);
+            self.process_window_commands(event_loop);
+            return;
+        }
+        #[cfg(target_os = "macos")]
         if matches!(&event, RuntimeEvent::ApplicationDeactivated) {
             let popovers = self.popovers_to_close_after_application_deactivation();
             self.close_requests.extend(popovers);
+            self.invoke_did_resign_active(event_loop);
             self.process_window_commands(event_loop);
             return;
         }
@@ -190,7 +197,9 @@ impl Runtime {
             #[cfg(target_os = "macos")]
             RuntimeEvent::NativeDropChanged(handle) => self.window_handles.get(handle).copied(),
             #[cfg(target_os = "macos")]
-            RuntimeEvent::ApplicationDeactivated => unreachable!("handled before routing"),
+            RuntimeEvent::ApplicationActivated | RuntimeEvent::ApplicationDeactivated => {
+                unreachable!("handled before routing")
+            }
             #[cfg(target_os = "macos")]
             RuntimeEvent::PopoverPointerDismissRequested(_) => {
                 unreachable!("handled before routing")
@@ -370,7 +379,9 @@ impl Runtime {
                 }
             }
             #[cfg(target_os = "macos")]
-            RuntimeEvent::ApplicationDeactivated => unreachable!("handled before routing"),
+            RuntimeEvent::ApplicationActivated | RuntimeEvent::ApplicationDeactivated => {
+                unreachable!("handled before routing")
+            }
             #[cfg(target_os = "macos")]
             RuntimeEvent::PopoverPointerDismissRequested(_) => {
                 unreachable!("handled before routing")

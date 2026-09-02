@@ -1,10 +1,10 @@
 use std::{path::PathBuf, time::Duration};
 
 use quickgui::{
-    Application, AsyncViewContext, Color, Element, Event, Global, IntoElement, PathPromptOptions,
-    PlatformError, PlatformResponse, PromptButton, PromptLevel, SavePathOptions,
-    SystemNotification, SystemNotificationAction, Task, TitleBarStyle, View, ViewContext,
-    WindowOptions, button, div, text,
+    ActivationPolicy, Application, AsyncViewContext, Color, DockAttention, Element, Event, Global,
+    IntoElement, PathPromptOptions, PlatformError, PlatformResponse, PromptButton, PromptLevel,
+    SavePathOptions, SystemNotification, SystemNotificationAction, Task, TitleBarStyle, View,
+    ViewContext, WindowOptions, button, div, text,
 };
 
 const NOTIFICATION_TAG: &str = "quickgui-platform-services";
@@ -37,6 +37,16 @@ fn main() -> Result<(), quickgui::AppError> {
         .on_system_wake(|cx| {
             cx.update_global::<ApplicationStatus, _>(|status| {
                 status.0 = "The system woke from sleep.".to_owned();
+            });
+        })
+        .on_did_become_active(|cx| {
+            cx.update_global::<ApplicationStatus, _>(|status| {
+                status.0 = "The application became frontmost.".to_owned();
+            });
+        })
+        .on_did_resign_active(|cx| {
+            cx.update_global::<ApplicationStatus, _>(|status| {
+                status.0 = "The application lost frontmost status.".to_owned();
             });
         })
         .on_system_notification_response(|response, cx| {
@@ -72,6 +82,7 @@ struct PlatformServices {
     response_task: Option<Task<()>>,
     notification_revision: usize,
     selected_path: Option<PathBuf>,
+    secure_input: bool,
     status: String,
 }
 
@@ -83,6 +94,7 @@ impl Default for PlatformServices {
             response_task: None,
             notification_revision: 0,
             selected_path: None,
+            secure_input: false,
             status: "Ready. Native services do not run a polling frame.".to_owned(),
         }
     }
@@ -296,6 +308,61 @@ impl View for PlatformServices {
             cx.invalidate();
         });
 
+        let hide_app = cx.listener("hide-application", |this, cx| {
+            this.status = match cx.hide_application() {
+                Ok(()) => "Hid every window; use the Dock or App Switcher to return".to_owned(),
+                Err(error) => format!("Hide rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let accessory = cx.listener("accessory-policy", |this, cx| {
+            // The response resolves once AppKit accepts or refuses the policy change.
+            this.status = match cx.set_activation_policy(ActivationPolicy::Accessory) {
+                Ok(_response) => "Requested the Accessory activation policy".to_owned(),
+                Err(error) => format!("Activation policy rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let regular = cx.listener("regular-policy", |this, cx| {
+            this.status = match cx.set_activation_policy(ActivationPolicy::Regular) {
+                Ok(_response) => "Requested the Regular activation policy".to_owned(),
+                Err(error) => format!("Activation policy rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let bounce = cx.listener("dock-attention", |this, cx| {
+            this.status = match cx.request_dock_attention(DockAttention::Informational) {
+                Ok(_response) => "Requested one informational Dock bounce".to_owned(),
+                Err(error) => format!("Dock attention rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let beep = cx.listener("beep", |this, cx| {
+            this.status = match cx.beep() {
+                Ok(()) => "Played the system alert sound".to_owned(),
+                Err(error) => format!("Alert sound rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let secure_input = cx.listener("secure-input", |this, cx| {
+            this.secure_input = !this.secure_input;
+            this.status = match cx.set_secure_keyboard_entry(this.secure_input) {
+                Ok(()) => format!("Secure keyboard entry: {}", this.secure_input),
+                Err(error) => format!("Secure keyboard entry rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let packaging = cx.listener("packaging", |this, cx| {
+            let support = cx.applications_folder_support();
+            this.status = format!(
+                "packaged={} · applications-folder supported={} already-installed={}",
+                cx.is_application_packaged(),
+                support.supported,
+                support.already_installed,
+            );
+            cx.invalidate();
+        });
+
         let open_url = cx.listener("open-url", |this, cx| {
             this.status = match cx.open_url("https://github.com/egoist/quickgui") {
                 Ok(()) => "Asked macOS to open the QuickGUI repository".to_owned(),
@@ -406,7 +473,14 @@ impl View for PlatformServices {
                             .child(Self::control("Open selected").disabled(self.selected_path.is_none()).on_click(open_selected))
                             .child(Self::control("Reveal in Finder").disabled(self.selected_path.is_none()).on_click(reveal_selected))
                             .child(Self::control("Post notification").on_click(show_notification))
-                            .child(Self::control("Dismiss notification").on_click(dismiss_notification)),
+                            .child(Self::control("Dismiss notification").on_click(dismiss_notification))
+                            .child(Self::control("Hide application").on_click(hide_app))
+                            .child(Self::control("Accessory policy").on_click(accessory))
+                            .child(Self::control("Regular policy").on_click(regular))
+                            .child(Self::control("Bounce Dock").on_click(bounce))
+                            .child(Self::control("Beep").on_click(beep))
+                            .child(Self::control("Toggle secure input").on_click(secure_input))
+                            .child(Self::control("Packaging report").on_click(packaging)),
                     )
                     .child(
                         div()

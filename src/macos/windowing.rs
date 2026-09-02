@@ -587,6 +587,115 @@ pub(crate) fn set_window_opacity(window: &Arc<Window>, opacity: f32) -> Result<(
     Ok(())
 }
 
+/// Apply an exact `NSWindowLevel` for one Winit-owned AppKit window.
+///
+/// Winit only understands three portable levels, so QuickGUI applies the winit hint first and
+/// then narrows to the precise AppKit constant named by [`WindowLevel`].
+pub(crate) fn set_window_level(window: &Arc<Window>, level: WindowLevel) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    window.setLevel(level.macos_level() as isize);
+    Ok(())
+}
+
+/// Raise one Winit-owned AppKit window to the front of its stacking level.
+///
+/// This is an ordering change only: it never activates the application and never makes the window
+/// key, so a floating panel can surface without stealing focus.
+pub(crate) fn order_window_front(window: &Arc<Window>) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    window.orderFront(None);
+    Ok(())
+}
+
+/// Order one AppKit window immediately above another window owned by this process.
+pub(crate) fn order_window_above(window: &Arc<Window>, above: &Arc<Window>) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    let above = appkit_window(above)?;
+    // SAFETY: the sibling is a live main-thread AppKit window owned by QuickGUI.
+    let relative = unsafe { above.windowNumber() };
+    // SAFETY: both windows are live main-thread AppKit windows owned by QuickGUI, and the
+    // relative window number was just read from the sibling.
+    unsafe { window.orderWindow_relativeTo(NSWindowOrderingMode::NSWindowAbove, relative) };
+    Ok(())
+}
+
+/// Let clicks fall through one AppKit window, optionally keeping mouse-moved delivery.
+///
+/// `forward` sets `acceptsMouseMovedEvents`, so the window keeps receiving the event-driven
+/// `mouseMoved:` stream AppKit already delivers while every press reaches the window below. No
+/// timer, tracking loop, or polling pass is installed.
+pub(crate) fn set_window_ignores_mouse_events(
+    window: &Arc<Window>,
+    ignore: bool,
+    forward: bool,
+) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    window.setIgnoresMouseEvents(ignore);
+    window.setAcceptsMouseMovedEvents(!ignore || forward);
+    Ok(())
+}
+
+/// Block or restore every native input event for one AppKit window.
+///
+/// AppKit has no `EnableWindow`, so QuickGUI expresses "visible but inert" with the documented
+/// combination of ignoring mouse events and refusing key-window status.
+pub(crate) fn set_window_input_enabled(window: &Arc<Window>, enabled: bool) -> Result<(), String> {
+    let appkit = appkit_window(window)?;
+    appkit.setIgnoresMouseEvents(!enabled);
+    appkit.setAcceptsMouseMovedEvents(enabled);
+    if !window.set_can_become_key_window(enabled) {
+        return Err("the native window did not expose key-window policy".to_owned());
+    }
+    if !enabled {
+        // SAFETY: QuickGUI owns this live main-thread AppKit window.
+        unsafe { appkit.resignKeyWindow() };
+    }
+    Ok(())
+}
+
+/// Apply or clear AppKit's `contentAspectRatio` for one window.
+pub(crate) fn set_window_aspect_ratio(
+    window: &Arc<Window>,
+    ratio: Option<Size>,
+) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    // SAFETY: QuickGUI owns this live main-thread AppKit window and passes validated scalars.
+    match ratio {
+        Some(ratio) => unsafe {
+            window.setContentAspectRatio(NSSize::new(
+                f64::from(ratio.width),
+                f64::from(ratio.height),
+            ));
+        },
+        None => window.setContentResizeIncrements(NSSize::new(1.0, 1.0)),
+    }
+    Ok(())
+}
+
+/// Show or hide the macOS traffic-light buttons without removing the titlebar.
+pub(crate) fn set_window_button_visibility(
+    window: &Arc<Window>,
+    visible: bool,
+) -> Result<(), String> {
+    let window = appkit_window(window)?;
+    for button in [
+        NSWindowButton::NSWindowCloseButton,
+        NSWindowButton::NSWindowMiniaturizeButton,
+        NSWindowButton::NSWindowZoomButton,
+    ] {
+        if let Some(button) = window.standardWindowButton(button) {
+            button.setHidden(!visible);
+        }
+    }
+    Ok(())
+}
+
+/// Whether one AppKit window is currently miniaturized into the Dock.
+pub(crate) fn is_window_miniaturized(window: &Arc<Window>) -> Result<bool, String> {
+    let window = appkit_window(window)?;
+    Ok(window.isMiniaturized())
+}
+
 /// Toggle AppKit's all-spaces collection behavior while preserving role-specific flags.
 pub(crate) fn set_window_visible_on_all_workspaces(
     window: &Arc<Window>,

@@ -39,6 +39,9 @@ pub struct EventContext {
     pub(crate) focus_windows: Vec<WindowHandle>,
     pub(crate) invalidate_windows: Vec<WindowHandle>,
     pub(crate) window_commands: Vec<WindowCommand>,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) constrained_size: Option<Size>,
+    pub(crate) constrained_position: Option<Point>,
     pub(crate) platform_requests: Vec<PlatformRequest>,
     pub(crate) prevent_close: bool,
     pub(crate) prevent_quit: bool,
@@ -118,6 +121,9 @@ impl EventContext {
             focus_windows: Vec::new(),
             invalidate_windows: Vec::new(),
             window_commands: Vec::new(),
+            exit_code: None,
+            constrained_size: None,
+            constrained_position: None,
             platform_requests: Vec::new(),
             prevent_close: false,
             prevent_quit: false,
@@ -133,6 +139,11 @@ impl EventContext {
     /// Read the latest bounded display snapshot without polling the operating system.
     pub fn displays(&self) -> &[Display] {
         self.displays.all()
+    }
+
+    /// The complete immutable display snapshot, for APIs that need primary and identity lookup.
+    pub const fn display_snapshot(&self) -> &Displays {
+        &self.displays
     }
 
     pub fn primary_display(&self) -> Option<&Display> {
@@ -1338,6 +1349,252 @@ impl EventContext {
         handle: WindowHandle,
     ) -> Result<(), WindowCommandError> {
         self.push_window_command(WindowCommand::SetWindowLevel(handle, None))
+    }
+
+    /// Change how the application appears in the Dock and application switcher.
+    ///
+    /// macOS applies `NSApplicationActivationPolicy`. Other platforms complete the response with
+    /// [`PlatformError::Unsupported`].
+    pub fn set_activation_policy(
+        &mut self,
+        policy: ActivationPolicy,
+    ) -> Result<PlatformResponse<()>, PlatformError> {
+        let (request, response) = PlatformRequest::set_activation_policy(policy);
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Bring the application forward.
+    ///
+    /// `force` uses AppKit's ignore-other-apps activation, which steals focus from the frontmost
+    /// application. Prefer `false` unless the user just asked for the application explicitly.
+    pub fn activate_application(&mut self, force: bool) -> Result<(), PlatformError> {
+        self.push_platform_request(PlatformRequest::ActivateApplication { force })
+    }
+
+    /// Hide every window of this application.
+    pub fn hide_application(&mut self) -> Result<(), PlatformError> {
+        self.push_platform_request(PlatformRequest::HideApplication)
+    }
+
+    /// Reveal an application hidden by [`Self::hide_application`].
+    pub fn unhide_application(&mut self) -> Result<(), PlatformError> {
+        self.push_platform_request(PlatformRequest::UnhideApplication)
+    }
+
+    /// Ask for the user's attention, bouncing the macOS Dock tile.
+    ///
+    /// [`DockAttention::Critical`] keeps bouncing until the application is activated or the
+    /// returned request is cancelled; [`DockAttention::Informational`] bounces once.
+    pub fn request_dock_attention(
+        &mut self,
+        attention: DockAttention,
+    ) -> Result<PlatformResponse<DockAttentionRequest>, PlatformError> {
+        let (request, response) = PlatformRequest::request_dock_attention(attention);
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Stop an in-flight [`DockAttention::Critical`] request.
+    pub fn cancel_dock_attention(
+        &mut self,
+        request: DockAttentionRequest,
+    ) -> Result<(), PlatformError> {
+        self.push_platform_request(PlatformRequest::CancelDockAttention(request))
+    }
+
+    /// Show or hide the Dock tile, keeping the application's windows usable either way.
+    pub fn set_dock_visible(
+        &mut self,
+        visible: bool,
+    ) -> Result<PlatformResponse<()>, PlatformError> {
+        let (request, response) = PlatformRequest::set_dock_visible(visible);
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Route keystrokes straight to this process, bypassing input monitoring.
+    ///
+    /// macOS uses `EnableSecureEventInput`/`DisableSecureEventInput`. QuickGUI reads the current
+    /// state first, so repeated calls cannot unbalance the system-wide counter.
+    pub fn set_secure_keyboard_entry(&mut self, enabled: bool) -> Result<(), PlatformError> {
+        self.push_platform_request(PlatformRequest::SetSecureKeyboardEntry(enabled))
+    }
+
+    /// Play the operating system's alert sound.
+    pub fn beep(&mut self) -> Result<(), PlatformError> {
+        self.push_platform_request(PlatformRequest::Beep)
+    }
+
+    /// Whether this process can relocate its bundle into an `/Applications` directory.
+    pub fn applications_folder_support(&self) -> ApplicationsFolderSupport {
+        #[cfg(target_os = "macos")]
+        {
+            crate::macos_shell::applications_folder_support()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            ApplicationsFolderSupport::default()
+        }
+    }
+
+    /// Move the running application bundle into `/Applications`.
+    ///
+    /// Resolves to `false` when the bundle is already installed there. QuickGUI never restarts the
+    /// process on its own; call [`Self::relaunch`] after a successful move.
+    pub fn move_to_applications_folder(&mut self) -> Result<PlatformResponse<bool>, PlatformError> {
+        let (request, response) = PlatformRequest::move_to_applications_folder();
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Whether this process is running from an installed application bundle.
+    ///
+    /// See [`crate::is_application_packaged`] for the exact per-platform heuristic.
+    pub fn is_application_packaged(&self) -> bool {
+        crate::is_application_packaged()
+    }
+
+    /// Exit the application with an explicit process exit code.
+    ///
+    /// Teardown is identical to [`Self::exit`]: windows close child-first and the quit callbacks
+    /// still run. A non-zero code is applied once the event loop has fully unwound.
+    pub fn exit_with_code(&mut self, code: i32) {
+        self.exit_code = Some(code);
+        self.exit();
+    }
+
+    /// Raise the current window to the front of its stacking level without activating the app.
+    pub fn move_window_top(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.move_window_top_handle(handle)
+    }
+
+    pub fn move_window_top_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::MoveToTop(handle))
+    }
+
+    /// Order the current window immediately above another retained window.
+    pub fn move_window_above(&mut self, other: WindowHandle) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.move_window_above_handle(handle, other)
+    }
+
+    pub fn move_window_above_handle(
+        &mut self,
+        handle: WindowHandle,
+        other: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        if handle == other {
+            return Err(WindowCommandError::InvalidWindowOrder);
+        }
+        self.push_window_command(WindowCommand::MoveAbove(handle, other))
+    }
+
+    /// Let clicks pass through the current window to whatever is behind it.
+    ///
+    /// `forward` keeps pointer motion and hover events flowing to this window; it is ignored when
+    /// `ignore` is `false`. [`Self::set_cursor_hit_test`] remains the simple all-or-nothing form.
+    pub fn set_ignore_mouse_events(
+        &mut self,
+        ignore: bool,
+        forward: bool,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_ignore_mouse_events_handle(handle, ignore, forward)
+    }
+
+    pub fn set_ignore_mouse_events_handle(
+        &mut self,
+        handle: WindowHandle,
+        ignore: bool,
+        forward: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetIgnoreMouseEvents(
+            handle,
+            ignore,
+            ignore && forward,
+        ))
+    }
+
+    /// Block or restore every native input event for the current window.
+    ///
+    /// A disabled window stays visible and keeps rendering; it simply stops receiving pointer and
+    /// keyboard input, which is the native way to express an application-modal owner.
+    pub fn set_window_enabled(&mut self, enabled: bool) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_enabled_handle(handle, enabled)
+    }
+
+    pub fn set_window_enabled_handle(
+        &mut self,
+        handle: WindowHandle,
+        enabled: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetWindowEnabled(handle, enabled))
+    }
+
+    /// Constrain the current window's live resizing to one `width:height` content ratio.
+    pub fn set_aspect_ratio(&mut self, ratio: Option<Size>) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_aspect_ratio_handle(handle, ratio)
+    }
+
+    pub fn set_aspect_ratio_handle(
+        &mut self,
+        handle: WindowHandle,
+        ratio: Option<Size>,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_aspect_ratio(ratio)?;
+        self.push_window_command(WindowCommand::SetAspectRatio(handle, ratio))
+    }
+
+    pub fn clear_aspect_ratio(&mut self) -> Result<(), WindowCommandError> {
+        self.set_aspect_ratio(None)
+    }
+
+    pub fn clear_aspect_ratio_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.set_aspect_ratio_handle(handle, None)
+    }
+
+    /// Show or hide the macOS close/minimize/zoom buttons on the current window.
+    pub fn set_window_button_visibility(
+        &mut self,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.set_window_button_visibility_handle(handle, visible)
+    }
+
+    pub fn set_window_button_visibility_handle(
+        &mut self,
+        handle: WindowHandle,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::SetWindowButtonVisibility(handle, visible))
+    }
+
+    /// Narrow the inner size proposed by [`Event::WillResize`](crate::Event::WillResize).
+    ///
+    /// Only meaningful while handling that event. The runtime issues at most one corrective
+    /// native resize per event and never loops.
+    pub fn constrain_resize(&mut self, size: Size) -> Result<(), WindowCommandError> {
+        validate_window_size(size)?;
+        self.constrained_size = Some(size);
+        Ok(())
+    }
+
+    /// Replace the position proposed by [`Event::WillMove`](crate::Event::WillMove).
+    pub fn constrain_move(&mut self, position: Point) -> Result<(), WindowCommandError> {
+        validate_window_position(position)?;
+        self.constrained_position = Some(position);
+        Ok(())
     }
 
     pub fn set_window_always_on_top(

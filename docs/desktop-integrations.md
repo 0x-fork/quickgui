@@ -119,3 +119,62 @@ service: Windows and Linux can register at runtime, while macOS requires bundle 
 Native visual/runtime acceptance is platform-specific. Cross-compilation proves type and backend
 integration, but does not by itself prove Explorer, AppKit, a Linux desktop portal, or application
 packaging behavior on an end-user machine.
+\n
+## Application shell services
+
+`EventContext` exposes the application-level shell operations Electron applications expect. They
+follow the ordinary platform-request path: fire-and-forget mutations return `Result<(),
+PlatformError>` immediately, while operations with a native answer return a `PlatformResponse`
+future awaited from a foreground task. Every request shares the existing
+`MAX_PLATFORM_REQUESTS_PER_EVENT` / `MAX_PENDING_PLATFORM_REQUESTS` bounds.
+
+| Operation | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| `set_activation_policy(Regular\|Accessory\|Prohibited)` | `NSApplicationActivationPolicy` | `Unsupported` | `Unsupported` |
+| `activate_application(force)` | `NSApp.activate` / `activateIgnoringOtherApps:` | logged, no-op | logged, no-op |
+| `hide_application()` / `unhide_application()` | `NSApplication hide:` / `unhide:` | logged, no-op | logged, no-op |
+| `request_dock_attention(Critical\|Informational)` | `requestUserAttention:` | `Unsupported` | `Unsupported` |
+| `cancel_dock_attention(request)` | `cancelUserAttentionRequest:` | no-op | no-op |
+| `set_dock_visible(bool)` | Regular / Accessory policy | `Unsupported` | `Unsupported` |
+| `set_secure_keyboard_entry(bool)` | `EnableSecureEventInput` / `DisableSecureEventInput` | logged, no-op | logged, no-op |
+| `beep()` | `NSBeep` | logged, no-op | logged, no-op |
+| `applications_folder_support()` | bundle + install query | `{ supported: false }` | `{ supported: false }` |
+| `move_to_applications_folder()` | moves the `.app` into `/Applications` | `Unsupported` | `Unsupported` |
+| `exit_with_code(i32)` | ordinary teardown, then the code | same | same |
+| `is_application_packaged()` | bundle heuristic | build-directory heuristic | build-directory heuristic |
+
+`activate_application(false)` uses AppKit's ordinary activation; `true` uses
+`activateIgnoringOtherApps:`, which takes focus away from the frontmost application. Prefer `false`
+unless the user just asked for the application explicitly.
+
+`DockAttention::Critical` bounces until the application is activated or the returned
+`DockAttentionRequest` is cancelled; `Informational` bounces once. The request identifier comes back
+through the `PlatformResponse`, so cancelling requires awaiting it first.
+
+`set_secure_keyboard_entry` reads `IsSecureEventInputEnabled` before enabling or disabling, so
+repeated calls cannot unbalance the system-wide counter. Secure event input is process-global on
+macOS: leaving it enabled affects every application, so disable it as soon as the sensitive field
+loses focus.
+
+`move_to_applications_folder` returns `false` when the bundle is already installed under an
+`Applications` directory, and fails with a platform error when a same-named application is already
+there or the move is not permitted. QuickGUI never restarts the process on its own; call
+`cx.relaunch()` after a successful move. `applications_folder_support()` is a pure query and is
+safe to call during rendering.
+
+`exit_with_code(code)` runs the identical structured teardown as `exit()` — windows close
+child-first, `on_before_quit`/`on_will_quit`/`on_window_closed` still run, and single-instance and
+process integrations are released. Only after the event loop has fully unwound is a non-zero code
+applied to the process. `TestAppContext::exit_code()` exposes it deterministically.
+
+`is_application_packaged()` is a documented heuristic, not a security boundary:
+
+- **macOS** — the executable path contains a `<name>.app/Contents/MacOS/` component **and** is not
+  under a Cargo build directory. `cargo run` therefore reports `false`.
+- **Windows and Linux/BSD** — the executable is not under a Cargo build directory
+  (`target/debug`, `target/release`, or `target/<triple>/<profile>`).
+
+`TestAppContext::application_shell()` returns a `TestApplicationShell` snapshot of every shell
+service a deterministic test requested: activation policy, hidden state, activation count and
+whether the last activation was forced, Dock visibility, the in-flight Dock attention request,
+secure keyboard entry, alert-sound count, and accepted Applications-folder moves.

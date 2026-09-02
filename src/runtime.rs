@@ -135,14 +135,16 @@ use crate::macos::{
     MacVibrancyHost, MacWindowTabAction, capture_left_mouse_down, configure_document_window,
     configure_gpu_window_resize, configure_window_kind,
     current_cursor_screen_position as macos_cursor_screen_position, current_pointer_position,
-    dismiss_window_relation, is_window_fullscreen, is_window_maximized, perform_window_close,
-    perform_window_drag, perform_window_tab_action, position_system_popover,
-    position_traffic_lights, present_native_open_panel, present_native_prompt,
-    present_native_save_panel, present_window_relation, set_window_document_edited,
-    set_window_focusable, set_window_movable, set_window_opacity, set_window_represented_file,
-    set_window_tabbing_identifier, set_window_visibility, set_window_visible_on_all_workspaces,
-    shell_open_path, shell_open_url, shell_reveal_path, shell_trash_path, show_character_palette,
-    start_external_drag, window_tab_state,
+    dismiss_window_relation, is_window_fullscreen, is_window_maximized, is_window_miniaturized,
+    order_window_above, order_window_front, perform_window_close, perform_window_drag,
+    perform_window_tab_action, position_system_popover, position_traffic_lights,
+    present_native_open_panel, present_native_prompt, present_native_save_panel,
+    present_window_relation, set_window_aspect_ratio, set_window_button_visibility,
+    set_window_document_edited, set_window_focusable, set_window_ignores_mouse_events,
+    set_window_input_enabled, set_window_level, set_window_movable, set_window_opacity,
+    set_window_represented_file, set_window_tabbing_identifier, set_window_visibility,
+    set_window_visible_on_all_workspaces, shell_open_path, shell_open_url, shell_reveal_path,
+    shell_trash_path, show_character_palette, start_external_drag, window_tab_state,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_application::MacApplicationHost;
@@ -170,6 +172,8 @@ pub(crate) enum RuntimeEvent {
     ExternalDragEnded(WindowHandle, ExternalDragOperation),
     #[cfg(target_os = "macos")]
     NativeDropChanged(WindowHandle),
+    #[cfg(target_os = "macos")]
+    ApplicationActivated,
     #[cfg(target_os = "macos")]
     ApplicationDeactivated,
     #[cfg(target_os = "macos")]
@@ -346,6 +350,8 @@ struct ApplicationCallbacks {
     second_instance: Option<SecondInstanceCallback>,
     power_event: Option<PowerEventCallback>,
     tray_event: Option<TrayEventCallback>,
+    did_become_active: Option<SystemWakeCallback>,
+    did_resign_active: Option<SystemWakeCallback>,
     window_closed: Option<WindowClosedCallback>,
     before_quit: Option<QuitCallback>,
     will_quit: Option<QuitCallback>,
@@ -461,7 +467,8 @@ pub use tray::{
 mod test_context;
 #[cfg(any(test, feature = "test-support"))]
 pub use test_context::{
-    MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,
+    MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestApplicationShell, TestWindowHandle,
+    VisualTestContext,
 };
 
 #[derive(Clone, Copy)]
@@ -542,6 +549,14 @@ struct RuntimeWindow {
     ime_target: Option<ElementId>,
     pending_focus: Option<ElementId>,
     occluded: bool,
+    minimized: bool,
+    fullscreen: bool,
+    /// Whether `Event::FirstPresented` has already been delivered for this window.
+    first_presented: bool,
+    /// One in-flight corrective inner size requested by `constrain_resize`/`aspect_ratio`.
+    resize_correction: Option<Size>,
+    /// One in-flight corrective outer position requested by `constrain_move`.
+    move_correction: Option<Point>,
     focused: bool,
     visible: bool,
     relation_presented: bool,
@@ -995,6 +1010,8 @@ struct Runtime {
     focus_requests: Vec<WindowHandle>,
     invalidate_requests: Vec<WindowHandle>,
     window_commands: Vec<WindowCommand>,
+    /// Bounded window lifecycle events produced while every window is deactivated.
+    pending_window_events: Vec<(WindowHandle, Event)>,
     external_menus: Option<Vec<Menu>>,
     pending_initial_open_urls: Option<OpenUrls>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -1060,6 +1077,8 @@ struct Runtime {
     ready: bool,
     opened_window: bool,
     exit_requested: bool,
+    /// Process exit code requested through `EventContext::exit_with_code`.
+    exit_code: Option<i32>,
     pending_quit: Option<QuitReason>,
     quit_phase_active: bool,
     last_window_quit_prevented: bool,
@@ -1437,6 +1456,11 @@ fn runtime_window_state(
         shadow: config.shadow,
         content_protected: config.content_protected,
         window_level: effective_window_level(config),
+        ignore_mouse_events: config.ignore_mouse_events,
+        forward_mouse_events: config.forward_mouse_events,
+        window_enabled: config.window_enabled,
+        aspect_ratio: config.aspect_ratio,
+        window_buttons_visible: config.window_buttons_visible,
         skip_taskbar: config.skip_taskbar,
         visible_on_all_workspaces: effective_visible_on_all_workspaces(config),
         opacity: config.opacity,

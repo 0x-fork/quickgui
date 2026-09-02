@@ -17,9 +17,9 @@ use windows::{
 
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GWL_EXSTYLE, GetCursorPos, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOOWNERZORDER,
-    SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowPos, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE,
+    EnableWindow, GWL_EXSTYLE, GetCursorPos, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOMOVE,
+    SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowPos,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE,
 };
 use winit::{
     raw_window_handle::{HasWindowHandle, RawWindowHandle},
@@ -235,6 +235,18 @@ pub(super) fn set_window_focusable(window: &Arc<Window>, focusable: bool) -> Res
             SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER,
         );
     }
+    Ok(())
+}
+
+/// Block or restore every native input event for one window.
+///
+/// This is the direct Win32 equivalent of QuickGUI's `set_window_enabled`. It is a small,
+/// obviously-correct addition that has not been verified on a live Windows desktop.
+pub(super) fn set_window_input_enabled(window: &Arc<Window>, enabled: bool) -> Result<(), String> {
+    let window = hwnd(window)?;
+    // SAFETY: The raw handle belongs to the live Winit window and `EnableWindow` is called on its
+    // event-loop thread.
+    unsafe { EnableWindow(window, i32::from(enabled)) };
     Ok(())
 }
 

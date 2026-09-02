@@ -37,6 +37,24 @@ Implemented now:
   position/hit testing, declarative native-state snapshots, a bounded core-owned application-window
   registry, hidden first-frame creation, child-first teardown, and bounded targeted runtime window
   commands;
+- native window lifecycle events (`Minimized`, `Maximized`, `FullscreenChanged`, `FirstPresented`
+  ready-to-show, `OcclusionChanged`, `WindowLevelChanged`) derived event-driven from the AppKit and
+  Winit events that accompany each transition, plus `WillResize`/`WillMove` constrain hooks whose
+  single bounded corrective resize or move can never loop, and application-wide
+  `on_did_become_active`/`on_did_resign_active` callbacks reusing the existing macOS observer;
+- AppKit-exact window stacking levels (`Floating`, `ModalPanel`, `MainMenu`, `Status`, `PopUpMenu`,
+  `ScreenSaver` with topmost fallbacks elsewhere), `move_window_top`/`move_window_above` restacking
+  without activation, click-through with optional pointer-motion forwarding, visible-but-inert
+  window input policy, validated content aspect ratios with a portable resize clamp, macOS
+  traffic-light visibility, and runtime shadow mutation;
+- serde-serializable `WindowRestoreState` captured from `WindowState::restore_state` and applied
+  with `WindowOptions::restore`, matching the remembered display by stable UUID then process
+  identifier, keeping intersecting bounds exactly, clamping into the remembered work area, and
+  falling back to centered placement for a disconnected display or an invalid persisted value;
+- application-shell services: activation policy, activation, hide/unhide, Dock attention with
+  cancellation, Dock visibility, secure keyboard entry, system alert sound, Applications-folder
+  support query and move, packaged-process detection, and `exit_with_code` applied after ordinary
+  structured teardown;
 - renderer-independent desktop capability queries plus Windows taskbar progress/overlays and Jump
   List user tasks; macOS Dock badges/icons/typed menus; macOS/Windows recent documents, native About
   panels, and file-icon lookup; unified bounded initial and second-instance deep-link callbacks;

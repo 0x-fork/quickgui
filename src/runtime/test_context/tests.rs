@@ -19,3 +19,4 @@ mod application;
 mod core;
 mod input;
 mod visual;
+mod window_shell;

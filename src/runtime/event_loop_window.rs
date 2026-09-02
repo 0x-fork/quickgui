@@ -61,11 +61,20 @@ impl Runtime {
                     }
                 }
                 WindowEvent::Moved(physical) => {
-                    let state = self.window.as_mut().expect("window checked above");
-                    state.logical_position = Point::new(
-                        physical.x as f32 / state.scale_factor,
-                        physical.y as f32 / state.scale_factor,
-                    );
+                    let proposed = {
+                        let state = self.window.as_ref().expect("window checked above");
+                        Point::new(
+                            physical.x as f32 / state.scale_factor,
+                            physical.y as f32 / state.scale_factor,
+                        )
+                    };
+                    if !self.apply_move_constraint(event_loop, proposed) {
+                        return;
+                    }
+                    let Some(state) = self.window.as_mut() else {
+                        return;
+                    };
+                    state.logical_position = proposed;
                     state.display_id = runtime_window_display_id(state, &self.displays);
                     state.maximized = runtime_window_is_maximized(state, &self.config);
                     if !runtime_window_is_fullscreen(state) && !state.maximized {
@@ -77,6 +86,9 @@ impl Runtime {
                     let observe = state.listeners.observes_window_state;
                     #[cfg(target_os = "macos")]
                     self.refresh_current_native_tab_state();
+                    if !self.refresh_window_lifecycle(event_loop) {
+                        return;
+                    }
                     self.dispatch(
                         event_loop,
                         Event::Moved {
@@ -112,7 +124,16 @@ impl Runtime {
                     }
                 }
                 WindowEvent::Resized(physical) => {
-                    let state = self.window.as_mut().expect("window checked above");
+                    let proposed = {
+                        let state = self.window.as_ref().expect("window checked above");
+                        logical_window_size(physical, state.scale_factor)
+                    };
+                    if !self.apply_resize_constraint(event_loop, proposed) {
+                        return;
+                    }
+                    let Some(state) = self.window.as_mut() else {
+                        return;
+                    };
                     state.renderer.resize(physical.width, physical.height);
                     state.logical_size = logical_window_size(physical, state.scale_factor);
                     state.display_id = runtime_window_display_id(state, &self.displays);
@@ -139,6 +160,9 @@ impl Runtime {
                     state.view_dirty |= state.listeners.observes_viewport;
                     #[cfg(target_os = "macos")]
                     self.refresh_current_native_tab_state();
+                    if !self.refresh_window_lifecycle(event_loop) {
+                        return;
+                    }
                     self.dispatch(
                         event_loop,
                         Event::Resized {
@@ -198,6 +222,7 @@ impl Runtime {
                 }
                 WindowEvent::Occluded(false) => {
                     let state = self.window.as_mut().expect("window checked above");
+                    let changed = state.occluded;
                     state.occluded = false;
                     if state.listeners.observes_window_state
                         || state.ui.has_declarative_animations()
@@ -210,11 +235,23 @@ impl Runtime {
                         .set_animations_enabled(!state.reduce_motion, Instant::now());
                     state.scheduler.invalidate();
                     state.window.request_redraw();
+                    if changed && !self.dispatch(event_loop, Event::OcclusionChanged(false), false)
+                    {
+                        return;
+                    }
+                    self.refresh_window_lifecycle(event_loop);
                 }
                 WindowEvent::Occluded(true) => {
                     let state = self.window.as_mut().expect("window checked above");
+                    let changed = !state.occluded;
                     state.occluded = true;
                     state.ui.set_animations_enabled(false, Instant::now());
+                    if changed && !self.dispatch(event_loop, Event::OcclusionChanged(true), false) {
+                        return;
+                    }
+                    // AppKit reports miniaturization as occlusion rather than as a Winit window
+                    // event, so this is where a Dock minimize becomes `Event::Minimized`.
+                    self.refresh_window_lifecycle(event_loop);
                 }
                 WindowEvent::RedrawRequested => {
                     #[cfg(target_os = "windows")]

@@ -645,6 +645,41 @@ impl Runtime {
                     responder.complete(Err(PlatformError::Unsupported));
                 }
             }
+            PlatformRequest::SetActivationPolicy { policy, responder } => {
+                let _ = policy;
+                responder.complete(Err(PlatformError::Unsupported));
+            }
+            PlatformRequest::ActivateApplication { force } => {
+                let _ = force;
+                tracing::warn!("application activation is not supported by this backend");
+            }
+            PlatformRequest::HideApplication | PlatformRequest::UnhideApplication => {
+                tracing::warn!("application hiding is not supported by this backend");
+            }
+            PlatformRequest::RequestDockAttention {
+                attention,
+                responder,
+            } => {
+                let _ = attention;
+                responder.complete(Err(PlatformError::Unsupported));
+            }
+            PlatformRequest::CancelDockAttention(request) => {
+                let _ = request;
+            }
+            PlatformRequest::SetDockVisible { visible, responder } => {
+                let _ = visible;
+                responder.complete(Err(PlatformError::Unsupported));
+            }
+            PlatformRequest::SetSecureKeyboardEntry(enabled) => {
+                let _ = enabled;
+                tracing::warn!("secure keyboard entry is not supported by this backend");
+            }
+            PlatformRequest::Beep => {
+                tracing::warn!("a system alert sound is not supported by this backend");
+            }
+            PlatformRequest::MoveToApplicationsFolder { responder } => {
+                responder.complete(Err(PlatformError::Unsupported));
+            }
         }
     }
 
@@ -1048,6 +1083,49 @@ impl Runtime {
                 let _ = tasks;
                 responder.complete(Err(PlatformError::Unsupported));
             }
+            PlatformRequest::SetActivationPolicy { policy, responder } => {
+                responder.complete(crate::macos_shell::set_activation_policy(policy));
+            }
+            PlatformRequest::ActivateApplication { force } => {
+                if let Err(error) = crate::macos_shell::activate_application(force) {
+                    tracing::warn!(%error, "could not activate the application");
+                }
+            }
+            PlatformRequest::HideApplication => {
+                if let Err(error) = crate::macos_shell::hide_application() {
+                    tracing::warn!(%error, "could not hide the application");
+                }
+            }
+            PlatformRequest::UnhideApplication => {
+                if let Err(error) = crate::macos_shell::unhide_application() {
+                    tracing::warn!(%error, "could not unhide the application");
+                }
+            }
+            PlatformRequest::RequestDockAttention {
+                attention,
+                responder,
+            } => responder.complete(crate::macos_shell::request_dock_attention(attention)),
+            PlatformRequest::CancelDockAttention(request) => {
+                if let Err(error) = crate::macos_shell::cancel_dock_attention(request) {
+                    tracing::warn!(%error, "could not cancel a Dock attention request");
+                }
+            }
+            PlatformRequest::SetDockVisible { visible, responder } => {
+                responder.complete(crate::macos_shell::set_dock_visible(visible));
+            }
+            PlatformRequest::SetSecureKeyboardEntry(enabled) => {
+                if let Err(error) = crate::macos_shell::set_secure_keyboard_entry(enabled) {
+                    tracing::warn!(%error, "could not change secure keyboard entry");
+                }
+            }
+            PlatformRequest::Beep => {
+                if let Err(error) = crate::macos_shell::beep() {
+                    tracing::warn!(%error, "could not play the system alert sound");
+                }
+            }
+            PlatformRequest::MoveToApplicationsFolder { responder } => {
+                responder.complete(crate::macos_shell::move_to_applications_folder());
+            }
             request => {
                 let owner = request.window();
                 let native_window = match owner {
@@ -1166,7 +1244,17 @@ impl Runtime {
                     | PlatformRequest::ClearRecentDocuments
                     | PlatformRequest::ShowAboutPanel(_)
                     | PlatformRequest::GetFileIcon { .. }
-                    | PlatformRequest::SetUserTasks { .. } => {
+                    | PlatformRequest::SetUserTasks { .. }
+                    | PlatformRequest::SetActivationPolicy { .. }
+                    | PlatformRequest::ActivateApplication { .. }
+                    | PlatformRequest::HideApplication
+                    | PlatformRequest::UnhideApplication
+                    | PlatformRequest::RequestDockAttention { .. }
+                    | PlatformRequest::CancelDockAttention(_)
+                    | PlatformRequest::SetDockVisible { .. }
+                    | PlatformRequest::SetSecureKeyboardEntry(_)
+                    | PlatformRequest::Beep
+                    | PlatformRequest::MoveToApplicationsFolder { .. } => {
                         unreachable!("application-wide platform actions returned above")
                     }
                 };

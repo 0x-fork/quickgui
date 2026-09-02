@@ -418,6 +418,14 @@ declare_class!(
             let _ = self.ivars().proxy.send_event(RuntimeEvent::DisplaysChanged);
         }
 
+        #[method(quickGuiApplicationDidBecomeActive:)]
+        fn application_did_become_active(&self, _notification: &NSNotification) {
+            let _ = self
+                .ivars()
+                .proxy
+                .send_event(RuntimeEvent::ApplicationActivated);
+        }
+
         #[method(quickGuiApplicationDidResignActive:)]
         fn application_did_resign_active(&self, _notification: &NSNotification) {
             let _ = self
@@ -1016,6 +1024,12 @@ impl MacApplicationHost {
             application_notifications.addObserver_selector_name_object(
                 application_observer.as_ref(),
                 sel!(quickGuiDisplaysDidChange:),
+                Some(NSApplicationDidBecomeActiveNotification),
+                None,
+            );
+            application_notifications.addObserver_selector_name_object(
+                application_observer.as_ref(),
+                sel!(quickGuiApplicationDidBecomeActive:),
                 Some(NSApplicationDidBecomeActiveNotification),
                 None,
             );

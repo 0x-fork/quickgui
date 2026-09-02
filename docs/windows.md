@@ -363,3 +363,180 @@ the application callback releases its borrows. Calling `cx.window_state()` or `c
 declaratively observes native changes; it does not install a timer or polling frame. See
 `cargo run --release --example window_controls`, `cargo run --release --example appearance`, and
 `cargo run --release --example window_background`.
+\n
+## Window lifecycle events and constrain hooks
+
+Native window transitions are ordinary `Event` variants delivered to `View::event`:
+
+```rust
+use quickgui::{Event, EventContext, Point, Size, View};
+
+fn event(&mut self, event: &Event, cx: &mut EventContext) {
+    match event {
+        // Delivered once, after this window's first frame reached the screen.
+        Event::FirstPresented => { let _ = cx.show_window(); }
+        Event::Minimized(minimized) => self.dock_state = *minimized,
+        Event::Maximized(maximized) => self.zoomed = *maximized,
+        Event::FullscreenChanged(fullscreen) => self.immersive = *fullscreen,
+        Event::OcclusionChanged(occluded) => self.paused = *occluded,
+        Event::WindowLevelChanged(level) => self.level = *level,
+        // Constrain hooks run before the next frame is laid out.
+        Event::WillResize { proposed_size } => {
+            let _ = cx.constrain_resize(Size::new(proposed_size.width, 480.0));
+        }
+        Event::WillMove { proposed_position } => {
+            let _ = cx.constrain_move(Point::new(proposed_position.x, 0.0));
+        }
+        _ => {}
+    }
+}
+```
+
+`Event::FirstPresented` is the flicker-free ready-to-show moment. A window created with
+`WindowOptions::show(false)` prepares its first frame offscreen and can be revealed from this event
+without a timer. It is delivered exactly once per window; later frames never repeat it.
+
+`Minimized`, `Maximized`, and `FullscreenChanged` are equality-suppressed: an unchanged transition
+delivers nothing. Winit does not surface AppKit's `windowDidMiniaturize:`,
+`windowDidEnterFullScreen:`, or `windowDidDeminiaturize:` callbacks, so QuickGUI derives them by
+reading `NSWindow.isMiniaturized`, the AppKit fullscreen mask, and the zoom geometry at the native
+events that accompany those transitions — resize, move, and occlusion. macOS reports a Dock
+minimize as occlusion, which is where `Event::Minimized` originates there. The read is entirely
+event-driven; an idle window performs no sampling, and no observer or timer is installed.
+
+`Event::WillResize` and `Event::WillMove` are QuickGUI's portable stand-in for
+`windowWillResize:toSize:` and `windowWillMove:`. They are delivered from the corresponding native
+event, and `constrain_resize`/`constrain_move` request at most **one** corrective native resize or
+move per proposal. The corrective value is remembered, so the event it produces cannot start
+another round: a constrain hook can never loop. Both hooks validate through the same finite
+32,768-point dimension and 16,777,216-point coordinate bounds as every other window command and
+return `WindowCommandError::InvalidBounds` for a non-finite or out-of-range value.
+
+Application-level activation reuses the observers QuickGUI already installs:
+
+```rust
+Application::new()
+    .on_did_become_active(|cx| cx.update_global::<Session, _>(|s| s.focused = true))
+    .on_did_resign_active(|cx| cx.update_global::<Session, _>(|s| s.focused = false))
+```
+
+Both are macOS-only today (`NSApplicationDidBecomeActiveNotification` and
+`NSApplicationDidResignActiveNotification`). They add no additional native observer: the resign
+notification is the same one that already dismisses grabbing system popovers. One callback slot is
+retained per hook; registering again replaces it.
+
+## Stacking and input policy
+
+`WindowLevel` now names AppKit's stacking constants directly. `WindowLevel::macos_level()` is the
+exact `NSWindowLevel` QuickGUI applies:
+
+| `WindowLevel` | `NSWindowLevel` | Windows / Linux |
+| --- | --- | --- |
+| `AlwaysOnBottom` | `-1` | always-on-bottom hint |
+| `Normal` | `0` | normal |
+| `AlwaysOnTop` | `3` (`NSFloatingWindowLevel`) | topmost |
+| `Floating` | `3` (`NSFloatingWindowLevel`) | topmost |
+| `ModalPanel` | `8` (`NSModalPanelWindowLevel`) | topmost |
+| `MainMenu` | `24` (`NSMainMenuWindowLevel`) | topmost |
+| `Status` | `25` (`NSStatusWindowLevel`) | topmost |
+| `PopUpMenu` | `101` (`NSPopUpMenuWindowLevel`) | topmost |
+| `ScreenSaver` | `1000` (`NSScreenSaverWindowLevel`) | topmost |
+
+`AlwaysOnTop` deliberately shares `NSFloatingWindowLevel` with `Floating` so existing applications
+keep their established behavior. Non-macOS backends collapse every above-normal level to Winit's
+single topmost hint and retain the exact requested level in `WindowState::window_level`, so the
+core stays the source of truth. A command that changes the *effective* level delivers
+`Event::WindowLevelChanged` to that window.
+
+```rust
+cx.set_window_level(WindowLevel::Status)?;
+cx.move_window_top()?;                       // raise without activating the application
+cx.move_window_above(other_handle)?;         // order directly above a sibling
+cx.set_ignore_mouse_events(true, true)?;     // clicks pass through, hover still arrives
+cx.set_window_enabled(false)?;               // visible but inert
+cx.set_aspect_ratio(Some(Size::new(16.0, 9.0)))?;
+cx.set_window_button_visibility(false)?;     // hide the macOS traffic lights
+cx.set_window_shadow(false)?;
+```
+
+Every command has a `_handle` variant and shares the 256-per-event / 1,024-per-effect-cycle window
+command bounds.
+
+- **`move_window_top` / `move_window_above`** — macOS uses `orderFront:` and
+  `orderWindow:relativeTo:`, which change stacking without activating the application or making the
+  window key. `move_window_above` rejects a window ordering above itself with
+  `WindowCommandError::InvalidWindowOrder`, and silently ignores a sibling handle that is no longer
+  mounted. Windows and Linux have no portable restack request in Winit, so they fall back to a
+  native focus request; this is an honest approximation, not the same operation.
+- **`set_ignore_mouse_events(ignore, forward)`** — macOS sets `ignoresMouseEvents` and, when
+  `forward` is true, keeps `acceptsMouseMovedEvents` on so AppKit's existing event-driven
+  `mouseMoved:` stream still reaches the window while every press falls through. `forward` is
+  meaningless without pass-through and is normalized to `false` when `ignore` is `false`. Other
+  backends map the request onto `set_cursor_hittest`, which cannot forward motion; they report
+  `forward_mouse_events` truthfully in `WindowState`. `set_cursor_hit_test` remains the simple
+  all-or-nothing form.
+- **`set_window_enabled(bool)`** — AppKit has no `EnableWindow`, so macOS expresses "visible but
+  inert" with `ignoresMouseEvents` plus refusing key-window status and resigning key. Windows uses
+  Win32 `EnableWindow` (a small addition that is **unverified** on a live Windows desktop). Linux
+  retains the requested state and logs that the backend does not implement it.
+- **`set_aspect_ratio(Option<Size>)`** — macOS applies `contentAspectRatio`. Every platform also
+  applies a portable clamp inside the resize path: after the view's own `constrain_resize`
+  narrowing, the width is kept authoritative and the height is recomputed from the ratio. The ratio
+  must be finite, both components positive, and neither component more than
+  `MAX_WINDOW_ASPECT_RATIO` (1,000) times the other; otherwise the command fails with
+  `WindowCommandError::InvalidAspectRatio` before anything is retained.
+- **`set_window_button_visibility(bool)`** — macOS hides the close/minimize/zoom
+  `standardWindowButton`s while keeping the titlebar. Other platforms retain the requested state
+  and log that only macOS separates the buttons from the titlebar; use `decorated(false)` there.
+
+`WindowState` reports `window_level`, `ignore_mouse_events`, `forward_mouse_events`,
+`window_enabled`, `aspect_ratio`, and `window_buttons_visible`, and `WindowOptions` has matching
+`ignore_mouse_events`, `window_enabled`, `aspect_ratio`, and `window_button_visibility` builders so
+a window can start in any of these policies.
+
+## Persisting and restoring window geometry
+
+`WindowRestoreState` is a `serde` `Serialize`/`Deserialize` value an application can store next to
+its own settings:
+
+```rust
+use quickgui::{WindowOptions, WindowRestoreState};
+
+// During rendering, this observes both window state and displays:
+let restore: WindowRestoreState = cx.window_restore_state();
+let json = serde_json::to_string(&restore)?;
+
+// From an event callback, capture it explicitly:
+let restore = cx.window_state().restore_state(cx.display_snapshot());
+
+// On the next launch:
+let restore: WindowRestoreState = serde_json::from_str(&json)?;
+cx.open_window(
+    WindowOptions::new("Workspace").restore(&restore, cx.display_snapshot()),
+    Workspace::default(),
+);
+```
+
+It stores the windowed restore rectangle (`x`, `y`, `width`, `height`), the `maximized` and
+`fullscreen` modes, the process-level `display_id`, the stable `display_uuid` when the platform
+exposes one (macOS), and the capturing display's `scale_factor`. A maximized or fullscreen window
+still persists the rectangle it returns to.
+
+`WindowOptions::restore` (and the underlying `WindowRestoreState::resolve`) validates the value
+against the live display snapshot and never places a window off every connected display:
+
+1. The remembered display is matched by stable UUID first, then by process identifier.
+2. If that display is connected and its **work area** intersects the rectangle, the rectangle is
+   used exactly.
+3. If the remembered display is connected but the rectangle no longer intersects its work area, the
+   rectangle is clamped into that work area with `Display::constrain_bounds`.
+4. If the remembered display is gone but some other connected display's work area intersects the
+   rectangle, that display is adopted and the rectangle is used exactly.
+5. Otherwise the window is centered on the primary display at the persisted size.
+6. A rectangle that fails the ordinary window-bounds validation (non-finite, non-positive, or
+   outside the 16,777,216-point coordinate / 32,768-point dimension range) falls back to a centered
+   960 x 640 window.
+
+`ResolvedWindowRestoreState::adjusted` reports whether steps 3, 5, or 6 changed the persisted
+geometry, so an application can tell the user its window moved. `WindowRestoreState::is_valid`
+exposes the same validation without resolving.

@@ -58,7 +58,7 @@ use crate::{
     ElementId, ExternalDragOperation, ExternalDragPayload, ExternalDragText, ExternalDragUrl,
     MAX_EXTERNAL_DRAG_TEXT_BYTES, MAX_EXTERNAL_DRAG_URL_BYTES, MAX_GRABBING_POPOVERS,
     MAX_SYSTEM_WINDOW_TABS, Point, PopoverOptions, Rect, Size, WindowHandle, WindowKind,
-    WindowTabState,
+    WindowLevel, WindowTabState,
     native_view::NativeViewPlacement,
     platform::{
         FileDialogFilter, MAX_PLATFORM_PATH_BYTES, MAX_SELECTED_PATHS,
@@ -92,12 +92,15 @@ pub(crate) use windowing::{
     MacTrafficLightHost, MacWindowTabAction, configure_document_window,
     configure_gpu_window_resize, configure_window_kind, current_cursor_screen_position,
     current_pointer_position, dismiss_window_relation, is_window_fullscreen, is_window_maximized,
-    native_file_url, perform_window_close, perform_window_drag, perform_window_tab_action,
-    position_system_popover, position_traffic_lights, present_native_prompt,
-    present_window_relation, set_window_document_edited, set_window_focusable, set_window_movable,
-    set_window_opacity, set_window_represented_file, set_window_tabbing_identifier,
-    set_window_visibility, set_window_visible_on_all_workspaces, shell_open_path, shell_open_url,
-    shell_reveal_path, shell_trash_path, show_character_palette, window_tab_state,
+    is_window_miniaturized, native_file_url, order_window_above, order_window_front,
+    perform_window_close, perform_window_drag, perform_window_tab_action, position_system_popover,
+    position_traffic_lights, present_native_prompt, present_window_relation,
+    set_window_aspect_ratio, set_window_button_visibility, set_window_document_edited,
+    set_window_focusable, set_window_ignores_mouse_events, set_window_input_enabled,
+    set_window_level, set_window_movable, set_window_opacity, set_window_represented_file,
+    set_window_tabbing_identifier, set_window_visibility, set_window_visible_on_all_workspaces,
+    shell_open_path, shell_open_url, shell_reveal_path, shell_trash_path, show_character_palette,
+    window_tab_state,
 };
 
 use drag_drop::point_outside_ns_rect;

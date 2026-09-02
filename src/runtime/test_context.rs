@@ -12,7 +12,8 @@ use thiserror::Error;
 
 use super::*;
 use crate::{
-    ClipboardError, MAX_MOUSE_EVENT_PATH, TextHighlight, TextId, TextStyle, TextWrap,
+    ActivationPolicy, ClipboardError, DockAttention, DockAttentionRequest, MAX_MOUSE_EVENT_PATH,
+    TextHighlight, TextId, TextStyle, TextWrap,
     renderer::{
         OffscreenRenderer, SharedFontSystem, StyledTextGeometry, TextLayoutEngine,
         create_shared_font_system,
@@ -328,6 +329,44 @@ struct TestWindow {
     requested_animation_frame: bool,
     repaint_deadline: Option<Instant>,
     pointer: Option<Point>,
+    /// Whether the one-time ready-to-show event was already delivered for this window.
+    first_presented: bool,
+}
+
+/// Deterministic record of the application-shell state a test application requested.
+///
+/// Every field mirrors one native service that has no observable effect in a headless test.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TestApplicationShell {
+    pub activation_policy: ActivationPolicy,
+    /// Whether every window is hidden by `hide_application`.
+    pub hidden: bool,
+    /// Number of `activate_application` requests, and whether the last one forced activation.
+    pub activations: usize,
+    pub last_activation_forced: bool,
+    pub dock_visible: bool,
+    /// The in-flight attention request, if one has not been cancelled.
+    pub dock_attention: Option<DockAttention>,
+    pub secure_keyboard_entry: bool,
+    pub beeps: usize,
+    /// Number of accepted `move_to_applications_folder` requests.
+    pub applications_folder_moves: usize,
+}
+
+impl Default for TestApplicationShell {
+    fn default() -> Self {
+        Self {
+            activation_policy: ActivationPolicy::Regular,
+            hidden: false,
+            activations: 0,
+            last_activation_forced: false,
+            dock_visible: true,
+            dock_attention: None,
+            secure_keyboard_entry: false,
+            beeps: 0,
+            applications_folder_moves: 0,
+        }
+    }
 }
 
 enum TestDispatch {
@@ -372,7 +411,10 @@ pub struct TestAppContext {
     focus_history: Vec<WindowHandle>,
     now: Rc<Cell<Instant>>,
     animation_epoch: Instant,
+    application_shell: TestApplicationShell,
+    next_dock_attention_id: i64,
     exited: bool,
+    exit_code: Option<i32>,
     quit_phase_active: bool,
     last_window_quit_prevented: bool,
     relaunch_request: Option<RelaunchRequest>,
@@ -443,7 +485,10 @@ impl TestAppContext {
             focus_history: Vec::with_capacity(4),
             now,
             animation_epoch,
+            application_shell: TestApplicationShell::default(),
+            next_dock_attention_id: 0,
             exited: false,
+            exit_code: None,
             quit_phase_active: false,
             last_window_quit_prevented: false,
             relaunch_request: None,
@@ -462,6 +507,17 @@ impl TestAppContext {
 
     pub fn active_window(&self) -> Option<WindowHandle> {
         self.active_window
+    }
+
+    /// Process exit code requested through
+    /// [`EventContext::exit_with_code`](crate::EventContext::exit_with_code).
+    pub const fn exit_code(&self) -> Option<i32> {
+        self.exit_code
+    }
+
+    /// Deterministic snapshot of every application-shell service a test requested.
+    pub const fn application_shell(&self) -> TestApplicationShell {
+        self.application_shell
     }
 
     pub fn is_exited(&self) -> bool {
@@ -930,6 +986,7 @@ mod effects;
 mod input;
 mod lifecycle;
 mod window_commands;
+mod window_lifecycle;
 
 impl Application {
     /// Consume this configured application into a deterministic headless test context.
@@ -1041,6 +1098,11 @@ fn test_window_state(
         shadow: options.shadow,
         content_protected: options.content_protected,
         window_level: effective_window_level(options),
+        ignore_mouse_events: options.ignore_mouse_events,
+        forward_mouse_events: options.forward_mouse_events,
+        window_enabled: options.window_enabled,
+        aspect_ratio: options.aspect_ratio,
+        window_buttons_visible: options.window_buttons_visible,
         skip_taskbar: options.skip_taskbar,
         visible_on_all_workspaces: effective_visible_on_all_workspaces(options),
         opacity: options.opacity,
