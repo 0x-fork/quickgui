@@ -708,6 +708,17 @@ impl NativeRuntime {
         application = application.bind_keys(quickgui::splitter_key_bindings());
         application = application.bind_keys(quickgui::toolbar_key_bindings());
         application = application.bind_keys(quickgui::toggle_group_key_bindings());
+        // Declared pickers, collections, date and time fields, month grids, and menubars adopt
+        // the core's own typed navigation, filtering, and commit bindings the same way.
+        application = application.bind_keys(quickgui::picker_key_bindings());
+        application = application.bind_keys(quickgui::select_key_bindings());
+        application = application.bind_keys(quickgui::combobox_key_bindings());
+        application = application.bind_keys(quickgui::table_key_bindings());
+        application = application.bind_keys(quickgui::tree_key_bindings());
+        application = application.bind_keys(quickgui::date_field_key_bindings());
+        application = application.bind_keys(quickgui::time_field_key_bindings());
+        application = application.bind_keys(quickgui::calendar_key_bindings());
+        application = application.bind_keys(quickgui::menubar_key_bindings());
         let mut runner = application
             .on_open_urls(move |urls, _cx| {
                 let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())

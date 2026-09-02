@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 21;
+export const PROTOCOL_VERSION = 22;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -232,6 +232,38 @@ export const enum PropertyCode {
   LargeStep = 205,
   Items = 206,
   ComponentChangeListener = 207,
+  Options = 208,
+  InputValue = 209,
+  FilterMode = 210,
+  Appearance = 211,
+  Columns = 212,
+  RowCount = 213,
+  SortColumn = 214,
+  SortDirection = 215,
+  SelectionMode = 216,
+  Selection = 217,
+  RowIndex = 218,
+  ColumnIndex = 219,
+  Nodes = 220,
+  Expanded = 221,
+  SelectedValue = 222,
+  SetChildren = 223,
+  Precision = 224,
+  Toasts = 225,
+  SegmentOrder = 226,
+  Segment = 227,
+  CivilValue = 228,
+  CivilMinimum = 229,
+  CivilMaximum = 230,
+  MenuCount = 231,
+  FirstWeekday = 232,
+  RowHeight = 233,
+  HeaderHeight = 234,
+  Group = 235,
+  Editing = 236,
+  Disclosure = 237,
+  LoadingLabel = 238,
+  CommitListener = 239,
 }
 
 /**
@@ -299,6 +331,35 @@ export const NativePart = {
   ToolbarItem: "toolbar-item",
   ToggleGroup: "toggle-group",
   ToggleGroupItem: "toggle-group-item",
+  Select: "select",
+  Combobox: "combobox",
+  Autocomplete: "autocomplete",
+  Option: "option",
+  Table: "table",
+  TableHeader: "table-header",
+  TableRow: "table-row",
+  TableCell: "table-cell",
+  Tree: "tree",
+  TreeRow: "tree-row",
+  NumberField: "number-field",
+  NumberFieldInput: "number-field-input",
+  NumberFieldIncrement: "number-field-increment",
+  NumberFieldDecrement: "number-field-decrement",
+  DateField: "date-field",
+  DateFieldSegment: "date-field-segment",
+  TimeField: "time-field",
+  TimeFieldSegment: "time-field-segment",
+  Calendar: "calendar",
+  CalendarWeek: "calendar-week",
+  CalendarDay: "calendar-day",
+  Menubar: "menubar",
+  MenubarItem: "menubar-item",
+  ToastViewport: "toast-viewport",
+  Toast: "toast",
+  ToastTitle: "toast-title",
+  ToastDescription: "toast-description",
+  ToastAction: "toast-action",
+  ToastClose: "toast-close",
 } as const;
 
 export type NativePartName = (typeof NativePart)[keyof typeof NativePart];
@@ -326,6 +387,30 @@ export const MAX_COMPONENT_ITEMS = 256;
 
 /** Longest bounded drag declaration accepted by the Rust binding. */
 export const MAX_DRAG_JSON_BYTES = 64 * 1024;
+
+/** Longest bounded option source accepted by the Rust binding. */
+export const MAX_OPTIONS_JSON_BYTES = 512 * 1024;
+
+/** Most options the Rust binding decodes from one declared source. */
+export const MAX_DECLARED_OPTIONS = 4096;
+
+/** Longest bounded column, node, or selection declaration accepted by the Rust binding. */
+export const MAX_COLLECTION_JSON_BYTES = 2 * 1024 * 1024;
+
+/** Most tree nodes the Rust binding decodes from one declared source. */
+export const MAX_DECLARED_TREE_NODES = 65_536;
+
+/** Most columns the Rust core retains for one table. */
+export const MAX_TABLE_COLUMNS = 512;
+
+/** Most rows one declared table may address. */
+export const MAX_TABLE_ROWS = 1_000_000;
+
+/** Most toasts the Rust core keeps queued in one viewport. */
+export const MAX_TOASTS = 8;
+
+/** Most menus one declared in-window menubar retains. */
+export const MAX_MENUBAR_MENUS = 64;
 
 export type NativePropertyValue = boolean | number | string | null;
 

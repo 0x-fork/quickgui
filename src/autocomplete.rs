@@ -256,6 +256,17 @@ impl<T> AutocompleteState<T> {
         self
     }
 
+    /// Set the initial free-form value before a runtime context exists.
+    ///
+    /// This is the constructor-time equivalent of [`Self::set_value`]: a state that has never been
+    /// mounted owns no popover to synchronize, so no [`EventContext`] is needed. The value is
+    /// bounded by [`MAX_AUTOCOMPLETE_VALUE_BYTES`] exactly as it is at runtime.
+    pub fn with_value(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.value = bounded_value(value.into());
+        self.picker.set_query(&self.value);
+        self
+    }
+
     pub const fn layout(&self) -> AutocompletePopoverLayout {
         self.layout
     }
@@ -1326,6 +1337,20 @@ mod tests {
                 button().id("after-autocomplete").child("After"),
             ])
         }
+    }
+
+    #[test]
+    fn with_value_seeds_the_query_and_stays_bounded_before_a_context_exists() {
+        let state = AutocompleteState::new(options()).unwrap().with_value("ap");
+        assert_eq!(state.value().as_ref(), "ap");
+        assert_eq!(state.picker_query().as_ref(), "ap");
+        assert_eq!(state.result_count(), 2);
+
+        let long = "é".repeat(MAX_AUTOCOMPLETE_VALUE_BYTES);
+        let state = AutocompleteState::new(options()).unwrap().with_value(long);
+        let retained = state.value();
+        assert!(retained.len() <= MAX_AUTOCOMPLETE_VALUE_BYTES);
+        assert!(retained.is_char_boundary(retained.len()));
     }
 
     #[test]

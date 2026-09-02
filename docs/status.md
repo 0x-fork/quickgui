@@ -23,6 +23,23 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
+- JavaScript bindings for the declared option sources: Solid `Select`, `Combobox`, and
+  `Autocomplete` compound parts declaring a bounded option source — one `items` array or child
+  `Option` nodes — the controlled value, the controlled input text, the filter mode, and one
+  bounded `appearance` block the Rust core renders every popover row from in its own native window,
+  so filtering, highlight movement, typeahead, surface placement, dismissal, and commit policy stay
+  in the core and travel back as asynchronous `componentchange` and `commit` payloads;
+- JavaScript bindings for the virtual collections: Solid `Table` (`Root`/`Header`/`Row`/`Cell`) and
+  `Tree` (`Root`/`Row`) declaring columns with sort state and widths, `rowCount`, selection mode
+  and controlled selection ranges, the inline-edit position, a tree node source with lazy `pending`
+  branches, controlled expansion and selection, and an atomically validated `setChildren` splice,
+  with the core owning the virtual window it reports through `onVisibleRangeChange`, column
+  resize and reorder, keyboard navigation, and the inline-edit lifetime;
+- JavaScript bindings for the remaining stateful field components: Solid `NumberField`,
+  `DateField`, `TimeField`, `Calendar`, `Menubar`, and a declared `Toast` queue, with the core
+  owning numeric parsing and clamping, the bounded stepper repeat, civil-value segment arithmetic,
+  month and year movement, menubar roving focus, and the exact toast auto-dismiss deadline the
+  binding sleeps on with one `request_repaint_at` instead of a timer of its own;
 - JavaScript bindings for the declared range, ordering, and roving-focus components: Solid
   `Slider` (single-thumb and range), `Splitter`, `Toolbar`, and `ToggleGroup` compound parts
   declared ahead of time as bounded protocol properties, with the Rust core owning clamping, step

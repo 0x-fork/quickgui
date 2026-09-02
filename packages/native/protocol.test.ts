@@ -1,12 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import {
+  MAX_COLLECTION_JSON_BYTES,
   MAX_COMPONENT_ITEMS,
   MAX_COMPONENT_JSON_BYTES,
   MAX_COMPONENT_VALUE_BYTES,
   MAX_COMPONENT_VALUES,
+  MAX_DECLARED_OPTIONS,
+  MAX_DECLARED_TREE_NODES,
   MAX_DRAG_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
+  MAX_MENUBAR_MENUS,
+  MAX_OPTIONS_JSON_BYTES,
+  MAX_TABLE_COLUMNS,
+  MAX_TABLE_ROWS,
+  MAX_TOASTS,
   MAX_TOOLTIP_TEXT_BYTES,
   MutationBatch,
   NativeNodeTag,
@@ -39,8 +47,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v21", () => {
-    expect(PROTOCOL_VERSION).toBe(21);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v22", () => {
+    expect(PROTOCOL_VERSION).toBe(22);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -312,6 +320,111 @@ describe("binary mutation protocol", () => {
     expect(MAX_COMPONENT_JSON_BYTES).toBe(64 * 1024);
     expect(MAX_COMPONENT_VALUES).toBe(64);
     expect(MAX_COMPONENT_ITEMS).toBe(256);
+    expect(NativePart.Select).toBe("select");
+    expect(NativePart.Combobox).toBe("combobox");
+    expect(NativePart.Autocomplete).toBe("autocomplete");
+    expect(NativePart.Option).toBe("option");
+    expect(NativePart.Table).toBe("table");
+    expect(NativePart.TableHeader).toBe("table-header");
+    expect(NativePart.TableRow).toBe("table-row");
+    expect(NativePart.TableCell).toBe("table-cell");
+    expect(NativePart.Tree).toBe("tree");
+    expect(NativePart.TreeRow).toBe("tree-row");
+    expect(NativePart.NumberField).toBe("number-field");
+    expect(NativePart.NumberFieldInput).toBe("number-field-input");
+    expect(NativePart.NumberFieldIncrement).toBe("number-field-increment");
+    expect(NativePart.NumberFieldDecrement).toBe("number-field-decrement");
+    expect(NativePart.DateField).toBe("date-field");
+    expect(NativePart.DateFieldSegment).toBe("date-field-segment");
+    expect(NativePart.TimeField).toBe("time-field");
+    expect(NativePart.TimeFieldSegment).toBe("time-field-segment");
+    expect(NativePart.Calendar).toBe("calendar");
+    expect(NativePart.CalendarWeek).toBe("calendar-week");
+    expect(NativePart.CalendarDay).toBe("calendar-day");
+    expect(NativePart.Menubar).toBe("menubar");
+    expect(NativePart.MenubarItem).toBe("menubar-item");
+    expect(NativePart.ToastViewport).toBe("toast-viewport");
+    expect(NativePart.Toast).toBe("toast");
+    expect(NativePart.ToastTitle).toBe("toast-title");
+    expect(NativePart.ToastDescription).toBe("toast-description");
+    expect(NativePart.ToastAction).toBe("toast-action");
+    expect(NativePart.ToastClose).toBe("toast-close");
+    expect(MAX_OPTIONS_JSON_BYTES).toBe(512 * 1024);
+    expect(MAX_DECLARED_OPTIONS).toBe(4096);
+    expect(MAX_COLLECTION_JSON_BYTES).toBe(2 * 1024 * 1024);
+    expect(MAX_DECLARED_TREE_NODES).toBe(65_536);
+    expect(MAX_TABLE_COLUMNS).toBe(512);
+    expect(MAX_TABLE_ROWS).toBe(1_000_000);
+    expect(MAX_TOASTS).toBe(8);
+    expect(MAX_MENUBAR_MENUS).toBe(64);
+  });
+
+  test("encodes declared option sources, virtual collections, and stateful fields", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.Button);
+    batch.setProperty(1, PropertyCode.Part, NativePart.Select);
+    batch.setProperty(1, PropertyCode.Scope, "theme");
+    batch.setProperty(
+      1,
+      PropertyCode.Options,
+      JSON.stringify([{ value: "light", label: "Light" }]),
+    );
+    batch.setProperty(1, PropertyCode.ActiveValue, "light");
+    batch.setProperty(1, PropertyCode.FilterMode, "fuzzy");
+    batch.setProperty(1, PropertyCode.Appearance, '{"width":240}');
+    batch.setProperty(1, PropertyCode.CommitListener, true);
+
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Part, NativePart.Table);
+    batch.setProperty(2, PropertyCode.Scope, "files");
+    batch.setProperty(
+      2,
+      PropertyCode.Columns,
+      JSON.stringify([{ id: "name", label: "Name" }]),
+    );
+    batch.setProperty(2, PropertyCode.RowCount, 1000);
+    batch.setProperty(2, PropertyCode.RowHeight, 24);
+    batch.setProperty(2, PropertyCode.HeaderHeight, 32);
+    batch.setProperty(2, PropertyCode.SelectionMode, "multiple");
+    batch.setProperty(2, PropertyCode.Selection, "[[0,2]]");
+    batch.setProperty(2, PropertyCode.SortColumn, "name");
+    batch.setProperty(2, PropertyCode.SortDirection, "ascending");
+    batch.setProperty(2, PropertyCode.Editing, '{"row":0,"column":0}');
+
+    batch.createElement(3, NativeNodeTag.View);
+    batch.setProperty(3, PropertyCode.Part, NativePart.TableCell);
+    batch.setProperty(3, PropertyCode.PartValue, "name");
+    batch.setProperty(3, PropertyCode.ColumnIndex, 0);
+
+    batch.createElement(4, NativeNodeTag.View);
+    batch.setProperty(4, PropertyCode.Part, NativePart.Tree);
+    batch.setProperty(4, PropertyCode.Nodes, '[{"id":"src","pending":true}]');
+    batch.setProperty(4, PropertyCode.Expanded, '["src"]');
+    batch.setProperty(4, PropertyCode.SelectedValue, "src");
+    batch.setProperty(4, PropertyCode.SetChildren, '{"id":"src","children":[]}');
+    batch.setProperty(4, PropertyCode.LoadingLabel, "Loading…");
+    batch.setProperty(4, PropertyCode.Disclosure, "leading");
+
+    batch.createElement(5, NativeNodeTag.View);
+    batch.setProperty(5, PropertyCode.Part, NativePart.DateField);
+    batch.setProperty(5, PropertyCode.CivilValue, "2026-09-03");
+    batch.setProperty(5, PropertyCode.CivilMinimum, "2000-01-01");
+    batch.setProperty(5, PropertyCode.CivilMaximum, "2099-12-31");
+    batch.setProperty(5, PropertyCode.SegmentOrder, "mdy");
+    batch.setProperty(5, PropertyCode.Segment, "year");
+
+    batch.createElement(6, NativeNodeTag.View);
+    batch.setProperty(6, PropertyCode.Part, NativePart.ToastViewport);
+    batch.setProperty(6, PropertyCode.Toasts, '[{"id":"a","title":"Saved"}]');
+    batch.setProperty(6, PropertyCode.MenuCount, 3);
+    batch.setProperty(6, PropertyCode.FirstWeekday, 0);
+    batch.setProperty(6, PropertyCode.Precision, 2);
+    batch.setProperty(6, PropertyCode.InputValue, "al");
+    batch.setProperty(6, PropertyCode.Group, "recent");
+    batch.setProperty(6, PropertyCode.RowIndex, 4);
+
+    expect(batch.mutationCount).toBe(48);
+    expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 
   test("encodes declared range, ordering, and roving-focus component declarations", () => {

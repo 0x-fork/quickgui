@@ -577,6 +577,197 @@ declaration is bounded rather than fatal: unparsable JSON declares no values, du
 keep the first occurrence, and a list past `MAX_COMPONENT_VALUES` (64) or `MAX_COMPONENT_ITEMS`
 (256) is truncated instead of reaching the core.
 
+## Option sources: select, combobox, and autocomplete
+
+`Select`, `Combobox`, and `Autocomplete` each own a native popover window of their own. JavaScript
+declares the option source, the controlled value, and one bounded `appearance` block; the core
+opens the window, filters, moves the highlight, answers typeahead, places the surface, and paints
+every row from that appearance — exactly the way a declared `PopoverMenu` paints its rows. No row
+can wait on the hosted runtime while the core is deciding what a keystroke means.
+
+| Component | Parts | Declared props | Reported through | Core guide |
+| --- | --- | --- | --- | --- |
+| `Select` | `Root`, `Option` | `scope`, `items` or child `Option` nodes, `value`/`defaultValue`, `appearance`, `filterMode`, `ariaLabel`, `disabled` | `onValueChange(value, event)`, `onOpenChange(open, event)`, `onCommit(details, event)` | [select and autocomplete](select-and-autocomplete.md) |
+| `Combobox` | `Root`, `Option` | the same, plus `inputValue` and `placeholder` | the same, plus `onInputValueChange(value, event)` | [select and autocomplete](select-and-autocomplete.md) |
+| `Autocomplete` | `Root`, `Option` | `scope`, `items`, `inputValue`, `placeholder`, `appearance`, `filterMode` | `onInputValueChange(value, event)`, `onOpenChange`, `onCommit` | [select and autocomplete](select-and-autocomplete.md) |
+
+`Select.Root` renders the trigger; `Combobox.Root` and `Autocomplete.Root` render the input. The
+options are either one bounded `items` array or child `Option` nodes, which contribute no element of
+their own:
+
+```tsx
+<Select.Root
+  scope="theme"
+  ariaLabel="Theme"
+  value={theme()}
+  items={[
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark", detail: "⌘D" },
+  ]}
+  appearance={{ width: 240, rowHeight: 28, highlightBackground: "#2f6feb" }}
+  onValueChange={setTheme}
+>
+  <Text>{theme() ?? "Choose a theme"}</Text>
+</Select.Root>
+
+<Combobox.Root scope="fruit" value={fruit()} onValueChange={setFruit}>
+  <Combobox.Option partValue="apple" label="Apple" group="Common" />
+  <Combobox.Option partValue="banana" label="Banana" />
+</Combobox.Root>
+```
+
+`appearance` carries only geometry and paint: `width`, `rowHeight`, `maxVisibleRows`, `anchorGap`,
+`fontSize`, `radius`, `padding`, `verticalPadding`, `background`, `color`, `highlightBackground`,
+`highlightColor`, `selectedBackground`, and `mutedColor`. `filterMode` selects the core's own
+bounded fuzzy matcher (`"fuzzy"`, the default) or no filtering at all (`"none"`) for a source an
+application or service already filtered.
+
+`inputValue` seeds the core's retained editing text; every edit after that belongs to the core,
+which reports the exact value it holds. `onCommit` is an edge, not a value: committing the same
+option twice reports twice while the controlled value never moves.
+
+Because the core's replacement mutators close a live native popover — something a render pass
+cannot do — the binding rebuilds a picker's retained state only when the declaration itself changes
+and the popover is closed. A declaration committed while the surface is open is applied as soon as
+the core closes it, which is the frame the close already schedules.
+
+## Virtual tables and trees
+
+`Table` and `Tree` are on-demand: the rows JavaScript declares are the rows the core last reported
+as visible, so a million-row table declares only the window on screen. Column widths, display
+order, sort direction, selection ranges, expansion, the lazy-children request, and the inline-edit
+lifetime all live in the core.
+
+| Component | Parts | Declared props | Reported through | Core guide |
+| --- | --- | --- | --- | --- |
+| `Table` | `Root`, `Header`, `Row`, `Cell` | `scope`, `columns`, `rowCount`, `rowHeight`, `headerHeight`, `selectionMode`, `selection`, `sort`, `editing` | `onVisibleRangeChange`, `onSelectionChange`, `onSortChange`, `onActiveCellChange`, `onColumnResize`, `onColumnReorder`, `onEditEnd`, `onActivate` | [data collections](data-collections.md) |
+| `Tree` | `Root`, `Row` | `scope`, `nodes`, `expanded`/`defaultExpanded`, `value`, `rowHeight`, `loadingLabel`, `disclosure`, `setChildren` | `onVisibleRangeChange`, `onExpandedChange`, `onValueChange`, `onLoadChildren`, `onActivate` | [data collections](data-collections.md) |
+
+```tsx
+const [range, setRange] = createSignal({ start: 0, end: 0 });
+
+<Table.Root
+  scope="files"
+  rowCount={rows().length}
+  columns={[
+    { id: "name", label: "Name", width: 220, sortable: true },
+    { id: "size", label: "Size", track: "1fr", align: "end" },
+  ]}
+  selectionMode="multiple"
+  onVisibleRangeChange={setRange}
+  onSelectionChange={setSelection}
+>
+  <Table.Header column="name"><Text>Name</Text></Table.Header>
+  <Table.Header column="size"><Text>Size</Text></Table.Header>
+  <For each={visible(range())}>
+    {(row, index) => (
+      <Table.Row index={range().start + index()}>
+        <Table.Cell column="name"><Text>{row.name}</Text></Table.Cell>
+        <Table.Cell column="size"><Text>{row.size}</Text></Table.Cell>
+      </Table.Row>
+    )}
+  </For>
+</Table.Root>
+```
+
+A declared `Header`, `Row`, or `Cell` is content, not identity: the core assigns the exact grid,
+tree-item, and active-descendant identity, appends the resize handle it owns, and attaches the row
+and cell interaction itself, so these nodes register no listener of their own. Put an interactive
+control inside a cell as an ordinary child node instead.
+
+`selection` is a list of inclusive `[start, end]` row ranges, which is exactly the shape the core
+retains and reports. `editing` opens the inline editor over one cell; the core reports the end of
+that edit — with its own commit decision — through `onEditEnd`.
+
+A `Tree` node source declares `id`, `label`, `disabled`, `pending`, and nested `children`. A
+`pending` branch asks for its children exactly once, through `onLoadChildren`; supplying them is a
+declaration too:
+
+```tsx
+<Tree.Root
+  scope="explorer"
+  nodes={nodes()}
+  expanded={expanded()}
+  setChildren={loaded()}
+  onExpandedChange={setExpanded}
+  onLoadChildren={(id) => void fetchChildren(id).then((children) => setLoaded({ id, children }))}
+>
+  <For each={visibleNodes()}>
+    {(node) => <Tree.Row nodeId={node.id}><Text>{node.label}</Text></Tree.Row>}
+  </For>
+</Tree.Root>
+```
+
+The core hands the binding a behavior-only disclosure control for every branch; `disclosure`
+decides whether it is mounted before (`"leading"`, the default), after (`"trailing"`), or not at
+all (`"none"`) inside the declared row.
+
+## Number fields, date and time fields, month grids, menubars, and toasts
+
+| Component | Parts | Declared props | Reported through | Core guide |
+| --- | --- | --- | --- | --- |
+| `NumberField` | `Root`, `Input`, `Increment`, `Decrement` | `scope`, `value`/`defaultValue`, `min`, `max`, `step`, `precision`, `disabled` | `onValueChange(value, valid, event)` on the root, `onCommit(details, event)` on the input | [range and feedback](range-and-feedback.md) |
+| `DateField` | `Root`, `Segment` | `scope`, `value`/`defaultValue`, `min`, `max`, `format` (`"ymd"`/`"dmy"`/`"mdy"`), `disabled` | `onValueChange(value, event)` | [date and time](date-and-time.md) |
+| `TimeField` | `Root`, `Segment` | `scope`, `value`/`defaultValue`, `min`, `max`, `hour12`, `showSeconds`, `disabled` | `onValueChange(value, event)` | [date and time](date-and-time.md) |
+| `Calendar` | `Root`, `Week`, `Day` | `scope`, `value`/`defaultValue`, `min`, `max`, `firstWeekday`, `disabled` | `onValueChange`, `onFocusChange(day, event)`, `onMonthChange(month, event)` | [date and time](date-and-time.md) |
+| `Menubar` | `Root`, `Item` | `scope`, `count`, `open`/`defaultOpen`, `disabled` | `onOpenChange(index, event)`, `onActiveChange(index, event)` | [menubar](menubar.md) |
+| `Toast` | `Viewport`, `Root`, `Title`, `Description`, `Action`, `Close` | `scope`, `toasts` | `onDismiss(ids, event)` | [toolbar and toast](toolbar-and-toast.md) |
+
+Civil values are ISO strings with no time zone: `YYYY-MM-DD` for a date or a calendar day,
+`HH:MM` or `HH:MM:SS` for a time. The core owns segment arithmetic, digit entry, leap years, month
+and year movement, and each field's validity.
+
+```tsx
+<NumberField.Root scope="qty" value={quantity()} min={0} max={99} step={1} onValueChange={setQuantity}>
+  <NumberField.Decrement scope="qty"><Text>−</Text></NumberField.Decrement>
+  <NumberField.Input scope="qty" onCommit={({ value }) => setQuantity(value as number)} />
+  <NumberField.Increment scope="qty"><Text>+</Text></NumberField.Increment>
+</NumberField.Root>
+
+<DateField.Root scope="due" value={due()} format="mdy" onValueChange={setDue}>
+  <DateField.Segment scope="due" segment="month" />
+  <DateField.Segment scope="due" segment="day" />
+  <DateField.Segment scope="due" segment="year" />
+</DateField.Root>
+```
+
+Holding a `NumberField` stepper repeats on the core's own exact deadlines; the binding arms the
+repeat on press, releases it on lift, and owns no timer of its own. Return commits: the core clamps
+into range and reformats before reporting, and it refuses to submit a control whose text does not
+parse into range.
+
+Pushing a toast is adding an entry to the declared `toasts` list, and dropping one dismisses it.
+The core owns the queue bound, live-region politeness, focused-Escape dismissal, and the exact
+auto-dismiss deadline, and it reports every dismissal — including the timed ones — through
+`onDismiss`:
+
+```tsx
+<Toast.Viewport scope="toasts" toasts={toasts()} onDismiss={(ids) => setToasts((queue) => queue.filter((toast) => !ids.includes(toast.id)))}>
+  <For each={toasts()}>
+    {(toast) => (
+      <Toast.Root scope="toasts" toastId={toast.id}>
+        <Toast.Title scope="toasts" toastId={toast.id}><Text>{toast.title}</Text></Toast.Title>
+        <Toast.Close scope="toasts" toastId={toast.id}><Text>×</Text></Toast.Close>
+      </Toast.Root>
+    )}
+  </For>
+</Toast.Viewport>
+```
+
+A `Menubar` owns which menu is open and which one holds the bar's single Tab stop; each menu's
+surface is an ordinary declared `PopoverMenu` anchored to the matching `Menubar.Item`.
+
+Every declaration on this page is bounded exactly as the Rust binding bounds it: an option source
+past `MAX_OPTIONS_JSON_BYTES` (512 KiB) or a column, node, selection, or toast declaration past
+`MAX_COLLECTION_JSON_BYTES` (2 MiB) is refused at the boundary instead of silently truncated, and
+malformed JSON declares nothing at all rather than reaching a core constructor that would panic on
+it. Duplicate option values, duplicate column identifiers, and duplicate node identifiers keep
+their first occurrence; anything past `MAX_DECLARED_OPTIONS` (4096), `MAX_TABLE_COLUMNS` (512),
+`MAX_DECLARED_TREE_NODES` (65 536), `MAX_TOASTS` (8), or `MAX_MENUBAR_MENUS` (64) is dropped.
+
+`componentChangeFromEvent(event)` and `commitFromEvent(event)` decode a raw payload when an
+application wants to handle one directly.
+
 ## Tooltips
 
 Any host component accepts a `tooltip` string plus `tooltipPlacement`, `tooltipDelay` (milliseconds,
@@ -1019,18 +1210,20 @@ system submenus, native window-tab commands, controlled selection controls, tab 
 and field/fieldset composition, controlled in-window dialogs and alert dialogs, delayed native
 tooltips, declared popover and context menus, CSS Grid layout, complete paint transitions, retained
 images and application shaders, progress/meter/toggle parts, sliders, range sliders, splitters,
-toolbars, and toggle groups, declared keyboard, mouse, gesture,
+toolbars, and toggle groups, declared option sources with core-rendered popover rows, virtual
+tables and trees, number fields, date and time fields, month grids, in-window menubars, declared
+toast queues, declared keyboard, mouse, gesture,
 accelerator, and drag-and-drop events, a stable real-`.app` development host, and self-contained
 production packaging on the current macOS target. It is not yet the full Rust rendering API surface:
-popover arrows and backdrops, select/combobox/autocomplete, tables and trees, number
-fields, toasts, date/time fields and calendars, menubars, animated-image playback control, native
-child views, accessibility actions, every
-native binary target, and dedicated JavaScript performance gates still need bindings and acceptance.
+popover arrows and backdrops, animated-image playback control, native child views, accessibility
+actions, every native binary target, and dedicated JavaScript performance gates still need bindings
+and acceptance.
 
-The remaining unbound interaction models are no longer blocked on the accessor shape: every
-component that retains interaction state now also exposes a `StateAccessor` entry point, so one
-hosted view can address many declared instances. What they still need is the declaration format for
-their own data — option sources, columns and rows, segments, and queued toasts — plus the popover
-surfaces that `Select`, `Combobox`, `Autocomplete`, and `Menubar` render in their own windows.
+Two boundaries inside the newly bound components are worth naming. A picker's retained core state
+is rebuilt rather than mutated when its declaration changes, because every replacement mutator the
+core offers closes a live native popover and a render pass owns no `EventContext`; a declaration
+committed while the surface is open therefore lands on the frame the close already schedules. And a
+declared table or tree header, row, and cell carries content only — the core assigns their identity
+and interaction — so an interactive control belongs inside a cell as an ordinary child node.
 
 Return to the [documentation index](README.md).

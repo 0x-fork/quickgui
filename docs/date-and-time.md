@@ -183,3 +183,21 @@ and one bounded placeholder per segment; a calendar retains eight small fields. 
 an item registry, allocation-sized event payload, task, timer, observer, animation, GPU resource, or
 idle scheduler source, and none can produce a deadline. State changes rebuild only when the caller's
 listener requests invalidation, so a settled window renders zero extra frames.
+
+## JavaScript bindings
+
+`DateField.Root` / `Segment`, `TimeField.Root` / `Segment`, and `Calendar.Root` / `Week` / `Day`
+declare the controlled civil value, the civil bounds, the segment order, the twelve-hour and
+seconds policy, and the first weekday. Civil values cross the boundary as ISO strings with no time
+zone: `YYYY-MM-DD` for a date or a calendar day, `HH:MM` or `HH:MM:SS` for a time. A string the
+core would not accept as a real calendar day or wall-clock time declares no value at all.
+
+The hosted view reaches each declared instance's retained `DateFieldState`, `TimeFieldState`, or
+`CalendarState` through a per-instance [`StateAccessor`](view-api.md). Segment arithmetic, digit
+entry, leap years, clamping into the declared range, day and week movement, month and year
+movement, and the single Tab stop all stay in the core; the value it decided travels back as one
+asynchronous `onValueChange`, and a month grid additionally reports the focused day and the
+displayed month. A time-field segment the core does not own — the seconds segment of a field
+without `showSeconds`, or the period segment of a twenty-four-hour field — contributes no layout,
+paint, or accessibility node. See the
+[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).

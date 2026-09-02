@@ -251,9 +251,16 @@ captured pointer arithmetic, and size conservation all run in the core, and the 
 JavaScript as one asynchronous `onValueChange` or `onSizesChange` payload. `Slider.Track` uses the
 track's own laid-out size, which the core now delivers on `PointerEvent::size`.
 
-`NumberField` is not bound yet: it registers no core listeners of its own, so a binding would have
-to declare a separate stepping and commit surface rather than adopt one. See
-[Solid 2 renderer](solid.md#range-ordering-and-roving-focus-components).
+`NumberField.Root` / `Input` / `Increment` / `Decrement` declares the controlled value, the range,
+the step, and the formatting precision; the hosted view reaches each declared instance's retained
+`NumberFieldState` through a per-instance [`StateAccessor`](view-api.md). The core owns parsing,
+clamping, formatting, and the exact stepper repeat: the binding arms the repeat on press, releases
+it on lift, and asks the window for one repaint at the deadline the core reports, so it owns no
+timer of its own. Editing text and validity travel back as one asynchronous `onValueChange`, and a
+Return that commits reports the clamped, reformatted value through `onCommit` on the input part.
+Because a control whose text does not parse into range refuses to submit, an invalid field reports
+`valid: false` and commits nothing. See
+[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
 
 ## Resource contract
 

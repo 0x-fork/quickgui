@@ -286,3 +286,22 @@ Run the application-styled unstyled Select and 20,000-option constrained Combobo
 cargo run --release --example comboboxes
 cargo run --release --example autocomplete
 ```
+
+## JavaScript bindings
+
+`Select.Root`, `Combobox.Root`, and `Autocomplete.Root` declare the option source, the controlled
+value, the controlled input text, and the filter mode; the core opens its own native popover window
+and paints every row from a bounded `appearance` block, so no row can ever wait on the hosted
+runtime while the core is deciding what a keystroke means. Options travel as one bounded `items`
+array or as child `Option` nodes, which contribute no element of their own. Filtering, highlight
+movement, typeahead, surface placement, dismissal, and commit policy all stay in the core; the
+committed value, the retained input text, and the surface's open state travel back as one
+asynchronous `onValueChange`, `onInputValueChange`, `onOpenChange`, or `onCommit` payload.
+
+A declaration is bounded before it reaches a core constructor: an option source past 512 KiB is
+refused at the boundary, malformed JSON declares no options at all, a duplicate value keeps its
+first occurrence, and anything past 4,096 declared options is dropped. Because every core mutator
+that replaces a source, layout, or selection closes a live native popover — something a render pass
+has no `EventContext` for — the binding rebuilds the retained state only when the declaration
+itself changes and the popover is closed. See the
+[Solid 2 renderer](solid.md#option-sources-select-combobox-and-autocomplete).

@@ -10,7 +10,7 @@ use std::{
         atomic::{AtomicU32, Ordering},
     },
     task::{Context, Poll, Waker},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use napi::{
@@ -39,6 +39,20 @@ use quickgui::{
     text_input,
 };
 use quickgui::{Event, EventContext};
+// Declared option sources, virtual collections, and the remaining stateful field components.
+// Every type below is a core model the binding only translates a declaration into.
+use quickgui::{
+    AutocompleteListState, AutocompleteOptionState, AutocompletePopoverLayout, AutocompleteState,
+    Calendar, CalendarState, CalendarWeekday, CivilDate, CivilTime, ComboboxListState,
+    ComboboxOptionState, ComboboxState, DateField, DateFieldOrder, DateFieldState, DateSegment,
+    MAX_MENUBAR_MENUS, MAX_NUMBER_FIELD_PRECISION, MAX_TABLE_COLUMNS, MAX_TABLE_ROWS, MAX_TOASTS,
+    Menubar, MenubarState, NumberField, NumberFieldState, PickerFilterMode, PickerItem,
+    SelectListState, SelectOptionState, SelectPopoverLayout, SelectState, TableCellPosition,
+    TableCellState, TableColumn, TableColumnAlign, TableEditEnded, TableHeaderState, TableLayout,
+    TableSelection, TableSelectionMode, TableSort, TableSortDirection, TableState, TimeField,
+    TimeFieldState, TimeSegment, Toast as CoreToast, ToastEntry, ToastId, ToastKind, ToastManager,
+    ToastViewport, TreeLayout, TreeLoadChildren, TreeNode, TreeRow, TreeState,
+};
 #[cfg(target_os = "macos")]
 use quickgui::{
     MacEmbeddedView, MacSwiftUiHost, SwiftUiButton, SwiftUiButtonBorderShape, SwiftUiButtonRole,
@@ -65,7 +79,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 21;
+const PROTOCOL_VERSION: u16 = 22;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -293,7 +307,39 @@ mod property {
     pub const LARGE_STEP: u16 = 205;
     pub const ITEMS: u16 = 206;
     pub const COMPONENT_CHANGE_LISTENER: u16 = 207;
-    pub const LAST: u16 = COMPONENT_CHANGE_LISTENER;
+    pub const OPTIONS: u16 = 208;
+    pub const INPUT_VALUE: u16 = 209;
+    pub const FILTER_MODE: u16 = 210;
+    pub const APPEARANCE: u16 = 211;
+    pub const COLUMNS: u16 = 212;
+    pub const ROW_COUNT: u16 = 213;
+    pub const SORT_COLUMN: u16 = 214;
+    pub const SORT_DIRECTION: u16 = 215;
+    pub const SELECTION_MODE: u16 = 216;
+    pub const SELECTION: u16 = 217;
+    pub const ROW_INDEX: u16 = 218;
+    pub const COLUMN_INDEX: u16 = 219;
+    pub const NODES: u16 = 220;
+    pub const EXPANDED: u16 = 221;
+    pub const SELECTED_VALUE: u16 = 222;
+    pub const SET_CHILDREN: u16 = 223;
+    pub const PRECISION: u16 = 224;
+    pub const TOASTS: u16 = 225;
+    pub const SEGMENT_ORDER: u16 = 226;
+    pub const SEGMENT: u16 = 227;
+    pub const CIVIL_VALUE: u16 = 228;
+    pub const CIVIL_MINIMUM: u16 = 229;
+    pub const CIVIL_MAXIMUM: u16 = 230;
+    pub const MENU_COUNT: u16 = 231;
+    pub const FIRST_WEEKDAY: u16 = 232;
+    pub const ROW_HEIGHT: u16 = 233;
+    pub const HEADER_HEIGHT: u16 = 234;
+    pub const GROUP: u16 = 235;
+    pub const EDITING: u16 = 236;
+    pub const DISCLOSURE: u16 = 237;
+    pub const LOADING_LABEL: u16 = 238;
+    pub const COMMIT_LISTENER: u16 = 239;
+    pub const LAST: u16 = COMMIT_LISTENER;
 }
 
 #[derive(Default)]
@@ -779,8 +825,10 @@ fn wait<'a, T>(
 }
 
 mod api;
+mod collections;
 mod components;
 mod events;
+mod pickers;
 mod popover_menu;
 mod runtime;
 mod tree;
@@ -788,8 +836,10 @@ mod view;
 
 pub use api::*;
 
+use collections::*;
 use components::*;
 use events::*;
+use pickers::*;
 use popover_menu::*;
 use runtime::*;
 use tree::*;

@@ -17,9 +17,11 @@ import {
   type NativeEventListener,
   type NativePartName,
   type PopoverPlacement,
+  MAX_COLLECTION_JSON_BYTES,
   MAX_COMPONENT_JSON_BYTES,
   MAX_COMPONENT_VALUE_BYTES,
   MAX_DRAG_JSON_BYTES,
+  MAX_OPTIONS_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
@@ -253,6 +255,49 @@ const properties: Record<string, PropertyEntry> = {
   items: { code: PropertyCode.Items, normalize: normalizeComponentJson },
   step: { code: PropertyCode.Step },
   largeStep: { code: PropertyCode.LargeStep },
+  options: { code: PropertyCode.Options, normalize: normalizeOptionsJson },
+  inputValue: { code: PropertyCode.InputValue },
+  filterMode: { code: PropertyCode.FilterMode },
+  appearance: {
+    code: PropertyCode.Appearance,
+    normalize: normalizeAppearanceJson,
+  },
+  columns: { code: PropertyCode.Columns, normalize: normalizeCollectionJson },
+  rowCount: { code: PropertyCode.RowCount },
+  sortColumn: { code: PropertyCode.SortColumn },
+  sortDirection: { code: PropertyCode.SortDirection },
+  selectionMode: { code: PropertyCode.SelectionMode },
+  selection: {
+    code: PropertyCode.Selection,
+    normalize: normalizeCollectionJson,
+  },
+  rowIndex: { code: PropertyCode.RowIndex },
+  columnIndex: { code: PropertyCode.ColumnIndex },
+  nodes: { code: PropertyCode.Nodes, normalize: normalizeCollectionJson },
+  expanded: { code: PropertyCode.Expanded, normalize: normalizeCollectionJson },
+  selectedValue: {
+    code: PropertyCode.SelectedValue,
+    normalize: normalizeComponentValue,
+  },
+  setChildren: {
+    code: PropertyCode.SetChildren,
+    normalize: normalizeCollectionJson,
+  },
+  precision: { code: PropertyCode.Precision },
+  toasts: { code: PropertyCode.Toasts, normalize: normalizeCollectionJson },
+  segmentOrder: { code: PropertyCode.SegmentOrder },
+  segment: { code: PropertyCode.Segment },
+  civilValue: { code: PropertyCode.CivilValue },
+  civilMinimum: { code: PropertyCode.CivilMinimum },
+  civilMaximum: { code: PropertyCode.CivilMaximum },
+  menuCount: { code: PropertyCode.MenuCount },
+  firstWeekday: { code: PropertyCode.FirstWeekday },
+  rowHeight: { code: PropertyCode.RowHeight },
+  headerHeight: { code: PropertyCode.HeaderHeight },
+  group: { code: PropertyCode.Group, normalize: normalizeComponentValue },
+  editing: { code: PropertyCode.Editing, normalize: normalizeCollectionJson },
+  disclosure: { code: PropertyCode.Disclosure },
+  loadingLabel: { code: PropertyCode.LoadingLabel },
   objectFit: { code: PropertyCode.ObjectFit },
   fit: { code: PropertyCode.ObjectFit },
   shaderParameters: {
@@ -942,6 +987,37 @@ function normalizeComponentJson(value: PropertyInput): string | null {
   return encoded;
 }
 
+/**
+ * Serialize one declared option source, column list, node source, or toast queue.
+ *
+ * Every declaration crossing the boundary is bounded exactly as the Rust binding bounds it, so an
+ * oversized source is refused here instead of being silently dropped by the decoder.
+ */
+function boundedJson(limit: number, what: string) {
+  return (value: PropertyInput): string | null => {
+    if (value === null || value === undefined || value === false) return null;
+    const encoded =
+      typeof value === "string" ? value : JSON.stringify(value ?? null);
+    if (encoded === undefined) return null;
+    if (textEncoder.encode(encoded).length > limit) {
+      throw new TypeError(`QuickGUI ${what} declarations are limited to ${limit} bytes`);
+    }
+    return encoded;
+  };
+}
+
+function normalizeOptionsJson(value: PropertyInput): string | null {
+  return boundedJson(MAX_OPTIONS_JSON_BYTES, "option source")(value);
+}
+
+function normalizeCollectionJson(value: PropertyInput): string | null {
+  return boundedJson(MAX_COLLECTION_JSON_BYTES, "collection")(value);
+}
+
+function normalizeAppearanceJson(value: PropertyInput): string | null {
+  return boundedJson(MAX_COMPONENT_JSON_BYTES, "component appearance")(value);
+}
+
 function normalizeTooltipText(value: PropertyInput): string | null {
   if (value === null || value === undefined || value === false) return null;
   const text = String(value);
@@ -1003,6 +1079,7 @@ function eventName(
   | "drop"
   | "filesdropped"
   | "componentchange"
+  | "commit"
   | undefined {
   switch (name.toLowerCase()) {
     case "onclick":
@@ -1037,6 +1114,10 @@ function eventName(
     case "oncomponentchange":
     case "on:componentchange":
       return "componentchange";
+    case "oncommit":
+    case "on:commit":
+    case "onactivate":
+      return "commit";
     case "onkeydown":
     case "on:keydown":
       return "keydown";
@@ -2882,6 +2963,40 @@ export interface ComponentChangeDetails {
   active?: string | null;
   /** The pressed toggle-group values, in declared item order. */
   pressed?: readonly string[];
+  /** Selected option value, selected tree node, number-field value, or civil value. */
+  value?: string | number | null;
+  /** Free-form editing text a picker retains. */
+  inputValue?: string;
+  /** Whether a picker's own native popover is open, or which menubar menu is. */
+  open?: boolean | number | null;
+  /** The number field's exact editing text. */
+  text?: string;
+  /** Whether the number field's editing text parses into range. */
+  valid?: boolean;
+  /** The range of rows a collection is virtualizing. */
+  visibleRange?: VisibleRange;
+  /** Selected table rows as inclusive `[start, end]` ranges. */
+  selectedRanges?: readonly (readonly number[])[];
+  /** The table's sort state, or `null` once it is cleared. */
+  sort?: TableSortState | null;
+  /** The table's active cell, or `null` once it is cleared. */
+  activeCell?: TableCell | null;
+  /** Retained widths of the resizable columns, keyed by declared identifier. */
+  columnWidths?: Readonly<Record<string, number>>;
+  /** Declared column identifiers in their current display order. */
+  columnOrder?: readonly string[];
+  /** The inline edit the core just ended, with its own commit decision. */
+  editEnded?: TableEditEndDetails;
+  /** Expanded tree node identifiers. */
+  expanded?: readonly string[];
+  /** The pending tree branch asking for its children. */
+  loadChildren?: string;
+  /** Toast identifiers the core's queue dismissed. */
+  dismissed?: readonly string[];
+  /** The calendar day, or menubar menu index, that now owns the single Tab stop. */
+  focused?: string | number;
+  /** The month a calendar is displaying, as `YYYY-MM`. */
+  month?: string;
 }
 
 /** Decode the payload of a native `componentchange` event. */
@@ -3684,6 +3799,918 @@ export interface TransitionDeclaration {
   maxFps?: number;
 }
 
+
+// ---------------------------------------------------------------------------
+// Declared option sources, virtual collections, and the remaining stateful fields
+//
+// Every value below is declared ahead of the core's decision. The Rust core owns filtering,
+// highlight movement, typeahead, native popover placement and lifetime, virtual windowing,
+// column widths and display order, selection ranges, expansion, lazy children, inline-edit
+// lifetime, numeric parsing and clamping, civil-value segment arithmetic, month arithmetic,
+// menubar roving focus, and toast auto-dismiss deadlines. JavaScript declares the data and
+// receives whatever the core decided as one asynchronous `componentchange` or `commit` payload.
+// ---------------------------------------------------------------------------
+
+/** The payload of a native `commit` event. */
+export interface CommitDetails {
+  /** Committed option value, tree node id, or number-field value. */
+  value?: string | number | null;
+  /** Committed free-form input text. */
+  inputValue?: string;
+  /** Activated table row. */
+  row?: number;
+  /** Activated table column, by declaration index. */
+  column?: number;
+}
+
+/** Decode the payload of a native `commit` event. */
+export function commitFromEvent(
+  event: QuickGuiEvent,
+): CommitDetails | undefined {
+  if (!event.value) return undefined;
+  try {
+    const parsed = JSON.parse(event.value) as CommitDetails;
+    return typeof parsed === "object" && parsed !== null ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function commitListener(
+  handler: ((details: CommitDetails, event: QuickGuiEvent) => void) | undefined,
+): ((event: QuickGuiEvent) => void) | undefined {
+  if (!handler) return undefined;
+  return (event) => {
+    const details = commitFromEvent(event);
+    if (details) handler(details, event);
+  };
+}
+
+/** Read every key one declared component reports, applying only the ones the core moved. */
+function componentChangeReader(
+  apply: (details: ComponentChangeDetails, event: QuickGuiEvent) => void,
+): (event: QuickGuiEvent) => void {
+  return (event) => {
+    const details = componentChangeFromEvent(event);
+    if (details) apply(details, event);
+  };
+}
+
+/** One entry in a declared select, combobox, or autocomplete option source. */
+export interface OptionDeclaration {
+  value: string;
+  label?: string;
+  /** Trailing hint text the core paints on the option row. */
+  detail?: string;
+  /** Searchable group name. The core's picker has no group rows, so this joins the keywords. */
+  group?: string;
+  keywords?: string;
+  disabled?: boolean;
+}
+
+/** Structural geometry and paint for the rows the core renders in its own popover window. */
+export interface PickerAppearance {
+  width?: number;
+  rowHeight?: number;
+  maxVisibleRows?: number;
+  anchorGap?: number;
+  fontSize?: number;
+  radius?: number;
+  padding?: number;
+  verticalPadding?: number;
+  background?: ColorValue;
+  color?: ColorValue;
+  highlightBackground?: ColorValue;
+  highlightColor?: ColorValue;
+  selectedBackground?: ColorValue;
+  mutedColor?: ColorValue;
+}
+
+function encodePickerAppearance(
+  appearance: PickerAppearance | undefined,
+): Record<string, unknown> | undefined {
+  if (!appearance) return undefined;
+  const encoded: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(appearance)) {
+    if (value === undefined || value === null) continue;
+    encoded[key] =
+      key === "background" ||
+      key === "color" ||
+      key === "highlightBackground" ||
+      key === "highlightColor" ||
+      key === "selectedBackground" ||
+      key === "mutedColor"
+        ? parseColor(value as ColorValue)
+        : value;
+  }
+  return encoded;
+}
+
+/**
+ * Controlled select trigger.
+ *
+ * The trigger is the only element JavaScript declares: the core opens its own native popover
+ * window and paints every option row from `appearance`, so no row can ever wait on the hosted
+ * runtime while the core is deciding what a keystroke means.
+ */
+export function SelectRoot(props: JSX.SelectProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
+    props.defaultValue,
+  );
+  const value = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "button",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "onOpenChange",
+      "onCommit",
+      "items",
+      "appearance",
+    ),
+    {
+      part: NativePart.Select,
+      get options() {
+        return props.items ? props.items.slice() : undefined;
+      },
+      get appearance() {
+        return encodePickerAppearance(props.appearance);
+      },
+      get activeValue() {
+        return value();
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.value !== undefined) {
+          const next = typeof details.value === "string" ? details.value : undefined;
+          if (props.value === undefined) setUncontrolled(next);
+          props.onValueChange?.(next, event);
+        }
+        if (typeof details.open === "boolean") {
+          props.onOpenChange?.(details.open, event);
+        }
+      }),
+      onCommit: commitListener(props.onCommit),
+    },
+  );
+}
+
+/** One declared option. The core paints the row itself, so this node mounts nothing. */
+export function SelectOption(props: JSX.OptionProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.Option });
+}
+
+/** Base-UI-shaped compound parts for a select. */
+export const Select = Object.assign(SelectRoot, {
+  Root: SelectRoot,
+  Option: SelectOption,
+});
+
+/**
+ * Controlled constrained combobox.
+ *
+ * Arbitrary text is an editing query, not a committable value: the core restores the last
+ * committed label on dismissal and reports the constrained value it committed.
+ */
+export function ComboboxRoot(props: JSX.ComboboxProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
+    props.defaultValue,
+  );
+  const value = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "input",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "onInputValueChange",
+      "onOpenChange",
+      "onCommit",
+      "items",
+      "appearance",
+    ),
+    {
+      part: NativePart.Combobox,
+      get options() {
+        return props.items ? props.items.slice() : undefined;
+      },
+      get appearance() {
+        return encodePickerAppearance(props.appearance);
+      },
+      get activeValue() {
+        return value();
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.value !== undefined) {
+          const next = typeof details.value === "string" ? details.value : undefined;
+          if (props.value === undefined) setUncontrolled(next);
+          props.onValueChange?.(next, event);
+        }
+        if (details.inputValue !== undefined) {
+          props.onInputValueChange?.(details.inputValue, event);
+        }
+        if (typeof details.open === "boolean") {
+          props.onOpenChange?.(details.open, event);
+        }
+      }),
+      onCommit: commitListener(props.onCommit),
+    },
+  );
+}
+
+/** Base-UI-shaped compound parts for a constrained combobox. */
+export const Combobox = Object.assign(ComboboxRoot, {
+  Root: ComboboxRoot,
+  Option: SelectOption,
+});
+
+/**
+ * Free-form autocomplete.
+ *
+ * `inputValue` seeds the core's retained text; every edit after that belongs to the core, which
+ * reports the exact value it holds through `onInputValueChange`.
+ */
+export function AutocompleteRoot(props: JSX.AutocompleteProps): NativeNode {
+  return createPartNode(
+    "input",
+    omit(
+      props,
+      "onInputValueChange",
+      "onOpenChange",
+      "onCommit",
+      "items",
+      "appearance",
+    ),
+    {
+      part: NativePart.Autocomplete,
+      get options() {
+        return props.items ? props.items.slice() : undefined;
+      },
+      get appearance() {
+        return encodePickerAppearance(props.appearance);
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.inputValue !== undefined) {
+          props.onInputValueChange?.(details.inputValue, event);
+        }
+        if (typeof details.open === "boolean") {
+          props.onOpenChange?.(details.open, event);
+        }
+      }),
+      onCommit: commitListener(props.onCommit),
+    },
+  );
+}
+
+/** Base-UI-shaped compound parts for a free-form autocomplete. */
+export const Autocomplete = Object.assign(AutocompleteRoot, {
+  Root: AutocompleteRoot,
+  Option: SelectOption,
+});
+
+/** One declared table column. */
+export interface TableColumnDeclaration {
+  id: string;
+  label?: string;
+  /** Fixed starting width in logical pixels. A column with a width is user-resizable. */
+  width?: number;
+  minWidth?: number;
+  align?: "start" | "center" | "end";
+  sortable?: boolean;
+  /** Project this column's cells as the row's accessible name. */
+  rowHeader?: boolean;
+  /** CSS grid track for a column that is not user-resizable, such as `1fr` or `auto`. */
+  track?: string;
+}
+
+/** The range of rows the core is currently virtualizing. */
+export interface VisibleRange {
+  start: number;
+  end: number;
+}
+
+/** The sort state the core retains for one table. */
+export interface TableSortState {
+  column: string;
+  direction: "ascending" | "descending";
+}
+
+/** One inline-edit position. */
+export interface TableCell {
+  row: number;
+  column: number;
+}
+
+/** The end of one inline edit, reported with the core's own commit decision. */
+export interface TableEditEndDetails extends TableCell {
+  committed: boolean;
+}
+
+function collectionChange(props: {
+  onVisibleRangeChange?: (range: VisibleRange, event: QuickGuiEvent) => void;
+}): (details: ComponentChangeDetails, event: QuickGuiEvent) => void {
+  return (details, event) => {
+    if (details.visibleRange) {
+      props.onVisibleRangeChange?.(details.visibleRange, event);
+    }
+  };
+}
+
+/**
+ * Virtual table root.
+ *
+ * The rows JavaScript declares are the rows the core last reported as visible, so a million-row
+ * table declares only the window on screen. Selection, sort, widths, display order, and the
+ * inline-edit lifetime are all decided by the core and reported asynchronously.
+ */
+export function TableRoot(props: JSX.TableProps): NativeNode {
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "columns",
+      "sort",
+      "selection",
+      "editing",
+      "onVisibleRangeChange",
+      "onSelectionChange",
+      "onSortChange",
+      "onActiveCellChange",
+      "onColumnResize",
+      "onColumnReorder",
+      "onEditEnd",
+      "onActivate",
+    ),
+    {
+      part: NativePart.Table,
+      get columns() {
+        return props.columns ? props.columns.slice() : undefined;
+      },
+      get sortColumn() {
+        return props.sort?.column;
+      },
+      get sortDirection() {
+        return props.sort?.direction;
+      },
+      get selection() {
+        return props.selection ? props.selection.map((range) => range.slice()) : undefined;
+      },
+      get editing() {
+        return props.editing ? { ...props.editing } : undefined;
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        collectionChange(props)(details, event);
+        if (details.selectedRanges) {
+          props.onSelectionChange?.(details.selectedRanges, event);
+        }
+        if (details.sort !== undefined) {
+          props.onSortChange?.(details.sort ?? undefined, event);
+        }
+        if (details.activeCell !== undefined) {
+          props.onActiveCellChange?.(details.activeCell ?? undefined, event);
+        }
+        if (details.columnWidths) {
+          props.onColumnResize?.(details.columnWidths, event);
+        }
+        if (details.columnOrder) {
+          props.onColumnReorder?.(details.columnOrder, event);
+        }
+        if (details.editEnded) props.onEditEnd?.(details.editEnded, event);
+      }),
+      onCommit: commitListener((details, event) => {
+        if (details.row !== undefined && details.column !== undefined) {
+          props.onActivate?.({ row: details.row, column: details.column }, event);
+        }
+      }),
+    },
+  );
+}
+
+/**
+ * One declared column header.
+ *
+ * The core assigns the header's grid identity and appends its own resize handle, so this node
+ * declares content and paint only.
+ */
+export function TableHeader(props: JSX.TableHeaderProps): NativeNode {
+  return createPartNode("view", omit(props, "column"), {
+    part: NativePart.TableHeader,
+    get partValue() {
+      return props.column;
+    },
+  });
+}
+
+/** One declared row inside the range the core reported as visible. */
+export function TableRow(props: JSX.TableRowProps): NativeNode {
+  return createPartNode("view", omit(props, "index"), {
+    part: NativePart.TableRow,
+    get rowIndex() {
+      return props.index;
+    },
+  });
+}
+
+/** One declared cell. The core owns its identity, selection state, and editor key context. */
+export function TableCellPart(props: JSX.TableCellProps): NativeNode {
+  return createPartNode("view", omit(props, "column", "index"), {
+    part: NativePart.TableCell,
+    get partValue() {
+      return props.column;
+    },
+    get columnIndex() {
+      return props.index;
+    },
+  });
+}
+
+/** Base-UI-shaped compound parts for a virtual table. */
+export const Table = Object.assign(TableRoot, {
+  Root: TableRoot,
+  Header: TableHeader,
+  Row: TableRow,
+  Cell: TableCellPart,
+});
+
+/** One declared tree node, which may declare its own children or be lazily pending. */
+export interface TreeNodeDeclaration {
+  id: string;
+  label?: string;
+  disabled?: boolean;
+  /** A branch whose children are fetched the first time it is expanded. */
+  pending?: boolean;
+  children?: readonly TreeNodeDeclaration[];
+}
+
+/**
+ * Virtual tree root.
+ *
+ * Expansion and selection are controlled declarations; the core owns arrow navigation, the
+ * virtual window, and the lazy-children request a pending branch makes exactly once.
+ */
+export function TreeRoot(props: JSX.TreeProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<readonly string[]>(
+    props.defaultExpanded ?? [],
+  );
+  const expanded = () => props.expanded ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "nodes",
+      "expanded",
+      "defaultExpanded",
+      "value",
+      "setChildren",
+      "onExpandedChange",
+      "onValueChange",
+      "onLoadChildren",
+      "onVisibleRangeChange",
+      "onActivate",
+    ),
+    {
+      part: NativePart.Tree,
+      get nodes() {
+        return props.nodes ? props.nodes.slice() : undefined;
+      },
+      get expanded() {
+        return expanded().slice();
+      },
+      get selectedValue() {
+        return props.value;
+      },
+      get setChildren() {
+        return props.setChildren ? { ...props.setChildren } : undefined;
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        collectionChange(props)(details, event);
+        if (details.expanded) {
+          if (props.expanded === undefined) setUncontrolled(details.expanded);
+          props.onExpandedChange?.(details.expanded, event);
+        }
+        if (details.value !== undefined) {
+          props.onValueChange?.(
+            typeof details.value === "string" ? details.value : undefined,
+            event,
+          );
+        }
+        if (details.loadChildren) {
+          props.onLoadChildren?.(details.loadChildren, event);
+        }
+      }),
+      onCommit: commitListener((details, event) => {
+        if (typeof details.value === "string") {
+          props.onActivate?.(details.value, event);
+        }
+      }),
+    },
+  );
+}
+
+/**
+ * One declared tree row inside the range the core reported as visible.
+ *
+ * The core hands the binding a behavior-only disclosure control for a branch; `disclosure` on the
+ * root decides whether it is mounted before or after this content.
+ */
+export function TreeRow(props: JSX.TreeRowProps): NativeNode {
+  return createPartNode("view", omit(props, "nodeId"), {
+    part: NativePart.TreeRow,
+    get partValue() {
+      return props.nodeId;
+    },
+  });
+}
+
+/** Base-UI-shaped compound parts for a virtual tree. */
+export const Tree = Object.assign(TreeRoot, {
+  Root: TreeRoot,
+  Row: TreeRow,
+});
+
+/**
+ * Controlled number-field root.
+ *
+ * The core parses, clamps, formats, and steps; `value` seeds its retained editing text and the
+ * result travels back through `onValueChange`.
+ */
+export function NumberFieldRoot(props: JSX.NumberFieldProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<number | undefined>(
+    props.defaultValue,
+  );
+  const value = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "onValueChange"),
+    {
+      part: NativePart.NumberField,
+      get values() {
+        const current = value();
+        return current === undefined ? [] : [current];
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.value === undefined) return;
+        const next = typeof details.value === "number" ? details.value : undefined;
+        if (props.value === undefined) setUncontrolled(next);
+        props.onValueChange?.(next, details.valid !== false, event);
+      }),
+    },
+  );
+}
+
+/** Controlled number-field input. The core owns its editing text, parsing, and commit. */
+export function NumberFieldInput(props: JSX.NumberFieldInputProps): NativeNode {
+  return createPartNode("input", omit(props, "onCommit"), {
+    part: NativePart.NumberFieldInput,
+    onCommit: commitListener(props.onCommit),
+  });
+}
+
+/** Application-owned increment stepper carrying the core's bounded press-and-hold repeat. */
+export function NumberFieldIncrement(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("button", props, {
+    part: NativePart.NumberFieldIncrement,
+  });
+}
+
+/** Application-owned decrement stepper carrying the core's bounded press-and-hold repeat. */
+export function NumberFieldDecrement(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("button", props, {
+    part: NativePart.NumberFieldDecrement,
+  });
+}
+
+/** Base-UI-shaped compound parts for a number field. */
+export const NumberField = Object.assign(NumberFieldRoot, {
+  Root: NumberFieldRoot,
+  Input: NumberFieldInput,
+  Increment: NumberFieldIncrement,
+  Decrement: NumberFieldDecrement,
+});
+
+/** One queued toast. Pushing a toast is adding an entry to this declared list. */
+export interface ToastDeclaration {
+  id: string;
+  title: string;
+  description?: string;
+  action?: string;
+  kind?: "info" | "success" | "warning" | "error";
+  /** Auto-dismiss duration in milliseconds. Omit for a toast that stays until dismissed. */
+  duration?: number;
+}
+
+/**
+ * Toast viewport.
+ *
+ * The queue is a declaration: adding an identifier pushes a toast, dropping one dismisses it, and
+ * the core's own bounded queue reports every dismissal — including the timed ones — through
+ * `onDismiss`.
+ */
+export function ToastViewport(props: JSX.ToastViewportProps): NativeNode {
+  return createPartNode("view", omit(props, "toasts", "onDismiss"), {
+    part: NativePart.ToastViewport,
+    get toasts() {
+      return props.toasts ? props.toasts.slice() : undefined;
+    },
+    onComponentChange: componentChangeReader((details, event) => {
+      if (details.dismissed) props.onDismiss?.(details.dismissed, event);
+    }),
+  });
+}
+
+/** One queued toast root, projecting the live-region politeness its kind selects. */
+export function ToastRoot(props: JSX.ToastProps): NativeNode {
+  return createPartNode("view", omit(props, "toastId"), {
+    part: NativePart.Toast,
+    get partValue() {
+      return props.toastId;
+    },
+  });
+}
+
+/** One toast title, which names the toast for assistive technology. */
+export function ToastTitle(props: JSX.ToastProps): NativeNode {
+  return createPartNode("view", omit(props, "toastId"), {
+    part: NativePart.ToastTitle,
+    get partValue() {
+      return props.toastId;
+    },
+  });
+}
+
+/** One toast description, which describes the toast for assistive technology. */
+export function ToastDescription(props: JSX.ToastProps): NativeNode {
+  return createPartNode("view", omit(props, "toastId"), {
+    part: NativePart.ToastDescription,
+    get partValue() {
+      return props.toastId;
+    },
+  });
+}
+
+/** One toast action control. */
+export function ToastAction(props: JSX.ToastProps): NativeNode {
+  return createPartNode("button", omit(props, "toastId"), {
+    part: NativePart.ToastAction,
+    get partValue() {
+      return props.toastId;
+    },
+  });
+}
+
+/** One toast close control. Pressing it dismisses the toast through the core's own queue. */
+export function ToastClose(props: JSX.ToastProps): NativeNode {
+  return createPartNode("button", omit(props, "toastId"), {
+    part: NativePart.ToastClose,
+    get partValue() {
+      return props.toastId;
+    },
+  });
+}
+
+/** Base-UI-shaped compound parts for a toast viewport. */
+export const Toast = Object.assign(ToastRoot, {
+  Viewport: ToastViewport,
+  Root: ToastRoot,
+  Title: ToastTitle,
+  Description: ToastDescription,
+  Action: ToastAction,
+  Close: ToastClose,
+});
+
+/**
+ * Controlled date field.
+ *
+ * `value`, `min`, and `max` are ISO `YYYY-MM-DD` civil values with no time zone. The core owns
+ * segment arithmetic, digit entry, leap years, and the field's validity.
+ */
+export function DateFieldRoot(props: JSX.DateFieldProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
+    props.defaultValue,
+  );
+  const value = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "min", "max", "format", "onValueChange"),
+    {
+      part: NativePart.DateField,
+      get civilValue() {
+        return value();
+      },
+      get civilMinimum() {
+        return props.min;
+      },
+      get civilMaximum() {
+        return props.max;
+      },
+      get segmentOrder() {
+        return props.format;
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.value === undefined) return;
+        const next = typeof details.value === "string" ? details.value : undefined;
+        if (props.value === undefined) setUncontrolled(next);
+        props.onValueChange?.(next, event);
+      }),
+    },
+  );
+}
+
+/** One date-field segment carrying the core's spin-button semantics and typed actions. */
+export function DateFieldSegment(props: JSX.DateFieldSegmentProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.DateFieldSegment });
+}
+
+/** Base-UI-shaped compound parts for a date field. */
+export const DateField = Object.assign(DateFieldRoot, {
+  Root: DateFieldRoot,
+  Segment: DateFieldSegment,
+});
+
+/**
+ * Controlled time field.
+ *
+ * `value`, `min`, and `max` are `HH:MM` or `HH:MM:SS` civil times. A twelve-hour field gains an
+ * AM/PM segment, and a field without `showSeconds` mounts no seconds segment at all.
+ */
+export function TimeFieldRoot(props: JSX.TimeFieldProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
+    props.defaultValue,
+  );
+  const value = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "min",
+      "max",
+      "hour12",
+      "showSeconds",
+      "onValueChange",
+    ),
+    {
+      part: NativePart.TimeField,
+      get civilValue() {
+        return value();
+      },
+      get civilMinimum() {
+        return props.min;
+      },
+      get civilMaximum() {
+        return props.max;
+      },
+      get segmentOrder() {
+        return props.hour12 ? "h12" : "h23";
+      },
+      get variant() {
+        return props.showSeconds ? "seconds" : undefined;
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.value === undefined) return;
+        const next = typeof details.value === "string" ? details.value : undefined;
+        if (props.value === undefined) setUncontrolled(next);
+        props.onValueChange?.(next, event);
+      }),
+    },
+  );
+}
+
+/** One time-field segment carrying the core's spin-button semantics and typed actions. */
+export function TimeFieldSegment(props: JSX.TimeFieldSegmentProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.TimeFieldSegment });
+}
+
+/** Base-UI-shaped compound parts for a time field. */
+export const TimeField = Object.assign(TimeFieldRoot, {
+  Root: TimeFieldRoot,
+  Segment: TimeFieldSegment,
+});
+
+/**
+ * Controlled month grid.
+ *
+ * The core owns day, week, month, and year movement, the single Tab stop, and selectability
+ * inside the declared civil bounds. `onFocusChange` reports the day the grid moved to.
+ */
+export function CalendarRoot(props: JSX.CalendarProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
+    props.defaultValue,
+  );
+  const value = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "min",
+      "max",
+      "onValueChange",
+      "onFocusChange",
+      "onMonthChange",
+    ),
+    {
+      part: NativePart.Calendar,
+      get civilValue() {
+        return value();
+      },
+      get civilMinimum() {
+        return props.min;
+      },
+      get civilMaximum() {
+        return props.max;
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.value !== undefined) {
+          const next = typeof details.value === "string" ? details.value : undefined;
+          if (props.value === undefined) setUncontrolled(next);
+          props.onValueChange?.(next, event);
+        }
+        if (typeof details.focused === "string") {
+          props.onFocusChange?.(details.focused, event);
+        }
+        if (details.month) props.onMonthChange?.(details.month, event);
+      }),
+    },
+  );
+}
+
+/** One calendar week row. */
+export function CalendarWeek(props: JSX.CalendarWeekProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.CalendarWeek });
+}
+
+/** One calendar day cell, named by its ISO `YYYY-MM-DD` civil date. */
+export function CalendarDay(props: JSX.CalendarDayProps): NativeNode {
+  return createPartNode("view", omit(props, "day"), {
+    part: NativePart.CalendarDay,
+    get civilValue() {
+      return props.day;
+    },
+  });
+}
+
+/** Base-UI-shaped compound parts for a month grid. */
+export const Calendar = Object.assign(CalendarRoot, {
+  Root: CalendarRoot,
+  Week: CalendarWeek,
+  Day: CalendarDay,
+});
+
+/**
+ * In-window menubar.
+ *
+ * The bar owns which menu is open and which one holds its single Tab stop; each menu's surface is
+ * an ordinary declared `PopoverMenu` anchored to the matching `Menubar.Item`.
+ */
+export function MenubarRoot(props: JSX.MenubarProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<number | undefined>(
+    props.defaultOpen,
+  );
+  const open = () => (props.open === undefined ? uncontrolled() : props.open ?? undefined);
+  return createPartNode(
+    "view",
+    omit(props, "open", "defaultOpen", "count", "onOpenChange", "onActiveChange"),
+    {
+      part: NativePart.Menubar,
+      get menuCount() {
+        return props.count;
+      },
+      get open() {
+        return open() !== undefined;
+      },
+      get itemIndex() {
+        return open();
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.open !== undefined) {
+          const next = typeof details.open === "number" ? details.open : undefined;
+          if (props.open === undefined) setUncontrolled(next);
+          props.onOpenChange?.(next, event);
+        }
+        if (details.focused !== undefined && typeof details.focused === "number") {
+          props.onActiveChange?.(details.focused, event);
+        }
+      }),
+    },
+  );
+}
+
+/** One menubar trigger. Exactly one trigger carries the bar's Tab stop. */
+export function MenubarItem(props: JSX.MenubarItemProps): NativeNode {
+  return createPartNode("button", props, { part: NativePart.MenubarItem });
+}
+
+/** Base-UI-shaped compound parts for an in-window menubar. */
+export const Menubar = Object.assign(MenubarRoot, {
+  Root: MenubarRoot,
+  Item: MenubarItem,
+});
+
 export namespace JSX {
   export type Element = SolidElement;
   export type Child = SolidElement;
@@ -4220,6 +5247,251 @@ export namespace JSX {
     dismissOnEscape?: boolean;
     /** Dismiss on a backdrop press. Defaults to `true`, or `false` for an alert dialog. */
     dismissOnBackdrop?: boolean;
+  }
+
+
+  /** A declared option source shared by the select, combobox, and autocomplete. */
+  export interface PickerSourceProps extends NativeScopedProps {
+    /** Bounded option source. Omit it to declare the options as child `Option` nodes instead. */
+    items?: readonly OptionDeclaration[];
+    /** Structural geometry and paint for the rows the core renders in its own window. */
+    appearance?: PickerAppearance;
+    /** `"fuzzy"` ranks with the core's own matcher; `"none"` keeps a pre-filtered source in order. */
+    filterMode?: "fuzzy" | "none";
+    /** Accessible name for the control the core decorates. */
+    ariaLabel?: string;
+    /** Reported when the core opens or closes its own native popover window. */
+    onOpenChange?: (open: boolean, event: QuickGuiEvent) => void;
+  }
+
+  export interface SelectProps extends PickerSourceProps {
+    /** Controlled selected option value. */
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+    /** One edge per commit, even when the committed value did not move. */
+    onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
+  }
+
+  export interface ComboboxProps extends PickerSourceProps {
+    value?: string;
+    defaultValue?: string;
+    placeholder?: string;
+    /** Seeds the core's retained editing text. The core owns every edit after that. */
+    inputValue?: string;
+    onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+    onInputValueChange?: (value: string, event: QuickGuiEvent) => void;
+    onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
+  }
+
+  export interface AutocompleteProps extends PickerSourceProps {
+    placeholder?: string;
+    /** Seeds the core's retained free-form text. The core owns every edit after that. */
+    inputValue?: string;
+    onInputValueChange?: (value: string, event: QuickGuiEvent) => void;
+    onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
+  }
+
+  /** One declared option node. It contributes no element: the core paints every row itself. */
+  export interface OptionProps extends NativeScopedProps {
+    /** The option's stable value. */
+    partValue?: string;
+    /** Row label. Defaults to the value. */
+    label?: string;
+    /** Trailing hint text. */
+    valueText?: string;
+    /** Searchable group name. */
+    group?: string;
+  }
+
+  export interface TableProps extends NativeScopedProps {
+    columns?: readonly TableColumnDeclaration[];
+    /** Total logical row count, up to the core's own million-row bound. */
+    rowCount?: number;
+    rowHeight?: number;
+    headerHeight?: number;
+    selectionMode?: "single" | "multiple";
+    /** Controlled selection as inclusive `[start, end]` row ranges. */
+    selection?: readonly (readonly number[])[];
+    sort?: TableSortState;
+    /** Controlled inline-edit position. Declaring it opens the editor over that cell. */
+    editing?: TableCell;
+    /** The range of rows the core is virtualizing. Declare exactly these `Row` children. */
+    onVisibleRangeChange?: (range: VisibleRange, event: QuickGuiEvent) => void;
+    onSelectionChange?: (
+      ranges: readonly (readonly number[])[],
+      event: QuickGuiEvent,
+    ) => void;
+    onSortChange?: (
+      sort: TableSortState | undefined,
+      event: QuickGuiEvent,
+    ) => void;
+    onActiveCellChange?: (
+      cell: TableCell | undefined,
+      event: QuickGuiEvent,
+    ) => void;
+    onColumnResize?: (
+      widths: Readonly<Record<string, number>>,
+      event: QuickGuiEvent,
+    ) => void;
+    onColumnReorder?: (order: readonly string[], event: QuickGuiEvent) => void;
+    onEditEnd?: (details: TableEditEndDetails, event: QuickGuiEvent) => void;
+    onActivate?: (cell: TableCell, event: QuickGuiEvent) => void;
+  }
+
+  export interface TableHeaderProps extends NativeProps {
+    /** Declared column identifier this header paints. */
+    column: string;
+  }
+
+  export interface TableRowProps extends NativeProps {
+    /** Logical row index, inside the range the core reported as visible. */
+    index: number;
+  }
+
+  export interface TableCellProps extends NativeProps {
+    /** Declared column identifier, or use `index` for a positional cell. */
+    column?: string;
+    index?: number;
+  }
+
+  export interface TreeProps extends NativeScopedProps {
+    nodes?: readonly TreeNodeDeclaration[];
+    /** Controlled expanded node identifiers. */
+    expanded?: readonly string[];
+    defaultExpanded?: readonly string[];
+    /** Controlled selected node identifier. */
+    value?: string;
+    rowHeight?: number;
+    /** Row text the core paints while a pending branch is loading. */
+    loadingLabel?: string;
+    /** Where the core's behavior-only disclosure control is mounted inside a declared row. */
+    disclosure?: "leading" | "trailing" | "none";
+    /** One bounded, atomically validated lazy-children splice. */
+    setChildren?: { id: string; children: readonly TreeNodeDeclaration[] };
+    onExpandedChange?: (
+      expanded: readonly string[],
+      event: QuickGuiEvent,
+    ) => void;
+    onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+    /** A pending branch asks for its children exactly once, when it is first expanded. */
+    onLoadChildren?: (id: string, event: QuickGuiEvent) => void;
+    onVisibleRangeChange?: (range: VisibleRange, event: QuickGuiEvent) => void;
+    onActivate?: (id: string, event: QuickGuiEvent) => void;
+  }
+
+  export interface TreeRowProps extends NativeProps {
+    /** Declared node identifier this row paints. */
+    nodeId: string;
+  }
+
+  export interface NumberFieldProps extends NativeScopedProps {
+    /** Controlled numeric value. Omit for an empty field. */
+    value?: number;
+    defaultValue?: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    /** Fractional digits used when the core formats a committed value. */
+    precision?: number;
+    onValueChange?: (
+      value: number | undefined,
+      valid: boolean,
+      event: QuickGuiEvent,
+    ) => void;
+  }
+
+  export interface NumberFieldInputProps extends InputProps {
+    /** Stable key shared by every part of one number field. */
+    scope?: string;
+    /** Return commits: the core clamps into range and reformats before reporting. */
+    onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
+  }
+
+  export interface ToastViewportProps
+    extends Omit<NativeScopedProps, "onDismiss"> {
+    /** The bounded queue. Adding an entry pushes a toast; dropping one dismisses it. */
+    toasts?: readonly ToastDeclaration[];
+    /** Every dismissal the core decided, including timed auto-dismissals. */
+    onDismiss?: (ids: readonly string[], event: QuickGuiEvent) => void;
+  }
+
+  export interface ToastProps extends NativeScopedProps {
+    /** Declared identifier of the queued toast this part belongs to. */
+    toastId: string;
+  }
+
+  export interface DateFieldProps extends NativeScopedProps {
+    /** Controlled ISO `YYYY-MM-DD` civil date. */
+    value?: string;
+    defaultValue?: string;
+    min?: string;
+    max?: string;
+    /** Segment order. Defaults to ISO `ymd`. */
+    format?: "ymd" | "dmy" | "mdy";
+    onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+  }
+
+  export interface DateFieldSegmentProps extends NativeScopedProps {
+    segment: "year" | "month" | "day";
+  }
+
+  export interface TimeFieldProps extends NativeScopedProps {
+    /** Controlled `HH:MM` or `HH:MM:SS` civil time. */
+    value?: string;
+    defaultValue?: string;
+    min?: string;
+    max?: string;
+    /** Add an AM/PM segment and display hours on a twelve-hour clock. */
+    hour12?: boolean;
+    /** Mount a seconds segment. Without it the core owns no seconds segment at all. */
+    showSeconds?: boolean;
+    onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+  }
+
+  export interface TimeFieldSegmentProps extends NativeScopedProps {
+    segment: "hour" | "minute" | "second" | "period";
+  }
+
+  export interface CalendarProps extends NativeScopedProps {
+    /** Controlled selected ISO `YYYY-MM-DD` civil date. */
+    value?: string;
+    defaultValue?: string;
+    min?: string;
+    max?: string;
+    /** First weekday column, where Monday is `0` and Sunday is `6`. */
+    firstWeekday?: number;
+    onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+    /** The day the grid's single Tab stop moved to. */
+    onFocusChange?: (day: string, event: QuickGuiEvent) => void;
+    /** The displayed month, as `YYYY-MM`. */
+    onMonthChange?: (month: string, event: QuickGuiEvent) => void;
+  }
+
+  export interface CalendarWeekProps extends NativeScopedProps {
+    /** Week row index inside the displayed month. */
+    itemIndex?: number;
+  }
+
+  export interface CalendarDayProps extends NativeScopedProps {
+    /** ISO `YYYY-MM-DD` civil date this cell paints. */
+    day: string;
+  }
+
+  export interface MenubarProps extends NativeScopedProps {
+    /** Number of declared menus. The core clamps it to its own bound. */
+    count?: number;
+    /** Controlled open menu index, or `null` for a closed bar. */
+    open?: number | null;
+    defaultOpen?: number;
+    onOpenChange?: (open: number | undefined, event: QuickGuiEvent) => void;
+    /** The menu that now owns the bar's single Tab stop. */
+    onActiveChange?: (index: number, event: QuickGuiEvent) => void;
+  }
+
+  export interface MenubarItemProps extends NativeScopedProps {
+    /** Position of this menu on the bar. */
+    itemIndex?: number;
   }
 
   export interface IntrinsicElements {
