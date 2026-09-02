@@ -52,7 +52,7 @@ pub fn menubar_key_bindings() -> [KeyBinding; 8] {
 /// Controlled roving-focus and open state for one in-window menubar.
 ///
 /// The application declares the menus and composes each surface from
-/// [`crate::PopoverMenuState`]; QuickGUI retains only which menu owns the bar's single Tab stop and
+/// [`crate::PopoverMenu`]; QuickGUI retains only which menu owns the bar's single Tab stop and
 /// which one is open. The state is a plain copyable value with no item registry, allocation, task,
 /// timer, observer, or idle scheduler source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -331,7 +331,7 @@ impl MenubarItem {
     /// Attach QuickGUI's typed menubar actions, click opening, and hover switching.
     ///
     /// Install [`menubar_key_bindings`] once on the application keymap. Compose the surface itself
-    /// from [`crate::PopoverMenuState`] anchored to [`Self::item_id`]; the menubar owns which menu
+    /// from [`crate::PopoverMenu`] anchored to [`Self::item_id`]; the menubar owns which menu
     /// is open, never the menu's own contents.
     pub fn key_part<V: 'static>(
         self,
