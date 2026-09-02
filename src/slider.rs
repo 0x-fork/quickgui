@@ -1,6 +1,6 @@
 use crate::{
     AccessibilityOrientation, AccessibilityRole, AccessibilityValueRange, Element, ElementId,
-    KeyBinding, PointerEvent, PointerPhase, Size, ViewContext, div,
+    KeyBinding, PointerEvent, PointerPhase, Size, StateAccessor, ViewContext, div,
 };
 
 /// Maximum thumbs retained by one slider.
@@ -549,7 +549,17 @@ impl Slider {
         root: Element,
         access: fn(&mut V) -> &mut SliderState,
     ) -> Element {
-        bind_slider_actions(cx, root, self.root_id, access, None)
+        self.key_part_with(cx, root, StateAccessor::from(access))
+    }
+
+    /// Attach the typed slider keyboard actions against a per-instance state accessor.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        root: Element,
+        access: StateAccessor<V, SliderState>,
+    ) -> Element {
+        bind_slider_actions(cx, root, self.root_id, &access, None)
     }
 
     /// Decorate an application-owned track.
@@ -661,7 +671,27 @@ impl SliderThumb {
         thumb: Element,
         access: fn(&mut V) -> &mut SliderState,
     ) -> Element {
-        bind_slider_actions(cx, thumb, self.thumb_id(), access, Some(self.index))
+        self.key_part_with(cx, thumb, StateAccessor::from(access))
+    }
+
+    /// Attach this thumb's typed keyboard actions against a per-instance state accessor.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        thumb: Element,
+        access: StateAccessor<V, SliderState>,
+    ) -> Element {
+        bind_slider_actions(cx, thumb, self.thumb_id(), &access, Some(self.index))
+    }
+}
+
+fn activate_slider_thumb<V: 'static>(
+    view: &mut V,
+    access: &StateAccessor<V, SliderState>,
+    thumb: Option<usize>,
+) {
+    if let Some(index) = thumb {
+        access.get(view).set_active_thumb(index);
     }
 }
 
@@ -669,47 +699,48 @@ fn bind_slider_actions<V: 'static>(
     cx: &mut ViewContext<'_, V>,
     element: Element,
     id: ElementId,
-    access: fn(&mut V) -> &mut SliderState,
+    access_source: &StateAccessor<V, SliderState>,
     thumb: Option<usize>,
 ) -> Element {
-    let activate = move |view: &mut V| {
-        if let Some(index) = thumb {
-            access(view).set_active_thumb(index);
-        }
-    };
+    let access = access_source.clone();
     let increment = cx.action_listener(id, move |view, _: &SliderIncrement, cx| {
-        activate(view);
-        if access(view).step_active(1.0) {
+        activate_slider_thumb(view, &access, thumb);
+        if access.get(view).step_active(1.0) {
             cx.invalidate();
         }
     });
+    let access = access_source.clone();
     let decrement = cx.action_listener(id, move |view, _: &SliderDecrement, cx| {
-        activate(view);
-        if access(view).step_active(-1.0) {
+        activate_slider_thumb(view, &access, thumb);
+        if access.get(view).step_active(-1.0) {
             cx.invalidate();
         }
     });
+    let access = access_source.clone();
     let large_increment = cx.action_listener(id, move |view, _: &SliderLargeIncrement, cx| {
-        activate(view);
-        if access(view).large_step_active(true) {
+        activate_slider_thumb(view, &access, thumb);
+        if access.get(view).large_step_active(true) {
             cx.invalidate();
         }
     });
+    let access = access_source.clone();
     let large_decrement = cx.action_listener(id, move |view, _: &SliderLargeDecrement, cx| {
-        activate(view);
-        if access(view).large_step_active(false) {
+        activate_slider_thumb(view, &access, thumb);
+        if access.get(view).large_step_active(false) {
             cx.invalidate();
         }
     });
+    let access = access_source.clone();
     let minimum = cx.action_listener(id, move |view, _: &SliderMinimum, cx| {
-        activate(view);
-        if access(view).active_to_minimum() {
+        activate_slider_thumb(view, &access, thumb);
+        if access.get(view).active_to_minimum() {
             cx.invalidate();
         }
     });
+    let access = access_source.clone();
     let maximum = cx.action_listener(id, move |view, _: &SliderMaximum, cx| {
-        activate(view);
-        if access(view).active_to_maximum() {
+        activate_slider_thumb(view, &access, thumb);
+        if access.get(view).active_to_maximum() {
             cx.invalidate();
         }
     });
@@ -756,6 +787,7 @@ mod tests {
 
     fn pointer_event(phase: PointerPhase, x: f32, y: f32) -> PointerEvent {
         PointerEvent {
+            size: Size::new(200.0, 20.0),
             phase,
             position: Point::new(x, y),
             origin: Point::new(x, y),
@@ -1060,6 +1092,80 @@ mod tests {
         assert_eq!(upper.min_numeric_value(), Some(20.0));
         assert_eq!(upper.max_numeric_value(), Some(100.0));
 
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    /// One view that renders a data-driven list of sliders through the accessor entry point.
+    ///
+    /// This is exactly the shape a host renderer has: one `View` implementation, many declared
+    /// instances, and no way to hand each one a distinct non-capturing `fn` pointer.
+    struct SliderListView {
+        sliders: Vec<SliderState>,
+    }
+
+    impl SliderListView {
+        fn slider_id(index: usize) -> ElementId {
+            ElementId::new(index as u64 + 1)
+        }
+    }
+
+    impl View for SliderListView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let mut root = div();
+            for index in 0..self.sliders.len() {
+                let state = self.sliders[index];
+                let slider = Slider::new(Self::slider_id(index), &state);
+                root = root.child(slider.key_part_with(
+                    cx,
+                    slider.root_part(div()),
+                    StateAccessor::new(move |view: &mut Self| &mut view.sliders[index]),
+                ));
+            }
+            root
+        }
+    }
+
+    #[test]
+    fn per_instance_accessors_keep_declared_instances_independent() {
+        let (mut cx, view) = Application::new()
+            .bind_keys(slider_key_bindings())
+            .into_test_context(
+                WindowOptions::default(),
+                SliderListView {
+                    sliders: vec![
+                        SliderState::new(0.0, 100.0, 10.0).step(5.0),
+                        SliderState::new(0.0, 100.0, 60.0).step(5.0),
+                        SliderState::new(0.0, 100.0, 90.0).step(5.0),
+                    ],
+                },
+            )
+            .unwrap();
+        let window = view.window_handle();
+        let values = |cx: &mut crate::TestAppContext| {
+            cx.read(view, |view| {
+                view.sliders
+                    .iter()
+                    .map(SliderState::value)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap()
+        };
+
+        cx.focus(window, SliderListView::slider_id(0)).unwrap();
+        cx.simulate_keystrokes(window, "right right").unwrap();
+        assert_eq!(values(&mut cx), vec![20.0, 60.0, 90.0]);
+
+        cx.focus(window, SliderListView::slider_id(2)).unwrap();
+        cx.simulate_keystrokes(window, "left").unwrap();
+        assert_eq!(values(&mut cx), vec![20.0, 60.0, 85.0]);
+
+        cx.focus(window, SliderListView::slider_id(1)).unwrap();
+        cx.simulate_keystrokes(window, "home").unwrap();
+        assert_eq!(values(&mut cx), vec![20.0, 0.0, 85.0]);
+
+        // The accessor adds no idle source: a settled window still renders nothing extra.
         let renders = cx.render_count(window).unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(cx.render_count(window).unwrap(), renders);

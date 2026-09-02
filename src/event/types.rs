@@ -707,12 +707,20 @@ pub struct PointerEvent {
     pub delta: Vector,
     pub button: MouseButton,
     pub modifiers: Modifiers,
+    /// The captured element's laid-out size in logical pixels.
+    ///
+    /// Pointer arithmetic for a slider, splitter, or custom drag surface needs the element's own
+    /// extent, and the layout that produced it lives in the core. Delivering it with the event
+    /// keeps that geometry exact for a hosted binding instead of forcing it to re-derive a size
+    /// the core already knows. It is `Size::ZERO` before the event is localized to an element.
+    pub size: Size,
 }
 
 impl PointerEvent {
     pub(crate) fn localize(mut self, bounds: Rect) -> Self {
         self.local_position = Point::new(self.position.x - bounds.x, self.position.y - bounds.y);
         self.local_origin = Point::new(self.origin.x - bounds.x, self.origin.y - bounds.y);
+        self.size = Size::new(bounds.width, bounds.height);
         self
     }
 }
@@ -994,5 +1002,35 @@ bitflags! {
         const CONTROL = 1 << 1;
         const ALT = 1 << 2;
         const SUPER = 1 << 3;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A captured pointer event carries the element's own laid-out extent.
+    ///
+    /// Slider and splitter arithmetic needs the size layout already decided; deriving it again
+    /// from a declared width would drift the moment a flexible track resolves differently.
+    #[test]
+    fn localizing_a_pointer_event_carries_the_captured_element_geometry() {
+        let event = PointerEvent {
+            phase: PointerPhase::Move,
+            position: Point::new(140.0, 60.0),
+            origin: Point::new(100.0, 50.0),
+            local_position: Point::ZERO,
+            local_origin: Point::ZERO,
+            delta: Vector::new(40.0, 10.0),
+            button: MouseButton::Left,
+            modifiers: Modifiers::empty(),
+            size: Size::ZERO,
+        };
+        assert_eq!(event.size, Size::ZERO);
+
+        let localized = event.localize(Rect::new(100.0, 40.0, 200.0, 20.0));
+        assert_eq!(localized.local_position, Point::new(40.0, 20.0));
+        assert_eq!(localized.local_origin, Point::new(0.0, 10.0));
+        assert_eq!(localized.size, Size::new(200.0, 20.0));
     }
 }

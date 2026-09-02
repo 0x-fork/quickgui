@@ -17,6 +17,7 @@ import {
   type NativeEventListener,
   type NativePartName,
   type PopoverPlacement,
+  MAX_COMPONENT_JSON_BYTES,
   MAX_COMPONENT_VALUE_BYTES,
   MAX_DRAG_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
@@ -248,6 +249,10 @@ const properties: Record<string, PropertyEntry> = {
   optimum: { code: PropertyCode.Optimum },
   valueText: { code: PropertyCode.ValueText },
   pressed: { code: PropertyCode.Pressed },
+  values: { code: PropertyCode.Values, normalize: normalizeComponentJson },
+  items: { code: PropertyCode.Items, normalize: normalizeComponentJson },
+  step: { code: PropertyCode.Step },
+  largeStep: { code: PropertyCode.LargeStep },
   objectFit: { code: PropertyCode.ObjectFit },
   fit: { code: PropertyCode.ObjectFit },
   shaderParameters: {
@@ -918,6 +923,25 @@ function normalizeComponentValue(value: PropertyInput): string | null {
   return text;
 }
 
+/**
+ * Serialize one declared component list into the bounded JSON the Rust binding decodes.
+ *
+ * Slider thumb values, splitter pane sizes, toggle-group pressed values, and ordered toolbar or
+ * toggle-group items all travel as one declaration so the core can answer a keypress without ever
+ * asking JavaScript a synchronous question.
+ */
+function normalizeComponentJson(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const encoded = Array.isArray(value) ? JSON.stringify(value) : String(value);
+  if (encoded.length === 0 || encoded === "[]") return encoded === "[]" ? encoded : null;
+  if (textEncoder.encode(encoded).length > MAX_COMPONENT_JSON_BYTES) {
+    throw new TypeError(
+      `QuickGUI component declarations are limited to ${MAX_COMPONENT_JSON_BYTES} bytes`,
+    );
+  }
+  return encoded;
+}
+
 function normalizeTooltipText(value: PropertyInput): string | null {
   if (value === null || value === undefined || value === false) return null;
   const text = String(value);
@@ -978,6 +1002,7 @@ function eventName(
   | "dragend"
   | "drop"
   | "filesdropped"
+  | "componentchange"
   | undefined {
   switch (name.toLowerCase()) {
     case "onclick":
@@ -1009,6 +1034,9 @@ function eventName(
     case "on:select":
     case "onmenuselect":
       return "menuselect";
+    case "oncomponentchange":
+    case "on:componentchange":
+      return "componentchange";
     case "onkeydown":
     case "on:keydown":
       return "keydown";
@@ -2834,6 +2862,241 @@ export const Toggle = Object.assign(ToggleRoot, {
 });
 
 
+
+// ---------------------------------------------------------------------------
+// Declared range, ordering, and roving-focus components
+//
+// Every value below is declared ahead of the core's decision. The Rust core owns clamping, step
+// snapping, thumb ordering, splitter size conservation, wrapping arrow navigation, disabled-item
+// skipping, and the single roving Tab stop; JavaScript declares the state and receives whatever
+// the core decided as one asynchronous `componentchange` payload.
+// ---------------------------------------------------------------------------
+
+/** The payload of a native `componentchange` event. */
+export interface ComponentChangeDetails {
+  /** Slider thumb values, in ascending thumb order. */
+  values?: readonly number[];
+  /** Splitter pane sizes in logical pixels, conserved across the whole splitter. */
+  sizes?: readonly number[];
+  /** The toolbar item that now owns the single roving Tab stop. */
+  active?: string | null;
+  /** The pressed toggle-group values, in declared item order. */
+  pressed?: readonly string[];
+}
+
+/** Decode the payload of a native `componentchange` event. */
+export function componentChangeFromEvent(
+  event: QuickGuiEvent,
+): ComponentChangeDetails | undefined {
+  if (!event.value) return undefined;
+  try {
+    const parsed = JSON.parse(event.value) as ComponentChangeDetails;
+    return typeof parsed === "object" && parsed !== null ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function componentChangeListener<T>(
+  read: (details: ComponentChangeDetails) => T | undefined,
+  apply: (next: T, event: QuickGuiEvent) => void,
+): (event: QuickGuiEvent) => void {
+  return (event) => {
+    const details = componentChangeFromEvent(event);
+    if (!details) return;
+    const next = read(details);
+    if (next === undefined) return;
+    apply(next, event);
+  };
+}
+
+/**
+ * Controlled slider root.
+ *
+ * `values` carries one entry per thumb, so a single-thumb slider and a range slider are the same
+ * component. The core answers arrows, Page keys, Home, End, and captured pointer drags; it reports
+ * the snapped, ordered, clamped result through `onValueChange`.
+ */
+export function SliderRoot(props: JSX.SliderProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<readonly number[]>(
+    props.defaultValue ?? [0],
+  );
+  const values = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "onValueChange"),
+    {
+      part: NativePart.Slider,
+      get values() {
+        return values().slice();
+      },
+      onComponentChange: componentChangeListener(
+        (details) => details.values,
+        (next, event) => {
+          if (props.value === undefined) setUncontrolled(next);
+          props.onValueChange?.(next, event);
+        },
+      ),
+    },
+  );
+}
+
+/** Application-owned slider track. The core attaches this slider's captured pointer arithmetic. */
+export function SliderTrack(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SliderTrack });
+}
+
+/** Application-owned slider fill, hidden from the accessible name by the core. */
+export function SliderRange(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SliderRange });
+}
+
+/** Application-owned slider thumb. A range slider gives each thumb its own keyboard focus. */
+export function SliderThumb(props: JSX.SliderThumbProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SliderThumb });
+}
+
+/** Base-UI-shaped compound parts for a slider. */
+export const Slider = Object.assign(SliderRoot, {
+  Root: SliderRoot,
+  Track: SliderTrack,
+  Range: SliderRange,
+  Thumb: SliderThumb,
+});
+
+/**
+ * Controlled splitter root.
+ *
+ * `value` carries one size per pane. The core conserves the total across captured drags and typed
+ * keyboard resizing and reports every pane size together through `onSizesChange`.
+ */
+export function SplitterRoot(props: JSX.SplitterProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<readonly number[]>(
+    props.defaultValue ?? [],
+  );
+  const sizes = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "onSizesChange", "panes"),
+    {
+      part: NativePart.Splitter,
+      get values() {
+        return sizes().slice();
+      },
+      get items() {
+        return props.panes ? props.panes.slice() : undefined;
+      },
+      onComponentChange: componentChangeListener(
+        (details) => details.sizes,
+        (next, event) => {
+          if (props.value === undefined) setUncontrolled(next);
+          props.onSizesChange?.(next, event);
+        },
+      ),
+    },
+  );
+}
+
+/** Application-owned splitter pane. */
+export function SplitterPane(props: JSX.SplitterPaneProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SplitterPane });
+}
+
+/** Application-owned splitter handle carrying the core's numeric resize semantics. */
+export function SplitterHandle(props: JSX.SplitterPaneProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SplitterHandle });
+}
+
+/** Base-UI-shaped compound parts for an adjustable splitter. */
+export const Splitter = Object.assign(SplitterRoot, {
+  Root: SplitterRoot,
+  Pane: SplitterPane,
+  Handle: SplitterHandle,
+});
+
+/**
+ * Toolbar root with a single roving Tab stop.
+ *
+ * `items` declares the ordered navigation model. The core answers arrows, Home, and End on the
+ * focused item, skips disabled items, and reports the moved Tab stop through `onActiveChange`.
+ */
+export function ToolbarRoot(props: JSX.ToolbarProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
+    props.defaultActive,
+  );
+  const active = () => props.active ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(props, "active", "defaultActive", "onActiveChange"),
+    {
+      part: NativePart.Toolbar,
+      get activeValue() {
+        return active();
+      },
+      onComponentChange: componentChangeListener(
+        (details) => details.active ?? undefined,
+        (next, event) => {
+          if (props.active === undefined) setUncontrolled(next);
+          props.onActiveChange?.(next, event);
+        },
+      ),
+    },
+  );
+}
+
+/** Application-owned toolbar item. Exactly one enabled item stays in the Tab sequence. */
+export function ToolbarItem(props: JSX.ComponentItemProps): NativeNode {
+  return createPartNode("button", props, { part: NativePart.ToolbarItem });
+}
+
+/** Base-UI-shaped compound parts for a toolbar. */
+export const Toolbar = Object.assign(ToolbarRoot, {
+  Root: ToolbarRoot,
+  Item: ToolbarItem,
+});
+
+/**
+ * Toggle-group root with single or multiple selection.
+ *
+ * `items` declares the ordered navigation model and `value` the pressed values. The core owns the
+ * selection policy, the roving Tab stop, and disabled-item skipping.
+ */
+export function ToggleGroupRoot(props: JSX.ToggleGroupProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal<readonly string[]>(
+    props.defaultValue ?? [],
+  );
+  const pressed = () => props.value ?? uncontrolled();
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "onValueChange"),
+    {
+      part: NativePart.ToggleGroup,
+      get values() {
+        return pressed().slice();
+      },
+      onComponentChange: componentChangeListener(
+        (details) => details.pressed,
+        (next, event) => {
+          if (props.value === undefined) setUncontrolled(next);
+          props.onValueChange?.(next, event);
+        },
+      ),
+    },
+  );
+}
+
+/** Application-owned toggle-group item carrying pressed-button semantics from the core. */
+export function ToggleGroupItem(props: JSX.ComponentItemProps): NativeNode {
+  return createPartNode("button", props, { part: NativePart.ToggleGroupItem });
+}
+
+/** Base-UI-shaped compound parts for a toggle group. */
+export const ToggleGroup = Object.assign(ToggleGroupRoot, {
+  Root: ToggleGroupRoot,
+  Item: ToggleGroupItem,
+});
+
+
 // ---------------------------------------------------------------------------
 // Declared input
 //
@@ -3827,6 +4090,85 @@ export namespace JSX {
     low?: number;
     high?: number;
     optimum?: number;
+  }
+
+
+  /** A declared component part that names the instance it belongs to. */
+  export interface NativeScopedProps extends NativeProps {
+    /** Stable key shared by every part of one component instance. */
+    scope?: string;
+  }
+
+  /** One entry in a declared toolbar or toggle-group navigation model. */
+  export interface ComponentItemDeclaration {
+    value: string;
+    disabled?: boolean;
+  }
+
+  /** One pane constraint in a declared splitter. */
+  export interface SplitterPaneDeclaration {
+    min?: number;
+    collapsible?: boolean;
+  }
+
+  export interface SliderProps extends NativeScopedProps {
+    /** Controlled thumb values, one entry per thumb. */
+    value?: readonly number[];
+    defaultValue?: readonly number[];
+    min?: number;
+    max?: number;
+    step?: number;
+    largeStep?: number;
+    orientation?: "horizontal" | "vertical";
+    onValueChange?: (values: readonly number[], event: QuickGuiEvent) => void;
+  }
+
+  export interface SliderThumbProps extends NativeScopedProps {
+    /** Which thumb this part paints, matching the index in `value`. */
+    itemIndex?: number;
+  }
+
+  export interface SplitterProps extends NativeScopedProps {
+    /** Controlled pane sizes in logical pixels. */
+    value?: readonly number[];
+    defaultValue?: readonly number[];
+    panes?: readonly SplitterPaneDeclaration[];
+    step?: number;
+    orientation?: "horizontal" | "vertical";
+    onSizesChange?: (sizes: readonly number[], event: QuickGuiEvent) => void;
+  }
+
+  export interface SplitterPaneProps extends NativeScopedProps {
+    /** Which pane or handle this part paints. */
+    itemIndex?: number;
+  }
+
+  export interface ToolbarProps extends NativeScopedProps {
+    items?: readonly ComponentItemDeclaration[];
+    active?: string;
+    defaultActive?: string;
+    orientation?: "horizontal" | "vertical";
+    loopFocus?: boolean;
+    onActiveChange?: (active: string | undefined, event: QuickGuiEvent) => void;
+  }
+
+  export interface ToggleGroupProps extends NativeScopedProps {
+    items?: readonly ComponentItemDeclaration[];
+    /** Controlled pressed values. */
+    value?: readonly string[];
+    defaultValue?: readonly string[];
+    /** `"single"` presses at most one item; `"multiple"` presses any number. */
+    variant?: "single" | "multiple";
+    active?: string;
+    orientation?: "horizontal" | "vertical";
+    loopFocus?: boolean;
+    onValueChange?: (values: readonly string[], event: QuickGuiEvent) => void;
+  }
+
+  /** One declared toolbar or toggle-group item part. */
+  export interface ComponentItemProps extends NativeScopedProps {
+    /** The item's stable value, matching an entry in the group's `items`. */
+    partValue?: string;
   }
 
   export interface ToggleProps extends NativeProps {

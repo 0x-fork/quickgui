@@ -524,6 +524,59 @@ reports a level inside a known range rather than task progress, and `low`/`high`
 application color the gauge without the framework inventing thresholds. A toggle is a button that
 stays pressed, not a checkbox, so the core exposes it as a toggle button.
 
+## Range, ordering, and roving-focus components
+
+Every part of one instance carries the same `scope`, which is how the Rust binding finds the one
+retained state a thumb, handle, or item belongs to. The core owns clamping, step snapping, thumb
+ordering, splitter size conservation, wrapping arrow navigation, disabled-item skipping, and the
+single roving Tab stop; JavaScript declares the state and receives whatever the core decided as one
+asynchronous payload. Nothing in this table is re-implemented in TypeScript.
+
+| Component | Parts | Declared props | Reported through | Core guide |
+| --- | --- | --- | --- | --- |
+| `Slider` | `Root`, `Track`, `Range`, `Thumb` | `scope`, `value`/`defaultValue` (one entry per thumb), `min`, `max`, `step`, `largeStep`, `orientation`, `disabled` | `onValueChange(values, event)` | [range and feedback](range-and-feedback.md) |
+| `Splitter` | `Root`, `Pane`, `Handle` | `scope`, `value`/`defaultValue` (one size per pane), `panes` (`min`, `collapsible`), `step`, `orientation` | `onSizesChange(sizes, event)` | [range and feedback](range-and-feedback.md) |
+| `Toolbar` | `Root`, `Item` | `scope`, `items` (`value`, `disabled`), `active`/`defaultActive`, `orientation`, `loopFocus` | `onActiveChange(active, event)` | [toolbar and toast](toolbar-and-toast.md) |
+| `ToggleGroup` | `Root`, `Item` | `scope`, `items`, `value`/`defaultValue`, `variant` (`"single"`/`"multiple"`), `active`, `orientation`, `loopFocus` | `onValueChange(values, event)` | [toolbar and toast](toolbar-and-toast.md) |
+
+A `Slider.Thumb` and a `Splitter.Pane` or `Splitter.Handle` name their position with `itemIndex`; a
+`Toolbar.Item` and a `ToggleGroup.Item` name their entry with `partValue`, matching a `value` in the
+group's `items`.
+
+```tsx
+<Slider.Root
+  scope="volume"
+  value={volume()}
+  min={0}
+  max={100}
+  step={5}
+  onValueChange={([next]) => setVolume([next])}
+>
+  <Slider.Track scope="volume">
+    <Slider.Range scope="volume" />
+  </Slider.Track>
+  <Slider.Thumb scope="volume" itemIndex={0} />
+</Slider.Root>
+
+<Toolbar.Root scope="actions" items={[{ value: "cut" }, { value: "copy" }]}>
+  <Toolbar.Item scope="actions" partValue="cut">Cut</Toolbar.Item>
+  <Toolbar.Item scope="actions" partValue="copy">Copy</Toolbar.Item>
+</Toolbar.Root>
+```
+
+A single-thumb slider answers arrows, Page keys, Home, and End on its root; a range slider answers
+them on the focused thumb, so the thumb the user sees is the one that moves. `Slider.Track` carries
+the core's captured pointer arithmetic, which uses the track's own laid-out size as the core
+measured it — the binding never re-derives geometry that layout already decided.
+
+A change never overwrites a controlled declaration on its own: the core keeps the value it decided
+until the application commits the matching prop, and each declared instance reports independently,
+so two sliders in one window never disturb each other. `componentChangeFromEvent(event)` decodes a
+raw `componentchange` payload when an application wants to handle it directly. A malformed
+declaration is bounded rather than fatal: unparsable JSON declares no values, duplicate item values
+keep the first occurrence, and a list past `MAX_COMPONENT_VALUES` (64) or `MAX_COMPONENT_ITEMS`
+(256) is truncated instead of reaching the core.
+
 ## Tooltips
 
 Any host component accepts a `tooltip` string plus `tooltipPlacement`, `tooltipDelay` (milliseconds,
@@ -965,17 +1018,19 @@ titlebars, traffic-light positioning, declared close and quit interception, menu
 system submenus, native window-tab commands, controlled selection controls, tab sets, disclosures,
 and field/fieldset composition, controlled in-window dialogs and alert dialogs, delayed native
 tooltips, declared popover and context menus, CSS Grid layout, complete paint transitions, retained
-images and application shaders, progress/meter/toggle parts, declared keyboard, mouse, gesture,
+images and application shaders, progress/meter/toggle parts, sliders, range sliders, splitters,
+toolbars, and toggle groups, declared keyboard, mouse, gesture,
 accelerator, and drag-and-drop events, a stable real-`.app` development host, and self-contained
 production packaging on the current macOS target. It is not yet the full Rust rendering API surface:
-popover arrows and backdrops, select/combobox/autocomplete, tables and trees, sliders, number
-fields, splitters, toolbars, toggle groups, and toasts, animated-image playback control, native
+popover arrows and backdrops, select/combobox/autocomplete, tables and trees, number
+fields, toasts, date/time fields and calendars, menubars, animated-image playback control, native
 child views, accessibility actions, every
 native binary target, and dedicated JavaScript performance gates still need bindings and acceptance.
 
-The unbound interaction models above all reach their retained state through a non-capturing
-`fn(&mut V) -> &mut State` accessor. One hosted view renders every declaring node, so it cannot
-supply a distinct accessor per instance; those components need a closure- or entity-based accessor
-in the Rust core before they can be bound.
+The remaining unbound interaction models are no longer blocked on the accessor shape: every
+component that retains interaction state now also exposes a `StateAccessor` entry point, so one
+hosted view can address many declared instances. What they still need is the declaration format for
+their own data — option sources, columns and rows, segments, and queued toasts — plus the popover
+surfaces that `Select`, `Combobox`, `Autocomplete`, and `Menubar` render in their own windows.
 
 Return to the [documentation index](README.md).

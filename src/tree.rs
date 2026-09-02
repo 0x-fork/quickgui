@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     AccessibilityRole, Element, ElementId, EventContext, FocusHandle, IntoElement, KeyBinding,
-    ListOffset, ListState, ViewContext, div,
+    ListOffset, ListState, StateAccessor, ViewContext, div,
 };
 
 /// Maximum nodes retained by one tree state.
@@ -714,6 +714,28 @@ impl<T> TreeState<T> {
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
         access: fn(&mut V) -> &mut TreeState<T>,
+        render_row: RenderRow,
+        activate: Activate,
+    ) -> Element
+    where
+        V: 'static,
+        T: 'static,
+        E: IntoElement,
+        RenderRow: FnMut(TreeRow<'_, T>, Option<Element>) -> E,
+        Activate: Fn(&mut V, ElementId, &mut EventContext) + Clone + 'static,
+    {
+        self.element_with(cx, id, StateAccessor::from(access), render_row, activate)
+    }
+
+    /// Build the tree against a per-instance retained-state accessor.
+    ///
+    /// A host that renders many declared trees through one view passes an accessor that captures
+    /// which [`TreeState`] each registered listener resolves.
+    pub fn element_with<V, E, RenderRow, Activate>(
+        &mut self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        access_source: StateAccessor<V, TreeState<T>>,
         mut render_row: RenderRow,
         activate: Activate,
     ) -> Element
@@ -728,62 +750,72 @@ impl<T> TreeState<T> {
         let root_focus = Self::focus_handle(id);
         let layout = self.layout;
 
+        let access = access_source.clone();
         let previous = cx.action_listener(id, move |view, _: &TreePrevious, cx| {
-            if access(view).move_selection(false) {
+            if access.get(view).move_selection(false) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let next = cx.action_listener(id, move |view, _: &TreeNext, cx| {
-            if access(view).move_selection(true) {
+            if access.get(view).move_selection(true) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let collapse = cx.action_listener(id, move |view, _: &TreeCollapseOrParent, cx| {
-            if access(view).collapse_or_parent() {
+            if access.get(view).collapse_or_parent() {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let expand = cx.action_listener(id, move |view, _: &TreeExpandOrChild, cx| {
-            let node = access(view).selected_id();
-            if access(view).expand_or_child() {
+            let node = access.get(view).selected_id();
+            if access.get(view).expand_or_child() {
                 cx.invalidate();
-                if let Some(node) = node.filter(|node| access(view).is_loading(*node)) {
+                if let Some(node) = node.filter(|node| access.get(view).is_loading(*node)) {
                     cx.dispatch_action(TreeLoadChildren { node });
                 }
             }
         });
+        let access = access_source.clone();
         let first = cx.action_listener(id, move |view, _: &TreeFirst, cx| {
-            if access(view).select_edge(false) {
+            if access.get(view).select_edge(false) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let last = cx.action_listener(id, move |view, _: &TreeLast, cx| {
-            if access(view).select_edge(true) {
+            if access.get(view).select_edge(true) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let page_up = cx.action_listener(id, move |view, _: &TreePageUp, cx| {
-            if access(view).move_page(false) {
+            if access.get(view).move_page(false) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let page_down = cx.action_listener(id, move |view, _: &TreePageDown, cx| {
-            if access(view).move_page(true) {
+            if access.get(view).move_page(true) {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let toggle = cx.action_listener(id, move |view, _: &TreeToggle, cx| {
-            let selected = access(view).selected_id();
-            if selected.is_some_and(|selected| access(view).toggle_expanded(selected)) {
+            let selected = access.get(view).selected_id();
+            if selected.is_some_and(|selected| access.get(view).toggle_expanded(selected)) {
                 cx.invalidate();
-                if let Some(node) = selected.filter(|node| access(view).is_loading(*node)) {
+                if let Some(node) = selected.filter(|node| access.get(view).is_loading(*node)) {
                     cx.dispatch_action(TreeLoadChildren { node });
                 }
             }
         });
         let confirm_activate = activate.clone();
+        let access = access_source.clone();
         let confirm = cx.action_listener(id, move |view, _: &TreeActivate, cx| {
-            if let Some(selected) = access(view).selected_id() {
+            if let Some(selected) = access.get(view).selected_id() {
                 confirm_activate(view, selected, cx);
             }
         });
@@ -813,12 +845,13 @@ impl<T> TreeState<T> {
             };
             let disclosure = if !loading && (entry.child_count != 0 || entry.pending) {
                 let disclosure_id = Self::disclosure_id(id, node_id);
+                let access = access_source.clone();
                 let disclosure_click = cx.listener(disclosure_id, move |view, cx| {
                     cx.stop_propagation();
-                    if access(view).toggle_expanded(node_id) {
+                    if access.get(view).toggle_expanded(node_id) {
                         cx.focus(root_focus);
                         cx.invalidate();
-                        if access(view).is_loading(node_id) {
+                        if access.get(view).is_loading(node_id) {
                             cx.dispatch_action(TreeLoadChildren { node: node_id });
                         }
                     }
@@ -864,8 +897,9 @@ impl<T> TreeState<T> {
                 row_element = row_element.accessibility_expanded(expanded);
             }
             if !loading && !entry.disabled {
+                let access = access_source.clone();
                 let clicked = cx.listener(row_id, move |view, cx| {
-                    if access(view).select(node_id) {
+                    if access.get(view).select(node_id) {
                         cx.invalidate();
                     }
                     cx.focus(root_focus);

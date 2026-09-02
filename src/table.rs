@@ -3,7 +3,8 @@ use std::{fmt, sync::Arc};
 use crate::{
     AccessibilityOrientation, AccessibilityRole, AccessibilitySortDirection,
     AccessibilityValueRange, Element, ElementId, EventContext, FocusHandle, GridTrack, IntoElement,
-    KeyBinding, ListState, MAX_GRID_TRACKS, Modifiers, MouseButton, PointerPhase, ViewContext, div,
+    KeyBinding, ListState, MAX_GRID_TRACKS, Modifiers, MouseButton, PointerPhase, StateAccessor,
+    ViewContext, div,
 };
 
 /// Maximum logical rows managed by one reusable table.
@@ -1044,6 +1045,40 @@ impl TableState {
         id: impl Into<ElementId>,
         columns: &[TableColumn],
         access: fn(&mut V) -> &mut TableState,
+        render_header: RenderHeader,
+        render_cell: RenderCell,
+        activate: Activate,
+    ) -> Element
+    where
+        V: 'static,
+        H: IntoElement,
+        E: IntoElement,
+        RenderHeader: FnMut(TableHeaderState<'_>) -> H,
+        RenderCell: FnMut(TableCellState<'_>) -> E,
+        Activate: Fn(&mut V, TableCellPosition, &mut EventContext) + Clone + 'static,
+    {
+        self.element_with(
+            cx,
+            id,
+            columns,
+            StateAccessor::from(access),
+            render_header,
+            render_cell,
+            activate,
+        )
+    }
+
+    /// Build the table against a per-instance retained-state accessor.
+    ///
+    /// A host that renders many declared tables through one view passes an accessor that captures
+    /// which [`TableState`] each registered listener resolves.
+    #[allow(clippy::too_many_arguments)]
+    pub fn element_with<V, H, E, RenderHeader, RenderCell, Activate>(
+        &mut self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        columns: &[TableColumn],
+        access_source: StateAccessor<V, TableState>,
         mut render_header: RenderHeader,
         mut render_cell: RenderCell,
         activate: Activate,
@@ -1064,66 +1099,81 @@ impl TableState {
         let layout = self.layout;
         let root_focus = Self::focus_handle(id);
 
+        let access = access_source.clone();
         let previous_row = cx.action_listener(id, move |view, _: &TablePreviousRow, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.move_row(false, column_count)
             });
         });
+        let access = access_source.clone();
         let next_row = cx.action_listener(id, move |view, _: &TableNextRow, cx| {
-            selection_aware(view, cx, access, |state| state.move_row(true, column_count));
+            selection_aware(view, cx, &access, |state| {
+                state.move_row(true, column_count)
+            });
         });
+        let access = access_source.clone();
         let previous_column = cx.action_listener(id, move |view, _: &TablePreviousColumn, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.move_active_column(false, column_count)
             });
         });
+        let access = access_source.clone();
         let next_column = cx.action_listener(id, move |view, _: &TableNextColumn, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.move_active_column(true, column_count)
             });
         });
+        let access = access_source.clone();
         let page_up = cx.action_listener(id, move |view, _: &TablePageUp, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.move_page(false, column_count)
             });
         });
+        let access = access_source.clone();
         let page_down = cx.action_listener(id, move |view, _: &TablePageDown, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.move_page(true, column_count)
             });
         });
+        let access = access_source.clone();
         let first = cx.action_listener(id, move |view, _: &TableFirstRow, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.select_edge(false, column_count)
             });
         });
+        let access = access_source.clone();
         let last = cx.action_listener(id, move |view, _: &TableLastRow, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.select_edge(true, column_count)
             });
         });
+        let access = access_source.clone();
         let toggle_selection = cx.action_listener(id, move |view, _: &TableToggleSelection, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state
                     .selected
                     .is_some_and(|selected| state.toggle_row_selection(selected.row))
             });
         });
+        let access = access_source.clone();
         let extend_up = cx.action_listener(id, move |view, _: &TableExtendSelectionUp, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.extend_selection(false, column_count)
             });
         });
+        let access = access_source.clone();
         let extend_down = cx.action_listener(id, move |view, _: &TableExtendSelectionDown, cx| {
-            selection_aware(view, cx, access, |state| {
+            selection_aware(view, cx, &access, |state| {
                 state.extend_selection(true, column_count)
             });
         });
+        let access = access_source.clone();
         let select_all = cx.action_listener(id, move |view, _: &TableSelectAll, cx| {
-            selection_aware(view, cx, access, TableState::select_all_rows);
+            selection_aware(view, cx, &access, TableState::select_all_rows);
         });
+        let access = access_source.clone();
         let move_left = cx.action_listener(id, move |view, _: &TableMoveColumnLeft, cx| {
-            let state = access(view);
+            let state = access.get(view);
             let Some(selected) = state.selected else {
                 return;
             };
@@ -1131,8 +1181,9 @@ impl TableState {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let move_right = cx.action_listener(id, move |view, _: &TableMoveColumnRight, cx| {
-            let state = access(view);
+            let state = access.get(view);
             let Some(selected) = state.selected else {
                 return;
             };
@@ -1140,8 +1191,9 @@ impl TableState {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let commit_edit = cx.action_listener(id, move |view, _: &TableCommitEdit, cx| {
-            if let Some(position) = access(view).end_edit() {
+            if let Some(position) = access.get(view).end_edit() {
                 cx.focus(root_focus);
                 cx.dispatch_action(TableEditEnded {
                     position,
@@ -1150,8 +1202,9 @@ impl TableState {
                 cx.invalidate();
             }
         });
+        let access = access_source.clone();
         let cancel_edit = cx.action_listener(id, move |view, _: &TableCancelEdit, cx| {
-            if let Some(position) = access(view).end_edit() {
+            if let Some(position) = access.get(view).end_edit() {
                 cx.focus(root_focus);
                 cx.dispatch_action(TableEditEnded {
                     position,
@@ -1161,8 +1214,9 @@ impl TableState {
             }
         });
         let confirm_activate = activate.clone();
+        let access = access_source.clone();
         let confirm = cx.action_listener(id, move |view, _: &TableActivate, cx| {
-            if let Some(selected) = access(view).selected_cell() {
+            if let Some(selected) = access.get(view).selected_cell() {
                 confirm_activate(view, selected, cx);
             }
         });
@@ -1194,23 +1248,32 @@ impl TableState {
                 let handle_id = Self::resize_handle_id(id, column.id);
                 let column_id = column.id;
                 let minimum = column.minimum_width;
+                let access = access_source.clone();
                 let drag = cx.pointer_listener(handle_id, move |view, event, cx| {
                     if event.phase == PointerPhase::Down {
                         return;
                     }
-                    if access(view).resize_column(column_id, event.delta.x) {
+                    if access.get(view).resize_column(column_id, event.delta.x) {
                         cx.invalidate();
                     }
                 });
+                let access = access_source.clone();
                 let smaller =
                     cx.action_listener(handle_id, move |view, _: &TableResizeColumnSmaller, cx| {
-                        if access(view).resize_column(column_id, -TABLE_COLUMN_RESIZE_STEP) {
+                        if access
+                            .get(view)
+                            .resize_column(column_id, -TABLE_COLUMN_RESIZE_STEP)
+                        {
                             cx.invalidate();
                         }
                     });
+                let access = access_source.clone();
                 let larger =
                     cx.action_listener(handle_id, move |view, _: &TableResizeColumnLarger, cx| {
-                        if access(view).resize_column(column_id, TABLE_COLUMN_RESIZE_STEP) {
+                        if access
+                            .get(view)
+                            .resize_column(column_id, TABLE_COLUMN_RESIZE_STEP)
+                        {
                             cx.invalidate();
                         }
                     });
@@ -1266,8 +1329,9 @@ impl TableState {
             }
             if column.sortable {
                 let column_id = column.id;
+                let access = access_source.clone();
                 let clicked = cx.listener(header_id, move |view, cx| {
-                    if access(view).toggle_sort(column_id) {
+                    if access.get(view).toggle_sort(column_id) {
                         cx.focus(root_focus);
                         cx.invalidate();
                     }
@@ -1307,14 +1371,16 @@ impl TableState {
                 let cell_id = Self::cell_id(id, position);
                 let cell_selected = selected == Some(position);
                 let cell_editing = editing == Some(position);
+                let access = access_source.clone();
                 let clicked = cx.listener(cell_id, move |view, cx| {
-                    if access(view).set_active_cell(position, column_count) {
+                    if access.get(view).set_active_cell(position, column_count) {
                         cx.invalidate();
                     }
                     cx.focus(root_focus);
                 });
+                let access = access_source.clone();
                 let pressed = cx.mouse_down_listener(cell_id, move |view, event, cx| {
-                    let state = access(view);
+                    let state = access.get(view);
                     let before = state.selection_version;
                     let changed = if event.modifiers.contains(Modifiers::SHIFT) {
                         state.select_row_range(position.row)
@@ -1329,7 +1395,7 @@ impl TableState {
                     if changed {
                         cx.invalidate();
                     }
-                    if access(view).selection_version != before {
+                    if access.get(view).selection_version != before {
                         cx.dispatch_action(TableSelectionChanged);
                     }
                 });
@@ -1565,10 +1631,10 @@ fn assert_table_columns(columns: &[TableColumn]) {
 fn selection_aware<V: 'static>(
     view: &mut V,
     cx: &mut EventContext,
-    access: fn(&mut V) -> &mut TableState,
+    access: &StateAccessor<V, TableState>,
     mutate: impl FnOnce(&mut TableState) -> bool,
 ) {
-    let state = access(view);
+    let state = access.get(view);
     let before = state.selection_version;
     let changed = mutate(state);
     let selection_changed = state.selection_version != before;

@@ -343,6 +343,7 @@ impl NativeWindowRuntime {
             context_menu: ContextMenuState::new(),
             context_menu_owner: None,
             focused_node: None,
+            components: NativeComponentStates::default(),
             #[cfg(target_os = "macos")]
             swift_ui_hosts: Rc::clone(&self.swift_ui_hosts),
             #[cfg(target_os = "macos")]
@@ -701,6 +702,12 @@ impl NativeRuntime {
         // Declared menus adopt the core's own contextual navigation, typeahead, activation, and
         // dismissal bindings instead of a JavaScript keyboard implementation.
         application = application.bind_keys(quickgui::popover_menu_key_bindings());
+        // Declared range, ordering, and roving-focus components likewise adopt the core's typed
+        // actions instead of a JavaScript keyboard implementation.
+        application = application.bind_keys(quickgui::slider_key_bindings());
+        application = application.bind_keys(quickgui::splitter_key_bindings());
+        application = application.bind_keys(quickgui::toolbar_key_bindings());
+        application = application.bind_keys(quickgui::toggle_group_key_bindings());
         let mut runner = application
             .on_open_urls(move |urls, _cx| {
                 let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())

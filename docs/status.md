@@ -4,6 +4,23 @@
 
 Implemented now:
 
+- per-instance component state accessors: every unstyled component that retains interaction state
+  now exposes a `*_with` entry point taking a `StateAccessor<V, State>` — one reference-counted
+  closure that may capture which instance it addresses — alongside the original
+  `fn(&mut V) -> &mut State` method, which stays a thin wrapper so existing applications, examples,
+  and tests are unchanged. `Select`, `Autocomplete`, `Combobox`, `Picker`, `Table`, `Tree`,
+  `Slider`, `Splitter`, `Toolbar`, `ToggleGroup`, `Toast`, `DateField`, `TimeField`, `Calendar`,
+  `Menubar`, and `ContextMenu` all accept it, so one hosted view can render many declared instances
+  of the same component without giving up bounds or adding idle work;
+- element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
+  own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
+  decided instead of re-deriving it;
+- JavaScript bindings for the declared range, ordering, and roving-focus components: Solid
+  `Slider` (single-thumb and range), `Splitter`, `Toolbar`, and `ToggleGroup` compound parts
+  declared ahead of time as bounded protocol properties, with the Rust core owning clamping, step
+  snapping, thumb ordering, captured pointer arithmetic, pane-size conservation, wrapping arrow
+  navigation, disabled-item skipping, and the single roving Tab stop, and every result travelling
+  back as one asynchronous `componentchange` payload;
 - JavaScript bindings for the unstyled selection, tab, disclosure, and field descriptors: Solid
   `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`, `Accordion`, `Field`, and
   `Fieldset` compound parts declared ahead of time as bounded protocol properties, so the Rust core

@@ -53,7 +53,8 @@ export type NativeEventType =
   | "dragstart"
   | "dragend"
   | "drop"
-  | "filesdropped";
+  | "filesdropped"
+  | "componentchange";
 
 /** Declared input listeners whose presence is one boolean property. */
 const inputListenerProperties: ReadonlyMap<NativeEventType, PropertyCode> = new Map([
@@ -299,6 +300,14 @@ export function setNativeEventListener(
       node,
       PropertyCode.SelectListener,
       node.listeners.has("menuselect"),
+    );
+  } else if (type === "componentchange") {
+    // A declared range, ordering, or roving-focus component reports whatever the Rust core
+    // decided as one asynchronous payload; the declaration only says whether anyone listens.
+    setNativeProperty(
+      node,
+      PropertyCode.ComponentChangeListener,
+      node.listeners.has("componentchange"),
     );
   } else if (type === "presentationchange") {
     setNativeProperty(

@@ -8,7 +8,7 @@ use crate::{
     AccessibilityPopover, AccessibilityRole, AnchorPlacement, ComboboxConfirm, ComboboxFirst,
     ComboboxLast, ComboboxNext, ComboboxPageDown, ComboboxPageUp, ComboboxPrevious, Element,
     ElementId, EventContext, FocusHandle, Key, MAX_VALIDATION_MESSAGE_BYTES, Modifiers,
-    PickerError, PickerItem, View, ViewContext, VirtualList, WindowHandle, div,
+    PickerError, PickerItem, StateAccessor, View, ViewContext, VirtualList, WindowHandle, div,
     picker::collect_picker_items,
 };
 
@@ -358,6 +358,10 @@ impl<T> SelectState<T> {
     }
 
     /// Build the complete unstyled select interaction from caller-owned trigger, popover, and rows.
+    ///
+    /// This is the `fn`-pointer entry point: a view that owns one select per field passes
+    /// `Self::field`. A host that renders many declared selects through one view passes a
+    /// per-instance [`StateAccessor`] to [`SelectState::element_with`] instead.
     #[allow(clippy::too_many_arguments)]
     pub fn element<V, PopoverRoot, RenderOption, Change>(
         &self,
@@ -377,6 +381,41 @@ impl<T> SelectState<T> {
         RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
         Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
     {
+        self.element_with(
+            cx,
+            id,
+            label,
+            StateAccessor::from(access),
+            trigger,
+            popover_root,
+            render_option,
+            change,
+        )
+    }
+
+    /// Build the select interaction against a per-instance retained-state accessor.
+    ///
+    /// Two selects declared by one view stay independent because the accessor, not the view type,
+    /// decides which [`SelectState`] each registered listener resolves.
+    #[allow(clippy::too_many_arguments)]
+    pub fn element_with<V, PopoverRoot, RenderOption, Change>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        access: StateAccessor<V, SelectState<T>>,
+        trigger: Element,
+        popover_root: PopoverRoot,
+        render_option: RenderOption,
+        change: Change,
+    ) -> Element
+    where
+        V: 'static,
+        T: Clone + 'static,
+        PopoverRoot: Fn(SelectListState) -> Element + Clone + 'static,
+        RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
+        Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
+    {
         let id = id.into();
         let label = label.into();
         let renderers = SelectRenderers {
@@ -384,8 +423,9 @@ impl<T> SelectState<T> {
             render_option,
         };
 
+        let closed_access = access.clone();
         cx.on_any_child_window_closed(move |view, closed, cx| {
-            let state = access(view);
+            let state = closed_access.get(view);
             if state.popover == Some(closed) {
                 state.popover = None;
                 cx.focus(FocusHandle::new(id));
@@ -394,13 +434,14 @@ impl<T> SelectState<T> {
         });
 
         let commit_change = change.clone();
+        let commit_access = access.clone();
         let commit = cx.action_listener(id, move |view, action: &SelectCommit, cx| {
             if action.control != id {
                 cx.propagate();
                 return;
             }
             let value = {
-                let state = access(view);
+                let state = commit_access.get(view);
                 if state.popover != Some(action.popover)
                     || state.source_revision != action.source_revision
                 {
@@ -426,98 +467,106 @@ impl<T> SelectState<T> {
 
         let click_renderers = renderers.clone();
         let click_label = label.clone();
+        let click_access = access.clone();
         let click = cx.listener(id, move |view, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 click_label.clone(),
-                access,
+                &click_access,
                 click_renderers.clone(),
             );
         });
 
         let previous_renderers = renderers.clone();
         let previous_label = label.clone();
+        let previous_access = access.clone();
         let previous = cx.action_listener(id, move |view, _: &ComboboxPrevious, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 previous_label.clone(),
-                access,
+                &previous_access,
                 previous_renderers.clone(),
             );
         });
         let next_renderers = renderers.clone();
         let next_label = label.clone();
+        let next_access = access.clone();
         let next = cx.action_listener(id, move |view, _: &ComboboxNext, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 next_label.clone(),
-                access,
+                &next_access,
                 next_renderers.clone(),
             );
         });
         let page_up_renderers = renderers.clone();
         let page_up_label = label.clone();
+        let page_up_access = access.clone();
         let page_up = cx.action_listener(id, move |view, _: &ComboboxPageUp, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 page_up_label.clone(),
-                access,
+                &page_up_access,
                 page_up_renderers.clone(),
             );
         });
         let page_down_renderers = renderers.clone();
         let page_down_label = label.clone();
+        let page_down_access = access.clone();
         let page_down = cx.action_listener(id, move |view, _: &ComboboxPageDown, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 page_down_label.clone(),
-                access,
+                &page_down_access,
                 page_down_renderers.clone(),
             );
         });
         let first_renderers = renderers.clone();
         let first_label = label.clone();
+        let first_access = access.clone();
         let first = cx.action_listener(id, move |view, _: &ComboboxFirst, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 first_label.clone(),
-                access,
+                &first_access,
                 first_renderers.clone(),
             );
         });
         let last_renderers = renderers.clone();
         let last_label = label.clone();
+        let last_access = access.clone();
         let last = cx.action_listener(id, move |view, _: &ComboboxLast, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 last_label.clone(),
-                access,
+                &last_access,
                 last_renderers.clone(),
             );
         });
         let confirm_renderers = renderers;
         let confirm_label = label.clone();
+        let confirm_access = access.clone();
         let confirm = cx.action_listener(id, move |view, _: &ComboboxConfirm, cx| {
             open_select_popover(
                 view,
                 cx,
                 id,
                 confirm_label.clone(),
-                access,
+                &confirm_access,
                 confirm_renderers.clone(),
             );
         });
@@ -556,7 +605,7 @@ fn open_select_popover<V, T, PopoverRoot, RenderOption>(
     cx: &mut EventContext,
     id: ElementId,
     label: Arc<str>,
-    access: fn(&mut V) -> &mut SelectState<T>,
+    access: &StateAccessor<V, SelectState<T>>,
     renderers: SelectRenderers<PopoverRoot, RenderOption>,
 ) where
     V: 'static,
@@ -565,7 +614,7 @@ fn open_select_popover<V, T, PopoverRoot, RenderOption>(
     RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
 {
     let (items, selected_source, source_revision, layout) = {
-        let state = access(view);
+        let state = access.get(view);
         if state.disabled || state.popover.is_some() {
             return;
         }
@@ -591,7 +640,7 @@ fn open_select_popover<V, T, PopoverRoot, RenderOption>(
         .gap(layout.anchor_gap)
         .open(cx, id, "Select", popover);
     if let Ok(handle) = result {
-        access(view).popover = Some(handle);
+        access.get(view).popover = Some(handle);
         cx.invalidate();
     }
 }

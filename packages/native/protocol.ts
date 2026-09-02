@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 20;
+export const PROTOCOL_VERSION = 21;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -227,6 +227,11 @@ export const enum PropertyCode {
   DropKinds = 200,
   DragListener = 201,
   DropListener = 202,
+  Values = 203,
+  Step = 204,
+  LargeStep = 205,
+  Items = 206,
+  ComponentChangeListener = 207,
 }
 
 /**
@@ -283,6 +288,17 @@ export const NativePart = {
   MeterIndicator: "meter-indicator",
   Toggle: "toggle",
   ToggleIndicator: "toggle-indicator",
+  Slider: "slider",
+  SliderTrack: "slider-track",
+  SliderRange: "slider-range",
+  SliderThumb: "slider-thumb",
+  Splitter: "splitter",
+  SplitterPane: "splitter-pane",
+  SplitterHandle: "splitter-handle",
+  Toolbar: "toolbar",
+  ToolbarItem: "toolbar-item",
+  ToggleGroup: "toggle-group",
+  ToggleGroupItem: "toggle-group-item",
 } as const;
 
 export type NativePartName = (typeof NativePart)[keyof typeof NativePart];
@@ -298,6 +314,15 @@ export const MAX_MENU_JSON_BYTES = 512 * 1024;
 
 /** Longest bounded accelerator keymap accepted by the Rust binding. */
 export const MAX_KEYMAP_JSON_BYTES = 64 * 1024;
+
+/** Longest bounded `values` or `items` component declaration accepted by the Rust binding. */
+export const MAX_COMPONENT_JSON_BYTES = 64 * 1024;
+
+/** Most numbers the Rust binding decodes from one `values` declaration. */
+export const MAX_COMPONENT_VALUES = 64;
+
+/** Most entries the Rust binding decodes from one `items` declaration. */
+export const MAX_COMPONENT_ITEMS = 256;
 
 /** Longest bounded drag declaration accepted by the Rust binding. */
 export const MAX_DRAG_JSON_BYTES = 64 * 1024;

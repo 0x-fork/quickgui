@@ -4,8 +4,8 @@ use crate::{
     AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AnchorPlacement,
     ComboboxConfirm, ComboboxNext, ComboboxPageDown, ComboboxPageUp, ComboboxPrevious, Element,
     ElementId, Entity, EventContext, FocusHandle, Key, MAX_VALIDATION_MESSAGE_BYTES, PickerError,
-    PickerFilterMode, PickerItem, PickerState, View, ViewContext, VirtualList, WindowHandle, div,
-    element::ElementKind,
+    PickerFilterMode, PickerItem, PickerState, StateAccessor, View, ViewContext, VirtualList,
+    WindowHandle, div, element::ElementKind,
 };
 
 /// Maximum option rows mounted by one autocomplete popover before virtual scrolling takes over.
@@ -153,29 +153,35 @@ impl<T> AutocompletePopoverSnapshot<T> {
     }
 }
 
-pub(crate) struct AutocompleteAccess<V, S, T> {
-    outer: fn(&mut V) -> &mut S,
+/// A per-instance path from the owning view to one autocomplete's retained state.
+///
+/// The outer hop is a cloneable [`StateAccessor`] so a host that declares many autocompletes in
+/// one view can address each one; the inner hop stays a plain projection because it depends only
+/// on the wrapping state's type, never on which instance is being edited.
+pub(crate) struct AutocompleteAccess<V: 'static, S: 'static, T> {
+    outer: StateAccessor<V, S>,
     inner: fn(&mut S) -> &mut AutocompleteState<T>,
 }
 
-impl<V, S, T> Copy for AutocompleteAccess<V, S, T> {}
-
-impl<V, S, T> Clone for AutocompleteAccess<V, S, T> {
+impl<V: 'static, S: 'static, T> Clone for AutocompleteAccess<V, S, T> {
     fn clone(&self) -> Self {
-        *self
+        Self {
+            outer: self.outer.clone(),
+            inner: self.inner,
+        }
     }
 }
 
-impl<V, S: 'static, T> AutocompleteAccess<V, S, T> {
-    pub(crate) const fn new(
-        outer: fn(&mut V) -> &mut S,
+impl<V: 'static, S: 'static, T> AutocompleteAccess<V, S, T> {
+    pub(crate) fn new(
+        outer: StateAccessor<V, S>,
         inner: fn(&mut S) -> &mut AutocompleteState<T>,
     ) -> Self {
         Self { outer, inner }
     }
 
-    fn get(self, view: &mut V) -> &mut AutocompleteState<T> {
-        (self.inner)((self.outer)(view))
+    fn get<'a>(&self, view: &'a mut V) -> &'a mut AutocompleteState<T> {
+        (self.inner)(self.outer.get(view))
     }
 }
 
@@ -493,6 +499,44 @@ impl<T> AutocompleteState<T> {
         ValueChanged: Fn(&mut V, Arc<str>, &mut EventContext) + Clone + 'static,
         Select: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
     {
+        self.element_with(
+            cx,
+            id,
+            label,
+            StateAccessor::from(access),
+            input,
+            popover_root,
+            render_option,
+            value_changed,
+            select,
+        )
+    }
+
+    /// Build the autocomplete against a per-instance retained-state accessor.
+    ///
+    /// A host that renders many declared autocompletes through one view passes an accessor that
+    /// captures which [`AutocompleteState`] each registered listener resolves.
+    #[allow(clippy::too_many_arguments)]
+    pub fn element_with<V, PopoverRoot, RenderOption, ValueChanged, Select>(
+        &mut self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        access: StateAccessor<V, AutocompleteState<T>>,
+        input: Element,
+        popover_root: PopoverRoot,
+        render_option: RenderOption,
+        value_changed: ValueChanged,
+        select: Select,
+    ) -> Element
+    where
+        V: 'static,
+        T: Clone + 'static,
+        PopoverRoot: Fn(AutocompleteListState) -> Element + Clone + 'static,
+        RenderOption: Fn(&PickerItem<T>, AutocompleteOptionState) -> Element + Clone + 'static,
+        ValueChanged: Fn(&mut V, Arc<str>, &mut EventContext) + Clone + 'static,
+        Select: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
+    {
         let select_with_source =
             move |view: &mut V, _source_index: usize, value: T, cx: &mut EventContext| {
                 select(view, value, cx);
@@ -531,7 +575,7 @@ impl<T> AutocompleteState<T> {
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
-        access: AutocompleteAccess<V, S, T>,
+        access_source: AutocompleteAccess<V, S, T>,
         input: Element,
         popover_root: PopoverRoot,
         render_option: RenderOption,
@@ -576,6 +620,7 @@ impl<T> AutocompleteState<T> {
         }
 
         let child_dismiss = dismiss.clone();
+        let access = access_source.clone();
         cx.on_any_child_window_closed(move |view, closed, cx| {
             let state = access.get(view);
             if state.popover == Some(closed) {
@@ -586,6 +631,7 @@ impl<T> AutocompleteState<T> {
             }
         });
 
+        let access = access_source.clone();
         let preview = cx.action_listener(id, move |view, action: &AutocompletePreview, cx| {
             if action.control != id {
                 cx.propagate();
@@ -608,6 +654,7 @@ impl<T> AutocompleteState<T> {
 
         let commit_value_changed = value_changed.clone();
         let commit_select = select.clone();
+        let access = access_source.clone();
         let commit = cx.action_listener(id, move |view, action: &AutocompleteCommit, cx| {
             if action.control != id {
                 cx.propagate();
@@ -616,7 +663,7 @@ impl<T> AutocompleteState<T> {
             commit_autocomplete_source(
                 view,
                 cx,
-                access,
+                &access,
                 Some((action.popover, action.source_revision)),
                 action.source_index,
                 &commit_value_changed,
@@ -627,6 +674,7 @@ impl<T> AutocompleteState<T> {
         let input_renderers = renderers.clone();
         let input_label = label.clone();
         let input_value_changed = value_changed.clone();
+        let access = access_source.clone();
         let input_listener = cx.input_listener(id, move |view, value, cx| {
             let (changed, value) = {
                 let state = access.get(view);
@@ -641,7 +689,7 @@ impl<T> AutocompleteState<T> {
                 cx,
                 id,
                 input_label.clone(),
-                access,
+                &access,
                 input_renderers.clone(),
             );
             if changed {
@@ -651,13 +699,14 @@ impl<T> AutocompleteState<T> {
 
         let click_renderers = renderers.clone();
         let click_label = label.clone();
+        let access = access_source.clone();
         let click = cx.listener(id, move |view, cx| {
             open_autocomplete_popover(
                 view,
                 cx,
                 id,
                 click_label.clone(),
-                access,
+                &access,
                 click_renderers.clone(),
             );
             cx.focus(focus);
@@ -665,6 +714,7 @@ impl<T> AutocompleteState<T> {
 
         let previous_renderers = renderers.clone();
         let previous_label = label.clone();
+        let access = access_source.clone();
         let previous = cx.action_listener(id, move |view, _: &ComboboxPrevious, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_previous() {
@@ -677,13 +727,14 @@ impl<T> AutocompleteState<T> {
                     cx,
                     id,
                     previous_label.clone(),
-                    access,
+                    &access,
                     previous_renderers.clone(),
                 );
             }
         });
         let next_renderers = renderers.clone();
         let next_label = label.clone();
+        let access = access_source.clone();
         let next = cx.action_listener(id, move |view, _: &ComboboxNext, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_next() {
@@ -696,13 +747,14 @@ impl<T> AutocompleteState<T> {
                     cx,
                     id,
                     next_label.clone(),
-                    access,
+                    &access,
                     next_renderers.clone(),
                 );
             }
         });
         let page_up_renderers = renderers.clone();
         let page_up_label = label.clone();
+        let access = access_source.clone();
         let page_up = cx.action_listener(id, move |view, _: &ComboboxPageUp, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_page_up() {
@@ -715,13 +767,14 @@ impl<T> AutocompleteState<T> {
                     cx,
                     id,
                     page_up_label.clone(),
-                    access,
+                    &access,
                     page_up_renderers.clone(),
                 );
             }
         });
         let page_down_renderers = renderers;
         let page_down_label = label.clone();
+        let access = access_source.clone();
         let page_down = cx.action_listener(id, move |view, _: &ComboboxPageDown, cx| {
             if access.get(view).is_open() {
                 if access.get(view).picker.select_page_down() {
@@ -734,7 +787,7 @@ impl<T> AutocompleteState<T> {
                     cx,
                     id,
                     page_down_label.clone(),
-                    access,
+                    &access,
                     page_down_renderers.clone(),
                 );
             }
@@ -742,6 +795,7 @@ impl<T> AutocompleteState<T> {
 
         let confirm_value_changed = value_changed;
         let confirm_select = select;
+        let access = access_source.clone();
         let confirm = cx.action_listener(id, move |view, _: &ComboboxConfirm, cx| {
             let source_index = access.get(view).active_source_index();
             let Some(source_index) = source_index else {
@@ -751,7 +805,7 @@ impl<T> AutocompleteState<T> {
             if !commit_autocomplete_source(
                 view,
                 cx,
-                access,
+                &access,
                 None,
                 source_index,
                 &confirm_value_changed,
@@ -762,6 +816,7 @@ impl<T> AutocompleteState<T> {
         });
 
         let key_dismiss = dismiss.clone();
+        let access = access_source.clone();
         let key_down = cx.key_down_listener(id, move |view, event, cx| {
             if event.key == Key::Escape {
                 if access.get(view).close(cx) {
@@ -806,6 +861,7 @@ impl<T> AutocompleteState<T> {
         let mut proxy = None;
         if self.is_open() {
             let outside_dismiss = dismiss;
+            let access = access_source.clone();
             let outside = cx.mouse_down_listener(id, move |view, _event, cx| {
                 if access.get(view).close(cx) {
                     outside_dismiss(view, cx);
@@ -924,7 +980,7 @@ fn open_autocomplete_popover<V, S, T, PopoverRoot, RenderOption>(
     cx: &mut EventContext,
     id: ElementId,
     label: Arc<str>,
-    access: AutocompleteAccess<V, S, T>,
+    access: &AutocompleteAccess<V, S, T>,
     renderers: AutocompleteRenderers<PopoverRoot, RenderOption>,
 ) where
     V: 'static,
@@ -959,7 +1015,7 @@ fn open_autocomplete_popover<V, S, T, PopoverRoot, RenderOption>(
 fn commit_autocomplete_source<V, S, T, ValueChanged, Select>(
     view: &mut V,
     cx: &mut EventContext,
-    access: AutocompleteAccess<V, S, T>,
+    access: &AutocompleteAccess<V, S, T>,
     expected: Option<(WindowHandle, u64)>,
     source_index: usize,
     value_changed: &ValueChanged,

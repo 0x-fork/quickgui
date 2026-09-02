@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  MAX_COMPONENT_ITEMS,
+  MAX_COMPONENT_JSON_BYTES,
   MAX_COMPONENT_VALUE_BYTES,
+  MAX_COMPONENT_VALUES,
   MAX_DRAG_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
@@ -36,8 +39,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v20", () => {
-    expect(PROTOCOL_VERSION).toBe(20);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v21", () => {
+    expect(PROTOCOL_VERSION).toBe(21);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -295,5 +298,42 @@ describe("binary mutation protocol", () => {
     expect(NativeNodeTag.Shader).toBe(17);
     expect(MAX_KEYMAP_JSON_BYTES).toBe(64 * 1024);
     expect(MAX_DRAG_JSON_BYTES).toBe(64 * 1024);
+    expect(NativePart.Slider).toBe("slider");
+    expect(NativePart.SliderTrack).toBe("slider-track");
+    expect(NativePart.SliderRange).toBe("slider-range");
+    expect(NativePart.SliderThumb).toBe("slider-thumb");
+    expect(NativePart.Splitter).toBe("splitter");
+    expect(NativePart.SplitterPane).toBe("splitter-pane");
+    expect(NativePart.SplitterHandle).toBe("splitter-handle");
+    expect(NativePart.Toolbar).toBe("toolbar");
+    expect(NativePart.ToolbarItem).toBe("toolbar-item");
+    expect(NativePart.ToggleGroup).toBe("toggle-group");
+    expect(NativePart.ToggleGroupItem).toBe("toggle-group-item");
+    expect(MAX_COMPONENT_JSON_BYTES).toBe(64 * 1024);
+    expect(MAX_COMPONENT_VALUES).toBe(64);
+    expect(MAX_COMPONENT_ITEMS).toBe(256);
+  });
+
+  test("encodes declared range, ordering, and roving-focus component declarations", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.View);
+    batch.setProperty(1, PropertyCode.Part, NativePart.Slider);
+    batch.setProperty(1, PropertyCode.Scope, "volume");
+    batch.setProperty(1, PropertyCode.Values, "[10,60]");
+    batch.setProperty(1, PropertyCode.Minimum, 0);
+    batch.setProperty(1, PropertyCode.Maximum, 100);
+    batch.setProperty(1, PropertyCode.Step, 5);
+    batch.setProperty(1, PropertyCode.LargeStep, 25);
+    batch.setProperty(1, PropertyCode.ComponentChangeListener, true);
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Part, NativePart.SliderThumb);
+    batch.setProperty(2, PropertyCode.Scope, "volume");
+    batch.setProperty(2, PropertyCode.ItemIndex, 1);
+    batch.createElement(3, NativeNodeTag.View);
+    batch.setProperty(3, PropertyCode.Part, NativePart.Toolbar);
+    batch.setProperty(3, PropertyCode.Items, JSON.stringify([{ value: "cut" }]));
+
+    expect(batch.mutationCount).toBe(16);
+    expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 });

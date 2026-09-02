@@ -255,6 +255,7 @@ fn terminal_style_normalizes_content_padding() {
 #[test]
 fn terminal_selection_uses_pointer_coordinates_local_to_the_terminal() {
     let event = PointerEvent {
+        size: Size::ZERO,
         phase: PointerPhase::Move,
         position: crate::Point::new(436.0, 158.0),
         origin: crate::Point::new(420.0, 158.0),

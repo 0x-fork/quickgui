@@ -3,7 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{AccessibilityLive, AccessibilityRole, Element, ElementId, Key, ViewContext, div};
+use crate::{
+    AccessibilityLive, AccessibilityRole, Element, ElementId, Key, StateAccessor, ViewContext, div,
+};
 
 /// Maximum toasts retained by one queue.
 ///
@@ -433,12 +435,25 @@ impl ToastParts {
         root: Element,
         access: fn(&mut V) -> &mut ToastManager,
     ) -> Element {
+        self.key_part_with(cx, root, StateAccessor::from(access))
+    }
+
+    /// Attach focused Escape dismissal against a per-instance [`ToastManager`] accessor.
+    ///
+    /// A host that owns one manager per declared viewport passes an accessor that captures which
+    /// viewport this toast belongs to.
+    pub fn key_part_with<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        root: Element,
+        access: StateAccessor<V, ToastManager>,
+    ) -> Element {
         let id = self.id;
         let dismiss = cx.key_down_listener(self.root_id(), move |view, event, cx| {
             if event.key != Key::Escape || event.repeat {
                 return;
             }
-            if access(view).dismiss(id) {
+            if access.get(view).dismiss(id) {
                 cx.stop_propagation();
                 cx.prevent_default();
                 cx.invalidate();
