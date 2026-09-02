@@ -554,6 +554,7 @@ fn automatic_user_selection_matches_web_control_boundaries() {
         0,
         &inherited,
         true,
+        Direction::Ltr,
     )
     .unwrap();
 

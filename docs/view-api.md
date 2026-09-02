@@ -244,3 +244,117 @@ away unaffected blocks.
 Bottom-aligned transcripts can combine `ListAlignment::Bottom` and `FollowMode::Tail`. Cloned
 `ListState` values intentionally share scroll and measurement state, so mount one shared state as
 one list.
+
+
+## Layout direction
+
+`direction(Direction::Rtl)`, or the `rtl()` and `ltr()` shorthands, set the inline layout
+direction for an element and every descendant that does not declare its own. Direction resolution
+happens once, while the layout tree is built, so it costs nothing per frame.
+
+```rust
+div()
+    .rtl()
+    .flex_row()
+    .ps(20.0) // inline start: the right edge here
+    .pe(4.0)
+    .child(text("مرحبا بالعالم"))
+```
+
+What an RTL subtree changes:
+
+- **In-flow positions are mirrored inside the parent's content box.** Row flex order, grid column
+  order, and wrapped line placement all read right to left. Mirroring is applied after layout to
+  painted geometry, hit regions, and accessibility bounds together, so all three stay consistent
+  and intrinsic sizing is untouched.
+- **Physical `left`/`right` insets and `ml`/`mr` margins mirror with the content**, which makes
+  them resolve as inline start and end. `ms`/`me` are the direction-independent spellings of the
+  same two edges.
+- **Padding and borders stay physical.** Use `ps`/`pe` and `border_s`/`border_e` for
+  direction-relative edges; they are folded into physical Taffy edges during the layout build.
+- **The horizontal scroll origin moves to the right edge.** A scroll offset of zero rests against
+  the container's right edge, and the offset grows as content to the left is revealed. Physical
+  wheel deltas are inverted for those containers so a trackpad still feels natural.
+- **Text alignment and shaping follow.** `TextAlign::Start` (the default) resolves to `Right` and
+  `TextAlign::End` to `Left`; `text_start()` and `text_end()` declare them explicitly.
+  `text_left()`, `text_center()`, and `text_right()` stay physical. The paragraph's base
+  bidirectional direction is forced to RTL for the subtree, so neutral characters and punctuation
+  resolve against the declared direction instead of the first strong character in the content.
+
+What it deliberately does not change:
+
+- **Focus order still follows document order.** Tab moves through the declaration order of the
+  tree, exactly as in a browser.
+- **Caret movement in text inputs stays logical.** `Left`/`Right` in an RTL input move to the
+  previous and next character in the string, not to the previous and next glyph on screen. Visual
+  caret motion for mixed-direction runs is not implemented.
+- **Vertical geometry, scrollbars, and `top`/`bottom` insets are unaffected.**
+
+## Sticky positioning
+
+`sticky_top`, `sticky_bottom`, `sticky_left`, and `sticky_right` pin an element inside the nearest
+ancestor scroll container while that container scrolls, exactly like CSS `position: sticky`.
+`sticky()` marks an element sticky without an offset.
+
+```rust
+div()
+    .overflow_y_scroll()
+    .flex_col()
+    .child(
+        div()
+            .w_full()
+            .flex_col()
+            .child(div().h(28.0).flex_none().sticky_top(0.0).child(text("Inbox")))
+            .children(rows),
+    )
+```
+
+A sticky element keeps the space it occupies in flow: sticking shifts painted geometry, hit
+regions, and accessibility bounds only, so scrolling a sticky header never triggers a relayout and
+adds no per-frame allocation. The shift is clamped to the element's parent box, which is what
+releases a pinned header when its own section scrolls past — the next section's header takes over
+the pinned position. The pinning viewport is the nearest ancestor scroll container's padding box,
+or the window viewport when there is no scroll container above it.
+
+One window may retain at most `MAX_STICKY_ELEMENTS_PER_WINDOW` (4096) sticky declarations; a view
+that exceeds it is rejected before any layout work happens.
+
+## Scroll snapping
+
+A scroll container opts into snapping per axis with `scroll_snap_x` and `scroll_snap_y`, and its
+children declare where they line up with `snap_align`:
+
+```rust
+div()
+    .overflow_x_scroll()
+    .scroll_snap_x(SnapStrictness::Mandatory)
+    .flex_row()
+    .child(page(0).snap_align(SnapAlign::Start))
+    .child(page(1).snap_align(SnapAlign::Start))
+    .child(page(2).snap_align(SnapAlign::Start).snap_stop_always())
+```
+
+- `SnapStrictness::Mandatory` always lands on a snap position.
+  `SnapStrictness::Proximity` only snaps when the container settled within half a viewport (at
+  most 200 logical pixels) of one.
+- `SnapAlign::Start`, `Center`, and `End` are inline-relative: in an RTL container `Start` is the
+  right edge.
+- `snap_stop_always()` forbids a gesture from passing over that child: a fling that started before
+  it and ended after it lands on it instead.
+
+Snapping resolves **at the end of a scroll**, never during it:
+
+- On platforms that report gesture phases, the native momentum end phase resolves immediately.
+- A plain wheel without phases arms one bounded settle deadline (90 ms) that each further delta
+  pushes back.
+- Releasing a scrollbar thumb resolves immediately, through the same programmatic entry point a
+  keyboard or scroll-into-view movement uses.
+
+The container then travels to its target over 220 ms through the existing motion machinery, using
+exact deadlines: one deadline for the settle, one for the end of the travel, and none afterwards.
+A window that has finished snapping is fully settled and sleeps in `ControlFlow::Wait`. With
+animations disabled or reduced motion on, the target is applied in one step instead.
+
+Snap geometry is rebuilt in place by the geometry pass that already walks the tree, bounded by
+`MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW` (256) and `MAX_SCROLL_SNAP_POINTS_PER_WINDOW` (4096). At
+most one settle and one travel exist per window at a time, because a window has one pointer.

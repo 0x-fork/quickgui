@@ -1,5 +1,8 @@
 use super::*;
-use crate::{BoxShadow, Color, FontFeatureTag, HighlightStyle, StyledText};
+use crate::{
+    BoxShadow, Color, FontFeatureTag, HighlightStyle, Hyphens, MAX_TEXT_SHADOW_SAMPLES,
+    OverflowWrap, StyledText, TextDirection, TextRun, TextShadow, TextTransform, WordBreak,
+};
 #[cfg(target_os = "macos")]
 use crate::{
     CustomShader, CustomShaderPrimitive, Image, ImagePrimitive, PathBuilder, PathPrimitive, Svg,
@@ -605,6 +608,7 @@ fn text_layout_keys_allow_reflow_only_for_width_changes() {
         text_overflow: None,
         line_clamp: None,
         shaping: TextShaping::Advanced,
+        extras: TextShapingExtras::from_style(&TextStyle::default()),
         scale: 2.0,
     };
     let mut narrower = key.clone();
@@ -1673,4 +1677,347 @@ fn inset_shadow_uses_a_spread_contracting_translated_hole() {
     assert_eq!(instance.geometry, [10.0, 20.0, 100.0, 50.0]);
     assert_eq!(instance.subject, [17.0, 28.0, 90.0, 40.0]);
     assert_eq!(instance.params, [SHAPE_MODE_INSET_SHADOW, 3.0, 8.0, 4.0]);
+}
+
+fn shaped_line_width(font_system: &mut FontSystem, content: &str, style: &TextStyle) -> f32 {
+    let mut buffer = Buffer::new(
+        font_system,
+        Metrics::new(style.font_size, style.line_height),
+    );
+    configure_text_buffer(&mut buffer, font_system, content, style, None, None, 1.0);
+    buffer
+        .layout_runs()
+        .map(|run| run.line_w)
+        .fold(0.0_f32, f32::max)
+}
+
+#[test]
+fn letter_and_word_spacing_add_exact_logical_advance() {
+    let mut font_system = fixture_font_system();
+    let content = "ab cd ef";
+    let base = TextStyle::new(20.0, Color::WHITE)
+        .family(FontFamily::named("Inter"))
+        .wrap(TextWrap::None);
+    let plain = shaped_line_width(&mut font_system, content, &base);
+
+    // Eight clusters each gain 2 logical pixels of tracking.
+    let tracked = shaped_line_width(&mut font_system, content, &base.clone().letter_spacing(2.0));
+    assert!(
+        (tracked - (plain + 16.0)).abs() < 0.5,
+        "tracked {tracked} should be 16 wider than {plain}"
+    );
+
+    // Only the two spaces gain word spacing.
+    let spaced = shaped_line_width(&mut font_system, content, &base.clone().word_spacing(5.0));
+    assert!(
+        (spaced - (plain + 10.0)).abs() < 0.5,
+        "word spaced {spaced} should be 10 wider than {plain}"
+    );
+
+    // Both spacings are part of the retained shaping key.
+    let extras = TextShapingExtras::from_style(&base.clone().letter_spacing(2.0));
+    assert_ne!(extras, TextShapingExtras::from_style(&base));
+    assert_ne!(
+        extras,
+        TextShapingExtras::from_style(&base.clone().word_spacing(2.0))
+    );
+}
+
+#[test]
+fn a_forced_base_direction_orders_a_neutral_run_against_the_content() {
+    // Digits and punctuation only: the Unicode bidirectional algorithm has no strong character to
+    // derive a paragraph direction from, so the declared base direction decides it.
+    const NEUTRAL: &str = "12 - 34";
+    // A digit run between Hebrew words: its visual placement depends on the paragraph level.
+    const MIXED: &str = "\u{05d0}\u{05d1} 12 \u{05d2}\u{05d3}";
+
+    fn shaped(
+        font_system: &mut FontSystem,
+        content: &str,
+        style: &TextStyle,
+    ) -> (bool, Vec<usize>) {
+        let mut buffer = Buffer::new(
+            font_system,
+            Metrics::new(style.font_size, style.line_height),
+        );
+        configure_text_buffer(&mut buffer, font_system, content, style, None, None, 1.0);
+        let run = buffer
+            .layout_runs()
+            .next()
+            .expect("the run shapes at least one line");
+        (
+            run.rtl,
+            run.glyphs.iter().map(|glyph| glyph.start).collect(),
+        )
+    }
+
+    let mut font_system = fixture_font_system();
+    let base = TextStyle::new(16.0, Color::WHITE)
+        .family(FontFamily::named("Noto Sans Hebrew"))
+        .wrap(TextWrap::None);
+
+    // Neutral content follows whichever base direction was declared.
+    assert!(!shaped(&mut font_system, NEUTRAL, &base).0);
+    assert!(
+        shaped(
+            &mut font_system,
+            NEUTRAL,
+            &base.clone().direction(TextDirection::Rtl)
+        )
+        .0
+    );
+    assert!(
+        !shaped(
+            &mut font_system,
+            NEUTRAL,
+            &base.clone().direction(TextDirection::Ltr)
+        )
+        .0
+    );
+
+    // Forcing a direction on mixed content reorders its visual runs.
+    let (rtl_flag, rtl_order) = shaped(
+        &mut font_system,
+        MIXED,
+        &base.clone().direction(TextDirection::Rtl),
+    );
+    let (ltr_flag, ltr_order) = shaped(
+        &mut font_system,
+        MIXED,
+        &base.clone().direction(TextDirection::Ltr),
+    );
+    assert!(rtl_flag);
+    assert!(!ltr_flag);
+    assert_ne!(rtl_order, ltr_order);
+
+    assert_ne!(
+        TextShapingExtras::from_style(&base.clone().direction(TextDirection::Rtl)),
+        TextShapingExtras::from_style(&base)
+    );
+}
+
+#[test]
+fn text_transform_shapes_the_mapped_string_and_keeps_source_indices() {
+    let content: Arc<str> = Arc::from("straße road");
+    let style = TextStyle::new(16.0, Color::WHITE)
+        .family(FontFamily::named("Inter"))
+        .wrap(TextWrap::None)
+        .text_transform(TextTransform::Uppercase);
+    let projection = project_text_content(&content, None, &style);
+
+    assert_eq!(projection.content.as_ref(), "STRASSE ROAD");
+    // The one character whose case mapping changes length snaps to a real source boundary; every
+    // other display index maps back exactly.
+    assert_eq!(projection.display_to_original(0), 0);
+    assert_eq!(projection.display_to_original(3), 3);
+    assert_eq!(
+        projection.display_to_original("STRASSE".len()),
+        "straße".len()
+    );
+    assert_eq!(
+        projection.display_to_original(projection.content.len()),
+        content.len()
+    );
+    assert_eq!(
+        projection.original_to_display(content.len()),
+        projection.content.len()
+    );
+    assert_eq!(projection.display_ranges_for_original(0..3), vec![0..3]);
+
+    // Capitalization only touches the first character of each word.
+    let capitalized = project_text_content(
+        &content,
+        None,
+        &style.clone().text_transform(TextTransform::Capitalize),
+    );
+    assert_eq!(capitalized.content.as_ref(), "Straße Road");
+    assert_eq!(capitalized.display_to_original(7), 7);
+}
+
+#[test]
+fn soft_hyphens_are_removed_unless_manual_hyphenation_is_requested() {
+    let content: Arc<str> = Arc::from("Kraft\u{00ad}fahrzeug");
+    let base = TextStyle::new(16.0, Color::WHITE)
+        .family(FontFamily::named("Inter"))
+        .wrap(TextWrap::Word);
+
+    let stripped = project_text_content(&content, None, &base);
+    assert_eq!(stripped.content.as_ref(), "Kraftfahrzeug");
+    // Indices after the removed character still land on source boundaries.
+    assert_eq!(stripped.display_to_original("Kraft".len()), "Kraft".len());
+    assert_eq!(
+        stripped.display_to_original(stripped.content.len()),
+        content.len()
+    );
+
+    let manual = project_text_content(&content, None, &base.clone().hyphens(Hyphens::Manual));
+    assert_eq!(manual.content.as_ref(), content.as_ref());
+    assert_eq!(manual.display_to_original(9), 9);
+
+    // Content without a soft hyphen keeps the identity projection and every truncation path.
+    let plain: Arc<str> = Arc::from("Kraftfahrzeug");
+    assert!(!rewrites_text_content(&plain, &base));
+    assert!(rewrites_text_content(&content, &base));
+}
+
+#[test]
+fn word_break_and_overflow_wrap_map_onto_cosmic_wrap_modes() {
+    let base = TextStyle::new(16.0, Color::WHITE);
+    assert_eq!(cosmic_wrap(&base), Wrap::Word);
+    assert_eq!(cosmic_wrap(&base.clone().wrap(TextWrap::None)), Wrap::None);
+    assert_eq!(
+        cosmic_wrap(&base.clone().word_break(WordBreak::BreakAll)),
+        Wrap::Glyph
+    );
+    assert_eq!(
+        cosmic_wrap(&base.clone().word_break(WordBreak::KeepAll)),
+        Wrap::Word
+    );
+    assert_eq!(
+        cosmic_wrap(&base.clone().overflow_wrap(OverflowWrap::Anywhere)),
+        Wrap::Glyph
+    );
+    assert_eq!(
+        cosmic_wrap(&base.clone().overflow_wrap(OverflowWrap::BreakWord)),
+        Wrap::WordOrGlyph
+    );
+    // `word-break` wins over `overflow-wrap`, and `wrap(None)` wins over both.
+    assert_eq!(
+        cosmic_wrap(
+            &base
+                .clone()
+                .word_break(WordBreak::KeepAll)
+                .overflow_wrap(OverflowWrap::Anywhere)
+        ),
+        Wrap::Word
+    );
+    assert_eq!(
+        cosmic_wrap(
+            &base
+                .clone()
+                .wrap(TextWrap::None)
+                .overflow_wrap(OverflowWrap::Anywhere)
+        ),
+        Wrap::None
+    );
+
+    // A long word only breaks once the mode allows it.
+    let mut font_system = fixture_font_system();
+    let content = "Kraftfahrzeughaftpflichtversicherung";
+    let narrow = TextStyle::new(14.0, Color::WHITE).family(FontFamily::named("Inter"));
+    let mut normal = Buffer::new(&mut font_system, Metrics::new(14.0, 18.0));
+    configure_text_buffer(
+        &mut normal,
+        &mut font_system,
+        content,
+        &narrow,
+        None,
+        Some(60.0),
+        1.0,
+    );
+    let mut broken = Buffer::new(&mut font_system, Metrics::new(14.0, 18.0));
+    configure_text_buffer(
+        &mut broken,
+        &mut font_system,
+        content,
+        &narrow.clone().word_break(WordBreak::BreakAll),
+        None,
+        Some(60.0),
+        1.0,
+    );
+    assert_eq!(normal.layout_runs().count(), 1);
+    assert!(broken.layout_runs().count() > 1);
+}
+
+#[test]
+fn overline_geometry_sits_above_the_baseline_and_joins_the_shaping_key() {
+    let mut font_system = fixture_font_system();
+    let style = TextStyle::new(20.0, Color::WHITE)
+        .family(FontFamily::named("Inter"))
+        .wrap(TextWrap::None)
+        .overline_color(Color::rgb8(255, 0, 0));
+    assert!(style.has_decorations());
+
+    let mut buffer = Buffer::new(&mut font_system, Metrics::new(20.0, 26.0));
+    configure_text_buffer(
+        &mut buffer,
+        &mut font_system,
+        "Overlined",
+        &style,
+        None,
+        None,
+        1.0,
+    );
+    let geometry = collect_styled_text_geometry(&buffer, &[], &style, 1.0, 0.0..26.0, None);
+    let decoration = geometry
+        .decorations
+        .first()
+        .copied()
+        .expect("an overline is emitted");
+    assert_eq!(decoration.color, Color::rgb8(255, 0, 0));
+    let baseline = buffer
+        .layout_runs()
+        .next()
+        .map(|run| run.line_y)
+        .expect("one shaped line");
+    assert!(
+        decoration.rect.y < baseline,
+        "the overline at {} must sit above the baseline at {baseline}",
+        decoration.rect.y
+    );
+
+    assert_ne!(
+        TextShapingExtras::from_style(&style),
+        TextShapingExtras::from_style(&TextStyle::new(20.0, Color::WHITE))
+    );
+}
+
+#[test]
+fn a_text_shadow_paints_bounded_offset_copies_beneath_the_run() {
+    let content: Arc<str> = Arc::from("shadowed");
+    let bounds = Rect::new(10.0, 20.0, 200.0, 30.0);
+    let sharp = TextStyle::new(16.0, Color::WHITE).text_shadow(TextShadow::new(
+        3.0,
+        4.0,
+        0.0,
+        Color::rgba8(0, 0, 0, 255),
+    ));
+
+    let mut scene = Scene::new();
+    scene.push_text(TextRun::new(
+        TextId::new(1),
+        content.clone(),
+        bounds,
+        sharp.clone(),
+    ));
+    let runs = scene.text_runs();
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0].bounds, Rect::new(13.0, 24.0, 200.0, 30.0));
+    assert_eq!(runs[0].style.color, Color::rgba8(0, 0, 0, 255));
+    assert!(runs[0].style.shadow.is_none());
+    assert_eq!(runs[1].bounds, bounds);
+    assert_eq!(runs[1].style.color, Color::WHITE);
+
+    // A blur radius is approximated with a bounded number of extra copies.
+    let blurred = TextStyle::new(16.0, Color::WHITE).text_shadow(TextShadow::new(
+        3.0,
+        4.0,
+        8.0,
+        Color::rgba8(0, 0, 0, 255),
+    ));
+    let mut scene = Scene::new();
+    scene.push_text(TextRun::new(TextId::new(1), content, bounds, blurred));
+    assert_eq!(scene.text_runs().len(), MAX_TEXT_SHADOW_SAMPLES + 1);
+
+    // Shadows are purely visual and never split the retained shaping cache.
+    assert_eq!(
+        TextShapingExtras::from_style(&sharp),
+        TextShapingExtras::from_style(&TextStyle::new(16.0, Color::WHITE))
+    );
+
+    // Offsets and blur are clamped to their exported bounds.
+    let clamped = TextShadow::new(f32::INFINITY, -1e9, f32::NAN, Color::BLACK);
+    assert_eq!(clamped.offset_x, 0.0);
+    assert_eq!(clamped.offset_y, -TextShadow::MAX_OFFSET);
+    assert_eq!(clamped.blur, 0.0);
 }

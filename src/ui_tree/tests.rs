@@ -130,6 +130,7 @@ fn assign_runtime_ids(element: &mut Element) {
     }
 }
 
+mod direction_sticky_snap;
 mod drag_selection;
 mod focus_accessibility;
 mod layout_motion;

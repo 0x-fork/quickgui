@@ -42,6 +42,8 @@ impl UiTree {
             visible_tooltip: None,
             tooltip_overlay: None,
             scroll_regions: Vec::with_capacity(8),
+            scroll_snap_geometry: ScrollSnapGeometry::default(),
+            scroll_snap: ScrollSnapState::default(),
             scrollbar_drag: None,
             scrollbar_states: HashMap::with_capacity(8),
             hovered_scrollbar: None,
@@ -235,6 +237,7 @@ impl UiTree {
         let mut style_transition_count = 0;
         validate_style_transition_count(&root, &mut style_transition_count)?;
         validate_container_query_limits(&root)?;
+        validate_sticky_limits(&root)?;
         collect_explicit_ids(&root, &mut self.seen_ids)?;
         let inherited = TextStyle::default();
         let root_node = build_layout_node(
@@ -245,6 +248,7 @@ impl UiTree {
             0,
             &inherited,
             true,
+            Direction::Ltr,
         )?;
         self.root = Some(root);
         self.root_node = Some(root_node);
@@ -632,7 +636,9 @@ impl UiTree {
     /// This never drives an animation loop: it returns true once, when a visible scrollbar needs
     /// its final hide repaint.
     pub(crate) fn advance_scrollbars(&mut self, now: Instant) -> bool {
-        let mut changed = false;
+        // Scroll snapping shares this one-shot deadline pump: it is not an animation loop, and
+        // both its settle and its bounded travel clear themselves once resolved.
+        let mut changed = self.advance_scroll_snap(now);
         for state in self.scrollbar_states.values_mut() {
             if !state.hovered
                 && !state.dragging
@@ -650,6 +656,7 @@ impl UiTree {
             .values()
             .filter(|state| !state.hovered && !state.dragging)
             .filter_map(|state| state.visible_until)
+            .chain(self.next_scroll_snap_deadline())
             .min()
     }
 

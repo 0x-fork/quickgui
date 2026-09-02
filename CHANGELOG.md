@@ -119,6 +119,30 @@ All notable user-facing changes to QuickGUI are recorded here.
 - Added `examples/text_services.rs` and new `docs/text-and-forms.md` sections covering spelling,
   dictionary lookup, find and replace, and application undo.
 
+- Added inherited right-to-left layout with `direction(Direction::Rtl)`, `rtl()`, and `ltr()`.
+  In an RTL subtree in-flow positions, physical horizontal insets, and margins mirror inside the
+  parent's content box for paint, hit testing, and accessibility together; horizontal scrolling
+  starts at the right edge and inverts physical wheel deltas; and shaping uses a forced RTL base
+  paragraph direction. Added the logical edge helpers `ps`, `pe`, `ms`, `me`, `border_s`, and
+  `border_e`, plus the `TextAlign::Start`/`TextAlign::End` alignments behind `text_start()` and
+  `text_end()`. Focus order still follows document order and caret movement stays logical.
+- Added CSS-style sticky positioning with `sticky()`, `sticky_top`, `sticky_bottom`, `sticky_left`,
+  and `sticky_right`. A sticky element pins inside the nearest scroll container and releases at its
+  parent's end, changing painted geometry and hit regions only, and never triggering a relayout.
+  Bounded by the new `MAX_STICKY_ELEMENTS_PER_WINDOW`.
+- Added scroll snapping with `scroll_snap_x`, `scroll_snap_y`, `snap_align`, and
+  `snap_stop_always`. Snapping resolves at a native momentum end phase, at a bounded settle
+  deadline for wheels without phases, at scrollbar release, or programmatically, then animates to
+  the target on exact deadlines and leaves the window fully settled. Bounded by the new
+  `MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW` and `MAX_SCROLL_SNAP_POINTS_PER_WINDOW`.
+- Added extended text styling: `text_shadow` (exact offset and color, bounded blur approximation),
+  `letter_spacing`, `word_spacing`, `text_transform` with `uppercase`/`lowercase`/`capitalize` for
+  non-editable text, `overline`, `word_break`, `overflow_wrap`, `hyphens`, and `text_direction`.
+  Every new property is part of the canonical retained shaping key; case mapping and soft-hyphen
+  removal keep selection, copy, and accessibility mapped to the original string, and editable
+  inputs are never transformed.
+- Added `overflow_x_scroll()` and `overflow_scroll()`.
+
 ### macOS
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
   and the AppKit standard binding for a role, and hidden items set `NSMenuItem.hidden` and no
@@ -156,6 +180,7 @@ All notable user-facing changes to QuickGUI are recorded here.
   conversion at the AppKit boundary.
 - Added the macOS dictionary popover through `NSView showDefinitionForAttributedString:atPoint:` on
   the key window's content view, positioned at a window-local logical point.
+
 
 ### JavaScript tooling
 - Added `CrashReporter` and `Metrics` to `@quickgui/native`, both Promise-backed by `AsyncTask`,

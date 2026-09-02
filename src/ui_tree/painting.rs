@@ -225,7 +225,7 @@ pub(super) fn collect_layout_hit_regions(
     scroll_offsets: &mut HashMap<ElementId, Vector>,
     selectable_text_indices: &HashMap<ElementId, usize>,
     hit_regions: &mut Vec<HitRegion>,
-    parent_origin: Point,
+    parent_origin: LayoutFrame,
     parent_clip: Rect,
     viewport: Rect,
     parent_layer: PaintLayerKey,
@@ -238,12 +238,7 @@ pub(super) fn collect_layout_hit_regions(
         .taffy_node
         .expect("layout nodes are assigned before hit testing");
     let layout = taffy.layout(node)?;
-    let natural = Rect::new(
-        parent_origin.x + layout.location.x,
-        parent_origin.y + layout.location.y,
-        layout.size.width,
-        layout.size.height,
-    );
+    let natural = positioned_rect(element, parent_origin, layout);
     let bounds = if let Some(anchor) = element.anchor {
         let anchor_bounds = match anchor.target {
             AnchorTarget::Element(target) => {
@@ -342,7 +337,14 @@ pub(super) fn collect_layout_hit_regions(
         scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
     }
 
-    let child_origin = Point::new(bounds.x - scroll.x, bounds.y - scroll.y);
+    let child_origin = child_frame(
+        element,
+        layout,
+        bounds,
+        scroll,
+        is_scrollable,
+        parent_origin,
+    );
     for child in &element.children {
         collect_layout_hit_regions(
             child,
@@ -390,7 +392,7 @@ pub(super) fn paint_element(
     selectable_text_indices: &HashMap<ElementId, usize>,
     selectable_text_regions: &mut Vec<SelectableTextRegion>,
     static_text_selection: Option<StaticTextSelection>,
-    parent_origin: Point,
+    parent_origin: LayoutFrame,
     parent_clip: Rect,
     viewport: Rect,
     parent_layer: PaintLayerKey,
@@ -404,12 +406,7 @@ pub(super) fn paint_element(
         .taffy_node
         .expect("layout nodes are assigned before paint");
     let layout = taffy.layout(node)?;
-    let natural = Rect::new(
-        parent_origin.x + layout.location.x,
-        parent_origin.y + layout.location.y,
-        layout.size.width,
-        layout.size.height,
-    );
+    let natural = positioned_rect(element, parent_origin, layout);
     let bounds = if let Some(anchor) = element.anchor {
         let anchor_bounds = match anchor.target {
             AnchorTarget::Element(target) => {
@@ -1181,7 +1178,14 @@ pub(super) fn paint_element(
         scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
     }
 
-    let child_origin = Point::new(bounds.x - scroll.x, bounds.y - scroll.y);
+    let child_origin = child_frame(
+        element,
+        layout,
+        bounds,
+        scroll,
+        scroll_max_offset.is_some(),
+        parent_origin,
+    );
     for child in &element.children {
         paint_element(
             child,
@@ -1231,6 +1235,7 @@ pub(super) fn paint_element(
         *source_order = (*source_order).saturating_add(1);
         let region = ScrollRegion {
             id: element.runtime_id,
+            rtl: false,
             bounds: text_bounds,
             scrollbar_bounds,
             clip: text_clip,
@@ -1282,6 +1287,7 @@ pub(super) fn paint_element(
         *source_order = (*source_order).saturating_add(1);
         let region = ScrollRegion {
             id: element.runtime_id,
+            rtl: element.resolved_direction.is_rtl(),
             bounds,
             scrollbar_bounds: bounds,
             clip: child_clip,

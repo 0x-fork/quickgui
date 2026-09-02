@@ -25,12 +25,17 @@ pub(super) fn accessibility_scroll_translation(
         && (element.layout.overflow.x == Overflow::Scroll
             || element.layout.overflow.y == Overflow::Scroll);
     if overflow_scroll {
-        return Some(
-            scroll_offsets
-                .get(&element.runtime_id)
-                .copied()
-                .unwrap_or_default(),
-        );
+        let offset = scroll_offsets
+            .get(&element.runtime_id)
+            .copied()
+            .unwrap_or_default();
+        // A right-to-left container stores its offset along the inline axis, whose start edge is
+        // on the right, so its painted content moves the opposite way to a left-to-right one.
+        return Some(if element.resolved_direction.is_rtl() {
+            Vector::new(-offset.x, offset.y)
+        } else {
+            offset
+        });
     }
     element.virtual_scroll.as_ref().map(|virtual_scroll| {
         let offset_y = scroll_offsets

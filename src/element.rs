@@ -37,6 +37,12 @@ use crate::{
     },
 };
 
+// Direction, sticky positioning, scroll snapping, and extended text styling.
+use crate::{
+    Hyphens, OverflowWrap, TextDirection, TextShadow, TextTransform, WordBreak,
+    scene::sane_text_spacing,
+};
+
 #[cfg(target_os = "macos")]
 use crate::native_view::MacNativeView;
 #[cfg(target_os = "macos")]
@@ -1227,6 +1233,16 @@ pub(crate) struct TypographyStyle {
     pub underline_thickness: Option<f32>,
     pub strikethrough: Option<bool>,
     pub strikethrough_color: Option<Option<Color>>,
+    pub overline: Option<bool>,
+    pub overline_color: Option<Option<Color>>,
+    pub direction: Option<TextDirection>,
+    pub letter_spacing: Option<f32>,
+    pub word_spacing: Option<f32>,
+    pub transform: Option<Option<TextTransform>>,
+    pub word_break: Option<WordBreak>,
+    pub overflow_wrap: Option<OverflowWrap>,
+    pub hyphens: Option<Hyphens>,
+    pub shadow: Option<Option<TextShadow>>,
     pub align: Option<TextAlign>,
     pub wrap: Option<TextWrap>,
     pub text_overflow: Option<TextOverflow>,
@@ -1271,6 +1287,16 @@ impl TypographyStyle {
             strikethrough_color: self
                 .strikethrough_color
                 .unwrap_or(inherited.strikethrough_color),
+            overline: self.overline.unwrap_or(inherited.overline),
+            overline_color: self.overline_color.unwrap_or(inherited.overline_color),
+            direction: self.direction.unwrap_or(inherited.direction),
+            letter_spacing: self.letter_spacing.unwrap_or(inherited.letter_spacing),
+            word_spacing: self.word_spacing.unwrap_or(inherited.word_spacing),
+            transform: self.transform.unwrap_or(inherited.transform),
+            word_break: self.word_break.unwrap_or(inherited.word_break),
+            overflow_wrap: self.overflow_wrap.unwrap_or(inherited.overflow_wrap),
+            hyphens: self.hyphens.unwrap_or(inherited.hyphens),
+            shadow: self.shadow.unwrap_or(inherited.shadow),
             align: self.align.unwrap_or(inherited.align),
             wrap: self.wrap.unwrap_or(inherited.wrap),
             text_overflow: self
@@ -1356,6 +1382,20 @@ pub struct Element {
     pub(crate) restore_focus: Option<FocusHandle>,
     pub(crate) children: Vec<Element>,
     pub(crate) taffy_node: Option<taffy::NodeId>,
+    /// Declared inline layout direction; inherited when absent.
+    pub(crate) direction: Option<Direction>,
+    /// Direction resolved against the ancestor chain during layout build.
+    pub(crate) resolved_direction: Direction,
+    /// Direction-relative padding and border overrides resolved during layout build.
+    pub(crate) logical_insets: Option<Box<LogicalInsets>>,
+    /// CSS-style sticky offsets relative to the nearest scroll container.
+    pub(crate) sticky: Option<StickyInsets>,
+    /// Scroll-snap strictness declared by this scroll container.
+    pub(crate) scroll_snap: Option<ScrollSnapStyle>,
+    /// Snap alignment declared by a scroll-snap child.
+    pub(crate) snap_align: Option<SnapAlign>,
+    /// Whether a scroll gesture may never skip past this snap child.
+    pub(crate) snap_stop_always: bool,
 }
 
 /// Create a container element.
@@ -1516,6 +1556,8 @@ pub fn native_view(view: &NSView) -> Element {
 }
 
 mod construction_layout;
+pub use construction_layout::{Direction, SnapAlign, SnapStrictness, StickyInsets};
+pub(crate) use construction_layout::{LogicalInsets, ScrollSnapStyle};
 mod interaction;
 mod state;
 mod style;

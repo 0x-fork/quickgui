@@ -502,3 +502,90 @@ task, or observer and performs no work while nothing is undone; it also implemen
 application with a single undoable surface can store it with `cx.set_global(..)`.
 
 See `cargo run --release --example text_services`.
+
+## Extended text styling
+
+Every helper below inherits through the subtree like the other typography helpers and is resolved
+once per layout build, so retained shaping keys stay canonical: two runs share a shaped buffer only
+when their spacing, direction, case mapping, and break behavior all agree.
+
+### Text shadow
+
+```rust
+text("Soft drop shadow").text_shadow(2.0, 2.0, 6.0, Color::rgba8(0, 0, 0, 200))
+```
+
+The offset and color are exact: the run is painted a second time at the offset, in the shadow
+color, beneath the real text. The blur radius is **approximated** — a non-zero blur paints four
+extra copies spread over the radius at 45% alpha instead of a true Gaussian blur. A shadow adds at
+most `MAX_TEXT_SHADOW_SAMPLES` (5) text primitives to the display list, reuses the run's shaping
+key, and never splits the shaping cache. Offsets are clamped to `TextShadow::MAX_OFFSET` (256) and
+the blur to `TextShadow::MAX_BLUR` (64). In a styled-text run, spans that declare their own
+highlight color keep that color in the shadow copy, so shadows suit uniformly colored text.
+`text_shadow_none()` clears an inherited shadow.
+
+### Letter and word spacing
+
+`letter_spacing(px)` adds advance after every glyph cluster; `word_spacing(px)` adds advance after
+every `U+0020` word separator (other whitespace is untouched, matching the CSS default separator
+set for Latin text). Both take logical pixels, may be negative, and are clamped to
+`MAX_TEXT_SPACING` (256).
+
+### Case mapping
+
+`text_transform(TextTransform::Uppercase | Lowercase | Capitalize)`, with the `uppercase()`,
+`lowercase()`, and `capitalize()` shorthands, rewrites the shaping input only.
+
+- Selection, copy, accessibility, and every index an application observes keep pointing at the
+  **original** string. Characters whose case mapping changes their UTF-8 length (`ß` → `SS`) map to
+  the nearest real boundary of the source string instead of a byte inside it.
+- Editable `text_input` content is **never** transformed: an input's shaped buffer must stay
+  byte-identical to its controlled value so caret indices, IME state, and clipboard round-trips
+  agree. A `text_transform` inherited by an input is dropped during the layout build.
+- A case mapping is not composed with a custom truncation affix (`TextOverflow::Truncate` with a
+  string other than `…`): such a run keeps its full shaped layout and relies on clipping. The
+  default `…` ellipsis is unaffected, because Cosmic Text applies it inside the shaped buffer.
+- `text_transform_none()` clears an inherited transform.
+
+### Overline
+
+`overline()` and `overline_color(color)` draw a line on the font's ascent, alongside the existing
+`underline()` and `strikethrough()` decorations. All three participate in the same decoration
+geometry pass and the same shaping key.
+
+### Breaking and wrapping
+
+`word_break(WordBreak::Normal | BreakAll | KeepAll)` and
+`overflow_wrap(OverflowWrap::Normal | Anywhere | BreakWord)` map onto Cosmic Text's wrap modes:
+
+| declaration | resulting mode |
+| --- | --- |
+| `whitespace_nowrap()` / `TextWrap::None` | no wrapping (wins over everything below) |
+| `word_break(BreakAll)` | break between any two characters |
+| `word_break(KeepAll)` | ordinary word wrapping |
+| `overflow_wrap(Anywhere)` | break between any two characters |
+| `overflow_wrap(BreakWord)` | word wrapping, falling back to characters for an unfittable word |
+| neither | the element's `TextWrap` |
+
+`word_break` wins over `overflow_wrap`, as in CSS. `KeepAll` is approximated: QuickGUI never breaks
+inside a CJK run in that mode, but it also does not add the extra CJK break opportunities `Normal`
+allows.
+
+### Soft hyphens
+
+`hyphens(Hyphens::Manual)` keeps author-placed soft hyphens (`U+00AD`) in the shaping input, where
+they act as break opportunities. `Hyphens::None`, the default, removes them before shaping, so a
+soft hyphen never renders and never introduces a break; the removal is mapped, so selection and
+copy still address the original string including its soft hyphens.
+
+Known limitation: whether a visible hyphen is drawn at a break in `Manual` mode comes from the
+font's own `U+00AD` glyph. QuickGUI does not substitute a hyphen at the break, and does not
+suppress a font-provided one mid-line. Automatic hyphenation (`hyphens: auto`) is not implemented.
+
+### Direction and alignment
+
+`text_start()` and `text_end()` align to the inline start and end of the resolved layout
+direction; `TextAlign::Start` is the default, and it resolves to `Left` in LTR and `Right` in RTL.
+`text_direction(TextDirection::Ltr | Rtl | Auto)` forces the base paragraph direction used when
+shaping bidirectional content without mirroring layout. `Element::rtl()` already sets it for its
+subtree. See "Layout direction" in `docs/view-api.md`.

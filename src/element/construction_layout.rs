@@ -1,5 +1,82 @@
 use super::*;
 
+/// Inline layout direction of an element and everything it contains.
+///
+/// Direction is inherited: declaring [`Element::rtl`] on a container flips every descendant that
+/// does not declare its own direction. Mirroring is applied to painted geometry and hit testing
+/// after layout, so it never changes intrinsic sizing or the document order used by focus.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum Direction {
+    /// Left to right.
+    #[default]
+    Ltr,
+    /// Right to left.
+    Rtl,
+}
+
+impl Direction {
+    /// Whether this direction lays inline content out from the right edge.
+    pub const fn is_rtl(self) -> bool {
+        matches!(self, Self::Rtl)
+    }
+}
+
+/// Direction-relative padding and border overrides.
+///
+/// These are resolved into physical edges once, while the layout tree is built, so Taffy only
+/// ever sees resolved physical values.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct LogicalInsets {
+    pub padding_start: Option<f32>,
+    pub padding_end: Option<f32>,
+    pub margin_start: Option<f32>,
+    pub margin_end: Option<f32>,
+    pub border_start: Option<f32>,
+    pub border_end: Option<f32>,
+}
+
+/// CSS-style sticky offsets, relative to the nearest ancestor scroll container.
+///
+/// An absent edge does not pin. Offsets are logical pixels measured inward from that edge of the
+/// scroll container's viewport.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StickyInsets {
+    pub top: Option<f32>,
+    pub right: Option<f32>,
+    pub bottom: Option<f32>,
+    pub left: Option<f32>,
+}
+
+impl StickyInsets {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.top.is_none() && self.right.is_none() && self.bottom.is_none() && self.left.is_none()
+    }
+}
+
+/// How strictly a scroll container must land on one of its snap positions.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SnapStrictness {
+    /// The container always rests on a snap position.
+    Mandatory,
+    /// The container snaps only when a snap position is already close to where it settled.
+    Proximity,
+}
+
+/// Where a scroll-snap child aligns inside its scroll container's viewport.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SnapAlign {
+    Start,
+    Center,
+    End,
+}
+
+/// Per-axis scroll-snap strictness declared by a scroll container.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub(crate) struct ScrollSnapStyle {
+    pub x: Option<SnapStrictness>,
+    pub y: Option<SnapStrictness>,
+}
+
 impl Element {
     pub(super) fn container() -> Self {
         let default_text = TextStyle::default();
@@ -68,6 +145,13 @@ impl Element {
             restore_focus: None,
             children: Vec::new(),
             taffy_node: None,
+            direction: None,
+            resolved_direction: Direction::Ltr,
+            logical_insets: None,
+            sticky: None,
+            scroll_snap: None,
+            snap_align: None,
+            snap_stop_always: false,
         }
     }
 
@@ -1002,6 +1086,152 @@ impl Element {
             top: LengthPercentage::length(top),
             bottom: LengthPercentage::length(bottom),
         };
+        self
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Layout direction, sticky positioning, and scroll snapping.
+    // ---------------------------------------------------------------------------------------
+
+    /// Set the inline layout direction for this element and its subtree.
+    ///
+    /// Direction is inherited by every descendant that does not declare its own. In an RTL
+    /// subtree, in-flow child positions, physical `left`/`right` insets, and horizontal margins
+    /// are mirrored inside the parent's content box after layout, and the horizontal scroll
+    /// origin moves to the right edge. Padding and borders stay physical; use [`Self::ps`],
+    /// [`Self::pe`], [`Self::border_s`], and [`Self::border_e`] for direction-relative edges.
+    pub fn direction(mut self, direction: Direction) -> Self {
+        self.direction = Some(direction);
+        self
+    }
+
+    /// Lay this subtree out right to left.
+    pub fn rtl(self) -> Self {
+        self.direction(Direction::Rtl)
+    }
+
+    /// Lay this subtree out left to right.
+    pub fn ltr(self) -> Self {
+        self.direction(Direction::Ltr)
+    }
+
+    fn logical_insets_mut(&mut self) -> &mut LogicalInsets {
+        self.logical_insets
+            .get_or_insert_with(|| Box::new(LogicalInsets::default()))
+    }
+
+    /// Padding on the inline start edge (left in LTR, right in RTL).
+    pub fn ps(mut self, value: f32) -> Self {
+        self.logical_insets_mut().padding_start = Some(value);
+        self
+    }
+
+    /// Padding on the inline end edge (right in LTR, left in RTL).
+    pub fn pe(mut self, value: f32) -> Self {
+        self.logical_insets_mut().padding_end = Some(value);
+        self
+    }
+
+    /// Margin on the inline start edge.
+    pub fn ms(mut self, value: f32) -> Self {
+        self.logical_insets_mut().margin_start = Some(value);
+        self
+    }
+
+    /// Margin on the inline end edge.
+    pub fn me(mut self, value: f32) -> Self {
+        self.logical_insets_mut().margin_end = Some(value);
+        self
+    }
+
+    /// Border width on the inline start edge.
+    pub fn border_s(mut self, value: f32) -> Self {
+        self.logical_insets_mut().border_start = Some(value);
+        self
+    }
+
+    /// Border width on the inline end edge.
+    pub fn border_e(mut self, value: f32) -> Self {
+        self.logical_insets_mut().border_end = Some(value);
+        self
+    }
+
+    /// Pin this element inside the nearest ancestor scroll container while it scrolls.
+    ///
+    /// Offsets are declared with [`Self::sticky_top`], [`Self::sticky_bottom`],
+    /// [`Self::sticky_left`], and [`Self::sticky_right`]. A sticky element keeps the space it
+    /// occupies in flow: sticking only shifts painted geometry and hit testing, never layout, so
+    /// scrolling never triggers a relayout. The shift is clamped to the element's parent box, so
+    /// a pinned header releases when its section scrolls away, exactly like CSS `position:
+    /// sticky`.
+    pub fn sticky(mut self) -> Self {
+        self.sticky.get_or_insert_with(StickyInsets::default);
+        self
+    }
+
+    /// Pin this element `value` logical pixels below the scroll container's top edge.
+    pub fn sticky_top(mut self, value: f32) -> Self {
+        self.sticky.get_or_insert_with(StickyInsets::default).top = Some(value);
+        self
+    }
+
+    /// Pin this element `value` logical pixels above the scroll container's bottom edge.
+    pub fn sticky_bottom(mut self, value: f32) -> Self {
+        self.sticky.get_or_insert_with(StickyInsets::default).bottom = Some(value);
+        self
+    }
+
+    /// Pin this element `value` logical pixels right of the scroll container's left edge.
+    pub fn sticky_left(mut self, value: f32) -> Self {
+        self.sticky.get_or_insert_with(StickyInsets::default).left = Some(value);
+        self
+    }
+
+    /// Pin this element `value` logical pixels left of the scroll container's right edge.
+    pub fn sticky_right(mut self, value: f32) -> Self {
+        self.sticky.get_or_insert_with(StickyInsets::default).right = Some(value);
+        self
+    }
+
+    /// Scroll this container horizontally when its content overflows.
+    pub fn overflow_x_scroll(mut self) -> Self {
+        self.layout.overflow = TaffyPoint {
+            x: Overflow::Scroll,
+            y: Overflow::Hidden,
+        };
+        self
+    }
+
+    /// Scroll this container on both axes when its content overflows.
+    pub fn overflow_scroll(mut self) -> Self {
+        self.layout.overflow = TaffyPoint {
+            x: Overflow::Scroll,
+            y: Overflow::Scroll,
+        };
+        self
+    }
+
+    /// Snap horizontal scrolling of this container to its children's snap positions.
+    pub fn scroll_snap_x(mut self, strictness: SnapStrictness) -> Self {
+        self.scroll_snap.get_or_insert_default().x = Some(strictness);
+        self
+    }
+
+    /// Snap vertical scrolling of this container to its children's snap positions.
+    pub fn scroll_snap_y(mut self, strictness: SnapStrictness) -> Self {
+        self.scroll_snap.get_or_insert_default().y = Some(strictness);
+        self
+    }
+
+    /// Declare where this child aligns when its scroll container snaps.
+    pub fn snap_align(mut self, align: SnapAlign) -> Self {
+        self.snap_align = Some(align);
+        self
+    }
+
+    /// Forbid a scroll gesture from passing over this snap child without stopping on it.
+    pub fn snap_stop_always(mut self) -> Self {
+        self.snap_stop_always = true;
         self
     }
 }

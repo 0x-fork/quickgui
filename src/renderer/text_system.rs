@@ -528,6 +528,7 @@ impl TextSystem {
             text_overflow: style.text_overflow.clone(),
             line_clamp: style.line_clamp,
             shaping: style.shaping,
+            extras: TextShapingExtras::from_style(style),
             scale,
         };
 
@@ -654,6 +655,7 @@ impl TextSystem {
             text_overflow: style.text_overflow.clone(),
             line_clamp: style.line_clamp,
             shaping: style.shaping,
+            extras: TextShapingExtras::from_style(style),
             scale,
         };
         self.update_shared_text_entry_for_key(key, style, scale, frame)

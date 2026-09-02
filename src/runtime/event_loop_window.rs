@@ -1096,6 +1096,20 @@ impl Runtime {
                             return;
                         }
                     }
+                    // A momentum end phase is the exact moment a scroll-snap container must
+                    // resolve. Requesting the settle here shortens the bounded fallback deadline
+                    // instead of adding a second timer.
+                    if matches!(event.phase, GesturePhase::Ended | GesturePhase::Cancelled) {
+                        let state = self
+                            .window
+                            .as_mut()
+                            .expect("window retained after callback");
+                        if state.ui.scroll_gesture_ended(Instant::now())
+                            && state.scheduler.invalidate()
+                        {
+                            state.window.request_redraw();
+                        }
+                    }
                     let delta = event.delta.pixel_delta(self.config.line_scroll_pixels);
                     if delta.is_zero() {
                         return;
