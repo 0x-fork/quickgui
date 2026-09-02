@@ -194,6 +194,20 @@ All notable user-facing changes to QuickGUI are recorded here.
   `Image::crop`, `Image::to_png`, `Image::to_jpeg`, `Image::template`, and
   `Image::with_representations`, all bounded by existing and new `MAX_*` image constants.
 - Added `AppRunner::tray_icon_bounds` and `TrayIconImage::template`.
+- Added `AppRunner`-level window stacking, input-policy, and application-shell commands, so an
+  externally pumped host reaches `move_window_to_top`, `move_window_above`,
+  `set_window_ignore_mouse_events`, `set_window_enabled`, `set_window_aspect_ratio`,
+  `set_window_button_visibility`, `set_window_always_on_top`, `set_activation_policy`,
+  `activate_application`, `hide_application`/`unhide_application`, `request_dock_attention`/
+  `cancel_dock_attention`, `set_dock_visible`, `set_secure_keyboard_entry`, `beep`,
+  `applications_folder_support`, `move_to_applications_folder`, `is_application_packaged`, and
+  `exit_with_code` under the identical queue bounds as the `EventContext` forms.
+- Added `AppRunner::set_window_menus`, `AppRunner::use_application_menus_for_window`, and
+  `AppRunner::show_window_popup_menu`. Per-window menus and native popup menus need the runtime's
+  window-scoped `EventContext`, so each is declared as a deferred request that the runtime resolves
+  inside its own effect cycle. Both queues carry the public `MAX_PENDING_NATIVE_POPUP_MENUS` bound,
+  the popup response completes when the menu closes, and a popup declared for a window that closes
+  first completes with `PlatformError::Unavailable`.
 
 ### macOS
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
@@ -266,7 +280,31 @@ All notable user-facing changes to QuickGUI are recorded here.
   TypeScript `.deb` writer; an NSIS installer with shortcuts, uninstall registration, protocol
   handlers, and an Authenticode `signtool` hook; and `quickgui build --mas` for Mac App Store
   `.pkg` submission.
-
+- Added window lifecycle events to `@quickgui/native`: `window.on("minimize" | "restore" |
+  "maximize" | "unmaximize" | "enterFullScreen" | "leaveFullScreen" | "readyToShow" |
+  "occlusionChange" | "levelChange" | "willResize" | "willMove" | "resize" | "move" | "focus" |
+  "blur" | "appearanceChange")`, plus `app.on("activate" | "deactivate")`. `willResize` and
+  `willMove` are notifications: the core answers the window manager synchronously, so the narrowing
+  is declared ahead with `window.setResizePolicy({ aspectRatio, minimum, maximum, snap })` and
+  `window.setMovePolicy({ keepOnScreen })` instead of blocking on a JavaScript callback.
+- Added `window.setAlwaysOnTop(flag, level?)` accepting the Electron level names over the extended
+  core `WindowLevel`, `window.moveTop()`, `window.moveAbove(other)`,
+  `window.setIgnoreMouseEvents(ignore, { forward })`, `window.setEnabled`,
+  `window.setAspectRatio(ratio | null)`, `window.setWindowButtonVisibility`, `window.setHasShadow`,
+  and `window.getRestoreState()` round-tripping into `WindowOptions.restoreState`.
+- Added the application shell to `app`: `setActivationPolicy`, `focus({ steal })`, `hide()`,
+  `show()`, `dock.bounce(type)`/`dock.cancelBounce(id)`/`dock.hide()`/`dock.show()`/
+  `dock.isVisible()` alongside the dock badge, icon, and menu, `setSecureKeyboardEntryEnabled`,
+  `isInApplicationsFolder()`, `moveToApplicationsFolder()`, `isPackaged`, and `Shell.beep()`.
+  `app.exit(code)` now maps onto the core's `exit_with_code`. Mutations the operating system applies
+  at once stay fire-and-forget; operations with a native answer resolve a Promise from an
+  asynchronous event.
+- Added `Menu.popup(items, { window, x, y })`, which resolves after the popup closes and releases
+  its item callbacks, and `window.setMenu(definitions | null)`. Both reuse `serializeNativeMenu`, so
+  popup and per-window items keep the same roles, marks, icons, accelerators, and bounds as the
+  application menu.
+- Added application-level `SpellChecker.learnWord(word)` and `SpellChecker.ignoreWord(word)` over
+  the installed core spell-check provider, bounded to 256 UTF-8 bytes.
 
 - Added `window.onCloseRequested(listener)`, `window.destroy()`, and `window.on("closed" |
   "closeRequested", …)`. While at least one listener is registered the window declares close

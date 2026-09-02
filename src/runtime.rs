@@ -51,7 +51,7 @@ use winit::{dpi::PhysicalPosition, raw_window_handle::HasWindowHandle};
     target_os = "openbsd",
     target_os = "netbsd"
 ))]
-use crate::platform::PlatformDialogId;
+use crate::platform::{PlatformDialogId, PlatformResponder};
 use crate::{
     AboutPanelOptions, Action, ActionListener, AnyAction, AppInfo, AppPaths, AssetError, Assets,
     Color, ColorScheme, CursorStyle, Display, DisplayEvent, DisplayId, Displays, Element,
@@ -1027,6 +1027,11 @@ struct Runtime {
     /// Bounded window lifecycle events produced while every window is deactivated.
     pending_window_events: Vec<(WindowHandle, Event)>,
     external_menus: Option<Vec<Menu>>,
+    /// Per-window native menu replacements declared through [`AppRunner`].
+    external_window_menus: VecDeque<ExternalWindowMenus>,
+    /// Native popup-menu requests declared through [`AppRunner`].
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    external_popup_menus: VecDeque<ExternalPopupMenuRequest>,
     pending_initial_open_urls: Option<OpenUrls>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     pending_native_popup_menus: HashMap<u64, PendingNativePopupMenu>,
@@ -1151,6 +1156,28 @@ struct WindowRegistryCache {
 struct PendingNativePopupMenu {
     window: WindowHandle,
     actions: Vec<MenuAction>,
+    /// Completed once the native popup closes, so an externally pumped host can await it.
+    responder: Option<PlatformResponder<()>>,
+}
+
+/// One `AppRunner`-scoped native popup-menu request awaiting a window-scoped effect cycle.
+///
+/// `EventContext::show_native_popup_menu` needs the runtime's current window, which only exists
+/// inside an effect cycle. An embedding host therefore declares the request here and the runtime
+/// resolves it during the next `process_window_commands` turn.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) struct ExternalPopupMenuRequest {
+    pub(crate) window: WindowHandle,
+    pub(crate) menu: Menu,
+    pub(crate) position: Option<Point>,
+    pub(crate) responder: PlatformResponder<()>,
+}
+
+/// One `AppRunner`-scoped per-window native menu replacement awaiting an effect cycle.
+pub(crate) struct ExternalWindowMenus {
+    pub(crate) window: WindowHandle,
+    /// `Some(menus)` overrides the window; `None` restores inheritance of the application menus.
+    pub(crate) menus: Option<Vec<Menu>>,
 }
 
 #[derive(Clone, Debug)]

@@ -21,7 +21,9 @@ pub(super) struct NativeMenuAction(pub(super) u32);
 
 impl View for NativeView {
     fn event(&mut self, event: &Event, cx: &mut EventContext) {
-        if !matches!(event, Event::CloseRequested) {
+        // Input events reach this callback on every frame; resolving the hosted window id costs a
+        // map lookup, so the hot path leaves before it.
+        if !crate::runtime::is_hosted_window_event(event) {
             return;
         }
         let window = cx.window_handle().map_or(self.window, |handle| {
@@ -33,6 +35,14 @@ impl View for NativeView {
                     .unwrap_or(self.window)
             })
         });
+        // Window lifecycle notifications and the declared-ahead resize/move constraints live in
+        // the hosted runtime module; everything else falls through to close interception.
+        if crate::runtime::handle_window_lifecycle_event(window, event, cx, &self.events) {
+            return;
+        }
+        if !matches!(event, Event::CloseRequested) {
+            return;
+        }
         // Interception was declared before the native decision, so the veto is answered here and
         // JavaScript completes the close later with an explicit command.
         if !crate::runtime::intercepts_close(window) {

@@ -106,6 +106,18 @@ pub(crate) fn application_menus(json: &str) -> Result<Vec<Menu>, String> {
         .collect()
 }
 
+/// Parse one native popup menu, encoded exactly like a single application menu.
+///
+/// Reusing the application-menu grammar keeps popup action ids, roles, icons, accelerators, and
+/// every bound identical to the menu bar's.
+pub(crate) fn popup_menu(json: &str) -> Result<Menu, String> {
+    let mut menus = application_menus(json)?;
+    if menus.len() != 1 {
+        return Err("a native popup menu must declare exactly one root menu".to_owned());
+    }
+    Ok(menus.remove(0))
+}
+
 fn add_text(value: &str, total: &mut usize) -> Result<(), String> {
     if value.is_empty() || value.contains('\0') || value.len() > 16 * 1024 {
         return Err("native menu labels must be nonempty, bounded, and NUL-free".to_owned());

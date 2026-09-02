@@ -21,7 +21,13 @@ impl Runtime {
         }
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         if let RuntimeEvent::NativePopupMenuClosed(popup_id) = &event {
-            self.pending_native_popup_menus.remove(popup_id);
+            if let Some(responder) = self
+                .pending_native_popup_menus
+                .remove(popup_id)
+                .and_then(|popup| popup.responder)
+            {
+                responder.complete(Ok(()));
+            }
             return;
         }
         if let RuntimeEvent::OpenUrls(urls) = &event {
@@ -330,9 +336,11 @@ impl Runtime {
             RuntimeEvent::DockMenuAction(_) => unreachable!("handled before window routing"),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             RuntimeEvent::NativePopupMenuAction(popup_id, action_id) => {
-                let item = self
-                    .pending_native_popup_menus
-                    .remove(&popup_id)
+                let popup = self.pending_native_popup_menus.remove(&popup_id);
+                if let Some(responder) = popup.as_ref().and_then(|popup| popup.responder.clone()) {
+                    responder.complete(Ok(()));
+                }
+                let item = popup
                     .and_then(|popup| popup.actions.into_iter().nth(action_id))
                     .filter(|item| !item.disabled)
                     .map(|item| (item.action, item.os_action));

@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::runtime::effects::queue_deferred_menu_request;
+
 impl AppRunner {
     /// Request an orderly application exit after native windows and owned resources close.
     pub fn exit(&mut self) -> bool {
@@ -820,6 +822,276 @@ impl AppRunner {
         item: ClipboardItem,
     ) -> Result<(), crate::ClipboardError> {
         self.runtime.clipboard.write(ClipboardTarget::Find, item)
+    }
+
+    /// Raise one mounted window to the front of its stacking level without activating the app.
+    pub fn move_window_to_top(&mut self, handle: WindowHandle) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::MoveToTop(handle))
+    }
+
+    /// Order one mounted window immediately above another retained window.
+    pub fn move_window_above(
+        &mut self,
+        handle: WindowHandle,
+        other: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        if handle == other {
+            return Err(WindowCommandError::InvalidWindowOrder);
+        }
+        self.ensure_window_command_target(other)?;
+        self.queue_window_command(handle, WindowCommand::MoveAbove(handle, other))
+    }
+
+    /// Let clicks pass through one window to whatever is behind it.
+    ///
+    /// `forward` keeps pointer motion flowing to the window; it is ignored when `ignore` is false.
+    pub fn set_window_ignore_mouse_events(
+        &mut self,
+        handle: WindowHandle,
+        ignore: bool,
+        forward: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetIgnoreMouseEvents(handle, ignore, ignore && forward),
+        )
+    }
+
+    /// Block or restore every native input event for one window.
+    pub fn set_window_enabled(
+        &mut self,
+        handle: WindowHandle,
+        enabled: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::SetWindowEnabled(handle, enabled))
+    }
+
+    /// Constrain one window's live resizing to a `width:height` content ratio.
+    pub fn set_window_aspect_ratio(
+        &mut self,
+        handle: WindowHandle,
+        ratio: Option<Size>,
+    ) -> Result<(), WindowCommandError> {
+        validate_window_aspect_ratio(ratio)?;
+        self.queue_window_command(handle, WindowCommand::SetAspectRatio(handle, ratio))
+    }
+
+    /// Show or hide the macOS close/minimize/zoom buttons on one window.
+    pub fn set_window_button_visibility(
+        &mut self,
+        handle: WindowHandle,
+        visible: bool,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(
+            handle,
+            WindowCommand::SetWindowButtonVisibility(handle, visible),
+        )
+    }
+
+    /// Raise or restore one window's stacking level.
+    ///
+    /// `level` names the level applied while `always_on_top` is true; `None` uses
+    /// [`WindowLevel::AlwaysOnTop`]. Turning it off returns the window to [`WindowLevel::Normal`].
+    pub fn set_window_always_on_top(
+        &mut self,
+        handle: WindowHandle,
+        always_on_top: bool,
+        level: Option<WindowLevel>,
+    ) -> Result<(), WindowCommandError> {
+        let level = if always_on_top {
+            level.unwrap_or(WindowLevel::AlwaysOnTop)
+        } else {
+            WindowLevel::Normal
+        };
+        self.queue_window_command(handle, WindowCommand::SetWindowLevel(handle, Some(level)))
+    }
+
+    /// Change how the application appears in the Dock and application switcher.
+    pub fn set_activation_policy(
+        &mut self,
+        policy: crate::ActivationPolicy,
+    ) -> Result<PlatformResponse<()>, PlatformError> {
+        let (request, response) = PlatformRequest::set_activation_policy(policy);
+        self.queue_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Bring the application forward, optionally stealing focus from the frontmost application.
+    pub fn activate_application(&mut self, force: bool) -> Result<(), PlatformError> {
+        self.queue_platform_request(PlatformRequest::ActivateApplication { force })
+    }
+
+    /// Hide every window of this application.
+    pub fn hide_application(&mut self) -> Result<(), PlatformError> {
+        self.queue_platform_request(PlatformRequest::HideApplication)
+    }
+
+    /// Reveal an application hidden by [`Self::hide_application`].
+    pub fn unhide_application(&mut self) -> Result<(), PlatformError> {
+        self.queue_platform_request(PlatformRequest::UnhideApplication)
+    }
+
+    /// Ask for the user's attention, bouncing the macOS Dock tile.
+    pub fn request_dock_attention(
+        &mut self,
+        attention: crate::DockAttention,
+    ) -> Result<PlatformResponse<crate::DockAttentionRequest>, PlatformError> {
+        let (request, response) = PlatformRequest::request_dock_attention(attention);
+        self.queue_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Stop an in-flight critical Dock bounce.
+    pub fn cancel_dock_attention(
+        &mut self,
+        request: crate::DockAttentionRequest,
+    ) -> Result<(), PlatformError> {
+        self.queue_platform_request(PlatformRequest::CancelDockAttention(request))
+    }
+
+    /// Show or hide the Dock tile.
+    pub fn set_dock_visible(
+        &mut self,
+        visible: bool,
+    ) -> Result<PlatformResponse<()>, PlatformError> {
+        let (request, response) = PlatformRequest::set_dock_visible(visible);
+        self.queue_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Route keystrokes straight to this process, bypassing input monitoring.
+    pub fn set_secure_keyboard_entry(&mut self, enabled: bool) -> Result<(), PlatformError> {
+        self.queue_platform_request(PlatformRequest::SetSecureKeyboardEntry(enabled))
+    }
+
+    /// Play the operating system's alert sound.
+    pub fn beep(&mut self) -> Result<(), PlatformError> {
+        self.queue_platform_request(PlatformRequest::Beep)
+    }
+
+    /// Whether this process can relocate its bundle into an `/Applications` directory.
+    pub fn applications_folder_support(&self) -> crate::ApplicationsFolderSupport {
+        #[cfg(target_os = "macos")]
+        {
+            crate::macos_shell::applications_folder_support()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            crate::ApplicationsFolderSupport::default()
+        }
+    }
+
+    /// Move the running application bundle into `/Applications`.
+    pub fn move_to_applications_folder(&mut self) -> Result<PlatformResponse<bool>, PlatformError> {
+        let (request, response) = PlatformRequest::move_to_applications_folder();
+        self.queue_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Whether this process is running from an installed application bundle.
+    pub fn is_application_packaged(&self) -> bool {
+        crate::is_application_packaged()
+    }
+
+    /// Request an orderly application exit that ends with an explicit process exit code.
+    pub fn exit_with_code(&mut self, code: i32) -> bool {
+        if !self.exit() {
+            return false;
+        }
+        self.runtime.exit_code = Some(code);
+        true
+    }
+
+    /// Replace one window's native menu declaration on the next event-loop turn.
+    ///
+    /// The replacement is applied inside the runtime's window-scoped effect cycle, exactly where
+    /// `EventContext::set_window_menus` applies one, so macOS menu-bar installation and Windows
+    /// per-window attachment follow the identical path.
+    pub fn set_window_menus(
+        &mut self,
+        handle: WindowHandle,
+        menus: impl IntoIterator<Item = Menu>,
+    ) -> Result<(), PlatformError> {
+        let menus = menus.into_iter().collect::<Vec<_>>();
+        validate_menus(&menus).map_err(|_| PlatformError::InvalidMenu)?;
+        self.queue_window_menus(handle, Some(menus))
+    }
+
+    /// Remove one window's override and inherit the application's native menus again.
+    pub fn use_application_menus_for_window(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), PlatformError> {
+        self.queue_window_menus(handle, None)
+    }
+
+    /// Open a platform-native popup menu owned by one mounted window.
+    ///
+    /// `position` is in window-local logical pixels from the top-left; `None` uses the current
+    /// native cursor position. The returned response completes once the popup closes, whether an
+    /// item was chosen or the user dismissed it.
+    pub fn show_window_popup_menu(
+        &mut self,
+        handle: WindowHandle,
+        menu: Menu,
+        position: Option<Point>,
+    ) -> Result<PlatformResponse<()>, PlatformError> {
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            let _ = (handle, menu, position);
+            Err(PlatformError::Unsupported)
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            if !matches!(self.status, AppRunStatus::Continue)
+                || !self.runtime.window_handles.contains_key(&handle)
+            {
+                return Err(PlatformError::Unavailable);
+            }
+            if position.is_some_and(|position| validate_window_position(position).is_err()) {
+                return Err(PlatformError::InvalidMenuPosition);
+            }
+            validate_menus(std::slice::from_ref(&menu)).map_err(|_| PlatformError::InvalidMenu)?;
+            let (responder, response) = crate::platform::response_channel();
+            queue_deferred_menu_request(
+                &mut self.runtime.external_popup_menus,
+                ExternalPopupMenuRequest {
+                    window: handle,
+                    menu,
+                    position,
+                    responder,
+                },
+            )?;
+            self.runtime
+                .event_proxy
+                .send_event(RuntimeEvent::ExternalCommandsReady)
+                .map_err(|_| PlatformError::Unavailable)?;
+            Ok(response)
+        }
+    }
+
+    fn queue_window_menus(
+        &mut self,
+        handle: WindowHandle,
+        menus: Option<Vec<Menu>>,
+    ) -> Result<(), PlatformError> {
+        if !matches!(self.status, AppRunStatus::Continue)
+            || !self.runtime.window_handles.contains_key(&handle)
+        {
+            return Err(PlatformError::Unavailable);
+        }
+        queue_deferred_menu_request(
+            &mut self.runtime.external_window_menus,
+            ExternalWindowMenus {
+                window: handle,
+                menus,
+            },
+        )?;
+        self.runtime
+            .event_proxy
+            .send_event(RuntimeEvent::ExternalCommandsReady)
+            .map_err(|_| PlatformError::Unavailable)?;
+        Ok(())
     }
 
     fn queue_window_command(

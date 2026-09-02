@@ -204,8 +204,31 @@ impl Runtime {
                 .unwrap_or((None, None));
             self.foreground_tasks.cancel_window(handle);
             #[cfg(any(target_os = "macos", target_os = "windows"))]
-            self.pending_native_popup_menus
-                .retain(|_, popup| popup.window != handle);
+            {
+                let closing = self
+                    .pending_native_popup_menus
+                    .extract_if(|_, popup| popup.window == handle)
+                    .filter_map(|(_, popup)| popup.responder)
+                    .collect::<Vec<_>>();
+                for responder in closing {
+                    responder.complete(Err(crate::PlatformError::Unavailable));
+                }
+                self.external_popup_menus.retain(|request| {
+                    if request.window == handle {
+                        request
+                            .responder
+                            .complete(Err(crate::PlatformError::Unavailable));
+                        false
+                    } else {
+                        true
+                    }
+                });
+                self.external_window_menus
+                    .retain(|request| request.window != handle);
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            self.external_window_menus
+                .retain(|request| request.window != handle);
             #[cfg(target_os = "macos")]
             if let Some(dialog) = self.active_platform_dialogs.remove(&Some(handle)) {
                 dialog.native.cancel();
@@ -444,6 +467,19 @@ impl Runtime {
                 && !self.replace_menus(event_loop, menus)
             {
                 return;
+            }
+
+            while let Some(request) = self.external_window_menus.pop_front() {
+                if !self.replace_external_window_menus(event_loop, request) {
+                    return;
+                }
+            }
+
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            while let Some(request) = self.external_popup_menus.pop_front() {
+                if !self.show_external_native_popup_menu(event_loop, request) {
+                    return;
+                }
             }
 
             for handle in std::mem::take(&mut self.invalidate_requests) {

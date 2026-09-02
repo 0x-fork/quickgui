@@ -152,18 +152,7 @@ impl From<WindowState> for NativeWindowState {
             decorated: state.decorated,
             shadow: state.shadow,
             content_protected: state.content_protected,
-            window_level: match state.window_level {
-                WindowLevel::AlwaysOnBottom => "always-on-bottom",
-                WindowLevel::Normal => "normal",
-                WindowLevel::AlwaysOnTop => "always-on-top",
-                WindowLevel::Floating => "floating",
-                WindowLevel::ModalPanel => "modal-panel",
-                WindowLevel::MainMenu => "main-menu",
-                WindowLevel::Status => "status",
-                WindowLevel::PopUpMenu => "pop-up-menu",
-                WindowLevel::ScreenSaver => "screen-saver",
-            }
-            .to_owned(),
+            window_level: window_level_name(state.window_level).to_owned(),
             skip_taskbar: state.skip_taskbar,
             visible_on_all_workspaces: state.visible_on_all_workspaces,
             opacity: f64::from(state.opacity),
@@ -430,6 +419,16 @@ hosted_system_task!(
     Option<NativeClipboardItem>,
     expect_clipboard
 );
+hosted_system_task!(
+    HostedWindowRestoreStateCommandTask,
+    NativeWindowRestoreState,
+    expect_window_restore_state
+);
+hosted_system_task!(
+    HostedApplicationsFolderSupportCommandTask,
+    NativeApplicationsFolderSupport,
+    expect_applications_folder_support
+);
 
 macro_rules! hosted_task_constructor {
     ($name:ident, $task:ident) => {
@@ -466,6 +465,95 @@ hosted_task_constructor!(
 );
 hosted_task_constructor!(hosted_window_state_command, HostedWindowStateCommandTask);
 hosted_task_constructor!(hosted_clipboard_command, HostedClipboardCommandTask);
+hosted_task_constructor!(
+    hosted_window_restore_state_command,
+    HostedWindowRestoreStateCommandTask
+);
+hosted_task_constructor!(
+    hosted_applications_folder_support_command,
+    HostedApplicationsFolderSupportCommandTask
+);
+
+pub(super) fn expect_window_restore_state(
+    result: SystemCommandResult,
+) -> Result<NativeWindowRestoreState> {
+    match result {
+        SystemCommandResult::WindowRestoreState(state) => Ok(state),
+        _ => Err(Error::from_reason(
+            "native system command returned the wrong result",
+        )),
+    }
+}
+
+pub(super) fn expect_applications_folder_support(
+    result: SystemCommandResult,
+) -> Result<NativeApplicationsFolderSupport> {
+    match result {
+        SystemCommandResult::ApplicationsFolderSupport(support) => Ok(support),
+        _ => Err(Error::from_reason(
+            "native system command returned the wrong result",
+        )),
+    }
+}
+
+/// Parse one JavaScript application-service name that resolves asynchronously.
+pub(crate) fn parse_app_service_action(
+    action: &str,
+    value: Option<String>,
+) -> std::result::Result<AppServiceAction, String> {
+    match action {
+        "set-activation-policy" => Ok(AppServiceAction::SetActivationPolicy(
+            match value.as_deref() {
+                Some("regular") => quickgui::ActivationPolicy::Regular,
+                Some("accessory") => quickgui::ActivationPolicy::Accessory,
+                Some("prohibited") => quickgui::ActivationPolicy::Prohibited,
+                Some(value) => return Err(format!("unknown activation policy `{value}`")),
+                None => return Err("set-activation-policy requires a value".to_owned()),
+            },
+        )),
+        "request-dock-attention" => Ok(AppServiceAction::RequestDockAttention(
+            match value.as_deref() {
+                Some("critical") => quickgui::DockAttention::Critical,
+                None | Some("informational" | "info") => quickgui::DockAttention::Informational,
+                Some(value) => return Err(format!("unknown dock attention `{value}`")),
+            },
+        )),
+        "set-dock-visible" => Ok(AppServiceAction::SetDockVisible(parse_bool(value)?)),
+        "move-to-applications-folder" => Ok(AppServiceAction::MoveToApplicationsFolder),
+        action => Err(format!("unknown native app service `{action}`")),
+    }
+}
+
+/// Parse one fire-and-forget JavaScript application-shell mutation.
+pub(crate) fn parse_app_mutation_action(
+    action: &str,
+    value: Option<String>,
+) -> std::result::Result<AppMutationAction, String> {
+    match action {
+        "activate" => Ok(AppMutationAction::Activate(
+            value.as_deref() == Some("true"),
+        )),
+        "hide" => Ok(AppMutationAction::Hide),
+        "unhide" => Ok(AppMutationAction::Unhide),
+        "cancel-dock-attention" => Ok(AppMutationAction::CancelDockAttention(
+            value
+                .ok_or_else(|| "cancel-dock-attention requires a value".to_owned())?
+                .parse::<i64>()
+                .map_err(|_| "a dock attention request id must be an integer".to_owned())?,
+        )),
+        "set-secure-keyboard-entry" => Ok(AppMutationAction::SetSecureKeyboardEntry(parse_bool(
+            value,
+        )?)),
+        "beep" => Ok(AppMutationAction::Beep),
+        "learn-word" => Ok(AppMutationAction::LearnWord(validate_spell_word(
+            value.ok_or_else(|| "learn-word requires a value".to_owned())?,
+        )?)),
+        "ignore-word" => Ok(AppMutationAction::IgnoreWord(validate_spell_word(
+            value.ok_or_else(|| "ignore-word requires a value".to_owned())?,
+        )?)),
+        action => Err(format!("unknown native app mutation `{action}`")),
+    }
+}
 
 pub(super) fn expect_displays(result: SystemCommandResult) -> Result<Vec<NativeDisplay>> {
     match result {
@@ -617,6 +705,98 @@ struct NativeTaskbarProgressPayload {
     progress: f32,
 }
 
+#[derive(Deserialize)]
+struct NativeIgnoreMouseEventsPayload {
+    ignore: bool,
+    forward: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct NativeAlwaysOnTopPayload {
+    flag: bool,
+    level: Option<String>,
+}
+
+/// Declared-ahead `WillResize` narrowing, as JavaScript encodes it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeResizePolicyPayload {
+    aspect_ratio: Option<f32>,
+    minimum: Option<NativeSizePayload>,
+    maximum: Option<NativeSizePayload>,
+    snap: Option<NativeSizePayload>,
+}
+
+/// Declared-ahead `WillMove` narrowing, as JavaScript encodes it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMovePolicyPayload {
+    keep_on_screen: Option<bool>,
+}
+
+/// Maximum logical extent accepted for a declared resize policy bound or grid step.
+const MAX_POLICY_DIMENSION: f32 = 32_768.0;
+
+pub(crate) fn parse_resize_policy(
+    json: &str,
+) -> std::result::Result<crate::runtime::WindowResizePolicy, String> {
+    let payload: NativeResizePolicyPayload =
+        serde_json::from_str(json).map_err(|error| format!("invalid resize policy: {error}"))?;
+    let dimension = |size: Option<NativeSizePayload>,
+                     label: &str|
+     -> std::result::Result<Option<(f32, f32)>, String> {
+        let Some(size) = size else { return Ok(None) };
+        if !(size.width.is_finite()
+            && size.height.is_finite()
+            && size.width > 0.0
+            && size.height > 0.0
+            && size.width <= MAX_POLICY_DIMENSION
+            && size.height <= MAX_POLICY_DIMENSION)
+        {
+            return Err(format!(
+                "a resize policy {label} must be finite, positive, and at most {MAX_POLICY_DIMENSION}"
+            ));
+        }
+        Ok(Some((size.width, size.height)))
+    };
+    let aspect_ratio = match payload.aspect_ratio {
+        None => None,
+        Some(ratio)
+            if ratio.is_finite() && ratio > 0.0 && ratio <= quickgui::MAX_WINDOW_ASPECT_RATIO =>
+        {
+            Some(ratio)
+        }
+        Some(_) => {
+            return Err(format!(
+                "a resize policy aspect ratio must be finite, positive, and at most {}",
+                quickgui::MAX_WINDOW_ASPECT_RATIO
+            ));
+        }
+    };
+    let policy = crate::runtime::WindowResizePolicy {
+        aspect_ratio,
+        minimum: dimension(payload.minimum, "minimum")?,
+        maximum: dimension(payload.maximum, "maximum")?,
+        snap: dimension(payload.snap, "grid step")?,
+    };
+    if let (Some(minimum), Some(maximum)) = (policy.minimum, policy.maximum)
+        && (minimum.0 > maximum.0 || minimum.1 > maximum.1)
+    {
+        return Err("a resize policy minimum cannot exceed its maximum".to_owned());
+    }
+    Ok(policy)
+}
+
+pub(crate) fn parse_move_policy(
+    json: &str,
+) -> std::result::Result<crate::runtime::WindowMovePolicy, String> {
+    let payload: NativeMovePolicyPayload =
+        serde_json::from_str(json).map_err(|error| format!("invalid move policy: {error}"))?;
+    Ok(crate::runtime::WindowMovePolicy {
+        keep_on_screen: payload.keep_on_screen.unwrap_or(false),
+    })
+}
+
 pub(crate) fn parse_window_action(
     action: &str,
     value: Option<String>,
@@ -662,17 +842,43 @@ pub(crate) fn parse_window_action(
         "set-content-protected" => Ok(WindowAction::SetContentProtected(parse_bool(value)?)),
         "set-window-level" => Ok(WindowAction::SetWindowLevel(match value.as_deref() {
             None | Some("automatic") => None,
-            Some("always-on-bottom") | Some("alwaysOnBottom") => Some(WindowLevel::AlwaysOnBottom),
-            Some("normal") => Some(WindowLevel::Normal),
-            Some("always-on-top") | Some("alwaysOnTop") => Some(WindowLevel::AlwaysOnTop),
-            Some("floating") | Some("floating") => Some(WindowLevel::Floating),
-            Some("modal-panel") | Some("modalPanel") => Some(WindowLevel::ModalPanel),
-            Some("main-menu") | Some("mainMenu") => Some(WindowLevel::MainMenu),
-            Some("status") | Some("status") => Some(WindowLevel::Status),
-            Some("pop-up-menu") | Some("popUpMenu") => Some(WindowLevel::PopUpMenu),
-            Some("screen-saver") | Some("screenSaver") => Some(WindowLevel::ScreenSaver),
-            Some(value) => return Err(format!("unknown window level `{value}`")),
+            Some(value) => Some(parse_window_level(value)?),
         })),
+        "move-top" => Ok(WindowAction::MoveTop),
+        "move-above" => {
+            let other = value
+                .ok_or_else(|| "move-above requires a value".to_owned())?
+                .parse::<u32>()
+                .map_err(|_| "move-above requires a native window id".to_owned())?;
+            Ok(WindowAction::MoveAbove(other))
+        }
+        "set-ignore-mouse-events" => {
+            let value: NativeIgnoreMouseEventsPayload =
+                parse_json_value(value, "set-ignore-mouse-events")?;
+            Ok(WindowAction::SetIgnoreMouseEvents(
+                value.ignore,
+                value.forward.unwrap_or(false),
+            ))
+        }
+        "set-enabled" => Ok(WindowAction::SetWindowEnabled(parse_bool(value)?)),
+        "set-aspect-ratio" => Ok(WindowAction::SetAspectRatio(parse_optional_size(value)?)),
+        "set-window-button-visibility" => {
+            Ok(WindowAction::SetWindowButtonVisibility(parse_bool(value)?))
+        }
+        "set-always-on-top" => {
+            let value: NativeAlwaysOnTopPayload = parse_json_value(value, "set-always-on-top")?;
+            Ok(WindowAction::SetAlwaysOnTop(
+                value.flag,
+                value.level.as_deref().map(parse_window_level).transpose()?,
+            ))
+        }
+        "set-menu" => Ok(WindowAction::SetMenu(value.filter(|menu| !menu.is_empty()))),
+        "set-resize-policy" => Ok(WindowAction::SetResizePolicy(
+            value.filter(|policy| !policy.is_empty()),
+        )),
+        "set-move-policy" => Ok(WindowAction::SetMovePolicy(
+            value.filter(|policy| !policy.is_empty()),
+        )),
         "set-focusable" => Ok(WindowAction::SetFocusable(parse_bool(value)?)),
         "set-skip-taskbar" => Ok(WindowAction::SetSkipTaskbar(parse_bool(value)?)),
         "set-visible-on-all-workspaces" => {
@@ -1019,5 +1225,116 @@ pub(super) fn parse_shell_action(
         "reveal-path" => Ok(ShellAction::RevealPath(PathBuf::from(value))),
         "trash-path" => Ok(ShellAction::TrashPath(PathBuf::from(value))),
         action => Err(format!("unknown native shell action `{action}`")),
+    }
+}
+
+impl From<quickgui::WindowRestoreState> for NativeWindowRestoreState {
+    fn from(state: quickgui::WindowRestoreState) -> Self {
+        Self {
+            x: f64::from(state.x),
+            y: f64::from(state.y),
+            width: f64::from(state.width),
+            height: f64::from(state.height),
+            maximized: state.maximized,
+            fullscreen: state.fullscreen,
+            display_id: state.display_id.map(|id| id.to_string()),
+            display_uuid: state
+                .display_uuid
+                .map(|bytes| quickgui::DisplayUuid::from_bytes(bytes).to_string()),
+            scale_factor: f64::from(state.scale_factor),
+        }
+    }
+}
+
+/// Parse the textual form of a display UUID back into its 16 bytes.
+fn parse_display_uuid(value: &str) -> std::result::Result<[u8; 16], String> {
+    let digits = value
+        .chars()
+        .filter(|character| *character != '-')
+        .collect::<String>();
+    if digits.len() != 32
+        || !digits
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err("a display uuid must be 32 hexadecimal digits".to_owned());
+    }
+    let mut bytes = [0_u8; 16];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16)
+            .map_err(|_| "a display uuid must be 32 hexadecimal digits".to_owned())?;
+    }
+    Ok(bytes)
+}
+
+/// Convert one JavaScript restore state into the validated core form.
+///
+/// Every field is re-validated by the core when it is applied, so a stale or hostile value can
+/// never place a window off every connected display.
+pub(crate) fn parse_window_restore_state(
+    state: &NativeWindowRestoreState,
+) -> std::result::Result<quickgui::WindowRestoreState, String> {
+    let finite = |value: f64, label: &str| -> std::result::Result<f32, String> {
+        let value = value as f32;
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(format!("a restore state {label} must be finite"))
+        }
+    };
+    Ok(quickgui::WindowRestoreState {
+        x: finite(state.x, "x")?,
+        y: finite(state.y, "y")?,
+        width: finite(state.width, "width")?,
+        height: finite(state.height, "height")?,
+        maximized: state.maximized,
+        fullscreen: state.fullscreen,
+        display_id: state
+            .display_id
+            .as_deref()
+            .map(|id| {
+                id.parse::<u64>().map_err(|_| {
+                    "a restore state display id must be a non-negative integer".to_owned()
+                })
+            })
+            .transpose()?,
+        display_uuid: state
+            .display_uuid
+            .as_deref()
+            .map(parse_display_uuid)
+            .transpose()?,
+        scale_factor: finite(state.scale_factor, "scale factor")?,
+    })
+}
+
+/// Stable JavaScript name for one core window stacking level.
+pub(crate) fn window_level_name(level: WindowLevel) -> &'static str {
+    match level {
+        WindowLevel::AlwaysOnBottom => "always-on-bottom",
+        WindowLevel::Normal => "normal",
+        WindowLevel::AlwaysOnTop => "always-on-top",
+        WindowLevel::Floating => "floating",
+        WindowLevel::ModalPanel => "modal-panel",
+        WindowLevel::MainMenu => "main-menu",
+        WindowLevel::Status => "status",
+        WindowLevel::PopUpMenu => "pop-up-menu",
+        WindowLevel::ScreenSaver => "screen-saver",
+    }
+}
+
+/// Parse one JavaScript window-level name, accepting kebab-case and Electron camelCase.
+pub(crate) fn parse_window_level(value: &str) -> std::result::Result<WindowLevel, String> {
+    match value {
+        "always-on-bottom" | "alwaysOnBottom" => Ok(WindowLevel::AlwaysOnBottom),
+        "normal" => Ok(WindowLevel::Normal),
+        "always-on-top" | "alwaysOnTop" => Ok(WindowLevel::AlwaysOnTop),
+        "floating" => Ok(WindowLevel::Floating),
+        "modal-panel" | "modalPanel" | "modal-panel-window" => Ok(WindowLevel::ModalPanel),
+        "main-menu" | "mainMenu" => Ok(WindowLevel::MainMenu),
+        "status" => Ok(WindowLevel::Status),
+        "pop-up-menu" | "popUpMenu" => Ok(WindowLevel::PopUpMenu),
+        "screen-saver" | "screenSaver" => Ok(WindowLevel::ScreenSaver),
+        "torn-off-menu" | "tornOffMenu" => Ok(WindowLevel::PopUpMenu),
+        value => Err(format!("unknown window level `{value}`")),
     }
 }

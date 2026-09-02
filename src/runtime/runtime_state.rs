@@ -102,6 +102,9 @@ impl Runtime {
             invalidate_requests: Vec::new(),
             window_commands: Vec::with_capacity(8),
             external_menus: None,
+            external_window_menus: VecDeque::with_capacity(2),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            external_popup_menus: VecDeque::with_capacity(2),
             pending_initial_open_urls,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             pending_native_popup_menus: HashMap::new(),

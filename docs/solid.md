@@ -543,13 +543,169 @@ console.log(state.nativeTabs.count, state.nativeTabs.selectedIndex);
 `availableFormats()`, `has(format)`, `readBuffer(format)`, `writeBuffer(format, data)`, and the
 macOS Find pasteboard through `readFindText()`/`writeFindText()`.
 
+## Window lifecycle events in JavaScript
+
+`window.on(type, listener)` returns a disposer and covers the core's window notifications:
+
+```ts
+import { Window, app } from "@quickgui/native";
+
+const window = new Window({ renderer, visible: false });
+
+window.on("readyToShow", () => window.show());
+window.on("minimize", () => pauseAnimations());
+window.on("restore", () => resumeAnimations());
+window.on("maximize", ({ window }) => remember(window));
+window.on("unmaximize", () => remember(window));
+window.on("enterFullScreen", () => hideChrome());
+window.on("leaveFullScreen", () => showChrome());
+window.on("occlusionChange", ({ occluded }) => setRenderingPaused(occluded));
+window.on("levelChange", ({ level }) => console.log(level));
+window.on("resize", ({ size }) => layout(size));
+window.on("move", ({ position }) => remember(position));
+window.on("focus", () => setActive(true));
+window.on("blur", () => setActive(false));
+window.on("appearanceChange", ({ appearance }) => setTheme(appearance));
+window.on("closed", ({ window }) => forget(window));
+
+app.on("activate", () => refresh());
+app.on("deactivate", () => flushDrafts());
+```
+
+`willResize` and `willMove` are **notifications**. The core has to answer the window manager on the
+application thread, and the hosted JavaScript boundary never blocks it, so the narrowing itself is
+declared ahead as a policy:
+
+```ts
+window.setResizePolicy({
+  aspectRatio: 16 / 9,
+  minimum: { width: 640, height: 360 },
+  maximum: { width: 3840, height: 2160 },
+  snap: { width: 8, height: 8 },
+});
+window.setMovePolicy({ keepOnScreen: true });
+
+window.on("willResize", ({ size }) => console.log("proposed", size));
+
+// Withdraw either policy with null.
+window.setResizePolicy(null);
+window.setMovePolicy(null);
+```
+
+The core applies the grid step first, then the aspect ratio, then the minimum and maximum, and
+answers `Event::WillResize` with `constrain_resize`. `keepOnScreen` clamps the proposed origin into
+the work area of the display that contains it through `constrain_move`.
+
+## Window stacking, input policy, and restore state in JavaScript
+
+```ts
+window.setAlwaysOnTop(true, "screenSaver"); // Electron level names, or QuickGUI's kebab-case ones
+window.setAlwaysOnTop(false); // back to "normal"
+window.moveTop();
+window.moveAbove(other);
+
+window.setIgnoreMouseEvents(true, { forward: true }); // clicks pass through, hover still arrives
+window.setEnabled(false); // visible and rendering, but no native input at all
+window.setAspectRatio({ width: 16, height: 9 });
+window.setAspectRatio(null);
+window.setWindowButtonVisibility(false);
+window.setHasShadow(true);
+
+const restoreState = await window.getRestoreState();
+localStorage.setItem("window", JSON.stringify(restoreState));
+```
+
+`getRestoreState()` returns the windowed restore rectangle, so a maximized or fullscreen window
+still persists the size it returns to, plus the display identity. Hand it back on the next launch:
+
+```ts
+const stored = localStorage.getItem("window");
+new Window({
+  renderer,
+  ...(stored ? { restoreState: JSON.parse(stored) } : {}),
+});
+```
+
+The core re-validates every field, so a stale or hostile value can never place a window off every
+connected display. `window.getState()` also reports `windowLevel`, `ignoreMouseEvents`,
+`aspectRatio`, and the other stacking and input fields.
+
+## Application shell in JavaScript
+
+```ts
+import { Shell, SpellChecker, app } from "@quickgui/native";
+
+await app.setActivationPolicy("accessory"); // "regular" | "accessory" | "prohibited"
+app.focus({ steal: true });
+app.hide();
+app.show();
+app.setSecureKeyboardEntryEnabled(true);
+Shell.beep();
+
+const bounce = await app.dock.bounce("critical");
+app.dock.cancelBounce(bounce);
+await app.dock.hide();
+await app.dock.show();
+app.dock.isVisible(); // the last visibility this process asked for
+app.dock.setBadge("3");
+app.dock.setIcon("./assets/dock.png");
+app.dock.setMenu({ label: "Dock", items: [{ label: "New Window", click: openWindow }] });
+
+if (app.isPackaged && !(await app.isInApplicationsFolder())) {
+  if (await app.moveToApplicationsFolder()) await app.relaunch();
+}
+
+await app.exit(2); // completes a held quit and exits with status 2
+
+SpellChecker.learnWord("quickgui");
+SpellChecker.ignoreWord("quickgui");
+```
+
+Mutations that the operating system applies immediately (`focus`, `hide`, `show`,
+`setSecureKeyboardEntryEnabled`, `Shell.beep`, `dock.cancelBounce`, `SpellChecker.*`) are
+fire-and-forget: nothing waits on the native main thread. Operations whose outcome the operating
+system reports (`setActivationPolicy`, `dock.bounce`, `dock.hide`/`dock.show`,
+`moveToApplicationsFolder`) return promises resolved by an asynchronous native event.
+
+## Popup menus and per-window menus in JavaScript
+
+`Menu.popup` reuses the application-menu item grammar, including roles, marks, icons, accelerators,
+and `hidden`. It resolves once the popup closes — whether an item ran or the user dismissed it — and
+releases the item callbacks with it.
+
+```ts
+import { Menu } from "@quickgui/native";
+
+await Menu.popup(
+  [
+    { label: "Copy", role: "copy" },
+    { type: "separator" },
+    { label: "Inspect", click: () => inspect(node) },
+  ],
+  { window, x: event.x, y: event.y },
+);
+```
+
+Omit `x` and `y` to open at the current cursor position; supplying only one of them is rejected.
+
+```ts
+window.setMenu([{ label: "Document", items: [{ label: "Export…", click: exportDocument }] }]);
+window.setMenu(null); // inherit the application menu again
+```
+
+On macOS a window menu becomes the process menu bar while that window is active. Both commands are
+resolved inside the runtime's own effect cycle, where the `EventContext`-scoped popup and
+window-menu commands exist, and both keep the core's `MAX_PENDING_NATIVE_POPUP_MENUS` bound.
+
 ## Current boundary
 
 This vertical slice supports dynamically created independent native windows, controlled system
 and retained in-window popovers, native alert and file dialogs with optional window
 ownership, retained view/text/button/input/Markdown nodes, variable-height virtual lists, password
 inputs, reactive properties and text, click/hover/input/submit/dismiss events, core-backed app and
-window lifecycle, native menus and desktop services, web-shaped Flexbox styling, hidden-inset
+window lifecycle, window lifecycle events with declared-ahead resize and move policies, window
+stacking, input, and restore-state commands, the application shell and Dock, native popup and
+per-window menus, native menus and desktop services, web-shaped Flexbox styling, hidden-inset
 titlebars, traffic-light positioning, declared close and quit interception, menu accelerators and
 system submenus, native window-tab commands, controlled selection controls, tab sets, disclosures,
 and field/fieldset composition, controlled in-window dialogs and alert dialogs, delayed native
@@ -557,8 +713,7 @@ tooltips, a stable real-`.app` development host, and self-contained production p
 current macOS target. It is not yet the full Rust rendering API surface: popover arrows and
 backdrops, context and popover menus, select/combobox/autocomplete, tables and trees, images and
 shaders, CSS Grid layout, keyboard, gesture, and drag-and-drop events, native child views,
-accessibility actions, JavaScript `Menu.popup` and per-window `window.setMenu` (the `AppRunner`
-does not yet expose the `EventContext`-scoped popup and window-menu commands), every native binary
-target, and dedicated JavaScript performance gates still need bindings and acceptance.
+accessibility actions, every native binary target, and dedicated JavaScript performance gates
+still need bindings and acceptance.
 
 Return to the [documentation index](README.md).

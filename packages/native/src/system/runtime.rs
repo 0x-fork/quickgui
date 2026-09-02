@@ -334,6 +334,172 @@ impl NativeRuntime {
                 self.pending_tray.push(PendingTray::new(request, response));
                 Ok(SystemCommandResult::Unit)
             }
+            SystemCommand::ExitWithCode(code) => Ok(SystemCommandResult::Boolean(
+                self.running_runner_mut()?.exit_with_code(code),
+            )),
+            SystemCommand::GetApplicationsFolderSupport => {
+                let support = self.running_runner()?.applications_folder_support();
+                Ok(SystemCommandResult::ApplicationsFolderSupport(
+                    NativeApplicationsFolderSupport {
+                        supported: support.supported,
+                        already_installed: support.already_installed,
+                    },
+                ))
+            }
+            SystemCommand::GetWindowRestoreState(window) => {
+                let handle = self.system_window_handle(window)?;
+                let runner = self.running_runner()?;
+                let state = runner
+                    .window_state(handle)
+                    .ok_or_else(|| format!("native window {window} is not mounted"))?;
+                Ok(SystemCommandResult::WindowRestoreState(
+                    state.restore_state(&runner.displays()).into(),
+                ))
+            }
+            SystemCommand::AppService { request, action } => {
+                if request == 0
+                    || self
+                        .pending_app_services
+                        .iter()
+                        .any(|pending| pending.request() == request)
+                {
+                    return Err(
+                        "native app-service request ids must be nonzero and unique".to_owned()
+                    );
+                }
+                let runner = self.running_runner_mut()?;
+                let response = match action {
+                    AppServiceAction::SetActivationPolicy(policy) => runner
+                        .set_activation_policy(policy)
+                        .map(AppServiceResponse::Unit),
+                    AppServiceAction::RequestDockAttention(attention) => runner
+                        .request_dock_attention(attention)
+                        .map(AppServiceResponse::DockAttention),
+                    AppServiceAction::SetDockVisible(visible) => runner
+                        .set_dock_visible(visible)
+                        .map(AppServiceResponse::Unit),
+                    AppServiceAction::MoveToApplicationsFolder => runner
+                        .move_to_applications_folder()
+                        .map(AppServiceResponse::Boolean),
+                }
+                .map_err(|error| error.to_string())?;
+                self.pending_app_services.push(PendingAppService::new(
+                    request,
+                    "app-service",
+                    response,
+                ));
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::AppMutation(AppMutationAction::LearnWord(word)) => {
+                // Provider state is application-thread local, exactly where this command runs.
+                let _ = self.running_runner()?;
+                quickgui::spell_check_provider().learn(&word);
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::AppMutation(AppMutationAction::IgnoreWord(word)) => {
+                let _ = self.running_runner()?;
+                quickgui::spell_check_provider().ignore(&word, quickgui::SpellDocumentTag::NONE);
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::AppMutation(action) => {
+                let runner = self.running_runner_mut()?;
+                match action {
+                    AppMutationAction::Activate(force) => runner.activate_application(force),
+                    AppMutationAction::Hide => runner.hide_application(),
+                    AppMutationAction::Unhide => runner.unhide_application(),
+                    AppMutationAction::CancelDockAttention(id) => {
+                        match take_dock_attention_request(id) {
+                            Some(request) => runner.cancel_dock_attention(request),
+                            // A stale identifier cannot cancel anything; the bounce has ended.
+                            None => Ok(()),
+                        }
+                    }
+                    AppMutationAction::SetSecureKeyboardEntry(enabled) => {
+                        runner.set_secure_keyboard_entry(enabled)
+                    }
+                    AppMutationAction::Beep => runner.beep(),
+                    // Handled before the runner borrow because they never reach the runner.
+                    AppMutationAction::LearnWord(_) | AppMutationAction::IgnoreWord(_) => Ok(()),
+                }
+                .map_err(|error| error.to_string())?;
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::WindowPopupMenu {
+                request,
+                window,
+                menu,
+                position,
+            } => {
+                if request == 0
+                    || self
+                        .pending_app_services
+                        .iter()
+                        .any(|pending| pending.request() == request)
+                {
+                    return Err(
+                        "native popup-menu request ids must be nonzero and unique".to_owned()
+                    );
+                }
+                let handle = self.system_window_handle(window)?;
+                let menu = menu::popup_menu(&menu)?;
+                let response = self
+                    .running_runner_mut()?
+                    .show_window_popup_menu(handle, menu, position)
+                    .map_err(|error| error.to_string())?;
+                self.pending_app_services.push(PendingAppService::new(
+                    request,
+                    "popup-menu",
+                    AppServiceResponse::Unit(response),
+                ));
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::WindowAction {
+                window,
+                action: WindowAction::SetMenu(menus),
+            } => {
+                let handle = self.system_window_handle(window)?;
+                let menus = menus
+                    .map(|json| menu::application_menus(&json))
+                    .transpose()?;
+                let runner = self.running_runner_mut()?;
+                match menus {
+                    Some(menus) => runner.set_window_menus(handle, menus),
+                    None => runner.use_application_menus_for_window(handle),
+                }
+                .map_err(|error| error.to_string())?;
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::WindowAction {
+                window,
+                action: WindowAction::SetResizePolicy(policy),
+            } => {
+                // Declared ahead of the native decision: the core answers `WillResize`
+                // synchronously and never waits on JavaScript.
+                self.system_window_handle(window)?;
+                let policy = policy.as_deref().map(parse_resize_policy).transpose()?;
+                crate::runtime::set_resize_policy(window, policy);
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::WindowAction {
+                window,
+                action: WindowAction::SetMovePolicy(policy),
+            } => {
+                self.system_window_handle(window)?;
+                let policy = policy.as_deref().map(parse_move_policy).transpose()?;
+                crate::runtime::set_move_policy(window, policy);
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::WindowAction {
+                window,
+                action: WindowAction::MoveAbove(other),
+            } => {
+                let handle = self.system_window_handle(window)?;
+                let other = self.system_window_handle(other)?;
+                self.running_runner_mut()?
+                    .move_window_above(handle, other)
+                    .map_err(|error| error.to_string())?;
+                Ok(SystemCommandResult::Unit)
+            }
             SystemCommand::WindowAction {
                 window,
                 action: WindowAction::SetCloseInterception(intercepting),
@@ -443,8 +609,29 @@ impl NativeRuntime {
                     }
                     WindowAction::ToggleTabBar => runner.toggle_window_tab_bar(handle),
                     WindowAction::ToggleTabOverview => runner.toggle_window_tab_overview(handle),
-                    // Handled before the runner borrow because it never reaches the core.
-                    WindowAction::SetCloseInterception(_) => Ok(()),
+                    WindowAction::MoveTop => runner.move_window_to_top(handle),
+                    WindowAction::SetIgnoreMouseEvents(ignore, forward) => {
+                        runner.set_window_ignore_mouse_events(handle, ignore, forward)
+                    }
+                    WindowAction::SetWindowEnabled(enabled) => {
+                        runner.set_window_enabled(handle, enabled)
+                    }
+                    WindowAction::SetAspectRatio(ratio) => {
+                        runner.set_window_aspect_ratio(handle, ratio)
+                    }
+                    WindowAction::SetWindowButtonVisibility(visible) => {
+                        runner.set_window_button_visibility(handle, visible)
+                    }
+                    WindowAction::SetAlwaysOnTop(flag, level) => {
+                        runner.set_window_always_on_top(handle, flag, level)
+                    }
+                    // Handled before the runner borrow because they never reach the core, or need
+                    // a second window handle or a parsed menu declaration first.
+                    WindowAction::SetCloseInterception(_)
+                    | WindowAction::MoveAbove(_)
+                    | WindowAction::SetMenu(_)
+                    | WindowAction::SetResizePolicy(_)
+                    | WindowAction::SetMovePolicy(_) => Ok(()),
                 }
                 .map_err(|error| error.to_string())?;
                 Ok(SystemCommandResult::Unit)

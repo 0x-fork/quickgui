@@ -335,6 +335,15 @@ child-first, `on_before_quit`/`on_will_quit`/`on_window_closed` still run, and s
 process integrations are released. Only after the event loop has fully unwound is a non-zero code
 applied to the process. `TestAppContext::exit_code()` exposes it deterministically.
 
+### Reaching the shell from an embedding host
+
+`AppRunner` exposes the same shell services for an externally pumped host:
+`set_activation_policy`, `activate_application`, `hide_application`, `unhide_application`,
+`request_dock_attention`, `cancel_dock_attention`, `set_dock_visible`, `set_secure_keyboard_entry`,
+`beep`, `applications_folder_support`, `move_to_applications_folder`, `is_application_packaged`,
+and `exit_with_code`. They queue the identical `PlatformRequest`s under the identical bounds, so an
+embedder gets the same teardown ordering and the same per-platform behavior as an in-view call.
+
 `is_application_packaged()` is a documented heuristic, not a security boundary:
 
 - **macOS** — the executable path contains a `<name>.app/Contents/MacOS/` component **and** is not
