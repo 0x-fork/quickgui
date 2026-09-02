@@ -1249,6 +1249,12 @@ pub(super) fn window_config(
             }
             "normal" => config.window_level(WindowLevel::Normal),
             "always-on-top" | "alwaysOnTop" => config.window_level(WindowLevel::AlwaysOnTop),
+            "floating" | "floating" => config.window_level(WindowLevel::Floating),
+            "modal-panel" | "modalPanel" => config.window_level(WindowLevel::ModalPanel),
+            "main-menu" | "mainMenu" => config.window_level(WindowLevel::MainMenu),
+            "status" | "status" => config.window_level(WindowLevel::Status),
+            "pop-up-menu" | "popUpMenu" => config.window_level(WindowLevel::PopUpMenu),
+            "screen-saver" | "screenSaver" => config.window_level(WindowLevel::ScreenSaver),
             value => return Err(format!("unknown windowLevel `{value}`")),
         };
     }

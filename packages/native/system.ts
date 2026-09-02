@@ -102,7 +102,16 @@ export interface KeyboardLayout {
 export type AppearanceMode = "light" | "dark";
 export type AppearancePreference = AppearanceMode | "system";
 export type WindowKind = "normal" | "popover" | "system-popover" | "floating" | "dialog";
-export type WindowLevel = "always-on-bottom" | "normal" | "always-on-top";
+export type WindowLevel =
+  | "always-on-bottom"
+  | "normal"
+  | "always-on-top"
+  | "floating"
+  | "modal-panel"
+  | "main-menu"
+  | "status"
+  | "pop-up-menu"
+  | "screen-saver";
 export type CursorGrabMode = "none" | "confined" | "locked";
 export type TaskbarProgressState = "none" | "normal" | "indeterminate" | "paused" | "error";
 export type WindowBackgroundAppearance = "opaque" | "transparent" | "blurred";
