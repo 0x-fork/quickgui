@@ -271,6 +271,149 @@ fn key_name(key: &Key) -> Arc<str> {
     }
 }
 
+/// Maximum UTF-8 bytes accepted for one Electron-style accelerator string.
+pub const MAX_ACCELERATOR_BYTES: usize = 128;
+
+/// Electron-compatible accelerator syntax parsed into QuickGUI's native [`Keystroke`].
+///
+/// Accelerators join modifiers and one key with `+`, for example `CmdOrCtrl+Shift+S`. They exist
+/// so declarative menus, JavaScript hosts, and documentation can share one portable spelling;
+/// QuickGUI keymaps continue to use the shorter `cmd-shift-s` [`Keystroke`] grammar internally.
+///
+/// Recognized modifiers are `CommandOrControl`/`CmdOrCtrl` (Command on macOS, Control elsewhere),
+/// `Command`/`Cmd`, `Control`/`Ctrl`, `Alt`/`Option`, `AltGr`, `Shift`, and `Super`/`Meta`.
+/// Recognized keys are `A`-`Z`, `0`-`9`, `F1`-`F24`, `Plus`, `Space`, `Tab`, `Capslock`,
+/// `Numlock`, `Scrolllock`, `Backspace`, `Delete`, `Insert`, `Return`/`Enter`, `Up`, `Down`,
+/// `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `Escape`/`Esc`, `VolumeUp`,
+/// `VolumeDown`, `VolumeMute`, `MediaNextTrack`, `MediaPreviousTrack`, `MediaStop`,
+/// `MediaPlayPause`, `PrintScreen`, `num0`-`num9`, `numdec`, `numadd`, `numsub`, `nummult`,
+/// `numdiv`, and any single punctuation character.
+///
+/// Keys QuickGUI's [`Key`] cannot name — the lock, media, volume, and print-screen keys — parse
+/// to [`Key::Other`]. That keeps the declaration valid without inventing a synthetic identity,
+/// and platforms which cannot render them simply show no key equivalent.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Accelerator;
+
+impl Accelerator {
+    /// Parse one bounded Electron accelerator string into a QuickGUI keystroke.
+    pub fn parse(accelerator: &str) -> Result<Keystroke, KeymapError> {
+        if accelerator.is_empty() {
+            return Err(KeymapError::new(0, "an accelerator cannot be empty"));
+        }
+        if accelerator.len() > MAX_ACCELERATOR_BYTES {
+            return Err(KeymapError::new(
+                MAX_ACCELERATOR_BYTES,
+                format!("an accelerator cannot exceed {MAX_ACCELERATOR_BYTES} UTF-8 bytes"),
+            ));
+        }
+        if accelerator.contains('\0') {
+            return Err(KeymapError::new(0, "an accelerator cannot contain NUL"));
+        }
+
+        let mut modifiers = Modifiers::empty();
+        let mut key = None;
+        let mut offset = 0;
+        for component in accelerator.split('+') {
+            let trimmed = component.trim();
+            if trimmed.is_empty() {
+                return Err(KeymapError::new(offset, "empty accelerator component"));
+            }
+            if let Some(modifier) = accelerator_modifier(trimmed) {
+                modifiers.insert(modifier);
+            } else if key.is_some() {
+                return Err(KeymapError::new(
+                    offset,
+                    "an accelerator must contain exactly one non-modifier key",
+                ));
+            } else {
+                key = Some(accelerator_key(trimmed, offset)?);
+            }
+            offset += component.len() + 1;
+        }
+
+        let key = key.ok_or_else(|| {
+            KeymapError::new(accelerator.len(), "an accelerator is missing its key")
+        })?;
+        Ok(Keystroke::new(key, modifiers))
+    }
+}
+
+fn accelerator_modifier(component: &str) -> Option<Modifiers> {
+    match component.to_ascii_lowercase().as_str() {
+        "commandorcontrol" | "cmdorctrl" => Some(if cfg!(target_os = "macos") {
+            Modifiers::SUPER
+        } else {
+            Modifiers::CONTROL
+        }),
+        "command" | "cmd" | "super" | "meta" => Some(Modifiers::SUPER),
+        "control" | "ctrl" => Some(Modifiers::CONTROL),
+        "alt" | "option" | "altgr" => Some(Modifiers::ALT),
+        "shift" => Some(Modifiers::SHIFT),
+        _ => None,
+    }
+}
+
+fn accelerator_key(component: &str, offset: usize) -> Result<Key, KeymapError> {
+    let normalized = component.to_lowercase();
+    let named = match normalized.as_str() {
+        "plus" => Some(Key::Character("+".to_owned())),
+        "space" => Some(Key::Space),
+        "tab" => Some(Key::Tab),
+        "backspace" => Some(Key::Backspace),
+        "delete" | "del" => Some(Key::Delete),
+        "insert" => Some(Key::Insert),
+        "return" | "enter" => Some(Key::Enter),
+        "up" => Some(Key::ArrowUp),
+        "down" => Some(Key::ArrowDown),
+        "left" => Some(Key::ArrowLeft),
+        "right" => Some(Key::ArrowRight),
+        "home" => Some(Key::Home),
+        "end" => Some(Key::End),
+        "pageup" => Some(Key::PageUp),
+        "pagedown" => Some(Key::PageDown),
+        "escape" | "esc" => Some(Key::Escape),
+        // AppKit and Win32 name numeric-keypad keys through their printed character, exactly as
+        // Electron resolves keypad accelerators for native menu key equivalents.
+        "num0" => Some(Key::Character("0".to_owned())),
+        "num1" => Some(Key::Character("1".to_owned())),
+        "num2" => Some(Key::Character("2".to_owned())),
+        "num3" => Some(Key::Character("3".to_owned())),
+        "num4" => Some(Key::Character("4".to_owned())),
+        "num5" => Some(Key::Character("5".to_owned())),
+        "num6" => Some(Key::Character("6".to_owned())),
+        "num7" => Some(Key::Character("7".to_owned())),
+        "num8" => Some(Key::Character("8".to_owned())),
+        "num9" => Some(Key::Character("9".to_owned())),
+        "numdec" => Some(Key::Character(".".to_owned())),
+        "numadd" => Some(Key::Character("+".to_owned())),
+        "numsub" => Some(Key::Character("-".to_owned())),
+        "nummult" => Some(Key::Character("*".to_owned())),
+        "numdiv" => Some(Key::Character("/".to_owned())),
+        "capslock" | "numlock" | "scrolllock" | "printscreen" | "volumeup" | "volumedown"
+        | "volumemute" | "medianexttrack" | "mediaprevioustrack" | "mediastop"
+        | "mediaplaypause" => Some(Key::Other),
+        _ => None,
+    };
+    if let Some(key) = named {
+        return Ok(key);
+    }
+    if let Some(number) = normalized
+        .strip_prefix('f')
+        .and_then(|value| value.parse::<u8>().ok())
+        && (1..=24).contains(&number)
+    {
+        return Ok(Key::Function(number));
+    }
+    if component.chars().count() == 1 {
+        return Ok(Key::Character(normalized));
+    }
+    Err(KeymapError::new(
+        offset,
+        format!("unknown accelerator key `{component}`"),
+    ))
+}
+
 fn parse_keystroke_sequence(input: &str) -> Result<Vec<Keystroke>, KeymapError> {
     let mut keystrokes = Vec::new();
     for part in input.split_whitespace() {
@@ -1323,5 +1466,118 @@ mod tests {
             keymap.shortcut_for_action(&OpenLine(2), &[]),
             Some(Keystroke::parse("cmd-2").unwrap())
         );
+    }
+    #[test]
+    fn electron_accelerators_parse_modifiers_and_named_keys() {
+        let platform = if cfg!(target_os = "macos") {
+            Modifiers::SUPER
+        } else {
+            Modifiers::CONTROL
+        };
+        for (accelerator, expected) in [
+            (
+                "CmdOrCtrl+Shift+S",
+                Keystroke::new(Key::Character("s".to_owned()), platform | Modifiers::SHIFT),
+            ),
+            (
+                "CommandOrControl+O",
+                Keystroke::new(Key::Character("o".to_owned()), platform),
+            ),
+            (
+                "Cmd+Alt+I",
+                Keystroke::new(
+                    Key::Character("i".to_owned()),
+                    Modifiers::SUPER | Modifiers::ALT,
+                ),
+            ),
+            (
+                "Control+Option+Shift+F12",
+                Keystroke::new(
+                    Key::Function(12),
+                    Modifiers::CONTROL | Modifiers::ALT | Modifiers::SHIFT,
+                ),
+            ),
+            ("Super+Space", Keystroke::new(Key::Space, Modifiers::SUPER)),
+            ("Meta+Return", Keystroke::new(Key::Enter, Modifiers::SUPER)),
+            ("Esc", Keystroke::new(Key::Escape, Modifiers::empty())),
+            (
+                "Alt+PageDown",
+                Keystroke::new(Key::PageDown, Modifiers::ALT),
+            ),
+            ("AltGr+Up", Keystroke::new(Key::ArrowUp, Modifiers::ALT)),
+            (
+                "Shift+Backspace",
+                Keystroke::new(Key::Backspace, Modifiers::SHIFT),
+            ),
+            (
+                "Cmd+Plus",
+                Keystroke::new(Key::Character("+".to_owned()), Modifiers::SUPER),
+            ),
+            (
+                "Cmd+numadd",
+                Keystroke::new(Key::Character("+".to_owned()), Modifiers::SUPER),
+            ),
+            (
+                "Cmd+num7",
+                Keystroke::new(Key::Character("7".to_owned()), Modifiers::SUPER),
+            ),
+            (
+                "Ctrl+numdiv",
+                Keystroke::new(Key::Character("/".to_owned()), Modifiers::CONTROL),
+            ),
+            (
+                "Cmd+,",
+                Keystroke::new(Key::Character(",".to_owned()), Modifiers::SUPER),
+            ),
+            ("Tab", Keystroke::new(Key::Tab, Modifiers::empty())),
+            ("Delete", Keystroke::new(Key::Delete, Modifiers::empty())),
+            ("Insert", Keystroke::new(Key::Insert, Modifiers::empty())),
+            ("Home", Keystroke::new(Key::Home, Modifiers::empty())),
+            ("End", Keystroke::new(Key::End, Modifiers::empty())),
+            ("Left", Keystroke::new(Key::ArrowLeft, Modifiers::empty())),
+            ("Right", Keystroke::new(Key::ArrowRight, Modifiers::empty())),
+            ("Down", Keystroke::new(Key::ArrowDown, Modifiers::empty())),
+            ("PageUp", Keystroke::new(Key::PageUp, Modifiers::empty())),
+        ] {
+            assert_eq!(
+                Accelerator::parse(accelerator).expect(accelerator),
+                expected,
+                "accelerator {accelerator}"
+            );
+        }
+    }
+
+    #[test]
+    fn unnameable_accelerator_keys_stay_valid_but_opaque() {
+        for accelerator in [
+            "VolumeUp",
+            "VolumeDown",
+            "VolumeMute",
+            "MediaNextTrack",
+            "MediaPreviousTrack",
+            "MediaStop",
+            "MediaPlayPause",
+            "PrintScreen",
+            "Capslock",
+            "Numlock",
+            "Scrolllock",
+        ] {
+            assert_eq!(
+                Accelerator::parse(accelerator).expect(accelerator).key,
+                Key::Other
+            );
+        }
+    }
+
+    #[test]
+    fn accelerator_parsing_is_bounded_and_rejects_malformed_input() {
+        assert!(Accelerator::parse("").is_err());
+        assert!(Accelerator::parse("Cmd+").is_err());
+        assert!(Accelerator::parse("Cmd").is_err());
+        assert!(Accelerator::parse("Cmd+S+T").is_err());
+        assert!(Accelerator::parse("Cmd+Unknown").is_err());
+        assert!(Accelerator::parse("Cmd+F25").is_err());
+        assert!(Accelerator::parse("Cmd+\0").is_err());
+        assert!(Accelerator::parse(&"a".repeat(MAX_ACCELERATOR_BYTES + 1)).is_err());
     }
 }

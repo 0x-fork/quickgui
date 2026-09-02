@@ -20,6 +20,36 @@ pub(super) struct NativeView {
 pub(super) struct NativeMenuAction(pub(super) u32);
 
 impl View for NativeView {
+    fn event(&mut self, event: &Event, cx: &mut EventContext) {
+        if !matches!(event, Event::CloseRequested) {
+            return;
+        }
+        let window = cx.window_handle().map_or(self.window, |handle| {
+            self.handles.as_ref().map_or(self.window, |handles| {
+                handles
+                    .borrow()
+                    .get(&handle)
+                    .copied()
+                    .unwrap_or(self.window)
+            })
+        });
+        // Interception was declared before the native decision, so the veto is answered here and
+        // JavaScript completes the close later with an explicit command.
+        if !crate::runtime::intercepts_close(window) {
+            return;
+        }
+        cx.prevent_close();
+        enqueue_event(
+            &self.events,
+            QueuedEvent {
+                kind: "close-requested",
+                window,
+                target: ROOT_NODE,
+                value: None,
+            },
+        );
+    }
+
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
         let window = self.handles.as_ref().map_or(self.window, |handles| {
             handles

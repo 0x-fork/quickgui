@@ -3,6 +3,7 @@ use super::*;
 use tray_icon::menu::{
     CheckMenuItem, ContextMenu, Icon, IconMenuItem, IsMenuItem, Menu as NativeMenu,
     MenuItem as NativeMenuItem, PredefinedMenuItem, Submenu,
+    accelerator::Accelerator as NativeAccelerator,
 };
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -93,6 +94,8 @@ fn append_items(
                 mark,
                 icon,
                 disabled,
+                hidden,
+                shortcut,
                 ..
             }
             | crate::MenuItem::Role {
@@ -101,6 +104,8 @@ fn append_items(
                 mark,
                 icon,
                 disabled,
+                hidden,
+                shortcut,
                 ..
             } => {
                 let id = match scope {
@@ -109,12 +114,26 @@ fn append_items(
                         format!("quickgui-popup-menu-{popup}-action-{next_action}")
                     }
                 };
+                // Win32 menus have no hidden flag; the action id still advances so the core's
+                // collection order keeps matching the presented items.
                 *next_action += 1;
+                if *hidden {
+                    continue;
+                }
+                // `muda` renders the accelerator after a tab in the item label and registers the
+                // matching Win32 accelerator-table binding, so dispatch and display stay in sync.
+                let accelerator = shortcut.as_ref().and_then(native_accelerator);
                 if *mark != crate::MenuItemMark::None {
                     let position = parent.items().len();
                     append(
                         parent,
-                        &CheckMenuItem::with_id(id, name.as_ref(), !disabled, *checked, None),
+                        &CheckMenuItem::with_id(
+                            id,
+                            name.as_ref(),
+                            !disabled,
+                            *checked,
+                            accelerator,
+                        ),
                     )?;
                     if *mark == crate::MenuItemMark::Radio {
                         set_radio_style(parent, position)?;
@@ -124,12 +143,18 @@ fn append_items(
                         .map_err(|error| error.to_string())?;
                     append(
                         parent,
-                        &IconMenuItem::with_id(id, name.as_ref(), !disabled, Some(icon), None),
+                        &IconMenuItem::with_id(
+                            id,
+                            name.as_ref(),
+                            !disabled,
+                            Some(icon),
+                            accelerator,
+                        ),
                     )?;
                 } else {
                     append(
                         parent,
-                        &NativeMenuItem::with_id(id, name.as_ref(), !disabled, None),
+                        &NativeMenuItem::with_id(id, name.as_ref(), !disabled, accelerator),
                     )?;
                 }
             }
@@ -142,6 +167,47 @@ fn append_items(
         }
     }
     Ok(())
+}
+
+/// Translate one QuickGUI keystroke into `muda`'s accelerator grammar.
+///
+/// Keys Win32 accelerator tables cannot name are dropped: the item keeps its label and its menu
+/// dispatch, only without a rendered shortcut.
+fn native_accelerator(stroke: &Keystroke) -> Option<NativeAccelerator> {
+    let key = match &stroke.key {
+        Key::Character(value) if value.chars().count() == 1 => value.to_uppercase(),
+        Key::ArrowUp => "ArrowUp".to_owned(),
+        Key::ArrowDown => "ArrowDown".to_owned(),
+        Key::ArrowLeft => "ArrowLeft".to_owned(),
+        Key::ArrowRight => "ArrowRight".to_owned(),
+        Key::PageUp => "PageUp".to_owned(),
+        Key::PageDown => "PageDown".to_owned(),
+        Key::Home => "Home".to_owned(),
+        Key::End => "End".to_owned(),
+        Key::Enter => "Enter".to_owned(),
+        Key::Escape => "Escape".to_owned(),
+        Key::Space => "Space".to_owned(),
+        Key::Tab => "Tab".to_owned(),
+        Key::Backspace => "Backspace".to_owned(),
+        Key::Delete => "Delete".to_owned(),
+        Key::Insert => "Insert".to_owned(),
+        Key::Function(number @ 1..=24) => format!("F{number}"),
+        Key::Function(_) | Key::Character(_) | Key::Other => return None,
+    };
+    let mut accelerator = String::with_capacity(32);
+    for (modifier, label) in [
+        (Modifiers::CONTROL, "CTRL"),
+        (Modifiers::ALT, "ALT"),
+        (Modifiers::SHIFT, "SHIFT"),
+        (Modifiers::SUPER, "SUPER"),
+    ] {
+        if stroke.modifiers.contains(modifier) {
+            accelerator.push_str(label);
+            accelerator.push('+');
+        }
+    }
+    accelerator.push_str(&key);
+    accelerator.parse::<NativeAccelerator>().ok()
 }
 
 fn set_radio_style(parent: &Submenu, position: usize) -> Result<(), String> {
@@ -187,5 +253,30 @@ mod tests {
         let mut next = 0;
         let _ = build_submenu(&menus[0], &mut next, MenuIdScope::Application).unwrap();
         assert_eq!(next, collect_menu_actions(&menus).len());
+    }
+
+    #[test]
+    fn hidden_items_keep_their_action_id_but_leave_the_native_menu() {
+        let menus = [Menu::new("File")
+            .item(crate::MenuItem::action("Hidden", TestAction).hidden(true))
+            .action("Open", TestAction)];
+        let mut next = 0;
+        let native = build_submenu(&menus[0], &mut next, MenuIdScope::Application).unwrap();
+        assert_eq!(next, 2);
+        assert_eq!(native.items().len(), 1);
+    }
+
+    #[test]
+    fn accelerators_translate_to_muda_and_drop_unnameable_keys() {
+        let save = native_accelerator(&crate::Accelerator::parse("Ctrl+Shift+S").unwrap())
+            .expect("Ctrl+Shift+S is representable");
+        assert_eq!(
+            save,
+            "CTRL+SHIFT+KeyS"
+                .parse::<NativeAccelerator>()
+                .expect("muda parses the same binding")
+        );
+        assert!(native_accelerator(&crate::Accelerator::parse("Ctrl+F13").unwrap()).is_some());
+        assert!(native_accelerator(&crate::Accelerator::parse("VolumeUp").unwrap()).is_none());
     }
 }

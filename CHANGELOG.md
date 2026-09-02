@@ -17,9 +17,32 @@ All notable user-facing changes to QuickGUI are recorded here.
   and system readings using `proc_pidinfo`/`proc_pid_rusage`/`host_statistics64` on macOS,
   `/proc` on Linux, and `GetProcessTimes`/`GlobalMemoryStatusEx` on Windows, reporting `None`
   rather than a guess where a platform does not expose a value.
+- Added `Accelerator::parse`, an Electron-compatible accelerator grammar that resolves to
+  QuickGUI's `Keystroke`, bounded by the new `MAX_ACCELERATOR_BYTES`. `MenuItem::accelerator`,
+  `MenuItem::try_accelerator`, and `MenuItem::keystroke` declare an explicit key equivalent that
+  outranks keymap derivation, and `MenuItem::hidden` keeps a declared item out of the presented
+  menu without changing its action id or collection order.
+- Added the `paste-and-match-style`, `delete`, `start-speaking`, `stop-speaking`, `select-next-tab`,
+  `select-previous-tab`, `merge-all-windows`, `move-tab-to-new-window`, `toggle-tab-bar`, and
+  `toggle-tab-overview` menu roles. Each follows the platform responder chain first and falls back
+  to the retained plain-text paste, selection delete, or window-tab command.
+- Added `SystemMenuType::RecentDocuments`, an operating-system-populated recent-documents submenu.
+- Added `AppRunner::request_quit()` for a preventable quit that runs the before-quit and will-quit
+  phases, alongside the existing `AppRunner::exit()` forced shutdown.
+- Added `AppRunner` character-palette, tabbing-identifier, tab selection, merge, detach, tab-bar,
+  and tab-overview commands plus macOS Find-pasteboard read/write, so externally pumped hosts reach
+  the same document-window and search integrations as `EventContext`.
+
+### macOS
+- Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
+  and the AppKit standard binding for a role, and hidden items set `NSMenuItem.hidden` and no
+  longer claim the Command-W close fallback.
+- An "Open Recent" system submenu is built with a `clearRecentDocuments:` "Clear Menu" item so
+  `NSDocumentController` populates it.
+- Dock menu items now render their declared accelerators.
+
 
 ### JavaScript tooling
-
 - Added `CrashReporter` and `Metrics` to `@quickgui/native`, both Promise-backed by `AsyncTask`,
   and an `onProgress` option for `Updater.downloadAndStage` delivered through a napi threadsafe
   function from the download worker thread.
@@ -32,6 +55,27 @@ All notable user-facing changes to QuickGUI are recorded here.
   TypeScript `.deb` writer; an NSIS installer with shortcuts, uninstall registration, protocol
   handlers, and an Authenticode `signtool` hook; and `quickgui build --mas` for Mac App Store
   `.pkg` submission.
+
+
+- Added `window.onCloseRequested(listener)`, `window.destroy()`, and `window.on("closed" |
+  "closeRequested", …)`. While at least one listener is registered the window declares close
+  interception to the core, which prevents the native close and emits `closeRequested` instead;
+  `window.close()` or `window.destroy()` completes the held request, and withdrawing the last
+  listener restores ordinary native closing.
+- Added `app.on("beforeQuit" | "willQuit", …)`. A `beforeQuit` listener declares quit interception,
+  so the core's `on_before_quit` hook prevents the quit and reports `{ reason }` to JavaScript.
+  `app.quit()` now asks for a preventable quit, `app.quit({ force: true })` completes a held one,
+  and the new `app.exit(code)` force-quits and reports `code` from `app.run()` and the `quit` event.
+  `quitMode` semantics are unchanged.
+- Added `accelerator` and `hidden` to `MenuActionItem`/`MenuRoleItem`, the new `MenuRole` names, and
+  `{ type: "system-menu", menu: "recent-documents" }`. Invalid or oversized accelerators are
+  rejected by the core rather than silently dropped.
+- Added `window.setTabbingIdentifier`, `selectNextTab`, `selectPreviousTab`, `selectTab`,
+  `mergeAllWindows`, `moveTabToNewWindow`, `toggleTabBar`, `toggleTabOverview`, and
+  `showCharacterPalette`.
+- Added `Clipboard.availableFormats()`, `Clipboard.has(format)`, `Clipboard.readBuffer(format)`,
+  `Clipboard.writeBuffer(format, data)`, `Clipboard.readFindText()`, and
+  `Clipboard.writeFindText(text)` over the core's typed clipboard entries.
 
 ## 0.1.1 - 2026-08-31
 

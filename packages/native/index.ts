@@ -50,7 +50,9 @@ import {
   performNativeWindowImageAction,
   rejectPendingSystemRequests,
   removeNativeWindowStateListeners,
+  requestNativeQuit,
   serializeNativeMenu,
+  setNativeQuitInterception,
 } from "./system.ts";
 import {
   type SecondInstanceEvent,
@@ -206,6 +208,18 @@ import type {
 } from "./system.ts";
 
 export type WindowCloseListener = (window: Window) => void;
+export type WindowCloseRequestListener = (event: { window: Window }) => void;
+
+export interface WindowEventMap {
+  /** The window has closed and released its retained tree. */
+  closed: { window: Window };
+  /**
+   * A native close was requested and held.
+   *
+   * Complete it with `window.close()` or `window.destroy()`, or ignore it to keep the window.
+   */
+  closeRequested: { window: Window };
+}
 export type WindowRenderer = (window: Window) => () => void;
 export type PopoverPlacement =
   | "top-start"
@@ -391,9 +405,26 @@ export interface SystemInfo {
   languagesTruncated: boolean;
 }
 
+/** Why the operating system or application began an orderly shutdown. */
+export type QuitReason =
+  | "explicit"
+  | "relaunch"
+  | "last-window-closed"
+  | "operating-system";
+
 export interface AppEventMap {
   ready: undefined;
   quit: { exitCode: number };
+  /**
+   * The first preventable quit phase.
+   *
+   * Registering a listener declares quit interception, so the native shutdown is held and the
+   * application stays alive until JavaScript completes it with `app.quit({ force: true })` or
+   * `app.exit(code)`.
+   */
+  beforeQuit: { reason: QuitReason };
+  /** The final quit phase. Purely a notification; the shutdown already proceeds. */
+  willQuit: { reason: QuitReason };
   openUrls: readonly string[];
   reopen: { hasVisibleWindows: boolean };
   systemWake: undefined;
@@ -496,6 +527,8 @@ class App {
   #nextDialogRequest = 1;
   readonly #pendingDialogs = new Map<number, PendingDialog>();
   #singleInstanceIdentifier: string | undefined;
+  #quitIntercepting = false;
+  #requestedExitCode: number | undefined;
   readonly #appEventListeners = new Map<
     keyof AppEventMap,
     Set<(payload: unknown) => unknown>
@@ -522,6 +555,7 @@ class App {
         throw new Error("the native QuickGUI application did not become ready");
       }
       this.#ready = true;
+      this.#syncQuitInterception();
       this.#emitAppEvent("ready", undefined);
     });
   }
@@ -657,6 +691,8 @@ class App {
       if (!window) continue;
       if (event.kind === "close") {
         this._didCloseWindow(window);
+      } else if (event.kind === "close-requested") {
+        window._didRequestClose();
       } else {
         window._dispatchEvent(
           event.kind as NativeEventType,
@@ -676,10 +712,31 @@ class App {
     const wrapped = (payload: unknown) => listener(payload as AppEventMap[K]);
     listeners.add(wrapped);
     this.#appEventListeners.set(type, listeners);
+    this.#syncQuitInterception();
     return () => {
       listeners.delete(wrapped);
       if (listeners.size === 0) this.#appEventListeners.delete(type);
+      this.#syncQuitInterception();
     };
+  }
+
+  /**
+   * Declare quit interception to the core whenever a `beforeQuit` listener exists.
+   *
+   * A JavaScript listener can never veto a native decision synchronously, so interception is
+   * declared ahead of time and the decision is completed later by an explicit quit or exit call.
+   */
+  #syncQuitInterception(): void {
+    if (this.#destroyed || !this.#ready) return;
+    const intercepting = (this.#appEventListeners.get("beforeQuit")?.size ?? 0) > 0;
+    if (intercepting === this.#quitIntercepting) return;
+    this.#quitIntercepting = intercepting;
+    try {
+      setNativeQuitInterception(intercepting);
+    } catch {
+      // The application is shutting down; the core no longer needs the declaration.
+      this.#quitIntercepting = false;
+    }
   }
 
   async run(options: RunOptions = {}): Promise<number> {
@@ -711,6 +768,9 @@ class App {
       }
       if (exitCode === undefined)
         throw new Error("the QuickGUI app exited without a status code");
+      if (this.#requestedExitCode !== undefined && exitCode === 0) {
+        exitCode = this.#requestedExitCode;
+      }
       await this.#emitAppEventAndWait("quit", { exitCode });
       return exitCode;
     } finally {
@@ -746,13 +806,34 @@ class App {
     return released;
   }
 
-  /** Request an orderly native shutdown. Returns false after shutdown already began. */
-  async quit(): Promise<boolean> {
+  /**
+   * Request an orderly native shutdown. Returns false after shutdown already began.
+   *
+   * The default runs the preventable `beforeQuit` and `willQuit` phases, so a registered
+   * `beforeQuit` listener holds the application open. Pass `{ force: true }` to complete a held
+   * quit, bypassing every interception.
+   */
+  async quit(options: { force?: boolean } = {}): Promise<boolean> {
     this.#assertAlive();
     this._assertReady();
+    if (options.force !== true) return await requestNativeQuit();
     return hostedRuntime
       ? await binding.exitHostedApp(this.nativeId)
       : binding.exitApp(this.nativeId);
+  }
+
+  /**
+   * Complete a held quit and report `code` from `app.run()` and the `quit` event.
+   *
+   * The core's native event loop does not carry an application-chosen exit status, so QuickGUI
+   * reports the requested code from the JavaScript host rather than inventing a native one.
+   */
+  async exit(code = 0): Promise<boolean> {
+    if (!Number.isInteger(code) || code < 0 || code > 255) {
+      throw new RangeError("an application exit code must be an integer between 0 and 255");
+    }
+    this.#requestedExitCode = code;
+    return await this.quit({ force: true });
   }
 
   /** Schedule a replacement process after ordinary child-first native teardown. */
@@ -809,6 +890,9 @@ class App {
     } else if (event.kind === "system-wake") {
       type = "systemWake";
       payload = undefined;
+    } else if (event.kind === "before-quit" || event.kind === "will-quit") {
+      type = event.kind === "before-quit" ? "beforeQuit" : "willQuit";
+      payload = { reason: quitReason(event.value) };
     } else if (event.kind === "keyboard-layout-change") {
       const layout = hostedRuntime
         ? binding.getHostedKeyboardLayout(this.nativeId)
@@ -1128,6 +1212,8 @@ export class Window {
   readonly #nativeReadyCallbacks = new Set<() => void>();
   #closed = false;
   readonly #closeListeners = new Set<WindowCloseListener>();
+  readonly #closeRequestListeners = new Set<WindowCloseRequestListener>();
+  #closeIntercepting = false;
   readonly #mountDisposers = new Set<() => void>();
 
   /** Return the Window whose renderer or native event callback is currently executing. */
@@ -1444,8 +1530,78 @@ export class Window {
     return () => this.#nativeReadyCallbacks.delete(callback);
   }
 
+  /**
+   * Complete a held close, or begin an ordinary one.
+   *
+   * Native close requests are intercepted only while `onCloseRequested` listeners exist; this
+   * call always completes the close.
+   */
   close(): void {
     this.app._closeWindow(this);
+  }
+
+  /** Close the window immediately, bypassing every registered `closeRequested` listener. */
+  destroy(): void {
+    this.#closeRequestListeners.clear();
+    this.#syncCloseInterception();
+    this.app._closeWindow(this);
+  }
+
+  /**
+   * Hold native close requests for this window and decide in JavaScript.
+   *
+   * While at least one listener is registered the core prevents the native close and delivers a
+   * `closeRequested` event instead. Call `window.close()` (or `window.destroy()`) to complete it.
+   * With no listener left, closes proceed natively again.
+   */
+  onCloseRequested(listener: WindowCloseRequestListener): () => void {
+    if (this.#closed) return () => {};
+    this.#closeRequestListeners.add(listener);
+    this.#syncCloseInterception();
+    return () => {
+      this.#closeRequestListeners.delete(listener);
+      this.#syncCloseInterception();
+    };
+  }
+
+  /** Subscribe to one window lifecycle event. */
+  on<K extends keyof WindowEventMap>(
+    type: K,
+    listener: (payload: WindowEventMap[K]) => void,
+  ): () => void {
+    if (type === "closeRequested") {
+      return this.onCloseRequested(listener as WindowCloseRequestListener);
+    }
+    return this.onClose((window) =>
+      (listener as (payload: WindowEventMap["closed"]) => void)({ window }),
+    );
+  }
+
+  #syncCloseInterception(): void {
+    const intercepting = this.#closeRequestListeners.size > 0;
+    if (this.#closed || intercepting === this.#closeIntercepting) return;
+    this.#closeIntercepting = intercepting;
+    this._afterNativeReady(() => {
+      try {
+        performNativeWindowAction(
+          this,
+          "set-close-interception",
+          String(intercepting),
+        );
+      } catch {
+        // The window is already gone; the core drops its interception with it.
+      }
+    });
+  }
+
+  /** @internal A held native close request reached JavaScript. */
+  _didRequestClose(): void {
+    if (this.#closed) return;
+    withCurrentWindow(this, () => {
+      for (const listener of [...this.#closeRequestListeners]) {
+        listener({ window: this });
+      }
+    });
   }
 
   getState(): Promise<WindowState> {
@@ -1654,6 +1810,47 @@ export class Window {
     performNativeWindowAction(this, "set-visual-effect-state", state);
   }
 
+  /** Present AppKit's character palette above this window. */
+  showCharacterPalette(): void {
+    performNativeWindowAction(this, "show-character-palette");
+  }
+
+  /** Join a named native system-tab group, or leave it by passing no identifier. */
+  setTabbingIdentifier(identifier?: string): void {
+    performNativeWindowAction(this, "set-tabbing-identifier", identifier ?? "");
+  }
+
+  selectNextTab(): void {
+    performNativeWindowAction(this, "select-next-tab");
+  }
+
+  selectPreviousTab(): void {
+    performNativeWindowAction(this, "select-previous-tab");
+  }
+
+  selectTab(index: number): void {
+    if (!Number.isInteger(index) || index < 0) {
+      throw new RangeError("a native tab index must be a non-negative integer");
+    }
+    performNativeWindowAction(this, "select-tab", String(index));
+  }
+
+  mergeAllWindows(): void {
+    performNativeWindowAction(this, "merge-all-windows");
+  }
+
+  moveTabToNewWindow(): void {
+    performNativeWindowAction(this, "move-tab-to-new-window");
+  }
+
+  toggleTabBar(): void {
+    performNativeWindowAction(this, "toggle-tab-bar");
+  }
+
+  toggleTabOverview(): void {
+    performNativeWindowAction(this, "toggle-tab-overview");
+  }
+
   _focusNode(node: NativeNode): boolean {
     if (this.#closed || node.host !== this) return false;
     this.flush();
@@ -1716,6 +1913,8 @@ export class Window {
     for (const dispose of disposers) dispose();
     this.#batch = new MutationBatch();
     removeNativeWindowStateListeners(this);
+    this.#closeRequestListeners.clear();
+    this.#closeIntercepting = false;
     for (const listener of this.#closeListeners) listener(this);
     this.#closeListeners.clear();
     this.nodes.clear();
@@ -1867,6 +2066,14 @@ export const Dialog = Object.freeze({
   showOpenDialog,
   showSaveDialog,
 });
+
+function quitReason(value: string | undefined): QuitReason {
+  return value === "relaunch" ||
+    value === "last-window-closed" ||
+    value === "operating-system"
+    ? value
+    : "explicit";
+}
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));

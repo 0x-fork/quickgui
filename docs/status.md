@@ -67,7 +67,23 @@ Implemented now:
   lifecycle callbacks;
 - GPUI-shaped `QuitMode` semantics, preventable before/will-quit phases, structured child-first
   application teardown, post-destruction window callbacks, and a zero-work windowless macOS
-  Dock-reopen state;
+  Dock-reopen state, plus an `AppRunner::request_quit()` preventable quit for embedding runtimes;
+- explicit Electron-syntax menu accelerators (`Accelerator::parse`, `MenuItem::accelerator`/
+  `keystroke`/`try_accelerator`) that outrank keymap derivation in AppKit key equivalents and
+  register matching Win32 accelerator-table bindings, bounded by `MAX_ACCELERATOR_BYTES`, plus
+  `MenuItem::hidden`, an operating-system-populated `SystemMenuType::RecentDocuments` submenu, and
+  paste-and-match-style, delete, speech, and window-tab menu roles with retained fallbacks;
+- `AppRunner`-level character-palette, tabbing-identifier, tab selection/merge/detach/bar/overview
+  commands and macOS Find-pasteboard access, so an externally pumped host reaches the same document
+  window and search integrations as `EventContext`;
+- declared JavaScript lifecycle vetoes: `window.onCloseRequested`/`window.destroy()` and
+  `app.on("beforeQuit")`/`app.on("willQuit")` with `app.quit({ force })`/`app.exit(code)`, where
+  interception is declared to the core ahead of the native decision and completed later by an
+  explicit host command, never by a synchronous JavaScript veto;
+- JavaScript menu `accelerator`/`hidden` declarations, the new menu roles, a
+  `{ type: "system-menu", menu: "recent-documents" }` submenu, imperative window-tab and
+  character-palette commands, and Electron-shaped clipboard `availableFormats`/`has`/`readBuffer`/
+  `writeBuffer`/`readFindText`/`writeFindText` helpers over the core's typed entries;
 - bounded immutable active-display snapshots with global logical work areas, scale/refresh metadata, stable macOS UUIDs, declarative change observation, current-display window state, display-targeted centered placement/fullscreen, disconnect fallback, and deterministic no-polling tests;
 - main-thread `Entity<T>`/`WeakEntity<T>` shared state with retained per-window observation, coalesced bounded notification fan-out, and automatic conditional unsubscribe, plus typed `EventEmitter` delivery with RAII `Subscription` lifetimes and bounded deterministic queues;
 - main-thread application globals with exact typed access, conditional per-window observation, RAII change subscriptions, deterministic deferred delivery, and bounded notification fan-out;

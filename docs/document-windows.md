@@ -94,6 +94,21 @@ The configuration remains portable Rust state on other targets. Native document 
 character palette, and system-tab actions are macOS capabilities; Windows and Linux projections
 belong to their later native-runtime milestones rather than being simulated as custom GPU chrome.
 
+## JavaScript
+
+`AppRunner` exposes the same tab and character-palette commands to embedding runtimes, and
+`@quickgui/native` forwards them as fire-and-forget window commands:
+`window.setTabbingIdentifier(id?)`, `selectNextTab()`, `selectPreviousTab()`, `selectTab(index)`,
+`mergeAllWindows()`, `moveTabToNewWindow()`, `toggleTabBar()`, `toggleTabOverview()`, and
+`showCharacterPalette()`. Passing no identifier to `setTabbingIdentifier` leaves the group. The
+resulting group state is read back from `window.getState()` under `nativeTabs`, which already
+reports `count`, `selectedIndex`, `tabBarVisible`, `overviewVisible`, and `truncated`.
+
+Menus can drive the same commands without JavaScript callbacks through the
+`"select-next-tab"`, `"select-previous-tab"`, `"merge-all-windows"`, `"move-tab-to-new-window"`,
+`"toggle-tab-bar"`, and `"toggle-tab-overview"` menu roles, which follow the AppKit responder chain
+first and fall back to the retained window command.
+
 Run the interactive macOS sample with:
 
 ```console

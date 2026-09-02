@@ -226,7 +226,11 @@ pub fn take_events(app: u32) -> Result<Vec<NativeEvent>> {
 
 #[napi]
 pub fn destroy_app(app: u32) -> Result<bool> {
-    REGISTRY.with(|registry| Ok(registry.borrow_mut().apps.remove(&app).is_some()))
+    let removed = REGISTRY.with(|registry| registry.borrow_mut().apps.remove(&app).is_some());
+    if removed {
+        crate::runtime::reset_interception_state();
+    }
+    Ok(removed)
 }
 
 #[napi]

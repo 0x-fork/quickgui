@@ -245,6 +245,41 @@ impl NativeRuntime {
                     .map(|()| SystemCommandResult::Unit)
                     .map_err(|error| error.to_string())
             }
+            SystemCommand::SetQuitInterception(intercepting) => {
+                crate::runtime::set_quit_interception(intercepting);
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::RequestQuit => Ok(SystemCommandResult::Boolean(
+                self.running_runner_mut()?.request_quit(),
+            )),
+            SystemCommand::ReadFindClipboard => {
+                #[cfg(target_os = "macos")]
+                {
+                    self.running_runner()?
+                        .read_from_find_pasteboard()
+                        .map(SystemCommandResult::Clipboard)
+                        .map_err(|error| error.to_string())
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = self.running_runner()?;
+                    Ok(SystemCommandResult::Clipboard(None))
+                }
+            }
+            SystemCommand::WriteFindClipboard(item) => {
+                #[cfg(target_os = "macos")]
+                {
+                    self.running_runner()?
+                        .write_to_find_pasteboard(item)
+                        .map(|()| SystemCommandResult::Unit)
+                        .map_err(|error| error.to_string())
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = (self.running_runner()?, item);
+                    Err("the Find pasteboard is a macOS integration".to_owned())
+                }
+            }
             SystemCommand::RequestSingleInstanceLock(identifier) => self
                 .running_runner_mut()?
                 .request_single_instance_lock(identifier)
@@ -297,6 +332,16 @@ impl NativeRuntime {
                 }
                 .map_err(|error| error.to_string())?;
                 self.pending_tray.push(PendingTray::new(request, response));
+                Ok(SystemCommandResult::Unit)
+            }
+            SystemCommand::WindowAction {
+                window,
+                action: WindowAction::SetCloseInterception(intercepting),
+            } => {
+                // Interception is declared ahead of the native decision: the hosted view answers
+                // `Event::CloseRequested` from this flag without waiting on JavaScript.
+                self.system_window_handle(window)?;
+                crate::runtime::set_close_interception(window, intercepting);
                 Ok(SystemCommandResult::Unit)
             }
             SystemCommand::WindowAction { window, action } => {
@@ -383,6 +428,23 @@ impl NativeRuntime {
                     WindowAction::SetMacOsVisualEffectState(state) => {
                         runner.set_macos_visual_effect_state(handle, state)
                     }
+                    WindowAction::ShowCharacterPalette => runner.show_character_palette(handle),
+                    WindowAction::SetTabbingIdentifier(identifier) => {
+                        runner.set_window_tabbing_identifier(handle, identifier)
+                    }
+                    WindowAction::SelectNextTab => runner.select_next_window_tab(handle),
+                    WindowAction::SelectPreviousTab => runner.select_previous_window_tab(handle),
+                    WindowAction::SelectTab(index) => {
+                        runner.select_window_tab(handle, index as usize)
+                    }
+                    WindowAction::MergeAllWindows => runner.merge_all_windows(handle),
+                    WindowAction::MoveTabToNewWindow => {
+                        runner.move_window_tab_to_new_window(handle)
+                    }
+                    WindowAction::ToggleTabBar => runner.toggle_window_tab_bar(handle),
+                    WindowAction::ToggleTabOverview => runner.toggle_window_tab_overview(handle),
+                    // Handled before the runner borrow because it never reaches the core.
+                    WindowAction::SetCloseInterception(_) => Ok(()),
                 }
                 .map_err(|error| error.to_string())?;
                 Ok(SystemCommandResult::Unit)

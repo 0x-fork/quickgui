@@ -439,6 +439,10 @@ pub(super) enum SystemCommand {
         tasks: Vec<UserTask>,
     },
     SetApplicationMenu(String),
+    SetQuitInterception(bool),
+    RequestQuit,
+    ReadFindClipboard,
+    WriteFindClipboard(ClipboardItem),
     RequestSingleInstanceLock(String),
     ReleaseSingleInstanceLock,
     GlobalShortcut {
@@ -511,6 +515,17 @@ pub(super) enum WindowAction {
     SetBackgroundAppearance(WindowBackgroundAppearance),
     SetMacOsVibrancy(Option<MacOsVibrancy>),
     SetMacOsVisualEffectState(MacOsVisualEffectState),
+    /// Ask the core to hand `Event::CloseRequested` to JavaScript instead of closing.
+    SetCloseInterception(bool),
+    ShowCharacterPalette,
+    SetTabbingIdentifier(Option<String>),
+    SelectNextTab,
+    SelectPreviousTab,
+    SelectTab(u32),
+    MergeAllWindows,
+    MoveTabToNewWindow,
+    ToggleTabBar,
+    ToggleTabOverview,
 }
 
 pub(super) enum ShellAction {
@@ -763,6 +778,7 @@ impl PendingUserTasks {
 mod parsing;
 mod runtime;
 
+pub(crate) use parsing::parse_window_action;
 use parsing::*;
 
 #[cfg(test)]

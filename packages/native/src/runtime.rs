@@ -1,5 +1,59 @@
 use super::*;
 
+use std::cell::Cell;
+use std::collections::HashSet;
+
+thread_local! {
+    /// Hosted windows whose JavaScript listeners intercept `Event::CloseRequested`.
+    ///
+    /// Interception is declared ahead of the native decision so the hosted view can answer
+    /// synchronously on the application thread; JavaScript later completes the close with an
+    /// explicit `closeWindow` command.
+    static CLOSE_INTERCEPTING_WINDOWS: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+    /// Whether the hosted application declared a preventable before-quit listener.
+    static QUIT_INTERCEPTION: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Declare or withdraw close interception for one hosted window.
+pub(crate) fn set_close_interception(window: u32, intercepting: bool) {
+    CLOSE_INTERCEPTING_WINDOWS.with_borrow_mut(|windows| {
+        if intercepting {
+            if windows.len() < MAX_WINDOWS {
+                windows.insert(window);
+            }
+        } else {
+            windows.remove(&window);
+        }
+    });
+}
+
+pub(crate) fn intercepts_close(window: u32) -> bool {
+    CLOSE_INTERCEPTING_WINDOWS.with_borrow(|windows| windows.contains(&window))
+}
+
+/// Declare or withdraw a preventable before-quit listener for the hosted application.
+pub(crate) fn set_quit_interception(intercepting: bool) {
+    QUIT_INTERCEPTION.with(|flag| flag.set(intercepting));
+}
+
+pub(crate) fn intercepts_quit() -> bool {
+    QUIT_INTERCEPTION.with(Cell::get)
+}
+
+pub(crate) fn reset_interception_state() {
+    CLOSE_INTERCEPTING_WINDOWS.with_borrow_mut(HashSet::clear);
+    set_quit_interception(false);
+}
+
+pub(crate) fn quit_reason_name(reason: quickgui::QuitReason) -> &'static str {
+    match reason {
+        quickgui::QuitReason::Explicit => "explicit",
+        quickgui::QuitReason::Relaunch => "relaunch",
+        quickgui::QuitReason::LastWindowClosed => "last-window-closed",
+        quickgui::QuitReason::OperatingSystem => "operating-system",
+    }
+}
+
 pub(super) struct NativeWindowRuntime {
     pub(super) config: WindowOptions,
     pub(super) tree: Rc<RefCell<NativeTree>>,
@@ -350,6 +404,8 @@ impl NativeRuntime {
         let second_instance_events = Rc::clone(&self.events);
         let power_events = Rc::clone(&self.events);
         let tray_events = Rc::clone(&self.events);
+        let before_quit_events = Rc::clone(&self.events);
+        let will_quit_events = Rc::clone(&self.events);
         let closed_windows = Rc::clone(&self.closed_windows);
         let mut application = QuickGuiApplication::new().quit_mode(self.quit_mode);
         if let Some(info) = self.app_info.clone() {
@@ -545,6 +601,34 @@ impl NativeRuntime {
                     },
                 );
             })
+            .on_before_quit(move |request, cx| {
+                // A JavaScript listener can never veto synchronously, so the declared
+                // interception flag prevents the quit and the decision returns as an explicit
+                // `quit`/`exit` command once listeners have run.
+                if intercepts_quit() {
+                    cx.prevent_quit();
+                }
+                enqueue_event(
+                    &before_quit_events,
+                    QueuedEvent {
+                        kind: "before-quit",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: Some(Arc::from(quit_reason_name(request.reason))),
+                    },
+                );
+            })
+            .on_will_quit(move |request, _cx| {
+                enqueue_event(
+                    &will_quit_events,
+                    QueuedEvent {
+                        kind: "will-quit",
+                        window: 0,
+                        target: ROOT_NODE,
+                        value: Some(Arc::from(quit_reason_name(request.reason))),
+                    },
+                );
+            })
             .on_window_closed(move |handle, _cx| {
                 let Some(window) = callback_handles.borrow_mut().remove(&handle) else {
                     return;
@@ -616,6 +700,7 @@ impl NativeRuntime {
 
     pub(super) fn close_window(&mut self, window: u32) -> bool {
         self.sync_closed_windows();
+        set_close_interception(window, false);
         let Some(handle) = self.windows.get(&window).and_then(|window| window.handle) else {
             if self.windows.remove(&window).is_none() {
                 return false;

@@ -125,7 +125,9 @@ pub(crate) struct MacMenuItemState {
     pub disabled: bool,
     pub action_available: bool,
     pub checked: bool,
+    /// Explicit declaration shortcut, else the keymap binding QuickGUI would display.
     pub shortcut: Option<Keystroke>,
+    pub hidden: bool,
 }
 
 /// Owns only the application-declared portion of the global macOS menu bar.
@@ -233,6 +235,7 @@ impl MacMenuHost {
             });
             unsafe {
                 item.setEnabled(!state.disabled && (state.action_available || native_available));
+                item.setHidden(state.hidden);
                 item.setState(if state.checked {
                     NSControlStateValueOn
                 } else {
@@ -276,6 +279,21 @@ fn default_os_action_key_equivalent(action: OsAction) -> Option<(String, NSEvent
         OsAction::CloseWindow => Some(("w".to_owned(), command)),
         OsAction::MinimizeWindow => Some(("m".to_owned(), command)),
         OsAction::ToggleFullscreen => Some(("f".to_owned(), command_control)),
+        OsAction::PasteAndMatchStyle => Some((
+            "v".to_owned(),
+            command
+                | NSEventModifierFlags::NSEventModifierFlagOption
+                | NSEventModifierFlags::NSEventModifierFlagShift,
+        )),
+        OsAction::SelectNextTab
+        | OsAction::SelectPreviousTab
+        | OsAction::MergeAllWindows
+        | OsAction::MoveTabToNewWindow
+        | OsAction::ToggleTabBar
+        | OsAction::ToggleTabOverview
+        | OsAction::Delete
+        | OsAction::StartSpeaking
+        | OsAction::StopSpeaking => None,
         OsAction::Cut
         | OsAction::Copy
         | OsAction::Paste
@@ -295,7 +313,8 @@ fn menu_item_claims_close(
     os_action: Option<OsAction>,
     native_available: bool,
 ) -> bool {
-    !state.disabled
+    !state.hidden
+        && !state.disabled
         && (state.action_available || native_available)
         && (os_action == Some(OsAction::CloseWindow)
             || state.shortcut.as_ref().is_some_and(is_close_shortcut))
@@ -355,12 +374,25 @@ impl MacDockMenuHost {
         {
             unsafe {
                 item.setEnabled(!declared.disabled);
+                item.setHidden(declared.hidden);
                 item.setState(if declared.checked {
                     NSControlStateValueOn
                 } else {
                     NSControlStateValueOff
                 });
             }
+            let (key, modifiers) = declared
+                .shortcut
+                .as_ref()
+                .and_then(appkit_key_equivalent)
+                .or_else(|| {
+                    declared
+                        .os_action
+                        .and_then(default_os_action_key_equivalent)
+                })
+                .unwrap_or_else(|| (String::new(), NSEventModifierFlags::empty()));
+            unsafe { item.setKeyEquivalent(&NSString::from_str(&key)) };
+            item.setKeyEquivalentModifierMask(modifiers);
         }
         Ok(Self {
             native,
@@ -416,6 +448,7 @@ pub(crate) fn show_popup_menu(
         });
         unsafe {
             item.setEnabled(!state.disabled && (state.action_available || native_available));
+            item.setHidden(state.hidden);
             item.setState(if state.checked {
                 NSControlStateValueOn
             } else {
@@ -479,6 +512,7 @@ fn build_menu(
                 checked,
                 mark,
                 icon,
+                hidden,
                 ..
             } => {
                 append_action_item(
@@ -491,6 +525,7 @@ fn build_menu(
                     *checked,
                     *mark,
                     icon.as_ref(),
+                    *hidden,
                     next_action_id,
                     action_items,
                 );
@@ -501,6 +536,7 @@ fn build_menu(
                 checked,
                 mark,
                 icon,
+                hidden,
                 ..
             } => {
                 append_action_item(
@@ -513,6 +549,7 @@ fn build_menu(
                     *checked,
                     *mark,
                     icon.as_ref(),
+                    *hidden,
                     next_action_id,
                     action_items,
                 );
@@ -540,6 +577,9 @@ fn build_menu(
                     SystemMenuType::Services => item.setSubmenu(services_menu),
                     SystemMenuType::Window => item.setSubmenu(windows_menu),
                     SystemMenuType::Help => item.setSubmenu(help_menu),
+                    SystemMenuType::RecentDocuments => {
+                        item.setSubmenu(Some(&recent_documents_menu(mtm, &os_menu.name)));
+                    }
                 }
                 native.addItem(&item);
             }
@@ -559,6 +599,7 @@ fn append_action_item(
     checked: bool,
     mark: MenuItemMark,
     icon: Option<&MenuIcon>,
+    hidden: bool,
     next_action_id: &mut usize,
     action_items: &mut Vec<Retained<NSMenuItem>>,
 ) {
@@ -566,6 +607,7 @@ fn append_action_item(
     unsafe {
         item.setTarget(Some(target));
         item.setTag(*next_action_id as isize);
+        item.setHidden(hidden);
         // Listener and native responder availability are known after the first render.
         item.setEnabled(false);
         item.setState(if checked {
@@ -594,6 +636,18 @@ fn append_action_item(
     *next_action_id += 1;
     native.addItem(&item);
     action_items.push(item);
+}
+
+/// Build the AppKit menu `NSDocumentController` populates with recent documents.
+///
+/// AppKit recognizes the menu by the `clearRecentDocuments:` item it owns, so the returned menu
+/// starts with only "Clear Menu" and is filled by the operating system.
+fn recent_documents_menu(mtm: MainThreadMarker, title: &str) -> Retained<NSMenu> {
+    let native = unsafe { NSMenu::initWithTitle(mtm.alloc(), &NSString::from_str(title)) };
+    unsafe { native.setAutoenablesItems(true) };
+    let clear = menu_item(mtm, "Clear Menu", Some(sel!(clearRecentDocuments:)), "");
+    native.addItem(&clear);
+    native
 }
 
 fn native_menu_icon(mtm: MainThreadMarker, icon: &MenuIcon) -> Option<Retained<NSImage>> {
@@ -631,6 +685,16 @@ fn os_action_selector(action: OsAction) -> Sel {
         OsAction::ToggleFullscreen => sel!(toggleFullScreen:),
         OsAction::BringAllToFront => sel!(arrangeInFront:),
         OsAction::ShowHelp => sel!(showHelp:),
+        OsAction::PasteAndMatchStyle => sel!(pasteAsPlainText:),
+        OsAction::Delete => sel!(delete:),
+        OsAction::StartSpeaking => sel!(startSpeaking:),
+        OsAction::StopSpeaking => sel!(stopSpeaking:),
+        OsAction::SelectNextTab => sel!(selectNextTab:),
+        OsAction::SelectPreviousTab => sel!(selectPreviousTab:),
+        OsAction::MergeAllWindows => sel!(mergeAllWindows:),
+        OsAction::MoveTabToNewWindow => sel!(moveTabToNewWindow:),
+        OsAction::ToggleTabBar => sel!(toggleTabBar:),
+        OsAction::ToggleTabOverview => sel!(toggleTabOverview:),
     }
 }
 
@@ -750,6 +814,7 @@ mod tests {
             action_available: true,
             checked: false,
             shortcut: None,
+            hidden: false,
         };
         assert!(menu_item_claims_close(
             &available,
@@ -766,5 +831,60 @@ mod tests {
             Some(OsAction::CloseWindow),
             true,
         ));
+
+        let hidden = MacMenuItemState {
+            disabled: false,
+            action_available: true,
+            checked: false,
+            shortcut: None,
+            hidden: true,
+        };
+        assert!(!menu_item_claims_close(
+            &hidden,
+            Some(OsAction::CloseWindow),
+            true,
+        ));
+    }
+
+    #[test]
+    fn declared_accelerators_outrank_default_role_key_equivalents() {
+        let role_default = default_os_action_key_equivalent(OsAction::MinimizeWindow)
+            .expect("Minimize has a default key equivalent");
+        assert_eq!(role_default.0, "m");
+
+        // `MacMenuHost::update` resolves the declaration shortcut before the role default, so an
+        // explicit accelerator replaces the AppKit standard binding.
+        let declared = crate::Accelerator::parse("Cmd+Shift+M").expect("valid accelerator");
+        let resolved = Some(declared)
+            .as_ref()
+            .and_then(appkit_key_equivalent)
+            .or_else(|| default_os_action_key_equivalent(OsAction::MinimizeWindow))
+            .expect("an explicit accelerator resolves");
+        assert_eq!(resolved.0, "m");
+        assert!(
+            resolved
+                .1
+                .contains(NSEventModifierFlags::NSEventModifierFlagShift)
+        );
+    }
+
+    #[test]
+    fn tab_and_speech_roles_leave_key_equivalents_to_the_declaration() {
+        for role in [
+            OsAction::SelectNextTab,
+            OsAction::SelectPreviousTab,
+            OsAction::MergeAllWindows,
+            OsAction::MoveTabToNewWindow,
+            OsAction::ToggleTabBar,
+            OsAction::ToggleTabOverview,
+            OsAction::Delete,
+            OsAction::StartSpeaking,
+            OsAction::StopSpeaking,
+        ] {
+            assert!(default_os_action_key_equivalent(role).is_none());
+        }
+        let paste_and_match =
+            default_os_action_key_equivalent(OsAction::PasteAndMatchStyle).expect("standard");
+        assert_eq!(paste_and_match.0, "v");
     }
 }

@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use quickgui::{Menu, MenuIcon, MenuItem, OsAction, SystemMenuType};
+use quickgui::{
+    Accelerator, MAX_ACCELERATOR_BYTES, Menu, MenuIcon, MenuItem, OsAction, SystemMenuType,
+};
 use serde::Deserialize;
 
 const MAX_MENU_JSON_BYTES: usize = 1024 * 1024;
@@ -31,6 +33,9 @@ enum NativeApplicationMenuItem {
         mark: Option<String>,
         role: Option<String>,
         icon: Option<NativeMenuIcon>,
+        accelerator: Option<String>,
+        #[serde(default)]
+        hidden: bool,
     },
     Role {
         label: String,
@@ -41,6 +46,9 @@ enum NativeApplicationMenuItem {
         mark: Option<String>,
         role: String,
         icon: Option<NativeMenuIcon>,
+        accelerator: Option<String>,
+        #[serde(default)]
+        hidden: bool,
     },
     Separator,
     Submenu {
@@ -134,6 +142,8 @@ fn convert_items(
                 mark,
                 role,
                 icon,
+                accelerator,
+                hidden,
             } => {
                 add_text(&label, text_bytes)?;
                 if id == 0 || !ids.insert(id) {
@@ -144,7 +154,8 @@ fn convert_items(
                     None => MenuItem::action(label, action),
                     Some(role) => MenuItem::os_action(label, action, os_action(role)?),
                 };
-                decorate_item(item, checked, mark.as_deref(), icon)?.enabled(enabled)
+                let item = decorate_item(item, checked, mark.as_deref(), icon)?.enabled(enabled);
+                apply_accelerator(item, accelerator.as_deref())?.hidden(hidden)
             }
             NativeApplicationMenuItem::Role {
                 label,
@@ -153,10 +164,13 @@ fn convert_items(
                 mark,
                 role,
                 icon,
+                accelerator,
+                hidden,
             } => {
                 add_text(&label, text_bytes)?;
                 let item = MenuItem::role(label, os_action(&role)?);
-                decorate_item(item, checked, mark.as_deref(), icon)?.enabled(enabled)
+                let item = decorate_item(item, checked, mark.as_deref(), icon)?.enabled(enabled);
+                apply_accelerator(item, accelerator.as_deref())?.hidden(hidden)
             }
             NativeApplicationMenuItem::Separator => MenuItem::separator(),
             NativeApplicationMenuItem::Submenu {
@@ -185,6 +199,7 @@ fn convert_items(
                         "services" => SystemMenuType::Services,
                         "window" => SystemMenuType::Window,
                         "help" => SystemMenuType::Help,
+                        "recent-documents" => SystemMenuType::RecentDocuments,
                         value => return Err(format!("unknown native system menu `{value}`")),
                     },
                 )
@@ -217,8 +232,33 @@ fn os_action(role: &str) -> Result<OsAction, String> {
         "toggle-fullscreen" => Ok(OsAction::ToggleFullscreen),
         "bring-all-to-front" => Ok(OsAction::BringAllToFront),
         "show-help" => Ok(OsAction::ShowHelp),
+        "paste-and-match-style" => Ok(OsAction::PasteAndMatchStyle),
+        "delete" => Ok(OsAction::Delete),
+        "start-speaking" => Ok(OsAction::StartSpeaking),
+        "stop-speaking" => Ok(OsAction::StopSpeaking),
+        "select-next-tab" => Ok(OsAction::SelectNextTab),
+        "select-previous-tab" => Ok(OsAction::SelectPreviousTab),
+        "merge-all-windows" => Ok(OsAction::MergeAllWindows),
+        "move-tab-to-new-window" => Ok(OsAction::MoveTabToNewWindow),
+        "toggle-tab-bar" => Ok(OsAction::ToggleTabBar),
+        "toggle-tab-overview" => Ok(OsAction::ToggleTabOverview),
         value => Err(format!("unknown native menu role `{value}`")),
     }
+}
+
+/// Attach one declared Electron accelerator, reporting an unparsable or oversized string.
+fn apply_accelerator(item: MenuItem, accelerator: Option<&str>) -> Result<MenuItem, String> {
+    let Some(accelerator) = accelerator else {
+        return Ok(item);
+    };
+    if accelerator.len() > MAX_ACCELERATOR_BYTES {
+        return Err(format!(
+            "a native menu accelerator cannot exceed {MAX_ACCELERATOR_BYTES} UTF-8 bytes"
+        ));
+    }
+    let stroke = Accelerator::parse(accelerator)
+        .map_err(|error| format!("invalid native menu accelerator `{accelerator}`: {error}"))?;
+    Ok(item.keystroke(stroke))
 }
 
 fn decorate_item(
@@ -272,6 +312,39 @@ mod tests {
     fn menu_json_rejects_duplicate_action_ids() {
         let json = r#"[{"label":"App","items":[{"type":"action","id":1,"label":"One"},{"type":"action","id":1,"label":"Two"}]}]"#;
         assert!(application_menus(json).unwrap_err().contains("unique"));
+    }
+
+    #[test]
+    fn menu_json_carries_accelerators_hidden_flags_and_new_roles() {
+        let json = r#"[{"label":"File","items":[
+            {"type":"action","id":1,"label":"Save As","accelerator":"CmdOrCtrl+Shift+S"},
+            {"type":"action","id":2,"label":"Debug","hidden":true},
+            {"type":"role","label":"Paste and Match Style","role":"paste-and-match-style"},
+            {"type":"role","label":"Show Next Tab","role":"select-next-tab"},
+            {"type":"system-menu","label":"Open Recent","menu":"recent-documents"}
+        ]}]"#;
+        let menus = application_menus(json).expect("valid menu");
+        let items = &menus[0].items;
+        assert_eq!(
+            items[0].shortcut(),
+            Some(&Accelerator::parse("CmdOrCtrl+Shift+S").unwrap())
+        );
+        assert!(!items[0].is_hidden());
+        assert!(items[1].is_hidden());
+        assert!(matches!(
+            &items[4],
+            MenuItem::SystemMenu(menu) if menu.menu_type == SystemMenuType::RecentDocuments
+        ));
+    }
+
+    #[test]
+    fn menu_json_rejects_an_unparsable_accelerator() {
+        let json = r#"[{"label":"File","items":[{"type":"action","id":1,"label":"X","accelerator":"Cmd+Nope"}]}]"#;
+        assert!(
+            application_menus(json)
+                .unwrap_err()
+                .contains("invalid native menu accelerator")
+        );
     }
 
     #[test]

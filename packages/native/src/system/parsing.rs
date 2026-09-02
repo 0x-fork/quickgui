@@ -611,7 +611,7 @@ struct NativeTaskbarProgressPayload {
     progress: f32,
 }
 
-pub(super) fn parse_window_action(
+pub(crate) fn parse_window_action(
     action: &str,
     value: Option<String>,
 ) -> std::result::Result<WindowAction, String> {
@@ -726,6 +726,24 @@ pub(super) fn parse_window_action(
                     .ok_or_else(|| "set-visual-effect-state requires a value".to_owned())?,
             )?,
         )),
+        "set-close-interception" => Ok(WindowAction::SetCloseInterception(parse_bool(value)?)),
+        "show-character-palette" => Ok(WindowAction::ShowCharacterPalette),
+        "set-tabbing-identifier" => Ok(WindowAction::SetTabbingIdentifier(
+            value.filter(|value| !value.is_empty()),
+        )),
+        "select-next-tab" => Ok(WindowAction::SelectNextTab),
+        "select-previous-tab" => Ok(WindowAction::SelectPreviousTab),
+        "select-tab" => {
+            let index = value
+                .ok_or_else(|| "select-tab requires a value".to_owned())?
+                .parse::<u32>()
+                .map_err(|_| "a native tab index must be a non-negative integer".to_owned())?;
+            Ok(WindowAction::SelectTab(index))
+        }
+        "merge-all-windows" => Ok(WindowAction::MergeAllWindows),
+        "move-tab-to-new-window" => Ok(WindowAction::MoveTabToNewWindow),
+        "toggle-tab-bar" => Ok(WindowAction::ToggleTabBar),
+        "toggle-tab-overview" => Ok(WindowAction::ToggleTabOverview),
         action => Err(format!("unknown native window action `{action}`")),
     }
 }
