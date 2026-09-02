@@ -49,6 +49,11 @@ impl Runtime {
             return;
         }
         #[cfg(target_os = "macos")]
+        if let RuntimeEvent::NativePanel(panel_event) = event {
+            self.invoke_native_panel_event(event_loop, panel_event);
+            return;
+        }
+        #[cfg(target_os = "macos")]
         if matches!(&event, RuntimeEvent::DisplaysChanged) {
             self.refresh_displays(event_loop);
             return;
@@ -243,6 +248,7 @@ impl Runtime {
             | RuntimeEvent::SystemWake
             | RuntimeEvent::DisplaysChanged
             | RuntimeEvent::KeyboardLayoutChanged
+            | RuntimeEvent::NativePanel(_)
             | RuntimeEvent::SystemNotificationPermissionStatus(_)
             | RuntimeEvent::SystemNotificationAuthorization { .. } => {
                 unreachable!("handled before window routing")
@@ -427,6 +433,7 @@ impl Runtime {
             | RuntimeEvent::SystemWake
             | RuntimeEvent::DisplaysChanged
             | RuntimeEvent::KeyboardLayoutChanged
+            | RuntimeEvent::NativePanel(_)
             | RuntimeEvent::SystemNotificationPermissionStatus(_)
             | RuntimeEvent::SystemNotificationAuthorization { .. } => {
                 unreachable!("handled before window routing")

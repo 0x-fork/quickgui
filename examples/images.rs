@@ -1,13 +1,12 @@
-use quickgui::{Application, Color, Element, Image, ObjectFit, View, ViewContext, div, img, text};
+use quickgui::{
+    Application, Color, Element, Image, ObjectFit, Rect, View, ViewContext, div, img, text,
+};
 
 fn main() -> Result<(), quickgui::AppError> {
     Application::new().run(|cx| {
         cx.open_window(
             quickgui::WindowOptions::new("QuickGUI — GPU images").size(1040.0, 680.0),
-            ImageDemo {
-                landscape: generated_image(640, 360),
-                thumbnail: generated_image(120, 68),
-            },
+            ImageDemo::new(),
         );
     })
 }
@@ -15,9 +14,61 @@ fn main() -> Result<(), quickgui::AppError> {
 struct ImageDemo {
     landscape: Image,
     thumbnail: Image,
+    /// The landscape re-encoded to PNG and decoded back through a base64 `data:` URL.
+    round_tripped: Image,
+    /// A bilinear resize of a crop taken from the landscape's center.
+    cropped: Image,
+    summary: String,
 }
 
 impl ImageDemo {
+    fn new() -> Self {
+        let landscape = generated_image(640, 360);
+        let thumbnail = generated_image(120, 68);
+
+        // PNG keeps alpha; JPEG composites it away. Both are decoded back into ordinary images.
+        let png = landscape.to_png().expect("PNG encoding always succeeds");
+        let jpeg = landscape
+            .to_jpeg(85)
+            .expect("JPEG encoding always succeeds");
+        let data_url = format!("data:image/png;base64,{}", encode_base64(&png));
+        let round_tripped =
+            Image::from_data_url(&data_url).expect("QuickGUI decodes its own PNG data URLs");
+
+        let cropped = landscape
+            .crop(Rect::new(160.0, 90.0, 320.0, 180.0))
+            .and_then(|cropped| cropped.resize(640, 360))
+            .expect("the crop lies inside the source image");
+
+        // Template metadata and multi-scale representations travel with the image into AppKit.
+        let retina = generated_image(240, 136);
+        let system = Image::named_system("NSFolder").ok().and_then(|image| {
+            image
+                .template(true)
+                .with_representations([(2.0, retina)])
+                .ok()
+        });
+
+        let summary = format!(
+            "PNG {} bytes · JPEG {} bytes · data URL {} bytes · system image {}",
+            png.len(),
+            jpeg.len(),
+            data_url.len(),
+            system.map_or_else(
+                || "unavailable on this platform".to_owned(),
+                |image| format!("{}x{} template", image.width(), image.height())
+            ),
+        );
+
+        Self {
+            landscape,
+            thumbnail,
+            round_tripped,
+            cropped,
+            summary,
+        }
+    }
+
     fn card(label: &'static str, image: &Image, fit: ObjectFit) -> Element {
         div()
             .flex_1()
@@ -119,7 +170,46 @@ impl View for ImageDemo {
                             ),
                     ),
             )
+            .child(
+                div()
+                    .flex_row()
+                    .gap_4()
+                    .child(Self::card(
+                        "PNG encode + data URL decode",
+                        &self.round_tripped,
+                        ObjectFit::Cover,
+                    ))
+                    .child(Self::card(
+                        "crop + bilinear resize",
+                        &self.cropped,
+                        ObjectFit::Cover,
+                    )),
+            )
+            .child(
+                text(self.summary.clone())
+                    .text_sm()
+                    .text_color(Color::rgb8(158, 166, 181)),
+            )
     }
+}
+
+/// Minimal standard-base64 encoder used to build the example's `data:` URL.
+fn encode_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let mut buffer = [0_u8; 3];
+        buffer[..chunk.len()].copy_from_slice(chunk);
+        let value = u32::from_be_bytes([0, buffer[0], buffer[1], buffer[2]]);
+        for index in 0..4 {
+            if index <= chunk.len() {
+                encoded.push(ALPHABET[((value >> (18 - index * 6)) & 0x3F) as usize] as char);
+            } else {
+                encoded.push('=');
+            }
+        }
+    }
+    encoded
 }
 
 fn generated_image(width: u32, height: u32) -> Image {

@@ -11,6 +11,13 @@ use crate::{Point, Rect, Size};
 pub const MAX_DISPLAYS: usize = 64;
 /// Maximum UTF-8 bytes retained for one operating-system display name.
 pub const MAX_DISPLAY_NAME_BYTES: usize = 4 * 1024;
+/// Maximum granular [`DisplayEvent`] values produced by one snapshot diff.
+///
+/// One reconfiguration can at most remove every previous display and add every new one, so the
+/// bound is twice [`MAX_DISPLAYS`].
+pub const MAX_DISPLAY_EVENTS: usize = MAX_DISPLAYS * 2;
+/// Largest reported bit depth retained by [`Display::color_depth`].
+pub const MAX_DISPLAY_COLOR_DEPTH: u8 = 64;
 
 const MAX_DISPLAY_LOGICAL_COORDINATE: f32 = 16_777_216.0;
 const MAX_DISPLAY_LOGICAL_DIMENSION: f32 = 1_048_576.0;
@@ -98,6 +105,9 @@ pub struct Display {
     visible_bounds: Rect,
     scale_factor: f32,
     refresh_rate_millihertz: Option<u32>,
+    rotation_degrees: u16,
+    is_internal: bool,
+    color_depth: Option<u8>,
     primary: bool,
 }
 
@@ -133,6 +143,9 @@ impl Display {
             visible_bounds,
             scale_factor,
             refresh_rate_millihertz: None,
+            rotation_degrees: 0,
+            is_internal: false,
+            color_depth: None,
             primary: false,
         })
     }
@@ -171,6 +184,23 @@ impl Display {
         self.primary
     }
 
+    /// Clockwise desktop rotation reported by the operating system: `0`, `90`, `180`, or `270`.
+    ///
+    /// Platforms that do not report a rotation return `0`.
+    pub const fn rotation_degrees(&self) -> u16 {
+        self.rotation_degrees
+    }
+
+    /// Whether the operating system reports this display as the machine's built-in panel.
+    pub const fn is_internal(&self) -> bool {
+        self.is_internal
+    }
+
+    /// Bits per pixel reported by the operating system, when it exposes one.
+    pub const fn color_depth(&self) -> Option<u8> {
+        self.color_depth
+    }
+
     pub fn with_uuid(mut self, uuid: DisplayUuid) -> Self {
         self.uuid = Some(uuid);
         self
@@ -178,6 +208,25 @@ impl Display {
 
     pub fn with_refresh_rate_millihertz(mut self, refresh_rate: u32) -> Self {
         self.refresh_rate_millihertz = (refresh_rate > 0).then_some(refresh_rate);
+        self
+    }
+
+    /// Record a clockwise rotation, normalized to the nearest quarter turn.
+    pub fn with_rotation_degrees(mut self, degrees: u16) -> Self {
+        self.rotation_degrees = normalize_rotation_degrees(degrees);
+        self
+    }
+
+    /// Record whether the display is the machine's built-in panel.
+    pub fn with_internal(mut self, is_internal: bool) -> Self {
+        self.is_internal = is_internal;
+        self
+    }
+
+    /// Record a reported bit depth. Zero and values above [`MAX_DISPLAY_COLOR_DEPTH`] clear it.
+    pub fn with_color_depth(mut self, bits_per_pixel: u8) -> Self {
+        self.color_depth = (bits_per_pixel > 0 && bits_per_pixel <= MAX_DISPLAY_COLOR_DEPTH)
+            .then_some(bits_per_pixel);
         self
     }
 
@@ -276,6 +325,50 @@ impl Displays {
         self.displays.len()
     }
 
+    /// Compute the granular changes that turn `self` into `next`.
+    ///
+    /// Both snapshots are sorted by [`DisplayId`], so the diff is one linear merge and its output
+    /// is deterministic: events are emitted in ascending identifier order and the result never
+    /// exceeds [`MAX_DISPLAY_EVENTS`]. A display present in both snapshots produces
+    /// [`DisplayEvent::MetricsChanged`] only when any observable field differs, including the
+    /// primary flag.
+    pub fn diff(&self, next: &Self) -> Vec<DisplayEvent> {
+        let previous = self.all();
+        let current = next.all();
+        let mut events = Vec::new();
+        let (mut left, mut right) = (0, 0);
+        while left < previous.len() || right < current.len() {
+            match (previous.get(left), current.get(right)) {
+                (Some(old), Some(new)) if old.id == new.id => {
+                    if old != new {
+                        events.push(DisplayEvent::MetricsChanged(new.clone()));
+                    }
+                    left += 1;
+                    right += 1;
+                }
+                (Some(old), Some(new)) if old.id < new.id => {
+                    events.push(DisplayEvent::Removed(old.id));
+                    left += 1;
+                }
+                (Some(_), Some(new)) => {
+                    events.push(DisplayEvent::Added(new.clone()));
+                    right += 1;
+                }
+                (Some(old), None) => {
+                    events.push(DisplayEvent::Removed(old.id));
+                    left += 1;
+                }
+                (None, Some(new)) => {
+                    events.push(DisplayEvent::Added(new.clone()));
+                    right += 1;
+                }
+                (None, None) => break,
+            }
+        }
+        debug_assert!(events.len() <= MAX_DISPLAY_EVENTS);
+        events
+    }
+
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn test_default() -> Self {
         let id = DisplayId::new(1);
@@ -293,6 +386,40 @@ impl Displays {
             Some(id),
         )
         .expect("the built-in test display snapshot is valid")
+    }
+}
+
+/// One granular change between two consecutive display snapshots.
+///
+/// Delivered by `App::on_display_event`. The coarse snapshot observed through
+/// [`crate::EventContext::displays`] keeps working unchanged; these events only describe what
+/// moved between two snapshots so an application can react without re-scanning every display.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DisplayEvent {
+    /// A display the previous snapshot did not contain.
+    Added(Display),
+    /// A display the new snapshot no longer contains.
+    Removed(DisplayId),
+    /// A retained display whose bounds, work area, scale, refresh rate, rotation, depth, name, or
+    /// primary flag changed.
+    MetricsChanged(Display),
+}
+
+impl DisplayEvent {
+    /// Identifier of the display this event describes.
+    pub fn display_id(&self) -> DisplayId {
+        match self {
+            Self::Added(display) | Self::MetricsChanged(display) => display.id,
+            Self::Removed(id) => *id,
+        }
+    }
+
+    /// The new display description, absent for [`Self::Removed`].
+    pub fn display(&self) -> Option<&Display> {
+        match self {
+            Self::Added(display) | Self::MetricsChanged(display) => Some(display),
+            Self::Removed(_) => None,
+        }
     }
 }
 
@@ -411,20 +538,43 @@ fn display_from_monitor(monitor: &MonitorHandle, id: DisplayId) -> Option<Displa
     }
 
     #[cfg(target_os = "macos")]
-    let (name, visible_bounds, uuid) = macos_display_metadata(monitor, id, bounds);
+    let metadata = macos_display_metadata(monitor, id, bounds);
     #[cfg(not(target_os = "macos"))]
-    let (name, visible_bounds, uuid) = (
-        bounded_native_name(monitor.name(), id),
-        bounds,
-        None::<DisplayUuid>,
-    );
+    let metadata = NativeDisplayMetadata {
+        name: bounded_native_name(monitor.name(), id),
+        visible_bounds: bounds,
+        uuid: None,
+        rotation_degrees: 0,
+        is_internal: false,
+        color_depth: None,
+    };
 
-    let mut display = Display::new(id, name, bounds, visible_bounds, scale_factor).ok()?;
-    display.uuid = uuid;
+    let mut display = Display::new(
+        id,
+        metadata.name,
+        bounds,
+        metadata.visible_bounds,
+        scale_factor,
+    )
+    .ok()?;
+    display.uuid = metadata.uuid;
+    display.rotation_degrees = metadata.rotation_degrees;
+    display.is_internal = metadata.is_internal;
+    display.color_depth = metadata.color_depth;
     display.refresh_rate_millihertz = monitor
         .refresh_rate_millihertz()
         .filter(|refresh_rate| *refresh_rate > 0);
     Some(display)
+}
+
+/// Operating-system display facts QuickGUI copies out before releasing every native handle.
+struct NativeDisplayMetadata {
+    name: Arc<str>,
+    visible_bounds: Rect,
+    uuid: Option<DisplayUuid>,
+    rotation_degrees: u16,
+    is_internal: bool,
+    color_depth: Option<u8>,
 }
 
 fn bounded_native_name(name: Option<String>, id: DisplayId) -> Arc<str> {
@@ -446,17 +596,22 @@ fn macos_display_metadata(
     monitor: &MonitorHandle,
     id: DisplayId,
     bounds: Rect,
-) -> (Arc<str>, Rect, Option<DisplayUuid>) {
-    use objc2_app_kit::NSScreen;
+) -> NativeDisplayMetadata {
+    use objc2_app_kit::{NSBitsPerPixelFromDepth, NSScreen};
     use objc2_foundation::NSUTF8StringEncoding;
     use winit::platform::macos::MonitorHandleExtMacOS;
 
     let mut name = None;
     let mut visible_bounds = bounds;
+    let mut color_depth = None;
     if let Some(screen) = monitor
         .ns_screen()
         .and_then(|screen| unsafe { (screen as *const NSScreen).as_ref() })
     {
+        let bits = unsafe { NSBitsPerPixelFromDepth(screen.depth()) };
+        color_depth = u8::try_from(bits)
+            .ok()
+            .filter(|bits| *bits > 0 && *bits <= MAX_DISPLAY_COLOR_DEPTH);
         let native_name = unsafe { screen.localizedName() };
         if native_name.lengthOfBytesUsingEncoding(NSUTF8StringEncoding) <= MAX_DISPLAY_NAME_BYTES {
             name = Some(native_name.to_string());
@@ -478,11 +633,38 @@ fn macos_display_metadata(
             visible_bounds = intersection;
         }
     }
-    (
-        bounded_native_name(name.or_else(|| monitor.name()), id),
+    let (rotation_degrees, is_internal) = macos_display_orientation(id);
+    NativeDisplayMetadata {
+        name: bounded_native_name(name.or_else(|| monitor.name()), id),
         visible_bounds,
-        macos_display_uuid(id),
-    )
+        uuid: macos_display_uuid(id),
+        rotation_degrees,
+        is_internal,
+        color_depth,
+    }
+}
+
+/// Read the Core Graphics rotation and built-in flag without retaining a native handle.
+#[cfg(target_os = "macos")]
+fn macos_display_orientation(id: DisplayId) -> (u16, bool) {
+    #[link(name = "ApplicationServices", kind = "framework")]
+    unsafe extern "C" {
+        fn CGDisplayRotation(display: u32) -> f64;
+        fn CGDisplayIsBuiltin(display: u32) -> i32;
+    }
+
+    let Ok(id) = u32::try_from(id.get()) else {
+        return (0, false);
+    };
+    let rotation = unsafe { CGDisplayRotation(id) };
+    // Core Graphics reports a counter-clockwise angle; QuickGUI publishes the clockwise turn.
+    let rotation = if rotation.is_finite() {
+        let clockwise = (360.0 - rotation).rem_euclid(360.0);
+        normalize_rotation_degrees(clockwise.round() as u16)
+    } else {
+        0
+    };
+    (rotation, unsafe { CGDisplayIsBuiltin(id) } != 0)
 }
 
 #[cfg(target_os = "macos")]
@@ -535,6 +717,53 @@ fn valid_display_bounds(bounds: Rect) -> bool {
         && bounds.height > 0.0
         && bounds.width <= MAX_DISPLAY_LOGICAL_DIMENSION
         && bounds.height <= MAX_DISPLAY_LOGICAL_DIMENSION
+}
+
+fn normalize_rotation_degrees(degrees: u16) -> u16 {
+    let degrees = degrees % 360;
+    match degrees {
+        0..=44 | 315..=359 => 0,
+        45..=134 => 90,
+        135..=224 => 180,
+        _ => 270,
+    }
+}
+
+/// Convert a physical status-item rectangle into QuickGUI's global logical desktop coordinates.
+///
+/// The tray backend reports physical pixels with a top-left origin. The correct scale factor is
+/// the one of the display that ends up containing the converted rectangle, so each candidate
+/// display is tested with its own factor before falling back to the primary display.
+pub(crate) fn logical_rect_from_physical(
+    displays: &Displays,
+    position: (f64, f64),
+    size: (u32, u32),
+) -> Option<Rect> {
+    let convert = |scale: f32| -> Option<Rect> {
+        let scale = f64::from(scale);
+        if !(scale.is_finite() && scale > 0.0) {
+            return None;
+        }
+        let rect = Rect::new(
+            (position.0 / scale) as f32,
+            (position.1 / scale) as f32,
+            (f64::from(size.0) / scale) as f32,
+            (f64::from(size.1) / scale) as f32,
+        );
+        (rect.x.is_finite() && rect.y.is_finite() && rect.width >= 0.0 && rect.height >= 0.0)
+            .then_some(rect)
+    };
+    for display in displays.all() {
+        if let Some(rect) = convert(display.scale_factor)
+            && display.bounds.contains(Point::new(
+                rect.x + rect.width * 0.5,
+                rect.y + rect.height * 0.5,
+            ))
+        {
+            return Some(rect);
+        }
+    }
+    convert(displays.primary().map_or(1.0, Display::scale_factor))
 }
 
 fn sane_window_dimension(requested: f32, available: f32) -> f32 {
@@ -628,6 +857,119 @@ mod tests {
         assert_eq!(
             display_for_rect(&displays, Rect::new(4_000.0, 100.0, 400.0, 400.0)),
             Some(DisplayId::new(1))
+        );
+    }
+
+    #[test]
+    fn snapshot_diffs_report_additions_removals_and_metric_changes_in_id_order() {
+        let previous = Displays::new(
+            vec![display(1, 0.0), display(2, 1_000.0), display(4, 3_000.0)],
+            Some(DisplayId::new(1)),
+        )
+        .unwrap();
+        let moved = display(2, 2_000.0);
+        let next = Displays::new(
+            vec![display(1, 0.0), moved.clone(), display(3, 4_000.0)],
+            Some(DisplayId::new(1)),
+        )
+        .unwrap();
+
+        let events = previous.diff(&next);
+        assert_eq!(
+            events,
+            vec![
+                DisplayEvent::MetricsChanged(next.find(DisplayId::new(2)).unwrap().clone()),
+                DisplayEvent::Added(next.find(DisplayId::new(3)).unwrap().clone()),
+                DisplayEvent::Removed(DisplayId::new(4)),
+            ]
+        );
+        assert_eq!(events[0].display_id(), DisplayId::new(2));
+        assert_eq!(events[2].display(), None);
+        assert!(previous.diff(&previous).is_empty());
+        assert!(events.len() <= MAX_DISPLAY_EVENTS);
+    }
+
+    #[test]
+    fn snapshot_diffs_report_a_changed_primary_and_stay_bounded() {
+        let first = Displays::new(
+            vec![display(1, 0.0), display(2, 1_000.0)],
+            Some(DisplayId::new(1)),
+        )
+        .unwrap();
+        let second = Displays::new(
+            vec![display(1, 0.0), display(2, 1_000.0)],
+            Some(DisplayId::new(2)),
+        )
+        .unwrap();
+        assert_eq!(
+            first.diff(&second),
+            vec![
+                DisplayEvent::MetricsChanged(second.find(DisplayId::new(1)).unwrap().clone()),
+                DisplayEvent::MetricsChanged(second.find(DisplayId::new(2)).unwrap().clone()),
+            ]
+        );
+
+        let mut many = Vec::new();
+        for id in 0..MAX_DISPLAYS {
+            many.push(display(id as u64 + 1, id as f32 * 1_000.0));
+        }
+        let full = Displays::new(many, None).unwrap();
+        assert_eq!(Displays::default().diff(&full).len(), MAX_DISPLAYS);
+        assert_eq!(full.diff(&Displays::default()).len(), MAX_DISPLAYS);
+    }
+
+    #[test]
+    fn optional_display_metadata_is_normalized() {
+        let display = display(1, 0.0);
+        assert_eq!(display.rotation_degrees(), 0);
+        assert!(!display.is_internal());
+        assert_eq!(display.color_depth(), None);
+
+        let rotated = display
+            .clone()
+            .with_rotation_degrees(450)
+            .with_internal(true)
+            .with_color_depth(32);
+        assert_eq!(rotated.rotation_degrees(), 90);
+        assert!(rotated.is_internal());
+        assert_eq!(rotated.color_depth(), Some(32));
+        assert_eq!(
+            display
+                .clone()
+                .with_rotation_degrees(271)
+                .rotation_degrees(),
+            270
+        );
+        assert_eq!(display.clone().with_color_depth(0).color_depth(), None);
+        assert_eq!(
+            display
+                .clone()
+                .with_color_depth(MAX_DISPLAY_COLOR_DEPTH + 1)
+                .color_depth(),
+            None
+        );
+        assert_ne!(display, rotated, "metadata participates in snapshot diffs");
+    }
+
+    #[test]
+    fn physical_rectangles_convert_with_the_containing_display_scale() {
+        let displays = Displays::new(
+            vec![display(1, 0.0), display(2, 1_000.0)],
+            Some(DisplayId::new(1)),
+        )
+        .unwrap();
+        assert_eq!(
+            logical_rect_from_physical(&displays, (2_400.0, 0.0), (44, 48)),
+            Some(Rect::new(1_200.0, 0.0, 22.0, 24.0))
+        );
+        // A rectangle outside every display still converts with the primary scale factor.
+        assert_eq!(
+            logical_rect_from_physical(&displays, (40_000.0, 0.0), (44, 48)),
+            Some(Rect::new(20_000.0, 0.0, 22.0, 24.0))
+        );
+        assert_eq!(
+            logical_rect_from_physical(&Displays::default(), (10.0, 20.0), (4, 6)),
+            Some(Rect::new(10.0, 20.0, 4.0, 6.0))
         );
     }
 

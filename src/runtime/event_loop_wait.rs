@@ -2,6 +2,7 @@ use super::*;
 
 impl Runtime {
     pub(super) fn handle_about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.flush_display_events(event_loop);
         let now = Instant::now();
         self.foreground_tasks.wake_due_timers(now);
         let window_ids = self.windows.keys().copied().collect::<Vec<_>>();

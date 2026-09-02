@@ -22,6 +22,21 @@ pub const MAX_IMAGE_DIMENSION: u32 = 4096;
 pub const MAX_DECODED_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 /// Largest encoded file accepted by [`Image::open`].
 pub const MAX_ENCODED_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
+/// Largest `data:` URL accepted by [`Image::from_data_url`], including its header.
+///
+/// Base64 expands payloads by four thirds, so this is the transport bound that corresponds to
+/// [`MAX_ENCODED_IMAGE_BYTES`].
+pub const MAX_IMAGE_DATA_URL_BYTES: usize = 88 * 1024 * 1024;
+/// Largest number of additional scale representations retained by one [`Image`].
+pub const MAX_IMAGE_REPRESENTATIONS: usize = 8;
+/// Smallest accepted representation scale factor.
+pub const MIN_IMAGE_REPRESENTATION_SCALE: f32 = 0.25;
+/// Largest accepted representation scale factor.
+pub const MAX_IMAGE_REPRESENTATION_SCALE: f32 = 16.0;
+/// Default point size used by [`Image::named_system`].
+pub const DEFAULT_SYSTEM_IMAGE_POINT_SIZE: f32 = 16.0;
+/// Default backing scale used by [`Image::named_system`].
+pub const DEFAULT_SYSTEM_IMAGE_SCALE: f32 = 2.0;
 
 static NEXT_IMAGE_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_CUSTOM_RESOURCE_ID: AtomicU64 = AtomicU64::new(1);
@@ -41,6 +56,8 @@ struct ImageData {
     width: u32,
     height: u32,
     rgba: Arc<[u8]>,
+    template: bool,
+    representations: Arc<[(f32, Image)]>,
 }
 
 impl Image {
@@ -71,13 +88,25 @@ impl Image {
                 actual: rgba.len(),
             });
         }
+        Ok(Self::from_parts(width, height, rgba, false, Arc::from([])))
+    }
+
+    fn from_parts(
+        width: u32,
+        height: u32,
+        rgba: Arc<[u8]>,
+        template: bool,
+        representations: Arc<[(f32, Image)]>,
+    ) -> Self {
         let id = ImageId(NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed));
-        Ok(Self(Arc::new(ImageData {
+        Self(Arc::new(ImageData {
             id,
             width,
             height,
             rgba,
-        })))
+            template,
+            representations,
+        }))
     }
 
     /// Decode PNG, JPEG, TIFF, WebP, or the first frame of a GIF from memory.
@@ -150,6 +179,248 @@ impl Image {
     /// Tightly packed, straight-alpha RGBA8 pixels.
     pub fn rgba(&self) -> &[u8] {
         &self.0.rgba
+    }
+
+    /// Decode a base64 `data:` URL carrying PNG, JPEG, GIF, or WebP bytes.
+    ///
+    /// Only base64 payloads are accepted; percent-encoded `data:` URLs are rejected because the
+    /// binary formats QuickGUI decodes are never sent that way in practice. The URL text is
+    /// bounded by [`MAX_IMAGE_DATA_URL_BYTES`] and the decoded payload by the same limits as
+    /// [`Image::decode`].
+    pub fn from_data_url(url: &str) -> Result<Self, ImageError> {
+        if url.len() > MAX_IMAGE_DATA_URL_BYTES {
+            return Err(ImageError::EncodedTooLarge {
+                bytes: url.len() as u64,
+                maximum: MAX_IMAGE_DATA_URL_BYTES as u64,
+            });
+        }
+        let rest = url
+            .strip_prefix("data:")
+            .or_else(|| url.strip_prefix("DATA:"))
+            .ok_or(ImageError::InvalidDataUrl)?;
+        let (header, payload) = rest.split_once(',').ok_or(ImageError::InvalidDataUrl)?;
+        if !header
+            .rsplit(';')
+            .next()
+            .is_some_and(|encoding| encoding.eq_ignore_ascii_case("base64"))
+        {
+            return Err(ImageError::InvalidDataUrl);
+        }
+        let decoded = decode_base64(payload)?;
+        if decoded.len() as u64 > MAX_ENCODED_IMAGE_BYTES {
+            return Err(ImageError::EncodedTooLarge {
+                bytes: decoded.len() as u64,
+                maximum: MAX_ENCODED_IMAGE_BYTES,
+            });
+        }
+        Self::decode(decoded)
+    }
+
+    /// Rasterize a system-provided image at [`DEFAULT_SYSTEM_IMAGE_POINT_SIZE`] and
+    /// [`DEFAULT_SYSTEM_IMAGE_SCALE`].
+    ///
+    /// On macOS this resolves an `NSImage` name first and then an SF Symbol name. Other platforms
+    /// report [`ImageError::SystemImageUnavailable`].
+    pub fn named_system(name: &str) -> Result<Self, ImageError> {
+        Self::named_system_sized(
+            name,
+            DEFAULT_SYSTEM_IMAGE_POINT_SIZE,
+            DEFAULT_SYSTEM_IMAGE_SCALE,
+        )
+    }
+
+    /// Rasterize a system-provided image at a requested point size and backing scale.
+    ///
+    /// The resulting bitmap is `round(point_size * scale)` pixels on its longest axis.
+    pub fn named_system_sized(name: &str, point_size: f32, scale: f32) -> Result<Self, ImageError> {
+        if name.is_empty() || name.contains('\0') {
+            return Err(ImageError::SystemImageUnavailable {
+                name: name.to_owned(),
+            });
+        }
+        if !point_size.is_finite() || point_size <= 0.0 || !scale.is_finite() || scale <= 0.0 {
+            return Err(ImageError::EmptyDimensions {
+                width: point_size as u32,
+                height: scale as u32,
+            });
+        }
+        let pixels = (f64::from(point_size) * f64::from(scale)).round();
+        if !(1.0..=f64::from(MAX_IMAGE_DIMENSION)).contains(&pixels) {
+            return Err(ImageError::DimensionsTooLarge {
+                width: pixels as u32,
+                height: pixels as u32,
+                maximum: MAX_IMAGE_DIMENSION,
+            });
+        }
+        #[cfg(target_os = "macos")]
+        {
+            crate::macos::system_image(name, f64::from(point_size), f64::from(scale))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Err(ImageError::SystemImageUnavailable {
+                name: name.to_owned(),
+            })
+        }
+    }
+
+    /// Return a copy marked as a macOS template image.
+    ///
+    /// A template image is recolored by AppKit for the menu bar's light, dark, and highlighted
+    /// appearances using only its alpha channel. The returned value has a fresh identity so a
+    /// renderer cache never confuses it with the untemplated original; the pixels are shared.
+    pub fn template(&self, template: bool) -> Self {
+        if self.0.template == template {
+            return self.clone();
+        }
+        Self::from_parts(
+            self.0.width,
+            self.0.height,
+            self.0.rgba.clone(),
+            template,
+            self.0.representations.clone(),
+        )
+    }
+
+    /// Whether this image is marked for macOS template rendering.
+    pub fn is_template(&self) -> bool {
+        self.0.template
+    }
+
+    /// Attach additional backing-scale representations used when building a native image.
+    ///
+    /// The receiver is the 1x representation. At most [`MAX_IMAGE_REPRESENTATIONS`] variants are
+    /// retained and each scale must lie between [`MIN_IMAGE_REPRESENTATION_SCALE`] and
+    /// [`MAX_IMAGE_REPRESENTATION_SCALE`].
+    pub fn with_representations(
+        &self,
+        representations: impl IntoIterator<Item = (f32, Self)>,
+    ) -> Result<Self, ImageError> {
+        let representations = representations.into_iter().collect::<Vec<_>>();
+        if representations.len() > MAX_IMAGE_REPRESENTATIONS {
+            return Err(ImageError::TooManyRepresentations {
+                representations: representations.len(),
+                maximum: MAX_IMAGE_REPRESENTATIONS,
+            });
+        }
+        if representations.iter().any(|(scale, _)| {
+            !scale.is_finite()
+                || !(MIN_IMAGE_REPRESENTATION_SCALE..=MAX_IMAGE_REPRESENTATION_SCALE)
+                    .contains(scale)
+        }) {
+            return Err(ImageError::InvalidRepresentationScale);
+        }
+        Ok(Self::from_parts(
+            self.0.width,
+            self.0.height,
+            self.0.rgba.clone(),
+            self.0.template,
+            representations.into(),
+        ))
+    }
+
+    /// Additional backing-scale representations attached to this image.
+    pub fn representations(&self) -> &[(f32, Self)] {
+        &self.0.representations
+    }
+
+    /// Resample this image to exact pixel dimensions with a bilinear filter.
+    pub fn resize(&self, width: u32, height: u32) -> Result<Self, ImageError> {
+        validate_dimensions(width, height)?;
+        if width == self.0.width && height == self.0.height {
+            return Ok(self.clone());
+        }
+        let source = self.rgba_buffer()?;
+        let resized = image_codecs::imageops::resize(
+            &source,
+            width,
+            height,
+            image_codecs::imageops::FilterType::Triangle,
+        );
+        Self::from_rgba(width, height, resized.into_raw())
+    }
+
+    /// Copy a pixel rectangle out of this image.
+    ///
+    /// The rectangle is rounded to whole pixels and must lie inside the image with a non-empty
+    /// area.
+    pub fn crop(&self, bounds: Rect) -> Result<Self, ImageError> {
+        if !bounds.x.is_finite()
+            || !bounds.y.is_finite()
+            || !bounds.width.is_finite()
+            || !bounds.height.is_finite()
+            || bounds.x < 0.0
+            || bounds.y < 0.0
+        {
+            return Err(ImageError::InvalidCrop);
+        }
+        let x = bounds.x.round() as u32;
+        let y = bounds.y.round() as u32;
+        let width = bounds.width.round() as u32;
+        let height = bounds.height.round() as u32;
+        if width == 0
+            || height == 0
+            || x.saturating_add(width) > self.0.width
+            || y.saturating_add(height) > self.0.height
+        {
+            return Err(ImageError::InvalidCrop);
+        }
+        let mut pixels = Vec::with_capacity((width as usize) * (height as usize) * 4);
+        let stride = self.0.width as usize * 4;
+        for row in 0..height as usize {
+            let start = (y as usize + row) * stride + x as usize * 4;
+            pixels.extend_from_slice(&self.0.rgba[start..start + width as usize * 4]);
+        }
+        Self::from_rgba(width, height, pixels)
+    }
+
+    /// Encode this image as PNG with its alpha channel intact.
+    pub fn to_png(&self) -> Result<Vec<u8>, ImageError> {
+        use image_codecs::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
+
+        let mut encoded = Vec::new();
+        PngEncoder::new(&mut encoded)
+            .write_image(
+                self.rgba(),
+                self.0.width,
+                self.0.height,
+                ExtendedColorType::Rgba8,
+            )
+            .map_err(ImageError::Encode)?;
+        Ok(encoded)
+    }
+
+    /// Encode this image as JPEG at `quality` (1-100), compositing away the alpha channel.
+    ///
+    /// JPEG has no alpha, so translucent pixels are composited over opaque white.
+    pub fn to_jpeg(&self, quality: u8) -> Result<Vec<u8>, ImageError> {
+        use image_codecs::{ExtendedColorType, ImageEncoder, codecs::jpeg::JpegEncoder};
+
+        if quality == 0 || quality > 100 {
+            return Err(ImageError::InvalidJpegQuality { quality });
+        }
+        let mut rgb = Vec::with_capacity((self.0.rgba.len() / 4) * 3);
+        for pixel in self.0.rgba.chunks_exact(4) {
+            let alpha = f32::from(pixel[3]) / 255.0;
+            for channel in &pixel[..3] {
+                let value = f32::from(*channel) * alpha + 255.0 * (1.0 - alpha);
+                rgb.push(value.round().clamp(0.0, 255.0) as u8);
+            }
+        }
+        let mut encoded = Vec::new();
+        JpegEncoder::new_with_quality(&mut encoded, quality)
+            .write_image(&rgb, self.0.width, self.0.height, ExtendedColorType::Rgb8)
+            .map_err(ImageError::Encode)?;
+        Ok(encoded)
+    }
+
+    fn rgba_buffer(&self) -> Result<image_codecs::RgbaImage, ImageError> {
+        image_codecs::RgbaImage::from_raw(self.0.width, self.0.height, self.0.rgba.to_vec()).ok_or(
+            ImageError::InvalidPixelLength {
+                expected: u64::from(self.0.width) * u64::from(self.0.height) * 4,
+                actual: self.0.rgba.len(),
+            },
+        )
     }
 }
 
@@ -304,6 +575,8 @@ impl fmt::Debug for Image {
             .field("width", &self.width())
             .field("height", &self.height())
             .field("bytes", &self.byte_len())
+            .field("template", &self.0.template)
+            .field("representations", &self.0.representations.len())
             .finish_non_exhaustive()
     }
 }
@@ -486,6 +759,72 @@ fn centered(bounds: Rect, size: Size) -> Rect {
     )
 }
 
+/// Decode standard base64 without allocating an intermediate alphabet table per call.
+///
+/// Whitespace is skipped so wrapped `data:` URLs decode, and any other character is rejected.
+fn decode_base64(value: &str) -> Result<Vec<u8>, ImageError> {
+    const INVALID: u8 = 0xFF;
+    const SKIP: u8 = 0xFE;
+    const PAD: u8 = 0xFD;
+
+    fn symbol(byte: u8) -> u8 {
+        match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => PAD,
+            b' ' | b'\t' | b'\r' | b'\n' => SKIP,
+            _ => INVALID,
+        }
+    }
+
+    let mut decoded = Vec::with_capacity(value.len() / 4 * 3);
+    let mut accumulator = 0_u32;
+    let mut symbols = 0_u32;
+    let mut padding = 0_usize;
+    for byte in value.bytes() {
+        match symbol(byte) {
+            SKIP => continue,
+            PAD => {
+                padding += 1;
+                if padding > 2 {
+                    return Err(ImageError::InvalidDataUrl);
+                }
+                continue;
+            }
+            INVALID => return Err(ImageError::InvalidDataUrl),
+            value if padding > 0 => {
+                let _ = value;
+                return Err(ImageError::InvalidDataUrl);
+            }
+            value => {
+                accumulator = (accumulator << 6) | u32::from(value);
+                symbols += 1;
+                if symbols == 4 {
+                    decoded.extend_from_slice(&accumulator.to_be_bytes()[1..]);
+                    accumulator = 0;
+                    symbols = 0;
+                }
+            }
+        }
+    }
+    match symbols {
+        0 => {}
+        2 => decoded.push((accumulator >> 4) as u8),
+        3 => {
+            decoded.push((accumulator >> 10) as u8);
+            decoded.push((accumulator >> 2) as u8);
+        }
+        _ => return Err(ImageError::InvalidDataUrl),
+    }
+    if decoded.is_empty() {
+        return Err(ImageError::InvalidDataUrl);
+    }
+    Ok(decoded)
+}
+
 fn validate_dimensions(width: u32, height: u32) -> Result<(), ImageError> {
     if width == 0 || height == 0 {
         return Err(ImageError::EmptyDimensions { width, height });
@@ -536,6 +875,23 @@ pub enum ImageError {
     },
     #[error("could not decode image data: {0}")]
     Decode(#[source] image_codecs::ImageError),
+    #[error("could not encode image data: {0}")]
+    Encode(#[source] image_codecs::ImageError),
+    #[error("a data URL must be a base64 `data:` URL carrying a supported image format")]
+    InvalidDataUrl,
+    #[error("a crop rectangle must be non-empty, whole-pixel, and inside the source image")]
+    InvalidCrop,
+    #[error("JPEG quality must be between 1 and 100, got {quality}")]
+    InvalidJpegQuality { quality: u8 },
+    #[error("an image carries {representations} representations, exceeding the {maximum} limit")]
+    TooManyRepresentations {
+        representations: usize,
+        maximum: usize,
+    },
+    #[error("an image representation scale must be finite and between 0.25 and 16")]
+    InvalidRepresentationScale,
+    #[error("the operating system does not provide a system image named {name}")]
+    SystemImageUnavailable { name: String },
 }
 
 #[cfg(test)]
@@ -640,6 +996,204 @@ mod tests {
         let resource =
             ImageResource::custom_animated(move || Ok::<_, &'static str>(animation.clone()));
         assert_eq!(resource.load().unwrap(), ImageAsset::Animated(expected));
+    }
+
+    fn gradient(width: u32, height: u32) -> Image {
+        let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+        for y in 0..height {
+            for x in 0..width {
+                pixels.extend_from_slice(&[(x * 8) as u8, (y * 8) as u8, (x * y) as u8, 255]);
+            }
+        }
+        Image::from_rgba(width, height, pixels).unwrap()
+    }
+
+    #[test]
+    fn png_and_jpeg_round_trips_preserve_geometry_and_opaque_pixels() {
+        let source = gradient(4, 3);
+        let png = source.to_png().unwrap();
+        let decoded = Image::decode(&png).unwrap();
+        assert_eq!(decoded.size(), source.size());
+        assert_eq!(decoded.rgba(), source.rgba());
+
+        let jpeg = source.to_jpeg(95).unwrap();
+        let decoded = Image::decode(&jpeg).unwrap();
+        assert_eq!(decoded.size(), source.size());
+        assert!(
+            decoded.rgba().chunks_exact(4).all(|pixel| pixel[3] == 255),
+            "JPEG has no alpha channel"
+        );
+        assert!(matches!(
+            source.to_jpeg(0).unwrap_err(),
+            ImageError::InvalidJpegQuality { quality: 0 }
+        ));
+        assert!(matches!(
+            source.to_jpeg(101).unwrap_err(),
+            ImageError::InvalidJpegQuality { quality: 101 }
+        ));
+    }
+
+    #[test]
+    fn jpeg_encoding_composites_translucent_pixels_over_white() {
+        let image = Image::from_rgba(1, 1, vec![0, 0, 0, 0]).unwrap();
+        let decoded = Image::decode(image.to_jpeg(100).unwrap()).unwrap();
+        let pixel = decoded.rgba();
+        assert!(
+            pixel[0] > 240 && pixel[1] > 240 && pixel[2] > 240,
+            "a fully transparent pixel composites to white, got {pixel:?}"
+        );
+    }
+
+    #[test]
+    fn resize_is_bilinear_and_crop_copies_an_inside_rectangle() {
+        let source = gradient(4, 4);
+        let resized = source.resize(2, 2).unwrap();
+        assert_eq!(resized.size(), Size::new(2.0, 2.0));
+        assert_eq!(resized.byte_len(), 16);
+        assert_eq!(
+            source.resize(4, 4).unwrap(),
+            source,
+            "a no-op resize aliases"
+        );
+        assert!(source.resize(0, 4).is_err());
+        assert!(source.resize(MAX_IMAGE_DIMENSION + 1, 4).is_err());
+
+        let cropped = source.crop(Rect::new(1.0, 1.0, 2.0, 2.0)).unwrap();
+        assert_eq!(cropped.size(), Size::new(2.0, 2.0));
+        let stride = 4 * 4;
+        assert_eq!(
+            &cropped.rgba()[..8],
+            &source.rgba()[stride + 4..stride + 12]
+        );
+
+        for invalid in [
+            Rect::new(-1.0, 0.0, 2.0, 2.0),
+            Rect::new(0.0, 0.0, 0.0, 2.0),
+            Rect::new(3.0, 3.0, 2.0, 2.0),
+            Rect::new(f32::NAN, 0.0, 2.0, 2.0),
+        ] {
+            assert!(matches!(
+                source.crop(invalid).unwrap_err(),
+                ImageError::InvalidCrop
+            ));
+        }
+    }
+
+    #[test]
+    fn data_urls_decode_base64_payloads_and_reject_malformed_input() {
+        let source = gradient(2, 2);
+        let png = source.to_png().unwrap();
+        let encoded = encode_base64_for_test(&png);
+        let decoded = Image::from_data_url(&format!("data:image/png;base64,{encoded}")).unwrap();
+        assert_eq!(decoded.rgba(), source.rgba());
+        // The media type is optional and the encoding token is case-insensitive.
+        assert!(Image::from_data_url(&format!("data:;BASE64,{encoded}")).is_ok());
+
+        for invalid in [
+            "https://example.com/a.png".to_owned(),
+            "data:image/png,notbase64".to_owned(),
+            "data:image/png;base64".to_owned(),
+            "data:image/png;base64,%%%%".to_owned(),
+            "data:image/png;base64,".to_owned(),
+            format!("data:image/png;base64,{encoded}=A"),
+        ] {
+            assert!(
+                matches!(
+                    Image::from_data_url(&invalid),
+                    Err(ImageError::InvalidDataUrl)
+                ),
+                "{invalid} should be rejected"
+            );
+        }
+        assert!(matches!(
+            Image::from_data_url(&format!(
+                "data:image/png;base64,{}",
+                "A".repeat(MAX_IMAGE_DATA_URL_BYTES)
+            )),
+            Err(ImageError::EncodedTooLarge { .. })
+        ));
+    }
+
+    #[test]
+    fn template_and_representation_metadata_keep_pixels_and_gain_identity() {
+        let base = gradient(2, 2);
+        assert!(!base.is_template());
+        assert!(base.representations().is_empty());
+
+        let template = base.template(true);
+        assert!(template.is_template());
+        assert_ne!(
+            template, base,
+            "native metadata gets a fresh cache identity"
+        );
+        assert_eq!(template.rgba(), base.rgba());
+        assert_eq!(base.template(false), base, "an unchanged flag aliases");
+
+        let retina = gradient(4, 4);
+        let multi = base.with_representations([(2.0, retina.clone())]).unwrap();
+        assert_eq!(multi.representations().len(), 1);
+        assert_eq!(multi.representations()[0].0, 2.0);
+        assert_eq!(multi.representations()[0].1, retina);
+        assert_eq!(multi.size(), base.size());
+
+        assert!(matches!(
+            base.with_representations([(0.0, retina.clone())]),
+            Err(ImageError::InvalidRepresentationScale)
+        ));
+        assert!(matches!(
+            base.with_representations([(f32::INFINITY, retina.clone())]),
+            Err(ImageError::InvalidRepresentationScale)
+        ));
+        let too_many =
+            std::iter::repeat_n((2.0_f32, retina.clone()), MAX_IMAGE_REPRESENTATIONS + 1);
+        assert!(matches!(
+            base.with_representations(too_many),
+            Err(ImageError::TooManyRepresentations { .. })
+        ));
+    }
+
+    #[test]
+    fn system_images_validate_their_name_and_requested_size() {
+        assert!(matches!(
+            Image::named_system(""),
+            Err(ImageError::SystemImageUnavailable { .. })
+        ));
+        assert!(matches!(
+            Image::named_system("a\0b"),
+            Err(ImageError::SystemImageUnavailable { .. })
+        ));
+        assert!(Image::named_system_sized("NSAddTemplate", 0.0, 2.0).is_err());
+        assert!(Image::named_system_sized("NSAddTemplate", 16.0, f32::NAN).is_err());
+        assert!(matches!(
+            Image::named_system_sized("NSAddTemplate", 4_096.0, 4.0),
+            Err(ImageError::DimensionsTooLarge { .. })
+        ));
+        #[cfg(not(target_os = "macos"))]
+        assert!(matches!(
+            Image::named_system("NSAddTemplate"),
+            Err(ImageError::SystemImageUnavailable { .. })
+        ));
+    }
+
+    /// Minimal standard-base64 encoder used only to build deterministic test fixtures.
+    fn encode_base64_for_test(bytes: &[u8]) -> String {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let mut buffer = [0_u8; 3];
+            buffer[..chunk.len()].copy_from_slice(chunk);
+            let value = u32::from_be_bytes([0, buffer[0], buffer[1], buffer[2]]);
+            for index in 0..4 {
+                if index <= chunk.len() {
+                    let symbol = (value >> (18 - index * 6)) & 0x3F;
+                    encoded.push(ALPHABET[symbol as usize] as char);
+                } else {
+                    encoded.push('=');
+                }
+            }
+        }
+        encoded
     }
 
     #[test]

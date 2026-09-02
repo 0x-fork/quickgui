@@ -23,6 +23,7 @@ pub struct TrayIconImage {
     rgba: Arc<[u8]>,
     width: u32,
     height: u32,
+    template: bool,
 }
 
 impl TrayIconImage {
@@ -50,6 +51,7 @@ impl TrayIconImage {
             rgba,
             width,
             height,
+            template: false,
         })
     }
 
@@ -79,6 +81,20 @@ impl TrayIconImage {
             ))
         })?;
         Self::from_encoded(&bytes)
+    }
+
+    /// Mark the artwork as a macOS template image.
+    ///
+    /// AppKit then recolors the icon for the menu bar's light, dark, and highlighted appearances
+    /// using only the alpha channel. Other platforms retain the flag and ignore it.
+    pub const fn template(mut self, template: bool) -> Self {
+        self.template = template;
+        self
+    }
+
+    /// Whether this artwork is marked for macOS template rendering.
+    pub const fn is_template(&self) -> bool {
+        self.template
     }
 
     pub fn rgba(&self) -> &[u8] {
@@ -279,6 +295,34 @@ impl AppRunner {
         ids
     }
 
+    /// Screen rectangle of one tray icon in global logical desktop coordinates.
+    ///
+    /// `Ok(None)` means the platform host has not laid the item out yet, or the id is unknown.
+    /// Linux StatusNotifierItem hosts own item placement and never report a rectangle.
+    pub fn tray_icon_bounds(&self, id: u32) -> Result<Option<Rect>, PlatformError> {
+        if id == 0 {
+            return Err(tray_error("a tray icon id must be nonzero"));
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            let Some(tray) = self.runtime.tray_icons.get(&id) else {
+                return Ok(None);
+            };
+            Ok(tray.rect().and_then(|rect| {
+                crate::display::logical_rect_from_physical(
+                    &self.runtime.displays,
+                    (rect.position.x, rect.position.y),
+                    (rect.size.width, rect.size.height),
+                )
+            }))
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            let _ = id;
+            Err(PlatformError::Unsupported)
+        }
+    }
+
     /// Create or atomically replace a native tray icon.
     pub fn set_tray_icon(
         &mut self,
@@ -464,7 +508,7 @@ impl NativeTrayIcon {
         let mut builder = tray_icon::TrayIconBuilder::new()
             .with_id(tray_native_id(options.id))
             .with_icon(icon)
-            .with_icon_as_template(options.icon_is_template)
+            .with_icon_as_template(options.icon_is_template || options.icon.is_template())
             .with_menu_on_left_click(options.menu_on_left_click)
             .with_menu_on_right_click(true)
             .with_menu(Box::new(menu));
@@ -488,6 +532,10 @@ impl NativeTrayIcon {
     fn show_menu(&self) -> Result<(), PlatformError> {
         self.native.show_menu();
         Ok(())
+    }
+
+    fn rect(&self) -> Option<tray_icon::Rect> {
+        self.native.rect()
     }
 }
 
@@ -911,6 +959,17 @@ mod tests {
         assert!(TrayIconImage::from_rgba(vec![0; 4], 1, 1).is_ok());
         assert!(TrayIconImage::from_rgba(vec![0; 3], 1, 1).is_err());
         assert!(TrayIconImage::from_rgba(Vec::<u8>::new(), 0, 0).is_err());
+    }
+
+    #[test]
+    fn template_metadata_travels_with_the_artwork() {
+        assert!(!icon().is_template());
+        let template = icon().template(true);
+        assert!(template.is_template());
+        assert_ne!(icon(), template);
+        assert!(!template.clone().template(false).is_template());
+        assert!(!TrayIconOptions::new(1, icon()).icon_is_template);
+        assert!(TrayIconOptions::new(1, template).icon.is_template());
     }
 
     #[test]

@@ -7,7 +7,7 @@ use objc2_app_kit::{
     NSAboutPanelOptionVersion, NSApplication, NSApplicationActivationPolicy, NSBeep,
     NSDocumentController, NSImage, NSRequestUserAttentionType, NSWorkspace,
 };
-use objc2_foundation::{MainThreadMarker, NSAttributedString, NSData, NSDictionary, NSString};
+use objc2_foundation::{MainThreadMarker, NSAttributedString, NSDictionary, NSString};
 
 use crate::{
     AboutPanelOptions, ActivationPolicy, ApplicationsFolderSupport, DockAttention,
@@ -302,24 +302,13 @@ pub(crate) fn file_icon(path: &Path, size: FileIconSize) -> Result<Image, Platfo
         .map_err(|error| PlatformError::Platform(error.to_string().into()))
 }
 
+/// Convert a QuickGUI image into an `NSImage`, honoring its template flag and any additional
+/// backing-scale representations.
 pub(crate) fn native_image(
     mtm: MainThreadMarker,
     image: &Image,
 ) -> Result<Retained<NSImage>, PlatformError> {
-    use image_codecs::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
-
-    let mut encoded = Vec::new();
-    PngEncoder::new(&mut encoded)
-        .write_image(
-            image.rgba(),
-            image.width(),
-            image.height(),
-            ExtendedColorType::Rgba8,
-        )
-        .map_err(|error| PlatformError::Platform(error.to_string().into()))?;
-    NSImage::initWithData(mtm.alloc(), &NSData::with_bytes(&encoded)).ok_or_else(|| {
-        PlatformError::Platform("AppKit could not decode the application icon".into())
-    })
+    crate::macos::native_image_with_metadata(mtm, image)
 }
 
 fn main_thread() -> Result<MainThreadMarker, PlatformError> {

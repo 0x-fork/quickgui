@@ -36,6 +36,12 @@ panels.
 | Scheduled notifications | Yes | Yes | — |
 | Notification inline replies | Yes | Yes | Portal-dependent / — |
 | Dynamic protocol registration | Bundle metadata | Yes | Yes |
+| Message-box checkbox and custom icon | Yes | — | — |
+| File preview panel (Quick Look) | Yes | — | — |
+| System color panel | Yes | — | — |
+| System font panel | Yes | — | — |
+| Share sheet | Yes | — | — |
+| Biometric authentication | Yes | — | — |
 
 The complete machine-readable matrix also covers tray icons, global shortcuts, single-instance
 ownership, autostart, window icons/focusability/opacity, workspace visibility, and cursor control.
@@ -81,6 +87,110 @@ native result can fail after queueing. The About panel fills missing application
 from `AppInfo`. macOS uses `NSDocumentController`, `NSWorkspace`, and the standard AppKit About
 panel; Windows uses Shell recent-document APIs, Shell file icons/About UI, and a transactional
 `ICustomDestinationList` Jump List update.
+
+## Message boxes and file panels
+
+`EventContext::prompt` remains the smallest native alert. `EventContext::message_box` is its richer
+sibling: it accepts a level, a `message`/`detail` pair, explicit default and cancel button indices,
+a suppression checkbox, and a custom icon, and its response carries both the chosen button index and
+the final checkbox state.
+
+```rust
+use quickgui::{MessageBoxOptions, PromptButton, PromptLevel};
+
+let answer = cx.message_box(
+    MessageBoxOptions::new("Discard the unsaved draft?")
+        .level(PromptLevel::Warning)
+        .detail("This cannot be undone.")
+        .buttons([
+            PromptButton::new("Discard"),
+            PromptButton::new("Keep editing"),
+            PromptButton::cancel("Cancel"),
+        ])
+        .default_button(1)
+        .cancel_button(2)
+        .checkbox("Do not ask again", false),
+)?;
+// answer.await -> MessageBoxResponse { button, checkbox_checked }
+```
+
+Declaring no buttons yields one implicit `OK`. Every field is validated before the request is
+retained: the message must be non-empty, text is NUL-free and within `MAX_PLATFORM_TEXT_BYTES`, the
+checkbox label is within `MAX_MESSAGE_BOX_CHECKBOX_BYTES`, and the default/cancel indices must
+address a declared button. When the context owns a window the box is presented as that window's
+sheet; otherwise it is application-modal.
+
+`PathPromptOptions` and `SavePathOptions` gained the remaining panel controls:
+
+| Option | macOS | Windows | Linux/BSD |
+| --- | :---: | :---: | :---: |
+| `MessageBoxOptions::checkbox` | Yes | `Unsupported` | `Unsupported` |
+| `MessageBoxOptions::icon` | Yes | `Unsupported` | `Unsupported` |
+| `MessageBoxOptions::detail` | Yes | Title + description | Title + description |
+| `MessageBoxOptions::default_button` / `cancel_button` | Yes | Button-set order | Button-set order |
+| `PathPromptOptions::can_create_directories` | Yes | — | — |
+| `PathPromptOptions::resolves_aliases` | Yes | — | — |
+| `PathPromptOptions::treats_file_packages_as_directories` | Yes | — | — |
+| `PathPromptOptions::message` | Yes | — | — |
+| `SavePathOptions::name_field_label` | Yes | — | — |
+| `SavePathOptions::shows_tag_field` | Yes | — | — |
+
+A `Yes` maps to the AppKit panel property of the same name. A dash means the portable `rfd` backend
+exposes no equivalent and silently keeps its own default; those options never change behavior there.
+`Unsupported` means the request is rejected with `PlatformError::Unsupported` rather than dropping a
+declared affordance: the portable message box refuses a checkbox or a custom icon instead of showing
+a box that quietly lacks them. `PathPromptOptions::message` is the panel's explanatory header;
+`title` keeps mapping to the same slot when no message is supplied.
+
+## File previews, panels, and services
+
+```rust
+use quickgui::{ColorPanelMode, Font, Rect, ShareItem};
+
+cx.preview_file("/absolute/path/report.pdf", Some("Quarterly report"))?;
+cx.close_file_preview()?;
+
+cx.show_color_panel(Color::rgb8(94, 234, 212), ColorPanelMode::Continuous)?;
+cx.close_color_panel()?;
+cx.show_font_panel(Font::default())?;
+
+cx.share_items(
+    &[ShareItem::Text("Shared from QuickGUI".into()), ShareItem::File(path)],
+    Rect::new(30.0, 240.0, 1.0, 1.0),
+)?;
+
+let granted = cx.authenticate_with_biometrics("Unlock the vault")?;
+```
+
+macOS implements all five with `QLPreviewPanel`, `NSColorPanel`, `NSFontManager`,
+`NSSharingServicePicker`, and `LAContext`. Every other target returns `PlatformError::Unsupported`
+from the corresponding `DesktopIntegrationSupport` flag check before anything is queued.
+
+Bounds: a preview display name is at most `MAX_FILE_PREVIEW_NAME_BYTES`; a share sheet accepts 1 to
+`MAX_SHARE_ITEMS` items with at most `MAX_SHARE_ITEM_TEXT_BYTES` per text or URL item and an anchor
+whose components are finite and non-negative; a biometric reason is at most
+`MAX_BIOMETRIC_REASON_BYTES`.
+
+The color and font panels are shared system resources, so their observations are application
+callbacks rather than per-window listeners:
+
+```rust
+Application::new()
+    .on_color_panel_change(|color, cx| cx.update_global::<Theme, _>(|theme| theme.accent = color))
+    .on_font_panel_change(|font, cx| cx.update_global::<Theme, _>(|theme| theme.body = font))
+    .run(|cx| { /* … */ })?;
+```
+
+`ColorPanelMode::Continuous` reports every intermediate color through the panel's target/action;
+`ColorPanelMode::OnClose` installs no action and reports the final color once from the panel's
+close notification. Closing the panel removes both the target and the observation, so a dismissed
+panel costs nothing. QuickGUI's `Font` carries no point size, so a font-panel change reports the
+chosen family, weight, and slant.
+
+`LAContext` replies on a background queue. QuickGUI forwards that reply through the event loop and
+completes the `PlatformResponse<bool>` on the main thread, so no responder is ever touched off the
+application thread. A machine without biometric hardware, or a policy that forbids the check,
+reports `PlatformError::Unsupported` before the system prompt appears.
 
 ## Native menus
 

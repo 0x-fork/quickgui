@@ -538,6 +538,158 @@ impl EventContext {
         Ok(response)
     }
 
+    /// Present a native message box with an optional checkbox, custom icon, and key buttons.
+    ///
+    /// The returned future resolves to the chosen button index and the final checkbox state, so a
+    /// "do not ask again" affordance needs no second round trip. When this context owns a window
+    /// the box is presented as that window's sheet; otherwise it is application-modal.
+    ///
+    /// Only macOS implements the checkbox and the custom icon. The portable backend rejects those
+    /// two options with [`PlatformError::Unsupported`] rather than dropping them silently.
+    pub fn message_box(
+        &mut self,
+        options: MessageBoxOptions,
+    ) -> Result<MessageBoxResponseFuture, PlatformError> {
+        self.ensure_platform_capacity()?;
+        let (request, response) = match self.window {
+            Some(window) => PlatformRequest::message_box(window, options)?,
+            None => PlatformRequest::application_message_box(options)?,
+        };
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Show the operating system's file preview panel for one path.
+    ///
+    /// `display_name` replaces the panel's title and is bounded by
+    /// [`crate::MAX_FILE_PREVIEW_NAME_BYTES`]. macOS implements this with Quick Look; other
+    /// desktops report [`PlatformError::Unsupported`].
+    pub fn preview_file(
+        &mut self,
+        path: impl Into<PathBuf>,
+        display_name: Option<&str>,
+    ) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().file_previews {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        let request = PlatformRequest::preview_file(path, display_name.map(Arc::from))?;
+        self.push_platform_request(request)
+    }
+
+    /// Show the file preview panel and observe whether the platform accepted the request.
+    pub fn preview_file_response(
+        &mut self,
+        path: impl Into<PathBuf>,
+        display_name: Option<&str>,
+    ) -> Result<ShellResponse, PlatformError> {
+        self.ensure_platform_capacity()?;
+        let (request, response) =
+            PlatformRequest::preview_file_response(path, display_name.map(Arc::from))?;
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Close the operating system's file preview panel if it is open.
+    pub fn close_file_preview(&mut self) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().file_previews {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::close_file_preview())
+    }
+
+    /// Close the file preview panel and observe whether the platform accepted the request.
+    pub fn close_file_preview_response(&mut self) -> Result<ShellResponse, PlatformError> {
+        self.ensure_platform_capacity()?;
+        let (request, response) = PlatformRequest::close_file_preview_response();
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Present the system color panel and observe the user's selection.
+    ///
+    /// Install the observer with `Application::on_color_panel_change` before showing the panel.
+    /// The panel is a shared system resource: showing it again re-seeds its color and replaces the
+    /// reporting mode. macOS implements this; other desktops report [`PlatformError::Unsupported`].
+    pub fn show_color_panel(
+        &mut self,
+        initial: Color,
+        mode: ColorPanelMode,
+    ) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().color_panel {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::show_color_panel(initial, mode))
+    }
+
+    /// Dismiss the system color panel and stop observing it.
+    pub fn close_color_panel(&mut self) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().color_panel {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::close_color_panel())
+    }
+
+    /// Present the system font panel seeded with `font`.
+    ///
+    /// Install the observer with `Application::on_font_panel_change` before showing the panel.
+    pub fn show_font_panel(&mut self, font: Font) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().font_panel {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        self.push_platform_request(PlatformRequest::show_font_panel(font))
+    }
+
+    /// Present the operating system's share sheet anchored inside the current window.
+    ///
+    /// `anchor` is in the window's logical content coordinates. The item list is bounded by
+    /// [`crate::MAX_SHARE_ITEMS`] and every text or URL item by
+    /// [`crate::MAX_SHARE_ITEM_TEXT_BYTES`].
+    pub fn share_items(&mut self, items: &[ShareItem], anchor: Rect) -> Result<(), PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().share_sheet {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        let window = Some(self.window.ok_or(PlatformError::Unavailable)?);
+        self.push_platform_request(PlatformRequest::share_items(window, items, anchor)?)
+    }
+
+    /// Present the share sheet and observe whether the platform accepted the request.
+    pub fn share_items_response(
+        &mut self,
+        items: &[ShareItem],
+        anchor: Rect,
+    ) -> Result<ShellResponse, PlatformError> {
+        self.ensure_platform_capacity()?;
+        let window = Some(self.window.ok_or(PlatformError::Unavailable)?);
+        let (request, response) = PlatformRequest::share_items_response(window, items, anchor)?;
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
+    /// Ask the operating system to authenticate the current user with biometrics.
+    ///
+    /// The future resolves to `true` when the user authenticated and `false` when the attempt was
+    /// cancelled or rejected. Platforms without a biometric service, and machines whose hardware
+    /// or policy makes the check unavailable, report [`PlatformError::Unsupported`]. `reason` is
+    /// shown by the operating system and is bounded by [`crate::MAX_BIOMETRIC_REASON_BYTES`].
+    pub fn authenticate_with_biometrics(
+        &mut self,
+        reason: impl Into<Arc<str>>,
+    ) -> Result<PlatformResponse<bool>, PlatformError> {
+        if !crate::DesktopIntegrationSupport::current().biometric_authentication {
+            return Err(PlatformError::Unsupported);
+        }
+        self.ensure_platform_capacity()?;
+        let (request, response) = PlatformRequest::authenticate_with_biometrics(reason)?;
+        self.push_platform_request(request)?;
+        Ok(response)
+    }
+
     /// Post or replace an operating-system notification.
     ///
     /// The request is rejected before retention if any text or action exceeds its public bound.

@@ -1,10 +1,11 @@
 use std::{path::PathBuf, time::Duration};
 
 use quickgui::{
-    ActivationPolicy, Application, AsyncViewContext, Color, DockAttention, Element, Event, Global,
-    IntoElement, PathPromptOptions, PlatformError, PlatformResponse, PromptButton, PromptLevel,
-    SavePathOptions, SystemNotification, SystemNotificationAction, Task, TitleBarStyle, View,
-    ViewContext, WindowOptions, button, div, text,
+    ActivationPolicy, Application, AsyncViewContext, Color, ColorPanelMode, DockAttention, Element,
+    Event, Font, Global, IntoElement, MessageBoxOptions, PathPromptOptions, PlatformError,
+    PlatformResponse, PromptButton, PromptLevel, Rect, SavePathOptions, ShareItem,
+    SystemNotification, SystemNotificationAction, Task, TitleBarStyle, View, ViewContext,
+    WindowOptions, button, div, text,
 };
 
 const NOTIFICATION_TAG: &str = "quickgui-platform-services";
@@ -33,6 +34,21 @@ fn main() -> Result<(), quickgui::AppError> {
             if !had_visible_windows {
                 cx.open_window(platform_window_options(), PlatformServices::default());
             }
+        })
+        .on_display_event(|event, cx| {
+            cx.update_global::<ApplicationStatus, _>(|status| {
+                status.0 = format!("Display {:?} changed: {event:?}", event.display_id());
+            });
+        })
+        .on_color_panel_change(|color, cx| {
+            cx.update_global::<ApplicationStatus, _>(|status| {
+                status.0 = format!("Color panel chose {color:?}");
+            });
+        })
+        .on_font_panel_change(|font, cx| {
+            cx.update_global::<ApplicationStatus, _>(|status| {
+                status.0 = format!("Font panel chose {:?}", font.family);
+            });
         })
         .on_system_wake(|cx| {
             cx.update_global::<ApplicationStatus, _>(|status| {
@@ -394,6 +410,108 @@ impl View for PlatformServices {
             };
             cx.invalidate();
         });
+        let message_box = cx.listener("native-message-box", |this, cx| {
+            if this.pending {
+                return;
+            }
+            let options = MessageBoxOptions::new("Discard the unsaved draft?")
+                .level(PromptLevel::Warning)
+                .detail("A message box adds a suppression checkbox and explicit key buttons.")
+                .buttons([
+                    PromptButton::new("Discard"),
+                    PromptButton::new("Keep editing"),
+                    PromptButton::cancel("Cancel"),
+                ])
+                .default_button(1)
+                .cancel_button(2)
+                .checkbox("Do not ask again", false);
+            match cx.message_box(options) {
+                Ok(response) => this.await_response(cx, response, |this, result| {
+                    this.status = match result {
+                        Ok(answer) => format!(
+                            "Message box chose button {} with checkbox {}",
+                            answer.button, answer.checkbox_checked
+                        ),
+                        Err(error) => format!("Message box failed: {error}"),
+                    };
+                }),
+                Err(error) => this.status = format!("Message box rejected: {error}"),
+            }
+            cx.invalidate();
+        });
+
+        let preview_selected = cx.listener("preview-selected", |this, cx| {
+            let Some(path) = this.selected_path.clone() else {
+                this.status = "Select a path first".to_owned();
+                cx.invalidate();
+                return;
+            };
+            this.status = match cx.preview_file(path, Some("QuickGUI preview")) {
+                Ok(()) => "Opened the Quick Look preview panel".to_owned(),
+                Err(error) => format!("Preview rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let close_preview = cx.listener("close-preview", |this, cx| {
+            this.status = match cx.close_file_preview() {
+                Ok(()) => "Closed the Quick Look preview panel".to_owned(),
+                Err(error) => format!("Preview dismissal rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+
+        let color_panel = cx.listener("show-color-panel", |this, cx| {
+            this.status =
+                match cx.show_color_panel(Color::rgb8(94, 234, 212), ColorPanelMode::Continuous) {
+                    Ok(()) => "Opened the system color panel".to_owned(),
+                    Err(error) => format!("Color panel rejected: {error}"),
+                };
+            cx.invalidate();
+        });
+        let close_color_panel = cx.listener("close-color-panel", |this, cx| {
+            this.status = match cx.close_color_panel() {
+                Ok(()) => "Closed the system color panel".to_owned(),
+                Err(error) => format!("Color panel dismissal rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+        let font_panel = cx.listener("show-font-panel", |this, cx| {
+            this.status = match cx.show_font_panel(Font::default()) {
+                Ok(()) => "Opened the system font panel".to_owned(),
+                Err(error) => format!("Font panel rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+
+        let share = cx.listener("share-items", |this, cx| {
+            let mut items = vec![ShareItem::Text("Shared from QuickGUI".into())];
+            if let Some(path) = this.selected_path.clone() {
+                items.push(ShareItem::File(path));
+            }
+            this.status = match cx.share_items(&items, Rect::new(30.0, 240.0, 1.0, 1.0)) {
+                Ok(()) => "Opened the share sheet".to_owned(),
+                Err(error) => format!("Share sheet rejected: {error}"),
+            };
+            cx.invalidate();
+        });
+
+        let biometrics = cx.listener("authenticate", |this, cx| {
+            if this.pending {
+                return;
+            }
+            match cx.authenticate_with_biometrics("Unlock the QuickGUI example") {
+                Ok(response) => this.await_response(cx, response, |this, result| {
+                    this.status = match result {
+                        Ok(true) => "Biometric authentication succeeded".to_owned(),
+                        Ok(false) => "Biometric authentication was declined".to_owned(),
+                        Err(error) => format!("Biometric authentication failed: {error}"),
+                    };
+                }),
+                Err(error) => this.status = format!("Biometric request rejected: {error}"),
+            }
+            cx.invalidate();
+        });
+
         let show_notification = cx.listener("show-system-notification", |this, cx| {
             this.notification_revision += 1;
             let revision = this.notification_revision;
@@ -481,6 +599,20 @@ impl View for PlatformServices {
                             .child(Self::control("Beep").on_click(beep))
                             .child(Self::control("Toggle secure input").on_click(secure_input))
                             .child(Self::control("Packaging report").on_click(packaging)),
+                    )
+                    .child(
+                        div()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(10.0)
+                            .child(Self::control("Message box…").disabled(self.pending).on_click(message_box))
+                            .child(Self::control("Quick Look").disabled(self.selected_path.is_none()).on_click(preview_selected))
+                            .child(Self::control("Close preview").on_click(close_preview))
+                            .child(Self::control("Color panel").on_click(color_panel))
+                            .child(Self::control("Close color panel").on_click(close_color_panel))
+                            .child(Self::control("Font panel").on_click(font_panel))
+                            .child(Self::control("Share…").on_click(share))
+                            .child(Self::control("Authenticate").disabled(self.pending).on_click(biometrics)),
                     )
                     .child(
                         div()

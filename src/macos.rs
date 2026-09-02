@@ -70,8 +70,19 @@ use crate::{
 };
 
 mod file_dialog;
+mod image;
+mod message_box;
+mod panels;
+mod quick_look;
 
 pub(crate) use file_dialog::{present_native_open_panel, present_native_save_panel};
+pub(crate) use image::{native_image_with_metadata, system_image};
+pub(crate) use message_box::present_native_message_box;
+pub(crate) use panels::{
+    authenticate_with_biometrics, close_color_panel, complete_biometric_authentication,
+    share_items, show_color_panel, show_font_panel,
+};
+pub(crate) use quick_look::{close_file_preview, preview_file};
 
 mod drag_drop;
 mod native_host;

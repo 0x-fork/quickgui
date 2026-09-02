@@ -54,9 +54,9 @@ use winit::{dpi::PhysicalPosition, raw_window_handle::HasWindowHandle};
 use crate::platform::PlatformDialogId;
 use crate::{
     AboutPanelOptions, Action, ActionListener, AnyAction, AppInfo, AppPaths, AssetError, Assets,
-    Color, ColorScheme, CursorStyle, Display, DisplayId, Displays, Element, ElementId, Entity,
-    EntityId, EventEmitter, FileIconResponse, FileIconSize, FocusHandle, FontSource, Global, Image,
-    IntoElement, KeyBinding, KeyboardLayout, Keymap, Keystroke,
+    Color, ColorScheme, CursorStyle, Display, DisplayEvent, DisplayId, Displays, Element,
+    ElementId, Entity, EntityId, EventEmitter, FileIconResponse, FileIconSize, FocusHandle, Font,
+    FontSource, Global, Image, IntoElement, KeyBinding, KeyboardLayout, Keymap, Keystroke,
     MAX_ENTITY_EVENT_DELIVERIES_PER_TURN, MAX_ENTITY_SUBSCRIPTIONS_PER_WINDOW,
     MAX_GLOBAL_OBSERVER_DELIVERIES_PER_TURN, MAX_GLOBAL_SUBSCRIPTIONS_PER_WINDOW,
     MAX_OBSERVED_ENTITIES_PER_WINDOW, MAX_OBSERVED_GLOBALS_PER_WINDOW, MAX_PENDING_ENTITY_EVENTS,
@@ -205,6 +205,8 @@ pub(crate) enum RuntimeEvent {
     #[cfg(target_os = "macos")]
     KeyboardLayoutChanged,
     #[cfg(target_os = "macos")]
+    NativePanel(native_panels::NativePanelEvent),
+    #[cfg(target_os = "macos")]
     SystemNotificationAuthorization {
         granted: bool,
         error: Option<Arc<str>>,
@@ -334,6 +336,9 @@ type GlobalShortcutCallback = Box<dyn FnMut(GlobalShortcutEvent, &mut EventConte
 type SecondInstanceCallback = Box<dyn FnMut(SecondInstanceEvent, &mut EventContext)>;
 type PowerEventCallback = Box<dyn FnMut(PowerEvent, &mut EventContext)>;
 type TrayEventCallback = Box<dyn FnMut(TrayEvent, &mut EventContext)>;
+type DisplayEventCallback = Box<dyn FnMut(DisplayEvent, &mut EventContext)>;
+type ColorPanelChangeCallback = Box<dyn FnMut(Color, &mut EventContext)>;
+type FontPanelChangeCallback = Box<dyn FnMut(Font, &mut EventContext)>;
 type WindowClosedCallback = Box<dyn FnMut(WindowHandle, &mut EventContext)>;
 type QuitCallback = Box<dyn FnMut(QuitRequest, &mut EventContext)>;
 type FinishLaunchingCallback = Box<dyn FnOnce(&mut EventContext)>;
@@ -352,6 +357,9 @@ struct ApplicationCallbacks {
     tray_event: Option<TrayEventCallback>,
     did_become_active: Option<SystemWakeCallback>,
     did_resign_active: Option<SystemWakeCallback>,
+    display_event: Option<DisplayEventCallback>,
+    color_panel_change: Option<ColorPanelChangeCallback>,
+    font_panel_change: Option<FontPanelChangeCallback>,
     window_closed: Option<WindowClosedCallback>,
     before_quit: Option<QuitCallback>,
     will_quit: Option<QuitCallback>,
@@ -360,6 +368,10 @@ struct ApplicationCallbacks {
 mod application;
 #[cfg(not(target_arch = "wasm32"))]
 mod deep_link;
+mod display_events;
+mod native_panels;
+#[cfg(target_os = "macos")]
+pub(crate) use native_panels::NativePanelEvent;
 mod external;
 #[cfg(not(target_arch = "wasm32"))]
 pub use application::AppRunner;
@@ -1021,6 +1033,7 @@ struct Runtime {
     platform_requests: VecDeque<PlatformRequest>,
     pending_global_shortcut_commands: VecDeque<global_shortcut::GlobalShortcutCommand>,
     pending_tray_commands: VecDeque<tray::TrayCommand>,
+    pending_display_events: VecDeque<DisplayEvent>,
     global_shortcut_state: global_shortcut::GlobalShortcutState,
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     global_shortcuts: HashMap<u32, global_shortcut::RegisteredGlobalShortcut>,

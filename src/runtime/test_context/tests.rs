@@ -18,5 +18,6 @@ crate::actions!(
 mod application;
 mod core;
 mod input;
+mod platform_services;
 mod visual;
 mod window_shell;

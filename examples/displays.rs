@@ -145,6 +145,23 @@ impl DisplayBrowser {
                 .text_color(Color::rgb8(148, 156, 174)),
             )
             .child(
+                text(format!(
+                    "{} panel · rotated {}° · {}",
+                    if display.is_internal() {
+                        "built-in"
+                    } else {
+                        "external"
+                    },
+                    display.rotation_degrees(),
+                    display.color_depth().map_or_else(
+                        || "depth unknown".to_owned(),
+                        |bits| format!("{bits}-bit color")
+                    ),
+                ))
+                .text_sm()
+                .text_color(Color::rgb8(148, 156, 174)),
+            )
+            .child(
                 button()
                     .on_click(open)
                     .min_h(38.0)

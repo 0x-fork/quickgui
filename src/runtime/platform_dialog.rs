@@ -521,6 +521,26 @@ impl Runtime {
                 options,
                 responder,
             } => self.start_rfd_open_dialog(window, options, responder),
+            PlatformRequest::MessageBox {
+                window,
+                options,
+                responder,
+            } => self.start_rfd_message_box(window, *options, responder),
+            PlatformRequest::PreviewFile { responder, .. }
+            | PlatformRequest::CloseFilePreview { responder }
+            | PlatformRequest::ShowColorPanel { responder, .. }
+            | PlatformRequest::CloseColorPanel { responder }
+            | PlatformRequest::ShowFontPanel { responder, .. }
+            | PlatformRequest::ShareItems { responder, .. } => {
+                finish_shell_request(
+                    responder,
+                    Err(PlatformError::Unsupported),
+                    "unsupported native panel",
+                );
+            }
+            PlatformRequest::AuthenticateWithBiometrics { responder, .. } => {
+                responder.complete(Err(PlatformError::Unsupported));
+            }
             PlatformRequest::SavePath {
                 window,
                 options,
@@ -802,6 +822,97 @@ impl Runtime {
             let _completion = completion;
             let result = dialog.show().await;
             responder.complete(rfd_prompt_index(result, &buttons));
+        };
+        let task = match owner {
+            Some(owner) => self
+                .foreground_tasks
+                .spawn::<(), _, _, _>(owner, move |_| future),
+            None => self.foreground_tasks.spawn_application(future),
+        };
+        match task {
+            Ok(task) => {
+                self.active_platform_dialogs
+                    .insert(owner, ActivePlatformDialog { id, _task: task });
+            }
+            Err(error) => {
+                failed_responder.complete(Err(PlatformError::Platform(error.to_string().into())))
+            }
+        }
+    }
+
+    /// Present a portable message box.
+    ///
+    /// The portable backend has no suppression checkbox and no custom icon, so those options are
+    /// rejected rather than silently dropped. The response always reports `checkbox_checked:
+    /// false` here.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    fn start_rfd_message_box(
+        &mut self,
+        owner: Option<WindowHandle>,
+        options: crate::MessageBoxOptions,
+        responder: crate::platform::PlatformResponder<crate::MessageBoxResponse>,
+    ) {
+        if options.checkbox.is_some() || options.icon.is_some() {
+            responder.complete(Err(PlatformError::Unsupported));
+            return;
+        }
+        let native_window = match self.rfd_parent_window(owner) {
+            Ok(window) => window,
+            Err(error) => {
+                responder.complete(Err(error));
+                return;
+            }
+        };
+        let buttons = options.resolved_buttons();
+        let native_buttons = match rfd_prompt_buttons(&buttons) {
+            Ok(buttons) => buttons,
+            Err(error) => {
+                responder.complete(Err(error));
+                return;
+            }
+        };
+
+        let mut dialog = rfd::AsyncMessageDialog::new()
+            .set_level(match options.level.unwrap_or(PromptLevel::Info) {
+                PromptLevel::Info => rfd::MessageLevel::Info,
+                PromptLevel::Warning => rfd::MessageLevel::Warning,
+                PromptLevel::Critical => rfd::MessageLevel::Error,
+            })
+            .set_buttons(native_buttons);
+        if let Some(native_window) = &native_window {
+            dialog = dialog.set_parent(native_window.as_ref());
+        }
+        dialog = if let Some(detail) = &options.detail {
+            dialog
+                .set_title(options.message.as_ref())
+                .set_description(detail.as_ref())
+        } else {
+            dialog.set_description(options.message.as_ref())
+        };
+
+        let id = PlatformDialogId::next();
+        let completion = PlatformDialogCompletion {
+            proxy: self.event_proxy.clone(),
+            owner,
+            id,
+        };
+        let failed_responder = responder.clone();
+        let future = async move {
+            let _completion = completion;
+            let result = dialog.show().await;
+            responder.complete(rfd_prompt_index(result, &buttons).map(|button| {
+                crate::MessageBoxResponse {
+                    button,
+                    checkbox_checked: false,
+                }
+            }));
         };
         let task = match owner {
             Some(owner) => self
@@ -1126,6 +1237,61 @@ impl Runtime {
             PlatformRequest::MoveToApplicationsFolder { responder } => {
                 responder.complete(crate::macos_shell::move_to_applications_folder());
             }
+            PlatformRequest::PreviewFile {
+                path,
+                display_name,
+                responder,
+            } => finish_shell_request(
+                responder,
+                crate::macos::preview_file(&path, display_name.as_deref()),
+                "preview file",
+            ),
+            PlatformRequest::CloseFilePreview { responder } => {
+                finish_shell_request(
+                    responder,
+                    crate::macos::close_file_preview(),
+                    "close preview",
+                );
+            }
+            PlatformRequest::ShowColorPanel {
+                initial,
+                mode,
+                responder,
+            } => finish_shell_request(
+                responder,
+                crate::macos::show_color_panel(&self.event_proxy, initial, mode),
+                "show color panel",
+            ),
+            PlatformRequest::CloseColorPanel { responder } => finish_shell_request(
+                responder,
+                crate::macos::close_color_panel(),
+                "close color panel",
+            ),
+            PlatformRequest::ShowFontPanel { font, responder } => finish_shell_request(
+                responder,
+                crate::macos::show_font_panel(&self.event_proxy, &font),
+                "show font panel",
+            ),
+            PlatformRequest::ShareItems {
+                window,
+                items,
+                anchor,
+                responder,
+            } => {
+                let native_window = window
+                    .and_then(|window| self.window_handles.get(&window).copied())
+                    .and_then(|window_id| self.windows.get(&window_id))
+                    .map(|entry| entry.state.window.clone());
+                let result = if window.is_some() && native_window.is_none() {
+                    Err(PlatformError::Unavailable)
+                } else {
+                    crate::macos::share_items(native_window.as_ref(), &items, anchor)
+                };
+                finish_shell_request(responder, result, "share items");
+            }
+            PlatformRequest::AuthenticateWithBiometrics { reason, responder } => {
+                crate::macos::authenticate_with_biometrics(&self.event_proxy, &reason, responder);
+            }
             request => {
                 let owner = request.window();
                 let native_window = match owner {
@@ -1229,7 +1395,31 @@ impl Runtime {
                             }
                         }
                     }
-                    PlatformRequest::ShowSystemNotification(_)
+                    PlatformRequest::MessageBox {
+                        options, responder, ..
+                    } => {
+                        let completion = responder.clone();
+                        match crate::macos::present_native_message_box(
+                            native_window.as_ref(),
+                            context,
+                            &options,
+                            completion,
+                        ) {
+                            Ok(native) => native,
+                            Err(error) => {
+                                responder.complete(Err(PlatformError::Platform(error.into())));
+                                return;
+                            }
+                        }
+                    }
+                    PlatformRequest::PreviewFile { .. }
+                    | PlatformRequest::CloseFilePreview { .. }
+                    | PlatformRequest::ShowColorPanel { .. }
+                    | PlatformRequest::CloseColorPanel { .. }
+                    | PlatformRequest::ShowFontPanel { .. }
+                    | PlatformRequest::ShareItems { .. }
+                    | PlatformRequest::AuthenticateWithBiometrics { .. }
+                    | PlatformRequest::ShowSystemNotification(_)
                     | PlatformRequest::DismissSystemNotification(_)
                     | PlatformRequest::NotificationPermissionStatus { .. }
                     | PlatformRequest::RequestNotificationPermission { .. }

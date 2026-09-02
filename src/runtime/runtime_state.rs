@@ -108,6 +108,7 @@ impl Runtime {
             platform_requests: VecDeque::with_capacity(8),
             pending_global_shortcut_commands: VecDeque::with_capacity(4),
             pending_tray_commands: VecDeque::with_capacity(4),
+            pending_display_events: VecDeque::new(),
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             global_shortcut_state: global_shortcut::GlobalShortcutState::Pending,
             #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -580,6 +581,10 @@ impl Runtime {
     pub(super) fn refresh_displays(&mut self, event_loop: &ActiveEventLoop) -> bool {
         let displays = crate::display::native_displays(event_loop);
         let snapshot_changed = self.displays != displays;
+        if snapshot_changed && self.application_callbacks.display_event.is_some() {
+            self.pending_display_events
+                .extend(self.displays.diff(&displays));
+        }
         self.displays = displays;
 
         let refresh_window = |state: &mut RuntimeWindow| {

@@ -31,6 +31,16 @@ pub const MAX_ACTIVE_PLATFORM_DIALOGS: usize = 32;
 pub const MAX_PLATFORM_TEXT_BYTES: usize = 64 * 1024;
 /// Maximum UTF-8 bytes retained by one native prompt button label.
 pub const MAX_PROMPT_BUTTON_BYTES: usize = 1_024;
+/// Maximum UTF-8 bytes retained by one native message-box checkbox label.
+pub const MAX_MESSAGE_BOX_CHECKBOX_BYTES: usize = 4 * 1_024;
+/// Maximum UTF-8 bytes retained by one Quick Look preview display name.
+pub const MAX_FILE_PREVIEW_NAME_BYTES: usize = 1_024;
+/// Maximum items accepted by one native share sheet.
+pub const MAX_SHARE_ITEMS: usize = 32;
+/// Maximum UTF-8 bytes accepted for one share-sheet text or URL item.
+pub const MAX_SHARE_ITEM_TEXT_BYTES: usize = 64 * 1024;
+/// Maximum UTF-8 bytes accepted for one biometric-authentication reason.
+pub const MAX_BIOMETRIC_REASON_BYTES: usize = 4 * 1_024;
 /// Maximum buttons accepted by one native prompt.
 pub const MAX_PROMPT_BUTTONS: usize = 16;
 /// Maximum platform-native bytes accepted for one filesystem path.
@@ -162,6 +172,12 @@ pub enum PlatformError {
     InvalidFileDialogFilter,
     #[error("the native path selection exceeded QuickGUI's bounded result size")]
     SelectionTooLarge,
+    #[error(
+        "a share sheet requires 1 to {MAX_SHARE_ITEMS} items whose text, URLs, and paths are nonempty, NUL-free, and within their byte bounds"
+    )]
+    InvalidShareItems,
+    #[error("a share-sheet anchor must be finite with non-negative dimensions")]
+    InvalidShareAnchor,
     #[error("native platform operation failed: {0}")]
     Platform(Arc<str>),
 }
@@ -610,6 +626,14 @@ pub struct PathPromptOptions {
     pub suggested_name: Option<Arc<str>>,
     pub filters: Vec<FileDialogFilter>,
     pub shows_hidden_files: bool,
+    /// Whether the panel offers its "New Folder" affordance.
+    pub can_create_directories: bool,
+    /// Whether the panel resolves a selected alias to its original item.
+    pub resolves_aliases: bool,
+    /// Whether bundles such as `.app` are browsed as directories instead of chosen as files.
+    pub treats_file_packages_as_directories: bool,
+    /// Explanatory text shown above the panel's browser.
+    pub message: Option<Arc<str>>,
 }
 
 impl Default for PathPromptOptions {
@@ -624,6 +648,10 @@ impl Default for PathPromptOptions {
             suggested_name: None,
             filters: Vec::new(),
             shows_hidden_files: false,
+            can_create_directories: true,
+            resolves_aliases: false,
+            treats_file_packages_as_directories: false,
+            message: None,
         }
     }
 }
@@ -677,6 +705,30 @@ impl PathPromptOptions {
         self.shows_hidden_files = shows_hidden_files;
         self
     }
+
+    /// Offer or hide the panel's "New Folder" affordance. Enabled by default.
+    pub fn can_create_directories(mut self, can_create_directories: bool) -> Self {
+        self.can_create_directories = can_create_directories;
+        self
+    }
+
+    /// Resolve a selected alias or symbolic link to its original item.
+    pub fn resolves_aliases(mut self, resolves_aliases: bool) -> Self {
+        self.resolves_aliases = resolves_aliases;
+        self
+    }
+
+    /// Browse bundles such as `.app` as ordinary directories.
+    pub fn treats_file_packages_as_directories(mut self, treats: bool) -> Self {
+        self.treats_file_packages_as_directories = treats;
+        self
+    }
+
+    /// Explanatory text shown above the panel's browser.
+    pub fn message(mut self, message: impl Into<Arc<str>>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
 }
 
 /// Options for a native save panel.
@@ -688,6 +740,10 @@ pub struct SavePathOptions {
     pub prompt: Option<Arc<str>>,
     pub filters: Vec<FileDialogFilter>,
     pub shows_hidden_files: bool,
+    /// Label shown beside the file-name field.
+    pub name_field_label: Option<Arc<str>>,
+    /// Whether the panel offers the Finder tag field.
+    pub shows_tag_field: bool,
 }
 
 impl SavePathOptions {
@@ -699,6 +755,8 @@ impl SavePathOptions {
             prompt: None,
             filters: Vec::new(),
             shows_hidden_files: false,
+            name_field_label: None,
+            shows_tag_field: true,
         }
     }
 
@@ -726,7 +784,142 @@ impl SavePathOptions {
         self.shows_hidden_files = shows_hidden_files;
         self
     }
+
+    /// Label shown beside the file-name field.
+    pub fn name_field_label(mut self, label: impl Into<Arc<str>>) -> Self {
+        self.name_field_label = Some(label.into());
+        self
+    }
+
+    /// Show or hide the Finder tag field. Shown by default.
+    pub fn shows_tag_field(mut self, shows_tag_field: bool) -> Self {
+        self.shows_tag_field = shows_tag_field;
+        self
+    }
 }
+
+/// When a system color panel reports the user's selection.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum ColorPanelMode {
+    /// Report every intermediate color while the user drags inside the panel.
+    #[default]
+    Continuous,
+    /// Report only the final color, once the panel is dismissed.
+    OnClose,
+}
+
+/// One item offered to the operating system's share sheet.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ShareItem {
+    Text(Arc<str>),
+    Url(Arc<str>),
+    File(PathBuf),
+    Image(Image),
+}
+
+/// One optional suppression checkbox shown inside a native message box.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MessageBoxCheckbox {
+    pub label: Arc<str>,
+    pub checked: bool,
+}
+
+/// The user's answer to a native message box.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct MessageBoxResponse {
+    /// Index of the chosen button in the declared button order.
+    pub button: usize,
+    /// Final checkbox state, always `false` when no checkbox was declared.
+    pub checkbox_checked: bool,
+}
+
+/// A native message box with an optional checkbox, custom icon, and explicit key buttons.
+///
+/// This is the richer sibling of [`crate::EventContext::prompt`]. Every field is validated and
+/// bounded before the request is retained, and the response carries the checkbox state so a
+/// "do not ask again" affordance needs no second round trip.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MessageBoxOptions {
+    pub level: Option<PromptLevel>,
+    pub message: Arc<str>,
+    pub detail: Option<Arc<str>>,
+    pub buttons: Vec<PromptButton>,
+    pub default_button: Option<usize>,
+    pub cancel_button: Option<usize>,
+    pub checkbox: Option<MessageBoxCheckbox>,
+    pub icon: Option<Image>,
+}
+
+impl MessageBoxOptions {
+    /// Start a message box with one `OK` button at [`PromptLevel::Info`].
+    pub fn new(message: impl Into<Arc<str>>) -> Self {
+        Self {
+            level: None,
+            message: message.into(),
+            detail: None,
+            buttons: Vec::new(),
+            default_button: None,
+            cancel_button: None,
+            checkbox: None,
+            icon: None,
+        }
+    }
+
+    pub fn level(mut self, level: PromptLevel) -> Self {
+        self.level = Some(level);
+        self
+    }
+
+    /// Secondary explanatory text shown below the message.
+    pub fn detail(mut self, detail: impl Into<Arc<str>>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn buttons(mut self, buttons: impl IntoIterator<Item = PromptButton>) -> Self {
+        self.buttons = buttons.into_iter().collect();
+        self
+    }
+
+    /// Index of the button activated by Return.
+    pub fn default_button(mut self, index: usize) -> Self {
+        self.default_button = Some(index);
+        self
+    }
+
+    /// Index of the button activated by Escape.
+    pub fn cancel_button(mut self, index: usize) -> Self {
+        self.cancel_button = Some(index);
+        self
+    }
+
+    /// Add a suppression checkbox whose final state is returned with the answer.
+    pub fn checkbox(mut self, label: impl Into<Arc<str>>, initially_checked: bool) -> Self {
+        self.checkbox = Some(MessageBoxCheckbox {
+            label: label.into(),
+            checked: initially_checked,
+        });
+        self
+    }
+
+    /// Replace the level's stock artwork with an application image.
+    pub fn icon(mut self, icon: Image) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Declared buttons, or the implicit single `OK` button.
+    pub fn resolved_buttons(&self) -> Vec<PromptButton> {
+        if self.buttons.is_empty() {
+            vec![PromptButton::ok("OK")]
+        } else {
+            self.buttons.clone()
+        }
+    }
+}
+
+/// A pending native message-box answer.
+pub type MessageBoxResponseFuture = PlatformResponse<MessageBoxResponse>;
 
 struct PlatformResponseState<T> {
     result: RefCell<Option<Result<T, PlatformError>>>,
@@ -914,6 +1107,41 @@ pub(crate) enum PlatformRequest {
         options: SavePathOptions,
         responder: PlatformResponder<Option<PathBuf>>,
     },
+    MessageBox {
+        window: Option<WindowHandle>,
+        options: Box<MessageBoxOptions>,
+        responder: PlatformResponder<MessageBoxResponse>,
+    },
+    PreviewFile {
+        path: PathBuf,
+        display_name: Option<Arc<str>>,
+        responder: Option<PlatformResponder<()>>,
+    },
+    CloseFilePreview {
+        responder: Option<PlatformResponder<()>>,
+    },
+    ShowColorPanel {
+        initial: crate::Color,
+        mode: ColorPanelMode,
+        responder: Option<PlatformResponder<()>>,
+    },
+    CloseColorPanel {
+        responder: Option<PlatformResponder<()>>,
+    },
+    ShowFontPanel {
+        font: Box<crate::Font>,
+        responder: Option<PlatformResponder<()>>,
+    },
+    ShareItems {
+        window: Option<WindowHandle>,
+        items: Vec<ShareItem>,
+        anchor: crate::Rect,
+        responder: Option<PlatformResponder<()>>,
+    },
+    AuthenticateWithBiometrics {
+        reason: Arc<str>,
+        responder: PlatformResponder<bool>,
+    },
     ShowSystemNotification(SystemNotification),
     DismissSystemNotification(Arc<str>),
     NotificationPermissionStatus {
@@ -1079,6 +1307,144 @@ impl PlatformRequest {
                 options,
                 responder,
             },
+            response,
+        ))
+    }
+
+    pub(crate) fn message_box(
+        window: WindowHandle,
+        options: MessageBoxOptions,
+    ) -> Result<(Self, MessageBoxResponseFuture), PlatformError> {
+        Self::message_box_with_owner(Some(window), options)
+    }
+
+    pub(crate) fn application_message_box(
+        options: MessageBoxOptions,
+    ) -> Result<(Self, MessageBoxResponseFuture), PlatformError> {
+        Self::message_box_with_owner(None, options)
+    }
+
+    fn message_box_with_owner(
+        window: Option<WindowHandle>,
+        options: MessageBoxOptions,
+    ) -> Result<(Self, MessageBoxResponseFuture), PlatformError> {
+        validate_message_box_options(&options)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::MessageBox {
+                window,
+                options: Box::new(options),
+                responder,
+            },
+            response,
+        ))
+    }
+
+    pub(crate) fn preview_file(
+        path: impl Into<PathBuf>,
+        display_name: Option<Arc<str>>,
+    ) -> Result<Self, PlatformError> {
+        let (path, display_name) = validated_preview_file(path, display_name)?;
+        Ok(Self::PreviewFile {
+            path,
+            display_name,
+            responder: None,
+        })
+    }
+
+    pub(crate) fn preview_file_response(
+        path: impl Into<PathBuf>,
+        display_name: Option<Arc<str>>,
+    ) -> Result<(Self, ShellResponse), PlatformError> {
+        let (path, display_name) = validated_preview_file(path, display_name)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::PreviewFile {
+                path,
+                display_name,
+                responder: Some(responder),
+            },
+            response,
+        ))
+    }
+
+    pub(crate) fn close_file_preview() -> Self {
+        Self::CloseFilePreview { responder: None }
+    }
+
+    pub(crate) fn close_file_preview_response() -> (Self, ShellResponse) {
+        let (responder, response) = response_channel();
+        (
+            Self::CloseFilePreview {
+                responder: Some(responder),
+            },
+            response,
+        )
+    }
+
+    pub(crate) fn show_color_panel(initial: crate::Color, mode: ColorPanelMode) -> Self {
+        Self::ShowColorPanel {
+            initial,
+            mode,
+            responder: None,
+        }
+    }
+
+    pub(crate) fn close_color_panel() -> Self {
+        Self::CloseColorPanel { responder: None }
+    }
+
+    pub(crate) fn show_font_panel(font: crate::Font) -> Self {
+        Self::ShowFontPanel {
+            font: Box::new(font),
+            responder: None,
+        }
+    }
+
+    pub(crate) fn share_items(
+        window: Option<WindowHandle>,
+        items: &[ShareItem],
+        anchor: crate::Rect,
+    ) -> Result<Self, PlatformError> {
+        validate_share_items(items)?;
+        validate_share_anchor(anchor)?;
+        Ok(Self::ShareItems {
+            window,
+            items: items.to_vec(),
+            anchor,
+            responder: None,
+        })
+    }
+
+    pub(crate) fn share_items_response(
+        window: Option<WindowHandle>,
+        items: &[ShareItem],
+        anchor: crate::Rect,
+    ) -> Result<(Self, ShellResponse), PlatformError> {
+        validate_share_items(items)?;
+        validate_share_anchor(anchor)?;
+        let (responder, response) = response_channel();
+        Ok((
+            Self::ShareItems {
+                window,
+                items: items.to_vec(),
+                anchor,
+                responder: Some(responder),
+            },
+            response,
+        ))
+    }
+
+    pub(crate) fn authenticate_with_biometrics(
+        reason: impl Into<Arc<str>>,
+    ) -> Result<(Self, PlatformResponse<bool>), PlatformError> {
+        let reason = reason.into();
+        if reason.is_empty() || reason.len() > MAX_BIOMETRIC_REASON_BYTES || reason.contains('\0') {
+            return Err(PlatformError::InvalidText);
+        }
+        let (responder, response) = response_channel();
+        Ok((
+            Self::AuthenticateWithBiometrics { reason, responder },
             response,
         ))
     }
@@ -1266,8 +1632,16 @@ impl PlatformRequest {
         match self {
             Self::Prompt { window, .. }
             | Self::OpenPaths { window, .. }
-            | Self::SavePath { window, .. } => *window,
-            Self::ShowSystemNotification(_)
+            | Self::SavePath { window, .. }
+            | Self::MessageBox { window, .. } => *window,
+            Self::ShareItems { window, .. } => *window,
+            Self::PreviewFile { .. }
+            | Self::CloseFilePreview { .. }
+            | Self::ShowColorPanel { .. }
+            | Self::CloseColorPanel { .. }
+            | Self::ShowFontPanel { .. }
+            | Self::AuthenticateWithBiometrics { .. }
+            | Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
             | Self::NotificationPermissionStatus { .. }
             | Self::RequestNotificationPermission { .. }
@@ -1315,6 +1689,16 @@ impl PlatformRequest {
             | Self::SetDockVisible { responder, .. } => responder.is_cancelled(),
             Self::RequestDockAttention { responder, .. } => responder.is_cancelled(),
             Self::MoveToApplicationsFolder { responder } => responder.is_cancelled(),
+            Self::MessageBox { responder, .. } => responder.is_cancelled(),
+            Self::PreviewFile { responder, .. }
+            | Self::CloseFilePreview { responder }
+            | Self::ShowColorPanel { responder, .. }
+            | Self::CloseColorPanel { responder }
+            | Self::ShowFontPanel { responder, .. }
+            | Self::ShareItems { responder, .. } => responder
+                .as_ref()
+                .is_some_and(PlatformResponder::is_cancelled),
+            Self::AuthenticateWithBiometrics { responder, .. } => responder.is_cancelled(),
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
             | Self::SetDockBadge(_)
@@ -1343,7 +1727,15 @@ impl PlatformRequest {
             Self::Prompt { responder, .. } => responder.bind_cancellation(proxy, owner, id),
             Self::OpenPaths { responder, .. } => responder.bind_cancellation(proxy, owner, id),
             Self::SavePath { responder, .. } => responder.bind_cancellation(proxy, owner, id),
-            Self::ShowSystemNotification(_)
+            Self::MessageBox { responder, .. } => responder.bind_cancellation(proxy, owner, id),
+            Self::PreviewFile { .. }
+            | Self::CloseFilePreview { .. }
+            | Self::ShowColorPanel { .. }
+            | Self::CloseColorPanel { .. }
+            | Self::ShowFontPanel { .. }
+            | Self::ShareItems { .. }
+            | Self::AuthenticateWithBiometrics { .. }
+            | Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
             | Self::NotificationPermissionStatus { .. }
             | Self::RequestNotificationPermission { .. }
@@ -1395,6 +1787,18 @@ impl PlatformRequest {
             | Self::SetDockVisible { responder, .. } => responder.complete(Err(error)),
             Self::RequestDockAttention { responder, .. } => responder.complete(Err(error)),
             Self::MoveToApplicationsFolder { responder } => responder.complete(Err(error)),
+            Self::MessageBox { responder, .. } => responder.complete(Err(error)),
+            Self::PreviewFile { responder, .. }
+            | Self::CloseFilePreview { responder }
+            | Self::ShowColorPanel { responder, .. }
+            | Self::CloseColorPanel { responder }
+            | Self::ShowFontPanel { responder, .. }
+            | Self::ShareItems { responder, .. } => {
+                if let Some(responder) = responder {
+                    responder.complete(Err(error));
+                }
+            }
+            Self::AuthenticateWithBiometrics { responder, .. } => responder.complete(Err(error)),
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
             | Self::SetDockBadge(_)
@@ -1577,6 +1981,81 @@ fn validate_prompt_buttons(buttons: &[PromptButton]) -> Result<(), PlatformError
     Ok(())
 }
 
+fn validate_share_items(items: &[ShareItem]) -> Result<(), PlatformError> {
+    if items.is_empty() || items.len() > MAX_SHARE_ITEMS {
+        return Err(PlatformError::InvalidShareItems);
+    }
+    for item in items {
+        match item {
+            ShareItem::Text(value) | ShareItem::Url(value) => {
+                if value.is_empty()
+                    || value.len() > MAX_SHARE_ITEM_TEXT_BYTES
+                    || value.contains('\0')
+                {
+                    return Err(PlatformError::InvalidShareItems);
+                }
+            }
+            ShareItem::File(path) => validate_path(path)?,
+            ShareItem::Image(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_share_anchor(anchor: crate::Rect) -> Result<(), PlatformError> {
+    if anchor.x.is_finite()
+        && anchor.y.is_finite()
+        && anchor.width.is_finite()
+        && anchor.height.is_finite()
+        && anchor.width >= 0.0
+        && anchor.height >= 0.0
+    {
+        Ok(())
+    } else {
+        Err(PlatformError::InvalidShareAnchor)
+    }
+}
+
+fn validated_preview_file(
+    path: impl Into<PathBuf>,
+    display_name: Option<Arc<str>>,
+) -> Result<(PathBuf, Option<Arc<str>>), PlatformError> {
+    let path = path.into();
+    validate_path(&path)?;
+    if let Some(display_name) = &display_name
+        && (display_name.is_empty()
+            || display_name.len() > MAX_FILE_PREVIEW_NAME_BYTES
+            || display_name.contains('\0'))
+    {
+        return Err(PlatformError::InvalidText);
+    }
+    Ok((path, display_name))
+}
+
+fn validate_message_box_options(options: &MessageBoxOptions) -> Result<(), PlatformError> {
+    validate_required_text(&options.message)?;
+    if let Some(detail) = &options.detail {
+        validate_optional_text(detail)?;
+    }
+    let buttons = options.resolved_buttons();
+    validate_prompt_buttons(&buttons)?;
+    if [options.default_button, options.cancel_button]
+        .into_iter()
+        .flatten()
+        .any(|index| index >= buttons.len())
+    {
+        return Err(PlatformError::InvalidButtons);
+    }
+    if let Some(checkbox) = &options.checkbox
+        && (checkbox.label.is_empty()
+            || checkbox.label.len() > MAX_MESSAGE_BOX_CHECKBOX_BYTES
+            || checkbox.label.contains('\0'))
+    {
+        return Err(PlatformError::InvalidText);
+    }
+    Ok(())
+}
+
 fn validate_path_prompt_options(options: &PathPromptOptions) -> Result<(), PlatformError> {
     if !options.files && !options.directories {
         return Err(PlatformError::InvalidPathSelection);
@@ -1586,6 +2065,9 @@ fn validate_path_prompt_options(options: &PathPromptOptions) -> Result<(), Platf
     }
     if let Some(prompt) = &options.prompt {
         validate_optional_text(prompt)?;
+    }
+    if let Some(message) = &options.message {
+        validate_optional_text(message)?;
     }
     if let Some(directory) = &options.directory {
         validate_path(directory)?;
@@ -1607,6 +2089,9 @@ fn validate_save_path_options(options: &SavePathOptions) -> Result<(), PlatformE
     }
     if let Some(prompt) = &options.prompt {
         validate_optional_text(prompt)?;
+    }
+    if let Some(label) = &options.name_field_label {
+        validate_optional_text(label)?;
     }
     validate_file_dialog_filters(&options.filters)?;
     Ok(())
@@ -1969,6 +2454,306 @@ mod tests {
             PlatformRequest::dismiss_system_notification("").unwrap_err(),
             PlatformError::InvalidNotificationTag
         );
+    }
+
+    #[test]
+    fn message_box_options_are_validated_before_the_request_is_retained() {
+        let handle = WindowHandle::next();
+        assert_eq!(
+            PlatformRequest::message_box(handle, MessageBoxOptions::new(""))
+                .err()
+                .unwrap(),
+            PlatformError::EmptyPromptMessage
+        );
+        assert_eq!(
+            PlatformRequest::message_box(handle, MessageBoxOptions::new("Save?").default_button(1))
+                .err()
+                .unwrap(),
+            PlatformError::InvalidButtons,
+            "an implicit single OK button has no index 1"
+        );
+        assert_eq!(
+            PlatformRequest::message_box(
+                handle,
+                MessageBoxOptions::new("Save?")
+                    .buttons([PromptButton::ok("Save"), PromptButton::cancel("Cancel")])
+                    .cancel_button(2)
+            )
+            .err()
+            .unwrap(),
+            PlatformError::InvalidButtons
+        );
+        assert_eq!(
+            PlatformRequest::message_box(
+                handle,
+                MessageBoxOptions::new("Save?").checkbox("", true)
+            )
+            .err()
+            .unwrap(),
+            PlatformError::InvalidText
+        );
+        assert_eq!(
+            PlatformRequest::message_box(
+                handle,
+                MessageBoxOptions::new("Save?")
+                    .checkbox("x".repeat(MAX_MESSAGE_BOX_CHECKBOX_BYTES + 1), false)
+            )
+            .err()
+            .unwrap(),
+            PlatformError::InvalidText
+        );
+        assert_eq!(
+            PlatformRequest::message_box(
+                handle,
+                MessageBoxOptions::new("Save?").detail("a\0b".to_owned())
+            )
+            .err()
+            .unwrap(),
+            PlatformError::InvalidText
+        );
+    }
+
+    #[test]
+    fn message_box_requests_record_every_declared_option() {
+        let handle = WindowHandle::next();
+        let options = MessageBoxOptions::new("Discard the draft?")
+            .level(PromptLevel::Warning)
+            .detail("This cannot be undone.")
+            .buttons([
+                PromptButton::new("Discard"),
+                PromptButton::new("Keep"),
+                PromptButton::cancel("Cancel"),
+            ])
+            .default_button(1)
+            .cancel_button(2)
+            .checkbox("Do not ask again", true);
+        let (request, _response) = PlatformRequest::message_box(handle, options).unwrap();
+        assert_eq!(request.window(), Some(handle));
+        let PlatformRequest::MessageBox { options, .. } = &request else {
+            unreachable!("the constructor returns the matching request variant");
+        };
+        assert_eq!(options.level, Some(PromptLevel::Warning));
+        assert_eq!(options.detail.as_deref(), Some("This cannot be undone."));
+        assert_eq!(options.resolved_buttons().len(), 3);
+        assert_eq!(options.default_button, Some(1));
+        assert_eq!(options.cancel_button, Some(2));
+        assert_eq!(
+            options
+                .checkbox
+                .as_ref()
+                .map(|checkbox| (checkbox.label.as_ref().to_owned(), checkbox.checked)),
+            Some(("Do not ask again".to_owned(), true))
+        );
+
+        // An application-modal box carries no owning window.
+        let (request, _response) =
+            PlatformRequest::application_message_box(MessageBoxOptions::new("Ready")).unwrap();
+        assert_eq!(request.window(), None);
+        assert!(!request.response_cancelled());
+    }
+
+    #[test]
+    fn message_box_responses_travel_through_the_platform_queue() {
+        let (request, response) =
+            PlatformRequest::application_message_box(MessageBoxOptions::new("Ready")).unwrap();
+        let PlatformRequest::MessageBox { responder, .. } = request else {
+            unreachable!("the constructor returns the matching request variant");
+        };
+        let waker = Waker::from(Arc::new(WakeCounter(AtomicUsize::new(0))));
+        let mut context = Context::from_waker(&waker);
+        let mut response = pin!(response);
+        assert!(response.as_mut().poll(&mut context).is_pending());
+        responder.complete(Ok(MessageBoxResponse {
+            button: 2,
+            checkbox_checked: true,
+        }));
+        assert_eq!(
+            response.as_mut().poll(&mut context),
+            Poll::Ready(Ok(MessageBoxResponse {
+                button: 2,
+                checkbox_checked: true,
+            }))
+        );
+    }
+
+    #[test]
+    fn file_preview_requests_bound_their_path_and_display_name() {
+        assert_eq!(
+            PlatformRequest::preview_file("", None).unwrap_err(),
+            PlatformError::InvalidPath
+        );
+        assert_eq!(
+            PlatformRequest::preview_file("/tmp/report.pdf", Some(Arc::from(""))).unwrap_err(),
+            PlatformError::InvalidText
+        );
+        assert_eq!(
+            PlatformRequest::preview_file(
+                "/tmp/report.pdf",
+                Some(Arc::from("x".repeat(MAX_FILE_PREVIEW_NAME_BYTES + 1)))
+            )
+            .unwrap_err(),
+            PlatformError::InvalidText
+        );
+        let request =
+            PlatformRequest::preview_file("/tmp/report.pdf", Some(Arc::from("Report"))).unwrap();
+        assert_eq!(request.window(), None);
+        assert!(!request.response_cancelled());
+        let PlatformRequest::PreviewFile {
+            path, display_name, ..
+        } = &request
+        else {
+            unreachable!("the constructor returns the matching request variant");
+        };
+        assert_eq!(path, Path::new("/tmp/report.pdf"));
+        assert_eq!(display_name.as_deref(), Some("Report"));
+
+        let (request, _response) = PlatformRequest::close_file_preview_response();
+        assert!(!request.response_cancelled());
+    }
+
+    #[test]
+    fn file_dialog_options_validate_their_new_fields() {
+        let options = PathPromptOptions::new()
+            .can_create_directories(false)
+            .resolves_aliases(true)
+            .treats_file_packages_as_directories(true)
+            .message("Choose a workspace");
+        assert!(!options.can_create_directories);
+        assert!(options.resolves_aliases);
+        assert!(options.treats_file_packages_as_directories);
+        let handle = WindowHandle::next();
+        assert!(PlatformRequest::open_paths(handle, options.clone()).is_ok());
+        assert_eq!(
+            PlatformRequest::open_paths(handle, options.message("a\0b".to_owned()))
+                .err()
+                .unwrap(),
+            PlatformError::InvalidText
+        );
+
+        let save = SavePathOptions::new("/tmp")
+            .name_field_label("Export as:")
+            .shows_tag_field(false);
+        assert_eq!(save.name_field_label.as_deref(), Some("Export as:"));
+        assert!(!save.shows_tag_field);
+        assert!(PlatformRequest::save_path(handle, save.clone()).is_ok());
+        assert_eq!(
+            PlatformRequest::save_path(handle, save.name_field_label("a\0b".to_owned()))
+                .err()
+                .unwrap(),
+            PlatformError::InvalidText
+        );
+        assert!(SavePathOptions::new("/tmp").shows_tag_field);
+        assert!(PathPromptOptions::new().can_create_directories);
+    }
+
+    #[test]
+    fn share_items_are_bounded_before_the_request_is_retained() {
+        let handle = WindowHandle::next();
+        let anchor = crate::Rect::new(0.0, 0.0, 10.0, 10.0);
+        assert_eq!(
+            PlatformRequest::share_items(Some(handle), &[], anchor).unwrap_err(),
+            PlatformError::InvalidShareItems
+        );
+        let too_many = vec![ShareItem::Text(Arc::from("x")); MAX_SHARE_ITEMS + 1];
+        assert_eq!(
+            PlatformRequest::share_items(Some(handle), &too_many, anchor).unwrap_err(),
+            PlatformError::InvalidShareItems
+        );
+        assert_eq!(
+            PlatformRequest::share_items(Some(handle), &[ShareItem::Url(Arc::from(""))], anchor)
+                .unwrap_err(),
+            PlatformError::InvalidShareItems
+        );
+        assert_eq!(
+            PlatformRequest::share_items(
+                Some(handle),
+                &[ShareItem::Text(Arc::from(
+                    "x".repeat(MAX_SHARE_ITEM_TEXT_BYTES + 1)
+                ))],
+                anchor
+            )
+            .unwrap_err(),
+            PlatformError::InvalidShareItems
+        );
+        assert_eq!(
+            PlatformRequest::share_items(Some(handle), &[ShareItem::File(PathBuf::new())], anchor)
+                .unwrap_err(),
+            PlatformError::InvalidPath
+        );
+        assert_eq!(
+            PlatformRequest::share_items(
+                Some(handle),
+                &[ShareItem::Text(Arc::from("Report"))],
+                crate::Rect::new(f32::NAN, 0.0, 1.0, 1.0)
+            )
+            .unwrap_err(),
+            PlatformError::InvalidShareAnchor
+        );
+
+        let request = PlatformRequest::share_items(
+            Some(handle),
+            &[
+                ShareItem::Text(Arc::from("Report")),
+                ShareItem::File(PathBuf::from("/tmp/report.pdf")),
+            ],
+            anchor,
+        )
+        .unwrap();
+        assert_eq!(request.window(), Some(handle));
+        let PlatformRequest::ShareItems { items, .. } = &request else {
+            unreachable!("the constructor returns the matching request variant");
+        };
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn native_panel_requests_carry_their_declarations_and_bounds() {
+        let request = PlatformRequest::show_color_panel(
+            crate::Color::rgb8(10, 20, 30),
+            ColorPanelMode::OnClose,
+        );
+        assert_eq!(request.window(), None);
+        let PlatformRequest::ShowColorPanel { mode, initial, .. } = &request else {
+            unreachable!("the constructor returns the matching request variant");
+        };
+        assert_eq!(*mode, ColorPanelMode::OnClose);
+        assert_eq!(*initial, crate::Color::rgb8(10, 20, 30));
+        assert_eq!(ColorPanelMode::default(), ColorPanelMode::Continuous);
+        assert!(matches!(
+            PlatformRequest::close_color_panel(),
+            PlatformRequest::CloseColorPanel { .. }
+        ));
+
+        let request = PlatformRequest::show_font_panel(crate::Font::default().bold());
+        let PlatformRequest::ShowFontPanel { font, .. } = &request else {
+            unreachable!("the constructor returns the matching request variant");
+        };
+        assert_eq!(font.weight, crate::FontWeight::BOLD);
+
+        assert_eq!(
+            PlatformRequest::authenticate_with_biometrics("").unwrap_err(),
+            PlatformError::InvalidText
+        );
+        assert_eq!(
+            PlatformRequest::authenticate_with_biometrics(
+                "x".repeat(MAX_BIOMETRIC_REASON_BYTES + 1)
+            )
+            .unwrap_err(),
+            PlatformError::InvalidText
+        );
+        let (request, response) =
+            PlatformRequest::authenticate_with_biometrics("Unlock the vault").unwrap();
+        assert!(!request.response_cancelled());
+        let PlatformRequest::AuthenticateWithBiometrics { reason, responder } = request else {
+            unreachable!("the constructor returns the matching request variant");
+        };
+        assert_eq!(reason.as_ref(), "Unlock the vault");
+        let waker = Waker::from(Arc::new(WakeCounter(AtomicUsize::new(0))));
+        let mut context = Context::from_waker(&waker);
+        let mut response = pin!(response);
+        assert!(response.as_mut().poll(&mut context).is_pending());
+        responder.complete(Ok(true));
+        assert_eq!(response.as_mut().poll(&mut context), Poll::Ready(Ok(true)));
     }
 
     #[test]
