@@ -31,6 +31,12 @@ All notable user-facing changes to QuickGUI are recorded here.
   BackgroundPosition)` with `bg_image_cover`, `bg_image_contain`, `bg_image_tiled`, and
   `bg_image_none`. Tiles reuse the existing bounded image primitive and GPU texture cache, are
   masked by the element's rounded corners, and are capped by `MAX_BACKGROUND_IMAGE_TILES` (256).
+- Added bounded CSS-shaped color filters: `Filter`, `Filters`, `ColorMatrix`,
+  `MAX_FILTERS_PER_ELEMENT`, `Element::filters`/`filter`, and the `brightness`, `contrast`,
+  `saturate`, `invert`, `sepia`, and `hue_rotate` shorthands. `grayscale(bool)` now routes through
+  the same chain, and `ImagePrimitive::grayscale` is expressed as a `ColorMatrix`. Filters apply to
+  an element's own image and background-image pixels; subtree filters, blur, and drop-shadow are
+  not implemented because they require an offscreen group texture.
 - Added the `effects` example.
 
 ## 0.1.1 - 2026-08-31

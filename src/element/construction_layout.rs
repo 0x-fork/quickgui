@@ -97,7 +97,6 @@ impl Element {
         element.kind = ElementKind::Image(ImageElement {
             source,
             object_fit: ObjectFit::Contain,
-            grayscale: false,
             resolved,
             loading: None,
             fallback: None,

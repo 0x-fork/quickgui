@@ -115,6 +115,34 @@ of the element and its clip and are masked by the element's rounded rectangle. A
 exceed `MAX_BACKGROUND_IMAGE_TILES` (256) deliberately falls back to one anchored tile rather than
 emitting an unbounded number of per-frame instances.
 
+## Color filters
+
+```rust
+use quickgui::{Filter, div, img};
+
+img(&photo).grayscale(true);
+
+div()
+    .bg_image_cover(photo.clone())
+    .filters([Filter::Saturate(1.4), Filter::Contrast(1.1), Filter::HueRotate(20.0)]);
+
+img(&photo).brightness(0.8).sepia(0.3);
+```
+
+`Filter` covers `Brightness`, `Contrast`, `Saturate`, `Grayscale`, `Invert`, `Sepia`, `HueRotate`,
+and `Opacity` with CSS amounts, plus the `brightness`, `contrast`, `saturate`, `invert`, `sepia`,
+`hue_rotate`, and `grayscale` shorthands on `Element`. A chain is bounded at
+`MAX_FILTERS_PER_ELEMENT` (8) and collapses on the CPU into one `ColorMatrix`, so the number of
+declared filters never changes per-frame GPU work: the shader performs one 4x5 multiply-add. Like
+CSS, the matrix is applied to encoded sRGB rather than the framework's linear-light working space,
+and the shader converts in and out around it. `grayscale(true)` is exactly
+`filters([Filter::Grayscale(1.0)])`.
+
+Filters apply to an element's own raster content: an image element's pixels and any `bg_image`
+tiles on the same element. They deliberately do not descend into children, because a subtree
+filter requires an offscreen group texture. Blur and drop-shadow filters are absent for the same
+reason; use `.shadow(...)` for elevation.
+
 See `cargo run --release --example effects`.
 
 Box shadows follow web paint order, support offset, blur, positive or negative spread, and inset
@@ -168,7 +196,7 @@ generated straight-alpha RGBA8 pixels. Decoding is explicit and synchronous so a
 move it off latency-sensitive input handling. A decoded image is limited to 4096 px per axis and
 64 MiB. Clones share immutable pixels and GPU identity. Each renderer retains at most 256 textures
 and 128 MiB of decoded texture data, evicting least-recently-used off-screen entries. See
-`cargo run --release --example images` for all five `ObjectFit` modes and GPU grayscale.
+`cargo run --release --example images` for all five `ObjectFit` modes and GPU color filters.
 
 SVG icons use the same intrinsic flexbox sizing and `ObjectFit` API. Their color inherits from
 typography, including hover, active, and focus overrides, while transforms remain paint-only:

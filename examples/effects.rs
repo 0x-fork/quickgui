@@ -6,9 +6,9 @@
 //! as the pointer stops moving.
 
 use quickgui::{
-    Application, Color, ColorStops, Corners, Element, Gradient, GradientCenter, GradientColorSpace,
-    GradientDirection, Image, IntoElement, RadialGradientExtent, RadialGradientShape, View,
-    ViewContext, WindowOptions, div, linear_color_stop, text,
+    Application, Color, ColorStops, Corners, Element, Filter, Gradient, GradientCenter,
+    GradientColorSpace, GradientDirection, Image, IntoElement, RadialGradientExtent,
+    RadialGradientShape, View, ViewContext, WindowOptions, div, linear_color_stop, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
@@ -23,14 +23,31 @@ fn main() -> Result<(), quickgui::AppError> {
 
 struct EffectsDemo {
     tile: Image,
+    swatch_image: Image,
 }
 
 impl EffectsDemo {
     fn new() -> Self {
         Self {
             tile: checkerboard(),
+            swatch_image: color_ramp(),
         }
     }
+}
+
+/// A tiny generated hue ramp, so the filter row needs no asset on disk.
+fn color_ramp() -> Image {
+    const WIDTH: u32 = 32;
+    const HEIGHT: u32 = 32;
+    let mut pixels = Vec::with_capacity((WIDTH * HEIGHT * 4) as usize);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let red = (x * 255 / (WIDTH - 1)) as u8;
+            let green = (y * 255 / (HEIGHT - 1)) as u8;
+            pixels.extend_from_slice(&[red, green, 200_u8.saturating_sub(red / 2), 255]);
+        }
+    }
+    Image::from_rgba(WIDTH, HEIGHT, pixels).expect("the generated ramp is valid")
 }
 
 /// A tiny generated checkerboard, so the example needs no asset on disk.
@@ -220,6 +237,41 @@ impl View for EffectsDemo {
                         )
                         .bg_image_tiled(self.tile.clone())
                         .opacity(0.85),
+                ),
+            ]))
+            .child(text("Color filters").text_lg().font_semibold())
+            .child(row([
+                card(
+                    "Unfiltered",
+                    "The reference raster content.",
+                    swatch()
+                        .rounded_lg()
+                        .bg_image_cover(self.swatch_image.clone()),
+                ),
+                card(
+                    "Grayscale",
+                    "grayscale(true) is the luminance-preserving saturate(0) matrix.",
+                    swatch()
+                        .rounded_lg()
+                        .bg_image_cover(self.swatch_image.clone())
+                        .grayscale(true),
+                ),
+                card(
+                    "Hue rotate",
+                    "One chained color matrix; the filter count never costs GPU work.",
+                    swatch()
+                        .rounded_lg()
+                        .bg_image_cover(self.swatch_image.clone())
+                        .hue_rotate(140.0)
+                        .saturate(1.4),
+                ),
+                card(
+                    "Invert and contrast",
+                    "Chains collapse into a single 4x5 multiply-add.",
+                    swatch()
+                        .rounded_lg()
+                        .bg_image_cover(self.swatch_image.clone())
+                        .filters([Filter::Invert(1.0), Filter::Contrast(1.2)]),
                 ),
             ]))
     }

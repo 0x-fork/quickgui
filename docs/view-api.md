@@ -94,8 +94,10 @@ Corners round independently with `rounded_tl`/`rounded_tr`/`rounded_br`/`rounded
 Borders gain `border_solid()`, `border_dashed()`, and `border_dotted()` on top of the existing
 per-side widths, and `outline(width, color)` with `outline_offset(px)`, `outline_dashed()`,
 `outline_dotted()`, and `outline_none()` draws a ring outside the border box without affecting
-layout. All of these are paint-only: they change no Taffy style and schedule no frame of their own.
-See [Graphics and media](graphics.md) for the exact bounds.
+layout. `filters([...])`, `filter(...)`, and the `brightness`, `contrast`, `saturate`, `invert`, `sepia`,
+`hue_rotate`, and `grayscale` shorthands apply a bounded CSS-shaped color-filter chain to an
+element's own raster content. All of these are paint-only: they change no Taffy style and schedule
+no frame of their own. See [Graphics and media](graphics.md) for the exact bounds.
 
 Hover, active, focus, validation, and drag-state variants are paint-only. Add
 `.transition(Duration::from_millis(140))` to interpolate their colors, border, radius, inherited

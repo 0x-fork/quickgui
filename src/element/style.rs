@@ -466,12 +466,64 @@ impl Element {
         self
     }
 
-    /// Render an image in grayscale without creating another decoded image.
-    pub fn grayscale(mut self, grayscale: bool) -> Self {
-        if let ElementKind::Image(image) = &mut self.kind {
-            image.grayscale = grayscale;
+    /// Render this element's raster content in grayscale without decoding another image.
+    ///
+    /// This is `filters([Filter::Grayscale(1.0)])`, or clearing the chain when `false`.
+    pub fn grayscale(self, grayscale: bool) -> Self {
+        if grayscale {
+            self.filters([Filter::Grayscale(1.0)])
+        } else {
+            self.filters([])
         }
+    }
+
+    /// Apply a bounded chain of CSS-shaped color filters to this element's own raster content.
+    ///
+    /// The chain applies to an image element's pixels and to any `bg_image` tiles on the same
+    /// element. It does not descend into children: subtree filters need a compositing layer,
+    /// which QuickGUI deliberately does not allocate. At most
+    /// [`MAX_FILTERS_PER_ELEMENT`](crate::MAX_FILTERS_PER_ELEMENT) filters are retained and the
+    /// whole chain collapses into one color matrix before it reaches the GPU, so the number of
+    /// declared filters never changes per-frame work.
+    pub fn filters(mut self, filters: impl IntoIterator<Item = Filter>) -> Self {
+        self.visual.filters = Filters::new(filters);
         self
+    }
+
+    /// Append one color filter to this element's chain.
+    pub fn filter(mut self, filter: Filter) -> Self {
+        self.visual.filters = self.visual.filters.push(filter);
+        self
+    }
+
+    /// Scale the brightness of this element's raster content. `1.0` leaves it unchanged.
+    pub fn brightness(self, amount: f32) -> Self {
+        self.filter(Filter::Brightness(amount))
+    }
+
+    /// Scale the contrast of this element's raster content. `1.0` leaves it unchanged.
+    pub fn contrast(self, amount: f32) -> Self {
+        self.filter(Filter::Contrast(amount))
+    }
+
+    /// Scale the saturation of this element's raster content. `1.0` leaves it unchanged.
+    pub fn saturate(self, amount: f32) -> Self {
+        self.filter(Filter::Saturate(amount))
+    }
+
+    /// Invert this element's raster content. `0.0` leaves it unchanged.
+    pub fn invert(self, amount: f32) -> Self {
+        self.filter(Filter::Invert(amount))
+    }
+
+    /// Apply a sepia tone to this element's raster content. `0.0` leaves it unchanged.
+    pub fn sepia(self, amount: f32) -> Self {
+        self.filter(Filter::Sepia(amount))
+    }
+
+    /// Rotate the hues of this element's raster content by `degrees`.
+    pub fn hue_rotate(self, degrees: f32) -> Self {
+        self.filter(Filter::HueRotate(degrees))
     }
 
     /// Render a replacement element when an image resource has been loading for 200 ms.

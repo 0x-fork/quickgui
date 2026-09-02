@@ -24,8 +24,8 @@ use taffy::{
 
 use crate::{
     AnimatedImage, Background, BorderStyle, BoxShadow, Canvas, Color, ColorStops, Corners,
-    CursorStyle, CustomShader, DispatchPhase, Font, FontFallbacks, FontFamily, FontFeatures,
-    Gradient, GradientAngle, GradientCenter, Image, ImageSource, Insets, KeyContext,
+    CursorStyle, CustomShader, DispatchPhase, Filter, Filters, Font, FontFallbacks, FontFamily,
+    FontFeatures, Gradient, GradientAngle, GradientCenter, Image, ImageSource, Insets, KeyContext,
     MAX_VALIDATION_MESSAGE_BYTES, ObjectFit, Path, RadialGradientShape, Rect, ScenePlane,
     ShaderParameters, StyledText, Svg, SvgTransform, TextAlign, TextHighlight, TextOverflow,
     TextShaping, TextStyle, TextUnderline, TextWrap, Tooltip, Transition, WhiteSpace,
@@ -627,7 +627,6 @@ impl fmt::Debug for ContainerQueryElement {
 pub(crate) struct ImageElement {
     pub source: ImageSource,
     pub object_fit: ObjectFit,
-    pub grayscale: bool,
     pub resolved: ImageResolution,
     pub loading: Option<ImageReplacement>,
     pub fallback: Option<ImageReplacement>,
@@ -919,6 +918,8 @@ pub(crate) struct VisualStyle {
     pub background_gradient: Option<Gradient>,
     /// A raster background painted above the background color and behind children.
     pub background_image: Option<Box<BackgroundImage>>,
+    /// A bounded color-filter chain applied to this element's own raster content.
+    pub filters: Filters,
     pub border_color: Option<Color>,
     pub border_widths: Insets,
     pub border_style: BorderStyle,
@@ -943,6 +944,7 @@ impl Default for VisualStyle {
             background: None,
             background_gradient: None,
             background_image: None,
+            filters: Filters::none(),
             border_color: None,
             border_widths: Insets::default(),
             border_style: BorderStyle::Solid,

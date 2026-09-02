@@ -488,12 +488,21 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             inner_rect,
             inner_corners,
         ));
-        let inside = select(inner, outer, input.effects.y > 0.5);
-        let fill_alpha = fill_color.a * inside;
         let border_alpha = input.secondary.a * max(outer - inner, 0.0) * dashes;
-        let alpha = border_alpha + fill_alpha * (1.0 - border_alpha);
-        let rgb = input.secondary.rgb * border_alpha
-            + fill_color.rgb * fill_alpha * (1.0 - border_alpha);
+        if input.effects.y > 0.5 {
+            // A dash gap reveals the element background, which CSS paints out to the border box,
+            // so the pattern composites over the fill instead of partitioning it.
+            let fill_alpha = fill_color.a * outer;
+            let alpha = border_alpha + fill_alpha * (1.0 - border_alpha);
+            let rgb = input.secondary.rgb * border_alpha
+                + fill_color.rgb * fill_alpha * (1.0 - border_alpha);
+            return vec4<f32>(rgb, alpha);
+        }
+        // A solid border and its fill cover complementary regions, so their coverage adds
+        // exactly and the shared antialiased edge stays seamless.
+        let fill_alpha = fill_color.a * inner;
+        let alpha = fill_alpha + border_alpha;
+        let rgb = fill_color.rgb * fill_alpha + input.secondary.rgb * border_alpha;
         return vec4<f32>(rgb, alpha);
     }
 
@@ -549,12 +558,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             input.effects.y,
         );
         let color = resolved_fill(input);
-        let inside = select(inner, subject_coverage, input.effects.y > 0.5);
-        let fill_alpha = color.a * inside;
         let border_alpha = input.secondary.a * max(subject_coverage - inner, 0.0) * dashes;
-        let alpha = border_alpha + fill_alpha * (1.0 - border_alpha);
-        let rgb = input.secondary.rgb * border_alpha
-            + color.rgb * fill_alpha * (1.0 - border_alpha);
+        if input.effects.y > 0.5 {
+            let fill_alpha = color.a * subject_coverage;
+            let alpha = border_alpha + fill_alpha * (1.0 - border_alpha);
+            let rgb = input.secondary.rgb * border_alpha
+                + color.rgb * fill_alpha * (1.0 - border_alpha);
+            return vec4<f32>(rgb, alpha);
+        }
+        let fill_alpha = color.a * inner;
+        let alpha = fill_alpha + border_alpha;
+        let rgb = color.rgb * fill_alpha + input.secondary.rgb * border_alpha;
         return vec4<f32>(rgb, alpha);
     }
 

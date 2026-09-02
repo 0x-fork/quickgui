@@ -1180,3 +1180,161 @@ fn visual_background_images_respect_rounded_corners() {
     assert_pixel_near(&snapshot, 6, 6, [255, 0, 0, 255]);
     assert_pixel_near(&snapshot, 25, 25, [255, 255, 255, 255]);
 }
+
+#[cfg(target_os = "macos")]
+struct RoundedBorderSeamVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for RoundedBorderSeamVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::rgb8(220, 20, 20)).child(
+            div()
+                .id("seam-card")
+                .size_full()
+                .rounded(10.0)
+                .bg(Color::WHITE)
+                .border(4.0, Color::BLACK),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_solid_rounded_borders_meet_their_fill_without_a_seam() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(40.0, 40.0),
+            RoundedBorderSeamVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+
+    // The red parent must never show through the boundary between the border and the fill.
+    // The two outermost columns are the element's own antialiased outer edge.
+    for x in 2..snapshot.width() - 2 {
+        let pixel = snapshot.pixel(x, 40).unwrap();
+        assert!(
+            pixel[0].abs_diff(pixel[1]) <= 6 && pixel[1].abs_diff(pixel[2]) <= 6,
+            "an opaque border and fill must stay neutral at x={x}: {pixel:?}"
+        );
+    }
+    // The border and the fill are still both present on that row.
+    assert_eq!(snapshot.pixel(2, 40), Some([0, 0, 0, 255]));
+    assert_eq!(snapshot.pixel(40, 40), Some([255, 255, 255, 255]));
+}
+
+#[cfg(target_os = "macos")]
+struct RoundedDashVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for RoundedDashVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::BLACK).child(
+            div()
+                .id("dash-card")
+                .size_full()
+                .rounded(12.0)
+                .bg_linear_gradient(
+                    crate::GradientDirection::ToBottom,
+                    [Color::rgb8(20, 20, 20), Color::rgb8(40, 40, 40)],
+                )
+                .border(3.0, Color::WHITE)
+                .border_dashed(),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_rounded_dashed_borders_wrap_the_corners_and_keep_gaps() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(60.0, 60.0),
+            RoundedDashVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+
+    let mut bright = 0_usize;
+    let mut dark = 0_usize;
+    // Walk the top border row and count lit and unlit samples.
+    for x in 4..116 {
+        let pixel = snapshot.pixel(x, 2).unwrap();
+        if pixel[0] > 200 {
+            bright += 1;
+        } else if pixel[0] < 80 {
+            dark += 1;
+        }
+    }
+    assert!(bright > 20, "a dashed border must paint dashes: {bright}");
+    assert!(dark > 20, "a dashed border must leave gaps: {dark}");
+
+    // The rounded corners are part of the same evenly distributed pattern, so at least one
+    // corner sample is lit and at least one is not.
+    let corners = [
+        snapshot.pixel(6, 6).unwrap(),
+        snapshot.pixel(113, 6).unwrap(),
+        snapshot.pixel(6, 113).unwrap(),
+        snapshot.pixel(113, 113).unwrap(),
+        snapshot.pixel(10, 4).unwrap(),
+        snapshot.pixel(109, 4).unwrap(),
+    ];
+    assert!(
+        corners.iter().any(|pixel| pixel[0] > 150),
+        "dashes must continue around the corners: {corners:?}"
+    );
+}
+
+#[cfg(target_os = "macos")]
+struct ImageFilterVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for ImageFilterVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let tile = || {
+            div().w(17.0).h(17.0).flex_none().bg_image(
+                quadrant_image(),
+                crate::BackgroundSize::Fixed(17.0, 17.0),
+                crate::BackgroundRepeat::NoRepeat,
+                crate::BackgroundPosition::TOP_LEFT,
+            )
+        };
+        div()
+            .size_full()
+            .flex_row()
+            .bg(Color::BLACK)
+            .child(tile().id("filter-none"))
+            .child(tile().id("filter-grayscale").grayscale(true))
+            .child(tile().id("filter-invert").invert(1.0))
+            .child(tile().id("filter-brightness").brightness(0.5))
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_color_filters_apply_the_css_matrices_to_raster_content() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(68.0, 17.0),
+            ImageFilterVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    visual
+        .assert_element_bounds("filter-brightness", Rect::new(51.0, 0.0, 17.0, 17.0), 0.0)
+        .unwrap();
+    let snapshot = visual.capture_screenshot().unwrap();
+
+    // The unfiltered source texel.
+    assert_pixel_near(&snapshot, 8, 8, [255, 0, 0, 255]);
+    // CSS grayscale is the luminance-preserving saturate(0) matrix on encoded sRGB.
+    assert_pixel_near(&snapshot, 42, 8, [54, 54, 54, 255]);
+    // Full inversion turns red into cyan.
+    assert_pixel_near(&snapshot, 76, 8, [0, 255, 255, 255]);
+    // Half brightness halves the encoded sRGB value.
+    assert_pixel_near(&snapshot, 110, 8, [128, 0, 0, 255]);
+    // Filters never leak outside their own element.
+    assert_pixel_near(&snapshot, 8, 25, [0, 0, 255, 255]);
+}

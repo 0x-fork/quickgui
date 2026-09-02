@@ -11,6 +11,7 @@ pub(super) fn push_background_image(
     bounds: Rect,
     corners: Corners,
     clip: Rect,
+    color_matrix: ColorMatrix,
     background: &BackgroundImage,
 ) {
     if bounds.is_empty() {
@@ -75,6 +76,7 @@ pub(super) fn push_background_image(
                 ImagePrimitive::new(background.image.clone(), destination)
                     .mask(bounds)
                     .radius(radius)
+                    .color_matrix(color_matrix)
                     .clip(visible),
             );
         }
@@ -704,7 +706,15 @@ pub(super) fn paint_element(
     }
     push_element_shadows(scene, layer, bounds, corners, parent_clip, shadows, true);
     if let Some(background_image) = element.visual.background_image.as_deref() {
-        push_background_image(scene, layer, bounds, corners, parent_clip, background_image);
+        push_background_image(
+            scene,
+            layer,
+            bounds,
+            corners,
+            parent_clip,
+            element.visual.filters.color_matrix(),
+            background_image,
+        );
     }
     // The outline ring lives outside the border box and never participates in layout.
     if let Some(outline) = target_outline
@@ -909,7 +919,7 @@ pub(super) fn paint_element(
                         .source_uv(fitted.source_uv)
                         .mask(bounds)
                         .radius(element.visual.corners(element.visual.radius).maximum())
-                        .grayscale(image.grayscale)
+                        .color_matrix(element.visual.filters.color_matrix())
                         .clip(clip),
                 );
             }

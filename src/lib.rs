@@ -351,10 +351,10 @@ pub use runtime::{
     MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,
 };
 pub use scene::{
-    BorderStyle, BoxShadow, Corners, CustomShaderPrimitive, ImagePrimitive,
-    MAX_BOX_SHADOW_BLUR_RADIUS, MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane,
-    Shadow, SvgPrimitive, TextAlign, TextId, TextOverflow, TextRun, TextShaping, TextStyle,
-    TextWrap, WhiteSpace,
+    BorderStyle, BoxShadow, ColorMatrix, Corners, CustomShaderPrimitive, Filter, Filters,
+    ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS, MAX_BOX_SHADOW_EXTENT, MAX_FILTERS_PER_ELEMENT,
+    PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign, TextId, TextOverflow,
+    TextRun, TextShaping, TextStyle, TextWrap, WhiteSpace,
 };
 pub use select::{
     MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VISIBLE_ROWS, SELECT_TYPEAHEAD_TIMEOUT, SelectListState,

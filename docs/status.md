@@ -12,6 +12,9 @@ Implemented now:
   `rounded_full`) with CSS uniform-scale reduction, analytic dashed and dotted borders distributed
   evenly around the whole rounded outline, and `outline`/`outline_offset` rings painted outside the
   border box without affecting layout;
+- bounded CSS-shaped color filters (`brightness`, `contrast`, `saturate`, `grayscale`, `invert`,
+  `sepia`, `hue-rotate`, `opacity`) collapsed into one color matrix and applied to an element's own
+  image and background-image pixels without an offscreen group texture;
 - raster element backgrounds with `Auto`/`Cover`/`Contain`/`Fixed` sizing, four repeat modes, and
   fractional background positions, painted through the existing bounded image primitive and masked
   by the element's rounded corners;
