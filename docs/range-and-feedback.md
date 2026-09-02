@@ -1,0 +1,249 @@
+# Range and feedback components
+
+[Documentation index](README.md) · [Unstyled component roadmap](component-roadmap.md)
+
+QuickGUI provides controlled, unstyled sliders, number fields, splitters, progress indicators, and
+meters. The application owns every track, thumb, fill, stepper glyph, divider, color, radius, and
+animation. QuickGUI owns the numeric contract — bounds, step snapping, ordering, clamping — plus
+pointer capture, keyboard behavior, and native accessibility semantics.
+
+The behavior follows the current [Base UI](https://base-ui.com/react/overview/quick-start)
+component contracts and the WAI-ARIA [Slider](https://www.w3.org/WAI/ARIA/apg/patterns/slider/),
+[Slider (Multi-Thumb)](https://www.w3.org/WAI/ARIA/apg/patterns/slider-multithumb/),
+[Spinbutton](https://www.w3.org/WAI/ARIA/apg/patterns/spinbutton/), and
+[Window Splitter](https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/) patterns.
+
+Run the caller-styled gallery with:
+
+```console
+cargo run --release --example range_controls
+```
+
+## Slider
+
+`SliderState` is a copyable value. It holds the bounds, the step, up to `MAX_SLIDER_THUMBS` values,
+the orientation, and the active thumb. Every mutation returns whether anything changed, so the
+owning view invalidates only on a real change.
+
+```rust
+use quickgui::{Size, Slider, SliderState, div};
+
+struct Mixer {
+    volume: SliderState, // SliderState::new(0.0, 100.0, 40.0).step(5.0)
+}
+
+const TRACK: Size = Size { width: 260.0, height: 20.0 };
+
+let slider = Slider::new("volume", &self.volume);
+let drag = cx.pointer_listener(slider.track_id(), |view: &mut Mixer, event, cx| {
+    if view.volume.apply_pointer(event, TRACK) {
+        cx.invalidate();
+    }
+});
+let thumb = slider.thumb(0).expect("single thumb");
+
+slider.key_part(
+    cx,
+    slider
+        .root_part(div())
+        .accessibility_label("Volume")
+        .child(
+            slider
+                .track_part(div().w(TRACK.width).h(TRACK.height).on_pointer(drag))
+                .child(slider.range_part(div()))
+                .child(thumb.thumb_part(div())),
+        ),
+    |view: &mut Mixer| &mut view.volume,
+)
+```
+
+`root_part`, `track_part`, `range_part`, and `SliderThumb::thumb_part` are pure decorators; they add
+identity, roles, and interaction contracts and never add layout or paint. `key_part` attaches the
+typed keyboard actions to whichever part owns focus.
+
+### Geometry
+
+The application owns the track's layout, so it passes the size it declared to
+`SliderState::apply_pointer`. A press picks the nearest thumb, makes it active, and jumps it to the
+pointer; captured motion continues to drag that thumb outside the track and outside the window.
+`SliderState::fraction` returns each thumb's `0.0..=1.0` position for caller-owned placement, and
+`value_at` converts a pointer offset into a snapped value. A vertical track measures from its top,
+where the maximum lives, so vertical sliders behave like their desktop counterparts without the
+application inverting anything.
+
+### Keyboard
+
+Install `slider_key_bindings()` once on the application keymap. Left and Down decrement, Right and
+Up increment, Shift with any arrow and PageUp/PageDown move one large step, Home and End move to the
+bounds. The large step defaults to ten ordinary steps, or one tenth of the range for a continuous
+slider; `SliderState::large_step` replaces it.
+
+### Multiple thumbs
+
+`SliderState::range(min, max, &[..])` creates up to `MAX_SLIDER_THUMBS` thumbs. Values stay ordered:
+each thumb is clamped between its neighbors, so a drag can push a thumb to its neighbor's value but
+never past it. A single-thumb slider projects the Slider role on its root; a multi-thumb slider
+projects a group root and one Slider role per thumb, each carrying its own value and its
+neighbor-derived bounds. Give each thumb an `.accessibility_label(...)`.
+
+### Bounds
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `MAX_SLIDER_THUMBS` | 8 | Values retained by one slider. |
+
+Non-finite bounds fall back to `0.0..=1.0`, an inverted range is swapped, a non-positive step
+selects continuous movement, and every value is clamped and snapped before it is retained.
+
+## Number field
+
+`NumberFieldState` wraps a controlled text value with parsing, clamping, formatting, and bounded
+stepping. It composes the ordinary `text_input()` element, so editing, selection, IME, and
+clipboard behavior are unchanged.
+
+`NumberFieldFormat` owns the locale-shaped rules. QuickGUI has no locale database; the application
+supplies the decimal separator, the optional grouping separator, whether a leading sign is accepted,
+whether scientific notation is accepted, and the fixed fractional precision used when formatting.
+Only ASCII digits parse.
+
+```rust
+let field = NumberField::new("quantity");
+let edit = cx.input_listener(field.input_id(), |view: &mut Order, value, cx| {
+    if view.quantity.set_text(value) {
+        cx.invalidate();
+    }
+});
+
+field.root_part(
+    div()
+        .child(field.input_part(&self.quantity, text_input(self.quantity.text().clone()).on_input(edit)))
+        .child(field.decrement_part(&self.quantity, div().child("−")))
+        .child(field.increment_part(&self.quantity, div().child("+"))),
+)
+```
+
+Typing keeps arbitrary text: `set_text` records it and reparses, but never clamps or reformats.
+`commit()` clamps into range and reformats; call it on Return and when focus leaves. Unparseable
+text restores the last committed value, and an empty field stays empty. `step_by`, `increment`,
+`decrement`, and `wheel` step and reformat immediately; `wheel` applies only when the field is
+focused and uses only the delta's sign.
+
+The input projects the SpinButton role with the committed numeric value, the finite parts of the
+range, the step, and invalid state whenever the current text does not parse into range. QuickGUI
+blocks Return submission for an invalid control, so commit from an ordinary key listener rather than
+`on_submit` when a field can hold out-of-range text.
+
+### Press and hold
+
+Holding a stepper repeats on exact one-shot deadlines and nothing else:
+
+```rust
+view.quantity.press_step(true, Instant::now()); // steps once, arms the first deadline
+let deadline = view.quantity.repeat_deadline(); // None once released
+view.quantity.repeat(now);                      // applies every step that came due
+view.quantity.release_step();                   // no deadline, task, or timer remains
+```
+
+The state never owns a timer. It reports one deadline, the application sleeps until exactly that
+instant with `AsyncViewContext::sleep_until`, and a released stepper leaves the window with no idle
+source. A single late wakeup applies exactly the steps that came due rather than an unbounded burst.
+
+### Bounds
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `MAX_NUMBER_FIELD_TEXT_BYTES` | 64 | UTF-8 bytes retained by one field's editing text. |
+| `MAX_NUMBER_FIELD_PRECISION` | 15 | Fractional digits one field formats. |
+| `NUMBER_FIELD_REPEAT_DELAY` | 400 ms | Delay before a held stepper starts repeating. |
+| `NUMBER_FIELD_REPEAT_INTERVAL` | 60 ms | Interval between repeats while held. |
+
+Longer text is truncated on a character boundary instead of retained.
+
+## Splitter
+
+`SplitterState` owns pane sizes in logical pixels, per-pane minimum sizes, and which panes may
+collapse. Sizes always sum to the splitter's total: moving a handle takes exactly what it gives.
+
+```rust
+let splitter = Splitter::new("workspace", &self.panes);
+let sidebar = splitter.pane(0).expect("sidebar");
+let content = splitter.pane(1).expect("content");
+let handle = splitter.handle(0).expect("handle");
+let drag = cx.pointer_listener(handle.handle_id(), |view: &mut Workspace, event, cx| {
+    if view.panes.apply_pointer(0, event) {
+        cx.invalidate();
+    }
+});
+
+splitter.root_part(
+    div()
+        .child(sidebar.pane_part(div()))
+        .child(handle.key_part(cx, handle.handle_part(div().w(6.0).on_pointer(drag)), access))
+        .child(content.pane_part(div())),
+)
+```
+
+Pane sizes along the split axis are framework-owned structural geometry: without them the resize
+behavior would not exist. Every other layout and paint declaration is caller-owned, including the
+handle's thickness and hit area. `handle_part` applies the platform column or row resize cursor
+unless the caller sets `.cursor(...)` explicitly.
+
+Captured pointer motion uses the event's own delta, so a splitter needs no container geometry and
+stays correct while the pointer is outside the window. `set_total` rescales the panes proportionally
+and then honors minimums; call it from a `container_query` when the surrounding layout changes.
+`reset` restores the sizes the splitter was created with — bind it to a handle double-click if the
+product wants that gesture; QuickGUI does not assume it.
+
+Install `splitter_key_bindings()` once. Left and Up shrink the preceding pane, Right and Down grow
+it, Home and End move to its limits, and Enter collapses or restores a pane marked
+`.collapsible(index, true)`. Enter on a pane that is not collapsible does nothing rather than
+resizing silently.
+
+Each handle projects the Splitter role with the preceding pane's size as its numeric value, that
+pane's reachable minimum and maximum as the bounds, the split axis, and a controls relationship to
+the pane it resizes. A row of panes is divided by vertical handles, matching the WAI-ARIA
+window-splitter pattern where the orientation describes the separator rather than the pane axis.
+
+### Bounds
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `MAX_SPLITTER_PANES` | 16 | Panes managed by one splitter. |
+
+A splitter needs at least two panes. Deeper layouts nest splitters instead of growing one.
+
+## Progress and meter
+
+`Progress` reports the completion of a task; `Meter` reports a static level inside a known range.
+Both are plain descriptors with a root part and an accessibility-hidden indicator part.
+
+```rust
+let download = Progress::new(3.0, 12.0).value_text("3 of 12 files");
+download
+    .root_part(div().accessibility_label("Download"))
+    .child(download.indicator_part(div().w(track * download.completion().unwrap_or(0.0))))
+```
+
+`Progress::indeterminate()` reports work whose completion is unknown: it projects the progress role
+with bounds but no value. **QuickGUI never animates an indeterminate indicator.** A moving barber
+pole is product motion, and a framework-owned animation would keep an otherwise settled window
+awake every frame. Use [declarative motion](animations.md) in the application when a product wants
+one.
+
+`Meter::new(value, min, max)` accepts optional `low`, `high`, and `optimum` markers, all clamped
+into the meter's range, so an application can color a gauge without QuickGUI inventing thresholds.
+`is_low` and `is_high` report which band the value falls in, and `completion` returns the
+`0.0..=1.0` position for caller-owned fill geometry.
+
+Non-finite inputs are dropped: a non-positive progress maximum falls back to `1.0`, an inverted
+meter range is swapped, and values are clamped into range before they are retained.
+
+## Resource contract
+
+`SliderState`, `SplitterState`, `Progress`, and `Meter` are plain values; `NumberFieldState` retains
+one bounded shared string. None of them retains an item registry, task, timer, observer, animation,
+GPU resource, or idle scheduler source. The only deadline any of these components can produce is the
+number field's stepper repeat, and it exists only while a stepper is held.
+
+State changes rebuild only when the caller's listener requests invalidation. Every component in this
+page returns a settled window to zero extra frames.

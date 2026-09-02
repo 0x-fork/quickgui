@@ -21,6 +21,8 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 - [Selection controls](selection-controls.md) — controlled checkboxes, radio groups, switches, checked/mixed accessibility, and roving keyboard behavior.
 - [Collapsible and accordion](disclosures.md) — controlled unstyled disclosure parts, current Tab/Enter/Space behavior, exact heading/region relationships, bounded open values, and mounting policy.
 - [Tabs](tabs.md) — controlled unstyled in-window tab parts, manual or automatic activation, horizontal or vertical roving focus, panel mounting, and exact accessibility relationships.
+- [Range and feedback components](range-and-feedback.md) — controlled unstyled sliders, number fields, splitters, progress indicators, and meters with captured pointer arithmetic, typed keyboard actions, exact bounds, and numeric accessibility.
+- [Toolbar, toggles, and toasts](toolbar-and-toast.md) — roving toolbar focus, pressed-state toggle buttons and groups, and a bounded live-region toast queue with exact one-shot auto-dismissal.
 - [Popovers and popover menus](popovers.md) — controlled in-window overlays, cross-edge native WGPU hosts, unstyled menu parts, typed owner actions, nesting, placement, and popover accessibility.
 - [Context menus](context-menus.md) — unstyled cursor-point triggers, native overflow surfaces, popover-menu composition, exact lifecycle, nested actions, and resource bounds.
 - [Select, autocomplete, and combobox](select-and-autocomplete.md) — three distinct unstyled value contracts with overflow-capable native children, never-key owner-IME behavior, accessibility portals, async source replacement, validation, and bounded virtualization.
