@@ -263,6 +263,46 @@ impl TestAppContext {
                     }
                     responder.complete(Ok(self.notification_permission_status));
                 }
+                PlatformRequest::SetActivationPolicy { policy, responder } => {
+                    self.application_shell.activation_policy = policy;
+                    self.application_shell.dock_visible = policy == ActivationPolicy::Regular;
+                    responder.complete(Ok(()));
+                }
+                PlatformRequest::ActivateApplication { force } => {
+                    self.application_shell.activations += 1;
+                    self.application_shell.last_activation_forced = force;
+                    self.application_shell.hidden = false;
+                }
+                PlatformRequest::HideApplication => self.application_shell.hidden = true,
+                PlatformRequest::UnhideApplication => self.application_shell.hidden = false,
+                PlatformRequest::RequestDockAttention {
+                    attention,
+                    responder,
+                } => {
+                    self.application_shell.dock_attention = Some(attention);
+                    self.next_dock_attention_id = self.next_dock_attention_id.saturating_add(1);
+                    responder.complete(Ok(DockAttentionRequest::new(self.next_dock_attention_id)));
+                }
+                PlatformRequest::CancelDockAttention(_) => {
+                    self.application_shell.dock_attention = None;
+                }
+                PlatformRequest::SetDockVisible { visible, responder } => {
+                    self.application_shell.dock_visible = visible;
+                    self.application_shell.activation_policy = if visible {
+                        ActivationPolicy::Regular
+                    } else {
+                        ActivationPolicy::Accessory
+                    };
+                    responder.complete(Ok(()));
+                }
+                PlatformRequest::SetSecureKeyboardEntry(enabled) => {
+                    self.application_shell.secure_keyboard_entry = enabled;
+                }
+                PlatformRequest::Beep => self.application_shell.beeps += 1,
+                PlatformRequest::MoveToApplicationsFolder { responder } => {
+                    self.application_shell.applications_folder_moves += 1;
+                    responder.complete(Ok(true));
+                }
                 request => {
                     request.complete_error(PlatformError::Unsupported);
                     unsupported_platform_request = true;
@@ -278,6 +318,9 @@ impl TestAppContext {
         let relaunch_requested = cx.relaunch.is_some();
         if let Some(request) = cx.relaunch.take() {
             self.relaunch_request = Some(request);
+        }
+        if let Some(code) = cx.exit_code.take() {
+            self.exit_code = Some(code);
         }
         if cx.exit && !self.quit_phase_active {
             self.request_quit(if relaunch_requested {

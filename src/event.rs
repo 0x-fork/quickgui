@@ -21,6 +21,7 @@ use crate::{
     foreground::{AsyncViewContext, ForegroundTaskSpawnError, ForegroundTaskSpawner, Task},
     global::{GlobalStore, MAX_GLOBAL_NOTIFICATIONS_PER_EVENT},
     platform::{
+        ActivationPolicy, ApplicationsFolderSupport, DockAttention, DockAttentionRequest,
         NotificationPermissionResponse, PathPromptOptions, PathPromptResponse, PlatformError,
         PlatformRequest, PlatformResponse, PromptButton, PromptLevel, SavePathOptions,
         SavePathResponse, ShellResponse, SystemNotification,
@@ -28,9 +29,9 @@ use crate::{
     runtime::{
         MAX_SYSTEM_WINDOW_TABS, WindowAppearance, WindowBackgroundAppearance, WindowCommand,
         WindowCommandError, WindowRequest, validate_taskbar_overlay_description,
-        validate_taskbar_progress, validate_window_bounds, validate_window_document_path,
-        validate_window_opacity, validate_window_position, validate_window_size,
-        validate_window_tabbing_identifier, validate_window_title,
+        validate_taskbar_progress, validate_window_aspect_ratio, validate_window_bounds,
+        validate_window_document_path, validate_window_opacity, validate_window_position,
+        validate_window_size, validate_window_tabbing_identifier, validate_window_title,
     },
 };
 

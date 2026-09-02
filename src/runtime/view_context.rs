@@ -78,6 +78,22 @@ impl<V: 'static> ViewContext<'_, V> {
         self.displays.all()
     }
 
+    /// Read and observe the complete immutable display snapshot.
+    pub fn display_snapshot(&mut self) -> &Displays {
+        self.listeners.observes_displays = true;
+        self.displays
+    }
+
+    /// Capture persistable geometry and display identity for this window.
+    ///
+    /// This observes both window state and displays, so the view rebuilds when either changes.
+    /// See [`WindowRestoreState`](crate::WindowRestoreState).
+    pub fn window_restore_state(&mut self) -> crate::WindowRestoreState {
+        self.listeners.observes_displays = true;
+        self.listeners.observes_window_state = true;
+        self.window_state.restore_state(self.displays)
+    }
+
     pub fn primary_display(&mut self) -> Option<&Display> {
         self.listeners.observes_displays = true;
         self.displays.primary()

@@ -32,6 +32,37 @@ All notable user-facing changes to QuickGUI are recorded here.
 - Added `AppRunner` character-palette, tabbing-identifier, tab selection, merge, detach, tab-bar,
   and tab-overview commands plus macOS Find-pasteboard read/write, so externally pumped hosts reach
   the same document-window and search integrations as `EventContext`.
+- Added window lifecycle events `Event::Minimized`, `Event::Maximized`,
+  `Event::FullscreenChanged`, `Event::FirstPresented`, `Event::OcclusionChanged`, and
+  `Event::WindowLevelChanged`. `FirstPresented` is the flicker-free ready-to-show moment for a
+  window created with `WindowOptions::show(false)` and is delivered exactly once; the state events
+  are equality-suppressed and derived event-driven, with no observer, timer, or idle sampling.
+- Added the `Event::WillResize`/`Event::WillMove` constrain hooks with
+  `EventContext::constrain_resize` and `constrain_move`. Each proposal issues at most one
+  corrective native resize or move, and the corrective value is remembered so a hook can never
+  loop. Both validate through the existing window-bounds range.
+- Added `Application::on_did_become_active` and `on_did_resign_active`.
+- Extended `WindowLevel` with `Floating`, `ModalPanel`, `MainMenu`, `Status`, `PopUpMenu`, and
+  `ScreenSaver`, plus `WindowLevel::macos_level()` and `is_above_normal()`. Non-macOS backends
+  collapse every above-normal level to the topmost hint while retaining the exact requested level.
+- Added `move_window_top`, `move_window_above`, `set_ignore_mouse_events(ignore, forward)`,
+  `set_window_enabled`, `set_aspect_ratio`/`clear_aspect_ratio`, and
+  `set_window_button_visibility`, each with a `_handle` variant, matching `WindowOptions` builders,
+  and new `WindowState` fields. Aspect ratios are validated against the new
+  `MAX_WINDOW_ASPECT_RATIO` bound.
+- Added the serde-serializable `WindowRestoreState`, `WindowState::restore_state`,
+  `WindowRestoreState::resolve`, `ResolvedWindowRestoreState`, and `WindowOptions::restore`, which
+  validate persisted geometry against the connected displays, clamp into the remembered work area,
+  and fall back to centered placement rather than placing a window off every display.
+- Added application-shell services on `EventContext`: `set_activation_policy`,
+  `activate_application`, `hide_application`, `unhide_application`, `request_dock_attention`,
+  `cancel_dock_attention`, `set_dock_visible`, `set_secure_keyboard_entry`, `beep`,
+  `applications_folder_support`, `move_to_applications_folder`, `is_application_packaged`, and
+  `exit_with_code`, plus the free `quickgui::is_application_packaged()`.
+- Added deterministic coverage through `TestAppContext::simulate_minimize`, `simulate_maximize`,
+  `simulate_fullscreen_change`, `simulate_occlusion_change`, `simulate_first_presented`,
+  `simulate_window_resize`, `simulate_window_move`, `window_restore_state`, `exit_code`, and the
+  `TestApplicationShell` snapshot.
 
 ### macOS
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
@@ -41,6 +72,24 @@ All notable user-facing changes to QuickGUI are recorded here.
   `NSDocumentController` populates it.
 - Dock menu items now render their declared accelerators.
 
+
+
+
+- Window levels now apply the exact `NSWindowLevel` after Winit's three-level hint;
+  `move_window_top`/`move_window_above` use `orderFront:` and `orderWindow:relativeTo:` so a window
+  restacks without activating the application or becoming key.
+- Click-through uses `ignoresMouseEvents` with `acceptsMouseMovedEvents`, so a forwarding window
+  keeps AppKit's existing event-driven `mouseMoved:` stream without a tracking area or timer.
+- `set_window_enabled` expresses "visible but inert" with `ignoresMouseEvents` plus refusing and
+  resigning key-window status; `set_aspect_ratio` uses `contentAspectRatio`; and
+  `set_window_button_visibility` hides the standard traffic-light buttons while keeping the
+  titlebar.
+- Application-shell services use `NSApplicationActivationPolicy`, `NSApp.activate` /
+  `activateIgnoringOtherApps:`, `hide:`/`unhide:`, `requestUserAttention:` /
+  `cancelUserAttentionRequest:`, Carbon `EnableSecureEventInput`/`DisableSecureEventInput` (guarded
+  by `IsSecureEventInputEnabled` so the process-global counter stays balanced), and `NSBeep`.
+- `on_did_become_active`/`on_did_resign_active` reuse the existing application observer, adding no
+  new native observer.
 
 ### JavaScript tooling
 - Added `CrashReporter` and `Metrics` to `@quickgui/native`, both Promise-backed by `AsyncTask`,

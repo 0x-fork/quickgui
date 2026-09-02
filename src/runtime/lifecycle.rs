@@ -46,6 +46,28 @@ impl Runtime {
         self.apply_application_context(event_loop, context);
     }
 
+    /// Run the application-wide "did become active" hook.
+    pub(super) fn invoke_did_become_active(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(mut callback) = self.application_callbacks.did_become_active.take() else {
+            return;
+        };
+        let mut context = self.event_context();
+        callback(&mut context);
+        self.application_callbacks.did_become_active = Some(callback);
+        self.apply_application_context(event_loop, context);
+    }
+
+    /// Run the application-wide "did resign active" hook.
+    pub(super) fn invoke_did_resign_active(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(mut callback) = self.application_callbacks.did_resign_active.take() else {
+            return;
+        };
+        let mut context = self.event_context();
+        callback(&mut context);
+        self.application_callbacks.did_resign_active = Some(callback);
+        self.apply_application_context(event_loop, context);
+    }
+
     #[cfg(target_os = "macos")]
     pub(super) fn invoke_keyboard_layout_change(&mut self, event_loop: &ActiveEventLoop) {
         let Some(mut callback) = self.application_callbacks.keyboard_layout.take() else {
@@ -413,6 +435,7 @@ impl Runtime {
             }
 
             self.process_queued_window_commands(event_loop);
+            self.process_pending_window_events(event_loop);
 
             self.process_global_shortcut_commands();
             self.process_tray_commands();

@@ -413,6 +413,17 @@ impl Runtime {
             }
             Err(error) => self.fail(event_loop, AppError::Render(error.to_string())),
         }
+        if let Some(state) = self.window.as_mut()
+            && !state.first_presented
+            && state.metrics.current().frame_number > 0
+        {
+            state.first_presented = true;
+            // Ready-to-show: the first frame is on screen, so a window created with
+            // `WindowOptions::show(false)` can be revealed without a blank flash.
+            if !self.dispatch(event_loop, Event::FirstPresented, false) {
+                return;
+            }
+        }
         if !self.invoke_pending_mouse_hover(event_loop) {
             return;
         }

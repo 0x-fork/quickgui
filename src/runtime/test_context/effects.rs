@@ -199,6 +199,7 @@ impl TestAppContext {
                 requested_animation_frame: false,
                 repaint_deadline: None,
                 pointer: None,
+                first_presented: false,
             };
             self.windows.insert(handle, window);
             self.last_window_quit_prevented = false;

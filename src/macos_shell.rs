@@ -4,11 +4,186 @@ use objc2::{ClassType, rc::Retained, runtime::AnyObject};
 use objc2_app_kit::{
     NSAboutPanelOptionApplicationIcon, NSAboutPanelOptionApplicationName,
     NSAboutPanelOptionApplicationVersion, NSAboutPanelOptionCredits, NSAboutPanelOptionKey,
-    NSAboutPanelOptionVersion, NSApplication, NSDocumentController, NSImage, NSWorkspace,
+    NSAboutPanelOptionVersion, NSApplication, NSApplicationActivationPolicy, NSBeep,
+    NSDocumentController, NSImage, NSRequestUserAttentionType, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSAttributedString, NSData, NSDictionary, NSString};
 
-use crate::{AboutPanelOptions, FileIconSize, Image, PlatformError};
+use crate::{
+    AboutPanelOptions, ActivationPolicy, ApplicationsFolderSupport, DockAttention,
+    DockAttentionRequest, FileIconSize, Image, PlatformError,
+};
+
+#[link(name = "Carbon", kind = "framework")]
+unsafe extern "C" {
+    fn EnableSecureEventInput() -> i32;
+    fn DisableSecureEventInput() -> i32;
+    fn IsSecureEventInputEnabled() -> bool;
+}
+
+/// Apply an `NSApplicationActivationPolicy`.
+pub(crate) fn set_activation_policy(policy: ActivationPolicy) -> Result<(), PlatformError> {
+    let mtm = main_thread()?;
+    let native = match policy {
+        ActivationPolicy::Regular => NSApplicationActivationPolicy::Regular,
+        ActivationPolicy::Accessory => NSApplicationActivationPolicy::Accessory,
+        ActivationPolicy::Prohibited => NSApplicationActivationPolicy::Prohibited,
+    };
+    if NSApplication::sharedApplication(mtm).setActivationPolicy(native) {
+        Ok(())
+    } else {
+        Err(PlatformError::Platform(
+            "AppKit refused the requested activation policy".into(),
+        ))
+    }
+}
+
+/// Bring the application forward. `force` uses AppKit's ignore-other-apps activation.
+pub(crate) fn activate_application(force: bool) -> Result<(), PlatformError> {
+    let mtm = main_thread()?;
+    let application = NSApplication::sharedApplication(mtm);
+    if force {
+        // `activateIgnoringOtherApps:` is the only API that steals focus from the frontmost
+        // application, which is exactly what `force` promises.
+        #[allow(deprecated)]
+        application.activateIgnoringOtherApps(true);
+    } else {
+        // SAFETY: a main-thread AppKit activation request taking no arguments.
+        unsafe { application.activate() };
+    }
+    Ok(())
+}
+
+pub(crate) fn hide_application() -> Result<(), PlatformError> {
+    let mtm = main_thread()?;
+    NSApplication::sharedApplication(mtm).hide(None);
+    Ok(())
+}
+
+pub(crate) fn unhide_application() -> Result<(), PlatformError> {
+    let mtm = main_thread()?;
+    // SAFETY: `unhide:` is a main-thread AppKit action taking an optional sender.
+    unsafe { NSApplication::sharedApplication(mtm).unhide(None) };
+    Ok(())
+}
+
+pub(crate) fn request_dock_attention(
+    attention: DockAttention,
+) -> Result<DockAttentionRequest, PlatformError> {
+    let mtm = main_thread()?;
+    let native = match attention {
+        DockAttention::Critical => NSRequestUserAttentionType::NSCriticalRequest,
+        DockAttention::Informational => NSRequestUserAttentionType::NSInformationalRequest,
+    };
+    let id = NSApplication::sharedApplication(mtm).requestUserAttention(native);
+    Ok(DockAttentionRequest::new(id as i64))
+}
+
+pub(crate) fn cancel_dock_attention(request: DockAttentionRequest) -> Result<(), PlatformError> {
+    let mtm = main_thread()?;
+    // SAFETY: cancelling an unknown identifier is a documented AppKit no-op.
+    unsafe {
+        NSApplication::sharedApplication(mtm).cancelUserAttentionRequest(request.get() as isize);
+    }
+    Ok(())
+}
+
+/// Show or hide the Dock tile by switching between the Regular and Accessory policies.
+pub(crate) fn set_dock_visible(visible: bool) -> Result<(), PlatformError> {
+    set_activation_policy(if visible {
+        ActivationPolicy::Regular
+    } else {
+        ActivationPolicy::Accessory
+    })
+}
+
+/// Route every keystroke straight to this process, bypassing input monitoring.
+pub(crate) fn set_secure_keyboard_entry(enabled: bool) -> Result<(), PlatformError> {
+    main_thread()?;
+    // SAFETY: both Carbon entry points take no arguments and are safe to call repeatedly; the
+    // enabled query keeps the enable/disable counter balanced.
+    let status = unsafe {
+        if enabled {
+            if IsSecureEventInputEnabled() {
+                return Ok(());
+            }
+            EnableSecureEventInput()
+        } else {
+            if !IsSecureEventInputEnabled() {
+                return Ok(());
+            }
+            DisableSecureEventInput()
+        }
+    };
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(PlatformError::Platform(
+            format!("secure keyboard entry failed with status {status}").into(),
+        ))
+    }
+}
+
+pub(crate) fn beep() -> Result<(), PlatformError> {
+    main_thread()?;
+    // SAFETY: `NSBeep` takes no arguments and has no failure mode.
+    unsafe { NSBeep() };
+    Ok(())
+}
+
+/// Whether this process can relocate its bundle into an `/Applications` directory.
+pub(crate) fn applications_folder_support() -> ApplicationsFolderSupport {
+    let Some(bundle) = current_application_bundle() else {
+        return ApplicationsFolderSupport::default();
+    };
+    let already_installed = bundle
+        .parent()
+        .is_some_and(|parent| parent.ends_with("Applications"));
+    ApplicationsFolderSupport {
+        supported: true,
+        already_installed,
+    }
+}
+
+/// Move the running application bundle into `/Applications`.
+///
+/// Returns `false` when the bundle is already installed there. The caller relaunches; QuickGUI
+/// never restarts the process behind the application's back.
+pub(crate) fn move_to_applications_folder() -> Result<bool, PlatformError> {
+    let support = applications_folder_support();
+    if !support.supported {
+        return Err(PlatformError::Unsupported);
+    }
+    if support.already_installed {
+        return Ok(false);
+    }
+    let bundle = current_application_bundle().ok_or(PlatformError::Unsupported)?;
+    let name = bundle
+        .file_name()
+        .ok_or_else(|| PlatformError::Platform("the application bundle has no name".into()))?;
+    let destination = Path::new("/Applications").join(name);
+    if destination.exists() {
+        return Err(PlatformError::Platform(
+            "an application with the same name is already installed".into(),
+        ));
+    }
+    std::fs::rename(&bundle, &destination)
+        .map_err(|error| PlatformError::Platform(error.to_string().into()))?;
+    Ok(true)
+}
+
+/// Path of the `.app` bundle containing the running executable, when there is one.
+fn current_application_bundle() -> Option<std::path::PathBuf> {
+    let executable = std::env::current_exe().ok()?;
+    let bundle = executable.parent()?.parent()?.parent()?;
+    let is_bundle = bundle
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("app"))
+        && executable
+            .parent()
+            .is_some_and(|parent| parent.ends_with("MacOS"));
+    is_bundle.then(|| bundle.to_path_buf())
+}
 
 pub(crate) fn set_dock_badge(value: Option<&str>) -> Result<(), PlatformError> {
     let mtm = main_thread()?;

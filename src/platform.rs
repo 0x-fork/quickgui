@@ -167,6 +167,56 @@ pub enum PlatformError {
 }
 
 /// Native prompt severity, matching the platform's informational, warning, and critical styles.
+/// How the application appears to the operating system's window and application switchers.
+///
+/// This is AppKit's `NSApplicationActivationPolicy`. Other platforms retain the requested value
+/// and report [`PlatformError::Unsupported`].
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum ActivationPolicy {
+    /// An ordinary application with a Dock tile and a menu bar.
+    #[default]
+    Regular,
+    /// A background application that can still show windows but owns no Dock tile.
+    Accessory,
+    /// A background application that cannot be activated at all.
+    Prohibited,
+}
+
+/// Urgency of a request for the user's attention.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum DockAttention {
+    /// Bounce until the application is activated or the request is cancelled.
+    Critical,
+    /// Bounce once.
+    Informational,
+}
+
+/// Identifier for one in-flight [`DockAttention`] request.
+///
+/// Pass it to `cancel_dock_attention` to stop a critical bounce early. `0` is never a valid
+/// request identifier.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DockAttentionRequest(i64);
+
+impl DockAttentionRequest {
+    pub(crate) const fn new(value: i64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
+/// Whether the running process can relocate itself into `/Applications`.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct ApplicationsFolderSupport {
+    /// Whether the platform implements the move at all.
+    pub supported: bool,
+    /// Whether the executable is already inside an `/Applications` directory.
+    pub already_installed: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PromptLevel {
     Info,
@@ -903,6 +953,29 @@ pub(crate) enum PlatformRequest {
         tasks: Vec<UserTask>,
         responder: PlatformResponder<()>,
     },
+    SetActivationPolicy {
+        policy: ActivationPolicy,
+        responder: PlatformResponder<()>,
+    },
+    ActivateApplication {
+        force: bool,
+    },
+    HideApplication,
+    UnhideApplication,
+    RequestDockAttention {
+        attention: DockAttention,
+        responder: PlatformResponder<DockAttentionRequest>,
+    },
+    CancelDockAttention(DockAttentionRequest),
+    SetDockVisible {
+        visible: bool,
+        responder: PlatformResponder<()>,
+    },
+    SetSecureKeyboardEntry(bool),
+    Beep,
+    MoveToApplicationsFolder {
+        responder: PlatformResponder<bool>,
+    },
 }
 
 impl PlatformRequest {
@@ -1209,7 +1282,17 @@ impl PlatformRequest {
             | Self::ClearRecentDocuments
             | Self::ShowAboutPanel(_)
             | Self::GetFileIcon { .. }
-            | Self::SetUserTasks { .. } => None,
+            | Self::SetUserTasks { .. }
+            | Self::SetActivationPolicy { .. }
+            | Self::ActivateApplication { .. }
+            | Self::HideApplication
+            | Self::UnhideApplication
+            | Self::RequestDockAttention { .. }
+            | Self::CancelDockAttention(_)
+            | Self::SetDockVisible { .. }
+            | Self::SetSecureKeyboardEntry(_)
+            | Self::Beep
+            | Self::MoveToApplicationsFolder { .. } => None,
         }
     }
 
@@ -1228,6 +1311,10 @@ impl PlatformRequest {
             | Self::RequestNotificationPermission { responder } => responder.is_cancelled(),
             Self::GetFileIcon { responder, .. } => responder.is_cancelled(),
             Self::SetUserTasks { responder, .. } => responder.is_cancelled(),
+            Self::SetActivationPolicy { responder, .. }
+            | Self::SetDockVisible { responder, .. } => responder.is_cancelled(),
+            Self::RequestDockAttention { responder, .. } => responder.is_cancelled(),
+            Self::MoveToApplicationsFolder { responder } => responder.is_cancelled(),
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
             | Self::SetDockBadge(_)
@@ -1235,6 +1322,12 @@ impl PlatformRequest {
             | Self::SetDockMenu(_)
             | Self::AddRecentDocument(_)
             | Self::ClearRecentDocuments
+            | Self::ActivateApplication { .. }
+            | Self::HideApplication
+            | Self::UnhideApplication
+            | Self::CancelDockAttention(_)
+            | Self::SetSecureKeyboardEntry(_)
+            | Self::Beep
             | Self::ShowAboutPanel(_) => false,
         }
     }
@@ -1265,7 +1358,17 @@ impl PlatformRequest {
             | Self::ClearRecentDocuments
             | Self::ShowAboutPanel(_)
             | Self::GetFileIcon { .. }
-            | Self::SetUserTasks { .. } => false,
+            | Self::SetUserTasks { .. }
+            | Self::SetActivationPolicy { .. }
+            | Self::ActivateApplication { .. }
+            | Self::HideApplication
+            | Self::UnhideApplication
+            | Self::RequestDockAttention { .. }
+            | Self::CancelDockAttention(_)
+            | Self::SetDockVisible { .. }
+            | Self::SetSecureKeyboardEntry(_)
+            | Self::Beep
+            | Self::MoveToApplicationsFolder { .. } => false,
         }
     }
 
@@ -1288,6 +1391,10 @@ impl PlatformRequest {
             }
             Self::GetFileIcon { responder, .. } => responder.complete(Err(error)),
             Self::SetUserTasks { responder, .. } => responder.complete(Err(error)),
+            Self::SetActivationPolicy { responder, .. }
+            | Self::SetDockVisible { responder, .. } => responder.complete(Err(error)),
+            Self::RequestDockAttention { responder, .. } => responder.complete(Err(error)),
+            Self::MoveToApplicationsFolder { responder } => responder.complete(Err(error)),
             Self::ShowSystemNotification(_)
             | Self::DismissSystemNotification(_)
             | Self::SetDockBadge(_)
@@ -1295,9 +1402,98 @@ impl PlatformRequest {
             | Self::SetDockMenu(_)
             | Self::AddRecentDocument(_)
             | Self::ClearRecentDocuments
+            | Self::ActivateApplication { .. }
+            | Self::HideApplication
+            | Self::UnhideApplication
+            | Self::CancelDockAttention(_)
+            | Self::SetSecureKeyboardEntry(_)
+            | Self::Beep
             | Self::ShowAboutPanel(_) => {}
         }
     }
+}
+
+impl PlatformRequest {
+    pub(crate) fn set_activation_policy(policy: ActivationPolicy) -> (Self, PlatformResponse<()>) {
+        let (responder, response) = response_channel();
+        (Self::SetActivationPolicy { policy, responder }, response)
+    }
+
+    pub(crate) fn request_dock_attention(
+        attention: DockAttention,
+    ) -> (Self, PlatformResponse<DockAttentionRequest>) {
+        let (responder, response) = response_channel();
+        (
+            Self::RequestDockAttention {
+                attention,
+                responder,
+            },
+            response,
+        )
+    }
+
+    pub(crate) fn set_dock_visible(visible: bool) -> (Self, PlatformResponse<()>) {
+        let (responder, response) = response_channel();
+        (Self::SetDockVisible { visible, responder }, response)
+    }
+
+    pub(crate) fn move_to_applications_folder() -> (Self, PlatformResponse<bool>) {
+        let (responder, response) = response_channel();
+        (Self::MoveToApplicationsFolder { responder }, response)
+    }
+}
+
+/// Whether this process is running from an installed application bundle.
+///
+/// The answer is a documented heuristic, not a security boundary:
+///
+/// * **macOS** — the executable path contains a `.app/Contents/MacOS/` component and is not under
+///   a Cargo build directory (`target/debug`, `target/release`, or any `target/<triple>/…`).
+///   `cargo run` therefore reports `false` even when it produced a bundle-shaped path.
+/// * **Windows** — the executable is not under a Cargo build directory.
+/// * **Linux and the BSDs** — the executable is not under a Cargo build directory and does not
+///   live in the current working directory tree used by `cargo run`.
+///
+/// It reads `std::env::current_exe` once per call and installs no observer, cache, or timer.
+pub fn is_application_packaged() -> bool {
+    let Ok(path) = std::env::current_exe() else {
+        return false;
+    };
+    if path_is_cargo_build_output(&path) {
+        return false;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let components: Vec<_> = path
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().into_owned())
+            .collect();
+        components.windows(3).any(|window| {
+            window[0].ends_with(".app") && window[1] == "Contents" && window[2] == "MacOS"
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+fn path_is_cargo_build_output(path: &Path) -> bool {
+    let mut components = path.components().peekable();
+    while let Some(component) = components.next() {
+        if component.as_os_str() != "target" {
+            continue;
+        }
+        let Some(next) = components.peek() else {
+            continue;
+        };
+        let next = next.as_os_str().to_string_lossy();
+        // `target/debug`, `target/release`, and `target/<triple>/<profile>` all mark build output.
+        if next == "debug" || next == "release" || next.contains('-') {
+            return true;
+        }
+    }
+    false
 }
 
 fn validate_about_panel_options(options: &AboutPanelOptions) -> Result<(), PlatformError> {

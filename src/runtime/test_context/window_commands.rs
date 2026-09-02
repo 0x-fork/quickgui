@@ -20,6 +20,7 @@ impl TestAppContext {
             return Ok(());
         };
         let previous = state.state;
+        let mut window_level_changed = None;
         match command {
             WindowCommand::SetTitle(_, title) => state.config.title = title,
             WindowCommand::SetRepresentedFile(_, represented_file) => {
@@ -186,8 +187,47 @@ impl TestAppContext {
                 state.state.content_protected = protected;
             }
             WindowCommand::SetWindowLevel(_, level) => {
+                let previous = state.state.window_level;
                 state.config.window_level = level;
                 state.state.window_level = effective_window_level(&state.config);
+                if previous != state.state.window_level {
+                    window_level_changed = Some(state.state.window_level);
+                }
+            }
+            WindowCommand::MoveToTop(_) | WindowCommand::MoveAbove(_, _) => {}
+            WindowCommand::SetIgnoreMouseEvents(_, ignore, forward) => {
+                state.config.ignore_mouse_events = ignore;
+                state.config.forward_mouse_events = forward;
+                state.state.ignore_mouse_events = ignore;
+                state.state.forward_mouse_events = forward;
+            }
+            WindowCommand::SetWindowEnabled(_, enabled) => {
+                state.config.window_enabled = enabled;
+                state.state.window_enabled = enabled;
+            }
+            WindowCommand::SetAspectRatio(_, ratio) => {
+                state.config.aspect_ratio = ratio;
+                state.state.aspect_ratio = ratio;
+                if let Some(ratio) = ratio {
+                    let bounds = state.state.bounds.bounds();
+                    let clamped =
+                        clamp_size_to_aspect_ratio(Size::new(bounds.width, bounds.height), ratio);
+                    if clamped != Size::new(bounds.width, bounds.height) {
+                        set_test_window_bounds(
+                            state,
+                            WindowBounds::Windowed(Rect::new(
+                                bounds.x,
+                                bounds.y,
+                                clamped.width,
+                                clamped.height,
+                            )),
+                        );
+                    }
+                }
+            }
+            WindowCommand::SetWindowButtonVisibility(_, visible) => {
+                state.config.window_buttons_visible = visible;
+                state.state.window_buttons_visible = visible;
             }
             WindowCommand::SetFocusable(_, focusable) => {
                 state.config.focusable = focusable;
@@ -291,6 +331,12 @@ impl TestAppContext {
         }
         if state.state != previous && state.listeners.observes_window_state {
             state.dirty = true;
+        }
+        if let Some(level) = window_level_changed {
+            self.queue_dispatch(TestDispatch::Event(
+                window,
+                Event::WindowLevelChanged(level),
+            ))?;
         }
         Ok(())
     }

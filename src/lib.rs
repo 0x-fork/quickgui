@@ -251,6 +251,7 @@ pub use picker::{
     PickerError, PickerFilterMode, PickerFirst, PickerItem, PickerLast, PickerLayout, PickerMatch,
     PickerNext, PickerPageDown, PickerPageUp, PickerPrevious, PickerState, picker_key_bindings,
 };
+// Application-shell services: activation policy, Dock attention, and process packaging.
 pub use platform::{
     AboutPanelOptions, FileDialogFilter, FileIconResponse, FileIconSize,
     MAX_ABOUT_PANEL_TEXT_BYTES, MAX_ACTIVE_PLATFORM_DIALOGS, MAX_DOCK_BADGE_BYTES,
@@ -270,6 +271,10 @@ pub use platform::{
     PlatformResponse, PromptButton, PromptLevel, SavePathOptions, SavePathResponse, ShellResponse,
     SystemNotification, SystemNotificationAction, SystemNotificationActionKind,
     SystemNotificationAttachment, SystemNotificationResponse, SystemNotificationSound, UserTask,
+};
+pub use platform::{
+    ActivationPolicy, ApplicationsFolderSupport, DockAttention, DockAttentionRequest,
+    is_application_packaged,
 };
 pub use popover::{
     MAX_GRABBING_POPOVERS, PopoverAnchor, PopoverConstraintAdjustment, PopoverGravity,
@@ -317,6 +322,7 @@ pub use quickgui_system::{
 pub use quickgui_system::{
     CpuUsage, CpuUsageSampler, MAX_CPU_SAMPLE_INTERVAL, ProcessMetrics, SystemMemory,
 };
+// Window lifecycle events, stacking/input policy, and persistable restore geometry.
 pub use runtime::{
     App, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
     DesktopIntegrationSupport, DismissListener, Drag, DragListener, DropListener,
@@ -355,8 +361,10 @@ pub use runtime::{
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use runtime::{
-    MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestWindowHandle, VisualTestContext,
+    MAX_TEST_EFFECT_TURNS, TestAppContext, TestAppError, TestApplicationShell, TestWindowHandle,
+    VisualTestContext,
 };
+pub use runtime::{MAX_WINDOW_ASPECT_RATIO, ResolvedWindowRestoreState, WindowRestoreState};
 pub use scene::{
     BoxShadow, CustomShaderPrimitive, ImagePrimitive, MAX_BOX_SHADOW_BLUR_RADIUS,
     MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign,

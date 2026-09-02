@@ -12,6 +12,16 @@ impl Runtime {
                 continue;
             };
             #[cfg(target_os = "macos")]
+            let sibling_window = match &command {
+                WindowCommand::MoveAbove(_, other) => self
+                    .window_handles
+                    .get(other)
+                    .copied()
+                    .and_then(|id| self.windows.get(&id))
+                    .map(|entry| entry.state.window.clone()),
+                _ => None,
+            };
+            #[cfg(target_os = "macos")]
             let parent_window = self.windows.get(&window_id).and_then(|entry| {
                 entry
                     .state
@@ -26,6 +36,7 @@ impl Runtime {
             let state = &mut entry.state;
             let mut state_changed = false;
             let mut force_redraw = false;
+            let mut window_events: Vec<Event> = Vec::new();
             #[cfg(target_os = "macos")]
             let mut tabbing_ownership_delta = 0_i8;
             #[cfg(feature = "inspector")]
@@ -516,10 +527,123 @@ impl Runtime {
                 }
                 WindowCommand::SetWindowLevel(_, level) => {
                     if entry.config.window_level != level {
+                        let previous = effective_window_level(&entry.config);
                         entry.config.window_level = level;
-                        state
+                        let effective = effective_window_level(&entry.config);
+                        state.window.set_window_level(effective.to_winit());
+                        #[cfg(target_os = "macos")]
+                        if let Err(error) = set_window_level(&state.window, effective) {
+                            tracing::warn!(%error, "could not apply the native window level");
+                        }
+                        if previous != effective {
+                            window_events.push(Event::WindowLevelChanged(effective));
+                        }
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::MoveToTop(_) => {
+                    #[cfg(target_os = "macos")]
+                    if let Err(error) = order_window_front(&state.window) {
+                        tracing::warn!(%error, "could not raise the native window");
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        // Winit exposes no portable restack request, so the closest honest
+                        // approximation on these backends is a native focus request.
+                        state.window.focus_window();
+                    }
+                }
+                WindowCommand::MoveAbove(_, _other) => {
+                    #[cfg(target_os = "macos")]
+                    match sibling_window {
+                        Some(above) => {
+                            if let Err(error) = order_window_above(&state.window, &above) {
+                                tracing::warn!(%error, "could not order the native window above its sibling");
+                            }
+                        }
+                        None => tracing::warn!(
+                            "ignoring a window ordering request for an unknown sibling window"
+                        ),
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    state.window.focus_window();
+                }
+                WindowCommand::SetIgnoreMouseEvents(_, ignore, forward) => {
+                    if entry.config.ignore_mouse_events != ignore
+                        || entry.config.forward_mouse_events != forward
+                    {
+                        #[cfg(target_os = "macos")]
+                        let applied =
+                            set_window_ignores_mouse_events(&state.window, ignore, forward)
+                                .map_err(|error| {
+                                    tracing::warn!(%error, "could not change native mouse-event pass-through");
+                                })
+                                .is_ok();
+                        #[cfg(not(target_os = "macos"))]
+                        let applied = state
                             .window
-                            .set_window_level(effective_window_level(&entry.config).to_winit());
+                            .set_cursor_hittest(!ignore)
+                            .map_err(|error| {
+                                tracing::warn!(%error, "could not change native mouse-event pass-through");
+                            })
+                            .is_ok();
+                        if applied {
+                            entry.config.ignore_mouse_events = ignore;
+                            entry.config.forward_mouse_events = forward;
+                            state_changed = true;
+                        }
+                    }
+                }
+                WindowCommand::SetWindowEnabled(_, enabled) => {
+                    if entry.config.window_enabled != enabled {
+                        #[cfg(target_os = "macos")]
+                        if let Err(error) = set_window_input_enabled(&state.window, enabled) {
+                            tracing::warn!(%error, "could not change native window input policy");
+                        }
+                        #[cfg(target_os = "windows")]
+                        if let Err(error) =
+                            windows_window::set_window_input_enabled(&state.window, enabled)
+                        {
+                            tracing::warn!(%error, "could not change native window input policy");
+                        }
+                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                        tracing::warn!(
+                            "disabling native window input is not supported by this backend"
+                        );
+                        entry.config.window_enabled = enabled;
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetAspectRatio(_, ratio) => {
+                    if entry.config.aspect_ratio != ratio {
+                        entry.config.aspect_ratio = ratio;
+                        #[cfg(target_os = "macos")]
+                        if let Err(error) = set_window_aspect_ratio(&state.window, ratio) {
+                            tracing::warn!(%error, "could not change the native content aspect ratio");
+                        }
+                        if let Some(ratio) = ratio {
+                            let clamped = clamp_size_to_aspect_ratio(state.logical_size, ratio);
+                            if clamped != state.logical_size {
+                                let _ = state.window.request_inner_size(LogicalSize::new(
+                                    f64::from(clamped.width),
+                                    f64::from(clamped.height),
+                                ));
+                            }
+                        }
+                        state_changed = true;
+                    }
+                }
+                WindowCommand::SetWindowButtonVisibility(_, visible) => {
+                    if entry.config.window_buttons_visible != visible {
+                        #[cfg(target_os = "macos")]
+                        if let Err(error) = set_window_button_visibility(&state.window, visible) {
+                            tracing::warn!(%error, "could not change native window button visibility");
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        tracing::warn!(
+                            "native window buttons can only be hidden independently on macOS"
+                        );
+                        entry.config.window_buttons_visible = visible;
                         state_changed = true;
                     }
                 }
@@ -847,6 +971,14 @@ impl Runtime {
                 if state.visible && state.scheduler.invalidate() {
                     state.window.request_redraw();
                 }
+            }
+
+            if !window_events.is_empty()
+                && self.pending_window_events.len() + window_events.len()
+                    <= MAX_PENDING_WINDOW_COMMANDS
+            {
+                self.pending_window_events
+                    .extend(window_events.into_iter().map(|event| (handle, event)));
             }
 
             #[cfg(target_os = "macos")]

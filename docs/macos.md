@@ -285,3 +285,37 @@ components.
 
 See also `cargo run --release --example native_view` and
 `cargo run --release --example overlays`.
+\n
+## Window and application shell
+
+QuickGUI keeps Winit's AppKit delegate intact and never swizzles it. The window lifecycle events in
+[Windows and shared state](windows.md) are therefore derived from the native events Winit does
+deliver — resize, move, occlusion — rather than from `windowDidMiniaturize:`,
+`windowDidEnterFullScreen:`, or `windowWillResize:toSize:` directly. The derivation reads
+`NSWindow.isMiniaturized`, the AppKit fullscreen mask, and the zoom geometry only at those events;
+an idle window performs no sampling.
+
+The macOS-specific window operations are:
+
+- `orderFront:` and `orderWindow:relativeTo:` for `move_window_top` / `move_window_above`, which
+  restack without activating the application or making the window key.
+- `ignoresMouseEvents` plus `acceptsMouseMovedEvents` for
+  `set_ignore_mouse_events(ignore, forward)`. Forwarding uses AppKit's existing event-driven
+  `mouseMoved:` stream; QuickGUI installs no tracking area, timer, or polling pass.
+- `setLevel:` with the exact `NSWindowLevel` named by `WindowLevel`, applied after Winit's own
+  three-level hint.
+- `contentAspectRatio` for `set_aspect_ratio`, and `contentResizeIncrements` reset to `1 x 1` when
+  the ratio is cleared.
+- `standardWindowButton(_:)` hiding for `set_window_button_visibility`, which keeps the titlebar.
+- `setHasShadow:` for runtime shadow mutation.
+
+Application-shell services use `NSApplication` (`setActivationPolicy:`, `activate`,
+`activateIgnoringOtherApps:`, `hide:`, `unhide:`, `requestUserAttention:`,
+`cancelUserAttentionRequest:`), Carbon's `EnableSecureEventInput`/`DisableSecureEventInput`, and
+AppKit's `NSBeep`. `on_did_become_active` and `on_did_resign_active` reuse the
+`QuickGuiApplicationObserver` that already watches
+`NSApplicationDidBecomeActiveNotification`/`NSApplicationDidResignActiveNotification` for work-area
+refresh and popover dismissal, so no additional observer is registered.
+
+Everything above except the pure queries requires the AppKit main thread and fails with
+`PlatformError::Unavailable` off it.

@@ -15,6 +15,179 @@ impl Runtime {
         self.apply_event_context(event_loop, cx, force_redraw, true)
     }
 
+    /// Deliver one constrain hook and return the narrowing the view requested, if any.
+    ///
+    /// The boolean reports whether the runtime may keep processing this native event.
+    pub(super) fn dispatch_constraint(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        event: Event,
+    ) -> (bool, Option<Size>, Option<Point>) {
+        let mut cx = self.event_context();
+        let Some(window) = &mut self.window else {
+            return (false, None, None);
+        };
+        window.view.event(&event, &mut cx);
+        let size = cx.constrained_size;
+        let position = cx.constrained_position;
+        let alive = self.apply_event_context(event_loop, cx, false, true);
+        (alive, size, position)
+    }
+
+    /// Deliver one window lifecycle event to a possibly inactive retained window.
+    pub(super) fn dispatch_to_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        handle: WindowHandle,
+        event: Event,
+    ) {
+        if self.current_handle() == Some(handle) {
+            self.dispatch(event_loop, event, false);
+            return;
+        }
+        let Some(window_id) = self.window_handles.get(&handle).copied() else {
+            return;
+        };
+        if self.activate_window(window_id) {
+            self.dispatch(event_loop, event, false);
+            self.deactivate_window();
+        }
+    }
+
+    /// Drain the bounded queue of lifecycle events produced while windows were deactivated.
+    pub(super) fn process_pending_window_events(&mut self, event_loop: &ActiveEventLoop) {
+        if self.pending_window_events.is_empty() {
+            return;
+        }
+        for (handle, event) in std::mem::take(&mut self.pending_window_events) {
+            if self.fatal_error.is_some() || self.exit_requested {
+                return;
+            }
+            self.dispatch_to_window(event_loop, handle, event);
+        }
+    }
+
+    /// Recompute minimize/maximize/fullscreen from the operating system and deliver the changes.
+    ///
+    /// Winit does not expose AppKit's `windowDidMiniaturize:`/`windowDidEnterFullScreen:`
+    /// callbacks, so QuickGUI derives them at the native events that can accompany those
+    /// transitions. The read is event-driven; nothing polls while the window is idle.
+    pub(super) fn refresh_window_lifecycle(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        let Some(state) = self.window.as_ref() else {
+            return false;
+        };
+        #[cfg(target_os = "macos")]
+        let minimized = is_window_miniaturized(&state.window)
+            .unwrap_or_else(|_| state.window.is_minimized().unwrap_or(state.minimized));
+        #[cfg(not(target_os = "macos"))]
+        let minimized = state.window.is_minimized().unwrap_or(state.minimized);
+        let fullscreen = runtime_window_is_fullscreen(state);
+        let maximized = runtime_window_is_maximized(state, &self.config);
+
+        let state = self.window.as_mut().expect("window presence checked above");
+        let minimized_changed = state.minimized != minimized;
+        let fullscreen_changed = state.fullscreen != fullscreen;
+        let maximized_changed = state.maximized != maximized;
+        state.minimized = minimized;
+        state.fullscreen = fullscreen;
+        state.maximized = maximized;
+        if !(minimized_changed || fullscreen_changed || maximized_changed) {
+            return true;
+        }
+        let observe = state.listeners.observes_window_state;
+        if minimized_changed && !self.dispatch(event_loop, Event::Minimized(minimized), observe) {
+            return false;
+        }
+        if maximized_changed && !self.dispatch(event_loop, Event::Maximized(maximized), observe) {
+            return false;
+        }
+        if fullscreen_changed
+            && !self.dispatch(event_loop, Event::FullscreenChanged(fullscreen), observe)
+        {
+            return false;
+        }
+        true
+    }
+
+    /// Deliver `Event::WillResize` and apply the resulting inner-size narrowing.
+    ///
+    /// At most one corrective native resize is issued per proposal, and the corrective size is
+    /// remembered so the resize it produces cannot start another round.
+    pub(super) fn apply_resize_constraint(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        proposed: Size,
+    ) -> bool {
+        let Some(state) = self.window.as_mut() else {
+            return false;
+        };
+        if state.resize_correction == Some(proposed) {
+            state.resize_correction = None;
+            return true;
+        }
+        let aspect_ratio = self.config.aspect_ratio;
+        let (alive, constrained, _) = self.dispatch_constraint(
+            event_loop,
+            Event::WillResize {
+                proposed_size: proposed,
+            },
+        );
+        if !alive {
+            return false;
+        }
+        let mut target = constrained.unwrap_or(proposed);
+        if let Some(ratio) = aspect_ratio {
+            target = clamp_size_to_aspect_ratio(target, ratio);
+        }
+        let Some(state) = self.window.as_mut() else {
+            return false;
+        };
+        if target != proposed {
+            state.resize_correction = Some(target);
+            let _ = state.window.request_inner_size(LogicalSize::new(
+                f64::from(target.width),
+                f64::from(target.height),
+            ));
+        }
+        true
+    }
+
+    /// Deliver `Event::WillMove` and apply the resulting position override.
+    pub(super) fn apply_move_constraint(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        proposed: Point,
+    ) -> bool {
+        let Some(state) = self.window.as_mut() else {
+            return false;
+        };
+        if state.move_correction == Some(proposed) {
+            state.move_correction = None;
+            return true;
+        }
+        let (alive, _, constrained) = self.dispatch_constraint(
+            event_loop,
+            Event::WillMove {
+                proposed_position: proposed,
+            },
+        );
+        if !alive {
+            return false;
+        }
+        let Some(target) = constrained.filter(|target| *target != proposed) else {
+            return true;
+        };
+        let Some(state) = self.window.as_mut() else {
+            return false;
+        };
+        state.move_correction = Some(target);
+        state.window.set_outer_position(LogicalPosition::new(
+            f64::from(target.x),
+            f64::from(target.y),
+        ));
+        true
+    }
+
     pub(super) fn apply_event_context(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -25,6 +198,9 @@ impl Runtime {
         let relaunch_requested = cx.relaunch.is_some();
         if let Some(request) = cx.relaunch.take() {
             self.relaunch_request = Some(request);
+        }
+        if let Some(code) = cx.exit_code.take() {
+            self.exit_code = Some(code);
         }
         if cx.exit && !self.quit_phase_active {
             self.pending_quit = Some(if relaunch_requested {

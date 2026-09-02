@@ -77,6 +77,33 @@ pub enum Event {
         logical_size: Size,
         scale_factor: f32,
     },
+    /// The native window was minimized (`true`) or restored from the dock/taskbar (`false`).
+    Minimized(bool),
+    /// The native window entered (`true`) or left (`false`) the platform's maximized/zoomed state.
+    Maximized(bool),
+    /// The native window entered (`true`) or left (`false`) fullscreen.
+    FullscreenChanged(bool),
+    /// Delivered exactly once, after this window's first frame reached the screen.
+    ///
+    /// A window created with `WindowOptions::show(false)` can safely be shown here, which is the
+    /// flicker-free "ready to show" moment.
+    FirstPresented,
+    /// The compositor started (`true`) or stopped (`false`) hiding this window's contents.
+    OcclusionChanged(bool),
+    /// The effective native stacking level changed.
+    WindowLevelChanged(WindowLevel),
+    /// The window manager resized this window. Call
+    /// [`EventContext::constrain_resize`](crate::EventContext::constrain_resize) to request a
+    /// narrower inner size before the next frame is laid out.
+    WillResize {
+        proposed_size: Size,
+    },
+    /// The window manager moved this window. Call
+    /// [`EventContext::constrain_move`](crate::EventContext::constrain_move) to request a
+    /// different logical desktop position.
+    WillMove {
+        proposed_position: Point,
+    },
 }
 
 /// Maximum controlled text fields exposed by one form submission.

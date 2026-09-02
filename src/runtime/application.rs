@@ -731,6 +731,31 @@ impl Application {
         self
     }
 
+    /// Handle the application becoming the frontmost application.
+    ///
+    /// macOS delivers this from `NSApplicationDidBecomeActiveNotification`. It reuses the
+    /// application observer QuickGUI already installs, so it adds no additional native observer,
+    /// timer, or polling pass. Other platforms never invoke it today.
+    pub fn on_did_become_active(
+        mut self,
+        callback: impl FnMut(&mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.did_become_active = Some(Box::new(callback));
+        self
+    }
+
+    /// Handle the application losing frontmost status.
+    ///
+    /// macOS delivers this from `NSApplicationDidResignActiveNotification`, the same observer that
+    /// already dismisses grabbing system popovers. Other platforms never invoke it today.
+    pub fn on_did_resign_active(
+        mut self,
+        callback: impl FnMut(&mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.did_resign_active = Some(Box::new(callback));
+        self
+    }
+
     /// Run after a native window and its owned resources have been removed.
     pub fn on_window_closed(
         mut self,
@@ -810,6 +835,7 @@ impl Application {
             let run_result = event_loop.run_app(&mut runtime);
             let fatal_error = runtime.fatal_error.take();
             let relaunch = runtime.relaunch_request.take();
+            let exit_code = runtime.exit_code.take();
             runtime.finalize_process_services();
             drop(runtime);
             run_result?;
@@ -820,6 +846,10 @@ impl Application {
                 request
                     .spawn()
                     .map_err(|error| AppError::Platform(error.to_string()))?;
+            }
+            // Structured teardown already ran; only the process status is left to apply.
+            if let Some(code) = exit_code.filter(|code| *code != 0) {
+                std::process::exit(code);
             }
             Ok(())
         }

@@ -1,10 +1,26 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    Application, AsyncContextError, AsyncViewContext, Color, Element, Rect, Task, TitleBarStyle,
-    View, ViewContext, WindowBounds, WindowCommandError, WindowHandle, WindowKind, WindowOptions,
-    button, div, text,
+    Application, AsyncContextError, AsyncViewContext, Color, Element, Event, Rect, Size, Task,
+    TitleBarStyle, View, ViewContext, WindowBounds, WindowCommandError, WindowHandle, WindowKind,
+    WindowLevel, WindowOptions, button, div, text,
 };
+
+/// Every stacking level a child window can cycle through in this example.
+const LEVELS: [WindowLevel; 9] = [
+    WindowLevel::AlwaysOnBottom,
+    WindowLevel::Normal,
+    WindowLevel::AlwaysOnTop,
+    WindowLevel::Floating,
+    WindowLevel::ModalPanel,
+    WindowLevel::MainMenu,
+    WindowLevel::Status,
+    WindowLevel::PopUpMenu,
+    WindowLevel::ScreenSaver,
+];
+
+/// Maximum lifecycle events retained by the on-screen log.
+const MAX_LOGGED_LIFECYCLE_EVENTS: usize = 12;
 
 fn main() -> Result<(), quickgui::AppError> {
     Application::new().run(|cx| {
@@ -231,6 +247,14 @@ struct ControlledWindow {
     resizable: bool,
     minimizable: bool,
     delayed_show: bool,
+    level_index: usize,
+    ignore_mouse: bool,
+    forward_mouse: bool,
+    input_enabled: bool,
+    buttons_visible: bool,
+    aspect_locked: bool,
+    /// Bounded log of the native lifecycle events this window observed.
+    lifecycle: Vec<String>,
     task: Option<Task<Result<(), AsyncContextError>>>,
     status: String,
 }
@@ -245,6 +269,13 @@ impl ControlledWindow {
             resizable: true,
             minimizable: true,
             delayed_show,
+            level_index: 1,
+            ignore_mouse: false,
+            forward_mouse: true,
+            input_enabled: true,
+            buttons_visible: true,
+            aspect_locked: false,
+            lifecycle: Vec::new(),
             task: None,
             status: if delayed_show {
                 "Prepared offscreen; waiting for one exact timer".to_owned()
@@ -321,9 +352,57 @@ impl ControlledWindow {
         };
         cx.invalidate();
     }
+
+    /// Retain one lifecycle line, dropping the oldest entry at the fixed bound.
+    fn note(&mut self, entry: String) {
+        if self.lifecycle.len() == MAX_LOGGED_LIFECYCLE_EVENTS {
+            self.lifecycle.remove(0);
+        }
+        self.lifecycle.push(entry);
+    }
+
+    fn level(&self) -> WindowLevel {
+        LEVELS[self.level_index % LEVELS.len()]
+    }
+}
+
+impl ControlledWindow {
+    /// Keep a locked window's proposed size on a 16:9 ratio before the frame is laid out.
+    fn constrain(&self, proposed: Size) -> Size {
+        Size::new(proposed.width, proposed.width * 9.0 / 16.0)
+    }
 }
 
 impl View for ControlledWindow {
+    fn event(&mut self, event: &Event, cx: &mut quickgui::EventContext) {
+        match event {
+            Event::FirstPresented => self.note("first presented (ready to show)".to_owned()),
+            Event::Minimized(value) => self.note(format!("minimized = {value}")),
+            Event::Maximized(value) => self.note(format!("maximized = {value}")),
+            Event::FullscreenChanged(value) => self.note(format!("fullscreen = {value}")),
+            Event::OcclusionChanged(value) => self.note(format!("occluded = {value}")),
+            Event::WindowLevelChanged(level) => self.note(format!("level = {level:?}")),
+            Event::WillResize { proposed_size } => {
+                if self.aspect_locked {
+                    let target = self.constrain(*proposed_size);
+                    let _ = cx.constrain_resize(target);
+                    self.note(format!("will-resize clamped to {:.0}", target.height));
+                }
+                return;
+            }
+            Event::WillMove { proposed_position } => {
+                // Keep the window's top edge on screen without a policy timer.
+                if proposed_position.y < 0.0 {
+                    let _ = cx.constrain_move(quickgui::Point::new(proposed_position.x, 0.0));
+                    self.note("will-move clamped to y = 0".to_owned());
+                }
+                return;
+            }
+            _ => return,
+        }
+        cx.invalidate();
+    }
+
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl quickgui::IntoElement {
         self.schedule_initial_show(cx);
         let state = cx.window_state();
@@ -376,7 +455,41 @@ impl View for ControlledWindow {
             let result = cx.request_window_attention();
             this.apply("attention", result, cx);
         });
+        let cycle_level = cx.listener("cycle-level", |this, cx| {
+            this.level_index = (this.level_index + 1) % LEVELS.len();
+            let result = cx.set_window_level(this.level());
+            this.apply("stacking level", result, cx);
+        });
+        let move_top = cx.listener("move-top", |this, cx| {
+            let result = cx.move_window_top();
+            this.apply("raise to front", result, cx);
+        });
+        let ignore_mouse = cx.listener("ignore-mouse", |this, cx| {
+            this.ignore_mouse = !this.ignore_mouse;
+            let result = cx.set_ignore_mouse_events(this.ignore_mouse, this.forward_mouse);
+            this.apply("click-through change", result, cx);
+        });
+        let toggle_enabled = cx.listener("toggle-enabled", |this, cx| {
+            this.input_enabled = !this.input_enabled;
+            let result = cx.set_window_enabled(this.input_enabled);
+            this.apply("input policy change", result, cx);
+        });
+        let toggle_buttons = cx.listener("toggle-buttons", |this, cx| {
+            this.buttons_visible = !this.buttons_visible;
+            let result = cx.set_window_button_visibility(this.buttons_visible);
+            this.apply("window button visibility", result, cx);
+        });
+        let toggle_aspect = cx.listener("toggle-aspect", |this, cx| {
+            this.aspect_locked = !this.aspect_locked;
+            let result = cx.set_aspect_ratio(this.aspect_locked.then(|| Size::new(16.0, 9.0)));
+            this.apply("aspect ratio", result, cx);
+        });
         let close = cx.listener("close", |_this, cx| cx.close_window());
+        let lifecycle_log = if self.lifecycle.is_empty() {
+            "No lifecycle event yet. Minimize, zoom, or hide this window.".to_owned()
+        } else {
+            self.lifecycle.join("\n")
+        };
         let title = self.label.clone();
         let kind = kind_label(self.kind);
 
@@ -457,6 +570,34 @@ impl View for ControlledWindow {
                             ),
                     )
                     .child(
+                        card()
+                            .child(text("Stacking and input policy").font_semibold())
+                            .child(
+                                div()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap_2()
+                                    .child(control(format!("Level: {:?}", self.level())).on_click(cycle_level))
+                                    .child(control("Raise to front").on_click(move_top))
+                                    .child(control(format!("Click-through: {}", self.ignore_mouse)).on_click(ignore_mouse))
+                                    .child(control(format!("Input enabled: {}", self.input_enabled)).on_click(toggle_enabled))
+                                    .child(control(format!("Traffic lights: {}", self.buttons_visible)).on_click(toggle_buttons))
+                                    .child(control(format!("16:9 lock: {}", self.aspect_locked)).on_click(toggle_aspect)),
+                            ),
+                    )
+                    .child(
+                        card()
+                            .child(text("Lifecycle events").font_semibold())
+                            .child(
+                                text(lifecycle_log)
+                                    .w_full()
+                                    .wrap()
+                                    .text_sm()
+                                    .line_height(20.0)
+                                    .text_color(Color::rgb8(181, 190, 207)),
+                            ),
+                    )
+                    .child(
                         text(format!(
                             "Last rendered frame: {}. Window-state observation rebuilds only on native changes; there is no idle sampling loop.",
                             cx.metrics().frame_number
@@ -481,7 +622,7 @@ fn kind_label(kind: WindowKind) -> &'static str {
 
 fn state_text(state: quickgui::WindowState, bounds: Rect) -> Element {
     text(format!(
-        "role={} · bounds=({:.0}, {:.0}) {:.0}×{:.0} · viewport={:.0}×{:.0} @ {:.2}x\nfocused={} · visible={} · minimized={} · maximized={} · fullscreen={} · occluded={}\nmovable={} · resizable={} · minimizable={}",
+        "role={} · bounds=({:.0}, {:.0}) {:.0}×{:.0} · viewport={:.0}×{:.0} @ {:.2}x\nfocused={} · visible={} · minimized={} · maximized={} · fullscreen={} · occluded={}\nmovable={} · resizable={} · minimizable={}\nlevel={:?} · click-through={} (forward={}) · input-enabled={} · buttons={} · aspect={:?}",
         kind_label(state.kind),
         bounds.x,
         bounds.y,
@@ -499,6 +640,12 @@ fn state_text(state: quickgui::WindowState, bounds: Rect) -> Element {
         state.movable,
         state.resizable,
         state.minimizable,
+        state.window_level,
+        state.ignore_mouse_events,
+        state.forward_mouse_events,
+        state.window_enabled,
+        state.window_buttons_visible,
+        state.aspect_ratio,
     ))
     .w_full()
     .wrap()

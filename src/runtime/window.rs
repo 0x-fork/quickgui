@@ -168,12 +168,29 @@ pub enum WindowKind {
 }
 
 /// Requested native stacking level independent from a window's ownership role.
+///
+/// The first three variants are the portable levels every backend understands. The remaining
+/// variants name AppKit's `NSWindowLevel` constants; other platforms collapse them to the
+/// topmost hint their window manager exposes. [`WindowLevel::macos_level`] documents the exact
+/// mapping and is used by the macOS backend.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum WindowLevel {
     AlwaysOnBottom,
     #[default]
     Normal,
     AlwaysOnTop,
+    /// AppKit `NSFloatingWindowLevel`.
+    Floating,
+    /// AppKit `NSModalPanelWindowLevel`.
+    ModalPanel,
+    /// AppKit `NSMainMenuWindowLevel`.
+    MainMenu,
+    /// AppKit `NSStatusWindowLevel`.
+    Status,
+    /// AppKit `NSPopUpMenuWindowLevel`.
+    PopUpMenu,
+    /// AppKit `NSScreenSaverWindowLevel`.
+    ScreenSaver,
 }
 
 /// Native taskbar progress presentation for one window.
@@ -215,8 +232,37 @@ impl WindowLevel {
         match self {
             Self::AlwaysOnBottom => WinitWindowLevel::AlwaysOnBottom,
             Self::Normal => WinitWindowLevel::Normal,
-            Self::AlwaysOnTop => WinitWindowLevel::AlwaysOnTop,
+            Self::AlwaysOnTop
+            | Self::Floating
+            | Self::ModalPanel
+            | Self::MainMenu
+            | Self::Status
+            | Self::PopUpMenu
+            | Self::ScreenSaver => WinitWindowLevel::AlwaysOnTop,
         }
+    }
+
+    /// Raw AppKit `NSWindowLevel` for this stacking policy.
+    ///
+    /// `Normal` is `NSNormalWindowLevel` (0), `AlwaysOnBottom` is one level below it, and
+    /// `AlwaysOnTop` shares `NSFloatingWindowLevel` with [`Self::Floating`] so the historical
+    /// portable value keeps its established behavior.
+    pub const fn macos_level(self) -> i32 {
+        match self {
+            Self::AlwaysOnBottom => -1,
+            Self::Normal => 0,
+            Self::AlwaysOnTop | Self::Floating => 3,
+            Self::ModalPanel => 8,
+            Self::MainMenu => 24,
+            Self::Status => 25,
+            Self::PopUpMenu => 101,
+            Self::ScreenSaver => 1_000,
+        }
+    }
+
+    /// Whether this level keeps the window above ordinary application windows.
+    pub const fn is_above_normal(self) -> bool {
+        self.macos_level() > 0
     }
 }
 
@@ -282,6 +328,16 @@ pub struct WindowState {
     pub shadow: bool,
     pub content_protected: bool,
     pub window_level: WindowLevel,
+    /// Whether native pointer events pass through this window to whatever is behind it.
+    pub ignore_mouse_events: bool,
+    /// Whether pointer motion is still delivered to this window while clicks pass through.
+    pub forward_mouse_events: bool,
+    /// Whether the native window currently accepts any input at all.
+    pub window_enabled: bool,
+    /// Retained content aspect ratio as `width:height`, or `None` when unconstrained.
+    pub aspect_ratio: Option<Size>,
+    /// Whether the macOS close/minimize/zoom buttons are visible.
+    pub window_buttons_visible: bool,
     /// Whether this window is omitted from the taskbar on supported platforms.
     pub skip_taskbar: bool,
     /// Whether this window follows the user across virtual desktops/spaces.
@@ -314,6 +370,31 @@ pub struct WindowState {
     pub inspector_active: bool,
 }
 
+impl WindowState {
+    /// Capture persistable geometry and display identity for this window.
+    ///
+    /// The rectangle is the windowed restore geometry, so a maximized or fullscreen window still
+    /// persists the size it returns to. Pass the result to
+    /// [`WindowOptions::restore`](WindowOptions::restore) on the next launch.
+    pub fn restore_state(&self, displays: &Displays) -> WindowRestoreState {
+        let bounds = self.bounds.bounds();
+        let display = self.display_id.and_then(|id| displays.find(id));
+        WindowRestoreState {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            maximized: self.maximized,
+            fullscreen: self.fullscreen,
+            display_id: self.display_id.map(DisplayId::get),
+            display_uuid: display
+                .and_then(Display::uuid)
+                .map(crate::DisplayUuid::into_bytes),
+            scale_factor: self.scale_factor,
+        }
+    }
+}
+
 /// Maximum UTF-8 bytes accepted for a native window title.
 pub const MAX_WINDOW_TITLE_BYTES: usize = 16 * 1024;
 /// Maximum encoded bytes accepted for a represented document path.
@@ -326,6 +407,8 @@ pub const MAX_SYSTEM_WINDOW_TABS: usize = 256;
 pub const MAX_WINDOW_LOGICAL_DIMENSION: f32 = 32_768.0;
 /// Maximum absolute desktop coordinate accepted by a programmatic window-bounds request.
 pub const MAX_WINDOW_LOGICAL_COORDINATE: f32 = 16_777_216.0;
+/// Maximum ratio between the two components of a window aspect ratio.
+pub const MAX_WINDOW_ASPECT_RATIO: f32 = 1_000.0;
 /// Maximum window mutations one event callback may queue.
 pub const MAX_WINDOW_COMMANDS_PER_EVENT: usize = 256;
 /// Maximum deferred native window mutations retained by one application effect cycle.
@@ -375,6 +458,12 @@ pub enum WindowCommandError {
     InvalidTaskbarOverlayDescription,
     #[error("the per-window native menu declaration is invalid")]
     InvalidMenus,
+    #[error(
+        "a window aspect ratio must be finite, positive, and within {MAX_WINDOW_ASPECT_RATIO}:1"
+    )]
+    InvalidAspectRatio,
+    #[error("a window cannot be ordered above itself")]
+    InvalidWindowOrder,
 }
 
 /// Constant-size snapshot of one native system window-tab group.
@@ -524,6 +613,16 @@ pub struct WindowOptions {
     pub content_protected: bool,
     /// Explicit stacking override. `None` derives a role-appropriate level from [`Self::kind`].
     pub window_level: Option<WindowLevel>,
+    /// Let native pointer events pass through this window to whatever is behind it.
+    pub ignore_mouse_events: bool,
+    /// Keep delivering pointer motion while [`Self::ignore_mouse_events`] passes clicks through.
+    pub forward_mouse_events: bool,
+    /// Whether the native window accepts input at all. A disabled window stays visible.
+    pub window_enabled: bool,
+    /// Content aspect ratio as `width:height`. `None` leaves resizing unconstrained.
+    pub aspect_ratio: Option<Size>,
+    /// Whether the macOS close/minimize/zoom buttons are visible.
+    pub window_buttons_visible: bool,
     /// Hide the per-window taskbar entry where the platform exposes one.
     pub skip_taskbar: bool,
     /// Keep the window visible on every virtual desktop/space where supported.
@@ -592,6 +691,11 @@ impl Default for WindowOptions {
             shadow: true,
             content_protected: false,
             window_level: None,
+            ignore_mouse_events: false,
+            forward_mouse_events: false,
+            window_enabled: true,
+            aspect_ratio: None,
+            window_buttons_visible: true,
             skip_taskbar: false,
             visible_on_all_workspaces: false,
             opacity: 1.0,
@@ -1040,6 +1144,192 @@ impl WindowOptions {
         self.inspector = inspector;
         self
     }
+
+    /// Let clicks fall through this window to whatever is behind it.
+    ///
+    /// `forward` keeps pointer motion and hover events flowing to this window while every button
+    /// press reaches the window below. `false` makes the window completely inert to the pointer.
+    pub fn ignore_mouse_events(mut self, ignore: bool, forward: bool) -> Self {
+        self.ignore_mouse_events = ignore;
+        self.forward_mouse_events = ignore && forward;
+        self
+    }
+
+    /// Block every native input event while keeping the window visible.
+    pub fn window_enabled(mut self, enabled: bool) -> Self {
+        self.window_enabled = enabled;
+        self
+    }
+
+    /// Constrain live resizing to one `width:height` content aspect ratio.
+    pub fn aspect_ratio(mut self, width: f32, height: f32) -> Self {
+        self.aspect_ratio = Some(Size::new(width, height));
+        self
+    }
+
+    pub fn without_aspect_ratio(mut self) -> Self {
+        self.aspect_ratio = None;
+        self
+    }
+
+    /// Show or hide the macOS close/minimize/zoom buttons without removing the titlebar.
+    pub fn window_button_visibility(mut self, visible: bool) -> Self {
+        self.window_buttons_visible = visible;
+        self
+    }
+
+    /// Restore persisted geometry, validating it against the currently connected displays.
+    ///
+    /// Bounds that no longer intersect a connected display work area are clamped into the
+    /// remembered display when it is still present, and otherwise centered on the primary
+    /// display. See [`WindowRestoreState`].
+    pub fn restore(mut self, state: &WindowRestoreState, displays: &Displays) -> Self {
+        let resolved = state.resolve(displays);
+        self.window_bounds = Some(resolved.bounds);
+        self.size = Size::new(
+            resolved.bounds.bounds().width,
+            resolved.bounds.bounds().height,
+        );
+        self.display_id = resolved.display_id;
+        self
+    }
+}
+
+/// Persistable window geometry and display identity.
+///
+/// Capture it with [`WindowState::restore_state`] and apply it with [`WindowOptions::restore`].
+/// The struct is `serde`-serializable so an application can store it next to its own settings.
+/// Every field is validated on the way back in; a stale or hostile value can never place a
+/// window off every connected display.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct WindowRestoreState {
+    /// Windowed restore rectangle in global logical desktop coordinates.
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub maximized: bool,
+    pub fullscreen: bool,
+    /// Process-level display identifier captured with the bounds, when one was known.
+    pub display_id: Option<u64>,
+    /// Stable physical display identity captured with the bounds, when the platform exposes one.
+    pub display_uuid: Option<[u8; 16]>,
+    /// Scale factor of the capturing display, used only as a sanity signal.
+    pub scale_factor: f32,
+}
+
+/// Outcome of validating a [`WindowRestoreState`] against the current display snapshot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResolvedWindowRestoreState {
+    pub bounds: WindowBounds,
+    pub display_id: Option<DisplayId>,
+    /// Whether the persisted rectangle had to be clamped or re-centered.
+    pub adjusted: bool,
+}
+
+impl WindowRestoreState {
+    /// Build a restore state from an explicit windowed rectangle.
+    pub const fn new(bounds: Rect) -> Self {
+        Self {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            maximized: false,
+            fullscreen: false,
+            display_id: None,
+            display_uuid: None,
+            scale_factor: 1.0,
+        }
+    }
+
+    /// Persisted windowed rectangle in global logical desktop coordinates.
+    pub const fn bounds(&self) -> Rect {
+        Rect::new(self.x, self.y, self.width, self.height)
+    }
+
+    /// Whether the persisted values are finite and inside the supported desktop range.
+    pub fn is_valid(&self) -> bool {
+        validate_window_bounds(WindowBounds::Windowed(self.bounds())).is_ok()
+            && self.scale_factor.is_finite()
+            && self.scale_factor > 0.0
+    }
+
+    /// Resolve this state against a live display snapshot.
+    ///
+    /// The remembered display is matched by stable UUID first and by process identifier second.
+    /// A rectangle that still intersects that display's work area is kept exactly; otherwise it
+    /// is clamped into the work area. When no remembered display is connected and the rectangle
+    /// intersects no work area at all, the window is centered on the primary display.
+    pub fn resolve(&self, displays: &Displays) -> ResolvedWindowRestoreState {
+        let requested = self.bounds();
+        let valid = self.is_valid();
+        let remembered = if valid {
+            self.display_uuid
+                .and_then(|uuid| {
+                    let uuid = crate::DisplayUuid::from_bytes(uuid);
+                    displays
+                        .all()
+                        .iter()
+                        .find(|display| display.uuid() == Some(uuid))
+                })
+                .or_else(|| {
+                    self.display_id
+                        .and_then(|id| displays.find(DisplayId::new(id)))
+                })
+        } else {
+            None
+        };
+        let intersecting = valid
+            .then(|| {
+                displays
+                    .all()
+                    .iter()
+                    .find(|display| display.visible_bounds().intersection(requested).is_some())
+            })
+            .flatten();
+        let (rect, display, adjusted) = match (valid, remembered, intersecting) {
+            (false, _, _) => match displays.primary() {
+                Some(primary) => (
+                    primary.centered_bounds(Size::new(960.0, 640.0)),
+                    Some(primary.id()),
+                    true,
+                ),
+                None => (Rect::new(0.0, 0.0, 960.0, 640.0), None, true),
+            },
+            (true, Some(display), _)
+                if display.visible_bounds().intersection(requested).is_some() =>
+            {
+                (requested, Some(display.id()), false)
+            }
+            (true, Some(display), _) => (
+                display.constrain_bounds(requested),
+                Some(display.id()),
+                true,
+            ),
+            (true, None, Some(display)) => (requested, Some(display.id()), false),
+            (true, None, None) => match displays.primary() {
+                Some(primary) => (
+                    primary.centered_bounds(Size::new(requested.width, requested.height)),
+                    Some(primary.id()),
+                    true,
+                ),
+                None => (requested, None, false),
+            },
+        };
+        let bounds = if self.fullscreen {
+            WindowBounds::Fullscreen(rect)
+        } else if self.maximized {
+            WindowBounds::Maximized(rect)
+        } else {
+            WindowBounds::Windowed(rect)
+        };
+        ResolvedWindowRestoreState {
+            bounds,
+            display_id: display,
+            adjusted,
+        }
+    }
 }
 
 pub(crate) fn validate_window_bounds(bounds: WindowBounds) -> Result<(), WindowCommandError> {
@@ -1059,6 +1349,38 @@ pub(crate) fn validate_window_bounds(bounds: WindowBounds) -> Result<(), WindowC
     } else {
         Err(WindowCommandError::InvalidBounds)
     }
+}
+
+pub(crate) fn validate_window_aspect_ratio(ratio: Option<Size>) -> Result<(), WindowCommandError> {
+    let Some(ratio) = ratio else {
+        return Ok(());
+    };
+    let valid = ratio.width.is_finite()
+        && ratio.height.is_finite()
+        && ratio.width > 0.0
+        && ratio.height > 0.0
+        && ratio.width / ratio.height <= MAX_WINDOW_ASPECT_RATIO
+        && ratio.height / ratio.width <= MAX_WINDOW_ASPECT_RATIO;
+    if valid {
+        Ok(())
+    } else {
+        Err(WindowCommandError::InvalidAspectRatio)
+    }
+}
+
+/// Clamp one inner size to a `width:height` aspect ratio, preserving its area as closely as the
+/// portable fallback allows. The width is authoritative because horizontal edge drags are the
+/// common interactive resize.
+pub(crate) fn clamp_size_to_aspect_ratio(size: Size, ratio: Size) -> Size {
+    if !(ratio.width > 0.0
+        && ratio.height > 0.0
+        && ratio.width.is_finite()
+        && ratio.height.is_finite())
+    {
+        return size;
+    }
+    let width = size.width.max(1.0);
+    Size::new(width, (width * ratio.height / ratio.width).max(1.0))
 }
 
 pub(crate) fn validate_window_size(size: Size) -> Result<(), WindowCommandError> {
@@ -1114,6 +1436,7 @@ pub(super) fn validate_window_options(options: &WindowOptions) -> Result<(), Win
         validate_window_size(maximum)?;
     }
     validate_window_opacity(options.opacity)?;
+    validate_window_aspect_ratio(options.aspect_ratio)?;
     validate_taskbar_progress(options.taskbar_progress)?;
     validate_taskbar_overlay_description(options.taskbar_overlay_description.as_deref())?;
     if let Some(position) = options.cursor_position {
@@ -1389,6 +1712,12 @@ pub(crate) enum WindowCommand {
     SetShadow(WindowHandle, bool),
     SetContentProtected(WindowHandle, bool),
     SetWindowLevel(WindowHandle, Option<WindowLevel>),
+    MoveToTop(WindowHandle),
+    MoveAbove(WindowHandle, WindowHandle),
+    SetIgnoreMouseEvents(WindowHandle, bool, bool),
+    SetWindowEnabled(WindowHandle, bool),
+    SetAspectRatio(WindowHandle, Option<Size>),
+    SetWindowButtonVisibility(WindowHandle, bool),
     SetFocusable(WindowHandle, bool),
     SetSkipTaskbar(WindowHandle, bool),
     SetVisibleOnAllWorkspaces(WindowHandle, bool),
@@ -1446,6 +1775,12 @@ impl WindowCommand {
             | Self::SetShadow(handle, _)
             | Self::SetContentProtected(handle, _)
             | Self::SetWindowLevel(handle, _)
+            | Self::MoveToTop(handle)
+            | Self::MoveAbove(handle, _)
+            | Self::SetIgnoreMouseEvents(handle, _, _)
+            | Self::SetWindowEnabled(handle, _)
+            | Self::SetAspectRatio(handle, _)
+            | Self::SetWindowButtonVisibility(handle, _)
             | Self::SetFocusable(handle, _)
             | Self::SetSkipTaskbar(handle, _)
             | Self::SetVisibleOnAllWorkspaces(handle, _)
