@@ -26,8 +26,8 @@ use crate::{
     AnimatedImage, Background, BoxShadow, Canvas, Color, CursorStyle, CustomShader, DispatchPhase,
     Font, FontFallbacks, FontFamily, FontFeatures, Image, ImageSource, Insets, KeyContext,
     MAX_VALIDATION_MESSAGE_BYTES, ObjectFit, Path, Rect, ScenePlane, ShaderParameters, StyledText,
-    Svg, SvgTransform, TextAlign, TextHighlight, TextOverflow, TextShaping, TextStyle,
-    TextUnderline, TextWrap, Tooltip, Transition, WhiteSpace,
+    Svg, SvgTransform, TextAlign, TextCheckingOverrides, TextHighlight, TextOverflow, TextShaping,
+    TextStyle, TextUnderline, TextWrap, Tooltip, Transition, WhiteSpace,
     action::{ActionListenerBinding, MAX_ACTION_LISTENERS_PER_ELEMENT},
     animation::ElementAnimation,
     font::{assert_valid_font_family, normalize_fallbacks},
@@ -693,6 +693,8 @@ pub(crate) type InputFilterCallback = Arc<dyn Fn(&str) -> bool>;
 pub(crate) struct InputConstraints {
     pub max_length: Option<usize>,
     pub filter: Option<InputFilterCallback>,
+    /// Per-input text checking overrides layered over the application policy.
+    pub text_checking: TextCheckingOverrides,
 }
 
 impl fmt::Debug for InputConstraints {
@@ -701,6 +703,7 @@ impl fmt::Debug for InputConstraints {
             .debug_struct("InputConstraints")
             .field("max_length", &self.max_length)
             .field("filter", &self.filter.as_ref().map(|_| "InputFilter(..)"))
+            .field("text_checking", &self.text_checking)
             .finish()
     }
 }

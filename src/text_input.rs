@@ -1,8 +1,10 @@
 use std::{
     borrow::Cow,
+    cell::RefCell,
     collections::VecDeque,
     mem::size_of,
     ops::Range,
+    rc::Rc,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -10,7 +12,15 @@ use std::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    FontFallbacks, FontFamily, FontFeatures, TextHighlight, element::InputConstraints,
+    FontFallbacks, FontFamily, FontFeatures, HighlightStyle, PopoverMenuItem, TextHighlight,
+    element::InputConstraints,
+    spell::{
+        Autocorrection, MAX_MISSPELLED_RANGES, MAX_SPELL_GUESSES, MAX_SPELL_WORD_BYTES,
+        MAX_SPELLCHECK_BYTES, Misspelling, MisspellingKind, SPELL_CHECK_SETTLE_DELAY,
+        SpellDocument, SpellDocumentTag, SpellingMenuLabels, TextCheckingPolicy, completes_word,
+        default_text_checking, grammar_highlight_style, misspelling_highlight_style,
+        smart_substitution, spell_check_provider, spelling_menu_items, word_range_at,
+    },
     styled_text::MAX_TEXT_HIGHLIGHTS,
 };
 
@@ -30,6 +40,25 @@ pub(crate) struct TextInputState {
     undo_bytes: usize,
     redo_bytes: usize,
     edit_group: Option<EditGroup>,
+    /// Flagged ranges from the last settled check, sorted and non-overlapping.
+    misspellings: Vec<Misspelling>,
+    /// Bumped whenever `misspellings` changes so the projection cache can be validated cheaply.
+    misspelling_revision: u64,
+    /// The single one-shot deadline armed by the last accepted edit.
+    settle_deadline: Option<Instant>,
+    last_autocorrection: Option<Autocorrection>,
+    /// One provider checking session, released when this input unmounts.
+    document: Option<Rc<SpellDocument>>,
+    highlight_cache: RefCell<Option<HighlightCache>>,
+}
+
+/// One memoized merge of controlled runs and projected spelling runs.
+#[derive(Clone, Debug)]
+struct HighlightCache {
+    caret: usize,
+    revision: u64,
+    base: Arc<[TextHighlight]>,
+    merged: Arc<[TextHighlight]>,
 }
 
 #[derive(Clone, Debug)]
@@ -147,6 +176,12 @@ impl TextInputState {
             undo_bytes: 0,
             redo_bytes: 0,
             edit_group: None,
+            misspellings: Vec::new(),
+            misspelling_revision: 0,
+            settle_deadline: None,
+            last_autocorrection: None,
+            document: None,
+            highlight_cache: RefCell::new(None),
         }
     }
 
@@ -162,8 +197,37 @@ impl TextInputState {
         self.text.clone()
     }
 
+    /// The controlled run table with settled spelling runs merged in.
+    ///
+    /// Merging happens here rather than in the retained table so an accepted edit never rewrites
+    /// controlled styles and undo snapshots stay free of framework decorations. The word the caret
+    /// is inside is never underlined, matching native "do not flag the word being typed" behavior.
     pub fn shared_highlights(&self) -> Arc<[TextHighlight]> {
-        self.highlights.clone()
+        if !self.has_visible_misspellings() {
+            return self.highlights.clone();
+        }
+        let mut cache = self.highlight_cache.borrow_mut();
+        if let Some(entry) = cache.as_ref()
+            && entry.caret == self.caret
+            && entry.revision == self.misspelling_revision
+            && Arc::ptr_eq(&entry.base, &self.highlights)
+        {
+            return entry.merged.clone();
+        }
+        let merged = merge_spelling_highlights(&self.highlights, &self.misspellings, self.caret);
+        *cache = Some(HighlightCache {
+            caret: self.caret,
+            revision: self.misspelling_revision,
+            base: self.highlights.clone(),
+            merged: merged.clone(),
+        });
+        merged
+    }
+
+    fn has_visible_misspellings(&self) -> bool {
+        self.misspellings
+            .iter()
+            .any(|flagged| !contains_caret(&flagged.range(), self.caret))
     }
 
     /// The application-visible value, excluding an uncommitted IME preedit.
@@ -219,6 +283,7 @@ impl TextInputState {
         };
         if self.multiline == multiline && self.text.as_ref() == normalized {
             self.highlights = highlights;
+            self.invalidate_highlight_cache();
             return;
         }
         if self.multiline == multiline
@@ -240,6 +305,7 @@ impl TextInputState {
             if let Some(backup) = &mut self.composition_backup {
                 backup.highlights = highlights;
             }
+            self.invalidate_highlight_cache();
             return;
         }
         self.text = Arc::from(normalized.as_ref());
@@ -251,6 +317,8 @@ impl TextInputState {
         self.composition_backup = None;
         self.preferred_x = None;
         self.clear_history();
+        self.discard_misspellings();
+        self.arm_settle_deadline();
     }
 
     pub fn move_left(&mut self, extend: bool) -> bool {
@@ -471,10 +539,40 @@ impl TextInputState {
         if value.is_empty() && self.selection().is_empty() && self.marked.is_none() {
             return false;
         }
-        let range = self.marked.clone().unwrap_or_else(|| self.selection());
+        let mut range = self.marked.clone().unwrap_or_else(|| self.selection());
         let kind = (self.marked.is_none() && value.graphemes(true).count() == 1)
             .then_some(EditKind::Typing);
-        self.replace_range(range, &value, kind)
+        if self.marked.is_some() {
+            return self.replace_range(range, &value, kind);
+        }
+
+        let policy = self.text_checking_policy();
+        let mut inserted: Cow<'_, str> = value;
+        if policy.substitutes_on_insert()
+            && let Some(substitution) =
+                smart_substitution(&self.text[..range.start], &inserted, policy)
+        {
+            range.start = range.start.saturating_sub(substitution.remove_before);
+            inserted = Cow::Owned(substitution.replacement);
+        }
+
+        if (policy.autocorrect || policy.text_replacement)
+            && inserted.chars().count() == 1
+            && inserted.chars().next().is_some_and(completes_word)
+            && let Some((word_range, original, replacement)) =
+                self.pending_word_replacement(range.start, policy)
+        {
+            let mut combined = replacement.clone();
+            combined.push_str(&inserted);
+            let corrected_range = word_range.start..word_range.start + replacement.len();
+            if self.replace_range(word_range.start..range.end, &combined, None) {
+                self.last_autocorrection =
+                    Some(Autocorrection::new(corrected_range, original, replacement));
+                return true;
+            }
+        }
+
+        self.replace_range(range, &inserted, kind)
     }
 
     pub fn insert_newline(&mut self) -> bool {
@@ -634,6 +732,9 @@ impl TextInputState {
         self.composition_backup = None;
         self.preferred_x = None;
         self.edit_group = None;
+        self.last_autocorrection = None;
+        self.discard_misspellings();
+        self.arm_settle_deadline();
     }
 
     fn replace_range(
@@ -670,6 +771,10 @@ impl TextInputState {
         self.marked = None;
         self.composition_backup = None;
         self.preferred_x = None;
+        self.last_autocorrection = None;
+        self.shift_misspellings(range.start..range.end, end.saturating_sub(range.start));
+        self.arm_settle_deadline();
+        self.invalidate_highlight_cache();
         true
     }
 
@@ -711,6 +816,8 @@ impl TextInputState {
         self.marked = None;
         self.composition_backup = None;
         self.preferred_x = None;
+        self.shift_misspellings(range.start..range.end, value.len());
+        self.invalidate_highlight_cache();
     }
 
     fn cancel_composition(&mut self) -> bool {
@@ -728,6 +835,318 @@ impl TextInputState {
         self.marked = None;
         self.preferred_x = None;
         changed
+    }
+
+    /// The resolved text checking behavior for this input.
+    pub fn text_checking_policy(&self) -> TextCheckingPolicy {
+        self.constraints
+            .text_checking
+            .resolve(default_text_checking())
+    }
+
+    /// The single one-shot deadline at which the settled check should run.
+    ///
+    /// A settled or unchecked input reports `None`, so a clean window contributes no wakeup.
+    pub fn spell_check_deadline(&self) -> Option<Instant> {
+        self.settle_deadline
+    }
+
+    /// Run the settled check when its exact deadline has arrived.
+    ///
+    /// Returns whether flagged ranges changed and a repaint is required.
+    pub fn advance_spell_check(&mut self, now: Instant) -> bool {
+        let Some(deadline) = self.settle_deadline else {
+            return false;
+        };
+        if now < deadline {
+            return false;
+        }
+        self.settle_deadline = None;
+        self.run_spell_check()
+    }
+
+    /// Run the settled check immediately, cancelling any armed deadline.
+    pub fn run_spell_check(&mut self) -> bool {
+        self.settle_deadline = None;
+        let policy = self.text_checking_policy();
+        if !policy.checks_after_settle() || self.marked.is_some() {
+            return self.discard_misspellings();
+        }
+        let range = self.check_window();
+        if range.is_empty() {
+            return self.discard_misspellings();
+        }
+        let provider = spell_check_provider();
+        let flagged = provider.check(&self.text, range, policy);
+        let flagged = self.normalize_misspellings(flagged, policy);
+        if flagged == self.misspellings {
+            return false;
+        }
+        self.misspellings = flagged;
+        self.misspelling_revision = self.misspelling_revision.wrapping_add(1);
+        self.invalidate_highlight_cache();
+        true
+    }
+
+    /// Flagged ranges from the last settled check.
+    pub fn misspelled_ranges(&self) -> &[Misspelling] {
+        &self.misspellings
+    }
+
+    /// The flagged range covering `offset`, otherwise the word at `offset`.
+    pub fn spelling_range_at(&self, offset: usize) -> Option<Range<usize>> {
+        self.misspellings
+            .iter()
+            .find(|flagged| {
+                let range = flagged.range();
+                range.start <= offset && offset <= range.end
+            })
+            .map(Misspelling::range)
+            .or_else(|| word_range_at(&self.text, offset))
+    }
+
+    /// Bounded replacement guesses for the flagged word at `offset`.
+    pub fn spelling_suggestions_at(&self, offset: usize) -> Vec<Arc<str>> {
+        let Some(range) = self.spelling_range_at(offset) else {
+            return Vec::new();
+        };
+        let Some(word) = self.text.get(range) else {
+            return Vec::new();
+        };
+        if word.is_empty() || word.len() > MAX_SPELL_WORD_BYTES {
+            return Vec::new();
+        }
+        spell_check_provider()
+            .guesses(word)
+            .into_iter()
+            .filter(|guess| !guess.is_empty() && guess.len() <= MAX_SPELL_WORD_BYTES)
+            .take(MAX_SPELL_GUESSES)
+            .map(Arc::from)
+            .collect()
+    }
+
+    /// Build the standard suggestion, learn, and ignore entries for the word at `offset`.
+    pub fn spelling_menu_items(
+        &self,
+        offset: usize,
+        labels: SpellingMenuLabels,
+    ) -> Vec<PopoverMenuItem> {
+        let Some(range) = self.spelling_range_at(offset) else {
+            return Vec::new();
+        };
+        let Some(word) = self.text.get(range.clone()) else {
+            return Vec::new();
+        };
+        let guesses = self.spelling_suggestions_at(offset);
+        spelling_menu_items(range, word, &guesses, labels)
+    }
+
+    /// Replace one flagged range with a suggestion as a single undoable edit.
+    pub fn replace_word(&mut self, range: Range<usize>, replacement: &str) -> bool {
+        if range.start > range.end
+            || range.end > self.text.len()
+            || !self.text.is_char_boundary(range.start)
+            || !self.text.is_char_boundary(range.end)
+        {
+            return false;
+        }
+        let replacement = normalize_text(replacement, self.multiline);
+        self.edit_group = None;
+        self.replace_range(range, &replacement, None)
+    }
+
+    /// Add one word to the provider's user dictionary and recheck immediately.
+    pub fn learn_word(&mut self, word: &str) -> bool {
+        if word.is_empty() || word.len() > MAX_SPELL_WORD_BYTES {
+            return false;
+        }
+        spell_check_provider().learn(word);
+        self.run_spell_check()
+    }
+
+    /// Ignore one word for this input's checking session and recheck immediately.
+    pub fn ignore_word(&mut self, word: &str) -> bool {
+        if word.is_empty() || word.len() > MAX_SPELL_WORD_BYTES {
+            return false;
+        }
+        let tag = self.document_tag();
+        spell_check_provider().ignore(word, tag);
+        self.run_spell_check()
+    }
+
+    /// The most recent applied autocorrection, retained so an application can offer "Change back".
+    pub fn last_autocorrection(&self) -> Option<&Autocorrection> {
+        self.last_autocorrection.as_ref()
+    }
+
+    /// Restore the word an autocorrection replaced as a single undoable edit.
+    pub fn revert_autocorrection(&mut self) -> bool {
+        let Some(correction) = self.last_autocorrection.clone() else {
+            return false;
+        };
+        let range = correction.range();
+        if range.end > self.text.len()
+            || self.text.get(range.clone()) != Some(correction.replacement().as_ref())
+        {
+            self.last_autocorrection = None;
+            return false;
+        }
+        self.edit_group = None;
+        self.replace_range(range, correction.original(), None)
+    }
+
+    /// The bounded text a dictionary lookup should define, and where it starts.
+    ///
+    /// The selection wins when it is non-empty; otherwise the word at the caret is used.
+    pub fn definition_target(&self) -> Option<(Arc<str>, usize)> {
+        let selection = self.selection();
+        let range = if selection.is_empty() {
+            word_range_at(&self.text, self.caret)?
+        } else {
+            selection
+        };
+        let value = self.text.get(range.clone())?.trim();
+        if value.is_empty() || value.len() > crate::spell::MAX_DEFINITION_LOOKUP_BYTES {
+            return None;
+        }
+        Some((Arc::from(value), range.start))
+    }
+
+    /// Whether a Force Touch force-click over this input should show the dictionary popover.
+    pub fn looks_up_on_force_click(&self) -> bool {
+        self.text_checking_policy().lookup_on_force_click
+    }
+
+    fn document_tag(&mut self) -> SpellDocumentTag {
+        self.document.get_or_insert_with(SpellDocument::open).tag()
+    }
+
+    fn arm_settle_deadline(&mut self) {
+        if self.text_checking_policy().checks_after_settle() && self.marked.is_none() {
+            self.settle_deadline = Some(Instant::now() + SPELL_CHECK_SETTLE_DELAY);
+        } else {
+            self.settle_deadline = None;
+        }
+    }
+
+    fn discard_misspellings(&mut self) -> bool {
+        if self.misspellings.is_empty() {
+            return false;
+        }
+        self.misspellings.clear();
+        self.misspelling_revision = self.misspelling_revision.wrapping_add(1);
+        self.invalidate_highlight_cache();
+        true
+    }
+
+    /// Shift flagged ranges across one accepted replacement and drop the ranges it touched.
+    fn shift_misspellings(&mut self, replaced: Range<usize>, inserted_len: usize) {
+        if self.misspellings.is_empty() {
+            return;
+        }
+        let removed_len = replaced.end.saturating_sub(replaced.start);
+        let shift = inserted_len as isize - removed_len as isize;
+        self.misspellings.retain_mut(|flagged| {
+            if flagged.range().end <= replaced.start {
+                return true;
+            }
+            if flagged.range().start >= replaced.end {
+                let shifted = shifted_offset(flagged.range().start, shift)
+                    ..shifted_offset(flagged.range().end, shift);
+                *flagged = Misspelling::new(shifted, flagged.kind());
+                return true;
+            }
+            false
+        });
+        self.misspelling_revision = self.misspelling_revision.wrapping_add(1);
+    }
+
+    fn invalidate_highlight_cache(&self) {
+        *self.highlight_cache.borrow_mut() = None;
+    }
+
+    fn normalize_misspellings(
+        &self,
+        flagged: Vec<Misspelling>,
+        policy: TextCheckingPolicy,
+    ) -> Vec<Misspelling> {
+        let mut normalized: Vec<Misspelling> = Vec::with_capacity(flagged.len());
+        let mut sorted = flagged;
+        sorted.sort_by_key(|flagged| (flagged.range().start, flagged.range().end));
+        for entry in sorted {
+            if entry.kind() == MisspellingKind::Grammar && !policy.grammar_check {
+                continue;
+            }
+            if entry.kind() == MisspellingKind::Spelling && !policy.spellcheck {
+                continue;
+            }
+            let range = entry.range();
+            if range.start >= range.end
+                || range.end > self.text.len()
+                || !self.text.is_char_boundary(range.start)
+                || !self.text.is_char_boundary(range.end)
+            {
+                continue;
+            }
+            if normalized
+                .last()
+                .is_some_and(|previous| previous.range().end > range.start)
+            {
+                continue;
+            }
+            if normalized.len() == MAX_MISSPELLED_RANGES {
+                break;
+            }
+            normalized.push(entry);
+        }
+        normalized
+    }
+
+    /// The bounded UTF-8 window handed to the checker, centered on the caret.
+    fn check_window(&self) -> Range<usize> {
+        if self.text.len() <= MAX_SPELLCHECK_BYTES {
+            return 0..self.text.len();
+        }
+        let half = MAX_SPELLCHECK_BYTES / 2;
+        let start = boundary_at_or_before(&self.text, self.caret.saturating_sub(half));
+        let end = boundary_at_or_before(
+            &self.text,
+            (start + MAX_SPELLCHECK_BYTES).min(self.text.len()),
+        );
+        start..end
+    }
+
+    fn pending_word_replacement(
+        &self,
+        caret: usize,
+        policy: TextCheckingPolicy,
+    ) -> Option<(Range<usize>, String, String)> {
+        let range = word_range_at(&self.text, caret)?;
+        if range.end != caret {
+            return None;
+        }
+        let word = self.text.get(range.clone())?;
+        if word.is_empty() || word.len() > MAX_SPELL_WORD_BYTES {
+            return None;
+        }
+        let provider = spell_check_provider();
+        let mut replacement = policy
+            .text_replacement
+            .then(|| provider.check_text_substitutions(&self.text, range.clone(), policy))
+            .flatten()
+            .map(|substitution| substitution.replacement().to_string());
+        if replacement.is_none() && policy.autocorrect {
+            replacement = provider.correction(&self.text, range.clone());
+        }
+        let replacement = replacement?;
+        if replacement.is_empty()
+            || replacement == word
+            || replacement.len() > MAX_SPELL_WORD_BYTES
+            || (!self.multiline && replacement.contains(['\n', '\r']))
+        {
+            return None;
+        }
+        Some((range, word.to_string(), replacement))
     }
 
     fn accepts_existing(&self, value: &str) -> bool {
@@ -855,6 +1274,95 @@ fn replace_highlights(
         normalized.push(highlight);
     }
     normalized.into()
+}
+
+fn contains_caret(range: &Range<usize>, caret: usize) -> bool {
+    range.start <= caret && caret <= range.end
+}
+
+/// Overlay bounded spelling decorations onto the controlled run table.
+///
+/// Controlled runs and flagged ranges are each sorted and non-overlapping, so one linear sweep
+/// over their combined boundaries produces a sorted, non-overlapping merged table. Only underline
+/// attributes are overridden; controlled color, font, background, and strikethrough survive.
+fn merge_spelling_highlights(
+    base: &[TextHighlight],
+    misspellings: &[Misspelling],
+    caret: usize,
+) -> Arc<[TextHighlight]> {
+    let spelling_style = misspelling_highlight_style();
+    let grammar_style = grammar_highlight_style();
+    let spans: Vec<(Range<usize>, &HighlightStyle)> = misspellings
+        .iter()
+        .filter(|flagged| !contains_caret(&flagged.range(), caret))
+        .map(|flagged| {
+            let style = match flagged.kind() {
+                MisspellingKind::Spelling => &spelling_style,
+                MisspellingKind::Grammar => &grammar_style,
+            };
+            (flagged.range(), style)
+        })
+        .collect();
+
+    let mut boundaries = Vec::with_capacity((base.len() + spans.len()) * 2);
+    for highlight in base {
+        boundaries.push(highlight.range.start);
+        boundaries.push(highlight.range.end);
+    }
+    for (range, _) in &spans {
+        boundaries.push(range.start);
+        boundaries.push(range.end);
+    }
+    boundaries.sort_unstable();
+    boundaries.dedup();
+
+    let mut merged: Vec<TextHighlight> = Vec::with_capacity(boundaries.len());
+    let mut base_index = 0_usize;
+    let mut span_index = 0_usize;
+    for window in boundaries.windows(2) {
+        let (start, end) = (window[0], window[1]);
+        while base_index < base.len() && base[base_index].range.end <= start {
+            base_index += 1;
+        }
+        while span_index < spans.len() && spans[span_index].0.end <= start {
+            span_index += 1;
+        }
+        let base_style = base
+            .get(base_index)
+            .filter(|highlight| highlight.range.start <= start)
+            .map(|highlight| highlight.style.clone());
+        let spelling = spans
+            .get(span_index)
+            .filter(|(range, _)| range.start <= start)
+            .map(|(_, style)| *style);
+        let style = match (base_style, spelling) {
+            (None, None) => continue,
+            (Some(style), None) => style,
+            (base_style, Some(spelling)) => {
+                let mut style = base_style.unwrap_or_default();
+                style.underline = spelling.underline;
+                style.underline_color = spelling.underline_color;
+                style.underline_wavy = spelling.underline_wavy;
+                style.underline_thickness = spelling.underline_thickness;
+                style
+            }
+        };
+        if let Some(previous) = merged.last_mut()
+            && previous.range.end == start
+            && previous.style == style
+        {
+            previous.range.end = end;
+            continue;
+        }
+        if merged.len() == MAX_TEXT_HIGHLIGHTS {
+            break;
+        }
+        merged.push(TextHighlight {
+            range: start..end,
+            style,
+        });
+    }
+    merged.into()
 }
 
 fn shifted_offset(offset: usize, shift: isize) -> usize {
@@ -1456,6 +1964,7 @@ mod tests {
         let constraints = InputConstraints {
             max_length: Some(3),
             filter: None,
+            text_checking: crate::TextCheckingOverrides::default(),
         };
         let mut input = TextInputState::with_constraints("a", false, constraints);
 
@@ -1476,6 +1985,7 @@ mod tests {
             filter: Some(Arc::new(|value| {
                 value.chars().all(|character| character.is_ascii_digit())
             })),
+            text_checking: crate::TextCheckingOverrides::default(),
         };
         let mut input = TextInputState::with_constraints("12", false, constraints);
         let selection = input.selection();
@@ -1491,6 +2001,7 @@ mod tests {
         let constraints = InputConstraints {
             max_length: None,
             filter: Some(Arc::new(|value| value.is_ascii())),
+            text_checking: crate::TextCheckingOverrides::default(),
         };
         let mut input = TextInputState::with_constraints("hello", false, constraints);
 
@@ -1514,6 +2025,7 @@ mod tests {
             &InputConstraints {
                 max_length: Some(1),
                 filter: None,
+                text_checking: crate::TextCheckingOverrides::default(),
             },
         );
 
@@ -1562,6 +2074,400 @@ mod tests {
         assert!(input.replace_selection("!"));
         assert_eq!(input.undo_bytes, 0);
         assert!(!input.can_undo());
+    }
+
+    fn checking_input(value: &str, policy: TextCheckingPolicy) -> TextInputState {
+        let constraints = InputConstraints {
+            max_length: None,
+            filter: None,
+            text_checking: crate::TextCheckingOverrides {
+                spellcheck: Some(policy.spellcheck),
+                grammar_check: Some(policy.grammar_check),
+                autocorrect: Some(policy.autocorrect),
+                smart_quotes: Some(policy.smart_quotes),
+                smart_dashes: Some(policy.smart_dashes),
+                text_replacement: Some(policy.text_replacement),
+                lookup_on_force_click: Some(policy.lookup_on_force_click),
+            },
+        };
+        TextInputState::with_constraints(value, false, constraints)
+    }
+
+    fn install(provider: crate::TestSpellCheckProvider) -> Rc<crate::TestSpellCheckProvider> {
+        let provider = Rc::new(provider);
+        crate::set_shared_spell_check_provider(provider.clone());
+        provider
+    }
+
+    #[test]
+    fn settled_checks_run_once_on_one_exact_deadline() {
+        let _provider = install(crate::TestSpellCheckProvider::new().misspelling("helo"));
+        let mut input = checking_input(
+            "",
+            TextCheckingPolicy {
+                spellcheck: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.spell_check_deadline().is_none());
+
+        assert!(input.replace_selection("helo world"));
+        let first = input
+            .spell_check_deadline()
+            .expect("edit arms one deadline");
+        assert!(!input.advance_spell_check(first - Duration::from_millis(1)));
+        assert!(input.replace_selection("!"));
+        let second = input
+            .spell_check_deadline()
+            .expect("edits re-arm the deadline");
+        assert!(second >= first);
+
+        assert!(input.set_selection(0, 0));
+        assert!(input.advance_spell_check(second));
+        assert_eq!(
+            input
+                .misspelled_ranges()
+                .iter()
+                .map(Misspelling::range)
+                .collect::<Vec<_>>(),
+            vec![0..4]
+        );
+        assert!(input.spell_check_deadline().is_none());
+        assert!(!input.advance_spell_check(Instant::now()));
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn disabled_checking_never_arms_a_deadline_or_calls_the_provider() {
+        let _provider = install(crate::TestSpellCheckProvider::new().misspelling("helo"));
+        let mut input = checking_input("", TextCheckingPolicy::NONE);
+        assert!(input.replace_selection("helo"));
+        assert!(input.spell_check_deadline().is_none());
+        assert!(!input.advance_spell_check(Instant::now()));
+        assert!(input.misspelled_ranges().is_empty());
+        assert!(input.shared_highlights().is_empty());
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn misspellings_project_wavy_runs_and_skip_the_word_under_the_caret() {
+        let _provider = install(crate::TestSpellCheckProvider::new().misspelling("helo"));
+        let mut input = checking_input(
+            "helo there",
+            TextCheckingPolicy {
+                spellcheck: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.set_selection(2, 2));
+        assert!(input.run_spell_check());
+        assert_eq!(input.misspelled_ranges().len(), 1);
+        // The caret sits inside the flagged word, so nothing is underlined yet.
+        assert!(input.shared_highlights().is_empty());
+
+        assert!(input.set_selection(10, 10));
+        let highlights = input.shared_highlights();
+        assert_eq!(highlights.len(), 1);
+        assert_eq!(highlights[0].range(), 0..4);
+        assert_eq!(highlights[0].style().underline_wavy, Some(true));
+        assert_eq!(
+            highlights[0].style().underline_color,
+            Some(crate::Color::rgb8(248, 113, 113))
+        );
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn spelling_runs_merge_over_controlled_styles_without_replacing_them() {
+        let _provider = install(crate::TestSpellCheckProvider::new().misspelling("helo"));
+        let styled = crate::styled_text("helo there").with_highlights([(
+            0..10,
+            crate::HighlightStyle::default().color(crate::Color::rgb8(94, 234, 212)),
+        )]);
+        let (content, highlights) = styled.into_parts();
+        let controlled = highlights.clone();
+        let mut input = TextInputState::with_styling(
+            &content,
+            false,
+            InputConstraints {
+                max_length: None,
+                filter: None,
+                text_checking: crate::TextCheckingOverrides {
+                    spellcheck: Some(true),
+                    ..crate::TextCheckingOverrides::default()
+                },
+            },
+            highlights,
+        );
+        assert!(input.run_spell_check());
+
+        let merged = input.shared_highlights();
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].range(), 0..4);
+        assert_eq!(merged[1].range(), 4..10);
+        assert_eq!(
+            merged[0].style().color,
+            Some(crate::Color::rgb8(94, 234, 212))
+        );
+        assert_eq!(merged[0].style().underline_wavy, Some(true));
+        assert_eq!(merged[1].style().underline_wavy, None);
+        // The controlled table itself is untouched, so undo snapshots stay decoration-free.
+        assert_eq!(input.highlights.as_ref(), controlled.as_ref());
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn suggestions_and_menu_items_come_from_the_provider() {
+        let _provider = install(
+            crate::TestSpellCheckProvider::new()
+                .misspelling("helo")
+                .guess("helo", &["hello", "halo"]),
+        );
+        let mut input = checking_input(
+            "helo there",
+            TextCheckingPolicy {
+                spellcheck: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.run_spell_check());
+
+        let suggestions = input.spelling_suggestions_at(2);
+        assert_eq!(suggestions.len(), 2);
+        assert_eq!(suggestions[0].as_ref(), "hello");
+
+        let items = input.spelling_menu_items(2, crate::SpellingMenuLabels::default());
+        assert_eq!(items.len(), 5);
+        assert_eq!(items[0].label().as_ref(), "hello");
+
+        assert!(input.replace_word(0..4, "hello"));
+        assert_eq!(input.text(), "hello there");
+        assert!(input.undo());
+        assert_eq!(input.text(), "helo there");
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn learning_and_ignoring_words_clears_their_flagged_ranges() {
+        let provider = install(crate::TestSpellCheckProvider::new().misspelling("helo"));
+        let mut input = checking_input(
+            "helo helo",
+            TextCheckingPolicy {
+                spellcheck: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.set_selection(0, 0));
+        assert!(input.run_spell_check());
+        assert_eq!(input.misspelled_ranges().len(), 2);
+
+        assert!(input.ignore_word("helo"));
+        assert!(input.misspelled_ranges().is_empty());
+        assert_eq!(provider.ignored().len(), 1);
+        assert_eq!(provider.open_documents(), 1);
+
+        assert!(!input.learn_word("helo"));
+        assert_eq!(provider.learned().len(), 1);
+
+        drop(input);
+        assert_eq!(provider.open_documents(), 0);
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn autocorrect_replaces_the_completed_word_as_one_undoable_edit() {
+        let _provider = install(crate::TestSpellCheckProvider::new().correction_for("teh", "the"));
+        let mut input = checking_input(
+            "",
+            TextCheckingPolicy {
+                autocorrect: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        for character in "teh".chars() {
+            assert!(input.replace_selection(&character.to_string()));
+        }
+        assert_eq!(input.text(), "teh");
+        assert!(input.last_autocorrection().is_none());
+
+        assert!(input.replace_selection(" "));
+        assert_eq!(input.text(), "the ");
+        let correction = input
+            .last_autocorrection()
+            .expect("a correction is retained");
+        assert_eq!(correction.original().as_ref(), "teh");
+        assert_eq!(correction.replacement().as_ref(), "the");
+        assert_eq!(correction.range(), 0..3);
+
+        assert!(input.undo());
+        assert_eq!(input.text(), "teh");
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn autocorrections_can_be_changed_back_without_retyping() {
+        let _provider = install(crate::TestSpellCheckProvider::new().correction_for("teh", "the"));
+        let mut input = checking_input(
+            "teh",
+            TextCheckingPolicy {
+                autocorrect: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.replace_selection(" "));
+        assert_eq!(input.text(), "the ");
+        assert!(input.revert_autocorrection());
+        assert_eq!(input.text(), "teh ");
+        assert!(!input.revert_autocorrection());
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn replacement_dictionary_substitutions_apply_at_a_word_boundary() {
+        let _provider =
+            install(crate::TestSpellCheckProvider::new().replacement_for("omw", "On my way!"));
+        let mut input = checking_input(
+            "omw",
+            TextCheckingPolicy {
+                text_replacement: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.replace_selection("!"));
+        assert_eq!(input.text(), "On my way!!");
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn smart_quotes_and_dashes_apply_at_insertion_time() {
+        let mut input = checking_input(
+            "",
+            TextCheckingPolicy {
+                smart_quotes: true,
+                smart_dashes: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        for character in "\"hi\" a--b".chars() {
+            input.replace_selection(&character.to_string());
+        }
+        assert_eq!(input.text(), "\u{201c}hi\u{201d} a\u{2014}b");
+
+        let mut plain = checking_input("", TextCheckingPolicy::NONE);
+        for character in "\"hi\" a--b".chars() {
+            plain.replace_selection(&character.to_string());
+        }
+        assert_eq!(plain.text(), "\"hi\" a--b");
+    }
+
+    #[test]
+    fn pasted_and_composed_text_is_never_substituted() {
+        let mut input = checking_input(
+            "",
+            TextCheckingPolicy {
+                smart_quotes: true,
+                smart_dashes: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.replace_selection("\"quoted\" and --"));
+        assert_eq!(input.text(), "\"quoted\" and --");
+
+        assert!(input.set_preedit("\"", Some((1, 1))));
+        assert_eq!(&input.text()[input.text().len() - 1..], "\"");
+    }
+
+    #[test]
+    fn edits_shift_flagged_ranges_and_drop_the_ranges_they_touch() {
+        let _provider = install(
+            crate::TestSpellCheckProvider::new()
+                .misspelling("helo")
+                .misspelling("wrld"),
+        );
+        let mut input = checking_input(
+            "helo wrld",
+            TextCheckingPolicy {
+                spellcheck: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.set_selection(0, 0));
+        assert!(input.run_spell_check());
+        assert_eq!(input.misspelled_ranges().len(), 2);
+
+        assert!(input.set_selection(2, 3));
+        assert!(input.replace_selection("XY"));
+        let ranges = input
+            .misspelled_ranges()
+            .iter()
+            .map(Misspelling::range)
+            .collect::<Vec<_>>();
+        assert_eq!(ranges, vec![6..10]);
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn checked_windows_and_result_lists_stay_bounded() {
+        let long_word = "z".repeat(9);
+        let mut provider = crate::TestSpellCheckProvider::new();
+        provider = provider.misspelling(&long_word);
+        let _provider = install(provider);
+
+        let text = format!("{long_word} ").repeat(MAX_MISSPELLED_RANGES + 64);
+        let mut input = checking_input(
+            &text,
+            TextCheckingPolicy {
+                spellcheck: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(input.set_selection(0, 0));
+        assert!(input.run_spell_check());
+        assert_eq!(input.misspelled_ranges().len(), MAX_MISSPELLED_RANGES);
+
+        let huge = "a".repeat(MAX_SPELLCHECK_BYTES * 3);
+        let wide = checking_input(
+            &huge,
+            TextCheckingPolicy {
+                spellcheck: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert_eq!(wide.caret(), huge.len());
+        let window = wide.check_window();
+        assert!(window.len() <= MAX_SPELLCHECK_BYTES);
+        crate::clear_spell_check_provider();
+    }
+
+    #[test]
+    fn definition_targets_prefer_the_selection_then_the_caret_word() {
+        let mut input = checking_input("alpha beta", TextCheckingPolicy::NONE);
+        assert!(input.set_selection(8, 8));
+        assert_eq!(
+            input
+                .definition_target()
+                .map(|(value, start)| (value.to_string(), start)),
+            Some(("beta".to_owned(), 6))
+        );
+        assert!(input.set_selection(0, 5));
+        assert_eq!(
+            input
+                .definition_target()
+                .map(|(value, start)| (value.to_string(), start)),
+            Some(("alpha".to_owned(), 0))
+        );
+
+        let empty = checking_input("   ", TextCheckingPolicy::NONE);
+        assert!(empty.definition_target().is_none());
+        assert!(!empty.looks_up_on_force_click());
+        let forcing = checking_input(
+            "word",
+            TextCheckingPolicy {
+                lookup_on_force_click: true,
+                ..TextCheckingPolicy::NONE
+            },
+        );
+        assert!(forcing.looks_up_on_force_click());
     }
 
     #[test]

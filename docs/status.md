@@ -129,6 +129,23 @@ Implemented now:
   validation, dynamic replacement/removal/query, controlled check/radio marks, item icons, and
   native responder actions;
 - controlled plain or attributed single-line and wrapped multiline text editing with grapheme/word/line navigation and deletion, visual-line caret movement, mouse caret and drag selection, two-axis scrolling, copy/cut/paste, IME composition, and bounded text-plus-style undo/redo history;
+- per-input and application-wide text checking: settle-deadline spelling/grammar underlining over a
+  bounded 16 KiB caret window with no polling, wavy-underline projection merged over controlled runs
+  without rewriting them, caret-word skipping, boundary autocorrect and replacement-dictionary
+  substitutions as one undoable edit with "Change back", insertion-time smart quotes and dashes,
+  bounded guesses/learn/ignore with per-input `NSSpellChecker` document tags, typed
+  `ReplaceWord`/`LearnWord`/`IgnoreWord` menu items, and a pluggable `SpellCheckProvider` with a
+  portable `Unsupported` fallback;
+- macOS dictionary lookup for a selection or the caret word through
+  `NSView showDefinitionForAttributedString:atPoint:`, exposed as a bounded `show_definition_for`
+  request plus a typed `LookUpSelection` action and opt-in force-click behavior;
+- bounded literal find and replace with case-sensitive/whole-word options, 4,096 retained matches,
+  wrap-around navigation, distinct all-match and current-match highlight runs, single-edit
+  replace-all, and an unstyled `FindBar` over caller-owned query/replace/count/navigation/dismissal
+  parts with Return/Shift+Return/Escape behavior and an accessible match count;
+- application-wide `UndoManager` with 256 bounded named entries, reverse-order grouping, a
+  value-based `UndoableChange<T>` shortcut, menu-ready action names, and a documented policy that a
+  focused text input's own history claims Undo and Redo first;
 - semantic browser-style forms with nearest-form Return and submit-button routing, shared controlled field data, bounded document-order validation reports, deterministic first-invalid focus, and one-shot AccessKit live announcements;
 - controlled unstyled `Checkbox`, `Radio`, `RadioGroup`, and `Switch` descriptors with
   caller-owned roots, indicators, thumbs, layout, paint, and motion; exact AccessKit toggle roles,

@@ -4,6 +4,45 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+### Framework
+
+- Added per-input text checking with `.spellcheck(..)`, `.grammar_check(..)`, `.autocorrect(..)`,
+  `.smart_quotes(..)`, `.smart_dashes(..)`, `.text_replacement(..)`, and
+  `.lookup_on_force_click(..)`, layered over an application-wide `set_default_text_checking(..)`
+  policy. Checking runs once on a single 300 ms settle deadline over at most 16 KiB around the
+  caret, retains at most 512 flagged ranges, projects them as wavy underlines merged over the
+  controlled run table without rewriting it, and skips the word the caret is inside. A settled input
+  holds no timer.
+- Added the `SpellCheckProvider` trait plus `set_spell_check_provider`/`clear_spell_check_provider`,
+  bounded `guesses`/`learn`/`ignore` with per-input document tags, boundary autocorrect and
+  replacement-dictionary substitutions applied as one undoable edit with a "Change back" record, and
+  insertion-time smart quotes and dashes that never rewrite paste or IME commits. Portable targets
+  fall back to `NoSpellCheckProvider` and report `TextServiceError::Unsupported`.
+- Added `spelling_menu_items(..)` and the typed `ReplaceWord`, `LearnWord`, `IgnoreWord`, and
+  `LookUpSelection` actions so applications can build the standard spelling context menu and bind
+  dictionary lookup, plus `show_definition_for(..)` and `word_range_at(..)`.
+- Added bounded literal find and replace: `FindState` with case-sensitive and whole-word options,
+  4,096 retained matches, wrap-around `find_next`/`find_previous`, distinct all-match and
+  current-match highlight runs, a `2 of 17` count label, and `replace_current`/`replace_all` results
+  an application applies as one controlled edit. Added the unstyled `FindBar` component over
+  caller-owned root, query, replace, count, next, previous, replace, replace-all, and close parts
+  with `find_bar_key_bindings()` for Return, Shift+Return, and Escape.
+- Added an application-wide `UndoManager` with 256 bounded named entries, `begin_group`/`end_group`
+  collection, a value-based `UndoableChange<T>` shortcut, `undo_action_name`/`redo_action_name`
+  menu titles, `Undo`/`Redo` actions with `undo_key_bindings()`, and a documented policy that a
+  focused text input's own history claims Undo and Redo before the manager sees them.
+- Added `examples/text_services.rs` and new `docs/text-and-forms.md` sections covering spelling,
+  dictionary lookup, find and replace, and application undo.
+
+### macOS
+
+- Added an `NSSpellChecker`-backed default text checking provider covering spelling, guesses,
+  corrections, the user replacement dictionary, learned and ignored words, and per-input
+  `uniqueSpellDocumentTag` sessions released on unmount, with explicit UTF-8/UTF-16 offset
+  conversion at the AppKit boundary.
+- Added the macOS dictionary popover through `NSView showDefinitionForAttributedString:atPoint:` on
+  the key window's content view, positioned at a window-local logical point.
+
 ## 0.1.1 - 2026-08-31
 
 ### JavaScript tooling

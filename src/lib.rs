@@ -26,6 +26,7 @@ mod element;
 mod entity;
 mod event;
 mod field;
+mod find;
 mod font;
 mod foreground;
 mod geometry;
@@ -70,6 +71,7 @@ mod scene;
 mod scheduler;
 mod select;
 mod selection_control;
+mod spell;
 mod spring;
 mod styled_text;
 mod svg;
@@ -87,6 +89,7 @@ mod tooltip;
 mod transition;
 mod tree;
 mod ui_tree;
+mod undo;
 mod virtual_list;
 #[cfg(any(test, feature = "test-support"))]
 mod visual_test;
@@ -185,6 +188,11 @@ pub use event::{
     TouchId, TouchPhase, ValidationIssue, ValidationReport,
 };
 pub use field::{Field, FieldState, Fieldset};
+pub use find::{
+    FIND_BAR_KEY_CONTEXT, FindBar, FindClose, FindNext, FindOptions, FindPrevious, FindReplace,
+    FindReplaceAll, FindState, MAX_FIND_MATCHES, MAX_FIND_QUERY_BYTES, MAX_FIND_REPLACEMENT_BYTES,
+    find_bar_key_bindings,
+};
 pub use font::{
     Font, FontFallbacks, FontFamily, FontFeature, FontFeatureTag, FontFeatureTagError,
     FontFeatures, MAX_FONT_FALLBACKS, MAX_FONT_FAMILY_BYTES, MAX_FONT_FEATURES, font,
@@ -355,6 +363,20 @@ pub use select::{
 pub use selection_control::{
     Checkbox, Radio, RadioGroup, Switch, checkbox, radio, radio_group, switch,
 };
+#[cfg(any(test, feature = "test-support"))]
+pub use spell::TestSpellCheckProvider;
+pub use spell::{
+    Autocorrection, IgnoreWord, LearnWord, LookUpSelection, MAX_DEFINITION_LOOKUP_BYTES,
+    MAX_MISSPELLED_RANGES, MAX_SPELL_GUESSES, MAX_SPELL_WORD_BYTES, MAX_SPELLCHECK_BYTES,
+    Misspelling, MisspellingKind, NoSpellCheckProvider, ReplaceWord, SPELL_CHECK_SETTLE_DELAY,
+    SPELLING_MENU_ID_PREFIX, SpellCheckProvider, SpellDocumentTag, SpellingMenuLabels,
+    TextCheckingOverrides, TextCheckingPolicy, TextServiceError, TextSubstitution,
+    clear_spell_check_provider, default_text_checking, grammar_highlight_style,
+    has_spell_check_provider, misspelling_highlight_style, set_default_text_checking,
+    set_grammar_highlight_style, set_misspelling_highlight_style, set_shared_spell_check_provider,
+    set_spell_check_provider, show_definition_for, spell_check_provider, spelling_menu_items,
+    word_range_at,
+};
 pub use spring::{SpringAnimation, SpringConfig, SpringPlayback, SpringState, SpringTarget};
 pub use styled_text::{
     HighlightStyle, MAX_HIGHLIGHT_FONT_FAMILY_BYTES, MAX_TEXT_HIGHLIGHTS, StyledText,
@@ -398,6 +420,10 @@ pub use tree::{
     tree_key_bindings,
 };
 pub use ui_tree::{MAX_FOCUSED_EVENT_PATH, MAX_MOUSE_EVENT_PATH, MAX_STATIC_TEXT_COPY_BYTES};
+pub use undo::{
+    MAX_UNDO_ACTION_NAME_BYTES, MAX_UNDO_ENTRIES, MAX_UNDO_GROUP_ENTRIES, Redo, Undo, UndoEntry,
+    UndoManager, UndoableChange, undo_key_bindings,
+};
 pub use virtual_list::{
     FollowMode, ListAlignment, ListOffset, ListState, ListStateStats, MAX_LIST_ITEMS,
     MAX_LIST_OVERSCAN_ITEMS, MAX_MOUNTED_LIST_ITEMS, VirtualList, VisibleRows,
