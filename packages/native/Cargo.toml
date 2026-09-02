@@ -25,6 +25,15 @@ napi-build = "2.4.1"
 [dev-dependencies]
 quickgui = { path = "../..", features = ["test-support"] }
 
+# Match the root crate's development profile. The hosted view builds deep retained trees through
+# one recursive element constructor; unoptimized frames overflow the default test-thread stack
+# long before the optimized production addon would.
+[profile.dev]
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

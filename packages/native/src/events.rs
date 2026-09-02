@@ -177,6 +177,7 @@ impl NativeKeymap {
             .map(|(_, id)| Arc::clone(id))
     }
 
+    #[cfg(test)]
     pub(super) fn len(&self) -> usize {
         self.bindings.len()
     }
