@@ -497,12 +497,27 @@ fn require_written(written: bool, representation: &'static str) -> Result<(), Cl
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, MutexGuard};
+
     use objc2::rc::autoreleasepool;
 
     use super::*;
 
+    /// Every pasteboard test talks to the one per-user pasteboard server, and AppKit fulfills
+    /// promised representations across the process's pasteboards. Running these tests on parallel
+    /// test threads occasionally surfaced another test's representation on a freshly created
+    /// unique pasteboard, so they are serialized here.
+    static PASTEBOARD_SERVER: Mutex<()> = Mutex::new(());
+
+    fn serialize_pasteboard_access() -> MutexGuard<'static, ()> {
+        PASTEBOARD_SERVER
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
     fn unique_pasteboard_round_trips_text_metadata_and_clear() {
+        let _pasteboard = serialize_pasteboard_access();
         autoreleasepool(|_| {
             let pasteboard = MacPasteboard::unique();
             assert_eq!(pasteboard.read().unwrap(), None);
@@ -516,6 +531,7 @@ mod tests {
 
     #[test]
     fn unique_pasteboard_round_trips_files_with_text_fallback() {
+        let _pasteboard = serialize_pasteboard_access();
         autoreleasepool(|_| {
             let pasteboard = MacPasteboard::unique();
             let paths = ExternalPaths::new(["/tmp/one", "/tmp/two"]).unwrap();
@@ -529,6 +545,7 @@ mod tests {
 
     #[test]
     fn unique_pasteboard_keeps_image_encoded() {
+        let _pasteboard = serialize_pasteboard_access();
         autoreleasepool(|_| {
             let pasteboard = MacPasteboard::unique();
             let image = ClipboardImage::new(ClipboardImageFormat::Png, vec![1, 2, 3, 4]).unwrap();
@@ -540,6 +557,7 @@ mod tests {
 
     #[test]
     fn unique_pasteboard_round_trips_rich_and_custom_representations() {
+        let _pasteboard = serialize_pasteboard_access();
         autoreleasepool(|_| {
             let pasteboard = MacPasteboard::unique();
             let item = ClipboardItem::new([
