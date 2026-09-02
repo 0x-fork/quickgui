@@ -238,6 +238,14 @@ into the meter's range, so an application can color a gauge without QuickGUI inv
 Non-finite inputs are dropped: a non-positive progress maximum falls back to `1.0`, an inverted
 meter range is swapped, and values are clamped into range before they are retained.
 
+## JavaScript bindings
+
+`Progress.Root` / `Indicator` and `Meter.Root` / `Indicator` declare the value range, thresholds,
+and value text these descriptors own; the Solid renderer contributes no measurement logic. `Slider`,
+`NumberField`, and `Splitter` are not bound yet: their interaction models are retained mutable state
+reached through a non-capturing `fn(&mut V) -> &mut State` accessor, which one hosted view cannot
+provide per declaring node. See [Solid 2 renderer](solid.md#range-and-feedback-parts).
+
 ## Resource contract
 
 `SliderState`, `SplitterState`, `Progress`, and `Meter` are plain values; `NumberFieldState` retains

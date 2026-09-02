@@ -62,6 +62,9 @@ import {
 export { NativeNodeTag, PropertyCode } from "./protocol.ts";
 export {
   MAX_COMPONENT_VALUE_BYTES,
+  MAX_DRAG_JSON_BYTES,
+  MAX_KEYMAP_JSON_BYTES,
+  MAX_MENU_JSON_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativePart,
   type NativePartName,

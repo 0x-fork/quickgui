@@ -10,6 +10,22 @@ pub(super) struct NativeView {
     pub(super) svgs: Rc<RefCell<HashMap<u32, NativeSvgState>>>,
     pub(super) lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
     pub(super) terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
+    /// Retained decoded image sources keyed by their declaring node.
+    pub(super) images: Rc<RefCell<HashMap<u32, NativeImageState>>>,
+    /// Retained validated application shaders keyed by their declaring node.
+    pub(super) shaders: Rc<RefCell<HashMap<u32, NativeShaderState>>>,
+    /// Retained in-window popover-menu models keyed by their declaring node.
+    pub(super) menus: NativeMenuStates,
+    /// The one core context-menu state this window owns.
+    ///
+    /// `ContextMenuState::element` takes a non-capturing accessor, so the state lives directly on
+    /// the view. Opening a context menu anywhere in the window replaces the one already open,
+    /// which is exactly the native invariant.
+    pub(super) context_menu: ContextMenuState,
+    /// Node that opened the current context menu, so only that target reports `expanded`.
+    pub(super) context_menu_owner: Option<u32>,
+    /// Node that currently holds keyboard focus, so blur is reported exactly once.
+    pub(super) focused_node: Option<u32>,
     #[cfg(target_os = "macos")]
     pub(super) swift_ui_hosts: Rc<RefCell<HashMap<u32, NativeSwiftUiHostState>>>,
     #[cfg(target_os = "macos")]
@@ -21,8 +37,81 @@ pub(super) struct NativeMenuAction(pub(super) u32);
 
 impl View for NativeView {
     fn event(&mut self, event: &Event, cx: &mut EventContext) {
-        if !matches!(event, Event::CloseRequested) {
-            return;
+        match event {
+            // The core decides focus; the binding only reports the transition to the two nodes
+            // that declared a listener.
+            Event::FocusChanged(focused) => {
+                let next = focused
+                    .map(quickgui::ElementId::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+                    .filter(|id| self.declares_focus_listener(*id));
+                let previous = self.focused_node.take();
+                if previous == next {
+                    self.focused_node = next;
+                    return;
+                }
+                let window = self.event_window(cx);
+                if let Some(previous) = previous {
+                    enqueue_event(
+                        &self.events,
+                        QueuedEvent {
+                            kind: "blur",
+                            window,
+                            target: previous,
+                            value: None,
+                        },
+                    );
+                }
+                if let Some(next) = next {
+                    enqueue_event(
+                        &self.events,
+                        QueuedEvent {
+                            kind: "focus",
+                            window,
+                            target: next,
+                            value: None,
+                        },
+                    );
+                }
+                self.focused_node = next;
+                return;
+            }
+            // A promoted drag ends outside the retained tree, so the core reports it on the
+            // window and the binding routes it back to the declaring source node.
+            Event::ExternalDragEnded(ended) => {
+                let Some(source) = u32::try_from(ended.source.as_u64())
+                    .ok()
+                    .filter(|id| self.declares_drag_listener(*id))
+                else {
+                    return;
+                };
+                let window = self.event_window(cx);
+                enqueue_event(
+                    &self.events,
+                    QueuedEvent {
+                        kind: "dragend",
+                        window,
+                        target: source,
+                        value: Some(Arc::from(
+                            serde_json::json!({
+                                "operation": match ended.operation {
+                                    quickgui::ExternalDragOperation::Cancelled => "cancelled",
+                                    quickgui::ExternalDragOperation::Copied => "copied",
+                                    quickgui::ExternalDragOperation::Moved => "moved",
+                                    quickgui::ExternalDragOperation::Linked => "linked",
+                                    quickgui::ExternalDragOperation::Deleted => "deleted",
+                                    quickgui::ExternalDragOperation::Other => "other",
+                                },
+                            })
+                            .to_string()
+                            .as_str(),
+                        )),
+                    },
+                );
+                return;
+            }
+            Event::CloseRequested => {}
+            _ => return,
         }
         let window = cx.window_handle().map_or(self.window, |handle| {
             self.handles.as_ref().map_or(self.window, |handles| {
@@ -83,6 +172,25 @@ impl View for NativeView {
                 .get(id)
                 .is_some_and(|node| node.tag == NodeTag::Terminal)
         });
+        let mut images = self.images.borrow_mut();
+        images.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Image)
+        });
+        let mut shaders = self.shaders.borrow_mut();
+        shaders.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Shader)
+        });
+        self.menus.borrow_mut().retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.string(property::PART) == Some(POPOVER_MENU_POPUP_PART))
+        });
+        let context_menu = self.context_menu;
+        let context_menu_owner = self.context_menu_owner;
         #[cfg(target_os = "macos")]
         let mut swift_ui_hosts = self.swift_ui_hosts.borrow_mut();
         #[cfg(target_os = "macos")]
@@ -106,6 +214,11 @@ impl View for NativeView {
                 lists: &mut lists,
                 terminals: &mut terminals,
                 part_ids: &mut part_ids,
+                images: &mut images,
+                shaders: &mut shaders,
+                menus: Rc::clone(&self.menus),
+                context_menu,
+                context_menu_owner,
                 #[cfg(target_os = "macos")]
                 swift_ui_hosts: &mut swift_ui_hosts,
                 #[cfg(target_os = "macos")]
@@ -130,7 +243,65 @@ impl View for NativeView {
                 );
             },
         );
-        root.on_action(menu_action)
+        let select_events = Rc::clone(&self.events);
+        // A declared menu command keeps its concrete typed payload through the core's popover
+        // chain and arrives here on the owner window's ordinary action path.
+        let menu_select = cx.action_listener(
+            ElementId::new(ROOT_ELEMENT_ID),
+            move |view, action: &NativeMenuSelect, _cx| {
+                // Selection is declared ahead of the core's decision, exactly like every other
+                // listener, so a menu without an `onSelect` handler queues nothing.
+                let declared = view
+                    .tree
+                    .borrow()
+                    .nodes
+                    .get(&action.node)
+                    .is_some_and(|node| node.boolean(property::SELECT_LISTENER).unwrap_or(false));
+                if !declared {
+                    return;
+                }
+                enqueue_event(
+                    &select_events,
+                    QueuedEvent {
+                        kind: "menuselect",
+                        window,
+                        target: action.node,
+                        value: Some(action.event_value()),
+                    },
+                );
+            },
+        );
+        root.on_action(menu_action).on_action(menu_select)
+    }
+}
+
+impl NativeView {
+    fn event_window(&self, cx: &mut EventContext) -> u32 {
+        cx.window_handle().map_or(self.window, |handle| {
+            self.handles.as_ref().map_or(self.window, |handles| {
+                handles
+                    .borrow()
+                    .get(&handle)
+                    .copied()
+                    .unwrap_or(self.window)
+            })
+        })
+    }
+
+    fn declares_focus_listener(&self, id: u32) -> bool {
+        self.tree
+            .borrow()
+            .nodes
+            .get(&id)
+            .is_some_and(|node| node.boolean(property::FOCUS_LISTENER).unwrap_or(false))
+    }
+
+    fn declares_drag_listener(&self, id: u32) -> bool {
+        self.tree
+            .borrow()
+            .nodes
+            .get(&id)
+            .is_some_and(|node| node.boolean(property::DRAG_LISTENER).unwrap_or(false))
     }
 }
 
@@ -146,6 +317,13 @@ pub(super) struct NativeElementStates<'a> {
     /// scope and value would otherwise register one core listener identity twice, which the core
     /// rejects with a panic; the duplicate mounts without listeners instead.
     pub(super) part_ids: &'a mut HashSet<u64>,
+    pub(super) images: &'a mut HashMap<u32, NativeImageState>,
+    pub(super) shaders: &'a mut HashMap<u32, NativeShaderState>,
+    /// Retained popover-menu models, shared with the listeners this pass installs.
+    pub(super) menus: NativeMenuStates,
+    /// Snapshot of the window's context-menu state for this render pass.
+    pub(super) context_menu: ContextMenuState,
+    pub(super) context_menu_owner: Option<u32>,
     #[cfg(target_os = "macos")]
     pub(super) swift_ui_hosts: &'a mut HashMap<u32, NativeSwiftUiHostState>,
     #[cfg(target_os = "macos")]
@@ -617,6 +795,24 @@ pub(super) fn build_element(
             state.set_text(node.string(property::VALUE).unwrap_or_default());
             state.element(element_id)
         }
+        NodeTag::Image => {
+            let source = node.string(property::VALUE).unwrap_or_default();
+            let state = states
+                .images
+                .entry(id)
+                .or_insert_with(|| NativeImageState::new(Arc::from(source)));
+            state.sync(source);
+            state.element(node)
+        }
+        NodeTag::Shader => {
+            let source = node.string(property::VALUE).unwrap_or_default();
+            let state = states
+                .shaders
+                .entry(id)
+                .or_insert_with(|| NativeShaderState::new(Arc::from(source)));
+            state.sync(source);
+            state.element(node)
+        }
         NodeTag::Svg => {
             let source = node.string(property::VALUE).unwrap_or_default();
             let state = states
@@ -732,6 +928,38 @@ pub(super) fn build_element(
     // mounted at all. A part that is not mounted contributes no layout, paint, input, or
     // accessibility node, exactly as the Rust component guides describe.
     element = apply_part(element, id, node)?;
+    element = apply_controls(element, node, tree);
+
+    let part = node.string(property::PART);
+    if part == Some(POPOVER_MENU_POPUP_PART) {
+        // The declared model is retained across renders so the core keeps its highlighted item,
+        // typeahead prefix, and toggle state through an atomic source replacement.
+        let source = node.string(property::MENU).unwrap_or("");
+        {
+            let mut menus = states.menus.borrow_mut();
+            match menus.get_mut(&id) {
+                Some(state) => state.sync(id, source),
+                None => {
+                    if let Some(state) = NativeMenuState::new(id, source) {
+                        menus.insert(id, state);
+                    }
+                }
+            }
+        }
+        if listeners_enabled {
+            let menus = Rc::clone(&states.menus);
+            element =
+                popover_menu_surface(element, element_id, id, window, events, &menus, node, cx);
+        }
+    }
+    if listeners_enabled && part == Some(CONTEXT_MENU_TRIGGER_PART) {
+        let state = if states.context_menu_owner == Some(id) {
+            states.context_menu
+        } else {
+            ContextMenuState::new()
+        };
+        element = apply_context_menu(element, element_id, id, node, state, cx);
+    }
 
     let anchor_id = node
         .string(property::ANCHOR_TARGET)
@@ -743,6 +971,11 @@ pub(super) fn build_element(
             .boolean(property::DISMISS_ON_POINTER_OUTSIDE)
             .unwrap_or(true);
         let mut popover = Popover::new(ElementId::new(anchor_id as u64), element_id, true)
+            .kind(if part == Some(POPOVER_MENU_POPUP_PART) {
+                PopoverKind::Menu
+            } else {
+                PopoverKind::Dialog
+            })
             .placement(
                 node.string(property::ANCHOR_PLACEMENT)
                     .and_then(parse_anchor_placement)
@@ -844,6 +1077,10 @@ pub(super) fn build_element(
         element = element.on_pointer(listener);
     }
 
+    if listeners_enabled {
+        element = attach_input_listeners(element, element_id, id, window, events, node, cx);
+    }
+
     match node.tag {
         NodeTag::VirtualList => {
             let state = states
@@ -883,6 +1120,8 @@ pub(super) fn build_element(
         | NodeTag::Input
         | NodeTag::Markdown
         | NodeTag::Svg
+        | NodeTag::Image
+        | NodeTag::Shader
         | NodeTag::Terminal => {}
         NodeTag::SwiftUiHost
         | NodeTag::SwiftUiButton
@@ -1198,6 +1437,14 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
         "field-control" => native_field(id, node).control_part(element),
         "field-description" => native_field(id, node).description_part(element),
         "field-error" => native_field(id, node).error_part(element),
+        "progress" => native_progress(node).root_part(element),
+        "progress-indicator" => native_progress(node).indicator_part(element),
+        "meter" => native_meter(node).root_part(element),
+        "meter-indicator" => native_meter(node).indicator_part(element),
+        "toggle" => {
+            Toggle::new(node.boolean(property::PRESSED).unwrap_or(false)).root_part(element)
+        }
+        "toggle-indicator" => Toggle::new(false).indicator_part(element),
         "fieldset" => native_fieldset(id, node).root_part(element),
         "fieldset-legend" => native_fieldset(id, node).legend_part(element),
         "fieldset-description" => native_fieldset(id, node).description_part(element),
@@ -1218,6 +1465,14 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
         "dialog-popup" => native_dialog(id, node).popover_part(element),
         "dialog-title" => native_dialog(id, node).title_part(element),
         "dialog-description" => native_dialog(id, node).description_part(element),
+        // A menu trigger declares only `has-popup` and expansion here; the mounted relationship to
+        // its surface travels through the validated `controls` property instead of a guessed id.
+        POPOVER_MENU_TRIGGER_PART => {
+            Popover::new(ElementId::new(id as u64), ElementId::new(id as u64), false)
+                .kind(PopoverKind::Menu)
+                .trigger_part(element)
+                .accessibility_expanded(node.boolean(property::OPEN).unwrap_or(false))
+        }
         "dialog-close" => native_dialog(id, node).close_part(
             node.string(property::ACCESSIBILITY_LABEL)
                 .unwrap_or("Close"),
@@ -1225,6 +1480,315 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
         ),
         _ => element,
     })
+}
+
+/// Materialize a declared CSS grid track list into the core's bounded track descriptors.
+///
+/// The list is a declaration, so an unparsable track becomes `auto` instead of failing the whole
+/// template, and the result is bounded by [`MAX_GRID_TRACKS`].
+pub(super) fn native_grid_tracks(value: &str) -> Vec<GridTrack> {
+    let mut tracks = Vec::new();
+    if value.len() > MAX_GRID_TRACK_LIST_BYTES {
+        return tracks;
+    }
+    for token in split_grid_tokens(value) {
+        if tracks.len() >= MAX_GRID_TRACKS {
+            break;
+        }
+        if let Some(arguments) = function_arguments(&token, "repeat") {
+            let mut parts = split_grid_arguments(arguments);
+            if parts.len() < 2 {
+                continue;
+            }
+            let count = parts
+                .remove(0)
+                .trim()
+                .parse::<usize>()
+                .unwrap_or(0)
+                .min(MAX_GRID_TRACKS);
+            let repeated = parts
+                .iter()
+                .flat_map(|part| split_grid_tokens(part))
+                .map(|part| native_grid_track(&part))
+                .collect::<Vec<_>>();
+            for _ in 0..count {
+                for track in &repeated {
+                    if tracks.len() >= MAX_GRID_TRACKS {
+                        break;
+                    }
+                    tracks.push(*track);
+                }
+            }
+            continue;
+        }
+        tracks.push(native_grid_track(&token));
+    }
+    tracks
+}
+
+fn native_grid_track(token: &str) -> GridTrack {
+    let token = token.trim();
+    if let Some(arguments) = function_arguments(token, "minmax") {
+        let parts = split_grid_arguments(arguments);
+        if let [minimum, maximum] = parts.as_slice() {
+            let minimum = grid_length(minimum).unwrap_or(0.0);
+            let fraction = grid_fraction(maximum).unwrap_or(1.0);
+            return GridTrack::minmax_px_fr(minimum, fraction);
+        }
+        return GridTrack::auto();
+    }
+    if let Some(arguments) = function_arguments(token, "fit-content") {
+        return GridTrack::fit_content_px(grid_length(arguments).unwrap_or(0.0));
+    }
+    match token {
+        "auto" => GridTrack::auto(),
+        "min-content" => GridTrack::min_content(),
+        "max-content" => GridTrack::max_content(),
+        _ => {
+            if let Some(fraction) = grid_fraction(token) {
+                return GridTrack::fr(fraction);
+            }
+            if let Some(percent) = token.strip_suffix('%').and_then(parse_finite) {
+                return GridTrack::percent(percent / 100.0);
+            }
+            match grid_length(token) {
+                Some(length) => GridTrack::px(length),
+                None => GridTrack::auto(),
+            }
+        }
+    }
+}
+
+fn function_arguments<'a>(token: &'a str, name: &str) -> Option<&'a str> {
+    let rest = token.strip_prefix(name)?.trim_start();
+    rest.strip_prefix('(')?.strip_suffix(')')
+}
+
+fn grid_fraction(token: &str) -> Option<f32> {
+    token.trim().strip_suffix("fr").and_then(parse_finite)
+}
+
+fn grid_length(token: &str) -> Option<f32> {
+    let token = token.trim();
+    parse_finite(token.strip_suffix("px").unwrap_or(token))
+}
+
+fn parse_finite(value: &str) -> Option<f32> {
+    value
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|value| value.is_finite())
+}
+
+/// Split a track list on whitespace while keeping parenthesized functions intact.
+fn split_grid_tokens(value: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0usize;
+    for character in value.chars() {
+        match character {
+            '(' => {
+                depth += 1;
+                current.push(character);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                current.push(character);
+            }
+            character if character.is_whitespace() && depth == 0 => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            character => current.push(character),
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
+fn split_grid_arguments(value: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0usize;
+    for character in value.chars() {
+        match character {
+            '(' => {
+                depth += 1;
+                current.push(character);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                current.push(character);
+            }
+            ',' if depth == 0 => parts.push(std::mem::take(&mut current)),
+            character => current.push(character),
+        }
+    }
+    parts.push(current);
+    parts
+        .into_iter()
+        .map(|part| part.trim().to_owned())
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+/// Apply the declared CSS grid template, flow, and item placement.
+pub(super) fn apply_grid(mut element: Element, node: &NativeNode) -> Element {
+    if let Some(columns) = node.string(property::GRID_TEMPLATE_COLUMNS) {
+        element = element.grid_template_columns(native_grid_tracks(columns));
+    } else if let Some(count) = node.number(property::GRID_TEMPLATE_COLUMNS) {
+        element = element.grid_cols(bounded_track_count(count));
+    }
+    if let Some(rows) = node.string(property::GRID_TEMPLATE_ROWS) {
+        element = element.grid_template_rows(native_grid_tracks(rows));
+    } else if let Some(count) = node.number(property::GRID_TEMPLATE_ROWS) {
+        element = element.grid_rows(bounded_track_count(count));
+    }
+    if let Some(flow) = node.string(property::GRID_AUTO_FLOW) {
+        element = match flow {
+            "column" | "col" => element.grid_flow_col(),
+            "row dense" | "dense row" => element.grid_flow_row_dense(),
+            "column dense" | "dense column" | "col dense" => element.grid_flow_col_dense(),
+            _ => element.grid_flow_row(),
+        };
+    }
+    if let Some(span) = node.number(property::GRID_COLUMN_SPAN) {
+        element = element.col_span(bounded_track_count(span));
+    }
+    if let Some(start) = node.number(property::GRID_COLUMN_START) {
+        element = element.col_start(bounded_grid_line(start));
+    }
+    if let Some(end) = node.number(property::GRID_COLUMN_END) {
+        element = element.col_end(bounded_grid_line(end));
+    }
+    if let Some(span) = node.number(property::GRID_ROW_SPAN) {
+        element = element.row_span(bounded_track_count(span));
+    }
+    if let Some(start) = node.number(property::GRID_ROW_START) {
+        element = element.row_start(bounded_grid_line(start));
+    }
+    if let Some(end) = node.number(property::GRID_ROW_END) {
+        element = element.row_end(bounded_grid_line(end));
+    }
+    element
+}
+
+fn bounded_track_count(value: f32) -> u16 {
+    if value.is_finite() {
+        value.clamp(0.0, MAX_GRID_TRACKS as f32) as u16
+    } else {
+        0
+    }
+}
+
+fn bounded_grid_line(value: f32) -> i16 {
+    if value.is_finite() {
+        value.clamp(-(MAX_GRID_TRACKS as f32), MAX_GRID_TRACKS as f32) as i16
+    } else {
+        0
+    }
+}
+
+/// Build the declared paint-only transition.
+///
+/// The core owns interpolation, cadence, and which paint properties can transition; the binding
+/// only maps the declared CSS-shaped names onto the core's own flags and easing curves.
+pub(super) fn native_transition(node: &NativeNode) -> Option<Transition> {
+    let milliseconds = node
+        .number(property::TRANSITION_DURATION)
+        .or_else(|| node.number(property::TRANSITION))?;
+    let mut transition = Transition::new(Duration::from_secs_f32(
+        (milliseconds / 1_000.0).clamp(0.0, 10.0),
+    ));
+    transition = transition.with_properties(match node.string(property::TRANSITION_PROPERTIES) {
+        Some(list) => native_transition_properties(list),
+        // The previous shorthand-only binding transitioned colors, so an undeclared property set
+        // keeps that exact behavior.
+        None => TransitionProperties::COLORS,
+    });
+    transition = match node.string(property::TRANSITION_EASING) {
+        Some("linear") => transition.with_easing(quickgui::linear),
+        Some("ease-in") => transition.with_easing(quickgui::quadratic),
+        Some("ease-out") => transition.with_easing(quickgui::ease_out_quint()),
+        _ => transition,
+    };
+    if let Some(fps) = node.number(property::TRANSITION_MAX_FPS) {
+        transition = transition.with_max_fps(fps);
+    }
+    Some(transition)
+}
+
+fn native_transition_properties(list: &str) -> TransitionProperties {
+    let mut properties = TransitionProperties::empty();
+    for name in list.split(',') {
+        properties |= match name.trim() {
+            "all" => TransitionProperties::ALL,
+            "background" | "background-color" => TransitionProperties::BACKGROUND,
+            "border-color" => TransitionProperties::BORDER_COLOR,
+            "border-width" => TransitionProperties::BORDER_WIDTH,
+            "border-radius" => TransitionProperties::BORDER_RADIUS,
+            "color" => TransitionProperties::TEXT_COLOR,
+            "box-shadow" => TransitionProperties::BOX_SHADOW,
+            "opacity" => TransitionProperties::OPACITY,
+            _ => TransitionProperties::empty(),
+        };
+    }
+    if properties.is_empty() {
+        TransitionProperties::COLORS
+    } else {
+        properties
+    }
+}
+
+/// Build the declared progress descriptor.
+pub(super) fn native_progress(node: &NativeNode) -> Progress {
+    let maximum = f64::from(node.number(property::MAXIMUM).unwrap_or(1.0));
+    let indeterminate = node.boolean(property::INDETERMINATE).unwrap_or(false);
+    let progress = match node.number(property::VALUE) {
+        Some(value) if !indeterminate => Progress::new(f64::from(value), maximum),
+        _ => Progress::indeterminate(),
+    };
+    match node.string(property::VALUE_TEXT) {
+        Some(text) => progress.value_text(text),
+        None => progress,
+    }
+}
+
+/// Build the declared meter descriptor.
+pub(super) fn native_meter(node: &NativeNode) -> Meter {
+    let mut meter = Meter::new(
+        f64::from(node.number(property::VALUE).unwrap_or(0.0)),
+        f64::from(node.number(property::MINIMUM).unwrap_or(0.0)),
+        f64::from(node.number(property::MAXIMUM).unwrap_or(1.0)),
+    );
+    if let Some(low) = node.number(property::LOW) {
+        meter = meter.low(f64::from(low));
+    }
+    if let Some(high) = node.number(property::HIGH) {
+        meter = meter.high(f64::from(high));
+    }
+    if let Some(optimum) = node.number(property::OPTIMUM) {
+        meter = meter.optimum(f64::from(optimum));
+    }
+    meter
+}
+
+/// Relate a caller-declared `controls` target that is still mounted in the retained tree.
+///
+/// A dangling or self-referential target is omitted, matching the core's own relation rules.
+pub(super) fn apply_controls(element: Element, node: &NativeNode, tree: &NativeTree) -> Element {
+    let Some(target) = node
+        .string(property::CONTROLS)
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|target| tree.nodes.contains_key(target))
+    else {
+        return element;
+    };
+    element.accessibility_controls(ElementId::new(target as u64))
 }
 
 /// Attach the core's delayed, pointer-passive tooltip declared by the `tooltip` property.
@@ -1423,11 +1987,10 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
             style
         });
     }
-    if let Some(milliseconds) = node.number(property::TRANSITION) {
-        element = element.transition(Transition::colors(Duration::from_secs_f32(
-            (milliseconds / 1_000.0).clamp(0.0, 10.0),
-        )));
+    if let Some(transition) = native_transition(node) {
+        element = element.transition(transition);
     }
+    element = apply_grid(element, node);
     if let Some(value) = node.number(property::OPACITY) {
         element = element.opacity(value);
     }
@@ -1526,7 +2089,11 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
         element = element.accessibility_role(value);
     }
     if let Some(value) = node.number(property::TAB_INDEX) {
-        element = element.tab_index(value.clamp(i16::MIN as f32, i16::MAX as f32) as i16);
+        // A declared tab index makes an element focusable, exactly as the web attribute does, so
+        // focused key, action, and focus listeners can reach an ordinary container.
+        element = element
+            .tab_index(value.clamp(i16::MIN as f32, i16::MAX as f32) as i16)
+            .focusable();
     }
     if let Some(value) = node.boolean(property::FOCUS_ON_POINTER) {
         element = element.focus_on_pointer(value);

@@ -316,6 +316,90 @@ valid.
 Scope keys and item values are bounded to 256 bytes and the renderer throws a `TypeError` rather
 than sending an oversized declaration across N-API.
 
+## Declared popover and context menus
+
+`PopoverMenu` and `ContextMenu` bind the Rust core's [`PopoverMenu` model](popovers.md) and
+[cursor-point context adapter](context-menus.md). Menu rows are *declared data*, not JSX children:
+one bounded JSON model crosses N-API ahead of time so the core can decide highlighting, typeahead,
+checkbox and radio policy, submenu opening, work-area placement, and native surface lifetime without
+ever waiting on JavaScript. The core also renders the rows, because the cursor-point surface is a
+separate native window that a hosted retained tree cannot reach synchronously.
+
+| Component | Parts | Declared props | Core guide |
+| --- | --- | --- | --- |
+| `PopoverMenu` | `Root`, `Trigger`, `Popup` | `items`, `appearance`, `open`, `defaultOpen`, `onOpenChange`, `onSelect`, `placement`, `gap`, `viewportMargin`, `dismissOnEscape`, `dismissOnPointerOutside` | [popovers](popovers.md) |
+| `ContextMenu` | `Root`, `Trigger` | `items`, `appearance`, `onSelect` | [context menus](context-menus.md) |
+
+```tsx
+const [open, setOpen] = createSignal(false);
+const [sidebar, setSidebar] = createSignal(true);
+
+<PopoverMenu.Root
+  open={open()}
+  onOpenChange={setOpen}
+  items={[
+    { type: "group", label: "File" },
+    { id: "open", label: "Open…", shortcut: "⌘O" },
+    { type: "separator" },
+    { type: "checkbox", id: "sidebar", label: "Show sidebar", checked: sidebar() },
+    { id: "recent", label: "Recent", items: [{ id: "one", label: "quickgui.md" }] },
+  ]}
+  appearance={{ width: 240, background: "#101014", highlightBackground: "#2563eb" }}
+  onSelect={(item) => {
+    if (item.id === "sidebar") setSidebar(item.checked === true);
+  }}
+>
+  <PopoverMenu.Trigger>Actions</PopoverMenu.Trigger>
+  <PopoverMenu.Popup style={{ backgroundColor: "#101014", borderRadius: 8 }} />
+</PopoverMenu.Root>
+```
+
+One entry is an `action` by default, or a `submenu` when it declares nested `items`. `type` selects
+`"action"`, `"checkbox"`, `"radio"`, `"submenu"`, `"separator"`, or `"group"`. Every interactive
+entry needs a stable `id`; that id — never a positional index — is what `onSelect` reports, so an
+atomic model replacement cannot misroute a command. A checkbox reports the value the core computed
+in `checked`; a radio reports `checked: true`; a submenu row reports `submenu: true` instead of a
+command. Entries that cannot form a core item (no `id`, no `label`, or an identifier over 256 bytes)
+are skipped rather than discarding the whole menu, and a declaration over 512 KiB throws a
+`RangeError` in JavaScript before it can cross N-API.
+
+`appearance` carries the structural measurements the core needs to size its own surface —`width`,
+`itemHeight`, `separatorHeight`, `groupLabelHeight`, `verticalPadding`, `padding`, `fontSize`,
+`radius` — plus the row colors (`background`, `color`, `highlightBackground`, `highlightColor`,
+`mutedColor`) it paints. Colors accept the same CSS-like values as every other property and are
+packed before they cross N-API. `loop: false` stops arrow navigation from wrapping.
+
+Up/Down, Home/End, Enter/Space, Left/Escape, alphanumeric typeahead, hover highlighting, and the
+checkbox/radio close policy all come from the core's own contextual key bindings, which the binding
+installs on the application once. `PopoverMenu.Popup` is an in-window anchored surface, so it is
+mounted only while the menu is open and while a trigger exists to anchor it, and it declares
+`has-popup: menu`, `expanded`, and a validated `controls` relationship on the trigger.
+
+```tsx
+<ContextMenu.Root
+  items={[
+    { id: "cut", label: "Cut", shortcut: "⌘X" },
+    { id: "copy", label: "Copy", shortcut: "⌘C" },
+    { type: "separator" },
+    { id: "paste", label: "Paste", shortcut: "⌘V", disabled: !canPaste() },
+  ]}
+  onSelect={(item) => run(item.id)}
+>
+  <ContextMenu.Trigger style={{ flex: 1 }}>
+    <Text>Right-click anywhere</Text>
+  </ContextMenu.Trigger>
+</ContextMenu.Root>
+```
+
+`ContextMenu.Trigger` opens the core's separate cursor-point surface at the exact secondary-click
+point, so the menu can extend past the owner window while native work-area constraints flip and
+slide it. Submenu hover intent, diagonal safe corridors, child-first teardown, and exact close
+synchronization are all core behavior. A window owns exactly one context-menu state, which matches
+the native invariant that opening a menu anywhere replaces the one already open.
+
+Because the surface is core-rendered, a context menu has no JavaScript-rendered rows and therefore
+no `Popup` part; style it through `appearance` instead.
+
 ## In-window dialogs
 
 `Dialog` and `AlertDialog` compose the Rust core's caller-styled modal surface, which is separate
@@ -344,6 +428,101 @@ rather than answered by a callback; `AlertDialog` keeps Escape and blocks backdr
 default. `onOpenChange` reports `"trigger-press"`, `"close-press"`, or `"dismiss"`. Explicit
 initial-focus and focus-restoration targets are not bridged yet; the core's focus trap and
 `restore_previous_focus` default apply.
+
+## CSS Grid, transitions, images, and shaders
+
+`display: "grid"` selects the Rust core's retained Taffy grid. Track lists accept the CSS string,
+an array of tracks, or a plain count of equal `1fr` tracks, and item placement accepts the CSS
+`grid-column` / `grid-row` shorthands:
+
+```tsx
+<View
+  style={{
+    display: "grid",
+    gridTemplateColumns: ["200px", "1fr", "minmax(120px, 2fr)"],
+    gridTemplateRows: "repeat(3, auto)",
+    gridAutoFlow: "row dense",
+    gap: 12,
+  }}
+>
+  <View style={{ gridColumn: "1 / span 2", gridRow: 1 }} />
+</View>
+```
+
+Tracks understand `auto`, `min-content`, `max-content`, `<n>px`, `<n>%`, `<n>fr`,
+`minmax(<px>, <n>fr)`, `fit-content(<px>)`, and `repeat(<count>, <tracks>)`. A track the core cannot
+form becomes `auto` rather than discarding the template, and one template materializes at most 512
+tracks. `grid-column: 2 / span 3` is sent as the equivalent lines `2` and `5`, because that is the
+placement the core exposes. `gridAutoColumns` and `gridAutoRows` have no core equivalent yet.
+
+`transition` accepts the CSS shorthand, a plain duration in milliseconds, or an object:
+
+```tsx
+<Button
+  style={{
+    transition: { properties: ["background-color", "opacity"], duration: "150ms", easing: "ease-out" },
+    hoverBackgroundColor: "#2563eb",
+  }}
+/>
+```
+
+The core transitions `background-color`, `border-color`, `border-width`, `border-radius`, `color`,
+`box-shadow`, and `opacity`; `all` selects every one. Declaring any other property throws a
+`TypeError` instead of silently animating nothing. Easing selects one of the core's own curves —
+`linear`, `ease-in`, `ease-out`, and `ease-in-out` (`ease` is an alias). `transitionMaxFps` caps the
+repaint cadence while the transition runs. Transitions are paint-only in the Rust core, so there is
+no `delay`: a non-zero delay throws rather than being ignored.
+
+| Element | Declared props |
+| --- | --- |
+| `Image` | `source` (path, `file://`, or base64 `data:` URL), `fit` (`fill`, `contain`, `cover`, `scale-down`, `none`) |
+| `Shader` | `source` (bounded WGSL), `shaderParameters` (up to sixteen floats in four vectors) |
+
+```tsx
+<Image source="/assets/hero.png" fit="cover" style={{ width: 320, height: 180 }} />
+
+<Shader
+  source={`fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
+    return vec4<f32>(input.uv, quickgui_parameters[0].x, 1.0);
+  }`}
+  shaderParameters={[[0.5, 0, 0, 1]]}
+  style={{ width: 300, height: 150 }}
+/>
+```
+
+A path stays a lazy core `ImageResource` so decoding runs on the core's bounded worker pool; a
+`data:` URL is decoded once and retained until its declaration changes, and an animated format keeps
+its frames and repeat policy inside the core decoder. A source the core cannot decode contributes a
+hidden element rather than failing the tree. Explicit animated playback controls and loading or
+fallback children are not bound yet because the core exposes no play/pause or load-state API.
+
+Shader WGSL is validated by the core before it reaches the GPU: it must declare exactly the
+`quickgui_fragment` entry point, no bind-group resources, and no pipeline overrides. Invalid WGSL
+renders nothing instead of panicking.
+
+## Range and feedback parts
+
+| Component | Parts | Declared props | Core guide |
+| --- | --- | --- | --- |
+| `Progress` | `Root`, `Indicator` | `value`, `max`, `indeterminate`, `valueText` | [range and feedback](range-and-feedback.md) |
+| `Meter` | `Root`, `Indicator` | `value`, `min`, `max`, `low`, `high`, `optimum` | [range and feedback](range-and-feedback.md) |
+| `Toggle` | `Root`, `Indicator` | `pressed`, `defaultPressed`, `onPressedChange` | [toolbar and toast](toolbar-and-toast.md) |
+
+```tsx
+<Progress.Root value={done()} max={total()} valueText={`${done()} of ${total()} files`}>
+  <Progress.Indicator style={{ width: `${(done() / total()) * 100}%` }} />
+</Progress.Root>
+
+<Toggle.Root pressed={bold()} onPressedChange={setBold}>
+  <Text>B</Text>
+</Toggle.Root>
+```
+
+A progress root without a `value`, or with `indeterminate`, declares the core's indeterminate value
+range. `valueText` is never rendered; assistive technology prefers it over the raw number. A meter
+reports a level inside a known range rather than task progress, and `low`/`high`/`optimum` let the
+application color the gauge without the framework inventing thresholds. A toggle is a button that
+stays pressed, not a checkbox, so the core exposes it as a toggle button.
 
 ## Tooltips
 
@@ -420,6 +599,82 @@ The [system API example](../examples/system-api-solid) keeps renderer-neutral de
 `@quickgui/native` while Solid owns only the UI. It exercises the Rust core's application
 environment, rich clipboard, displays, permissions, preferences, power, menus, notifications,
 desktop integrations, native file icons, and imperative window controls.
+
+## Keyboard, mouse, gesture, and drag events
+
+Every input listener is *declared* — the property says a listener exists, and the Rust core's own
+targeting, capture, bubbling, multi-click counting, accelerator parsing, and drag promotion decide
+when it runs. Payloads travel back as bounded asynchronous JSON, so no synchronous question ever
+crosses the hosted boundary.
+
+| Prop | Native event | Payload |
+| --- | --- | --- |
+| `onKeyDown`, `onKeyUp` | `keydown`, `keyup` | `key`, `text`, `repeat`, modifiers |
+| `onMouseDown`, `onMouseUp` | `mousedown`, `mouseup` | `x`, `y`, `button`, `clickCount`, modifiers |
+| `onMouseMove` | `mousemove` | `x`, `y`, `pressedButton`, modifiers |
+| `onDoubleClick` | `dblclick` | the second press of one exact native sequence |
+| `onWheel` | `wheel` | `deltaX`, `deltaY`, `precise`, `phase`, modifiers |
+| `onContextMenu` | `contextmenu` | `x`, `y`, modifiers |
+| `onPinch`, `onRotate` | `pinch`, `rotate` | `x`, `y`, `delta`, `phase`, modifiers |
+| `onSmartMagnify` | `smartmagnify` | `x`, `y`, modifiers |
+| `onPressure` | `pressure` | `x`, `y`, `pressure`, `stage`, modifiers |
+| `onFocus`, `onBlur` | `focus`, `blur` | no payload |
+| `onAction` | `action` | the declared `keymap` binding id |
+| `onDragStart`, `onDragEnd` | `dragstart`, `dragend` | drag geometry, then the native operation |
+| `onDrop`, `onFilesDropped` | `drop`, `filesdropped` | `id`/`source`, or absolute `paths` |
+
+`keyEventFromEvent`, `mouseEventFromEvent`, `wheelEventFromEvent`, `gestureEventFromEvent`,
+`dropEventFromEvent`, and `actionFromEvent` decode a payload; a malformed one yields `undefined`
+rather than throwing inside a listener.
+
+```tsx
+<View
+  tabIndex={0}
+  keymap={{ "CmdOrCtrl+S": "save", "CmdOrCtrl+Shift+P": "palette" }}
+  onAction={(event) => run(actionFromEvent(event))}
+  onKeyDown={(event) => {
+    const key = keyEventFromEvent(event);
+    if (key?.key === "Escape") close();
+  }}
+  onDoubleClick={() => openInspector()}
+  onWheel={(event) => zoom(wheelEventFromEvent(event)?.deltaY ?? 0)}
+/>
+```
+
+Focused key, action, and focus events need a focusable element. A declared `tabIndex` makes an
+ordinary container focusable, exactly as the web attribute does; buttons, inputs, and core component
+parts are already focusable.
+
+`keymap` maps Electron-shaped accelerators to binding ids, parsed by the core's own
+`Accelerator::parse`. A matched accelerator becomes one `action` event carrying the id and consumes
+the keystroke, so JavaScript never interprets modifiers itself. An accelerator the core rejects is
+skipped rather than silencing the whole table, one element retains at most 256 bindings, and the
+declaration is bounded to 64 KiB.
+
+Drag sources declare their payload ahead of the gesture, and drop targets declare the payload kinds
+they accept so the core can decide compatibility while the pointer is still moving:
+
+```tsx
+<View
+  draggable={{ id: row.id, text: row.title, files: [{ path: row.path }] }}
+  onDragStart={() => setDragging(true)}
+  onDragEnd={() => setDragging(false)}
+/>
+
+<View
+  dropKinds={["local", "files"]}
+  onDrop={(event) => move(dropEventFromEvent(event)?.id)}
+  onFilesDropped={(event) => open(dropEventFromEvent(event)?.paths ?? [])}
+/>
+```
+
+An application-local drop reports the declared `id`, the originating node, and whether the payload
+stayed inside this window, crossed between QuickGUI windows, or came from another application. A
+`files` drop reports absolute paths. `onDragOver` is not bound: the Rust core reports drag hovering
+on the window rather than through a per-element listener.
+
+Physical `code` values are not reported. The core normalizes keys to a layout-independent command
+identity plus the printable character, which is what accelerators and keymaps match on.
 
 ## Lifecycle vetoes in JavaScript
 
@@ -553,12 +808,19 @@ window lifecycle, native menus and desktop services, web-shaped Flexbox styling,
 titlebars, traffic-light positioning, declared close and quit interception, menu accelerators and
 system submenus, native window-tab commands, controlled selection controls, tab sets, disclosures,
 and field/fieldset composition, controlled in-window dialogs and alert dialogs, delayed native
-tooltips, a stable real-`.app` development host, and self-contained production packaging on the
-current macOS target. It is not yet the full Rust rendering API surface: popover arrows and
-backdrops, context and popover menus, select/combobox/autocomplete, tables and trees, images and
-shaders, CSS Grid layout, keyboard, gesture, and drag-and-drop events, native child views,
-accessibility actions, JavaScript `Menu.popup` and per-window `window.setMenu` (the `AppRunner`
-does not yet expose the `EventContext`-scoped popup and window-menu commands), every native binary
-target, and dedicated JavaScript performance gates still need bindings and acceptance.
+tooltips, declared popover and context menus, CSS Grid layout, complete paint transitions, retained
+images and application shaders, progress/meter/toggle parts, declared keyboard, mouse, gesture,
+accelerator, and drag-and-drop events, a stable real-`.app` development host, and self-contained
+production packaging on the current macOS target. It is not yet the full Rust rendering API surface:
+popover arrows and backdrops, select/combobox/autocomplete, tables and trees, sliders, number
+fields, splitters, toolbars, toggle groups, and toasts, animated-image playback control, native
+child views, accessibility actions, JavaScript `Menu.popup` and per-window `window.setMenu` (the
+`AppRunner` does not yet expose the `EventContext`-scoped popup and window-menu commands), every
+native binary target, and dedicated JavaScript performance gates still need bindings and acceptance.
+
+The unbound interaction models above all reach their retained state through a non-capturing
+`fn(&mut V) -> &mut State` accessor. One hosted view renders every declaring node, so it cannot
+supply a distinct accessor per instance; those components need a closure- or entity-based accessor
+in the Rust core before they can be bound.
 
 Return to the [documentation index](README.md).

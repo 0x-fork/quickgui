@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 19;
+export const PROTOCOL_VERSION = 20;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -20,6 +20,8 @@ export const enum NativeNodeTag {
   SwiftUIPopover = 13,
   SwiftUIPopoverTrigger = 14,
   SwiftUIPopoverContent = 15,
+  Image = 16,
+  Shader = 17,
 }
 
 export const enum PropertyCode {
@@ -181,6 +183,50 @@ export const enum PropertyCode {
   TooltipGap = 156,
   TooltipViewportMargin = 157,
   Variant = 158,
+  Menu = 159,
+  SelectListener = 160,
+  Controls = 161,
+  GridTemplateColumns = 162,
+  GridTemplateRows = 163,
+  GridAutoFlow = 164,
+  GridColumnStart = 165,
+  GridColumnEnd = 166,
+  GridColumnSpan = 167,
+  GridRowStart = 168,
+  GridRowEnd = 169,
+  GridRowSpan = 170,
+  TransitionProperties = 171,
+  TransitionDuration = 172,
+  TransitionEasing = 173,
+  TransitionMaxFps = 174,
+  Minimum = 175,
+  Maximum = 176,
+  Low = 177,
+  High = 178,
+  Optimum = 179,
+  ValueText = 180,
+  Pressed = 181,
+  ObjectFit = 182,
+  ShaderParameters = 183,
+  KeyDownListener = 184,
+  KeyUpListener = 185,
+  MouseDownListener = 186,
+  MouseUpListener = 187,
+  MouseMoveListener = 188,
+  DoubleClickListener = 189,
+  ScrollListener = 190,
+  ContextMenuListener = 191,
+  PinchListener = 192,
+  RotationListener = 193,
+  SmartMagnifyListener = 194,
+  PressureListener = 195,
+  FocusListener = 196,
+  Keymap = 197,
+  ActionListener = 198,
+  Draggable = 199,
+  DropKinds = 200,
+  DragListener = 201,
+  DropListener = 202,
 }
 
 /**
@@ -228,6 +274,15 @@ export const NativePart = {
   DialogTitle: "dialog-title",
   DialogDescription: "dialog-description",
   DialogClose: "dialog-close",
+  PopoverMenuTrigger: "popover-menu-trigger",
+  PopoverMenuPopup: "popover-menu-popup",
+  ContextMenuTrigger: "context-menu-trigger",
+  Progress: "progress",
+  ProgressIndicator: "progress-indicator",
+  Meter: "meter",
+  MeterIndicator: "meter-indicator",
+  Toggle: "toggle",
+  ToggleIndicator: "toggle-indicator",
 } as const;
 
 export type NativePartName = (typeof NativePart)[keyof typeof NativePart];
@@ -237,6 +292,15 @@ export const MAX_COMPONENT_VALUE_BYTES = 256;
 
 /** Longest tooltip label retained by the Rust binding. */
 export const MAX_TOOLTIP_TEXT_BYTES = 1024;
+
+/** Longest bounded menu declaration accepted by the Rust binding. */
+export const MAX_MENU_JSON_BYTES = 512 * 1024;
+
+/** Longest bounded accelerator keymap accepted by the Rust binding. */
+export const MAX_KEYMAP_JSON_BYTES = 64 * 1024;
+
+/** Longest bounded drag declaration accepted by the Rust binding. */
+export const MAX_DRAG_JSON_BYTES = 64 * 1024;
 
 export type NativePropertyValue = boolean | number | string | null;
 

@@ -371,6 +371,12 @@ fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -472,6 +478,12 @@ fn flex_without_direction_uses_css_row_default() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -542,6 +554,12 @@ fn retained_popover_uses_core_placement_dismissal_and_focus_restoration() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -611,6 +629,12 @@ fn unanchored_overlay_traps_autofocus_dismisses_and_restores_previous_focus() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -719,6 +743,12 @@ fn native_svg_is_parsed_once_until_its_source_changes() {
         svgs: Rc::clone(&svgs),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -790,6 +820,12 @@ fn native_virtual_list_mounts_only_the_initial_window_and_overscan() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::clone(&lists),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -863,6 +899,12 @@ fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::clone(&terminals),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -1051,6 +1093,12 @@ fn a_declared_close_interception_holds_the_window_and_reports_it_to_javascript()
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -1116,6 +1164,12 @@ fn component_part_view(window: u32, tree: NativeTree, events: EventQueue) -> Nat
         svgs: Rc::new(RefCell::new(HashMap::new())),
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
+        images: Rc::new(RefCell::new(HashMap::new())),
+        shaders: Rc::new(RefCell::new(HashMap::new())),
+        menus: Rc::new(RefCell::new(HashMap::new())),
+        context_menu: ContextMenuState::new(),
+        context_menu_owner: None,
+        focused_node: None,
         #[cfg(target_os = "macos")]
         swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
         embedded_views: Rc::new(RefCell::new(HashMap::new())),
@@ -1470,6 +1524,809 @@ fn in_window_dialog_parts_mount_only_while_open_and_dismiss_through_the_core() {
     assert!(!cx.contains_element(window, core.title_id()).unwrap());
     assert!(
         cx.contains_element(window, ElementId::new(trigger_id as u64))
+            .unwrap()
+    );
+}
+
+const DECLARED_MENU: &str = r#"{
+  "width": 200,
+  "itemHeight": 30,
+  "items": [
+    { "type": "group", "label": "File" },
+    { "id": "open", "label": "Open…", "shortcut": "⌘O" },
+    { "type": "separator" },
+    { "type": "checkbox", "id": "sidebar", "label": "Show sidebar", "checked": true },
+    { "type": "radio", "id": "small", "group": "size", "label": "Small", "checked": true },
+    { "id": "recent", "label": "Recent", "items": [{ "id": "one", "label": "One" }] },
+    { "id": "quit", "label": "Quit", "disabled": true },
+    { "label": "no identifier" }
+  ]
+}"#;
+
+#[test]
+fn declared_menu_entries_adopt_core_kinds_bounds_and_shortcuts() {
+    let declaration =
+        NativeMenuDeclaration::parse(DECLARED_MENU).expect("the declaration is bounded JSON");
+    let style = declaration.style();
+    assert_eq!(style.width, 200.0);
+    assert_eq!(style.item_height, 30.0);
+    // Unspecified measurements keep the core's own defaults instead of a JavaScript guess.
+    assert_eq!(
+        style.separator_height,
+        NativeMenuStyle::default().separator_height
+    );
+
+    let items = menu_items(7, declaration.entries(), 0);
+    // The entry without a stable identifier cannot form a core command and is skipped.
+    assert_eq!(items.len(), 7);
+    let kinds = items.iter().map(PopoverMenuItem::kind).collect::<Vec<_>>();
+    assert_eq!(
+        kinds,
+        vec![
+            PopoverMenuItemKind::GroupLabel,
+            PopoverMenuItemKind::Action,
+            PopoverMenuItemKind::Separator,
+            PopoverMenuItemKind::Checkbox,
+            PopoverMenuItemKind::Radio,
+            PopoverMenuItemKind::Submenu,
+            PopoverMenuItemKind::Action,
+        ]
+    );
+    assert_eq!(
+        items[1].shortcut_text().map(|value| &**value),
+        Some("\u{2318}O")
+    );
+    assert_eq!(items[3].checked(), Some(true));
+    assert_eq!(items[4].checked(), Some(true));
+    assert!(items[6].is_disabled());
+    assert_eq!(
+        items[5]
+            .submenu_menu()
+            .expect("a declared submenu carries a validated core model")
+            .items()
+            .len(),
+        1
+    );
+
+    // The whole declaration validates through the core before any of it is retained.
+    let menu = PopoverMenu::new(items).expect("the declared tree passes core validation");
+    assert_eq!(menu.items().len(), 7);
+}
+
+#[test]
+fn malformed_and_oversized_menu_declarations_are_rejected_without_panicking() {
+    assert!(NativeMenuDeclaration::parse("not json").is_none());
+    assert!(NativeMenuDeclaration::parse(&"a".repeat(MAX_MENU_JSON_BYTES + 1)).is_none());
+
+    // A bounded declaration with an oversized identifier keeps the rest of the menu.
+    let oversized = format!(
+        r#"{{"items":[{{"id":"{}","label":"Too long"}},{{"id":"ok","label":"Fine"}}]}}"#,
+        "x".repeat(MAX_MENU_ITEM_ID_BYTES + 1)
+    );
+    let declaration = NativeMenuDeclaration::parse(&oversized).expect("the JSON itself is bounded");
+    let items = menu_items(3, declaration.entries(), 0);
+    assert_eq!(items.len(), 1);
+    assert_eq!(&**items[0].label(), "Fine");
+
+    // An empty declaration still forms a valid, inert model.
+    let empty = NativeMenuDeclaration::parse("{}").expect("an empty object is a valid declaration");
+    assert!(menu_items(3, empty.entries(), 0).is_empty());
+}
+
+fn menu_tree(popup_id: u32, trigger_id: u32, open: bool) -> NativeTree {
+    let mut tree = NativeTree::default();
+    let mut trigger = component_part_node(
+        NodeTag::Button,
+        ROOT_NODE,
+        POPOVER_MENU_TRIGGER_PART,
+        &[(property::CONTROLS, &popup_id.to_string())],
+        &[(property::OPEN, open)],
+    );
+    trigger.children.clear();
+    tree.nodes.insert(trigger_id, trigger);
+
+    let popup = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        POPOVER_MENU_POPUP_PART,
+        &[
+            (property::MENU, DECLARED_MENU),
+            (property::ANCHOR_TARGET, &trigger_id.to_string()),
+        ],
+        &[
+            (property::SELECT_LISTENER, true),
+            (property::DISMISS_LISTENER, true),
+        ],
+    );
+    tree.nodes.insert(popup_id, popup);
+
+    let root = tree.nodes.get_mut(&ROOT_NODE).unwrap();
+    root.children.push(trigger_id);
+    if open {
+        root.children.push(popup_id);
+    }
+    tree
+}
+
+#[test]
+fn declared_popover_menu_rows_navigate_and_activate_through_the_core_model() {
+    let trigger_id = 300;
+    let popup_id = 301;
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(9, menu_tree(popup_id, trigger_id, true), Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        quickgui::Application::new().bind_keys(quickgui::popover_menu_key_bindings()),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    let surface = ElementId::new(popup_id as u64);
+
+    let declaration = NativeMenuDeclaration::parse(DECLARED_MENU).unwrap();
+    let menu = PopoverMenu::new(menu_items(popup_id, declaration.entries(), 0)).unwrap();
+    // Rows mount with the core's derived identities, not the declaring node identity.
+    let open_row = menu
+        .item_element_id(surface, 1)
+        .expect("an interactive row has a derived identity");
+    assert!(cx.contains_element(window, open_row).unwrap());
+    assert!(
+        cx.contains_element(window, menu.item_element_id(surface, 0).unwrap())
+            .unwrap()
+    );
+
+    cx.focus(window, surface).unwrap();
+    // The first enabled entry is highlighted by the core, so one Down lands on the checkbox.
+    cx.simulate_keystrokes(window, "down").unwrap();
+    cx.simulate_keystrokes(window, "enter").unwrap();
+
+    let selected = events
+        .borrow()
+        .iter()
+        .find(|event| event.kind == "menuselect")
+        .cloned()
+        .expect("activating a row queues one selection event");
+    assert_eq!(selected.target, popup_id);
+    assert_eq!(selected.window, 9);
+    let payload = selected.value.expect("a selection carries its declared id");
+    assert!(
+        payload.contains("\"id\":\"sidebar\""),
+        "payload was {payload}"
+    );
+    // A checkbox reports the value the core computed, never a JavaScript-side guess.
+    assert!(
+        payload.contains("\"checked\":false"),
+        "payload was {payload}"
+    );
+}
+
+#[test]
+fn a_declared_context_menu_target_opens_the_core_cursor_point_surface() {
+    let target_id = 320;
+    let mut tree = NativeTree::default();
+    tree.nodes.insert(
+        target_id,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            CONTEXT_MENU_TRIGGER_PART,
+            &[(property::MENU, DECLARED_MENU)],
+            &[(property::SELECT_LISTENER, true)],
+        ),
+    );
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(target_id);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(11, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        quickgui::Application::new().bind_keys(quickgui::popover_menu_key_bindings()),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    let target = ElementId::new(target_id as u64);
+    assert!(cx.contains_element(window, target).unwrap());
+    assert_eq!(cx.windows().len(), 1);
+
+    cx.simulate_context_menu(
+        window,
+        target,
+        quickgui::Point::new(40.0, 24.0),
+        quickgui::Modifiers::empty(),
+    )
+    .unwrap();
+    // The core owns the separate cursor-point surface; JavaScript never creates or measures it.
+    assert_eq!(
+        cx.windows().len(),
+        2,
+        "a declared context menu opens exactly one core-owned surface"
+    );
+}
+
+#[test]
+fn declared_css_grid_tracks_and_placement_lay_out_through_taffy() {
+    let grid_id = 400;
+    let first_id = 401;
+    let second_id = 402;
+    let mut tree = NativeTree::default();
+
+    let mut grid = NativeNode::new(NodeTag::View);
+    grid.parent = Some(ROOT_NODE);
+    grid.set_property(
+        property::DISPLAY,
+        Some(PropertyValue::String(Arc::from("grid"))),
+    );
+    grid.set_property(
+        property::GRID_TEMPLATE_COLUMNS,
+        Some(PropertyValue::String(Arc::from("100px 1fr"))),
+    );
+    grid.set_property(
+        property::GRID_TEMPLATE_ROWS,
+        Some(PropertyValue::String(Arc::from("repeat(1, 40px)"))),
+    );
+    grid.set_property(property::WIDTH, Some(PropertyValue::Number(300.0)));
+    grid.set_property(property::HEIGHT, Some(PropertyValue::Number(40.0)));
+    grid.children.extend([first_id, second_id]);
+    tree.nodes.insert(grid_id, grid);
+
+    for id in [first_id, second_id] {
+        let mut cell = NativeNode::new(NodeTag::View);
+        cell.parent = Some(grid_id);
+        tree.nodes.insert(id, cell);
+    }
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(grid_id);
+
+    let view = component_part_view(12, tree, Rc::new(RefCell::new(VecDeque::new())));
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+
+    let first = cx
+        .element_bounds(window, ElementId::new(first_id as u64))
+        .unwrap();
+    let second = cx
+        .element_bounds(window, ElementId::new(second_id as u64))
+        .unwrap();
+    assert_eq!(first.width, 100.0);
+    assert_eq!(second.x - first.x, 100.0);
+    assert_eq!(second.width, 200.0);
+    assert_eq!(first.height, 40.0);
+}
+
+#[test]
+fn declared_transitions_map_css_names_onto_core_paint_flags_and_easing() {
+    let mut node = NativeNode::new(NodeTag::View);
+    // The shorthand-only declaration keeps the previous colors-only behavior.
+    node.set_property(property::TRANSITION, Some(PropertyValue::Number(120.0)));
+    let transition = native_transition(&node).expect("a duration declares a transition");
+    assert!((transition.duration.as_secs_f32() - 0.120).abs() < 0.001);
+    assert_eq!(
+        transition.properties,
+        quickgui::TransitionProperties::COLORS
+    );
+
+    node.set_property(
+        property::TRANSITION_PROPERTIES,
+        Some(PropertyValue::String(Arc::from(
+            "opacity,box-shadow,border-radius",
+        ))),
+    );
+    node.set_property(
+        property::TRANSITION_DURATION,
+        Some(PropertyValue::Number(240.0)),
+    );
+    node.set_property(
+        property::TRANSITION_EASING,
+        Some(PropertyValue::String(Arc::from("linear"))),
+    );
+    node.set_property(
+        property::TRANSITION_MAX_FPS,
+        Some(PropertyValue::Number(30.0)),
+    );
+    let transition = native_transition(&node).expect("an explicit duration declares a transition");
+    assert!((transition.duration.as_secs_f32() - 0.240).abs() < 0.001);
+    assert_eq!(
+        transition.properties,
+        quickgui::TransitionProperties::OPACITY
+            | quickgui::TransitionProperties::BOX_SHADOW
+            | quickgui::TransitionProperties::BORDER_RADIUS
+    );
+    assert_eq!(transition.max_fps, Some(30.0));
+    // Easing comes from the core's own curves, so linear is the identity.
+    assert_eq!((transition.easing)(0.25), 0.25);
+
+    // An unknown property name falls back to the core's color set instead of an empty transition.
+    node.set_property(
+        property::TRANSITION_PROPERTIES,
+        Some(PropertyValue::String(Arc::from("left,width"))),
+    );
+    assert_eq!(
+        native_transition(&node).unwrap().properties,
+        quickgui::TransitionProperties::COLORS
+    );
+
+    let mut plain = NativeNode::new(NodeTag::View);
+    plain.set_property(property::COLOR, Some(PropertyValue::Color(0xff00_00ff)));
+    assert!(native_transition(&plain).is_none());
+}
+
+#[test]
+fn range_and_feedback_parts_adopt_core_value_ranges() {
+    let mut progress = component_part_node(NodeTag::View, ROOT_NODE, "progress", &[], &[]);
+    progress.set_property(property::VALUE, Some(PropertyValue::Number(3.0)));
+    progress.set_property(property::MAXIMUM, Some(PropertyValue::Number(12.0)));
+    progress.set_property(
+        property::VALUE_TEXT,
+        Some(PropertyValue::String(Arc::from("3 of 12 files"))),
+    );
+    let declared = native_progress(&progress);
+    assert_eq!(declared.value(), Some(3.0));
+    assert_eq!(declared.maximum(), 12.0);
+    assert_eq!(declared.completion(), Some(0.25));
+    assert!(apply_part(div(), 41, &progress).is_some());
+
+    progress.set_property(property::INDETERMINATE, Some(PropertyValue::Bool(true)));
+    assert!(native_progress(&progress).is_indeterminate());
+
+    let mut meter = component_part_node(NodeTag::View, ROOT_NODE, "meter", &[], &[]);
+    meter.set_property(property::VALUE, Some(PropertyValue::Number(20.0)));
+    meter.set_property(property::MINIMUM, Some(PropertyValue::Number(0.0)));
+    meter.set_property(property::MAXIMUM, Some(PropertyValue::Number(100.0)));
+    meter.set_property(property::LOW, Some(PropertyValue::Number(25.0)));
+    meter.set_property(property::HIGH, Some(PropertyValue::Number(75.0)));
+    let declared = native_meter(&meter);
+    assert_eq!(declared.completion(), 0.2);
+    assert!(declared.is_low());
+    assert!(!declared.is_high());
+    assert!(apply_part(div(), 42, &meter).is_some());
+
+    let pressed = component_part_node(
+        NodeTag::Button,
+        ROOT_NODE,
+        "toggle",
+        &[],
+        &[(property::PRESSED, true)],
+    );
+    assert!(apply_part(div(), 43, &pressed).is_some());
+    assert!(
+        apply_part(
+            div(),
+            44,
+            &component_part_node(NodeTag::View, ROOT_NODE, "toggle-indicator", &[], &[])
+        )
+        .is_some()
+    );
+}
+
+/// A one-pixel opaque red PNG.
+const RED_PIXEL_PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+#[test]
+fn declared_image_sources_decode_once_and_degrade_without_panicking() {
+    let mut node = NativeNode::new(NodeTag::Image);
+    node.set_property(
+        property::VALUE,
+        Some(PropertyValue::String(Arc::from(RED_PIXEL_PNG))),
+    );
+    node.set_property(
+        property::OBJECT_FIT,
+        Some(PropertyValue::String(Arc::from("cover"))),
+    );
+    let mut state = NativeImageState::new(Arc::from(RED_PIXEL_PNG));
+    assert!(state.parsed.is_ok(), "a base64 data URL decodes once");
+    // Re-declaring the same source keeps the decoded image.
+    let before = state.source.clone();
+    state.sync(RED_PIXEL_PNG);
+    assert!(Arc::ptr_eq(&before, &state.source));
+
+    state.sync("/tmp/quickgui-does-not-exist.png");
+    // A path stays a lazy core resource; the core's worker pool owns the decode.
+    assert!(state.parsed.is_ok());
+
+    let broken = NativeImageState::new(Arc::from("data:image/png;base64,not-base64!!"));
+    assert!(broken.parsed.is_err());
+    assert!(NativeImageState::new(Arc::from("")).parsed.is_err());
+}
+
+#[test]
+fn declared_shaders_validate_wgsl_and_bound_their_parameter_vectors() {
+    let valid = "fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {\n\
+         return vec4<f32>(input.uv, 0.0, 1.0);\n\
+     }";
+    let state = NativeShaderState::new(Arc::from(valid));
+    assert!(state.parsed.is_ok(), "{:?}", state.parsed.as_ref().err());
+    assert!(
+        NativeShaderState::new(Arc::from("not wgsl"))
+            .parsed
+            .is_err()
+    );
+    assert!(NativeShaderState::new(Arc::from("")).parsed.is_err());
+
+    let mut node = NativeNode::new(NodeTag::Shader);
+    node.set_property(
+        property::SHADER_PARAMETERS,
+        Some(PropertyValue::String(Arc::from("[0.5,0.25,0,1]"))),
+    );
+    let parameters = native_shader_parameters(&node);
+    assert_eq!(parameters.vectors()[0], [0.5, 0.25, 0.0, 1.0]);
+
+    // Extra declared floats are ignored instead of growing the core's fixed uniform.
+    let many = (0..64).map(|_| "1").collect::<Vec<_>>().join(",");
+    node.set_property(
+        property::SHADER_PARAMETERS,
+        Some(PropertyValue::String(Arc::from(format!("[{many}]")))),
+    );
+    let parameters = native_shader_parameters(&node);
+    assert_eq!(parameters.vectors().len(), 4);
+
+    node.set_property(
+        property::SHADER_PARAMETERS,
+        Some(PropertyValue::String(Arc::from("not json"))),
+    );
+    assert_eq!(native_shader_parameters(&node).vectors()[0], [0.0; 4]);
+}
+
+fn input_node(parent: u32, flags: &[(u16, bool)], strings: &[(u16, &str)]) -> NativeNode {
+    let mut node = NativeNode::new(NodeTag::View);
+    node.parent = Some(parent);
+    node.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+    node.set_property(property::HEIGHT, Some(PropertyValue::Number(80.0)));
+    node.set_property(property::TAB_INDEX, Some(PropertyValue::Number(0.0)));
+    for (key, value) in flags {
+        node.set_property(*key, Some(PropertyValue::Bool(*value)));
+    }
+    for (key, value) in strings {
+        node.set_property(*key, Some(PropertyValue::String(Arc::from(*value))));
+    }
+    node
+}
+
+fn queued(events: &EventQueue, kind: &str) -> Option<QueuedEvent> {
+    events
+        .borrow()
+        .iter()
+        .find(|event| event.kind == kind)
+        .cloned()
+}
+
+#[test]
+fn declared_input_listeners_report_bounded_core_payloads() {
+    let target_id = 500;
+    let mut tree = NativeTree::default();
+    tree.nodes.insert(
+        target_id,
+        input_node(
+            ROOT_NODE,
+            &[
+                (property::KEY_DOWN_LISTENER, true),
+                (property::KEY_UP_LISTENER, true),
+                (property::MOUSE_DOWN_LISTENER, true),
+                (property::MOUSE_UP_LISTENER, true),
+                (property::MOUSE_MOVE_LISTENER, true),
+                (property::DOUBLE_CLICK_LISTENER, true),
+                (property::SCROLL_LISTENER, true),
+                (property::CONTEXT_MENU_LISTENER, true),
+                (property::PINCH_LISTENER, true),
+                (property::ROTATION_LISTENER, true),
+                (property::SMART_MAGNIFY_LISTENER, true),
+                (property::PRESSURE_LISTENER, true),
+                (property::FOCUS_LISTENER, true),
+            ],
+            &[],
+        ),
+    );
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(target_id);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(21, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+    let target = ElementId::new(target_id as u64);
+
+    cx.focus(window, target).unwrap();
+    let focus = queued(&events, "focus").expect("focus is reported once");
+    assert_eq!(focus.target, target_id);
+    assert_eq!(focus.window, 21);
+
+    cx.simulate_keystrokes(window, "cmd-shift-k").unwrap();
+    let key = queued(&events, "keydown").expect("a declared key listener reports the press");
+    let payload = key.value.expect("a key press carries its payload");
+    assert!(payload.contains("\"key\":\"k\""), "payload was {payload}");
+    assert!(payload.contains("\"meta\":true"), "payload was {payload}");
+    assert!(payload.contains("\"shift\":true"), "payload was {payload}");
+    assert!(
+        payload.contains("\"repeat\":false"),
+        "payload was {payload}"
+    );
+
+    cx.simulate_key_up(
+        window,
+        quickgui::Keystroke::parse("k").expect("a bounded keystroke"),
+    )
+    .unwrap();
+    assert!(queued(&events, "keyup").is_some());
+
+    cx.simulate_mouse_down(
+        window,
+        target,
+        quickgui::MouseDownEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(12.0, 8.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 2,
+            first_mouse: false,
+        },
+    )
+    .unwrap();
+    let down = queued(&events, "mousedown").expect("a mouse press is reported");
+    let payload = down.value.expect("a mouse press carries its payload");
+    assert!(
+        payload.contains("\"button\":\"left\""),
+        "payload was {payload}"
+    );
+    assert!(
+        payload.contains("\"clickCount\":2"),
+        "payload was {payload}"
+    );
+    // The exact native multi-click count comes from the core, not a JavaScript timer.
+    assert!(queued(&events, "dblclick").is_some());
+
+    cx.simulate_mouse_up(
+        window,
+        target,
+        quickgui::MouseUpEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(12.0, 8.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 2,
+        },
+    )
+    .unwrap();
+    assert!(queued(&events, "mouseup").is_some());
+
+    cx.simulate_mouse_move(
+        window,
+        target,
+        quickgui::MouseMoveEvent {
+            position: quickgui::Point::new(20.0, 10.0),
+            pressed_button: None,
+            modifiers: quickgui::Modifiers::empty(),
+        },
+    )
+    .unwrap();
+    assert!(queued(&events, "mousemove").is_some());
+
+    cx.simulate_scroll_wheel(
+        window,
+        target,
+        quickgui::ScrollWheelEvent {
+            position: quickgui::Point::new(20.0, 10.0),
+            delta: quickgui::ScrollDelta::Pixels(quickgui::Vector::new(0.0, -24.0)),
+            phase: quickgui::GesturePhase::Moved,
+            modifiers: quickgui::Modifiers::empty(),
+        },
+    )
+    .unwrap();
+    let wheel = queued(&events, "wheel").expect("a wheel event is reported");
+    let payload = wheel.value.expect("a wheel event carries its payload");
+    assert!(
+        payload.contains("\"deltaY\":-24.0"),
+        "payload was {payload}"
+    );
+    assert!(
+        payload.contains("\"precise\":true"),
+        "payload was {payload}"
+    );
+
+    cx.simulate_context_menu(
+        window,
+        target,
+        quickgui::Point::new(30.0, 12.0),
+        quickgui::Modifiers::CONTROL,
+    )
+    .unwrap();
+    let menu = queued(&events, "contextmenu").expect("a secondary click is reported");
+    assert!(
+        menu.value
+            .expect("a context-menu event carries its payload")
+            .contains("\"control\":true")
+    );
+
+    cx.simulate_pinch(
+        window,
+        target,
+        quickgui::PinchEvent {
+            position: quickgui::Point::new(4.0, 4.0),
+            delta: 0.1,
+            phase: quickgui::GesturePhase::Started,
+            modifiers: quickgui::Modifiers::empty(),
+        },
+    )
+    .unwrap();
+    let pinch = queued(&events, "pinch").expect("a pinch gesture is reported");
+    assert!(
+        pinch
+            .value
+            .expect("a pinch carries its payload")
+            .contains("\"phase\":\"started\"")
+    );
+
+    cx.simulate_rotation(
+        window,
+        target,
+        quickgui::RotationEvent {
+            position: quickgui::Point::new(4.0, 4.0),
+            delta: -12.0,
+            phase: quickgui::GesturePhase::Moved,
+            modifiers: quickgui::Modifiers::empty(),
+        },
+    )
+    .unwrap();
+    assert!(queued(&events, "rotate").is_some());
+
+    cx.simulate_smart_magnify(
+        window,
+        target,
+        quickgui::SmartMagnifyEvent {
+            position: quickgui::Point::new(4.0, 4.0),
+            modifiers: quickgui::Modifiers::empty(),
+        },
+    )
+    .unwrap();
+    assert!(queued(&events, "smartmagnify").is_some());
+
+    cx.simulate_mouse_pressure(
+        window,
+        target,
+        quickgui::MousePressureEvent {
+            position: quickgui::Point::new(4.0, 4.0),
+            pressure: 0.5,
+            stage: quickgui::PressureStage::Force,
+            modifiers: quickgui::Modifiers::empty(),
+        },
+    )
+    .unwrap();
+    let pressure = queued(&events, "pressure").expect("a pressure stage is reported");
+    assert!(
+        pressure
+            .value
+            .expect("a pressure event carries its payload")
+            .contains("\"stage\":\"force\"")
+    );
+}
+
+#[test]
+fn a_declared_keymap_parses_accelerators_through_the_core_and_dispatches_ids() {
+    let declaration =
+        r#"{"CmdOrCtrl+S":"save","CmdOrCtrl+Shift+P":"palette","Nonsense++":"skipped","Alt+X":""}"#;
+    let keymap = NativeKeymap::parse(declaration).expect("valid accelerators form a keymap");
+    // The unparsable accelerator and the empty identifier are skipped, not fatal.
+    assert_eq!(keymap.len(), 2);
+    assert!(NativeKeymap::parse("not json").is_none());
+    assert!(NativeKeymap::parse(&"x".repeat(MAX_KEYMAP_JSON_BYTES + 1)).is_none());
+
+    let target_id = 520;
+    let mut tree = NativeTree::default();
+    tree.nodes.insert(
+        target_id,
+        input_node(
+            ROOT_NODE,
+            &[(property::ACTION_LISTENER, true)],
+            &[(property::KEYMAP, declaration)],
+        ),
+    );
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(target_id);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(22, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+    let target = ElementId::new(target_id as u64);
+
+    cx.focus(window, target).unwrap();
+    cx.simulate_keystrokes(window, "cmd-s").unwrap();
+    let action = queued(&events, "action").expect("a declared accelerator dispatches its id");
+    assert_eq!(action.target, target_id);
+    assert_eq!(action.value.as_deref(), Some("save"));
+
+    // An unbound keystroke without a declared key listener queues nothing.
+    events.borrow_mut().clear();
+    cx.simulate_keystrokes(window, "cmd-q").unwrap();
+    assert!(queued(&events, "action").is_none());
+    assert!(queued(&events, "keydown").is_none());
+}
+
+#[test]
+fn declared_drag_sources_and_drop_targets_route_typed_core_payloads() {
+    let source_id = 540;
+    let target_id = 541;
+    let mut tree = NativeTree::default();
+    tree.nodes.insert(
+        source_id,
+        input_node(
+            ROOT_NODE,
+            &[(property::DRAG_LISTENER, true)],
+            &[(
+                property::DRAGGABLE,
+                r#"{"id":"row-7","text":"quickgui","files":[{"path":"/tmp/a.txt"}]}"#,
+            )],
+        ),
+    );
+    tree.nodes.insert(
+        target_id,
+        input_node(
+            ROOT_NODE,
+            &[(property::DROP_LISTENER, true)],
+            &[(property::DROP_KINDS, r#"["local","files"]"#)],
+        ),
+    );
+    let root = tree.nodes.get_mut(&ROOT_NODE).unwrap();
+    root.children.push(source_id);
+    root.children.push(target_id);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(23, tree, Rc::clone(&events));
+    let (cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+    // Both the declared drag source and both declared drop kinds mount on the core element tree.
+    assert!(
+        cx.contains_element(window, ElementId::new(source_id as u64))
+            .unwrap()
+    );
+    assert!(
+        cx.contains_element(window, ElementId::new(target_id as u64))
+            .unwrap()
+    );
+    assert!(events.borrow().is_empty());
+}
+
+#[test]
+fn a_drag_source_that_also_captures_the_pointer_is_ignored_instead_of_panicking() {
+    let node_id = 560;
+    let mut tree = NativeTree::default();
+    let mut conflicting = input_node(
+        ROOT_NODE,
+        &[
+            (property::POINTER_LISTENER, true),
+            (property::DRAG_LISTENER, true),
+            (property::DROP_LISTENER, true),
+        ],
+        &[
+            (property::DRAGGABLE, r#"{"id":"row-1"}"#),
+            (property::DROP_KINDS, r#"["local"]"#),
+        ],
+    );
+    conflicting.parent = Some(ROOT_NODE);
+    tree.nodes.insert(node_id, conflicting);
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(node_id);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(24, tree, Rc::clone(&events));
+    // The core rejects one element owning both, so the drag source is dropped and the element and
+    // its declared drop target still mount.
+    let (cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    assert!(
+        cx.contains_element(view.window_handle(), ElementId::new(node_id as u64))
             .unwrap()
     );
 }
