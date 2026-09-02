@@ -399,7 +399,7 @@ impl TextSystem {
         )
     }
 
-    pub(super) fn render_order<'pass>(
+    pub(crate) fn render_order<'pass>(
         &'pass self,
         pass: &mut wgpu::RenderPass<'pass>,
         layer: usize,

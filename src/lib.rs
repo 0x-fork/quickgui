@@ -400,6 +400,11 @@ pub use scene::{
     PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign, TextId, TextOverflow,
     TextRun, TextShaping, TextStyle, TextWrap, WhiteSpace,
 };
+// Compositing layers: transforms, subtree filters, backdrop effects, and blend modes.
+pub use scene::{
+    BlendMode, DropShadow, LayerEffects, MAX_BLUR_RADIUS, MAX_LAYER_DEPTH, MAX_LAYER_TEXTURE_BYTES,
+    MAX_LAYERS_PER_FRAME, Transform2D,
+};
 // Direction-relative layout, sticky positioning, scroll snapping, and text styling additions.
 pub use element::{Direction, SnapAlign, SnapStrictness, StickyInsets};
 pub use scene::{

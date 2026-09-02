@@ -373,3 +373,37 @@ animations disabled or reduced motion on, the target is applied in one step inst
 Snap geometry is rebuilt in place by the geometry pass that already walks the tree, bounded by
 `MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW` (256) and `MAX_SCROLL_SNAP_POINTS_PER_WINDOW` (4096). At
 most one settle and one travel exist per window at a time, because a window has one pointer.
+
+## Transforms and compositing layers
+
+```rust
+use quickgui::{BlendMode, Color, Filter, Transform2D, div, text};
+
+// Paint-only: layout never moves.
+div().rotate_degrees(-4.0).child(text("Tilted, text and all"));
+div().scale_uniform(1.05).transform_origin(0.5, 1.0);
+div().transform(Transform2D::skew_degrees(8.0, 0.0));
+
+// State styles carry transforms too, so a hover lift costs no relayout.
+div().hover(|style| style.scale_uniform(1.08));
+
+// Subtree effects.
+div().blur(8.0);
+div().drop_shadow(0.0, 6.0, 12.0, Color::rgba8(0, 0, 0, 80));
+div().rounded_xl().backdrop_blur(12.0).backdrop_filter([Filter::Saturate(1.5)]);
+div().blend_mode(BlendMode::Multiply);
+```
+
+`transform`, `translate`, `rotate_degrees`, `scale`, `scale_uniform`, `skew_degrees`, and
+`transform_origin` are paint-only, exactly like CSS `transform`: the element keeps its untransformed
+layout box, and that is what `element_bounds` and anchoring report. Pointer input is inverse-mapped
+through the accumulated transform, so clicks, hover, drag, drop, and cursor declarations follow the
+painted pixels. The same builders exist on `ElementStateStyle` for `hover`, `active`, `focus`,
+`disabled`, `invalid`, `dragging`, and `drag_over`.
+
+Anything but a pure translation renders the subtree into a bounded offscreen texture first, as do
+`blur`, `drop_shadow`, `backdrop_blur`, `backdrop_filter`, and a non-`Normal` `blend_mode`. Text is
+rasterized into that texture, so it transforms, blurs, and blends with the shapes around it. The
+bounds — `MAX_LAYERS_PER_FRAME`, `MAX_LAYER_DEPTH`, `MAX_LAYER_TEXTURE_BYTES`, `MAX_BLUR_RADIUS` —
+and how an element degrades once one is reached are documented in
+[`graphics.md`](graphics.md#compositing-layers).

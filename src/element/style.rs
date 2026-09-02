@@ -1,5 +1,17 @@
 use super::*;
 
+/// Clamp a transform origin to a finite fraction of the element box.
+fn sane_transform_origin(origin: Point) -> Point {
+    let clamp = |value: f32| {
+        if value.is_finite() {
+            value.clamp(-16.0, 16.0)
+        } else {
+            0.5
+        }
+    };
+    Point::new(clamp(origin.x), clamp(origin.y))
+}
+
 impl Element {
     pub fn padding_axis(mut self, vertical: f32, horizontal: f32) -> Self {
         self.layout.padding = TaffyRect {
@@ -477,14 +489,20 @@ impl Element {
         }
     }
 
-    /// Apply a bounded chain of CSS-shaped color filters to this element's own raster content.
+    /// Apply a bounded chain of CSS-shaped filters to this element.
     ///
-    /// The chain applies to an image element's pixels and to any `bg_image` tiles on the same
-    /// element. It does not descend into children: subtree filters need a compositing layer,
-    /// which QuickGUI deliberately does not allocate. At most
-    /// [`MAX_FILTERS_PER_ELEMENT`](crate::MAX_FILTERS_PER_ELEMENT) filters are retained and the
-    /// whole chain collapses into one color matrix before it reaches the GPU, so the number of
-    /// declared filters never changes per-frame work.
+    /// A chain of colour filters alone applies to this element's own raster content: an image
+    /// element's pixels and any `bg_image` tiles on the same element. It costs one color matrix
+    /// per primitive and allocates nothing.
+    ///
+    /// Adding a [`Filter::Blur`] or [`Filter::DropShadow`] promotes the element to a *compositing
+    /// group*: the whole subtree — text included — renders into a bounded offscreen texture first,
+    /// and the entire chain, colour filters and all, then applies to that texture. See
+    /// [`Element::blur`] and [`Element::drop_shadow`].
+    ///
+    /// At most [`MAX_FILTERS_PER_ELEMENT`](crate::MAX_FILTERS_PER_ELEMENT) filters are retained,
+    /// and the colour part of the chain collapses into one matrix before it reaches the GPU, so
+    /// the number of declared filters never changes per-frame work.
     pub fn filters(mut self, filters: impl IntoIterator<Item = Filter>) -> Self {
         self.visual.filters = Filters::new(filters);
         self
@@ -524,6 +542,119 @@ impl Element {
     /// Rotate the hues of this element's raster content by `degrees`.
     pub fn hue_rotate(self, degrees: f32) -> Self {
         self.filter(Filter::HueRotate(degrees))
+    }
+
+    /// Blur this element's whole subtree by `radius` logical pixels of standard deviation.
+    ///
+    /// This promotes the element to a compositing group: its subtree renders into a bounded
+    /// offscreen texture and a separable Gaussian is applied to it, so text blurs with its
+    /// background. `radius` is clamped to [`MAX_BLUR_RADIUS`](crate::MAX_BLUR_RADIUS); a radius of
+    /// zero declares nothing and allocates nothing.
+    pub fn blur(self, radius: f32) -> Self {
+        self.filter(Filter::Blur(radius))
+    }
+
+    /// Paint a blurred, offset, tinted copy of this element's subtree behind it.
+    ///
+    /// Unlike [`Element::shadow`], which is an analytic shadow of the element's rounded box, this
+    /// follows the subtree's real painted alpha, so text and images cast their own silhouette.
+    /// `blur` is the CSS `drop-shadow()` length, half of which is the Gaussian standard deviation,
+    /// and is clamped to twice [`MAX_BLUR_RADIUS`](crate::MAX_BLUR_RADIUS). Promotes the element
+    /// to a compositing group.
+    pub fn drop_shadow(self, offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
+        self.filter(Filter::DropShadow(DropShadow::new(
+            crate::Vector::new(offset_x, offset_y),
+            blur,
+            color,
+        )))
+    }
+
+    /// Transform this element's whole subtree, painting and hit testing alike.
+    ///
+    /// The transform acts around [`Element::transform_origin`], which defaults to the centre of
+    /// the element's border box. Layout is unaffected: the element still occupies its untransformed
+    /// box, exactly as a CSS `transform` does. Anything but a whole-pixel translation promotes the
+    /// element to a compositing group.
+    pub fn transform(mut self, transform: Transform2D) -> Self {
+        self.visual.transform = transform;
+        self
+    }
+
+    /// Move the point a transform acts around, as a fraction of the element's border box.
+    ///
+    /// `(0.0, 0.0)` is the top-left corner and the default `(0.5, 0.5)` the centre.
+    pub fn transform_origin(mut self, x: f32, y: f32) -> Self {
+        self.visual.transform_origin = sane_transform_origin(Point::new(x, y));
+        self
+    }
+
+    /// Translate this element's subtree by logical pixels without affecting layout.
+    ///
+    /// A whole-pixel translation is a paint offset and needs no offscreen texture.
+    pub fn translate(self, x: f32, y: f32) -> Self {
+        self.transform(Transform2D::translate(x, y))
+    }
+
+    /// Rotate this element's subtree clockwise around its transform origin.
+    pub fn rotate_degrees(self, degrees: f32) -> Self {
+        self.transform(Transform2D::rotate_degrees(degrees))
+    }
+
+    /// Scale this element's subtree around its transform origin.
+    pub fn scale(self, x: f32, y: f32) -> Self {
+        self.transform(Transform2D::scale(x, y))
+    }
+
+    /// Scale this element's subtree uniformly around its transform origin.
+    pub fn scale_uniform(self, scale: f32) -> Self {
+        self.transform(Transform2D::scale_uniform(scale))
+    }
+
+    /// Skew this element's subtree around its transform origin, in degrees.
+    pub fn skew_degrees(self, x: f32, y: f32) -> Self {
+        self.transform(Transform2D::skew_degrees(x, y))
+    }
+
+    /// Blur whatever is already painted behind this element, clipped to its rounded box.
+    ///
+    /// The renderer copies the target region behind the element, blurs the copy, and draws it
+    /// under this element's own background. `radius` is clamped to
+    /// [`MAX_BLUR_RADIUS`](crate::MAX_BLUR_RADIUS); zero clears the effect.
+    ///
+    /// The window surface must support `COPY_SRC`. When it does not, the element paints without
+    /// its backdrop and the frame counts it in
+    /// [`RenderStats::skipped_layer_effects`](crate::RenderStats).
+    pub fn backdrop_blur(mut self, radius: f32) -> Self {
+        self.visual.backdrop = self
+            .visual
+            .backdrop
+            .without_blur()
+            .push(Filter::Blur(radius));
+        self
+    }
+
+    /// Apply a bounded colour-filter chain to whatever is already painted behind this element.
+    ///
+    /// Combine with [`Element::backdrop_blur`] for the usual translucent-material look. Carries
+    /// the same surface requirement and the same honest degradation.
+    pub fn backdrop_filter(mut self, filters: impl IntoIterator<Item = Filter>) -> Self {
+        let blur = self.visual.backdrop.blur();
+        let mut chain = Filters::new(filters);
+        if blur > 0.0 {
+            chain = chain.push(Filter::Blur(blur));
+        }
+        self.visual.backdrop = chain;
+        self
+    }
+
+    /// Combine this element's subtree with what is already painted behind it.
+    ///
+    /// Every mode but [`BlendMode::Normal`] promotes the element to a compositing group, and every
+    /// mode but `normal` and [`BlendMode::Screen`] additionally copies the destination. See
+    /// `docs/graphics.md` for the exact formulas and their cost.
+    pub fn blend_mode(mut self, blend: BlendMode) -> Self {
+        self.visual.blend = blend;
+        self
     }
 
     /// Render a replacement element when an image resource has been loading for 200 ms.

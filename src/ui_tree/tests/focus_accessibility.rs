@@ -1133,6 +1133,7 @@ fn tooltips_use_one_exact_show_deadline_and_hide_without_a_loop() {
         Tooltip::text("Delayed").delay(Duration::from_millis(500)),
     );
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id,
         bounds,
         clip: bounds,

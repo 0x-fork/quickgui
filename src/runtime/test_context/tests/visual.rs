@@ -1338,3 +1338,633 @@ fn visual_color_filters_apply_the_css_matrices_to_raster_content() {
     // Filters never leak outside their own element.
     assert_pixel_near(&snapshot, 8, 25, [0, 0, 255, 255]);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Compositing layers: transforms, subtree filters, backdrop effects, and blend modes.
+//
+// Every test here drives the same `Compositor::render_scene` pass sequencing the window renderer
+// uses, through the headless offscreen target.
+// ---------------------------------------------------------------------------------------------
+
+#[cfg(target_os = "macos")]
+struct RotatedBarVisualView {
+    degrees: f32,
+}
+
+#[cfg(target_os = "macos")]
+impl View for RotatedBarVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::WHITE).child(
+            div()
+                .id("bar")
+                .absolute()
+                .left(10.0)
+                .top(15.0)
+                .w(20.0)
+                .h(10.0)
+                .bg(Color::rgb8(220, 0, 0))
+                .rotate_degrees(self.degrees),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_rotation_moves_painted_pixels_without_moving_layout() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(40.0, 40.0),
+            RotatedBarVisualView { degrees: 0.0 },
+        )
+        .unwrap();
+    let upright = cx
+        .visual(view.window_handle())
+        .unwrap()
+        .capture_screenshot()
+        .unwrap();
+    // Wide and short: filled across the middle row, empty above it.
+    assert_pixel_near(&upright, 40, 40, [220, 0, 0, 255]);
+    assert_pixel_near(&upright, 40, 24, [255, 255, 255, 255]);
+
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(40.0, 40.0),
+            RotatedBarVisualView { degrees: 90.0 },
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    // Layout never moves: the element still reports its untransformed box.
+    visual
+        .assert_element_bounds("bar", Rect::new(10.0, 15.0, 20.0, 10.0), 0.0)
+        .unwrap();
+    let rotated = visual.capture_screenshot().unwrap();
+    // A quarter turn about the element centre swaps the filled and empty samples.
+    assert_pixel_near(&rotated, 24, 40, [255, 255, 255, 255]);
+    assert_pixel_near(&rotated, 40, 24, [220, 0, 0, 255]);
+}
+
+#[cfg(target_os = "macos")]
+struct HalfTurnVisualView {
+    rotated: bool,
+}
+
+#[cfg(target_os = "macos")]
+impl View for HalfTurnVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let content = div()
+            .size_full()
+            .bg(Color::rgb8(250, 250, 250))
+            .child(
+                div()
+                    .absolute()
+                    .left(0.0)
+                    .top(0.0)
+                    .w(12.0)
+                    .h(6.0)
+                    .bg(Color::rgb8(20, 90, 220)),
+            )
+            .child(
+                text("Ag")
+                    .absolute()
+                    .left(2.0)
+                    .top(10.0)
+                    .text_sm()
+                    .text_color(Color::rgb8(10, 10, 10)),
+            );
+        if self.rotated {
+            content.rotate_degrees(180.0)
+        } else {
+            content
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_rotation_carries_glyphon_text_with_its_parent() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(32.0, 24.0),
+            HalfTurnVisualView { rotated: false },
+        )
+        .unwrap();
+    let upright = cx
+        .visual(view.window_handle())
+        .unwrap()
+        .capture_screenshot()
+        .unwrap();
+
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(32.0, 24.0),
+            HalfTurnVisualView { rotated: true },
+        )
+        .unwrap();
+    let rotated = cx
+        .visual(view.window_handle())
+        .unwrap()
+        .capture_screenshot()
+        .unwrap();
+
+    // A half turn about the centre of a full-window group maps every pixel centre onto another
+    // pixel centre, so the rotated capture must be the point reflection of the upright one. Text
+    // is rasterized by Glyphon into the group texture, so it travels with the shapes.
+    let (width, height) = (rotated.width(), rotated.height());
+    let mut differing = 0_u64;
+    for y in 0..height {
+        for x in 0..width {
+            let expected = upright.pixel(width - 1 - x, height - 1 - y).unwrap();
+            let actual = rotated.pixel(x, y).unwrap();
+            if (0..4).any(|channel| actual[channel].abs_diff(expected[channel]) > 12) {
+                differing += 1;
+            }
+        }
+    }
+    assert!(
+        differing <= u64::from(width + height),
+        "{differing} of {} pixels differ after a half turn",
+        width * height
+    );
+    // The text really was drawn: below the blue rectangle the upright capture still has dark
+    // glyph pixels, so the comparison above covered rasterized text and not only shapes.
+    let dark_glyph_pixels = (20..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .filter(|(x, y)| upright.pixel(*x, *y).unwrap()[0] < 200)
+        .count();
+    assert!(
+        dark_glyph_pixels > 0,
+        "the upright capture has no dark text pixels below the shape"
+    );
+}
+
+#[cfg(target_os = "macos")]
+struct BlurVisualView {
+    radius: f32,
+}
+
+#[cfg(target_os = "macos")]
+impl View for BlurVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::WHITE).child(
+            div()
+                .id("blurred")
+                .absolute()
+                .left(0.0)
+                .top(0.0)
+                .w(20.0)
+                .h(40.0)
+                .bg(Color::BLACK)
+                .blur(self.radius),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_subtree_blur_softens_an_edge_over_a_bounded_support() {
+    let sample = |radius: f32| {
+        let (mut cx, view) = Application::new()
+            .into_test_context(
+                WindowOptions::default().size(40.0, 40.0),
+                BlurVisualView { radius },
+            )
+            .unwrap();
+        cx.visual(view.window_handle())
+            .unwrap()
+            .capture_screenshot()
+            .unwrap()
+    };
+    let sharp = sample(0.0);
+    // A hard edge: black up to x = 20 logical (40 physical), white after it.
+    assert_pixel_near(&sharp, 38, 40, [0, 0, 0, 255]);
+    assert_pixel_near(&sharp, 42, 40, [255, 255, 255, 255]);
+
+    let blurred = sample(3.0);
+    let left = blurred.pixel(38, 40).unwrap()[0];
+    let right = blurred.pixel(42, 40).unwrap()[0];
+    assert!(
+        left > 8 && right < 247,
+        "the blurred edge is still hard: left {left}, right {right}"
+    );
+    assert!(left < right, "the blur must brighten towards the outside");
+    // Far outside the support the field is untouched.
+    assert_pixel_near(&blurred, 78, 40, [255, 255, 255, 255]);
+}
+
+#[cfg(target_os = "macos")]
+struct DropShadowVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for DropShadowVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::WHITE).child(
+            div()
+                .id("card")
+                .absolute()
+                .left(8.0)
+                .top(8.0)
+                .w(16.0)
+                .h(16.0)
+                .bg(Color::rgb8(0, 0, 200))
+                .drop_shadow(6.0, 6.0, 0.0, Color::rgb8(0, 160, 0)),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_drop_shadow_follows_the_painted_alpha_behind_the_subtree() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(40.0, 40.0),
+            DropShadowVisualView,
+        )
+        .unwrap();
+    let snapshot = cx
+        .visual(view.window_handle())
+        .unwrap()
+        .capture_screenshot()
+        .unwrap();
+    // The element itself is unchanged where it covers the shadow.
+    assert_pixel_near(&snapshot, 32, 32, [0, 0, 200, 255]);
+    // The offset, unblurred silhouette is painted behind it.
+    assert_pixel_near(&snapshot, 56, 56, [0, 160, 0, 255]);
+    // Neither the element nor its shadow leaks above and to the left.
+    assert_pixel_near(&snapshot, 8, 8, [255, 255, 255, 255]);
+}
+
+#[cfg(target_os = "macos")]
+struct BackdropVisualView {
+    radius: f32,
+}
+
+#[cfg(target_os = "macos")]
+impl View for BackdropVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .bg(Color::WHITE)
+            .child(
+                div()
+                    .absolute()
+                    .left(0.0)
+                    .top(0.0)
+                    .w(20.0)
+                    .h(40.0)
+                    .bg(Color::BLACK),
+            )
+            .child(
+                div()
+                    .id("glass")
+                    .absolute()
+                    .left(10.0)
+                    .top(10.0)
+                    .w(20.0)
+                    .h(20.0)
+                    .backdrop_blur(self.radius),
+            )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_backdrop_blur_softens_only_what_is_painted_behind_it() {
+    let sample = |radius: f32| {
+        let (mut cx, view) = Application::new()
+            .into_test_context(
+                WindowOptions::default().size(40.0, 40.0),
+                BackdropVisualView { radius },
+            )
+            .unwrap();
+        cx.visual(view.window_handle())
+            .unwrap()
+            .capture_screenshot()
+            .unwrap()
+    };
+    let plain = sample(0.0);
+    assert_pixel_near(&plain, 38, 40, [0, 0, 0, 255]);
+    assert_pixel_near(&plain, 42, 40, [255, 255, 255, 255]);
+
+    let frosted = sample(3.0);
+    let left = frosted.pixel(38, 40).unwrap()[0];
+    let right = frosted.pixel(42, 40).unwrap()[0];
+    assert!(
+        left > 8 && right < 247,
+        "the backdrop edge is still hard: left {left}, right {right}"
+    );
+    // Outside the element's own box the backdrop is untouched, even inside the blur support.
+    assert_pixel_near(&frosted, 38, 8, [0, 0, 0, 255]);
+    assert_pixel_near(&frosted, 42, 8, [255, 255, 255, 255]);
+}
+
+#[cfg(target_os = "macos")]
+struct BlendVisualView {
+    blend: crate::BlendMode,
+}
+
+#[cfg(target_os = "macos")]
+impl View for BlendVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::rgb8(128, 128, 128)).child(
+            div()
+                .id("blended")
+                .absolute()
+                .left(0.0)
+                .top(0.0)
+                .w(20.0)
+                .h(20.0)
+                .bg(Color::rgb8(64, 192, 255))
+                .blend_mode(self.blend),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_blend_modes_evaluate_the_separable_css_formulas() {
+    let sample = |blend: crate::BlendMode| {
+        let (mut cx, view) = Application::new()
+            .into_test_context(
+                WindowOptions::default().size(40.0, 40.0),
+                BlendVisualView { blend },
+            )
+            .unwrap();
+        cx.visual(view.window_handle())
+            .unwrap()
+            .capture_screenshot()
+            .unwrap()
+            .pixel(20, 20)
+            .unwrap()
+    };
+    // The source and the backdrop, in encoded sRGB, are (64, 192, 255) over (128, 128, 128).
+    let expect = |mode: crate::BlendMode, blend: fn(f32, f32) -> f32| {
+        let actual = sample(mode);
+        for (channel, source) in [64.0_f32, 192.0, 255.0].into_iter().enumerate() {
+            let source = srgb_to_linear(source / 255.0);
+            let backdrop = srgb_to_linear(128.0 / 255.0);
+            let expected = (linear_to_srgb(blend(source, backdrop)) * 255.0).round() as i32;
+            assert!(
+                i32::from(actual[channel]).abs_diff(expected) <= 10,
+                "{mode:?} channel {channel} is {} not about {expected}",
+                actual[channel]
+            );
+        }
+    };
+    expect(crate::BlendMode::Normal, |source, _| source);
+    expect(crate::BlendMode::Multiply, |source, backdrop| {
+        source * backdrop
+    });
+    expect(crate::BlendMode::Screen, |source, backdrop| {
+        source + backdrop - source * backdrop
+    });
+    expect(crate::BlendMode::Darken, |source, backdrop| {
+        source.min(backdrop)
+    });
+    expect(crate::BlendMode::Lighten, |source, backdrop| {
+        source.max(backdrop)
+    });
+    expect(crate::BlendMode::Difference, |source, backdrop| {
+        (source - backdrop).abs()
+    });
+    expect(crate::BlendMode::Exclusion, |source, backdrop| {
+        source + backdrop - 2.0 * source * backdrop
+    });
+    let hard_light = |source: f32, backdrop: f32| {
+        if source <= 0.5 {
+            2.0 * source * backdrop
+        } else {
+            1.0 - 2.0 * (1.0 - source) * (1.0 - backdrop)
+        }
+    };
+    expect(crate::BlendMode::HardLight, hard_light);
+    // Overlay is hard light with the operands swapped.
+    expect(crate::BlendMode::Overlay, |source, backdrop| {
+        if backdrop <= 0.5 {
+            2.0 * source * backdrop
+        } else {
+            1.0 - 2.0 * (1.0 - source) * (1.0 - backdrop)
+        }
+    });
+    expect(crate::BlendMode::ColorDodge, |source, backdrop| {
+        if backdrop <= 0.0 {
+            0.0
+        } else if source >= 1.0 {
+            1.0
+        } else {
+            (backdrop / (1.0 - source)).min(1.0)
+        }
+    });
+    expect(crate::BlendMode::ColorBurn, |source, backdrop| {
+        if backdrop >= 1.0 {
+            1.0
+        } else if source <= 0.0 {
+            0.0
+        } else {
+            1.0 - ((1.0 - backdrop) / source).min(1.0)
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn srgb_to_linear(value: f32) -> f32 {
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn linear_to_srgb(value: f32) -> f32 {
+    let value = value.clamp(0.0, 1.0);
+    if value <= 0.003_130_8 {
+        value * 12.92
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct SubtreeFilterVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for SubtreeFilterVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::WHITE).child(
+            div()
+                .id("filtered")
+                .absolute()
+                .left(0.0)
+                .top(0.0)
+                .w(20.0)
+                .h(20.0)
+                .bg(Color::rgb8(220, 20, 20))
+                .filters([crate::Filter::Grayscale(1.0), crate::Filter::Blur(0.001)]),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_color_filters_reach_a_whole_subtree_once_it_is_a_group() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(40.0, 40.0),
+            SubtreeFilterVisualView,
+        )
+        .unwrap();
+    let snapshot = cx
+        .visual(view.window_handle())
+        .unwrap()
+        .capture_screenshot()
+        .unwrap();
+    // A container background is not raster content, so without a group `grayscale` would not touch
+    // it. The blur opens a group, and the whole chain then applies to the composited subtree.
+    let pixel = snapshot.pixel(20, 20).unwrap();
+    assert!(
+        pixel[0].abs_diff(pixel[1]) <= 4 && pixel[1].abs_diff(pixel[2]) <= 4,
+        "the subtree was not desaturated: {pixel:?}"
+    );
+    assert!(pixel[0] < 200, "the subtree lost its content: {pixel:?}");
+}
+
+/// A pointer target transformed inside its own compositing group.
+///
+/// Layout keeps the element at `(0, 0, 20, 10)` whatever the transform is. Paint and hit testing
+/// both follow the transform, so pointer positions must be inverse-mapped through it.
+#[cfg(target_os = "macos")]
+struct TransformedPointerView {
+    scaled: bool,
+}
+
+#[cfg(target_os = "macos")]
+impl View for TransformedPointerView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let target = div()
+            .id("target")
+            .absolute()
+            .left(0.0)
+            .top(0.0)
+            .w(20.0)
+            .h(10.0)
+            .bg(Color::rgb8(20, 20, 200))
+            .cursor_pointer()
+            .hover(|style| style.bg(Color::rgb8(200, 20, 20)));
+        div().size_full().child(if self.scaled {
+            target.scale_uniform(2.0)
+        } else {
+            target.rotate_degrees(90.0)
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn pointer_positions_are_inverse_mapped_through_a_rotated_subtree() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(64.0, 48.0),
+            TransformedPointerView { scaled: false },
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+
+    // Layout is untouched: the element still reports its declared box.
+    visual
+        .assert_element_bounds("target", Rect::new(0.0, 0.0, 20.0, 10.0), 0.0)
+        .unwrap();
+
+    // A quarter turn about the centre `(10, 5)` paints the target at `(5, -5, 10, 20)`.
+    // Inside the rotated box but outside the layout box.
+    assert_eq!(
+        visual.cursor_style_at(Point::new(10.0, 12.0)).unwrap(),
+        Some(CursorStyle::PointingHand)
+    );
+    // Inside the layout box but outside the rotated box.
+    assert_eq!(visual.cursor_style_at(Point::new(18.0, 5.0)).unwrap(), None);
+    // The fixed point of the rotation is inside both.
+    assert_eq!(
+        visual.cursor_style_at(Point::new(10.0, 5.0)).unwrap(),
+        Some(CursorStyle::PointingHand)
+    );
+
+    // Hover follows the painted geometry too, and repaints the element's hover fill in place.
+    assert!(visual.move_pointer(Point::new(10.0, 12.0)).unwrap());
+    let hovered = visual.capture_screenshot().unwrap();
+    assert_pixel_near(&hovered, 20, 24, [200, 20, 20, 255]);
+    assert!(visual.move_pointer(Point::new(18.0, 5.0)).unwrap());
+    let unhovered = visual.capture_screenshot().unwrap();
+    assert_pixel_near(&unhovered, 20, 24, [20, 20, 200, 255]);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn pointer_positions_are_inverse_mapped_through_a_scaled_subtree() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(64.0, 48.0),
+            TransformedPointerView { scaled: true },
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    // Doubling about the centre `(10, 5)` grows the painted target to `(-10, -5, 40, 20)`.
+    assert_eq!(
+        visual.cursor_style_at(Point::new(28.0, 12.0)).unwrap(),
+        Some(CursorStyle::PointingHand)
+    );
+    assert_eq!(
+        visual.cursor_style_at(Point::new(34.0, 12.0)).unwrap(),
+        None
+    );
+    assert_eq!(
+        visual.cursor_style_at(Point::new(10.0, 18.0)).unwrap(),
+        None
+    );
+}
+
+#[cfg(target_os = "macos")]
+struct NestedGroupVisualView;
+
+#[cfg(target_os = "macos")]
+impl View for NestedGroupVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .bg(Color::WHITE)
+            .child(
+                div()
+                    .absolute()
+                    .left(0.0)
+                    .top(0.0)
+                    .w(10.0)
+                    .h(10.0)
+                    .bg(Color::BLACK)
+                    .blur(1.0),
+            )
+            .rotate_degrees(180.0)
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn visual_nested_groups_compose_recursively() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(40.0, 40.0),
+            NestedGroupVisualView,
+        )
+        .unwrap();
+    let snapshot = cx
+        .visual(view.window_handle())
+        .unwrap()
+        .capture_screenshot()
+        .unwrap();
+    // The blurred child composites into its rotated parent's texture, and the parent's half turn
+    // then carries it to the opposite corner.
+    assert!(
+        snapshot.pixel(70, 70).unwrap()[0] < 128,
+        "the nested group did not land in the far corner: {:?}",
+        snapshot.pixel(70, 70)
+    );
+    assert_pixel_near(&snapshot, 10, 10, [255, 255, 255, 255]);
+}

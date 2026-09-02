@@ -5,6 +5,41 @@ All notable user-facing changes to QuickGUI are recorded here.
 ## Unreleased
 
 ### Framework
+- Added compositing layers: an element that declares a transform beyond a pure translation, a
+  subtree blur or drop shadow, a backdrop effect, or a non-normal blend mode now renders its whole
+  subtree — Glyphon text included — into a bounded offscreen texture and composites it back through
+  the declared effect. `Scene` records the group, keeps its descendants' `z_index` layers inside it,
+  and places the composite in its parent's cross-primitive paint order; the new
+  `src/renderer/compositor.rs` owns the pass sequencing and both the window renderer and the
+  headless visual-test renderer drive it, so screenshot tests cover the production path.
+- Added `Transform2D` (`translate`, `scale`, `scale_uniform`, `rotate_degrees`, `rotate_radians`,
+  `skew_degrees`, `then`, `compose`, `inverse`, `apply`, `transform_rect`, `around`, `lerp`) with
+  `Element::transform`, `transform_origin`, `translate`, `rotate_degrees`, `scale`, `scale_uniform`,
+  and `skew_degrees`, mirrored on `ElementStateStyle` so hover, active, focus, disabled, invalid,
+  dragging, and drag-over states can move a subtree with no relayout. Transforms are paint-only:
+  layout, measurement, and reported element bounds are unchanged, and pointer positions are
+  inverse-mapped through the accumulated group transform so clicks, hover, drag, and cursor
+  declarations follow the painted pixels. A pure translation stays a paint offset and allocates no
+  layer.
+- Added `Filter::Blur` and `Filter::DropShadow` with `Element::blur` and `Element::drop_shadow`: a
+  separable Gaussian over the composited subtree bounded by the new `MAX_BLUR_RADIUS` (64 logical
+  pixels), and a shadow that follows the subtree's real painted alpha rather than its element box.
+  An element's existing colour-filter chain now applies to the whole subtree once anything else has
+  opened a group, and stays the cheap per-primitive colour matrix when nothing has.
+- Added `Element::backdrop_blur` and `Element::backdrop_filter`: the region already painted behind
+  the element is copied, filtered, and drawn clipped to its rounded rectangle through the element's
+  own transform. The window surface is configured with `COPY_SRC` when the adapter advertises it;
+  without it the element paints without its backdrop and the frame reports it.
+- Added `Element::blend_mode` and `BlendMode` (`Normal`, `Multiply`, `Screen`, `Darken`, `Lighten`,
+  `Overlay`, `Difference`, `Exclusion`, `HardLight`, `ColorDodge`, `ColorBurn`). Every mode is
+  exact: `Normal` and `Screen` through fixed-function blend state, the rest by evaluating the
+  separable Porter-Duff form in premultiplied colour from a bounded destination copy.
+- Added the compositing bounds `MAX_LAYERS_PER_FRAME` (8), `MAX_LAYER_DEPTH` (4), and
+  `MAX_LAYER_TEXTURE_BYTES` (128 MiB per window, least-recently-used eviction). Exceeding any of
+  them paints the subtree directly into its parent without the effect and counts it in the new
+  `RenderStats::skipped_layer_effects`, alongside `compositing_layers`, `layer_passes`,
+  `blur_passes`, and `layer_texture_bytes`. A scene that declares no layer effect keeps its former
+  cost exactly: no pipeline compiled, no texture allocated, no extra pass recorded.
 - Added a bounded `CrashReporter` behind the default `crash-reporter` feature: a panic hook that
   writes a size-limited JSON report atomically, an async-signal-safe native fatal-fault path
   (`SIGSEGV`/`SIGBUS`/`SIGILL`/`SIGFPE`/`SIGABRT` through `sigaction`, `SetUnhandledExceptionFilter`

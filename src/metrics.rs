@@ -47,6 +47,17 @@ pub struct RenderStats {
     /// Glyphon renderers retained for painter-order-separated text batches.
     pub retained_text_renderers: usize,
     pub cached_text_areas: usize,
+    /// Compositing groups drawn from their own offscreen texture this frame.
+    pub compositing_layers: usize,
+    /// Offscreen group passes recorded this frame.
+    pub layer_passes: usize,
+    /// Separable Gaussian passes recorded for subtree, drop-shadow, and backdrop blurs.
+    pub blur_passes: usize,
+    /// Offscreen compositing bytes retained by this window, bounded by
+    /// [`MAX_LAYER_TEXTURE_BYTES`](crate::MAX_LAYER_TEXTURE_BYTES).
+    pub layer_texture_bytes: u64,
+    /// Declared layer effects painted without their effect because a bound was reached.
+    pub skipped_layer_effects: usize,
 }
 
 /// Lightweight CPU-side frame telemetry. It is intentionally allocation-free.

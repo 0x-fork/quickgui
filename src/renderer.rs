@@ -23,11 +23,11 @@ use unicode_segmentation::UnicodeSegmentation;
 use wgpu::{
     Adapter, BindGroup, BufferAddress, ColorTargetState, CommandEncoderDescriptor,
     CompositeAlphaMode, Device, DeviceDescriptor, FragmentState, Instance, InstanceDescriptor,
-    LoadOp, MultisampleState, Operations, PipelineCompilationOptions, PresentMode, PrimitiveState,
-    PrimitiveTopology, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, RequestAdapterOptions, ShaderStages, Surface, SurfaceColorSpace,
-    SurfaceConfiguration, TextureFormat, TextureUsages, TextureViewDescriptor, VertexAttribute,
-    VertexBufferLayout, VertexFormat, VertexState, VertexStepMode, util::DeviceExt,
+    MultisampleState, PipelineCompilationOptions, PresentMode, PrimitiveState, PrimitiveTopology,
+    Queue, RenderPipeline, RenderPipelineDescriptor, RequestAdapterOptions, ShaderStages, Surface,
+    SurfaceColorSpace, SurfaceConfiguration, TextureFormat, TextureUsages, TextureViewDescriptor,
+    VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
+    util::DeviceExt,
 };
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
@@ -273,6 +273,7 @@ pub(crate) struct GpuRenderer {
     composition_active: bool,
     #[cfg(target_os = "macos")]
     overlay_active: bool,
+    compositor: Compositor,
     window: Arc<Window>,
 }
 
@@ -284,12 +285,16 @@ struct OverlaySurface {
     metal_layer: MetalLayer,
 }
 
+mod compositor;
 mod gpu;
 #[cfg(any(test, feature = "test-support"))]
 mod offscreen;
 mod text_layout;
 mod text_system;
 
+#[cfg(test)]
+pub(crate) use compositor::CompositeStats;
+pub(crate) use compositor::{CompositeFrame, Compositor, SceneRenderers};
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use offscreen::OffscreenRenderer;
 use text_layout::*;
@@ -543,14 +548,14 @@ const SHADOW_SIGMA_PER_BLUR_RADIUS: f32 = 0.5;
 const SHADOW_MARGIN_SIGMAS: f32 = 3.0;
 
 #[derive(Clone)]
-struct ShapePipeline {
+pub(crate) struct ShapePipeline {
     pipeline: Arc<RenderPipeline>,
     bind_group_layout: Arc<wgpu::BindGroupLayout>,
     gradient_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     format: TextureFormat,
 }
 
-struct ShapeRenderer {
+pub(crate) struct ShapeRenderer {
     pipeline: ShapePipeline,
     uniform_buffer: wgpu::Buffer,
     bind_group: BindGroup,
@@ -906,7 +911,7 @@ impl ShapeRenderer {
         (quads, shadows, self.batches.len())
     }
 
-    fn render_order<'pass>(
+    pub(crate) fn render_order<'pass>(
         &'pass self,
         pass: &mut wgpu::RenderPass<'pass>,
         layer: usize,
@@ -1623,7 +1628,7 @@ struct SharedTextEntry {
     last_used_frame: u64,
 }
 
-struct TextSystem {
+pub(crate) struct TextSystem {
     font_system: SharedFontSystem,
     cache: Cache,
     swash_cache: SwashCache,

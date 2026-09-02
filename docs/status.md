@@ -4,6 +4,14 @@
 
 Implemented now:
 
+- Compositing layers: `Element::transform` / `rotate_degrees` / `scale` / `skew_degrees` with
+  `transform_origin` and state-style overrides, `Filter::Blur` and `Filter::DropShadow` over a whole
+  subtree, `backdrop_blur` / `backdrop_filter`, and `blend_mode` with eleven exact separable CSS
+  blend modes. A qualifying element renders its subtree — Glyphon text included — into a retained
+  offscreen texture and composites it back; pointer input is inverse-mapped through the accumulated
+  transform. Bounded by `MAX_LAYERS_PER_FRAME`, `MAX_LAYER_DEPTH`, `MAX_LAYER_TEXTURE_BYTES`, and
+  `MAX_BLUR_RADIUS`, with over-budget elements painting without their effect and reporting it in
+  `RenderStats::skipped_layer_effects`; a scene with no layer effects keeps its former cost exactly.
 - JavaScript bindings for the unstyled selection, tab, disclosure, and field descriptors: Solid
   `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`, `Accordion`, `Field`, and
   `Fieldset` compound parts declared ahead of time as bounded protocol properties, so the Rust core

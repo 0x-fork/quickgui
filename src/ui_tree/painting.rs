@@ -83,6 +83,99 @@ pub(super) fn push_background_image(
     }
 }
 
+/// The transform an element declares for this frame, and the fraction of its box it acts around.
+///
+/// Interaction, focus, and validation states override the element's own transform with the same
+/// precedence the paint styles use. This is resolved before the element's box is recorded so a
+/// whole subtree translation can be folded into that box instead of allocating a group texture.
+pub(super) fn resolved_transform(
+    element: &Element,
+    hovered: &HashSet<ElementId>,
+    pressed: Option<ElementId>,
+    dragging: Option<ElementId>,
+    drag_over: Option<ElementId>,
+    focused: Option<ElementId>,
+) -> (Transform2D, Point) {
+    let empty = ElementStateStyle::default();
+    let interaction = if drag_over == Some(element.runtime_id) {
+        &element.drag_over
+    } else if dragging == Some(element.runtime_id) {
+        &element.dragging
+    } else if pressed == Some(element.runtime_id) {
+        &element.active
+    } else if hovered.contains(&element.runtime_id) {
+        &element.hover
+    } else {
+        &empty
+    };
+    let focus = if focused == Some(element.runtime_id) {
+        &element.focus
+    } else {
+        &empty
+    };
+    let disabled = if element.accessibility.disabled {
+        &element.disabled_style
+    } else {
+        &empty
+    };
+    let invalid = if element.accessibility.invalid {
+        &element.invalid_style
+    } else {
+        &empty
+    };
+    let transform = disabled
+        .transform
+        .or(interaction.transform)
+        .or(invalid.transform)
+        .or(focus.transform)
+        .unwrap_or(element.visual.transform);
+    let origin = disabled
+        .transform_origin
+        .or(interaction.transform_origin)
+        .or(invalid.transform_origin)
+        .or(focus.transform_origin)
+        .unwrap_or(element.visual.transform_origin);
+    (transform, origin)
+}
+
+/// The window-space point a transform origin fraction names inside an element's border box.
+pub(super) fn transform_origin_point(bounds: Rect, origin: Point) -> Point {
+    Point::new(
+        bounds.x + bounds.width * origin.x,
+        bounds.y + bounds.height * origin.y,
+    )
+}
+
+/// The layer effects an element declares, in window coordinates.
+///
+/// `transform` is the element's own transform expressed around its window-space origin; ancestors
+/// contribute their own when their groups composite.
+pub(super) fn resolved_layer_effects(
+    element: &Element,
+    bounds: Rect,
+    corners: Corners,
+    transform: Transform2D,
+) -> LayerEffects {
+    let filters = element.visual.filters;
+    let mut effects = LayerEffects {
+        transform,
+        blur: filters.blur(),
+        drop_shadow: filters.drop_shadow(),
+        color_matrix: ColorMatrix::IDENTITY,
+        backdrop_blur: element.visual.backdrop.blur(),
+        backdrop_matrix: element.visual.backdrop.color_matrix(),
+        backdrop_corners: corners,
+        blend: element.visual.blend,
+    };
+    // A colour chain stays a cheap per-primitive matrix until something else already forces an
+    // offscreen group; then it applies to the whole subtree, as CSS specifies.
+    if effects.needs_group() {
+        effects.color_matrix = filters.color_matrix();
+    }
+    let _ = bounds;
+    effects
+}
+
 fn has_visible_border(widths: Insets) -> bool {
     widths.top > 0.0 || widths.right > 0.0 || widths.bottom > 0.0 || widths.left > 0.0
 }
@@ -186,7 +279,11 @@ pub(super) fn collect_inspector_nodes(
     } else {
         element.z_index.unwrap_or(0)
     };
-    let layer = PaintLayerKey { plane, z_index };
+    let layer = PaintLayerKey {
+        plane,
+        z_index,
+        group: parent_layer.group,
+    };
     let source = *source_order;
     *source_order = source.saturating_add(1);
     let clip = if element.portal {
@@ -246,6 +343,7 @@ pub(super) fn element_hit_region(
     clip: Rect,
     order: PaintOrder,
     selectable_text: bool,
+    transform: Option<Transform2D>,
 ) -> Option<HitRegion> {
     if !(element.clickable
         || element.pointer_listener
@@ -272,6 +370,7 @@ pub(super) fn element_hit_region(
     }
 
     Some(HitRegion {
+        transform,
         id: element.runtime_id,
         bounds: expand_hit_bounds(bounds, element.hit_slop),
         clip,
@@ -308,6 +407,11 @@ pub(super) fn collect_layout_hit_regions(
     scroll_offsets: &mut HashMap<ElementId, Vector>,
     selectable_text_indices: &HashMap<ElementId, usize>,
     hit_regions: &mut Vec<HitRegion>,
+    hovered: &HashSet<ElementId>,
+    pressed: Option<ElementId>,
+    dragging: Option<ElementId>,
+    drag_over: Option<ElementId>,
+    focused: Option<ElementId>,
     parent_origin: LayoutFrame,
     parent_clip: Rect,
     viewport: Rect,
@@ -346,6 +450,35 @@ pub(super) fn collect_layout_hit_regions(
     } else {
         natural
     };
+    // Mirror the paint path: a pure translation moves the painted box, anything else transforms
+    // it through a compositing group whose accumulated matrix the hit region carries.
+    let (declared_transform, transform_origin) =
+        resolved_transform(element, hovered, pressed, dragging, drag_over, focused);
+    let window_transform =
+        declared_transform.around(transform_origin_point(bounds, transform_origin));
+    let translated = window_transform.is_translation();
+    let bounds = if translated {
+        bounds.translate(Vector::new(window_transform.tx, window_transform.ty))
+    } else {
+        bounds
+    };
+    let opens_group = !translated
+        && resolved_layer_effects(
+            element,
+            bounds,
+            element
+                .visual
+                .corners(element.visual.radius)
+                .resolve(bounds.width, bounds.height),
+            window_transform,
+        )
+        .needs_group();
+    let group_transform = if opens_group {
+        parent_origin.transform.compose(window_transform)
+    } else {
+        parent_origin.transform
+    };
+    let hit_transform = (!group_transform.is_identity()).then_some(group_transform);
     let hit_bounds = expand_hit_bounds(bounds, element.hit_slop);
     let effective_parent_clip = if element.portal {
         viewport
@@ -368,7 +501,11 @@ pub(super) fn collect_layout_hit_regions(
     } else {
         element.z_index.unwrap_or(0)
     };
-    let layer = PaintLayerKey { plane, z_index };
+    let layer = PaintLayerKey {
+        plane,
+        z_index,
+        group: parent_layer.group,
+    };
     let order = PaintOrder {
         layer,
         source: *source_order,
@@ -381,6 +518,7 @@ pub(super) fn collect_layout_hit_regions(
         parent_clip,
         order,
         selectable_text_indices.contains_key(&element.runtime_id),
+        hit_transform,
     ) {
         hit_regions.push(region);
     }
@@ -420,7 +558,7 @@ pub(super) fn collect_layout_hit_regions(
         scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
     }
 
-    let child_origin = child_frame(
+    let mut child_origin = child_frame(
         element,
         layout,
         bounds,
@@ -428,6 +566,7 @@ pub(super) fn collect_layout_hit_regions(
         is_scrollable,
         parent_origin,
     );
+    child_origin.transform = group_transform;
     for child in &element.children {
         collect_layout_hit_regions(
             child,
@@ -436,6 +575,11 @@ pub(super) fn collect_layout_hit_regions(
             scroll_offsets,
             selectable_text_indices,
             hit_regions,
+            hovered,
+            pressed,
+            dragging,
+            drag_over,
+            focused,
             child_origin,
             child_clip,
             viewport,
@@ -514,6 +658,19 @@ pub(super) fn paint_element(
     } else {
         natural
     };
+    // A subtree transform never moves layout. A pure translation is folded into the painted box
+    // here — children, clips, and hit bounds follow it for free — while anything else opens a
+    // compositing group below.
+    let (declared_transform, transform_origin) =
+        resolved_transform(element, hovered, pressed, dragging, drag_over, focused);
+    let window_transform =
+        declared_transform.around(transform_origin_point(bounds, transform_origin));
+    let translated = window_transform.is_translation();
+    let bounds = if translated {
+        bounds.translate(Vector::new(window_transform.tx, window_transform.ty))
+    } else {
+        bounds
+    };
     element_bounds.insert(element.runtime_id, bounds);
     let hit_bounds = expand_hit_bounds(bounds, element.hit_slop);
 
@@ -541,7 +698,11 @@ pub(super) fn paint_element(
     } else {
         element.z_index.unwrap_or(0)
     };
-    let layer = PaintLayerKey { plane, z_index };
+    let layer = PaintLayerKey {
+        plane,
+        z_index,
+        group: parent_layer.group,
+    };
     let order = PaintOrder {
         layer,
         source: *source_order,
@@ -686,6 +847,39 @@ pub(super) fn paint_element(
         .corner_radii
         .unwrap_or(Corners::all(radius))
         .resolve(bounds.width, bounds.height);
+    // Everything this element declares that cannot be one more instanced primitive opens a
+    // compositing group. Its subtree — including Glyphon text — renders into a bounded offscreen
+    // texture and is composited back through the transform, filters, and blend mode below. The
+    // scene refuses the group when a bound is already reached, in which case the subtree paints
+    // directly and without the effect.
+    let effects = resolved_layer_effects(
+        element,
+        bounds,
+        corners,
+        if translated {
+            Transform2D::IDENTITY
+        } else {
+            window_transform
+        },
+    );
+    let group: Option<GroupHandle> = scene.begin_group(layer, bounds, parent_clip, effects);
+    let layer = group.map_or(layer, |handle| handle.content_key());
+    let order = PaintOrder {
+        layer,
+        source: order.source,
+    };
+    let group_transform = match &group {
+        Some(_) => parent_origin.transform.compose(window_transform),
+        None => parent_origin.transform,
+    };
+    let hit_transform = (!group_transform.is_identity()).then_some(group_transform);
+    // A group applies the element's colour chain to the whole composited subtree; without one the
+    // chain stays the cheap per-primitive matrix it has always been.
+    let raster_color_matrix = if group.is_some() {
+        ColorMatrix::IDENTITY
+    } else {
+        element.visual.filters.color_matrix()
+    };
     push_element_shadows(scene, layer, bounds, corners, parent_clip, shadows, false);
     if fill.a > 0.0
         || target_gradient.is_some()
@@ -709,7 +903,7 @@ pub(super) fn paint_element(
             bounds,
             corners,
             parent_clip,
-            element.visual.filters.color_matrix(),
+            raster_color_matrix,
             background_image,
         );
     }
@@ -738,6 +932,7 @@ pub(super) fn paint_element(
         parent_clip,
         order,
         selectable_document_index.is_some(),
+        hit_transform,
     ) {
         hit_regions.push(region);
     }
@@ -916,7 +1111,7 @@ pub(super) fn paint_element(
                         .source_uv(fitted.source_uv)
                         .mask(bounds)
                         .radius(element.visual.corners(element.visual.radius).maximum())
-                        .color_matrix(element.visual.filters.color_matrix())
+                        .color_matrix(raster_color_matrix)
                         .clip(clip),
                 );
             }
@@ -1278,6 +1473,9 @@ pub(super) fn paint_element(
         match parent_clip.intersection(bounds) {
             Some(clip) => clip,
             None => {
+                if let Some(group) = group {
+                    scene.end_group(group);
+                }
                 scene.restore_opacity(previous_opacity);
                 return Ok(());
             }
@@ -1312,7 +1510,7 @@ pub(super) fn paint_element(
         scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
     }
 
-    let child_origin = child_frame(
+    let mut child_origin = child_frame(
         element,
         layout,
         bounds,
@@ -1320,6 +1518,7 @@ pub(super) fn paint_element(
         scroll_max_offset.is_some(),
         parent_origin,
     );
+    child_origin.transform = group_transform;
     for child in &element.children {
         paint_element(
             child,
@@ -1442,6 +1641,9 @@ pub(super) fn paint_element(
                 .unwrap_or_default(),
             paint_time,
         );
+    }
+    if let Some(group) = group {
+        scene.end_group(group);
     }
     scene.restore_opacity(previous_opacity);
     Ok(())

@@ -17,6 +17,9 @@ pub(crate) struct OffscreenRenderer {
     image: ImageRenderer,
     svg: SvgRenderer,
     text: TextSystem,
+    compositor: Compositor,
+    #[cfg(test)]
+    last_composite: CompositeStats,
     #[cfg(test)]
     last_reshaped_text_areas: usize,
 }
@@ -66,6 +69,9 @@ impl OffscreenRenderer {
             image,
             svg,
             text,
+            compositor: Compositor::default(),
+            #[cfg(test)]
+            last_composite: CompositeStats::default(),
             #[cfg(test)]
             last_reshaped_text_areas: 0,
         })
@@ -74,6 +80,17 @@ impl OffscreenRenderer {
     #[cfg(test)]
     pub(crate) fn last_reshaped_text_areas(&self) -> usize {
         self.last_reshaped_text_areas
+    }
+
+    /// Compositing telemetry for the most recent [`Self::render_to_snapshot`].
+    #[cfg(test)]
+    pub(crate) fn last_composite(&self) -> CompositeStats {
+        self.last_composite
+    }
+
+    #[cfg(test)]
+    pub(crate) fn compositor(&self) -> &Compositor {
+        &self.compositor
     }
 
     pub(crate) fn render_to_snapshot(
@@ -204,39 +221,38 @@ impl OffscreenRenderer {
                 label: Some("quickgui visual-test encoder"),
             });
         {
-            let clear = scene.background();
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("quickgui visual-test pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(wgpu::Color {
-                            r: clear.r as f64,
-                            g: clear.g as f64,
-                            b: clear.b as f64,
-                            a: clear.a as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
+            let renderers = SceneRenderers {
+                shapes: &self.shapes,
+                path: Some(&self.path),
+                custom_shader: Some(&self.custom_shader),
+                image: Some(&self.image),
+                svg: Some(&self.svg),
+                text: &self.text,
+            };
+            let _composite = self
+                .compositor
+                .render_scene(
+                    &self.device,
+                    &self.queue,
+                    &mut encoder,
+                    scene,
+                    &renderers,
+                    &view,
+                    Some(&texture),
+                    Some(scene.background()),
+                    CompositeFrame {
+                        width: target_width,
+                        height: target_height,
+                        scale: scale_factor,
+                        format: self.format,
+                        target_copyable: true,
+                        plane: None,
                     },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            for (layer, paint_layer) in scene.paint_layers().iter().enumerate() {
-                for order in 0..=paint_layer.max_order() {
-                    self.shapes.render_order(&mut pass, layer, order);
-                    self.path.render_order(&mut pass, layer, order);
-                    self.custom_shader.render_order(&mut pass, layer, order);
-                    self.image.render_order(&mut pass, layer, order);
-                    self.svg.render_order(&mut pass, layer, order);
-                    self.text
-                        .render_order(&mut pass, layer, order)
-                        .map_err(|error| crate::VisualTestError::Render(error.to_string()))?;
-                }
+                )
+                .map_err(|error| crate::VisualTestError::Render(error.to_string()))?;
+            #[cfg(test)]
+            {
+                self.last_composite = _composite;
             }
         }
         encoder.copy_texture_to_buffer(

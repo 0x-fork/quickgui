@@ -1,20 +1,23 @@
-//! Background gradients, per-corner radii, dashed and dotted borders, outlines, and raster
-//! backgrounds.
+//! Background gradients, per-corner radii, dashed and dotted borders, outlines, raster
+//! backgrounds, and compositing layers.
 //!
-//! Everything here is analytic paint state: no element in this example creates an offscreen
-//! texture, a gradient ramp cache, a timer, or an extra draw call, and the window sleeps as soon
-//! as the pointer stops moving.
+//! The first rows are analytic paint state: no element there creates an offscreen texture, a
+//! gradient ramp cache, a timer, or an extra draw call. The compositing rows deliberately do the
+//! opposite — every transform, subtree filter, backdrop effect, and blend mode there renders its
+//! subtree into a bounded offscreen texture and composites it back. Either way the window sleeps
+//! as soon as the pointer stops moving.
 
 use quickgui::{
-    Application, Color, ColorStops, Corners, Element, Filter, Gradient, GradientCenter,
+    Application, BlendMode, Color, ColorStops, Corners, Element, Filter, Gradient, GradientCenter,
     GradientColorSpace, GradientDirection, Image, IntoElement, RadialGradientExtent,
-    RadialGradientShape, View, ViewContext, WindowOptions, div, linear_color_stop, text,
+    RadialGradientShape, Transform2D, View, ViewContext, WindowOptions, div, linear_color_stop,
+    text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
     Application::new().run(|cx| {
         cx.open_window(
-            WindowOptions::new("QuickGUI — gradients, corners, borders, outlines")
+            WindowOptions::new("QuickGUI — gradients, borders, filters, and compositing layers")
                 .size(1120.0, 860.0),
             EffectsDemo::new(),
         );
@@ -274,5 +277,142 @@ impl View for EffectsDemo {
                         .filters([Filter::Invert(1.0), Filter::Contrast(1.2)]),
                 ),
             ]))
+            .child(text("Compositing layers").text_lg().font_semibold())
+            .child(row([
+                card(
+                    "Rotate",
+                    "The whole subtree, text included, turns around its transform origin.",
+                    swatch()
+                        .rounded_lg()
+                        .bg(Color::rgb8(30, 64, 175))
+                        .rotate_degrees(-8.0)
+                        .items_center()
+                        .justify_center()
+                        .child(text("Tilted").text_color(Color::WHITE)),
+                ),
+                card(
+                    "Scale and skew",
+                    "Transforms never touch layout; the box keeps its declared size.",
+                    swatch()
+                        .rounded_lg()
+                        .bg(Color::rgb8(13, 148, 136))
+                        .transform_origin(0.0, 1.0)
+                        .transform(
+                            Transform2D::skew_degrees(10.0, 0.0).then(Transform2D::scale(0.9, 1.0)),
+                        ),
+                ),
+                card(
+                    "Hover transform",
+                    "State styles carry transforms, so a lift costs no relayout.",
+                    swatch()
+                        .id("hover-scale")
+                        .rounded_lg()
+                        .bg(Color::rgb8(120, 53, 15))
+                        .hover(|style| style.scale_uniform(1.12)),
+                ),
+                card(
+                    "Translate",
+                    "A pure translation is a paint offset and allocates no layer.",
+                    swatch()
+                        .rounded_lg()
+                        .bg(Color::rgb8(76, 29, 149))
+                        .translate(6.0, -6.0),
+                ),
+            ]))
+            .child(text("Subtree filters").text_lg().font_semibold())
+            .child(row([
+                card(
+                    "Blur",
+                    "A separable Gaussian over the composited subtree, bounded at 64 px.",
+                    swatch()
+                        .rounded_lg()
+                        .bg_linear_gradient(
+                            GradientDirection::ToRight,
+                            [Color::rgb8(244, 114, 182), Color::rgb8(56, 189, 248)],
+                        )
+                        .blur(6.0),
+                ),
+                card(
+                    "Drop shadow",
+                    "Follows the painted alpha, not the element box, so text casts a shadow.",
+                    swatch()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            text("Aa")
+                                .text_2xl()
+                                .font_bold()
+                                .text_color(Color::rgb8(250, 250, 250)),
+                        )
+                        .drop_shadow(3.0, 4.0, 6.0, Color::rgb8(56, 189, 248)),
+                ),
+                card(
+                    "Subtree color",
+                    "Once an element is a group its colour chain covers the whole subtree.",
+                    swatch()
+                        .rounded_lg()
+                        .bg(Color::rgb8(220, 38, 38))
+                        .items_center()
+                        .justify_center()
+                        .child(text("Grey").text_color(Color::rgb8(250, 250, 250)))
+                        .filters([Filter::Grayscale(1.0), Filter::Blur(0.5)]),
+                ),
+                card(
+                    "Backdrop blur",
+                    "Copies what is behind the element, blurs it, clips it to the rounded box.",
+                    swatch()
+                        .rounded_lg()
+                        .bg_conic_gradient(
+                            0.0,
+                            [
+                                Color::rgb8(248, 113, 113),
+                                Color::rgb8(56, 189, 248),
+                                Color::rgb8(248, 113, 113),
+                            ],
+                        )
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            div()
+                                .w(60.0)
+                                .h(40.0)
+                                .rounded_lg()
+                                .bg(Color::rgba8(255, 255, 255, 40))
+                                .backdrop_blur(8.0)
+                                .backdrop_filter([Filter::Saturate(1.6)]),
+                        ),
+                ),
+            ]))
+            .child(text("Blend modes").text_lg().font_semibold())
+            .child(row([
+                blend_card("Multiply", BlendMode::Multiply),
+                blend_card("Screen", BlendMode::Screen),
+                blend_card("Overlay", BlendMode::Overlay),
+                blend_card("Difference", BlendMode::Difference),
+            ]))
     }
+}
+
+/// One blend-mode swatch over a fixed two-tone backdrop.
+fn blend_card(title: &'static str, blend: BlendMode) -> Element {
+    card(
+        title,
+        "Evaluated exactly, in premultiplied colour, from a bounded destination copy.",
+        swatch()
+            .rounded_lg()
+            .bg_linear_gradient(
+                GradientDirection::ToRight,
+                [Color::rgb8(20, 20, 20), Color::rgb8(235, 235, 235)],
+            )
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .w(72.0)
+                    .h(48.0)
+                    .rounded_lg()
+                    .bg(Color::rgb8(64, 192, 255))
+                    .blend_mode(blend),
+            ),
+    )
 }

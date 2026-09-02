@@ -5,6 +5,7 @@ fn typed_drag_hits_skip_incompatible_targets_but_respect_pointer_blockers() {
     let mut tree = UiTree::new();
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let region = |id, source, target, blocks, order| HitRegion {
+        transform: None,
         id: ElementId::new(id),
         bounds,
         clip: bounds,
@@ -65,6 +66,7 @@ fn native_drop_snapshot_matches_typed_targets_predicates_and_blockers() {
     let mut tree = UiTree::new();
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let region = |id, pointer_listener, blocks_pointer, order| HitRegion {
+        transform: None,
         id: ElementId::new(id),
         bounds,
         clip: bounds,
@@ -138,6 +140,7 @@ fn native_drop_snapshot_selects_the_topmost_target_before_offer_order() {
     let mut tree = UiTree::new();
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let region = |id, source| HitRegion {
+        transform: None,
         id: ElementId::new(id),
         bounds,
         clip: bounds,
@@ -200,6 +203,7 @@ fn native_drop_snapshot_supports_arbitrary_typed_predicates() {
     let mut tree = UiTree::new();
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     tree.hit_regions.push(HitRegion {
+        transform: None,
         id: ElementId::new(9),
         bounds,
         clip: bounds,
@@ -254,6 +258,7 @@ fn native_drop_acceptance_cap_fails_closed_in_listener_order() {
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     let target = ElementId::new((MAX_EXTERNAL_DROP_ACCEPTANCES + 2) as u64);
     let region = |id, source| HitRegion {
+        transform: None,
         id,
         bounds,
         clip: bounds,
@@ -299,6 +304,7 @@ fn native_drop_snapshot_retains_only_the_topmost_bounded_stack() {
     let bounds = Rect::new(0.0, 0.0, 20.0, 20.0);
     for source in 0..=MAX_EXTERNAL_DROP_HIT_REGIONS {
         tree.hit_regions.push(HitRegion {
+            transform: None,
             id: ElementId::new(source as u64 + 1),
             bounds,
             clip: bounds,

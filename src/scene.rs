@@ -4,8 +4,8 @@ use glyphon::{Style as GlyphStyle, Weight};
 
 use crate::{
     Background, Color, CustomShader, Font, FontFallbacks, FontFamily, FontFeatures, Gradient,
-    Image, Insets, Path, Rect, ShaderParameters, Svg, SvgTransform, TextHighlight, TextUnderline,
-    Vector,
+    Image, Insets, Path, Point, Rect, ShaderParameters, Svg, SvgTransform, TextHighlight,
+    TextUnderline, Vector,
     font::{assert_valid_font_family, normalize_fallbacks},
     paint_order::{BoundsOrderTree, valid_bounds},
 };
@@ -725,12 +725,15 @@ impl BorderStyle {
 /// Largest number of color filters retained by one element.
 pub const MAX_FILTERS_PER_ELEMENT: usize = 8;
 
-/// A CSS-shaped color filter.
+/// A CSS-shaped filter.
 ///
-/// Every variant is expressible as one color matrix, so a whole chain collapses into a single
-/// per-primitive matrix on the CPU and costs one multiply-add in the shader. Filters that need a
-/// convolution or an offscreen group — `blur` and `drop-shadow` — are deliberately absent; use
-/// [`Element::shadow`](crate::Element::shadow) for elevation.
+/// Every colour variant is expressible as one color matrix, so a whole chain of them collapses
+/// into a single per-primitive matrix on the CPU and costs one multiply-add in the shader.
+///
+/// [`Filter::Blur`] and [`Filter::DropShadow`] are convolutions instead: they cannot be folded
+/// into a matrix, so an element that declares one becomes a *compositing group* whose whole
+/// subtree is rendered into a bounded offscreen texture first. See
+/// [`Element::blur`](crate::Element::blur) and [`Element::drop_shadow`](crate::Element::drop_shadow).
 ///
 /// Amounts follow CSS: `1.0` is the unmodified image for `brightness`, `contrast`, and
 /// `saturate`, and `0.0` is the unmodified image for `grayscale`, `invert`, and `sepia`.
@@ -745,6 +748,79 @@ pub enum Filter {
     /// Rotate hues by the given number of degrees.
     HueRotate(f32),
     Opacity(f32),
+    /// Gaussian blur of the whole subtree, in logical pixels of standard deviation.
+    ///
+    /// Clamped to [`MAX_BLUR_RADIUS`]. A non-zero radius promotes the element to a compositing
+    /// group.
+    Blur(f32),
+    /// A blurred, tinted copy of the subtree's alpha painted behind it.
+    ///
+    /// Promotes the element to a compositing group.
+    DropShadow(DropShadow),
+}
+
+impl Filter {
+    /// Whether this filter needs an offscreen group rather than a per-primitive color matrix.
+    pub fn needs_group(self) -> bool {
+        match self {
+            Self::Blur(radius) => sanitize_blur(radius) > 0.0,
+            Self::DropShadow(shadow) => shadow.is_visible(),
+            _ => false,
+        }
+    }
+}
+
+/// A blurred, offset, tinted copy of a subtree's alpha painted behind it.
+///
+/// Unlike [`BoxShadow`], which is an analytic rounded-rectangle shadow of one element box, a drop
+/// shadow follows the exact painted alpha of the whole subtree, including text and images.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DropShadow {
+    pub offset: Vector,
+    /// CSS `drop-shadow()` blur length. The Gaussian standard deviation is half of it.
+    pub blur: f32,
+    pub color: Color,
+}
+
+impl DropShadow {
+    pub fn new(offset: Vector, blur: f32, color: Color) -> Self {
+        Self {
+            offset: sanitize_offset(offset),
+            blur: sanitize_blur(blur * 0.5) * 2.0,
+            color,
+        }
+    }
+
+    /// The Gaussian standard deviation in logical pixels.
+    pub fn sigma(self) -> f32 {
+        sanitize_blur(self.blur * 0.5)
+    }
+
+    pub(crate) fn is_visible(self) -> bool {
+        self.color.a > 0.0
+    }
+}
+
+/// Largest accepted Gaussian standard deviation for a subtree or backdrop blur, in logical pixels.
+pub const MAX_BLUR_RADIUS: f32 = 64.0;
+
+pub(crate) fn sanitize_blur(radius: f32) -> f32 {
+    if radius.is_finite() {
+        radius.clamp(0.0, MAX_BLUR_RADIUS)
+    } else {
+        0.0
+    }
+}
+
+fn sanitize_offset(offset: Vector) -> Vector {
+    let clamp = |value: f32| {
+        if value.is_finite() {
+            value.clamp(-MAX_BOX_SHADOW_EXTENT, MAX_BOX_SHADOW_EXTENT)
+        } else {
+            0.0
+        }
+    };
+    Vector::new(clamp(offset.x), clamp(offset.y))
 }
 
 /// A 4x5 color matrix applied to straight-alpha, encoded-sRGB color.
@@ -909,6 +985,8 @@ impl From<Filter> for ColorMatrix {
                     0.0, 0.0, 0.0, amount, 0.0,
                 ])
             }
+            // Convolutions are applied to the group texture, not to a per-primitive matrix.
+            Filter::Blur(_) | Filter::DropShadow(_) => Self::IDENTITY,
         }
     }
 }
@@ -996,11 +1074,420 @@ impl Filters {
         }
         matrix
     }
+
+    fn iter(self) -> impl Iterator<Item = Filter> {
+        self.filters
+            .into_iter()
+            .take(usize::from(self.length))
+            .flatten()
+    }
+
+    /// The total Gaussian standard deviation declared by [`Filter::Blur`] entries, in logical
+    /// pixels. Blurs compose additively in variance; the sum is clamped to [`MAX_BLUR_RADIUS`].
+    pub fn blur(self) -> f32 {
+        let variance: f32 = self
+            .iter()
+            .filter_map(|filter| match filter {
+                Filter::Blur(radius) => Some(sanitize_blur(radius)),
+                _ => None,
+            })
+            .map(|sigma| sigma * sigma)
+            .sum();
+        sanitize_blur(variance.sqrt())
+    }
+
+    /// The last declared [`Filter::DropShadow`], if any is visible.
+    pub fn drop_shadow(self) -> Option<DropShadow> {
+        self.iter()
+            .filter_map(|filter| match filter {
+                Filter::DropShadow(shadow) if shadow.is_visible() => Some(shadow),
+                _ => None,
+            })
+            .last()
+    }
+
+    /// Whether this chain forces its element into an offscreen compositing group.
+    pub fn needs_group(self) -> bool {
+        self.iter().any(Filter::needs_group)
+    }
+
+    /// The same chain without any [`Filter::Blur`] entry.
+    pub fn without_blur(self) -> Self {
+        Self::new(
+            self.iter()
+                .filter(|filter| !matches!(filter, Filter::Blur(_))),
+        )
+    }
 }
 
 impl FromIterator<Filter> for Filters {
     fn from_iter<T: IntoIterator<Item = Filter>>(filters: T) -> Self {
         Self::new(filters)
+    }
+}
+
+/// A 2-D affine transform stored as the two columns of its linear part plus a translation.
+///
+/// The matrix maps a point `p` to `(a * p.x + c * p.y + tx, b * p.x + d * p.y + ty)`, matching the
+/// CSS `matrix(a, b, c, d, tx, ty)` argument order. Every constructor sanitizes non-finite inputs
+/// to the identity so a broken animation can never poison layout, hit testing, or the GPU.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Transform2D {
+    pub a: f32,
+    pub b: f32,
+    pub c: f32,
+    pub d: f32,
+    pub tx: f32,
+    pub ty: f32,
+}
+
+impl Default for Transform2D {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
+impl Transform2D {
+    /// The transform that leaves a point where it is.
+    pub const IDENTITY: Self = Self {
+        a: 1.0,
+        b: 0.0,
+        c: 0.0,
+        d: 1.0,
+        tx: 0.0,
+        ty: 0.0,
+    };
+
+    /// Largest accepted translation, scale magnitude, or skew tangent.
+    pub const MAX_COMPONENT: f32 = 1.0e6;
+
+    /// Build a transform from CSS `matrix()` order, falling back to the identity when any
+    /// component is not finite or exceeds [`Transform2D::MAX_COMPONENT`].
+    pub fn new(a: f32, b: f32, c: f32, d: f32, tx: f32, ty: f32) -> Self {
+        let candidate = Self { a, b, c, d, tx, ty };
+        if candidate.is_valid() {
+            candidate
+        } else {
+            Self::IDENTITY
+        }
+    }
+
+    fn is_valid(self) -> bool {
+        [self.a, self.b, self.c, self.d, self.tx, self.ty]
+            .into_iter()
+            .all(|value| value.is_finite() && value.abs() <= Self::MAX_COMPONENT)
+    }
+
+    pub fn translate(x: f32, y: f32) -> Self {
+        Self::new(1.0, 0.0, 0.0, 1.0, x, y)
+    }
+
+    pub fn scale(x: f32, y: f32) -> Self {
+        Self::new(x, 0.0, 0.0, y, 0.0, 0.0)
+    }
+
+    pub fn scale_uniform(scale: f32) -> Self {
+        Self::scale(scale, scale)
+    }
+
+    pub fn rotate_radians(radians: f32) -> Self {
+        if !radians.is_finite() {
+            return Self::IDENTITY;
+        }
+        let (sine, cosine) = radians.sin_cos();
+        Self::new(cosine, sine, -sine, cosine, 0.0, 0.0)
+    }
+
+    pub fn rotate_degrees(degrees: f32) -> Self {
+        Self::rotate_radians(degrees.to_radians())
+    }
+
+    /// Skew by the given angles around the x and y axes.
+    pub fn skew_degrees(x: f32, y: f32) -> Self {
+        let tangent = |degrees: f32| {
+            let value = degrees.to_radians().tan();
+            if value.is_finite() {
+                value.clamp(-Self::MAX_COMPONENT, Self::MAX_COMPONENT)
+            } else {
+                0.0
+            }
+        };
+        Self::new(1.0, tangent(y), tangent(x), 1.0, 0.0, 0.0)
+    }
+
+    /// Apply `self` first and `next` second.
+    pub fn then(self, next: Self) -> Self {
+        Self::new(
+            next.a * self.a + next.c * self.b,
+            next.b * self.a + next.d * self.b,
+            next.a * self.c + next.c * self.d,
+            next.b * self.c + next.d * self.d,
+            next.a * self.tx + next.c * self.ty + next.tx,
+            next.b * self.tx + next.d * self.ty + next.ty,
+        )
+    }
+
+    /// Apply `inner` first and `self` second. This is the usual matrix product `self * inner`.
+    pub fn compose(self, inner: Self) -> Self {
+        inner.then(self)
+    }
+
+    pub fn determinant(self) -> f32 {
+        self.a * self.d - self.b * self.c
+    }
+
+    /// The inverse transform, or `None` when the matrix collapses an axis.
+    pub fn inverse(self) -> Option<Self> {
+        let determinant = self.determinant();
+        if !determinant.is_finite() || determinant.abs() < 1.0e-9 {
+            return None;
+        }
+        let inverse = 1.0 / determinant;
+        let a = self.d * inverse;
+        let b = -self.b * inverse;
+        let c = -self.c * inverse;
+        let d = self.a * inverse;
+        let candidate = Self {
+            a,
+            b,
+            c,
+            d,
+            tx: -(a * self.tx + c * self.ty),
+            ty: -(b * self.tx + d * self.ty),
+        };
+        candidate.is_valid().then_some(candidate)
+    }
+
+    pub fn apply(self, point: Point) -> Point {
+        Point::new(
+            self.a * point.x + self.c * point.y + self.tx,
+            self.b * point.x + self.d * point.y + self.ty,
+        )
+    }
+
+    /// The axis-aligned bounding box of the transformed rectangle.
+    pub fn transform_rect(self, rect: Rect) -> Rect {
+        let corners = [
+            self.apply(Point::new(rect.x, rect.y)),
+            self.apply(Point::new(rect.right(), rect.y)),
+            self.apply(Point::new(rect.right(), rect.bottom())),
+            self.apply(Point::new(rect.x, rect.bottom())),
+        ];
+        let left = corners.iter().map(|point| point.x).fold(f32::MAX, f32::min);
+        let right = corners.iter().map(|point| point.x).fold(f32::MIN, f32::max);
+        let top = corners.iter().map(|point| point.y).fold(f32::MAX, f32::min);
+        let bottom = corners.iter().map(|point| point.y).fold(f32::MIN, f32::max);
+        Rect::new(left, top, (right - left).max(0.0), (bottom - top).max(0.0))
+    }
+
+    pub fn is_identity(self) -> bool {
+        self == Self::IDENTITY
+    }
+
+    /// Whether the linear part is the identity, so the transform is a pure translation.
+    pub fn is_translation(self) -> bool {
+        self.a == 1.0 && self.b == 0.0 && self.c == 0.0 && self.d == 1.0
+    }
+
+    /// Whether this is a translation by whole logical pixels, which paints without a group.
+    pub fn is_integer_translation(self) -> bool {
+        self.is_translation() && self.tx.fract() == 0.0 && self.ty.fract() == 0.0
+    }
+
+    /// Re-express the transform so it acts around `origin` instead of the coordinate origin.
+    pub fn around(self, origin: Point) -> Self {
+        Self::translate(-origin.x, -origin.y)
+            .then(self)
+            .then(Self::translate(origin.x, origin.y))
+    }
+
+    /// Linearly interpolate every component. Used by paint-only style transitions.
+    pub fn lerp(self, other: Self, t: f32) -> Self {
+        let t = if t.is_finite() {
+            t.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let mix = |from: f32, to: f32| from + (to - from) * t;
+        Self::new(
+            mix(self.a, other.a),
+            mix(self.b, other.b),
+            mix(self.c, other.c),
+            mix(self.d, other.d),
+            mix(self.tx, other.tx),
+            mix(self.ty, other.ty),
+        )
+    }
+}
+
+/// A separable CSS blend mode used to combine a compositing group with what is already painted.
+///
+/// Every mode is evaluated exactly, in premultiplied form, from a captured copy of the
+/// destination; see `docs/graphics.md` for the cost this implies.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum BlendMode {
+    /// Ordinary source-over compositing. Never captures the destination.
+    #[default]
+    Normal,
+    Multiply,
+    Screen,
+    Darken,
+    Lighten,
+    Overlay,
+    Difference,
+    Exclusion,
+    HardLight,
+    ColorDodge,
+    ColorBurn,
+}
+
+impl BlendMode {
+    /// Whether combining through this mode needs a copy of the destination.
+    pub fn reads_destination(self) -> bool {
+        !matches!(self, Self::Normal | Self::Screen)
+    }
+
+    pub(crate) fn code(self) -> u32 {
+        match self {
+            Self::Normal => 0,
+            Self::Multiply => 1,
+            Self::Screen => 2,
+            Self::Darken => 3,
+            Self::Lighten => 4,
+            Self::Overlay => 5,
+            Self::Difference => 6,
+            Self::Exclusion => 7,
+            Self::HardLight => 8,
+            Self::ColorDodge => 9,
+            Self::ColorBurn => 10,
+        }
+    }
+}
+
+/// Everything about an element that forces its subtree through an offscreen group texture.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayerEffects {
+    /// The subtree transform, already expressed around the element's transform origin in window
+    /// coordinates.
+    pub transform: Transform2D,
+    /// Gaussian standard deviation applied to the whole group, in logical pixels.
+    pub blur: f32,
+    /// A blurred copy of the group's alpha painted behind it.
+    pub drop_shadow: Option<DropShadow>,
+    /// Color filters applied to the whole group rather than to individual raster primitives.
+    pub color_matrix: ColorMatrix,
+    /// Gaussian standard deviation applied to what is already painted behind the element.
+    pub backdrop_blur: f32,
+    /// Color filters applied to what is already painted behind the element.
+    pub backdrop_matrix: ColorMatrix,
+    /// The element's own rounded rectangle, used to clip the backdrop.
+    pub backdrop_corners: Corners,
+    pub blend: BlendMode,
+}
+
+impl Default for LayerEffects {
+    fn default() -> Self {
+        Self {
+            transform: Transform2D::IDENTITY,
+            blur: 0.0,
+            drop_shadow: None,
+            color_matrix: ColorMatrix::IDENTITY,
+            backdrop_blur: 0.0,
+            backdrop_matrix: ColorMatrix::IDENTITY,
+            backdrop_corners: Corners::ZERO,
+            blend: BlendMode::Normal,
+        }
+    }
+}
+
+impl LayerEffects {
+    /// Whether these effects need an offscreen group at all.
+    pub fn needs_group(&self) -> bool {
+        !self.transform.is_identity()
+            || self.blur > 0.0
+            || self.drop_shadow.is_some()
+            || !self.color_matrix.is_identity()
+            || self.has_backdrop()
+            || self.blend != BlendMode::Normal
+    }
+
+    /// Whether the group reads what is already painted behind it.
+    pub fn has_backdrop(&self) -> bool {
+        self.backdrop_blur > 0.0 || !self.backdrop_matrix.is_identity()
+    }
+
+    /// Whether the composite needs a copy of the destination.
+    pub fn reads_destination(&self) -> bool {
+        self.has_backdrop() || self.blend.reads_destination()
+    }
+
+    /// How far, in logical pixels, painted content spreads beyond the group's own bounds.
+    pub fn margin(&self) -> f32 {
+        let blur = self.blur * BLUR_MARGIN_SIGMAS;
+        let shadow = self.drop_shadow.map_or(0.0, |shadow| {
+            shadow.sigma() * BLUR_MARGIN_SIGMAS + shadow.offset.x.abs().max(shadow.offset.y.abs())
+        });
+        blur.max(shadow)
+    }
+}
+
+/// Gaussian support, in standard deviations, retained by the separable blur.
+pub(crate) const BLUR_MARGIN_SIGMAS: f32 = 3.0;
+
+/// Largest number of compositing groups rendered in one frame.
+///
+/// Additional groups paint their subtree directly into the parent target without the effect and
+/// are reported through [`RenderStats::skipped_layer_effects`](crate::RenderStats).
+pub const MAX_LAYERS_PER_FRAME: usize = 8;
+
+/// Largest nesting depth of compositing groups. Deeper groups paint without their effect.
+pub const MAX_LAYER_DEPTH: usize = 4;
+
+/// Largest total size, in bytes, of the offscreen textures one window retains for compositing.
+///
+/// Group textures are allocated at the window's full physical resolution so that text prepared by
+/// Glyphon at window coordinates lands in the group unchanged. A group whose textures would push
+/// the window past this bound is painted directly into its parent without its effect and counted
+/// in [`RenderStats::skipped_layer_effects`](crate::RenderStats). Textures are retained between
+/// frames and evicted least-recently-used first.
+pub const MAX_LAYER_TEXTURE_BYTES: u64 = 128 * 1024 * 1024;
+
+/// A compositing group recorded by the scene.
+#[derive(Clone, Debug)]
+pub(crate) struct PaintGroup {
+    /// Group index; zero is the window target itself and is never present in this list.
+    pub id: u16,
+    pub parent: u16,
+    pub depth: u16,
+    /// The plane whose target this group is composited into.
+    pub plane: ScenePlane,
+    /// Untransformed content bounds in logical window coordinates.
+    pub bounds: Rect,
+    /// Clip applied to the composited result, in the parent's coordinate space.
+    pub clip: Rect,
+    pub effects: LayerEffects,
+    pub opacity: f32,
+    /// Post-sort indices of the paint layers whose primitives belong to this group.
+    pub layers: Vec<usize>,
+}
+
+/// A group composited into a parent layer at one cross-primitive paint order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct GroupRef {
+    pub group: u16,
+}
+
+/// Cursor returned by [`Scene::begin_group`] and consumed by [`Scene::end_group`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GroupHandle {
+    pub key: PaintLayerKey,
+    previous_opacity: f32,
+}
+
+impl GroupHandle {
+    /// The layer key the group's own children paint into.
+    pub(crate) fn content_key(&self) -> PaintLayerKey {
+        self.key
     }
 }
 
@@ -1605,10 +2092,18 @@ pub enum ScenePlane {
     Overlay,
 }
 
+/// The sort key of one paint layer.
+///
+/// The field order is the sort order. `plane` and `z_index` keep their historical meaning; `group`
+/// identifies the compositing group whose offscreen texture the layer is rendered into, with zero
+/// meaning the window target. Because `group` is the least significant term, a compositing group
+/// still sorts against its siblings by its own `z_index` instead of floating above them, while a
+/// group's descendants remain distinguishable from the parent's layers at the same `z_index`.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct PaintLayerKey {
     pub plane: ScenePlane,
     pub z_index: i16,
+    pub group: u16,
 }
 
 #[derive(Debug)]
@@ -1624,9 +2119,12 @@ pub(crate) struct PaintLayer {
     paths: Vec<PathPrimitive>,
     custom_shaders: Vec<CustomShaderPrimitive>,
     text: Vec<TextRun>,
+    groups: Vec<GroupRef>,
     paint: Vec<PaintItem>,
     order_tree: BoundsOrderTree,
     max_order: u32,
+    /// Union of every painted primitive's effective bounds in this layer.
+    content_bounds: Option<Rect>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1645,6 +2143,8 @@ pub(crate) enum PrimitiveRef {
     Path(usize),
     CustomShader(usize),
     Text(usize),
+    /// A compositing group composited from its own offscreen texture.
+    Group(usize),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1667,9 +2167,11 @@ impl PaintLayer {
             paths: Vec::new(),
             custom_shaders: Vec::new(),
             text: Vec::new(),
+            groups: Vec::new(),
             paint: Vec::new(),
             order_tree: BoundsOrderTree::default(),
             max_order: 0,
+            content_bounds: None,
         }
     }
 
@@ -1718,6 +2220,10 @@ impl PaintLayer {
         &self.text
     }
 
+    pub(crate) fn groups(&self) -> &[GroupRef] {
+        &self.groups
+    }
+
     pub(crate) fn paint(&self) -> &[PaintItem] {
         &self.paint
     }
@@ -1731,6 +2237,14 @@ impl PaintLayer {
         let order = self.order_tree.insert(bounds);
         self.max_order = self.max_order.max(order);
         self.paint.push(PaintItem { order, primitive });
+        self.content_bounds = Some(match self.content_bounds {
+            Some(existing) => union_rect(existing, bounds),
+            None => bounds,
+        });
+    }
+
+    pub(crate) fn content_bounds(&self) -> Option<Rect> {
+        self.content_bounds
     }
 
     fn clear(&mut self) {
@@ -1744,9 +2258,11 @@ impl PaintLayer {
         self.paths.clear();
         self.custom_shaders.clear();
         self.text.clear();
+        self.groups.clear();
         self.paint.clear();
         self.order_tree.clear();
         self.max_order = 0;
+        self.content_bounds = None;
     }
 }
 
@@ -1757,6 +2273,9 @@ pub struct Scene {
     layers: Vec<PaintLayer>,
     used_layers: usize,
     opacity: f32,
+    groups: Vec<PaintGroup>,
+    /// Groups the scene refused to open because a bound was already reached.
+    skipped_groups: usize,
 }
 
 impl Scene {
@@ -1775,12 +2294,16 @@ impl Scene {
                 paths: Vec::with_capacity(64),
                 custom_shaders: Vec::with_capacity(16),
                 text: Vec::with_capacity(128),
+                groups: Vec::new(),
                 paint: Vec::with_capacity(512),
                 order_tree: BoundsOrderTree::with_capacity(512),
                 max_order: 0,
+                content_bounds: None,
             }],
             used_layers: 1,
             opacity: 1.0,
+            groups: Vec::new(),
+            skipped_groups: 0,
         }
     }
 
@@ -1798,6 +2321,8 @@ impl Scene {
         self.layers[0].key = PaintLayerKey::default();
         self.used_layers = 1;
         self.opacity = 1.0;
+        self.groups.clear();
+        self.skipped_groups = 0;
     }
 
     pub fn push_quad(&mut self, quad: Quad) {
@@ -2128,8 +2653,137 @@ impl Scene {
             .unwrap_or_default()
     }
 
+    /// Open a compositing group whose subtree renders into its own offscreen texture.
+    ///
+    /// `key` is the parent layer the composited result is painted into, `bounds` the element's own
+    /// box, and `clip` the clip that applies to the composited result. Returns `None` — leaving the
+    /// caller to paint the subtree directly and without the effect — when the frame already reached
+    /// [`MAX_LAYERS_PER_FRAME`], when nesting would exceed [`MAX_LAYER_DEPTH`], or when the
+    /// geometry is degenerate.
+    pub(crate) fn begin_group(
+        &mut self,
+        key: PaintLayerKey,
+        bounds: Rect,
+        clip: Rect,
+        effects: LayerEffects,
+    ) -> Option<GroupHandle> {
+        if !effects.needs_group() || !valid_bounds(bounds) || !valid_bounds(clip) {
+            return None;
+        }
+        let parent = key.group;
+        let parent_depth = self.group(parent).map_or(0, |group| group.depth);
+        if usize::from(parent_depth) + 1 > MAX_LAYER_DEPTH
+            || self.groups.len() >= MAX_LAYERS_PER_FRAME
+        {
+            self.skipped_groups += 1;
+            return None;
+        }
+        // The composite participates in the parent layer's cross-primitive paint order. Its
+        // declared extent is the element box grown by the effect margin and transformed; the
+        // exact painted extent is recomputed from the group's own layers in `finish`.
+        let declared = effects
+            .transform
+            .transform_rect(dilate_rect(bounds, effects.margin()));
+        let Some(order_bounds) = clipped_paint_bounds(declared, [Some(clip)]) else {
+            self.skipped_groups += 1;
+            return None;
+        };
+        let id = (self.groups.len() + 1) as u16;
+        let previous_opacity = self.opacity;
+        self.groups.push(PaintGroup {
+            id,
+            parent,
+            depth: parent_depth + 1,
+            plane: key.plane,
+            bounds,
+            clip,
+            effects,
+            opacity: previous_opacity,
+            layers: Vec::new(),
+        });
+        let layer = self.layer_mut(key);
+        let slot = layer.groups.len();
+        layer.groups.push(GroupRef { group: id });
+        layer.push_paint(order_bounds, PrimitiveRef::Group(slot));
+        // Ancestor opacity applies once to the composited result instead of to every primitive.
+        self.opacity = 1.0;
+        Some(GroupHandle {
+            key: PaintLayerKey {
+                plane: key.plane,
+                z_index: key.z_index,
+                group: id,
+            },
+            previous_opacity,
+        })
+    }
+
+    /// Close the group opened by [`Scene::begin_group`].
+    pub(crate) fn end_group(&mut self, handle: GroupHandle) {
+        self.opacity = handle.previous_opacity;
+    }
+
+    pub(crate) fn group(&self, id: u16) -> Option<&PaintGroup> {
+        if id == 0 {
+            return None;
+        }
+        self.groups.get(usize::from(id) - 1)
+    }
+
+    pub(crate) fn groups(&self) -> &[PaintGroup] {
+        &self.groups
+    }
+
+    /// Compositing groups the scene refused to open because a bound was already reached.
+    pub(crate) fn skipped_groups(&self) -> usize {
+        self.skipped_groups
+    }
+
     pub(crate) fn finish(&mut self) {
         self.layers[..self.used_layers].sort_by_key(PaintLayer::key);
+        if self.groups.is_empty() {
+            return;
+        }
+        for group in &mut self.groups {
+            group.layers.clear();
+        }
+        for (index, layer) in self.layers[..self.used_layers].iter().enumerate() {
+            let id = layer.key.group;
+            if id == 0 || layer.paint.is_empty() {
+                continue;
+            }
+            if let Some(group) = self.groups.get_mut(usize::from(id) - 1) {
+                group.layers.push(index);
+            }
+        }
+        // Grow every group's recorded extent to what its layers actually painted, then propagate
+        // that outward so an ancestor's texture covers its transformed descendants.
+        for index in (0..self.groups.len()).rev() {
+            let mut painted = None;
+            for layer in self.groups[index].layers.clone() {
+                if let Some(bounds) = self.layers[layer].content_bounds() {
+                    painted = Some(match painted {
+                        Some(existing) => union_rect(existing, bounds),
+                        None => bounds,
+                    });
+                }
+            }
+            if let Some(painted) = painted {
+                self.groups[index].bounds = union_rect(self.groups[index].bounds, painted);
+            }
+            // A nested group paints through its own transform, so its parent's texture must cover
+            // the composited extent rather than the child's untransformed box.
+            let group = &self.groups[index];
+            let composited = group
+                .effects
+                .transform
+                .transform_rect(dilate_rect(group.bounds, group.effects.margin()));
+            let parent = group.parent;
+            if parent != 0
+                && let Some(parent) = self.groups.get_mut(usize::from(parent) - 1)
+            {
+                parent.bounds = union_rect(parent.bounds, composited);
+            }
+        }
     }
 
     pub(crate) fn paint_layers(&self) -> &[PaintLayer] {
@@ -2205,6 +2859,14 @@ fn sanitize_opacity(opacity: f32) -> f32 {
     } else {
         1.0
     }
+}
+
+pub(crate) fn union_rect(a: Rect, b: Rect) -> Rect {
+    let left = a.x.min(b.x);
+    let top = a.y.min(b.y);
+    let right = a.right().max(b.right());
+    let bottom = a.bottom().max(b.bottom());
+    Rect::new(left, top, (right - left).max(0.0), (bottom - top).max(0.0))
 }
 
 fn dilate_rect(rect: Rect, amount: f32) -> Rect {
@@ -2611,10 +3273,12 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
     fn paint_layers_sort_base_before_overlay_and_reuse_matching_z_indices() {
         let mut scene = Scene::new();
         let overlay = PaintLayerKey {
+            group: 0,
             plane: ScenePlane::Overlay,
             z_index: -2,
         };
         let raised_base = PaintLayerKey {
+            group: 0,
             plane: ScenePlane::Base,
             z_index: 3,
         };
@@ -2638,5 +3302,296 @@ fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> {
         assert_eq!(layers[1].key(), raised_base);
         assert_eq!(layers[2].key(), overlay);
         assert_eq!(layers[2].quads().len(), 2);
+    }
+
+    #[test]
+    fn transforms_compose_invert_and_sanitize() {
+        let identity = Transform2D::IDENTITY;
+        assert!(identity.is_identity());
+        assert!(identity.is_translation());
+        assert!(identity.is_integer_translation());
+
+        let rotate = Transform2D::rotate_degrees(90.0);
+        let point = rotate.apply(Point::new(1.0, 0.0));
+        assert!((point.x - 0.0).abs() < 1.0e-5 && (point.y - 1.0).abs() < 1.0e-5);
+
+        // `then` applies the receiver first: scale then translate.
+        let composed = Transform2D::scale(2.0, 3.0).then(Transform2D::translate(5.0, 7.0));
+        let mapped = composed.apply(Point::new(1.0, 1.0));
+        assert!((mapped.x - 7.0).abs() < 1.0e-5 && (mapped.y - 10.0).abs() < 1.0e-5);
+        // `compose` is the same product written the other way round.
+        assert_eq!(
+            Transform2D::translate(5.0, 7.0).compose(Transform2D::scale(2.0, 3.0)),
+            composed
+        );
+
+        let inverse = composed.inverse().expect("an invertible transform");
+        let round_trip = inverse.apply(mapped);
+        assert!((round_trip.x - 1.0).abs() < 1.0e-4 && (round_trip.y - 1.0).abs() < 1.0e-4);
+        // A collapsed axis has no inverse, which makes the subtree untargetable rather than
+        // mapping every pointer position onto one line.
+        assert!(Transform2D::scale(0.0, 1.0).inverse().is_none());
+
+        // Non-finite and unbounded components fall back to the identity.
+        assert!(Transform2D::new(f32::NAN, 0.0, 0.0, 1.0, 0.0, 0.0).is_identity());
+        assert!(Transform2D::translate(f32::INFINITY, 0.0).is_identity());
+        assert!(Transform2D::translate(1.0e12, 0.0).is_identity());
+        assert!(Transform2D::rotate_degrees(f32::NAN).is_identity());
+    }
+
+    #[test]
+    fn transforms_act_around_their_origin_and_report_axis_aligned_bounds() {
+        let rect = Rect::new(10.0, 20.0, 20.0, 10.0);
+        let centre = Point::new(20.0, 25.0);
+        let rotated = Transform2D::rotate_degrees(90.0).around(centre);
+        // A quarter turn about the centre swaps the extents in place.
+        let bounds = rotated.transform_rect(rect);
+        assert!((bounds.x - 15.0).abs() < 1.0e-3, "{bounds:?}");
+        assert!((bounds.y - 15.0).abs() < 1.0e-3, "{bounds:?}");
+        assert!((bounds.width - 10.0).abs() < 1.0e-3, "{bounds:?}");
+        assert!((bounds.height - 20.0).abs() < 1.0e-3, "{bounds:?}");
+        // The origin itself never moves.
+        let fixed = rotated.apply(centre);
+        assert!((fixed.x - centre.x).abs() < 1.0e-3 && (fixed.y - centre.y).abs() < 1.0e-3);
+
+        // Interpolation is component-wise and clamped to the unit interval.
+        let half = Transform2D::IDENTITY.lerp(Transform2D::translate(10.0, 0.0), 0.5);
+        assert_eq!(half, Transform2D::translate(5.0, 0.0));
+        assert_eq!(
+            Transform2D::IDENTITY.lerp(Transform2D::translate(10.0, 0.0), 4.0),
+            Transform2D::translate(10.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn filters_separate_convolutions_from_the_color_matrix() {
+        let chain = Filters::new([
+            Filter::Grayscale(1.0),
+            Filter::Blur(3.0),
+            Filter::Blur(4.0),
+            Filter::DropShadow(DropShadow::new(Vector::new(2.0, 3.0), 8.0, Color::BLACK)),
+        ]);
+        assert!(chain.needs_group());
+        // Blurs compose additively in variance: sqrt(3^2 + 4^2).
+        assert!((chain.blur() - 5.0).abs() < 1.0e-4);
+        let shadow = chain.drop_shadow().expect("a visible drop shadow");
+        assert_eq!(shadow.offset, Vector::new(2.0, 3.0));
+        assert!((shadow.sigma() - 4.0).abs() < 1.0e-4);
+        // The convolutions leave the matrix alone, so the colour part still collapses.
+        assert!(!chain.color_matrix().is_identity());
+        assert_eq!(
+            chain.color_matrix(),
+            Filters::new([Filter::Grayscale(1.0)]).color_matrix()
+        );
+        assert!(
+            !chain.without_blur().needs_group() || chain.without_blur().drop_shadow().is_some()
+        );
+
+        // A colour-only chain never opens a group.
+        let colours = Filters::new([Filter::Saturate(2.0), Filter::HueRotate(30.0)]);
+        assert!(!colours.needs_group());
+        assert_eq!(colours.blur(), 0.0);
+        assert!(colours.drop_shadow().is_none());
+
+        // Radii are clamped and non-finite values are dropped.
+        assert_eq!(Filters::new([Filter::Blur(1.0e9)]).blur(), MAX_BLUR_RADIUS);
+        assert_eq!(Filters::new([Filter::Blur(f32::NAN)]).blur(), 0.0);
+        assert!(!Filters::new([Filter::Blur(0.0)]).needs_group());
+        // A fully transparent shadow is not painted and does not open a group.
+        assert!(
+            !Filters::new([Filter::DropShadow(DropShadow::new(
+                Vector::new(1.0, 1.0),
+                2.0,
+                Color::TRANSPARENT,
+            ))])
+            .needs_group()
+        );
+    }
+
+    #[test]
+    fn layer_effects_report_what_they_need() {
+        let plain = LayerEffects::default();
+        assert!(!plain.needs_group());
+        assert!(!plain.has_backdrop());
+        assert!(!plain.reads_destination());
+        assert_eq!(plain.margin(), 0.0);
+
+        let blurred = LayerEffects {
+            blur: 4.0,
+            ..LayerEffects::default()
+        };
+        assert!(blurred.needs_group());
+        assert!(!blurred.reads_destination());
+        assert_eq!(blurred.margin(), 4.0 * BLUR_MARGIN_SIGMAS);
+
+        let shadowed = LayerEffects {
+            drop_shadow: Some(DropShadow::new(Vector::new(6.0, 2.0), 4.0, Color::BLACK)),
+            ..LayerEffects::default()
+        };
+        assert!(shadowed.needs_group());
+        assert_eq!(shadowed.margin(), 2.0 * BLUR_MARGIN_SIGMAS + 6.0);
+
+        // `screen` is exact through fixed-function blending, so it never copies the destination.
+        assert!(!BlendMode::Screen.reads_destination());
+        assert!(!BlendMode::Normal.reads_destination());
+        for mode in [
+            BlendMode::Multiply,
+            BlendMode::Darken,
+            BlendMode::Lighten,
+            BlendMode::Overlay,
+            BlendMode::Difference,
+            BlendMode::Exclusion,
+            BlendMode::HardLight,
+            BlendMode::ColorDodge,
+            BlendMode::ColorBurn,
+        ] {
+            assert!(mode.reads_destination(), "{mode:?}");
+            assert!(
+                LayerEffects {
+                    blend: mode,
+                    ..LayerEffects::default()
+                }
+                .reads_destination()
+            );
+        }
+    }
+
+    #[test]
+    fn groups_contain_their_descendants_layers_and_stay_bounded() {
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+        let effects = LayerEffects {
+            transform: Transform2D::rotate_degrees(10.0),
+            ..LayerEffects::default()
+        };
+        let root = PaintLayerKey::default();
+        let handle = scene
+            .begin_group(
+                root,
+                Rect::new(0.0, 0.0, 10.0, 10.0),
+                Rect::new(0.0, 0.0, 100.0, 100.0),
+                effects,
+            )
+            .expect("the first group fits every bound");
+        let inner = handle.content_key();
+        assert_eq!(inner.group, 1);
+        // A descendant's own z-index layer stays inside the group.
+        let raised = PaintLayerKey {
+            plane: inner.plane,
+            z_index: 5,
+            group: inner.group,
+        };
+        scene.push_quad_in(
+            raised,
+            Quad::new(Rect::new(0.0, 0.0, 4.0, 4.0), Color::WHITE),
+        );
+        scene.push_quad_in(
+            inner,
+            Quad::new(Rect::new(0.0, 0.0, 8.0, 8.0), Color::WHITE),
+        );
+        scene.end_group(handle);
+        scene.push_quad_in(
+            root,
+            Quad::new(Rect::new(50.0, 50.0, 4.0, 4.0), Color::WHITE),
+        );
+        scene.finish();
+
+        let group = scene.group(1).expect("the group was recorded");
+        assert_eq!(group.layers.len(), 2);
+        for layer in &group.layers {
+            assert_eq!(scene.paint_layers()[*layer].key().group, 1);
+        }
+        // The group's extent grew to what its layers actually painted.
+        assert!(group.bounds.width >= 10.0 && group.bounds.height >= 10.0);
+        // The root layer carries exactly one composite primitive for the group.
+        let root_layer = scene
+            .paint_layers()
+            .iter()
+            .find(|layer| layer.key().group == 0)
+            .expect("a root layer");
+        assert_eq!(root_layer.groups().len(), 1);
+        assert_eq!(
+            root_layer
+                .paint()
+                .iter()
+                .filter(|item| matches!(item.primitive, PrimitiveRef::Group(_)))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn group_budgets_degrade_instead_of_growing() {
+        let effects = LayerEffects {
+            transform: Transform2D::rotate_degrees(10.0),
+            ..LayerEffects::default()
+        };
+        let bounds = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let clip = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        // Breadth: only MAX_LAYERS_PER_FRAME groups open in one frame.
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+        let mut opened = 0;
+        for _ in 0..(MAX_LAYERS_PER_FRAME + 4) {
+            if let Some(handle) = scene.begin_group(PaintLayerKey::default(), bounds, clip, effects)
+            {
+                opened += 1;
+                scene.end_group(handle);
+            }
+        }
+        assert_eq!(opened, MAX_LAYERS_PER_FRAME);
+        assert_eq!(scene.skipped_groups(), 4);
+
+        // Depth: nesting stops at MAX_LAYER_DEPTH.
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+        let mut key = PaintLayerKey::default();
+        let mut depth = 0;
+        let mut handles = Vec::new();
+        for _ in 0..(MAX_LAYER_DEPTH + 3) {
+            let Some(handle) = scene.begin_group(key, bounds, clip, effects) else {
+                break;
+            };
+            depth += 1;
+            key = handle.content_key();
+            handles.push(handle);
+        }
+        assert_eq!(depth, MAX_LAYER_DEPTH);
+        assert!(scene.skipped_groups() >= 1);
+        for handle in handles.into_iter().rev() {
+            scene.end_group(handle);
+        }
+
+        // Clearing the scene releases every group record.
+        scene.clear(Color::BLACK);
+        assert!(scene.groups().is_empty());
+        assert_eq!(scene.skipped_groups(), 0);
+    }
+
+    #[test]
+    fn a_group_takes_ancestor_opacity_and_restores_it() {
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+        let previous = scene.multiply_opacity(0.5);
+        let effects = LayerEffects {
+            blur: 2.0,
+            ..LayerEffects::default()
+        };
+        let handle = scene
+            .begin_group(
+                PaintLayerKey::default(),
+                Rect::new(0.0, 0.0, 10.0, 10.0),
+                Rect::new(0.0, 0.0, 100.0, 100.0),
+                effects,
+            )
+            .expect("the group fits");
+        // Inside the group primitives paint at full strength; the composite carries the opacity.
+        assert_eq!(scene.current_opacity(), 1.0);
+        assert_eq!(scene.group(1).expect("the group").opacity, 0.5);
+        scene.end_group(handle);
+        assert_eq!(scene.current_opacity(), 0.5);
+        scene.restore_opacity(previous);
+        assert_eq!(scene.current_opacity(), 1.0);
     }
 }
