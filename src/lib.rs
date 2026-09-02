@@ -56,6 +56,7 @@ mod menu;
 mod metrics;
 #[cfg(target_os = "macos")]
 mod native_view;
+mod number_field;
 mod paint_order;
 mod path;
 mod path_renderer;
@@ -64,12 +65,15 @@ mod platform;
 mod popover;
 mod popover_component;
 mod popover_menu;
+mod progress;
 mod renderer;
 mod runtime;
 mod scene;
 mod scheduler;
 mod select;
 mod selection_control;
+mod slider;
+mod splitter;
 mod spring;
 mod styled_text;
 mod svg;
@@ -83,6 +87,9 @@ mod terminal;
 #[cfg(feature = "terminal")]
 mod terminal_process;
 mod text_input;
+mod toast;
+mod toggle;
+mod toolbar;
 mod tooltip;
 mod transition;
 mod tree;
@@ -154,13 +161,14 @@ pub use display::{
 #[cfg(target_os = "macos")]
 pub use element::native_view;
 pub use element::{
-    AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AccessibilitySortDirection,
-    AnchorPlacement, AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack,
-    IntoElement, MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW,
-    MAX_CONTAINER_QUERY_DEPTH, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
-    MAX_MOUSE_LISTENERS_PER_ELEMENT, ToggleState, UserSelect, Visibility, button, canvas,
-    container_query, custom_shader, div, form, img, overlay, path, styled_text_area,
-    styled_text_input, submit_button, svg, text, text_area, text_input,
+    AccessibilityAutoComplete, AccessibilityLive, AccessibilityOrientation, AccessibilityPopover,
+    AccessibilityRole, AccessibilitySortDirection, AccessibilityValueRange, AnchorPlacement,
+    AppRegion, Element, ElementId, ElementStateStyle, FocusHandle, GridTrack, IntoElement,
+    MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
+    MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT, MAX_MOUSE_LISTENERS_PER_ELEMENT, ToggleState,
+    UserSelect, Visibility, button, canvas, container_query, custom_shader, div, form, img,
+    overlay, path, styled_text_area, styled_text_input, submit_button, svg, text, text_area,
+    text_input,
 };
 pub use entity::{
     Entity, EntityId, EventEmitter, MAX_ENTITY_EVENT_DELIVERIES_PER_TURN,
@@ -238,6 +246,11 @@ pub use menu::{
 pub use metrics::{FrameMetrics, RenderStats};
 #[cfg(target_os = "macos")]
 pub use native_view::MacNativeView;
+pub use number_field::{
+    MAX_NUMBER_FIELD_PRECISION, MAX_NUMBER_FIELD_TEXT_BYTES, NUMBER_FIELD_REPEAT_DELAY,
+    NUMBER_FIELD_REPEAT_INTERVAL, NumberField, NumberFieldFormat, NumberFieldState, number_field,
+    number_field_root,
+};
 pub use path::{
     Background, FillOptions, FillRule, GradientColorSpace, LineCap, LineJoin, LinearColorStop,
     LinearGradient, MAX_PATH_BYTES, MAX_PATH_COMMANDS, MAX_PATH_COORDINATE, MAX_PATH_DASH_SEGMENTS,
@@ -289,6 +302,7 @@ pub use popover_menu::{
     PopoverMenuItemState, PopoverMenuLast, PopoverMenuNext, PopoverMenuOpenSubmenu,
     PopoverMenuPrevious, popover_menu_key_bindings,
 };
+pub use progress::{Meter, Progress, meter, progress};
 pub use quickgui_system::{
     AppInfo, AppPaths, AutoStart, AutoStartMode, AutoStartOptions, BatteryState, BatteryStatus,
     ColorScheme, IdleState, MAX_APP_IDENTIFIER_BYTES, MAX_APP_NAME_BYTES, MAX_APP_VERSION_BYTES,
@@ -377,6 +391,16 @@ pub use select::{
 pub use selection_control::{
     Checkbox, Radio, RadioGroup, Switch, checkbox, radio, radio_group, switch,
 };
+pub use slider::{
+    MAX_SLIDER_THUMBS, Slider, SliderDecrement, SliderIncrement, SliderLargeDecrement,
+    SliderLargeIncrement, SliderMaximum, SliderMinimum, SliderOrientation, SliderState,
+    SliderThumb, slider, slider_key_bindings,
+};
+pub use splitter::{
+    MAX_SPLITTER_PANES, Splitter, SplitterCollapse, SplitterDecrease, SplitterHandle,
+    SplitterIncrease, SplitterMaximum, SplitterMinimum, SplitterOrientation, SplitterPane,
+    SplitterState, splitter_key_bindings,
+};
 pub use spring::{SpringAnimation, SpringConfig, SpringPlayback, SpringState, SpringTarget};
 pub use styled_text::{
     HighlightStyle, MAX_HIGHLIGHT_FONT_FAMILY_BYTES, MAX_TEXT_HIGHLIGHTS, StyledText,
@@ -407,6 +431,19 @@ pub use terminal::{
     TerminalAgentStatus, TerminalCursor, TerminalCursorStyle, TerminalError, TerminalOptions,
     TerminalPaddingColor, TerminalScrollState, TerminalSnapshot, TerminalStatus, TerminalStyle,
     TerminalTheme,
+};
+pub use toast::{
+    MAX_TOAST_DURATION, MAX_TOAST_TEXT_BYTES, MAX_TOASTS, Toast, ToastEntry, ToastId, ToastKind,
+    ToastManager, ToastParts, ToastViewport, toast_viewport,
+};
+pub use toggle::{
+    MAX_TOGGLE_GROUP_ITEMS, Toggle, ToggleGroup, ToggleGroupEntry, ToggleGroupFirst,
+    ToggleGroupItem, ToggleGroupLast, ToggleGroupNext, ToggleGroupPrevious, ToggleGroupSelection,
+    ToggleGroupState, toggle, toggle_group_key_bindings,
+};
+pub use toolbar::{
+    MAX_TOOLBAR_ITEMS, Toolbar, ToolbarEntry, ToolbarFirst, ToolbarItem, ToolbarLast, ToolbarNext,
+    ToolbarOrientation, ToolbarPrevious, ToolbarState, toolbar, toolbar_key_bindings,
 };
 pub use tooltip::{
     DEFAULT_TOOLTIP_DELAY, MAX_TOOLTIP_CONTENT_NODES, MAX_TOOLTIP_DELAY, MAX_TOOLTIPS_PER_WINDOW,

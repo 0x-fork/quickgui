@@ -32,7 +32,11 @@ input/header/row/cell renderers and retain only bounded virtual layout geometry.
 with stable label/description/error relationships, native label activation, controlled validity,
 and explicit disabled propagation. `Collapsible` and `Accordion` decorate caller-owned
 root/trigger/panel and item/header/trigger/panel parts with controlled open state, exact disclosure
-relationships, and optional retained mounting. Do not add compatibility presets, a bundled theme,
+relationships, and optional retained mounting. `Slider`, `Splitter`, `NumberField`, `Progress`,
+`Meter`, `Toolbar`, `Toggle`, `ToggleGroup`, and `ToastViewport` decorate caller-owned parts while
+QuickGUI keeps only the numeric, ordering, roving-focus, and dismissal contracts those behaviors
+require; indeterminate progress motion, toast placement, and splitter handle appearance stay
+application-owned. Do not add compatibility presets, a bundled theme,
 or a token system.
 
 ## Dependency order
@@ -87,25 +91,25 @@ Status terms here are intentionally strict:
 | Form | Behavior present | Preserve controlled fields, nearest-form submission, and first-invalid focus. |
 | Input | Behavior present | Keep editing/IME behavior reusable while removing visual defaults from the component contract. |
 | Menu | Behavior present | Native `Menu` remains the app menu; unstyled `PopoverMenu` provides bounded items, toggles, exact group-label/separator semantics, keyboard/typeahead behavior, owner-window actions, submenu composition, and an owner-controlled hover hook used by the native context-menu aim policy. Complete live VoiceOver acceptance. |
-| Menubar | Platform only | Native macOS menubar exists; add an in-window menubar only for a demonstrated product need. |
-| Meter | Missing | Add semantic bounded-value behavior independently of presentation. |
+| Menubar | Platform only | Native macOS menubar exists; add an in-window menubar on `PopoverMenu` only for a demonstrated product need. |
+| Meter | Behavior present | `Meter` decorates a caller-owned root and accessibility-hidden indicator with the Meter role, a clamped numeric value and range, and optional low/high/optimum markers. Complete live VoiceOver acceptance. |
 | Navigation Menu | Missing | Defer until menu, tabs, and disclosure contracts are stable. |
-| Number Field | Missing | Build on input constraints with locale-aware parsing and step behavior. |
+| Number Field | Behavior present | `NumberFieldState` composes the existing `text_input()` with caller-supplied decimal/group separators, sign and exponent policy, precision, range clamping on commit, arrow/wheel/stepper stepping, and press-and-hold repeat on exact one-shot deadlines. `NumberField` supplies root/input/increment/decrement parts with SpinButton semantics and invalid state. Complete live VoiceOver and IME acceptance. |
 | OTP Field | Missing | Build on grouped controlled inputs, paste distribution, and accessible labeling. |
 | Popover | Behavior present | `Popover` supplies caller-owned trigger, combined portal/positioner, popover, backdrop, title, description, and close parts; bounded placement, independent dismissal, initial focus, relationships, and merged-surface shorthand add no appearance or idle source. Complete live VoiceOver, pointer/focus, nesting, edge-placement, and repeated-open resource acceptance. A flip-aware arrow and multi-trigger animated viewport remain separate future capabilities rather than guessed presentation. |
 | Preview Card | Primitive only | Compose delayed pointer/focus opening from popover/tooltip foundations. |
-| Progress | Missing | Add determinate/indeterminate semantics without framework-owned animation or styling. |
+| Progress | Behavior present | `Progress` supplies determinate and indeterminate roots plus an accessibility-hidden indicator part with exact numeric value and bounds; indeterminate motion stays application-owned so no framework animation keeps a settled window awake. Complete live VoiceOver acceptance. |
 | Radio | Behavior present | `RadioGroup` and `Radio` supply caller-owned group/item/indicator parts with checked-entry Tab behavior, wrapping arrow activation, disabled-item skipping, and no retained item registry. Complete live VoiceOver and application-styled focus acceptance. |
 | Scroll Area | Primitive only | Retained scrolling and native-style overlay scrollbars exist; expose unstyled viewport/scrollbar parts only if product styling requires them. |
 | Select | Behavior present | Standalone `SelectState` supplies caller-owned trigger/popover/option parts on the overflow-capable native host, exact lifecycle sync, typeahead, disabled options, and visible-only rows. Complete live VoiceOver, mixed-scale, pointer/keyboard/scroll, and repeated-open resource acceptance. |
-| Separator | Primitive only | `AccessibilityRole::Separator` projects a non-interactive native divider; add an unstyled orientation part only when a product needs the standalone component. Keep adjustable splitters a separate behavior. |
-| Slider | Missing | Add captured pointer/keyboard range behavior, steps, orientation, and value semantics. |
+| Separator | Primitive only | `AccessibilityRole::Separator` projects a non-interactive native divider; add an unstyled orientation part only when a product needs the standalone component. Adjustable splitters are a separate implemented behavior: `SplitterState` conserves pane sizes across captured drags and typed keyboard resizing, and `Splitter` supplies caller-owned root/pane/handle parts with focusable Splitter handles carrying numeric value, bounds, axis, and a controls relationship. |
+| Slider | Behavior present | `SliderState` owns bounds, step snapping, thumb ordering, and the active thumb for up to `MAX_SLIDER_THUMBS` (8) values; `Slider` supplies caller-owned root/track/range/thumb parts, captured pointer arithmetic in either orientation, typed arrow/page/Home/End actions, and Slider roles with numeric value/min/max/step. Complete live VoiceOver and pointer acceptance. |
 | Switch | Behavior present | `Switch` supplies an unstyled caller-owned root/track plus accessibility-hidden thumb part and exact toggle semantics. Complete live VoiceOver and application-styled disabled/focus acceptance. |
 | Tabs | Behavior present | `Tabs` composes caller-owned root/list/tab/indicator/panel parts with controlled selection, horizontal or vertical roving focus, manual or automatic activation, optional looping, disabled-item skipping, default unmounting or explicit `display: none` retention, exact TabList/Tab/TabPanel semantics and relationships, and zero idle source. Indicator geometry/motion remains caller-owned. Complete live VoiceOver, application-styled focus/disabled, and pointer/keyboard acceptance; native document tabs remain a separate optional platform API. |
-| Toast | Platform only | System notifications exist; add a bounded in-window live-region queue only when required. |
-| Toggle | Primitive only | Add pressed-state button semantics distinct from checkbox state. |
-| Toggle Group | Missing | Build after toggle and composite focus behavior. |
-| Toolbar | Missing | Build on roving focus, button/toggle groups, and menu triggers. |
+| Toast | Behavior present | `ToastManager` supplies a bounded queue with exact one-shot auto-dismiss deadlines, pause on hover or focus, and no idle source once drained; `ToastViewport` supplies caller-owned viewport/root/title/description/action/close parts with polite or assertive live regions by kind and focused Escape dismissal. Native system notifications remain a separate platform API. |
+| Toggle | Behavior present | `Toggle` decorates a caller-owned root with pressed-button semantics distinct from a checkbox's checked state, plus an accessibility-hidden indicator part. Complete live VoiceOver acceptance. |
+| Toggle Group | Behavior present | `ToggleGroup` composes caller-owned group and item parts with single or multiple selection, inline bounded pressed values, one roving Tab stop, bounded arrow/Home/End navigation, and disabled-item skipping. Complete live VoiceOver acceptance. |
+| Toolbar | Behavior present | `Toolbar` decorates a caller-owned root and ordered items with the Toolbar role and orientation, one roving Tab stop, per-item arrow/Home/End actions on the focused item, disabled-item skipping, and optional looping. Menu-trigger composition inside a toolbar remains application-assembled. |
 | Tooltip | Behavior present | Keep delayed positioning/accessibility behavior; presentation remains caller content. |
 
 This ledger is not a promise to implement every web component before 0.1. Release priority still

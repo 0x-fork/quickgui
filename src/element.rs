@@ -432,13 +432,95 @@ pub enum AccessibilityRole {
     TabPanel,
     Tooltip,
     Form,
+    /// A continuous or stepped range control whose value the user changes directly.
+    Slider,
+    /// A numeric text control with paired increment and decrement affordances.
+    SpinButton,
+    /// A determinate or indeterminate task-completion indicator.
+    ProgressIndicator,
+    /// A static measurement inside a known range, such as disk usage.
+    Meter,
+    /// A movable divider between two resizable panes.
+    ///
+    /// AccessKit names the platform-neutral role `Splitter`. Unlike
+    /// [`AccessibilityRole::Separator`], this variant is focusable and carries a numeric value.
+    SplitterHandle,
+    /// A grouping of controls presented as one compact set of application commands.
+    Toolbar,
+    /// A button with retained pressed state, distinct from a checkbox's checked state.
+    ToggleButton,
+    /// An in-window horizontal set of menu triggers.
+    MenuBar,
+    /// An assertive live region for urgent, time-sensitive messages.
+    Alert,
+    /// A polite live region for advisory status messages.
+    Status,
 }
 
 /// Axis projected for accessibility roles whose behavior changes with orientation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum AccessibilityOrientation {
+pub enum AccessibilityOrientation {
     Horizontal,
     Vertical,
+}
+
+/// Announcement urgency projected for one live region.
+///
+/// QuickGUI never polls a live region. The projection is rebuilt only when the application
+/// rebuilds the mounted tree, so an unchanged region announces exactly once.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AccessibilityLive {
+    /// Announce after the current utterance finishes.
+    Polite,
+    /// Interrupt the current utterance.
+    Assertive,
+}
+
+/// Numeric range projected by slider, spin-button, progress, meter, and splitter roles.
+///
+/// Every field is optional so an indeterminate progress indicator can expose bounds without a
+/// current value. Non-finite inputs are dropped rather than projected.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct AccessibilityValueRange {
+    pub value: Option<f64>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub step: Option<f64>,
+}
+
+impl AccessibilityValueRange {
+    /// Create a determinate range. Non-finite components are omitted from the native projection.
+    pub fn new(value: f64, min: f64, max: f64) -> Self {
+        Self {
+            value: finite_value(value),
+            min: finite_value(min),
+            max: finite_value(max),
+            step: None,
+        }
+    }
+
+    /// Create a range with no current value, used by indeterminate progress indicators.
+    pub fn indeterminate(min: f64, max: f64) -> Self {
+        Self {
+            value: None,
+            min: finite_value(min),
+            max: finite_value(max),
+            step: None,
+        }
+    }
+
+    pub fn step(mut self, step: f64) -> Self {
+        self.step = finite_value(step).filter(|step| *step > 0.0);
+        self
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.value.is_none() && self.min.is_none() && self.max.is_none() && self.step.is_none()
+    }
+}
+
+fn finite_value(value: f64) -> Option<f64> {
+    value.is_finite().then_some(value)
 }
 
 /// Kind of popover exposed by a trigger to assistive technology.
@@ -935,6 +1017,8 @@ pub(crate) struct AccessibilityStyle {
     pub validation_message_truncated: bool,
     pub description: Option<Arc<str>>,
     pub orientation: Option<AccessibilityOrientation>,
+    pub live: Option<AccessibilityLive>,
+    pub value_range: Option<Box<AccessibilityValueRange>>,
 }
 
 /// Retained keyboard policy for an unstyled tab list.

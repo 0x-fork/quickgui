@@ -200,6 +200,30 @@ impl Element {
         self
     }
 
+    /// Expose the layout and keyboard axis of a composite or range control.
+    pub fn accessibility_orientation(mut self, orientation: AccessibilityOrientation) -> Self {
+        self.accessibility.orientation = Some(orientation);
+        self
+    }
+
+    /// Expose a numeric value with its bounds and step for a range-valued role.
+    ///
+    /// An empty range clears the projection. Non-finite components are dropped by
+    /// [`AccessibilityValueRange`] before they reach the native tree.
+    pub fn accessibility_value_range(mut self, range: AccessibilityValueRange) -> Self {
+        self.accessibility.value_range = (!range.is_empty()).then(|| Box::new(range));
+        self
+    }
+
+    /// Announce this element's mounted text as a live region.
+    ///
+    /// The projection carries no timer, observer, or idle scheduler source; a rebuilt region is
+    /// announced exactly once by the platform adapter.
+    pub fn accessibility_live(mut self, live: AccessibilityLive) -> Self {
+        self.accessibility.live = Some(live);
+        self
+    }
+
     /// Expose whether a disclosure, popover, or similar controlled surface is expanded.
     pub fn accessibility_expanded(mut self, expanded: bool) -> Self {
         self.accessibility.expanded = Some(expanded);

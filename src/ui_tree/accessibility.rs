@@ -305,6 +305,26 @@ pub(super) fn build_accessibility_nodes(
             AccessibilityOrientation::Vertical => NativeAccessibilityOrientation::Vertical,
         });
     }
+    if let Some(range) = element.accessibility.value_range.as_deref() {
+        if let Some(value) = range.value {
+            node.set_numeric_value(value);
+        }
+        if let Some(minimum) = range.min {
+            node.set_min_numeric_value(minimum);
+        }
+        if let Some(maximum) = range.max {
+            node.set_max_numeric_value(maximum);
+        }
+        if let Some(step) = range.step {
+            node.set_numeric_value_step(step);
+        }
+    }
+    if let Some(live) = element.accessibility.live {
+        node.set_live(match live {
+            crate::AccessibilityLive::Polite => Live::Polite,
+            crate::AccessibilityLive::Assertive => Live::Assertive,
+        });
+    }
     if element.accessibility.modal {
         node.set_modal();
     }
@@ -449,6 +469,16 @@ pub(super) fn accessibility_role(role: AccessibilityRole) -> Role {
         AccessibilityRole::TabPanel => Role::TabPanel,
         AccessibilityRole::Tooltip => Role::Tooltip,
         AccessibilityRole::Form => Role::Form,
+        AccessibilityRole::Slider => Role::Slider,
+        AccessibilityRole::SpinButton => Role::SpinButton,
+        AccessibilityRole::ProgressIndicator => Role::ProgressIndicator,
+        AccessibilityRole::Meter => Role::Meter,
+        AccessibilityRole::SplitterHandle => Role::Splitter,
+        AccessibilityRole::Toolbar => Role::Toolbar,
+        AccessibilityRole::ToggleButton => Role::Button,
+        AccessibilityRole::MenuBar => Role::MenuBar,
+        AccessibilityRole::Alert => Role::Alert,
+        AccessibilityRole::Status => Role::Status,
     }
 }
 

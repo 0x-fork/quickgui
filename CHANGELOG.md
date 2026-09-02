@@ -63,6 +63,34 @@ All notable user-facing changes to QuickGUI are recorded here.
   `simulate_fullscreen_change`, `simulate_occlusion_change`, `simulate_first_presented`,
   `simulate_window_resize`, `simulate_window_move`, `window_restore_state`, `exit_code`, and the
   `TestApplicationShell` snapshot.
+- Added controlled unstyled `Slider` with bounded `MAX_SLIDER_THUMBS` values, step snapping, thumb
+  ordering, horizontal or vertical captured pointer arithmetic, typed arrow/page/Home/End actions,
+  and Slider accessibility with numeric value, minimum, maximum, step, and orientation.
+- Added `Progress` and `Meter` descriptors with determinate and indeterminate semantics, optional
+  low/high/optimum meter markers, and no framework-owned animation, so an indeterminate indicator
+  never keeps a settled window awake.
+- Added `NumberFieldState` and `NumberField` composing the existing `text_input()` with
+  caller-supplied decimal and grouping separators, sign and exponent policy, fixed precision,
+  commit-time clamping and formatting, arrow/wheel/stepper stepping, press-and-hold repeat on exact
+  one-shot deadlines that leave no idle source once released, and SpinButton accessibility with
+  numeric value, bounds, step, and invalid state.
+- Added `SplitterState` and `Splitter` for resizable panes with size-conserving drags from captured
+  pointer deltas, per-pane minimum sizes, collapse and restore, proportional `set_total` rescaling,
+  typed keyboard resizing, and focusable Splitter handles carrying numeric value, bounds, axis, and
+  a controls relationship to the pane they resize.
+- Added `Toolbar` with the Toolbar role, one roving Tab stop over the caller's ordered items,
+  per-item arrow/Home/End navigation, disabled-item skipping, and optional looping.
+- Added `Toggle` and `ToggleGroup` with pressed-state button semantics distinct from checkbox state,
+  single or multiple selection over inline bounded pressed values, and the same roving focus
+  contract as the toolbar.
+- Added `ToastManager` and `ToastViewport` with a bounded `MAX_TOASTS` queue, exact one-shot
+  auto-dismiss deadlines reported through `next_deadline`, pause on hover or focus, polite or
+  assertive live regions chosen by toast kind, focused Escape dismissal, and caller-owned
+  viewport/root/title/description/action/close parts.
+- Added `AccessibilityRole::Slider`, `SpinButton`, `ProgressIndicator`, `Meter`, `SplitterHandle`,
+  `Toolbar`, `ToggleButton`, `MenuBar`, `Alert`, and `Status`, plus public
+  `AccessibilityOrientation`, `AccessibilityLive`, and `AccessibilityValueRange` with
+  `Element::accessibility_orientation`, `accessibility_live`, and `accessibility_value_range`.
 
 ### macOS
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
@@ -90,6 +118,7 @@ All notable user-facing changes to QuickGUI are recorded here.
   by `IsSecureEventInputEnabled` so the process-global counter stays balanced), and `NSBeep`.
 - `on_did_become_active`/`on_did_resign_active` reuse the existing application observer, adding no
   new native observer.
+
 
 ### JavaScript tooling
 - Added `CrashReporter` and `Metrics` to `@quickgui/native`, both Promise-backed by `AsyncTask`,
