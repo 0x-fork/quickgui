@@ -9,6 +9,7 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 - [Project CLI and application packaging](cli.md) — initialization, on-demand TSX development in a real native app, restart ownership, target builds, and macOS signing.
 - [Application identity, paths, and system information](application-environment.md) — package metadata, app-scoped standard directories, locale/language data, and immutable runtime access.
 - [Relaunch and signed updates](relaunch-and-updates.md) — orderly Rust-core restart, bounded progress, signature re-verification, and platform installation strategies.
+- [Crash reporting and process metrics](crash-reporting-and-metrics.md) — bounded panic and native-fault reports, retention and upload, an opt-in hang watchdog, and explicit process/system readings.
 - [Power, idle, thermal, and session state](power-and-session.md) — RAII sleep assertions, bounded point-in-time snapshots, idle/session queries, and native transition events.
 - [System preferences and permissions](system-preferences-and-permissions.md) — appearance and accessibility snapshots, declarative observation, Reduce Motion, and explicit privacy prompts.
 - [Desktop integrations](desktop-integrations.md) — taskbar and Dock state, recent documents, About panels, file icons, Jump Lists, native menus, notifications, deep links, and the per-target capability matrix.

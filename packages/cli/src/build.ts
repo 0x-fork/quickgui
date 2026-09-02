@@ -18,6 +18,25 @@ import type { BunPlugin } from "bun";
 
 import type { MacOSNotarizationConfig, ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
+import {
+  macDocumentTypesPlist,
+  macTypeDeclarationsPlist,
+  type ResolvedDocumentType,
+} from "./packaging/documents.ts";
+import {
+  masCodesignArguments,
+  masEntitlementsTemplate,
+  masPackageFilename,
+  productBuildArguments,
+  validateMasConfig,
+} from "./packaging/mas.ts";
+import {
+  buildIcons,
+  packageLinux,
+  packageWindows,
+  writeUpdateManifest,
+  type IconBuildResult,
+} from "./packaging/pipeline.ts";
 import { targetInfo, type QuickGuiTarget } from "./targets.ts";
 
 export type BuildMode = "development" | "production";
@@ -28,6 +47,12 @@ export interface BuildProjectOptions {
   outDir?: string;
   signingIdentity?: string;
   notarization?: MacOSNotarizationConfig;
+  /** Produce and sign the artifact the Rust updater installs, then write `latest.json`. */
+  updateManifest?: boolean;
+  /** Override `updates.baseUrl` for this build. */
+  updateBaseUrl?: string;
+  /** Sign for the Mac App Store and produce a `.pkg` instead of a DMG. */
+  macAppStore?: boolean;
 }
 
 export interface BuildResult {
@@ -36,11 +61,26 @@ export interface BuildResult {
   target: QuickGuiTarget;
   mode: BuildMode;
   dmgPath?: string;
+  /** Installers, packages, desktop entries, and scripts produced beside the main artifact. */
+  packagePaths?: string[];
+  /** The signed artifact published to the updater, when `--update-manifest` was requested. */
+  updateArtifactPath?: string;
+  /** `latest.json`, when `--update-manifest` was requested. */
+  manifestPath?: string;
+  /** Advisory lines describing tools that were missing. */
+  notes?: string[];
+}
+
+interface StagedBuild extends BuildResult {
+  /** Staged files moved into the target output directory alongside the main artifact. */
+  extraArtifacts?: string[];
 }
 
 export const nativeExports = [
+  "NativeCpuUsageSampler",
   "NativePowerAssertion",
   "abortAppHost",
+  "addCrashExtraParameter",
   "addHostedRecentDocument",
   "addRecentDocument",
   "applyBatch",
@@ -66,6 +106,7 @@ export const nativeExports = [
   "dismissHostedNotification",
   "dismissNotification",
   "defaultUpdateTarget",
+  "deleteCrashReport",
   "deleteSecureStorage",
   "enableAutoStart",
   "exitApp",
@@ -88,13 +129,17 @@ export const nativeExports = [
   "getHostedWindowRegistry",
   "getHostedWindowState",
   "getKeyboardLayout",
+  "getLastCrashReport",
+  "getPendingCrashReports",
   "getPermissionStatus",
   "getPowerState",
+  "getProcessMetrics",
   "getSecureStorage",
   "getSessionState",
   "getSystemIdleState",
   "getSystemIdleTime",
   "getSystemInfo",
+  "getSystemMemory",
   "getSystemPreferences",
   "getWindowRegistry",
   "getWindowState",
@@ -102,6 +147,7 @@ export const nativeExports = [
   "isAutoStartEnabled",
   "isAutoStartSupported",
   "isAppReady",
+  "isCrashReporterStarted",
   "isProtocolRegistered",
   "isSecureStorageSupported",
   "performGlobalShortcutAction",
@@ -121,6 +167,7 @@ export const nativeExports = [
   "readClipboard",
   "readHostedClipboard",
   "registerProtocol",
+  "removeCrashExtraParameter",
   "relaunchApp",
   "relaunchHostedApp",
   "releaseHostedSingleInstanceLock",
@@ -161,7 +208,10 @@ export const nativeExports = [
   "startApp",
   "startHostedApp",
   "stageUpdate",
+  "stageUpdateWithProgress",
+  "startCrashReporter",
   "supportsDynamicProtocolRegistration",
+  "uploadPendingCrashReports",
   "takeEvents",
   "waitForHostedEvents",
   "unregisterProtocol",
@@ -191,7 +241,7 @@ export async function buildProject(
   const stagingRoot = mkdtempSync(join(targetOutDir, ".quickgui-staging-"));
 
   try {
-    const staged =
+    const staged: StagedBuild =
       info.platform === "darwin"
         ? await buildMacApp(config, options, stagingRoot)
         : await buildExecutable(config, options, stagingRoot);
@@ -199,22 +249,44 @@ export async function buildProject(
     const finalDmgPath = staged.dmgPath
       ? resolve(targetOutDir, basename(staged.dmgPath))
       : undefined;
+    const extras = (staged.extraArtifacts ?? []).map((stagedPath) => ({
+      stagedPath,
+      finalPath: resolve(targetOutDir, basename(stagedPath)),
+    }));
     replaceArtifacts(
       [
         { stagedPath: staged.artifactPath, finalPath },
         ...(staged.dmgPath && finalDmgPath
           ? [{ stagedPath: staged.dmgPath, finalPath: finalDmgPath }]
           : []),
+        ...extras,
       ],
       stagingRoot,
     );
     const executablePath = resolve(finalPath, relative(staged.artifactPath, staged.executablePath));
+    const packagePaths = extras.map((extra) => extra.finalPath);
+    let updates: { artifactPath: string; manifestPath: string } | undefined;
+    if (options.updateManifest && options.mode === "production") {
+      updates = await writeUpdateManifest({
+        config,
+        target: options.target,
+        outputDirectory: targetOutDir,
+        source: updateSource(options, finalPath, packagePaths),
+        baseUrl: updateBaseUrl(config, options),
+        run: (command, cwd) => run(command, cwd),
+      });
+    }
     return {
       artifactPath: finalPath,
       executablePath,
       target: options.target,
       mode: options.mode,
       ...(finalDmgPath ? { dmgPath: finalDmgPath } : {}),
+      ...(packagePaths.length > 0 ? { packagePaths } : {}),
+      ...(staged.notes?.length ? { notes: staged.notes } : {}),
+      ...(updates
+        ? { updateArtifactPath: updates.artifactPath, manifestPath: updates.manifestPath }
+        : {}),
     };
   } finally {
     if (existsSync(stagingRoot)) rmSync(stagingRoot, { recursive: true, force: true });
@@ -225,7 +297,7 @@ async function buildMacApp(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   stagingRoot: string,
-): Promise<BuildResult> {
+): Promise<StagedBuild> {
   if (process.platform !== "darwin") {
     throw new CliError("macOS .app bundles must currently be assembled and signed on macOS");
   }
@@ -248,11 +320,16 @@ async function buildMacApp(
   chmodSync(executablePath, 0o755);
 
   let iconFile: string | undefined;
+  let generatedIcns: Uint8Array | undefined;
   if (config.macos.icon) {
     if (extname(config.macos.icon).toLowerCase() !== ".icns") {
       throw new CliError("macos.icon must point to an .icns file");
     }
     iconFile = "AppIcon.icns";
+  } else if (config.icon && options.mode === "production") {
+    // Icon containers are regenerated per build, so development reloads skip the `sips` passes.
+    generatedIcns = resolveIcons(config, stagingRoot)?.icns;
+    if (generatedIcns) iconFile = "AppIcon.icns";
   }
   const reservedResources = new Set<string>([
     ...(iconFile ? [iconFile] : []),
@@ -260,6 +337,8 @@ async function buildMacApp(
   copyResources(config.resources, resources, reservedResources);
   if (config.macos.icon && iconFile) {
     cpSync(config.macos.icon, resolve(resources, iconFile));
+  } else if (generatedIcns && iconFile) {
+    writeFileSync(resolve(resources, iconFile), generatedIcns);
   }
   writeFileSync(
     resolve(contents, "Info.plist"),
@@ -273,10 +352,22 @@ async function buildMacApp(
       minimumSystemVersion: config.macos.minimumSystemVersion,
       category: config.macos.category,
       urlSchemes: config.protocols,
+      documentTypes: config.documentTypes,
       ...(iconFile ? { iconFile } : {}),
     }),
   );
   writeFileSync(resolve(contents, "PkgInfo"), "APPL????");
+
+  if (options.macAppStore) {
+    const packagePath = await buildMacAppStorePackage(config, appPath, stagingRoot);
+    return {
+      artifactPath: appPath,
+      executablePath,
+      target: options.target,
+      mode: options.mode,
+      extraArtifacts: [packagePath],
+    };
+  }
 
   const signArguments = ["codesign", "--force", "--deep"];
   if (options.mode === "production" && identity !== "-") {
@@ -302,6 +393,55 @@ async function buildMacApp(
     mode: options.mode,
     ...(dmgPath ? { dmgPath } : {}),
   };
+}
+
+/**
+ * Sign a bundle with the Mac App Store identity and wrap it in a signed installer package.
+ *
+ * The provisioning profile is embedded before signing because `codesign` seals
+ * `Contents/embedded.provisionprofile` into the bundle signature.
+ */
+async function buildMacAppStorePackage(
+  config: ResolvedQuickGuiConfig,
+  appPath: string,
+  stagingRoot: string,
+): Promise<string> {
+  const appStore = config.macos.appStore;
+  if (!appStore) {
+    throw new CliError(
+      "`quickgui build --mas` needs `macos.appStore` with applicationIdentity, installerIdentity, " +
+        "and provisioningProfile.",
+    );
+  }
+  validateMasConfig(appStore);
+  if (!existsSync(appStore.provisioningProfile)) {
+    throw new CliError(`Provisioning profile not found: ${appStore.provisioningProfile}`);
+  }
+  cpSync(appStore.provisioningProfile, resolve(appPath, "Contents", "embedded.provisionprofile"));
+  let entitlements = appStore.entitlements;
+  if (!entitlements) {
+    entitlements = resolve(stagingRoot, "quickgui-mas.entitlements");
+    writeFileSync(
+      entitlements,
+      masEntitlementsTemplate(config.macos.teamIdentifier, config.identifier),
+    );
+  } else if (!existsSync(entitlements)) {
+    throw new CliError(`Mac App Store entitlements not found: ${entitlements}`);
+  }
+  await run(
+    masCodesignArguments(appPath, appStore.applicationIdentity, entitlements),
+    config.projectRoot,
+  );
+  await run(["codesign", "--verify", "--deep", "--strict", appPath], config.projectRoot);
+  const packagePath = resolve(stagingRoot, masPackageFilename(config.name, config.version));
+  await run(
+    productBuildArguments(appPath, appStore.installerIdentity, packagePath),
+    config.projectRoot,
+  );
+  if (!existsSync(packagePath)) {
+    throw new CliError(`productbuild did not produce the expected package: ${packagePath}`);
+  }
+  return packagePath;
 }
 
 async function buildMacDmg(
@@ -392,17 +532,42 @@ async function buildExecutable(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   stagingRoot: string,
-): Promise<BuildResult> {
+): Promise<StagedBuild> {
   const info = targetInfo(options.target);
   const suffix = info.platform === "windows" ? ".exe" : "";
   const executablePath = resolve(stagingRoot, `${config.executableName}${suffix}`);
   await compileExecutable(config, options, executablePath, stagingRoot);
   if (info.platform !== "windows") chmodSync(executablePath, 0o755);
-  return {
+  const result: StagedBuild = {
     artifactPath: executablePath,
     executablePath,
     target: options.target,
     mode: options.mode,
+  };
+  if (options.mode !== "production") return result;
+
+  const icons = resolveIcons(config, stagingRoot);
+  const packaged =
+    info.platform === "linux"
+      ? await packageLinux({
+          config,
+          target: options.target,
+          executablePath,
+          stagingRoot,
+          run: (command, cwd) => run(command, cwd),
+          ...(icons ? { icons } : {}),
+        })
+      : await packageWindows({
+          config,
+          executablePath,
+          stagingRoot,
+          run: (command, cwd) => run(command, cwd),
+          ...(icons ? { icons } : {}),
+        });
+  return {
+    ...result,
+    ...(packaged.artifacts.length > 0 ? { extraArtifacts: packaged.artifacts } : {}),
+    ...(packaged.notes.length > 0 ? { notes: packaged.notes } : {}),
   };
 }
 
@@ -598,6 +763,60 @@ function replaceArtifacts(
   }
 }
 
+
+function updateBaseUrl(
+  config: ResolvedQuickGuiConfig,
+  options: BuildProjectOptions,
+): string {
+  const baseUrl = options.updateBaseUrl ?? config.updates?.baseUrl;
+  if (!baseUrl) {
+    throw new CliError(
+      "Writing an update manifest needs a publication URL. Set `updates.baseUrl` in " +
+        "quickgui.config.ts or pass --update-base-url.",
+    );
+  }
+  return baseUrl;
+}
+
+/** The artifact the Rust updater installs for this target, chosen from what the build produced. */
+function updateSource(
+  options: BuildProjectOptions,
+  artifactPath: string,
+  packagePaths: readonly string[],
+): string {
+  const platform = targetInfo(options.target).platform;
+  if (platform === "darwin") return artifactPath;
+  if (platform === "windows") {
+    const installer = packagePaths.find((path) => path.endsWith("-setup.exe"));
+    if (!installer) {
+      throw new CliError(
+        "A Windows update artifact must be an .exe or .msi installer, but `makensis` did not " +
+          "produce one. Install NSIS and re-run, or publish the update from a host that has it.",
+      );
+    }
+    return installer;
+  }
+  const appImage = packagePaths.find((path) => path.endsWith(".AppImage"));
+  return appImage ?? artifactPath;
+}
+
+function resolveIcons(
+  config: ResolvedQuickGuiConfig,
+  stagingRoot: string,
+): IconBuildResult | undefined {
+  if (!config.icon) return undefined;
+  return buildIcons(config.icon, resolve(stagingRoot, ".quickgui-icons"), (command) => {
+    const result = Bun.spawnSync(command, {
+      cwd: config.projectRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (result.exitCode !== 0) {
+      throw new CliError(`Command failed: ${command.join(" ")}`);
+    }
+  });
+}
+
 function validateMacPackaging(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
@@ -645,6 +864,12 @@ function validateInputs(
   }
   if (platform === "windows" && config.windows.icon && !existsSync(config.windows.icon)) {
     throw new CliError(`Windows icon not found: ${config.windows.icon}`);
+  }
+  if (config.icon && (!existsSync(config.icon) || !statSync(config.icon).isFile())) {
+    throw new CliError(`Icon not found: ${config.icon}`);
+  }
+  if (config.updates?.notesFile && !existsSync(config.updates.notesFile)) {
+    throw new CliError(`Release notes not found: ${config.updates.notesFile}`);
   }
 }
 
@@ -707,6 +932,7 @@ interface MacInfoPlistOptions {
   minimumSystemVersion: string;
   category: string;
   urlSchemes?: readonly string[];
+  documentTypes?: readonly ResolvedDocumentType[];
   iconFile?: string;
 }
 
@@ -731,6 +957,9 @@ export function macInfoPlist(options: MacInfoPlistOptions): string {
     </dict>
   </array>`
     : "";
+  const documents = options.documentTypes?.length
+    ? macDocumentTypesPlist(options.documentTypes) + macTypeDeclarationsPlist(options.documentTypes)
+    : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -752,7 +981,7 @@ export function macInfoPlist(options: MacInfoPlistOptions): string {
   <key>CFBundleShortVersionString</key>
   <string>${xml(options.version)}</string>
   <key>CFBundleVersion</key>
-  <string>${xml(options.buildVersion)}</string>${urlTypes}
+  <string>${xml(options.buildVersion)}</string>${urlTypes}${documents}
   <key>LSApplicationCategoryType</key>
   <string>${xml(options.category)}</string>
   <key>LSMinimumSystemVersion</key>

@@ -57,7 +57,56 @@ describe("CLI arguments", () => {
       outDir: "artifacts",
       signingIdentity: "Developer ID Application: Example",
       notarizationProfile: "quickgui-notary",
+      updateManifest: false,
+      macAppStore: false,
     });
+  });
+
+  test("parses the packaging and updater build flags", () => {
+    expect(
+      parseCliArgs([
+        "build",
+        "--update-manifest",
+        "--update-base-url",
+        "https://dl.example.com/demo",
+        "--mas",
+      ]),
+    ).toEqual({
+      command: "build",
+      project: ".",
+      configFile: "quickgui.config.ts",
+      updateManifest: true,
+      updateBaseUrl: "https://dl.example.com/demo",
+      macAppStore: true,
+    });
+    // A base URL alone implies the manifest.
+    expect(
+      parseCliArgs(["build", "--update-base-url=https://dl.example.com/demo"]),
+    ).toMatchObject({ updateManifest: true });
+    expect(() => parseCliArgs(["build", "--update-base-url", "http://dl.example.com"])).toThrow(
+      "HTTPS",
+    );
+    expect(() => parseCliArgs(["build", "--update-manifest=yes"])).toThrow(
+      "does not take a value",
+    );
+  });
+
+  test("parses keygen options and help topics", () => {
+    expect(parseCliArgs(["keygen"])).toEqual({
+      command: "keygen",
+      outDir: ".",
+      force: false,
+      passwordless: true,
+    });
+    expect(parseCliArgs(["keygen", "--out-dir", "keys", "--force", "--password"])).toEqual({
+      command: "keygen",
+      outDir: "keys",
+      force: true,
+      passwordless: false,
+    });
+    expect(parseCliArgs(["help", "keygen"])).toEqual({ command: "help", topic: "keygen" });
+    expect(parseCliArgs(["keygen", "--help"])).toEqual({ command: "help", topic: "keygen" });
+    expect(() => parseCliArgs(["keygen", "extra"])).toThrow("positional");
   });
 
   test("rejects unknown and duplicate options", () => {

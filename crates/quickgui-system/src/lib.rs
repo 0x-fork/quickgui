@@ -3,6 +3,9 @@
 mod app_environment;
 #[cfg(feature = "autostart")]
 mod autostart;
+#[cfg(feature = "crash-reporter")]
+mod crash;
+mod metrics;
 mod power;
 mod preferences;
 mod process;
@@ -20,6 +23,19 @@ pub use app_environment::{
 };
 #[cfg(feature = "autostart")]
 pub use autostart::{AutoStart, AutoStartMode, AutoStartOptions};
+#[cfg(feature = "crash-reporter")]
+pub use crash::{
+    BacktracePolicy, CRASH_REPORT_SCHEMA_VERSION, CrashKind, CrashLocation, CrashReport,
+    CrashReporter, CrashReporterOptions, DEFAULT_MAX_CRASH_REPORT_BYTES, DEFAULT_MAX_CRASH_REPORTS,
+    DEFAULT_WATCHDOG_HANG_THRESHOLD, DEFAULT_WATCHDOG_INTERVAL, MAX_CRASH_BACKTRACE_BYTES,
+    MAX_CRASH_EXTRA_PARAMETERS, MAX_CRASH_MESSAGE_BYTES, MAX_CRASH_PARAMETER_KEY_BYTES,
+    MAX_CRASH_PARAMETER_VALUE_BYTES, MAX_CRASH_REPORT_BYTES, MAX_CRASH_REPORTS,
+    MAX_CRASH_UPLOAD_REPORTS, MAX_WATCHDOG_INTERVAL, MIN_WATCHDOG_INTERVAL, UploadSummary,
+    Watchdog, WatchdogOptions,
+};
+pub use metrics::{
+    CpuUsage, CpuUsageSampler, MAX_CPU_SAMPLE_INTERVAL, ProcessMetrics, SystemMemory,
+};
 pub use power::{
     BatteryState, BatteryStatus, IdleState, MAX_IDLE_THRESHOLD, MAX_POWER_ASSERTION_REASON_BYTES,
     PowerAssertion, PowerAssertionKind, PowerMonitor, PowerSource, PowerState, SessionState,

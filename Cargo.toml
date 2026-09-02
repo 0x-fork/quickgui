@@ -33,7 +33,8 @@ exclude = [
 resolver = "3"
 
 [features]
-default = ["updater"]
+default = ["crash-reporter", "updater"]
+crash-reporter = ["quickgui-system/crash-reporter"]
 inspector = []
 swift-ui = []
 test-support = []

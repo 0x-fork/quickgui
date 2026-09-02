@@ -750,3 +750,114 @@ export declare function waitForHostedEvents(app: number): Promise<HostedAppUpdat
 export declare function writeClipboard(app: number, item: NativeClipboardItem): void
 
 export declare function writeHostedClipboard(app: number, item: NativeClipboardItem): Promise<void>
+
+export declare class NativeCpuUsageSampler {
+  constructor()
+  sample(): Promise<NativeCpuUsage>
+}
+
+export interface NativeCrashParameter {
+  key: string
+  value: string
+}
+
+export interface NativeCrashReporterOptions {
+  appName: string
+  appVersion: string
+  appIdentifier: string
+  directory?: string
+  maxReports?: number
+  maxReportBytes?: number
+  parameters?: Array<NativeCrashParameter>
+  uploadEndpoint?: string
+  backtrace?: string
+  captureSignals?: boolean
+}
+
+export interface NativeCrashLocation {
+  file: string
+  line: number
+  column: number
+}
+
+export interface NativeCrashReport {
+  schemaVersion: number
+  id: string
+  kind: string
+  timestamp: string
+  appName: string
+  appVersion: string
+  appIdentifier: string
+  operatingSystem: string
+  operatingSystemVersion?: string
+  architecture: string
+  processId: number
+  thread?: string
+  message: string
+  location?: NativeCrashLocation
+  backtrace?: string
+  signal?: number
+  signalName?: string
+  faultAddress?: string
+  parameters: Array<NativeCrashParameter>
+}
+
+export interface NativeCrashUploadSummary {
+  attempted: number
+  uploaded: number
+  failed: number
+}
+
+export interface NativeProcessMetrics {
+  cpuUserSeconds: number
+  cpuSystemSeconds: number
+  residentBytes: number
+  footprintBytes?: number
+  virtualBytes: number
+  threadCount?: number
+  uptimeSeconds: number
+}
+
+export interface NativeSystemMemory {
+  totalBytes: number
+  availableBytes: number
+  freeBytes: number
+  usedBytes: number
+}
+
+export interface NativeCpuUsage {
+  percent?: number
+  intervalSeconds: number
+  cpuSeconds: number
+  totalCpuSeconds: number
+}
+
+export interface NativeUpdateProgress {
+  phase: string
+  chunkBytes?: number
+  downloadedBytes?: number
+  totalBytes?: number
+  path?: string
+}
+
+export declare function addCrashExtraParameter(key: string, value: string): Promise<boolean>
+
+export declare function deleteCrashReport(id: string): Promise<boolean>
+
+export declare function getLastCrashReport(): Promise<NativeCrashReport[]>
+
+export declare function getPendingCrashReports(): Promise<NativeCrashReport[]>
+
+export declare function getProcessMetrics(): Promise<NativeProcessMetrics>
+
+export declare function getSystemMemory(): Promise<NativeSystemMemory>
+
+export declare function isCrashReporterStarted(): boolean
+
+export declare function removeCrashExtraParameter(key: string): Promise<boolean>
+
+export declare function stageUpdateWithProgress(update: NativeAvailableUpdate, destinationDirectory: string, options: NativeUpdateClientOptions, onProgress: (progress: NativeUpdateProgress) => void): Promise<string>
+
+export declare function startCrashReporter(options: NativeCrashReporterOptions): Promise<string>
+
+export declare function uploadPendingCrashReports(endpoint?: string | undefined | null): Promise<NativeCrashUploadSummary>

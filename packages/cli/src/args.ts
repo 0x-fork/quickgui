@@ -2,7 +2,7 @@ import { CliError } from "./error.ts";
 import { parseTarget, type QuickGuiTarget } from "./targets.ts";
 
 export type ParsedCliCommand =
-  | { command: "help"; topic?: "init" | "dev" | "build" }
+  | { command: "help"; topic?: "init" | "dev" | "build" | "keygen" }
   | { command: "version" }
   | {
       command: "init";
@@ -28,6 +28,15 @@ export type ParsedCliCommand =
       outDir?: string;
       signingIdentity?: string;
       notarizationProfile?: string;
+      updateManifest: boolean;
+      updateBaseUrl?: string;
+      macAppStore: boolean;
+    }
+  | {
+      command: "keygen";
+      outDir: string;
+      force: boolean;
+      passwordless: boolean;
     };
 
 interface OptionSpec {
@@ -49,15 +58,15 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
   const command = argv[0];
   const rest = argv.slice(1);
   if (command === "help") {
-    if (rest.length > 1 || (rest[0] && !["init", "dev", "build"].includes(rest[0]))) {
-      throw new CliError("Usage: quickgui help [init|dev|build]");
+    if (rest.length > 1 || (rest[0] && !["init", "dev", "build", "keygen"].includes(rest[0]))) {
+      throw new CliError("Usage: quickgui help [init|dev|build|keygen]");
     }
     return rest[0]
-      ? { command: "help", topic: rest[0] as "init" | "dev" | "build" }
+      ? { command: "help", topic: rest[0] as "init" | "dev" | "build" | "keygen" }
       : { command: "help" };
   }
   if (rest.includes("--help") || rest.includes("-h")) {
-    if (command === "init" || command === "dev" || command === "build") {
+    if (command === "init" || command === "dev" || command === "build" || command === "keygen") {
       return { command: "help", topic: command };
     }
   }
@@ -111,20 +120,45 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       "--out-dir": { key: "outDir", value: true },
       "--sign": { key: "signingIdentity", value: true },
       "--notarize": { key: "notarizationProfile", value: true },
+      "--update-manifest": { key: "updateManifest", value: false },
+      "--update-base-url": { key: "updateBaseUrl", value: true },
+      "--mas": { key: "macAppStore", value: false },
     });
     rejectPositionals(parsed, "quickgui build");
     const target = stringOption(parsed, "target");
     const outDir = stringOption(parsed, "outDir");
     const signingIdentity = stringOption(parsed, "signingIdentity");
     const notarizationProfile = stringOption(parsed, "notarizationProfile");
+    const updateBaseUrl = stringOption(parsed, "updateBaseUrl");
+    if (updateBaseUrl !== undefined && !/^https:\/\/[^\s"']+$/.test(updateBaseUrl)) {
+      throw new CliError("--update-base-url must be an HTTPS URL");
+    }
     return {
       command: "build",
       project: stringOption(parsed, "project") ?? ".",
       configFile: stringOption(parsed, "configFile") ?? "quickgui.config.ts",
+      updateManifest: parsed.values.has("updateManifest") || updateBaseUrl !== undefined,
+      macAppStore: parsed.values.has("macAppStore"),
       ...(target ? { target: parseTarget(target) } : {}),
       ...(outDir ? { outDir } : {}),
       ...(signingIdentity ? { signingIdentity } : {}),
       ...(notarizationProfile ? { notarizationProfile } : {}),
+      ...(updateBaseUrl ? { updateBaseUrl } : {}),
+    };
+  }
+
+  if (command === "keygen") {
+    const parsed = parseOptions(rest, {
+      "--out-dir": { key: "outDir", value: true },
+      "--force": { key: "force", value: false },
+      "--password": { key: "password", value: false },
+    });
+    rejectPositionals(parsed, "quickgui keygen");
+    return {
+      command: "keygen",
+      outDir: stringOption(parsed, "outDir") ?? ".",
+      force: parsed.values.has("force"),
+      passwordless: !parsed.values.has("password"),
     };
   }
 

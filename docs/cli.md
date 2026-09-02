@@ -69,6 +69,8 @@ quickgui build
 quickgui build --target darwin-arm64
 quickgui build --target windows-x64 --out-dir artifacts
 quickgui build --sign "Developer ID Application: Example (TEAMID)" --notarize quickgui-notary
+quickgui build --update-manifest --update-base-url https://dl.example.com/demo
+quickgui build --mas
 ```
 
 Production compilation embeds the application, Solid runtime, Bun runtime, and selected N-API
@@ -95,6 +97,161 @@ Recognized targets are `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`,
 `windows-arm64`, and `windows-x64`. A build is available only when the installed
 `@quickgui/native` package contains the corresponding addon; target recognition is not a claim of
 native runtime acceptance.
+
+## Icons
+
+Point `icon` at one square PNG of at least 256x256 and QuickGUI generates every container it
+needs: a `.icns` with the PNG-based `ic07`…`ic13` entries for macOS, a PNG-based `.ico` for the
+Windows installer, and `hicolor` PNG sizes for Linux. Both writers are pure TypeScript.
+
+Sizes are collected in this order and never invented:
+
+1. `assets/icon.iconset/icon_<n>x<n>.png`, if that directory exists beside the configured icon;
+2. the source PNG itself, when its own size matches;
+3. `sips`, which only exists on macOS.
+
+So a macOS host produces every size from one file, while Linux and Windows hosts need the
+pre-sized `iconset` directory (`icon_16x16.png` through `icon_1024x1024.png`) for anything the
+source PNG does not already cover. A size with no source is simply left out of the container.
+`macos.icon` and `windows.icon` still take precedence when you have hand-built containers.
+
+## File associations
+
+`documentTypes` is declared once and reaches every packaging backend:
+
+```ts
+documentTypes: [
+  {
+    name: "Demo Project",
+    extensions: ["demo", "demoproj"],
+    role: "Editor",                        // or "Viewer"
+    mimeTypes: ["application/x-demo-project"],
+    utTypeIdentifier: "com.example.demo.project",
+    conformsTo: ["public.data"],           // defaults to ["public.data"]
+    exported: true,                        // false declares an imported UTI instead
+    description: "A Demo project bundle",
+  },
+],
+```
+
+| Backend | Generated |
+| --- | --- |
+| macOS `Info.plist` | `CFBundleDocumentTypes` plus `UTExportedTypeDeclarations` / `UTImportedTypeDeclarations` |
+| Linux desktop entry | `MimeType=` including `x-scheme-handler/<protocol>` entries |
+| Linux `shared-mime-info` | `usr/share/mime/packages/<name>.xml` with one `<glob>` per extension |
+| Windows NSIS | `Software\Classes` ProgID, `DefaultIcon`, and `shell\open\command` per extension, removed on uninstall |
+
+At most 64 document types, 64 extensions each; extensions are lowercased, stripped of leading
+dots, and may not repeat across types.
+
+## Linux packages
+
+A production Linux build always writes `<name>.desktop` and, when any document type declares a
+MIME type, a `shared-mime-info` XML package. Beyond that:
+
+- an AppDir with `AppRun`, the desktop entry, and the `hicolor` icon tree is assembled whenever
+  `linux.appImage` is true (the default). When `appimagetool` is on PATH it is invoked and the
+  `.AppImage` is kept; otherwise the finished AppDir is kept and the CLI prints the exact
+  `appimagetool` command that completes it;
+- a `.deb` is written when `linux.deb` is true, which defaults to true as soon as
+  `linux.maintainer` is set. The package is built in pure TypeScript — an `ar` container holding
+  `debian-binary`, `control.tar.gz`, and `data.tar.gz` written as ustar and compressed with
+  `Bun.gzipSync` — so no `dpkg-deb` is required. `control` carries `Installed-Size`, `Section`
+  (default `utils`), and `Depends`, and `md5sums` covers every payload file.
+
+```ts
+linux: {
+  categories: ["Utility", "Development"],
+  comment: "A QuickGUI demo",
+  maintainer: "Demo Team <demo@example.com>",
+  section: "utils",
+  depends: ["libc6"],
+},
+```
+
+## Windows installer
+
+A production Windows build writes an NSIS script next to the executable and runs `makensis` when
+it is on PATH; when it is not, the script is kept and the CLI prints the command that compiles it.
+The script installs the executable, writes an uninstaller and its
+`Software\Microsoft\Windows\CurrentVersion\Uninstall\<identifier>` entry, creates Start Menu and
+desktop shortcuts, and registers every `protocols` scheme and `documentTypes` extension.
+
+```ts
+windows: {
+  publisher: "Example Inc",
+  nsis: {
+    installDirectory: "$LOCALAPPDATA\\Demo",   // an NSIS expression, used verbatim
+    perMachine: false,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+  },
+  signing: {
+    subjectName: "Example Inc",              // or certificateFile: "keys/demo.pfx"
+    passwordEnvironmentVariable: "WINDOWS_CERT_PASSWORD",
+    timestampUrl: "http://timestamp.digicert.com",
+    digest: "sha256",
+  },
+},
+```
+
+Authenticode signing runs `signtool` and therefore only executes when the build host is Windows;
+on any other host the build succeeds and prints that signing was skipped. Exactly one of
+`certificateFile` or `subjectName` must be set.
+
+## Mac App Store
+
+```console
+quickgui build --mas
+```
+
+`--mas` signs the bundle with the `3rd Party Mac Developer Application` identity and the App
+Sandbox entitlements, embeds `Contents/embedded.provisionprofile` before signing, and runs
+`productbuild --component <app> /Applications --sign "3rd Party Mac Developer Installer" <pkg>`.
+It replaces the DMG rather than adding to it.
+
+```ts
+macos: {
+  teamIdentifier: "TEAMID",
+  appStore: {
+    applicationIdentity: "3rd Party Mac Developer Application: Example (TEAMID)",
+    installerIdentity: "3rd Party Mac Developer Installer: Example (TEAMID)",
+    provisioningProfile: "keys/demo.provisionprofile",
+    // entitlements: "MacAppStore.entitlements",
+  },
+},
+```
+
+Both identities are checked against the prefixes Apple requires, and the profile must end in
+`.provisionprofile`. When `entitlements` is omitted QuickGUI writes a minimal App Sandbox template
+enabling `com.apple.security.app-sandbox`, user-selected file access, and outbound networking,
+plus an application group derived from `macos.teamIdentifier` when that is set.
+
+## Signed update manifests
+
+```console
+quickgui keygen
+quickgui build --update-manifest
+quickgui build --update-manifest --update-base-url https://dl.example.com/demo
+```
+
+`quickgui keygen` shells out to `minisign -G` or `rsign generate` (whichever is on PATH) and
+writes `quickgui-update.pub` / `quickgui-update.key`. `--password` encrypts the secret key;
+`--force` overwrites an existing pair.
+
+`quickgui build --update-manifest` produces the exact artifact the Rust updater installs for the
+target, signs it with `minisign -S` or `rsign sign`, and writes `latest.json` beside it. See
+[Relaunch and signed updates](relaunch-and-updates.md) for the end-to-end flow, the artifact
+layout per platform, and the manifest shape.
+
+```ts
+updates: {
+  manifest: true,
+  baseUrl: "https://dl.example.com/demo",
+  minisignSecretKey: "keys/quickgui-update.key",  // or QUICKGUI_MINISIGN_SECRET_KEY
+  notesFile: "RELEASE_NOTES.md",
+},
+```
 
 ## Configuration
 
@@ -126,6 +283,24 @@ export default defineConfig({
   windows: {
     icon: "assets/app.ico",
     hideConsole: true,
+  },
+  icon: "assets/icon.png",
+  documentTypes: [
+    {
+      name: "Demo Project",
+      extensions: ["demo"],
+      mimeTypes: ["application/x-demo-project"],
+      utTypeIdentifier: "com.example.my-app.project",
+    },
+  ],
+  updates: {
+    manifest: true,
+    baseUrl: "https://dl.example.com/my-app",
+    minisignSecretKey: "keys/quickgui-update.key",
+  },
+  linux: {
+    maintainer: "My Team <team@example.com>",
+    categories: ["Utility"],
   },
 });
 ```

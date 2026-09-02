@@ -112,6 +112,8 @@ export {
   TrayIcon,
 } from "./system.ts";
 export { AutoStart, SecureStorage, Updater } from "./integrations.ts";
+export { CrashReporter, Metrics } from "./integrations.ts";
+export type { CrashBacktracePolicy, CrashKind, CrashLocation, CrashReport, CrashReporterOptions, CrashUploadSummary, CpuSampler, CpuUsage, ProcessMetrics, SystemMemory, UpdateProgress, UpdateProgressPhase, UpdateStageOptions } from "./integrations.ts";
 export { DeepLink } from "./single-instance.ts";
 export type { SecondInstanceEvent } from "./single-instance.ts";
 export type {

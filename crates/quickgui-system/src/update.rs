@@ -1306,6 +1306,48 @@ mod tests {
         assert_eq!(update.version, "1.1.0");
     }
 
+    /// The CLI writes `tests/fixtures/updater-manifest.json` with `quickgui build --update-manifest`.
+    /// Both sides parse the same file so the generator and the installer cannot drift apart.
+    #[test]
+    fn accepts_the_cli_generated_manifest_fixture() {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/updater-manifest.json");
+        let bytes = std::fs::read(&fixture).expect("the updater manifest fixture exists");
+
+        for target in [
+            "darwin-aarch64",
+            "darwin-x86_64",
+            "linux-x86_64",
+            "windows-x86_64",
+        ] {
+            let client = UpdateClient::new("1.0.0", KEY)
+                .unwrap()
+                .target(target)
+                .unwrap();
+            let update = client
+                .parse_manifest(&bytes)
+                .unwrap()
+                .expect("1.4.0 is newer than 1.0.0");
+            assert_eq!(update.version, "1.4.0");
+            assert_eq!(update.target, target);
+            assert!(update.url.starts_with("https://"));
+            assert!(update.notes.is_some());
+            assert_eq!(update.published_at.as_deref(), Some("2026-09-03T12:00:00Z"));
+        }
+
+        let client = UpdateClient::new("1.4.0", KEY)
+            .unwrap()
+            .target("darwin-aarch64")
+            .unwrap();
+        assert!(client.parse_manifest(&bytes).unwrap().is_none());
+
+        let client = UpdateClient::new("1.0.0", KEY)
+            .unwrap()
+            .target("linux-aarch64")
+            .unwrap();
+        assert!(client.parse_manifest(&bytes).is_err());
+    }
+
     #[test]
     fn rejects_missing_signature_metadata() {
         let client = UpdateClient::new("1.0.0", KEY).unwrap();

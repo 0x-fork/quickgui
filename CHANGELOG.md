@@ -4,6 +4,35 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+### Framework
+
+- Added a bounded `CrashReporter` behind the default `crash-reporter` feature: a panic hook that
+  writes a size-limited JSON report atomically, an async-signal-safe native fatal-fault path
+  (`SIGSEGV`/`SIGBUS`/`SIGILL`/`SIGFPE`/`SIGABRT` through `sigaction`, `SetUnhandledExceptionFilter`
+  on Windows) built on a pre-opened descriptor and a pre-rendered report template, bounded
+  retention, `last_crash_report`/`pending_reports`/`delete_report`, mutable extra parameters, and
+  `upload_pending` over HTTPS. The `Watchdog` main-thread hang detector is opt-in and documented
+  with its idle cost.
+- Added `ProcessMetrics`, `SystemMemory`, and `CpuUsageSampler`: explicit, allocation-light process
+  and system readings using `proc_pidinfo`/`proc_pid_rusage`/`host_statistics64` on macOS,
+  `/proc` on Linux, and `GetProcessTimes`/`GlobalMemoryStatusEx` on Windows, reporting `None`
+  rather than a guess where a platform does not expose a value.
+
+### JavaScript tooling
+
+- Added `CrashReporter` and `Metrics` to `@quickgui/native`, both Promise-backed by `AsyncTask`,
+  and an `onProgress` option for `Updater.downloadAndStage` delivered through a napi threadsafe
+  function from the download worker thread.
+- Added `quickgui keygen` and `quickgui build --update-manifest [--update-base-url <url>]`, which
+  produce the exact artifact the Rust updater installs for each target, sign it with `minisign` or
+  `rsign`, and write a `latest.json` whose platform keys match `default_update_target()`.
+- Added `documentTypes` file associations that reach macOS `Info.plist`, the Linux desktop entry
+  and `shared-mime-info` package, and the Windows NSIS registry; `icon` PNG-to-`.icns`/`.ico`/
+  `hicolor` generation written in pure TypeScript; Linux AppDir/AppImage output and a pure
+  TypeScript `.deb` writer; an NSIS installer with shortcuts, uninstall registration, protocol
+  handlers, and an Authenticode `signtool` hook; and `quickgui build --mas` for Mac App Store
+  `.pkg` submission.
+
 ## 0.1.1 - 2026-08-31
 
 ### JavaScript tooling

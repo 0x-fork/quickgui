@@ -303,6 +303,19 @@ pub use quickgui_system::{
     UpdateCancellation, UpdateClient, UpdateInstallDisposition, UpdateInstallOptions,
     UpdateProgress, WindowsUpdateInstallMode, default_update_target,
 };
+#[cfg(feature = "crash-reporter")]
+pub use quickgui_system::{
+    BacktracePolicy, CRASH_REPORT_SCHEMA_VERSION, CrashKind, CrashLocation, CrashReport,
+    CrashReporter, CrashReporterOptions, DEFAULT_MAX_CRASH_REPORT_BYTES, DEFAULT_MAX_CRASH_REPORTS,
+    DEFAULT_WATCHDOG_HANG_THRESHOLD, DEFAULT_WATCHDOG_INTERVAL, MAX_CRASH_BACKTRACE_BYTES,
+    MAX_CRASH_EXTRA_PARAMETERS, MAX_CRASH_MESSAGE_BYTES, MAX_CRASH_PARAMETER_KEY_BYTES,
+    MAX_CRASH_PARAMETER_VALUE_BYTES, MAX_CRASH_REPORT_BYTES, MAX_CRASH_REPORTS,
+    MAX_CRASH_UPLOAD_REPORTS, MAX_WATCHDOG_INTERVAL, MIN_WATCHDOG_INTERVAL, UploadSummary,
+    Watchdog, WatchdogOptions,
+};
+pub use quickgui_system::{
+    CpuUsage, CpuUsageSampler, MAX_CPU_SAMPLE_INTERVAL, ProcessMetrics, SystemMemory,
+};
 pub use runtime::{
     App, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
     DesktopIntegrationSupport, DismissListener, Drag, DragListener, DropListener,

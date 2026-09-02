@@ -23,6 +23,21 @@ Implemented now:
   without spawning in deterministic tests; plus HTTPS/Minisign updater download progress,
   mandatory install-time re-verification, confined bounded archive extraction, rollback-capable
   macOS bundle/Linux executable replacement, and Windows installer launch policies;
+- bounded Rust-core crash reporting with a panic hook, an async-signal-safe native fatal-fault
+  writer using a pre-opened descriptor and a pre-rendered report template, retention/parsing/
+  deletion of stored reports, HTTPS upload of pending reports, and an opt-in main-thread hang
+  watchdog that is disabled by default; plus explicit process metrics (CPU time, resident and
+  macOS physical-footprint memory, virtual size, thread count, uptime), a stateful CPU-usage
+  sampler, and whole-system memory readings, all exposed to JavaScript through Promise-backed
+  `CrashReporter` and `Metrics` bindings;
+- `@quickgui/cli` production packaging beyond the macOS DMG: declarative `documentTypes` file
+  associations rendered into `Info.plist`, Linux desktop entries and `shared-mime-info`, and NSIS
+  registry entries; pure-TypeScript `.icns`/`.ico`/`hicolor` icon generation from one square PNG;
+  Linux AppDir/AppImage and a pure-TypeScript `.deb` writer; an NSIS installer with protocol and
+  file-association registration plus an Authenticode signing hook; `quickgui build --mas` for Mac
+  App Store `.pkg` submission; and `quickgui keygen` plus `quickgui build --update-manifest`
+  producing the exact per-platform artifact the Rust updater installs, signed with Minisign and
+  described by a `latest.json` both sides parse from one shared fixture;
 - renderer-independent Rust-core RAII power assertions, bounded battery/thermal/low-power/CPU-limit
   snapshots, explicit idle and login-session queries, and event-driven suspend, lock, shutdown,
   source, thermal, and energy-mode transitions with platform-native resource teardown;
