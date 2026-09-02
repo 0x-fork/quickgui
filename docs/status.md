@@ -35,6 +35,12 @@ Implemented now:
   safe initialization, stable real-`.app` development hosts, candidate-first source restart, and
   self-contained signed production packaging; this is a first vertical slice, not yet parity with
   the Rust framework surface or a published JavaScript release;
+- declared JavaScript popover and context menus over the Rust `PopoverMenu` model and cursor-point
+  `ContextMenuState`, with one bounded JSON item model, core-owned validation, typeahead, toggle
+  policy, submenu surfaces, and stable-id `onSelect` events; plus JavaScript CSS Grid tracks and
+  placement, complete paint-transition declarations, retained image and application-shader nodes,
+  progress/meter/toggle parts, and declared key, mouse, double-click, wheel, context-menu, gesture,
+  focus, accelerator-keymap, and drag-and-drop listeners with bounded asynchronous payloads;
 - macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
 - inherited right-to-left layout direction with post-layout mirroring of paint, hit testing, and
   accessibility geometry inside each parent content box, logical `ps`/`pe`/`ms`/`me`/`border_s`/

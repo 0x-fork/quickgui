@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   MAX_COMPONENT_VALUE_BYTES,
+  MAX_DRAG_JSON_BYTES,
+  MAX_KEYMAP_JSON_BYTES,
+  MAX_MENU_JSON_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   MutationBatch,
   NativeNodeTag,
@@ -33,8 +36,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v19", () => {
-    expect(PROTOCOL_VERSION).toBe(19);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v20", () => {
+    expect(PROTOCOL_VERSION).toBe(20);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -180,6 +183,96 @@ describe("binary mutation protocol", () => {
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 
+  test("encodes declared popover and context menus", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.Button);
+    batch.setProperty(1, PropertyCode.Part, NativePart.PopoverMenuTrigger);
+    batch.setProperty(1, PropertyCode.Open, true);
+    batch.setProperty(1, PropertyCode.Controls, "2");
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Part, NativePart.PopoverMenuPopup);
+    batch.setProperty(
+      2,
+      PropertyCode.Menu,
+      JSON.stringify({ items: [{ id: "open", label: "Open" }] }),
+    );
+    batch.setProperty(2, PropertyCode.SelectListener, true);
+    batch.createElement(3, NativeNodeTag.View);
+    batch.setProperty(3, PropertyCode.Part, NativePart.ContextMenuTrigger);
+    batch.setProperty(3, PropertyCode.Menu, JSON.stringify({ items: [] }));
+    batch.setProperty(3, PropertyCode.SelectListener, true);
+
+    expect(batch.mutationCount).toBe(12);
+    expect(batch.finish().byteLength).toBeGreaterThan(10);
+  });
+
+  test("encodes CSS grid, full transitions, images, shaders, and range parts", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.View);
+    batch.setProperty(1, PropertyCode.Display, "grid");
+    batch.setProperty(1, PropertyCode.GridTemplateColumns, "200px 1fr");
+    batch.setProperty(1, PropertyCode.GridTemplateRows, 3);
+    batch.setProperty(1, PropertyCode.GridAutoFlow, "column dense");
+    batch.setProperty(1, PropertyCode.GridColumnStart, 2);
+    batch.setProperty(1, PropertyCode.GridColumnEnd, 5);
+    batch.setProperty(1, PropertyCode.GridRowSpan, 2);
+    batch.setProperty(1, PropertyCode.TransitionProperties, "opacity,box-shadow");
+    batch.setProperty(1, PropertyCode.TransitionDuration, 180);
+    batch.setProperty(1, PropertyCode.TransitionEasing, "ease-out");
+    batch.setProperty(1, PropertyCode.TransitionMaxFps, 30);
+    batch.createElement(2, NativeNodeTag.Image);
+    batch.setProperty(2, PropertyCode.Value, "/assets/logo.png");
+    batch.setProperty(2, PropertyCode.ObjectFit, "cover");
+    batch.createElement(3, NativeNodeTag.Shader);
+    batch.setProperty(3, PropertyCode.ShaderParameters, "[0.5,0,0,1]");
+    batch.createElement(4, NativeNodeTag.View);
+    batch.setProperty(4, PropertyCode.Part, NativePart.Progress);
+    batch.setProperty(4, PropertyCode.Maximum, 12);
+    batch.setProperty(4, PropertyCode.ValueText, "3 of 12 files");
+    batch.createElement(5, NativeNodeTag.View);
+    batch.setProperty(5, PropertyCode.Part, NativePart.Meter);
+    batch.setProperty(5, PropertyCode.Minimum, 0);
+    batch.setProperty(5, PropertyCode.Low, 25);
+    batch.setProperty(5, PropertyCode.High, 75);
+    batch.setProperty(5, PropertyCode.Optimum, 90);
+    batch.createElement(6, NativeNodeTag.Button);
+    batch.setProperty(6, PropertyCode.Part, NativePart.Toggle);
+    batch.setProperty(6, PropertyCode.Pressed, true);
+
+    expect(batch.mutationCount).toBe(30);
+    expect(batch.finish().byteLength).toBeGreaterThan(10);
+  });
+
+  test("encodes declared key, mouse, gesture, keymap, and drag listeners", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.View);
+    batch.setProperty(1, PropertyCode.TabIndex, 0);
+    batch.setProperty(1, PropertyCode.KeyDownListener, true);
+    batch.setProperty(1, PropertyCode.KeyUpListener, true);
+    batch.setProperty(1, PropertyCode.MouseDownListener, true);
+    batch.setProperty(1, PropertyCode.MouseUpListener, true);
+    batch.setProperty(1, PropertyCode.MouseMoveListener, true);
+    batch.setProperty(1, PropertyCode.DoubleClickListener, true);
+    batch.setProperty(1, PropertyCode.ScrollListener, true);
+    batch.setProperty(1, PropertyCode.ContextMenuListener, true);
+    batch.setProperty(1, PropertyCode.PinchListener, true);
+    batch.setProperty(1, PropertyCode.RotationListener, true);
+    batch.setProperty(1, PropertyCode.SmartMagnifyListener, true);
+    batch.setProperty(1, PropertyCode.PressureListener, true);
+    batch.setProperty(1, PropertyCode.FocusListener, true);
+    batch.setProperty(1, PropertyCode.Keymap, JSON.stringify({ "CmdOrCtrl+S": "save" }));
+    batch.setProperty(1, PropertyCode.ActionListener, true);
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Draggable, JSON.stringify({ id: "row-7" }));
+    batch.setProperty(2, PropertyCode.DragListener, true);
+    batch.createElement(3, NativeNodeTag.View);
+    batch.setProperty(3, PropertyCode.DropKinds, JSON.stringify(["local", "files"]));
+    batch.setProperty(3, PropertyCode.DropListener, true);
+
+    expect(batch.mutationCount).toBe(23);
+    expect(batch.finish().byteLength).toBeGreaterThan(10);
+  });
+
   test("keeps every component part name and bound stable", () => {
     expect(NativePart.Checkbox).toBe("checkbox");
     expect(NativePart.TabPanel).toBe("tab-panel");
@@ -191,5 +284,16 @@ describe("binary mutation protocol", () => {
     expect(NativePart.DialogPopup).toBe("dialog-popup");
     expect(MAX_COMPONENT_VALUE_BYTES).toBe(256);
     expect(MAX_TOOLTIP_TEXT_BYTES).toBe(1024);
+    expect(NativePart.PopoverMenuTrigger).toBe("popover-menu-trigger");
+    expect(NativePart.PopoverMenuPopup).toBe("popover-menu-popup");
+    expect(NativePart.ContextMenuTrigger).toBe("context-menu-trigger");
+    expect(MAX_MENU_JSON_BYTES).toBe(512 * 1024);
+    expect(NativePart.Progress).toBe("progress");
+    expect(NativePart.MeterIndicator).toBe("meter-indicator");
+    expect(NativePart.Toggle).toBe("toggle");
+    expect(NativeNodeTag.Image).toBe(16);
+    expect(NativeNodeTag.Shader).toBe(17);
+    expect(MAX_KEYMAP_JSON_BYTES).toBe(64 * 1024);
+    expect(MAX_DRAG_JSON_BYTES).toBe(64 * 1024);
   });
 });

@@ -268,6 +268,36 @@ All notable user-facing changes to QuickGUI are recorded here.
   resolves `NSImage` names and SF Symbols.
 
 ### JavaScript tooling
+- Added declared `PopoverMenu` and `ContextMenu` compound components to `@quickgui/solid`. Rows are
+  one bounded JSON model rather than JSX children, so the Rust core keeps ownership of validation,
+  highlighting, typeahead, checkbox/radio policy, submenu models, work-area placement, and the
+  cursor-point native surface. `onSelect` reports the application's own stable item id, and the
+  binding installs `popover_menu_key_bindings()` once so declared menus adopt the core's contextual
+  navigation.
+- Added CSS Grid props (`gridTemplateColumns`/`gridTemplateRows`, `gridAutoFlow`, and the
+  `gridColumn`/`gridRow` shorthands with their start/end/span forms) and the complete paint
+  transition declaration (`transitionProperty`, `transitionDuration`, `transitionTimingFunction`,
+  `transitionMaxFps`, plus object and CSS-shorthand forms) mapped onto the core's own
+  `TransitionProperties` flags and easing curves.
+- Added retained `Image` and `Shader` nodes: a filesystem path stays a lazy core `ImageResource`, a
+  base64 `data:` URL is decoded once, `fit` selects the core's `ObjectFit`, and `shaderParameters`
+  fills the core's four fixed vectors behind its WGSL validation.
+- Added `Progress`, `Meter`, and `Toggle` compound parts over the core's value-range and
+  toggle-button descriptors.
+- Added declared input listeners — `onKeyDown`/`onKeyUp`, `onMouseDown`/`onMouseUp`/`onMouseMove`,
+  `onDoubleClick` with the exact native click count, `onWheel`, `onContextMenu`, `onPinch`,
+  `onRotate`, `onSmartMagnify`, `onPressure`, and `onFocus`/`onBlur` — with bounded JSON payloads
+  and `keyEventFromEvent`/`mouseEventFromEvent`/`wheelEventFromEvent`/`gestureEventFromEvent`
+  decoders. A declared `tabIndex` now makes an ordinary container focusable, matching the web.
+- Added a bounded `keymap` prop whose Electron-shaped accelerators are parsed by the core's own
+  `Accelerator::parse` and dispatched to JavaScript as one `onAction` event carrying the binding id.
+- Added declared drag and drop: `draggable` carries an application-local id plus optional text, URL,
+  or file payloads promoted to other applications, `dropKinds` declares the accepted payload kinds
+  ahead of the native drag, and `onDragStart`/`onDragEnd`/`onDrop`/`onFilesDropped` report the
+  core's typed outcome.
+- Bumped the hosted mutation protocol to version 20 for the new component parts, node tags, and
+  declared listener properties.
+
 - Added `CrashReporter` and `Metrics` to `@quickgui/native`, both Promise-backed by `AsyncTask`,
   and an `onProgress` option for `Updater.downloadAndStage` delivered through a napi threadsafe
   function from the download worker thread.

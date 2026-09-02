@@ -156,6 +156,14 @@ handling.
 
 Longer text is truncated on a character boundary instead of retained.
 
+## JavaScript bindings
+
+`Toggle.Root` / `Indicator` declares the controlled pressed state and adopts the core's toggle-button
+role. `ToggleGroup`, `Toolbar`, and `Toast` are not bound yet: their roving focus and toast lifetime
+run through retained state reached with a non-capturing `fn(&mut V) -> &mut State` accessor, which
+one hosted view cannot provide per declaring node. See
+[Solid 2 renderer](solid.md#range-and-feedback-parts).
+
 ## Menubar
 
 An in-window menubar is not implemented. Native macOS menus remain the application menu; see

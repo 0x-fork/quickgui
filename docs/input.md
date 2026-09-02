@@ -567,3 +567,17 @@ text or rejects URLs above 16 KiB. Winit continues to own and receive every Find
 There is no polling, animation loop, or deadline while the pointer is stationary. See
 `cargo run --release --example drag_drop` for public formats and
 `cargo run --release --example multi_window` for arbitrary cross-window values.
+
+## JavaScript bindings
+
+The Solid renderer declares each of these listeners ahead of the core's decision:
+`onKeyDown`/`onKeyUp`, `onMouseDown`/`onMouseUp`/`onMouseMove`, `onDoubleClick` (the second press of
+one exact native multi-click sequence), `onWheel`, `onContextMenu`, `onPinch`, `onRotate`,
+`onSmartMagnify`, `onPressure`, `onFocus`/`onBlur`, and the drag/drop pair `draggable` + `dropKinds`
+with `onDragStart`/`onDragEnd`/`onDrop`/`onFilesDropped`. A bounded `keymap` prop resolves
+Electron-shaped accelerators through `Accelerator::parse` and dispatches one `onAction` event with
+the declared binding id. Payloads are bounded asynchronous JSON, and a declared `tabIndex` makes an
+ordinary container focusable. `onDragOver` is not bound because drag hovering is reported on the
+window rather than through a per-element listener, and physical key `code` values are not reported
+because the core normalizes keys to a layout-independent command identity. See
+[Solid 2 renderer](solid.md#keyboard-mouse-gesture-and-drag-events).

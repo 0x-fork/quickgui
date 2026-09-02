@@ -69,6 +69,15 @@ Large searchable datasets belong in a virtualized select, autocomplete, or comma
 than a thousands-of-rows context menu. `ContextMenuLayout` clamps native dimensions to the window
 limits, while ordinary menu rows remain finite under the popover-menu model bounds.
 
+## JavaScript bindings
+
+The Solid renderer exposes this adapter as `ContextMenu.Root` / `Trigger` with a bounded JSON item
+model and an `onSelect` event carrying the declared item id. One window owns exactly one
+`ContextMenuState`, matching the native invariant that opening a menu replaces the one already open.
+The cursor-point surface is a separate native window, so its rows are rendered by the binding from
+the declaration's `appearance` values instead of from JavaScript. See
+[Solid 2 renderer](solid.md#declared-popover-and-context-menus).
+
 ## Submenu pointer behavior
 
 Hovering a submenu row highlights it immediately and opens it after the exact

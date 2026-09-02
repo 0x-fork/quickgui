@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   app,
   MAX_COMPONENT_VALUE_BYTES,
+  MAX_KEYMAP_JSON_BYTES,
+  MAX_MENU_JSON_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativeNodeTag,
   PropertyCode,
@@ -16,16 +18,23 @@ import {
   Button,
   Checkbox,
   Collapsible,
+  ContextMenu,
   Dialog,
+  Image,
+  Meter,
   Field,
   Fieldset,
   Input,
   Markdown,
   Popover,
+  PopoverMenu,
+  Progress,
   Radio,
   RadioGroup,
   Switch,
+  Shader,
   Tabs,
+  Toggle,
   SystemPopover,
   Svg,
   Terminal,
@@ -37,10 +46,19 @@ import {
   createElement,
   createRenderer,
   createTextNode,
+  actionFromEvent,
   capturedPointerFromEvent,
+  dropEventFromEvent,
+  encodeMenu,
+  gestureEventFromEvent,
+  keyEventFromEvent,
   insertNode,
+  menuSelectionFromEvent,
+  mouseEventFromEvent,
+  wheelEventFromEvent,
   setProp,
   terminalStatusFromEvent,
+  type MenuSelectDetails,
 } from "./index.ts";
 
 describe("Solid universal host", () => {
@@ -1106,5 +1124,447 @@ describe("Solid universal host", () => {
       { open: false, reason: "close-press" },
     ]);
     window.close();
+  });
+
+  test("declares a bounded popover-menu model and adopts core selection", async () => {
+    await app.whenReady();
+    const [open, setOpen] = createSignal(false);
+    const selections: MenuSelectDetails[] = [];
+    const items = [
+      { type: "group" as const, label: "File" },
+      { id: "open", label: "Open…", shortcut: "⌘O" },
+      { type: "separator" as const },
+      { type: "checkbox" as const, id: "sidebar", label: "Sidebar", checked: true },
+      { id: "recent", label: "Recent", items: [{ id: "one", label: "One" }] },
+    ];
+    const window = new Window({
+      title: "Popover menu",
+      renderer: createRenderer(() =>
+        createComponent(PopoverMenu.Root, {
+          items,
+          appearance: { width: 240, background: "#101014", highlightColor: "#ffffff" },
+          get open() {
+            return open();
+          },
+          onOpenChange: (next: boolean) => setOpen(next),
+          onSelect: (details: MenuSelectDetails) => selections.push(details),
+          placement: "bottom-end",
+          gap: 6,
+          get children() {
+            return [
+              createComponent(PopoverMenu.Trigger, { children: "Actions" }),
+              createComponent(PopoverMenu.Popup, {}),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const trigger = window.root.children[0]!;
+    expect(trigger.properties.get(PropertyCode.Part)).toBe(
+      "popover-menu-trigger",
+    );
+    expect(trigger.properties.get(PropertyCode.Open)).toBe(false);
+    expect(window.root.children.length).toBe(1);
+
+    window._dispatchEvent("click", trigger.id);
+    expect(open()).toBe(true);
+
+    const popup = window.root.children[1]!;
+    expect(popup.properties.get(PropertyCode.Part)).toBe("popover-menu-popup");
+    expect(popup.properties.get(PropertyCode.AnchorTarget)).toBe(
+      String(trigger.id),
+    );
+    expect(popup.properties.get(PropertyCode.AnchorPlacement)).toBe(
+      "bottom-end",
+    );
+    expect(popup.properties.get(PropertyCode.AnchorGap)).toBe(6);
+    expect(popup.properties.get(PropertyCode.SelectListener)).toBe(true);
+    expect(popup.properties.get(PropertyCode.DismissListener)).toBe(true);
+    // The trigger relates to the mounted surface through the validated controls property.
+    expect(trigger.properties.get(PropertyCode.Controls)).toBe(String(popup.id));
+    expect(trigger.properties.get(PropertyCode.Open)).toBe(true);
+
+    const declaration = JSON.parse(String(popup.properties.get(PropertyCode.Menu)));
+    expect(declaration.width).toBe(240);
+    expect(declaration.background).toBeTypeOf("number");
+    expect(declaration.items.length).toBe(5);
+    expect(declaration.items[4].items[0].id).toBe("one");
+
+    // The core decides what an activation means; JavaScript only receives the declared id.
+    window._dispatchEvent(
+      "menuselect",
+      popup.id,
+      JSON.stringify({ id: "sidebar", checked: false }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(selections).toEqual([{ id: "sidebar", checked: false }]);
+    expect(open()).toBe(false);
+    expect(window.root.children.length).toBe(1);
+    window.close();
+  });
+
+  test("declares a bounded context-menu model on its secondary-click target", async () => {
+    await app.whenReady();
+    const selections: MenuSelectDetails[] = [];
+    const window = new Window({
+      title: "Context menu",
+      renderer: createRenderer(() =>
+        createComponent(ContextMenu.Root, {
+          items: [
+            { id: "cut", label: "Cut", shortcut: "⌘X" },
+            { type: "separator" as const },
+            { type: "radio" as const, id: "list", group: "view", label: "List", checked: true },
+          ],
+          appearance: { itemHeight: 26, mutedColor: "#8a8a8a", loop: false },
+          onSelect: (details: MenuSelectDetails) => selections.push(details),
+          get children() {
+            return createComponent(ContextMenu.Trigger, { children: "Canvas" });
+          },
+        }),
+      ),
+    });
+
+    const target = window.root.children[0]!;
+    expect(target.properties.get(PropertyCode.Part)).toBe("context-menu-trigger");
+    expect(target.properties.get(PropertyCode.SelectListener)).toBe(true);
+    const declaration = JSON.parse(String(target.properties.get(PropertyCode.Menu)));
+    expect(declaration.itemHeight).toBe(26);
+    expect(declaration.loopFocus).toBe(false);
+    expect(declaration.mutedColor).toBeTypeOf("number");
+    expect(declaration.items[2]).toEqual({
+      type: "radio",
+      id: "list",
+      group: "view",
+      label: "List",
+      checked: true,
+    });
+
+    window._dispatchEvent(
+      "menuselect",
+      target.id,
+      JSON.stringify({ id: "cut" }),
+    );
+    expect(selections).toEqual([{ id: "cut" }]);
+    window.close();
+  });
+
+  test("bounds declared menu models before they cross N-API", () => {
+    expect(() =>
+      encodeMenu([
+        { id: "big", label: "x".repeat(MAX_MENU_JSON_BYTES + 1) },
+      ]),
+    ).toThrow("bounded");
+    expect(JSON.parse(encodeMenu(undefined)).items).toEqual([]);
+    expect(menuSelectionFromEvent(new QuickGuiEvent("menuselect", createElement("view")))).toBe(
+      undefined,
+    );
+    expect(
+      menuSelectionFromEvent(
+        new QuickGuiEvent("menuselect", createElement("view"), "not json"),
+      ),
+    ).toBe(undefined);
+    expect(Object.keys(PopoverMenu)).toEqual(["Root", "Trigger", "Popup"]);
+    expect(Object.keys(ContextMenu)).toEqual(["Root", "Trigger"]);
+  });
+
+  test("projects CSS grid templates, flow, and item placement", () => {
+    const grid = createComponent(View, {
+      style: {
+        display: "grid",
+        gridTemplateColumns: ["200px", "1fr", "minmax(120px, 2fr)"],
+        gridTemplateRows: 3,
+        gridAutoFlow: "column dense",
+      },
+    });
+    expect(grid.properties.get(PropertyCode.GridTemplateColumns)).toBe(
+      "200px 1fr minmax(120px, 2fr)",
+    );
+    expect(grid.properties.get(PropertyCode.GridTemplateRows)).toBe(3);
+    expect(grid.properties.get(PropertyCode.GridAutoFlow)).toBe("column dense");
+
+    const spanned = createComponent(View, {
+      style: { gridColumn: "2 / span 3", gridRow: "span 2" },
+    });
+    // `2 / span 3` is lines 2 through 5, which is the placement the core exposes.
+    expect(spanned.properties.get(PropertyCode.GridColumnStart)).toBe(2);
+    expect(spanned.properties.get(PropertyCode.GridColumnEnd)).toBe(5);
+    expect(spanned.properties.get(PropertyCode.GridColumnSpan)).toBe(undefined);
+    expect(spanned.properties.get(PropertyCode.GridRowSpan)).toBe(2);
+
+    const lines = createComponent(View, { style: { gridColumn: "1 / 4" } });
+    expect(lines.properties.get(PropertyCode.GridColumnStart)).toBe(1);
+    expect(lines.properties.get(PropertyCode.GridColumnEnd)).toBe(4);
+  });
+
+  test("declares the complete paint transition the Rust core supports", () => {
+    const shorthand = createComponent(View, {
+      style: { transition: "opacity 180ms ease-out, box-shadow 180ms ease-out" },
+    });
+    expect(shorthand.properties.get(PropertyCode.Transition)).toBe(180);
+    expect(shorthand.properties.get(PropertyCode.TransitionProperties)).toBe(
+      "opacity,box-shadow",
+    );
+    expect(shorthand.properties.get(PropertyCode.TransitionEasing)).toBe(
+      "ease-out",
+    );
+
+    const declared = createComponent(View, {
+      style: {
+        transition: {
+          properties: ["background-color", "color"],
+          duration: "0.2s",
+          easing: "ease",
+          maxFps: 30,
+        },
+      },
+    });
+    expect(declared.properties.get(PropertyCode.TransitionDuration)).toBe(200);
+    expect(declared.properties.get(PropertyCode.TransitionProperties)).toBe(
+      "background-color,color",
+    );
+    // `ease` is the core's own ease-in-out curve.
+    expect(declared.properties.get(PropertyCode.TransitionEasing)).toBe(
+      "ease-in-out",
+    );
+    expect(declared.properties.get(PropertyCode.TransitionMaxFps)).toBe(30);
+
+    const rejected = createElement("view");
+    expect(() => setProp(rejected, "transition", "left 100ms")).toThrow(
+      "cannot transition",
+    );
+    expect(() => setProp(rejected, "transition", "opacity 100ms 40ms")).toThrow(
+      "delay",
+    );
+  });
+
+  test("creates retained image and shader nodes with bounded declarations", () => {
+    const image = createComponent(Image, {
+      source: "/assets/logo.png",
+      fit: "cover",
+      style: { width: 64, height: 64 },
+    });
+    expect(image.tag).toBe(NativeNodeTag.Image);
+    expect(image.properties.get(PropertyCode.Value)).toBe("/assets/logo.png");
+    expect(image.properties.get(PropertyCode.ObjectFit)).toBe("cover");
+
+    const shader = createComponent(Shader, {
+      source: "fn quickgui_fragment(input: QuickGuiShaderInput) -> vec4<f32> { return vec4<f32>(1.0); }",
+      shaderParameters: [
+        [0.5, 0.25, 0, 1],
+        [1, 0, 0, 1],
+      ],
+    });
+    expect(shader.tag).toBe(NativeNodeTag.Shader);
+    expect(
+      JSON.parse(String(shader.properties.get(PropertyCode.ShaderParameters))),
+    ).toEqual([0.5, 0.25, 0, 1, 1, 0, 0, 1]);
+
+    const bounded = createElement("shader");
+    expect(() =>
+      setProp(bounded, "shaderParameters", new Array(20).fill(0)),
+    ).toThrow("16 shader parameter floats");
+  });
+
+  test("declares progress, meter, and toggle state ahead of the core", () => {
+    const progress = createComponent(Progress.Root, {
+      value: 3,
+      max: 12,
+      valueText: "3 of 12 files",
+      children: createComponent(Progress.Indicator, {}),
+    });
+    expect(progress.properties.get(PropertyCode.Part)).toBe("progress");
+    expect(progress.properties.get(PropertyCode.Value)).toBe(3);
+    expect(progress.properties.get(PropertyCode.Maximum)).toBe(12);
+    expect(progress.properties.get(PropertyCode.ValueText)).toBe(
+      "3 of 12 files",
+    );
+
+    const meter = createComponent(Meter.Root, {
+      value: 20,
+      min: 0,
+      max: 100,
+      low: 25,
+      high: 75,
+      optimum: 90,
+    });
+    expect(meter.properties.get(PropertyCode.Part)).toBe("meter");
+    expect(meter.properties.get(PropertyCode.Low)).toBe(25);
+    expect(meter.properties.get(PropertyCode.High)).toBe(75);
+    expect(meter.properties.get(PropertyCode.Optimum)).toBe(90);
+
+    let pressedChanges = 0;
+    const toggle = createComponent(Toggle.Root, {
+      defaultPressed: true,
+      onPressedChange: () => {
+        pressedChanges += 1;
+      },
+    });
+    expect(toggle.properties.get(PropertyCode.Part)).toBe("toggle");
+    expect(toggle.properties.get(PropertyCode.Pressed)).toBe(true);
+    toggle.listeners.get("click")!(new QuickGuiEvent("click", toggle));
+    expect(pressedChanges).toBe(1);
+    expect(toggle.properties.get(PropertyCode.Pressed)).toBe(false);
+    expect(Object.keys(Toggle)).toEqual(["Root", "Indicator"]);
+  });
+
+  test("declares every input listener ahead of the core decision", () => {
+    const seen: string[] = [];
+    const record = (name: string) => (event: QuickGuiEvent) => {
+      seen.push(`${name}:${event.value ?? ""}`);
+    };
+    const node = createComponent(View, {
+      tabIndex: 0,
+      onKeyDown: record("keydown"),
+      onKeyUp: record("keyup"),
+      onMouseDown: record("mousedown"),
+      onMouseUp: record("mouseup"),
+      onMouseMove: record("mousemove"),
+      onDoubleClick: record("dblclick"),
+      onWheel: record("wheel"),
+      onContextMenu: record("contextmenu"),
+      onPinch: record("pinch"),
+      onRotate: record("rotate"),
+      onSmartMagnify: record("smartmagnify"),
+      onPressure: record("pressure"),
+      onFocus: record("focus"),
+      onBlur: record("blur"),
+    });
+
+    for (const code of [
+      PropertyCode.KeyDownListener,
+      PropertyCode.KeyUpListener,
+      PropertyCode.MouseDownListener,
+      PropertyCode.MouseUpListener,
+      PropertyCode.MouseMoveListener,
+      PropertyCode.DoubleClickListener,
+      PropertyCode.ScrollListener,
+      PropertyCode.ContextMenuListener,
+      PropertyCode.PinchListener,
+      PropertyCode.RotationListener,
+      PropertyCode.SmartMagnifyListener,
+      PropertyCode.PressureListener,
+      PropertyCode.FocusListener,
+    ]) {
+      expect(node.properties.get(code)).toBe(true);
+    }
+
+    const keyPayload = JSON.stringify({
+      key: "s",
+      repeat: false,
+      shift: false,
+      control: false,
+      alt: false,
+      meta: true,
+    });
+    node.listeners.get("keydown")!(
+      new QuickGuiEvent("keydown", node, keyPayload),
+    );
+    expect(keyEventFromEvent(new QuickGuiEvent("keydown", node, keyPayload))).toEqual(
+      {
+        key: "s",
+        repeat: false,
+        shift: false,
+        control: false,
+        alt: false,
+        meta: true,
+      },
+    );
+    expect(seen).toEqual([`keydown:${keyPayload}`]);
+
+    const wheel = new QuickGuiEvent(
+      "wheel",
+      node,
+      JSON.stringify({
+        x: 4,
+        y: 8,
+        deltaX: 0,
+        deltaY: -24,
+        precise: true,
+        phase: "moved",
+        shift: false,
+        control: false,
+        alt: false,
+        meta: false,
+      }),
+    );
+    expect(wheelEventFromEvent(wheel)?.deltaY).toBe(-24);
+    expect(wheelEventFromEvent(wheel)?.precise).toBe(true);
+    expect(
+      mouseEventFromEvent(new QuickGuiEvent("mousedown", node, "not json")),
+    ).toBe(undefined);
+    expect(
+      gestureEventFromEvent(
+        new QuickGuiEvent("pressure", node, JSON.stringify({ stage: "force" })),
+      )?.stage,
+    ).toBe("force");
+  });
+
+  test("declares bounded accelerator keymaps and typed action ids", () => {
+    let dispatched: string | undefined;
+    const node = createComponent(View, {
+      tabIndex: 0,
+      keymap: { "CmdOrCtrl+S": "save", "CmdOrCtrl+Shift+P": "palette" },
+      onAction: (event: QuickGuiEvent) => {
+        dispatched = actionFromEvent(event);
+      },
+    });
+    expect(node.properties.get(PropertyCode.ActionListener)).toBe(true);
+    expect(JSON.parse(String(node.properties.get(PropertyCode.Keymap)))).toEqual({
+      "CmdOrCtrl+S": "save",
+      "CmdOrCtrl+Shift+P": "palette",
+    });
+    node.listeners.get("action")!(new QuickGuiEvent("action", node, "save"));
+    expect(dispatched).toBe("save");
+
+    const invalid = createElement("view");
+    expect(() => setProp(invalid, "keymap", { "Cmd+S": 3 })).toThrow(
+      "binding ids must be strings",
+    );
+    expect(() =>
+      setProp(invalid, "keymap", { "Cmd+S": "x".repeat(MAX_KEYMAP_JSON_BYTES) }),
+    ).toThrow("bounded");
+  });
+
+  test("declares drag payloads and accepted drop kinds ahead of the native drag", () => {
+    const source = createComponent(View, {
+      draggable: { id: "row-7", text: "quickgui", files: [{ path: "/tmp/a.txt" }] },
+      onDragStart: () => {},
+      onDragEnd: () => {},
+    });
+    expect(source.properties.get(PropertyCode.DragListener)).toBe(true);
+    expect(
+      JSON.parse(String(source.properties.get(PropertyCode.Draggable))),
+    ).toEqual({
+      id: "row-7",
+      text: "quickgui",
+      files: [{ path: "/tmp/a.txt" }],
+    });
+
+    const target = createComponent(View, {
+      dropKinds: ["local", "files"],
+      onDrop: () => {},
+      onFilesDropped: () => {},
+    });
+    expect(target.properties.get(PropertyCode.DropListener)).toBe(true);
+    expect(
+      JSON.parse(String(target.properties.get(PropertyCode.DropKinds))),
+    ).toEqual(["local", "files"]);
+    expect(
+      dropEventFromEvent(
+        new QuickGuiEvent(
+          "filesdropped",
+          target,
+          JSON.stringify({ x: 0, y: 0, paths: ["/tmp/a.txt"], origin: "external" }),
+        ),
+      )?.paths,
+    ).toEqual(["/tmp/a.txt"]);
+
+    const invalid = createElement("view");
+    expect(() => setProp(invalid, "dropKinds", ["text"])).toThrow(
+      "drop kinds",
+    );
+    expect(() => setProp(invalid, "draggable", 7)).toThrow("declare its payload");
   });
 });

@@ -21,15 +21,18 @@ use napi_derive::napi;
 use quickgui::{
     AccessibilityRole, Accordion, AccordionItem, AnchorPlacement, AppInfo, AppPaths, AppRegion,
     AppRunStatus, AppRunner, AppRunnerWaker, Application as QuickGuiApplication, BoxShadow,
-    Checkbox, Collapsible, Color, CursorGrabMode, CursorStyle, Dialog as CoreDialog, DialogKind,
-    DisplayId, Element, ElementId, Field, Fieldset, FollowMode, FontWeight, Image, Insets,
-    IntoElement, ListAlignment, ListState, MAX_BOX_SHADOWS_PER_ELEMENT, MacOsVibrancy,
-    MacOsVisualEffectState, Markdown, MarkdownStyle, PerformanceProfile, Point, PointerPhase,
-    Popover, QuitMode, Radio, RadioGroup, Svg, Switch, SystemPopover, TERMINAL_ANSI_COLOR_COUNT,
-    Tab, Tabs, TaskbarProgressState, Terminal, TerminalOptions, TerminalPaddingColor,
-    TerminalStatus, TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle, ToggleState, Tooltip,
-    Transition, View, ViewContext, WindowAppearance, WindowBackgroundAppearance, WindowHandle,
-    WindowKind, WindowOptions, button, div, svg as svg_element, text, text_area, text_input,
+    Checkbox, Collapsible, Color, ContextMenuLayout, ContextMenuState, CursorGrabMode, CursorStyle,
+    Dialog as CoreDialog, DialogKind, DisplayId, Element, ElementId, Field, Fieldset, FollowMode,
+    FontWeight, GridTrack, Image, Insets, IntoElement, ListAlignment, ListState,
+    MAX_BOX_SHADOWS_PER_ELEMENT, MacOsVibrancy, MacOsVisualEffectState, Markdown, MarkdownStyle,
+    Meter, PerformanceProfile, Point, PointerPhase, Popover, PopoverKind, PopoverMenu,
+    PopoverMenuActivation, PopoverMenuItem, PopoverMenuItemKind, PopoverMenuItemState, Progress,
+    QuitMode, Radio, RadioGroup, Svg, Switch, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, Tab, Tabs,
+    TaskbarProgressState, Terminal, TerminalOptions, TerminalPaddingColor, TerminalStatus,
+    TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle, Toggle, ToggleState, Tooltip,
+    Transition, TransitionProperties, View, ViewContext, WindowAppearance,
+    WindowBackgroundAppearance, WindowHandle, WindowKind, WindowLevel, WindowOptions, button, div,
+    svg as svg_element, text, text_area, text_input,
 };
 use quickgui::{Event, EventContext};
 #[cfg(target_os = "macos")]
@@ -58,7 +61,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 19;
+const PROTOCOL_VERSION: u16 = 20;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -74,6 +77,10 @@ const NO_ANCHOR: u32 = u32::MAX;
 const MAX_COMPONENT_VALUE_BYTES: usize = 256;
 /// Longest tooltip label retained from one `tooltip` property.
 const MAX_TOOLTIP_TEXT_BYTES: usize = 1_024;
+/// Longest declared CSS grid track list accepted from one template property.
+const MAX_GRID_TRACK_LIST_BYTES: usize = 4_096;
+/// Most explicit grid tracks materialized from one declared template.
+const MAX_GRID_TRACKS: usize = 512;
 
 mod property {
     pub const DISPLAY: u16 = 1;
@@ -233,7 +240,51 @@ mod property {
     pub const TOOLTIP_GAP: u16 = 156;
     pub const TOOLTIP_VIEWPORT_MARGIN: u16 = 157;
     pub const VARIANT: u16 = 158;
-    pub const LAST: u16 = VARIANT;
+    pub const MENU: u16 = 159;
+    pub const SELECT_LISTENER: u16 = 160;
+    pub const CONTROLS: u16 = 161;
+    pub const GRID_TEMPLATE_COLUMNS: u16 = 162;
+    pub const GRID_TEMPLATE_ROWS: u16 = 163;
+    pub const GRID_AUTO_FLOW: u16 = 164;
+    pub const GRID_COLUMN_START: u16 = 165;
+    pub const GRID_COLUMN_END: u16 = 166;
+    pub const GRID_COLUMN_SPAN: u16 = 167;
+    pub const GRID_ROW_START: u16 = 168;
+    pub const GRID_ROW_END: u16 = 169;
+    pub const GRID_ROW_SPAN: u16 = 170;
+    pub const TRANSITION_PROPERTIES: u16 = 171;
+    pub const TRANSITION_DURATION: u16 = 172;
+    pub const TRANSITION_EASING: u16 = 173;
+    pub const TRANSITION_MAX_FPS: u16 = 174;
+    pub const MINIMUM: u16 = 175;
+    pub const MAXIMUM: u16 = 176;
+    pub const LOW: u16 = 177;
+    pub const HIGH: u16 = 178;
+    pub const OPTIMUM: u16 = 179;
+    pub const VALUE_TEXT: u16 = 180;
+    pub const PRESSED: u16 = 181;
+    pub const OBJECT_FIT: u16 = 182;
+    pub const SHADER_PARAMETERS: u16 = 183;
+    pub const KEY_DOWN_LISTENER: u16 = 184;
+    pub const KEY_UP_LISTENER: u16 = 185;
+    pub const MOUSE_DOWN_LISTENER: u16 = 186;
+    pub const MOUSE_UP_LISTENER: u16 = 187;
+    pub const MOUSE_MOVE_LISTENER: u16 = 188;
+    pub const DOUBLE_CLICK_LISTENER: u16 = 189;
+    pub const SCROLL_LISTENER: u16 = 190;
+    pub const CONTEXT_MENU_LISTENER: u16 = 191;
+    pub const PINCH_LISTENER: u16 = 192;
+    pub const ROTATION_LISTENER: u16 = 193;
+    pub const SMART_MAGNIFY_LISTENER: u16 = 194;
+    pub const PRESSURE_LISTENER: u16 = 195;
+    pub const FOCUS_LISTENER: u16 = 196;
+    pub const KEYMAP: u16 = 197;
+    pub const ACTION_LISTENER: u16 = 198;
+    pub const DRAGGABLE: u16 = 199;
+    pub const DROP_KINDS: u16 = 200;
+    pub const DRAG_LISTENER: u16 = 201;
+    pub const DROP_LISTENER: u16 = 202;
+    pub const LAST: u16 = DROP_LISTENER;
 }
 
 #[derive(Default)]
@@ -719,12 +770,16 @@ fn wait<'a, T>(
 }
 
 mod api;
+mod events;
+mod popover_menu;
 mod runtime;
 mod tree;
 mod view;
 
 pub use api::*;
 
+use events::*;
+use popover_menu::*;
 use runtime::*;
 use tree::*;
 use view::*;

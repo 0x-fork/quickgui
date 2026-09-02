@@ -16,6 +16,8 @@ export type NativeElementName =
   | "virtual-list"
   | "terminal"
   | "svg"
+  | "image"
+  | "shader"
   | "swift-ui-host"
   | "swift-ui-button"
   | "swift-ui-quickgui-host"
@@ -31,7 +33,46 @@ export type NativeEventType =
   | "dismiss"
   | "terminal"
   | "pointer"
-  | "presentationchange";
+  | "presentationchange"
+  | "menuselect"
+  | "keydown"
+  | "keyup"
+  | "mousedown"
+  | "mouseup"
+  | "mousemove"
+  | "dblclick"
+  | "wheel"
+  | "contextmenu"
+  | "pinch"
+  | "rotate"
+  | "smartmagnify"
+  | "pressure"
+  | "focus"
+  | "blur"
+  | "action"
+  | "dragstart"
+  | "dragend"
+  | "drop"
+  | "filesdropped";
+
+/** Declared input listeners whose presence is one boolean property. */
+const inputListenerProperties: ReadonlyMap<NativeEventType, PropertyCode> = new Map([
+  ["keydown", PropertyCode.KeyDownListener],
+  ["keyup", PropertyCode.KeyUpListener],
+  ["mousedown", PropertyCode.MouseDownListener],
+  ["mouseup", PropertyCode.MouseUpListener],
+  ["mousemove", PropertyCode.MouseMoveListener],
+  ["dblclick", PropertyCode.DoubleClickListener],
+  ["wheel", PropertyCode.ScrollListener],
+  ["contextmenu", PropertyCode.ContextMenuListener],
+  ["pinch", PropertyCode.PinchListener],
+  ["rotate", PropertyCode.RotationListener],
+  ["smartmagnify", PropertyCode.SmartMagnifyListener],
+  ["pressure", PropertyCode.PressureListener],
+  ["action", PropertyCode.ActionListener],
+  ["drop", PropertyCode.DropListener],
+  ["filesdropped", PropertyCode.DropListener],
+]);
 export type NativeEventListener = (event: QuickGuiEvent) => void;
 
 export interface NativeNodeHost {
@@ -135,7 +176,11 @@ export function createNativeElement(name: NativeElementName): NativeNode {
                           ? NativeNodeTag.Terminal
                           : name === "svg"
                             ? NativeNodeTag.Svg
-                            : NativeNodeTag.View;
+                            : name === "image"
+                              ? NativeNodeTag.Image
+                              : name === "shader"
+                                ? NativeNodeTag.Shader
+                                : NativeNodeTag.View;
   const node = new NativeNode(tag);
   if (name === "textarea")
     setNativeProperty(node, PropertyCode.Multiline, true);
@@ -227,6 +272,33 @@ export function setNativeEventListener(
       node,
       PropertyCode.PointerListener,
       node.listeners.has("pointer"),
+    );
+  } else if (inputListenerProperties.has(type)) {
+    const code = inputListenerProperties.get(type)!;
+    // `drop` and `filesdropped` share one declared listener property; the accepted payload kinds
+    // are declared separately through `dropKinds`.
+    const declared =
+      code === PropertyCode.DropListener
+        ? node.listeners.has("drop") || node.listeners.has("filesdropped")
+        : node.listeners.has(type);
+    setNativeProperty(node, code, declared);
+  } else if (type === "focus" || type === "blur") {
+    setNativeProperty(
+      node,
+      PropertyCode.FocusListener,
+      node.listeners.has("focus") || node.listeners.has("blur"),
+    );
+  } else if (type === "dragstart" || type === "dragend") {
+    setNativeProperty(
+      node,
+      PropertyCode.DragListener,
+      node.listeners.has("dragstart") || node.listeners.has("dragend"),
+    );
+  } else if (type === "menuselect") {
+    setNativeProperty(
+      node,
+      PropertyCode.SelectListener,
+      node.listeners.has("menuselect"),
     );
   } else if (type === "presentationchange") {
     setNativeProperty(

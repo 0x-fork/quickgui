@@ -244,6 +244,15 @@ uses one cancellable exact timer per menu level only while hover intent or a dia
 is pending, then returns to sleep. The styled `system_popover` and `tooltips_context_menu` examples
 are executable composition references.
 
+## JavaScript bindings
+
+The Solid renderer exposes this model as `PopoverMenu.Root` / `Trigger` / `Popup`. Rows are declared
+as one bounded JSON model rather than JSX children, so the core still owns validation, highlighting,
+typeahead, toggle policy, submenu models, and every accessibility relationship, and no synchronous
+question crosses the hosted boundary while a menu is open. `popover_menu_key_bindings()` is
+installed once by the binding, so declared menus adopt the same contextual navigation as Rust
+applications. See [Solid 2 renderer](solid.md#declared-popover-and-context-menus).
+
 ## Roles, placement, and nesting
 
 `PopoverKind::{Dialog, Menu, ListBox, Tree, Grid}` maps both the surface role and trigger

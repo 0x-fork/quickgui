@@ -12,11 +12,15 @@ import {
   useContext,
 } from "solid-js";
 import {
+  type ColorValue,
   type NativeElementName,
   type NativeEventListener,
   type NativePartName,
   type PopoverPlacement,
   MAX_COMPONENT_VALUE_BYTES,
+  MAX_DRAG_JSON_BYTES,
+  MAX_KEYMAP_JSON_BYTES,
+  MAX_MENU_JSON_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativeNode,
   NativePart,
@@ -90,10 +94,7 @@ const properties: Record<string, PropertyEntry> = {
     color: true,
   },
   activeColor: { code: PropertyCode.ActiveColor, color: true },
-  transition: {
-    code: PropertyCode.Transition,
-    normalize: normalizeTransitionShorthand,
-  },
+
   opacity: { code: PropertyCode.Opacity },
   borderWidth: { code: PropertyCode.BorderWidth },
   borderTopWidth: { code: PropertyCode.BorderTopWidth },
@@ -218,6 +219,41 @@ const properties: Record<string, PropertyEntry> = {
   tooltipGap: { code: PropertyCode.TooltipGap },
   tooltipViewportMargin: { code: PropertyCode.TooltipViewportMargin },
   variant: { code: PropertyCode.Variant },
+  menu: { code: PropertyCode.Menu },
+  gridTemplateColumns: {
+    code: PropertyCode.GridTemplateColumns,
+    normalize: normalizeGridTemplate,
+  },
+  gridTemplateRows: {
+    code: PropertyCode.GridTemplateRows,
+    normalize: normalizeGridTemplate,
+  },
+  gridAutoFlow: { code: PropertyCode.GridAutoFlow },
+  gridColumnStart: { code: PropertyCode.GridColumnStart },
+  gridColumnEnd: { code: PropertyCode.GridColumnEnd },
+  gridRowStart: { code: PropertyCode.GridRowStart },
+  gridRowEnd: { code: PropertyCode.GridRowEnd },
+  transitionProperty: { code: PropertyCode.TransitionProperties },
+  transitionDuration: {
+    code: PropertyCode.TransitionDuration,
+    normalize: normalizeMilliseconds,
+  },
+  transitionTimingFunction: { code: PropertyCode.TransitionEasing },
+  transitionEasing: { code: PropertyCode.TransitionEasing },
+  transitionMaxFps: { code: PropertyCode.TransitionMaxFps },
+  min: { code: PropertyCode.Minimum },
+  max: { code: PropertyCode.Maximum },
+  low: { code: PropertyCode.Low },
+  high: { code: PropertyCode.High },
+  optimum: { code: PropertyCode.Optimum },
+  valueText: { code: PropertyCode.ValueText },
+  pressed: { code: PropertyCode.Pressed },
+  objectFit: { code: PropertyCode.ObjectFit },
+  fit: { code: PropertyCode.ObjectFit },
+  shaderParameters: {
+    code: PropertyCode.ShaderParameters,
+    normalize: normalizeShaderParameters,
+  },
 };
 
 /**
@@ -233,6 +269,7 @@ const explicitFalseProperties = new Set<PropertyCode>([
   PropertyCode.FocusOnPointer,
   PropertyCode.Checked,
   PropertyCode.Indeterminate,
+  PropertyCode.Pressed,
   PropertyCode.ActivateOnFocus,
   PropertyCode.LoopFocus,
   PropertyCode.KeepMounted,
@@ -279,6 +316,20 @@ function setProperty(
     } else {
       throw new TypeError("QuickGUI popover anchor must be a NativeNode");
     }
+    return;
+  }
+  if (name === "controls") {
+    if (value === null || value === undefined || value === false) {
+      setNativeProperty(node, PropertyCode.Controls, null);
+    } else if (value instanceof NativeNode) {
+      setNativeProperty(node, PropertyCode.Controls, String(value.id));
+    } else {
+      throw new TypeError("QuickGUI controls target must be a NativeNode");
+    }
+    return;
+  }
+  if (name === "transition") {
+    setTransition(node, value);
     return;
   }
   const event = eventName(name);
@@ -338,6 +389,22 @@ function setProperty(
   }
   if (name === "flex") {
     setFlex(node, value);
+    return;
+  }
+  if (name === "keymap") {
+    setNativeProperty(node, PropertyCode.Keymap, encodeKeymap(value));
+    return;
+  }
+  if (name === "draggable") {
+    setNativeProperty(node, PropertyCode.Draggable, encodeDragSource(value));
+    return;
+  }
+  if (name === "dropKinds") {
+    setNativeProperty(node, PropertyCode.DropKinds, encodeDropKinds(value));
+    return;
+  }
+  if (name === "gridColumn" || name === "gridRow") {
+    setGridPlacement(node, name === "gridColumn", value);
     return;
   }
   if (name === "matchContents") {
@@ -455,58 +522,257 @@ function normalizeLength(value: string | undefined): number | string | null {
   return Number.isFinite(number) ? number : trimmed;
 }
 
-function normalizeTransitionShorthand(value: PropertyInput): number | null {
+/** Paint properties the Rust core can transition, keyed by their CSS-shaped names. */
+const transitionProperties = new Map<string, string>([
+  ["all", "all"],
+  ["background", "background-color"],
+  ["background-color", "background-color"],
+  ["border-color", "border-color"],
+  ["border-width", "border-width"],
+  ["border-radius", "border-radius"],
+  ["color", "color"],
+  ["box-shadow", "box-shadow"],
+  ["opacity", "opacity"],
+]);
+
+const transitionEasings = new Set([
+  "linear",
+  "ease",
+  "ease-in",
+  "ease-out",
+  "ease-in-out",
+]);
+
+/** Duration in milliseconds from a `120ms`, `0.2s`, or plain-number declaration. */
+function normalizeMilliseconds(value: PropertyInput): number | null {
   if (value === null || value === undefined || value === false) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  const text = String(value).trim();
+  const match = text.match(/^(\d*\.?\d+)(ms|s)?$/);
+  if (!match) return null;
+  return Number(match[1]) * (match[2] === "s" ? 1_000 : 1);
+}
+
+/**
+ * Declare a complete paint transition.
+ *
+ * The Rust core owns interpolation, cadence, and which paint properties can transition; this only
+ * translates the CSS-shaped declaration into the property, duration, and easing the core reads.
+ */
+function setTransition(node: NativeNode, value: PropertyInput): void {
+  const clear = () => {
+    for (const code of [
+      PropertyCode.Transition,
+      PropertyCode.TransitionProperties,
+      PropertyCode.TransitionDuration,
+      PropertyCode.TransitionEasing,
+      PropertyCode.TransitionMaxFps,
+    ]) {
+      setNativeProperty(node, code, null);
+    }
+  };
+  if (value === null || value === undefined || value === false) {
+    clear();
+    return;
+  }
+  if (typeof value === "number") {
+    clear();
+    setNativeProperty(node, PropertyCode.Transition, value);
+    return;
+  }
+  if (isRecord(value)) {
+    clear();
+    const duration = normalizeMilliseconds(value.duration as PropertyInput);
+    if (duration !== null) {
+      setNativeProperty(node, PropertyCode.TransitionDuration, duration);
+    }
+    const declared = value.property ?? value.properties;
+    if (declared !== undefined && declared !== null) {
+      const names = (Array.isArray(declared) ? declared : [declared])
+        .map((name) => normalizeTransitionProperty(String(name)))
+        .join(",");
+      setNativeProperty(node, PropertyCode.TransitionProperties, names);
+    }
+    if (typeof value.easing === "string" || typeof value.timingFunction === "string") {
+      setNativeProperty(
+        node,
+        PropertyCode.TransitionEasing,
+        normalizeTransitionEasing(String(value.easing ?? value.timingFunction)),
+      );
+    }
+    if (typeof value.maxFps === "number") {
+      setNativeProperty(node, PropertyCode.TransitionMaxFps, value.maxFps);
+    }
+    if (value.delay !== undefined && Number(value.delay) !== 0) {
+      throw new TypeError(
+        "QuickGUI transitions do not support a non-zero delay",
+      );
+    }
+    return;
+  }
   if (typeof value !== "string") {
     throw new TypeError(
       "QuickGUI transition must use the CSS transition shorthand",
     );
   }
   const shorthand = value.trim();
-  if (shorthand === "" || shorthand === "none") return null;
+  clear();
+  if (shorthand === "" || shorthand === "none") return;
 
-  const declarations = splitCssList(shorthand);
-  const supported = new Set(["background-color", "border-color", "color"]);
   const declared = new Set<string>();
   let sharedDuration: number | undefined;
-  for (const declaration of declarations) {
-    const property = declaration
-      .split(/\s+/)
-      .find((token) => supported.has(token));
+  let easing: string | undefined;
+  for (const declaration of splitCssList(shorthand)) {
+    const tokens = declaration.split(/\s+/).filter(Boolean);
+    const property = tokens.find((token) => transitionProperties.has(token));
     if (!property) {
       throw new TypeError(
-        "QuickGUI transition currently supports background-color, border-color, and color",
+        `QuickGUI cannot transition \`${declaration}\`; the core transitions background-color, border-color, border-width, border-radius, color, box-shadow, and opacity`,
       );
     }
-    declared.add(property);
+    declared.add(transitionProperties.get(property)!);
     const times = Array.from(
       declaration.matchAll(/(?:^|\s)(\d*\.?\d+)(ms|s)(?=\s|$)/g),
       (match) => Number(match[1]) * (match[2] === "s" ? 1_000 : 1),
     );
     const duration = times[0] ?? 0;
-    const delay = times[1] ?? 0;
-    if (delay !== 0) {
+    if ((times[1] ?? 0) !== 0) {
       throw new TypeError(
-        "QuickGUI transition does not support a non-zero delay",
+        "QuickGUI transitions do not support a non-zero delay",
       );
     }
     if (sharedDuration !== undefined && sharedDuration !== duration) {
       throw new TypeError(
-        "QuickGUI color transition properties must share one duration",
+        "QuickGUI transition properties must share one duration",
       );
     }
     sharedDuration = duration;
+    const declaredEasing = tokens.find((token) => transitionEasings.has(token));
+    if (declaredEasing) easing = declaredEasing;
   }
-  if (
-    declared.size !== supported.size ||
-    Array.from(supported).some((property) => !declared.has(property))
-  ) {
-    throw new TypeError(
-      "QuickGUI color transition must declare background-color, border-color, and color",
+  setNativeProperty(node, PropertyCode.Transition, sharedDuration ?? 0);
+  setNativeProperty(
+    node,
+    PropertyCode.TransitionProperties,
+    Array.from(declared).join(","),
+  );
+  if (easing) {
+    setNativeProperty(
+      node,
+      PropertyCode.TransitionEasing,
+      normalizeTransitionEasing(easing),
     );
   }
-  return sharedDuration ?? 0;
 }
+
+function normalizeTransitionProperty(name: string): string {
+  const normalized = transitionProperties.get(name.trim());
+  if (!normalized) {
+    throw new TypeError(`QuickGUI cannot transition \`${name}\``);
+  }
+  return normalized;
+}
+
+function normalizeTransitionEasing(name: string): string {
+  const normalized = name.trim();
+  if (!transitionEasings.has(normalized)) {
+    throw new TypeError(
+      `QuickGUI does not expose the \`${normalized}\` easing curve`,
+    );
+  }
+  return normalized === "ease" ? "ease-in-out" : normalized;
+}
+
+/** Normalize a CSS grid track list. A plain number declares that many equal `1fr` tracks. */
+function normalizeGridTemplate(value: PropertyInput): number | string | null {
+  if (value === null || value === undefined || value === false) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  const tracks = Array.isArray(value) ? value.join(" ") : String(value);
+  const normalized = tracks.trim().replace(/\s+/g, " ");
+  return normalized === "" || normalized === "none" ? null : normalized;
+}
+
+/**
+ * Split a `grid-column` / `grid-row` shorthand into the core's line and span placement.
+ *
+ * `2 / span 3` is the same placement as lines `2` through `5`, so a declared start plus span
+ * becomes an explicit end and the core never needs a combined form it does not expose.
+ */
+function setGridPlacement(
+  node: NativeNode,
+  column: boolean,
+  value: PropertyInput,
+): void {
+  const startCode = column
+    ? PropertyCode.GridColumnStart
+    : PropertyCode.GridRowStart;
+  const endCode = column ? PropertyCode.GridColumnEnd : PropertyCode.GridRowEnd;
+  const spanCode = column
+    ? PropertyCode.GridColumnSpan
+    : PropertyCode.GridRowSpan;
+  setNativeProperty(node, startCode, null);
+  setNativeProperty(node, endCode, null);
+  setNativeProperty(node, spanCode, null);
+  if (value === null || value === undefined || value === false) return;
+  if (typeof value === "number") {
+    setNativeProperty(node, startCode, value);
+    return;
+  }
+  const [rawStart = "", rawEnd = ""] = String(value).split("/");
+  const start = rawStart.trim();
+  const end = rawEnd.trim();
+  const startSpan = start.match(/^span\s+(\d+)$/);
+  const endSpan = end.match(/^span\s+(\d+)$/);
+  const startLine = start === "" || start === "auto" ? null : Number(start);
+  if (startSpan) {
+    setNativeProperty(node, spanCode, Number(startSpan[1]));
+    return;
+  }
+  if (startLine !== null && Number.isFinite(startLine)) {
+    setNativeProperty(node, startCode, startLine);
+  }
+  if (endSpan) {
+    const span = Number(endSpan[1]);
+    if (startLine !== null && Number.isFinite(startLine)) {
+      setNativeProperty(node, endCode, startLine + span);
+    } else {
+      setNativeProperty(node, spanCode, span);
+    }
+    return;
+  }
+  const endLine = end === "" || end === "auto" ? null : Number(end);
+  if (endLine !== null && Number.isFinite(endLine)) {
+    setNativeProperty(node, endCode, endLine);
+  }
+}
+
+/** Bounded shader parameter floats, packed into the core's four fixed vectors. */
+function normalizeShaderParameters(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  if (!Array.isArray(value)) {
+    throw new TypeError("QuickGUI shader parameters must be an array of numbers");
+  }
+  const floats = value.flat(2).map((entry) => {
+    const number = Number(entry);
+    if (!Number.isFinite(number)) {
+      throw new TypeError("QuickGUI shader parameters must be finite numbers");
+    }
+    return number;
+  });
+  if (floats.length > MAX_SHADER_PARAMETER_FLOATS) {
+    throw new RangeError(
+      `QuickGUI exposes ${MAX_SHADER_PARAMETER_FLOATS} shader parameter floats`,
+    );
+  }
+  return JSON.stringify(floats);
+}
+
+/** Four four-component vectors, matching the Rust core's fixed shader uniform. */
+export const MAX_SHADER_PARAMETER_FLOATS = 16;
 
 function splitCssList(value: string): string[] {
   const values: string[] = [];
@@ -692,6 +958,26 @@ function eventName(
   | "terminal"
   | "pointer"
   | "presentationchange"
+  | "menuselect"
+  | "keydown"
+  | "keyup"
+  | "mousedown"
+  | "mouseup"
+  | "mousemove"
+  | "dblclick"
+  | "wheel"
+  | "contextmenu"
+  | "pinch"
+  | "rotate"
+  | "smartmagnify"
+  | "pressure"
+  | "focus"
+  | "blur"
+  | "action"
+  | "dragstart"
+  | "dragend"
+  | "drop"
+  | "filesdropped"
   | undefined {
   switch (name.toLowerCase()) {
     case "onclick":
@@ -719,6 +1005,58 @@ function eventName(
     case "onpointer":
     case "on:pointer":
       return "pointer";
+    case "onselect":
+    case "on:select":
+    case "onmenuselect":
+      return "menuselect";
+    case "onkeydown":
+    case "on:keydown":
+      return "keydown";
+    case "onkeyup":
+    case "on:keyup":
+      return "keyup";
+    case "onmousedown":
+    case "onpointerdown":
+      return "mousedown";
+    case "onmouseup":
+    case "onpointerup":
+      return "mouseup";
+    case "onmousemove":
+    case "onpointermove":
+      return "mousemove";
+    case "ondoubleclick":
+    case "ondblclick":
+      return "dblclick";
+    case "onwheel":
+    case "onscrollwheel":
+      return "wheel";
+    case "oncontextmenu":
+    case "on:contextmenu":
+      return "contextmenu";
+    case "onpinch":
+      return "pinch";
+    case "onrotate":
+    case "onrotation":
+      return "rotate";
+    case "onsmartmagnify":
+      return "smartmagnify";
+    case "onpressure":
+      return "pressure";
+    case "onfocus":
+      return "focus";
+    case "onblur":
+      return "blur";
+    case "onaction":
+    case "on:action":
+      return "action";
+    case "ondragstart":
+      return "dragstart";
+    case "ondragend":
+      return "dragend";
+    case "ondrop":
+      return "drop";
+    case "onfilesdropped":
+      return "filesdropped";
     case "onispresentedchange":
     case "onpresentationchange":
     case "on:presentationchange":
@@ -890,6 +1228,8 @@ const universal = createUniversalRenderer<NativeNode>({
         "virtual-list",
         "terminal",
         "svg",
+        "image",
+        "shader",
         "swift-ui-host",
         "swift-ui-button",
         "swift-ui-quickgui-host",
@@ -1337,6 +1677,15 @@ let nextComponentScope = 1;
  */
 function createComponentScope(prefix: string): string {
   return `${prefix}-${nextComponentScope++}`;
+}
+
+function createHostNode(
+  element: NativeElementName,
+  props: unknown,
+): NativeNode {
+  const node = universal.createElement(element);
+  universal.spread(node, props as object);
+  return node;
 }
 
 function createPartNode(
@@ -2403,6 +2752,619 @@ export const Fieldset = Object.assign(FieldsetRoot, {
   Control: FieldsetControl,
 });
 
+
+/** Retained image node. A path decodes on the core's bounded worker pool. */
+export function Image(props: JSX.ImageProps): NativeNode {
+  return createHostNode("image", props);
+}
+
+/** Retained application shader surface painted by validated WGSL. */
+export function Shader(props: JSX.ShaderProps): NativeNode {
+  return createHostNode("shader", props);
+}
+
+// ---------------------------------------------------------------------------
+// Range and feedback parts
+// ---------------------------------------------------------------------------
+
+/** Determinate or indeterminate progress root carrying the core's exact value range. */
+export function ProgressRoot(props: JSX.ProgressProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.Progress });
+}
+
+/** Application-owned progress fill, hidden from the accessible name by the core. */
+export function ProgressIndicator(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.ProgressIndicator });
+}
+
+/** Base-UI-shaped compound parts for a progress indicator. */
+export const Progress = Object.assign(ProgressRoot, {
+  Root: ProgressRoot,
+  Indicator: ProgressIndicator,
+});
+
+/** Static measurement gauge with optional low, high, and optimum markers. */
+export function MeterRoot(props: JSX.MeterProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.Meter });
+}
+
+/** Application-owned meter fill, hidden from the accessible name by the core. */
+export function MeterIndicator(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.MeterIndicator });
+}
+
+/** Base-UI-shaped compound parts for a meter. */
+export const Meter = Object.assign(MeterRoot, {
+  Root: MeterRoot,
+  Indicator: MeterIndicator,
+});
+
+/** Controlled toggle button. A toggle is a button that stays pressed, not a checkbox. */
+export function ToggleRoot(props: JSX.ToggleProps): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultPressed ?? false,
+  );
+  const pressed = () => props.pressed ?? uncontrolled();
+  return createPartNode(
+    "button",
+    omit(props, "pressed", "defaultPressed", "onPressedChange"),
+    {
+      part: NativePart.Toggle,
+      get pressed() {
+        return pressed();
+      },
+      onClick: forwardClick(props.onClick, (event) => {
+        const next = !pressed();
+        if (props.pressed === undefined) setUncontrolled(next);
+        props.onPressedChange?.(next, event);
+      }),
+    },
+  );
+}
+
+/** Application-owned toggle indicator, hidden from the accessible name by the core. */
+export function ToggleIndicator(props: JSX.NativeProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.ToggleIndicator });
+}
+
+/** Base-UI-shaped compound parts for a toggle button. */
+export const Toggle = Object.assign(ToggleRoot, {
+  Root: ToggleRoot,
+  Indicator: ToggleIndicator,
+});
+
+
+// ---------------------------------------------------------------------------
+// Declared input
+//
+// Every listener below is declared ahead of the core's decision. The Rust core owns targeting,
+// capture, bubbling, multi-click counting, accelerator parsing, and drag promotion; JavaScript
+// receives the outcome as a bounded asynchronous payload.
+// ---------------------------------------------------------------------------
+
+const inputTextEncoder = new TextEncoder();
+
+/** Modifier flags shared by every declared input payload. */
+export interface InputModifiers {
+  shift: boolean;
+  control: boolean;
+  alt: boolean;
+  meta: boolean;
+}
+
+export interface KeyEventDetails extends InputModifiers {
+  /** DOM-shaped normalized key name, such as `"a"`, `"ArrowUp"`, or `"Escape"`. */
+  key: string;
+  /** Composed text the platform reported for this press, when it produced any. */
+  text?: string;
+  repeat?: boolean;
+}
+
+export interface MouseEventDetails extends InputModifiers {
+  x: number;
+  y: number;
+  button?: string;
+  pressedButton?: string | null;
+  /** Exact native multi-click count. The first press is `1`. */
+  clickCount?: number;
+  firstMouse?: boolean;
+}
+
+export interface WheelEventDetails extends InputModifiers {
+  x: number;
+  y: number;
+  deltaX: number;
+  deltaY: number;
+  /** `true` for a trackpad or precise wheel. */
+  precise: boolean;
+  phase: "started" | "moved" | "ended" | "cancelled";
+}
+
+export interface GestureEventDetails extends InputModifiers {
+  x: number;
+  y: number;
+  delta?: number;
+  phase?: "started" | "moved" | "ended" | "cancelled";
+  pressure?: number;
+  stage?: string;
+}
+
+export interface DropEventDetails extends InputModifiers {
+  x: number;
+  y: number;
+  /** Declared identifier of an application-local payload. */
+  id?: string;
+  /** Node id that started the drag. */
+  source?: number;
+  /** Absolute paths of a native file drop. */
+  paths?: string[];
+  origin?: "internal" | "cross-window" | "external";
+}
+
+/** Accelerator-to-binding-id pairs the Rust core resolves for a focused element. */
+export type Keymap = Readonly<Record<string, string>>;
+
+export interface DragSource {
+  /** Stable identifier delivered to an application-local drop target. */
+  id?: string;
+  /** Plain text promoted to other applications. */
+  text?: string;
+  /** Absolute URL promoted to other applications. */
+  url?: string;
+  /** Existing files or directories promoted to other applications. */
+  files?: readonly { path: string; directory?: boolean }[];
+}
+
+export type DropKind = "local" | "files";
+
+function bounded(value: string, limit: number, what: string): string {
+  if (inputTextEncoder.encode(value).length > limit) {
+    throw new RangeError(`QuickGUI ${what} are bounded to ${limit} bytes`);
+  }
+  return value;
+}
+
+function encodeKeymap(value: unknown): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  if (!isRecord(value)) {
+    throw new TypeError("QuickGUI keymap must map accelerators to binding ids");
+  }
+  for (const entry of Object.values(value)) {
+    if (typeof entry !== "string") {
+      throw new TypeError("QuickGUI keymap binding ids must be strings");
+    }
+  }
+  return bounded(JSON.stringify(value), MAX_KEYMAP_JSON_BYTES, "keymaps");
+}
+
+function encodeDragSource(value: unknown): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const declaration = value === true ? {} : value;
+  if (!isRecord(declaration)) {
+    throw new TypeError("QuickGUI draggable must declare its payload");
+  }
+  return bounded(
+    JSON.stringify(declaration),
+    MAX_DRAG_JSON_BYTES,
+    "drag declarations",
+  );
+}
+
+function encodeDropKinds(value: unknown): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const kinds = Array.isArray(value) ? value : [value];
+  for (const kind of kinds) {
+    if (kind !== "local" && kind !== "files") {
+      throw new TypeError(
+        `QuickGUI accepts the drop kinds \`local\` and \`files\`, not \`${String(kind)}\``,
+      );
+    }
+  }
+  return JSON.stringify(kinds);
+}
+
+function parseInputPayload<T>(event: QuickGuiEvent): T | undefined {
+  if (!event.value) return undefined;
+  try {
+    return JSON.parse(event.value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Decode a `keydown` or `keyup` payload. */
+export function keyEventFromEvent(
+  event: QuickGuiEvent,
+): KeyEventDetails | undefined {
+  return parseInputPayload<KeyEventDetails>(event);
+}
+
+/** Decode a `mousedown`, `mouseup`, `mousemove`, `dblclick`, or `contextmenu` payload. */
+export function mouseEventFromEvent(
+  event: QuickGuiEvent,
+): MouseEventDetails | undefined {
+  return parseInputPayload<MouseEventDetails>(event);
+}
+
+/** Decode a `wheel` payload. */
+export function wheelEventFromEvent(
+  event: QuickGuiEvent,
+): WheelEventDetails | undefined {
+  return parseInputPayload<WheelEventDetails>(event);
+}
+
+/** Decode a `pinch`, `rotate`, `smartmagnify`, or `pressure` payload. */
+export function gestureEventFromEvent(
+  event: QuickGuiEvent,
+): GestureEventDetails | undefined {
+  return parseInputPayload<GestureEventDetails>(event);
+}
+
+/** Decode a `drop` or `filesdropped` payload. */
+export function dropEventFromEvent(
+  event: QuickGuiEvent,
+): DropEventDetails | undefined {
+  return parseInputPayload<DropEventDetails>(event);
+}
+
+/** The binding id an `action` event carries, or `undefined` when the payload is missing. */
+export function actionFromEvent(event: QuickGuiEvent): string | undefined {
+  return event.value || undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Declared menus
+//
+// A menu is declared ahead of time as one bounded JSON model. The Rust core owns validation,
+// highlighting, typeahead, checkbox/radio policy, submenu models, accessibility semantics, and the
+// cursor-point native surface; JavaScript never answers a synchronous question while a menu is
+// open and never reimplements menu behavior.
+// ---------------------------------------------------------------------------
+
+export type MenuItemKind =
+  | "action"
+  | "checkbox"
+  | "radio"
+  | "submenu"
+  | "separator"
+  | "group";
+
+export interface MenuItem {
+  /** Defaults to `submenu` when `items` is present, otherwise `action`. */
+  type?: MenuItemKind;
+  /** Stable identifier reported by `onSelect`. Required for every interactive entry. */
+  id?: string;
+  label?: string;
+  /** Display-only accelerator hint, such as `"⌘O"`. */
+  shortcut?: string;
+  /** Radio group key. Defaults to the item's own id. */
+  group?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  /** Override the core's default close policy for this entry. */
+  closeOnSelect?: boolean;
+  /** Alphanumeric navigation label when it differs from the visible one. */
+  typeaheadLabel?: string;
+  items?: readonly MenuItem[];
+}
+
+/** Structural geometry and appearance for a declared menu surface. */
+export interface MenuAppearance {
+  width?: number;
+  itemHeight?: number;
+  separatorHeight?: number;
+  groupLabelHeight?: number;
+  verticalPadding?: number;
+  fontSize?: number;
+  radius?: number;
+  padding?: number;
+  background?: ColorValue;
+  color?: ColorValue;
+  highlightBackground?: ColorValue;
+  highlightColor?: ColorValue;
+  mutedColor?: ColorValue;
+  /** Wrap arrow navigation at the ends of a menu level. Defaults to `true`. */
+  loop?: boolean;
+}
+
+export interface MenuSelectDetails {
+  /** Stable id of the activated entry. */
+  id: string;
+  /** New checkbox value, or `true` for a radio item. */
+  checked?: boolean;
+  /** `true` when the entry opens a submenu instead of dispatching a command. */
+  submenu?: boolean;
+}
+
+const menuAppearanceColors: readonly string[] = [
+  "background",
+  "color",
+  "highlightBackground",
+  "highlightColor",
+  "mutedColor",
+];
+
+const menuTextEncoder = new TextEncoder();
+
+function encodeMenuItems(items: readonly MenuItem[]): unknown[] {
+  return items.map((item) => {
+    const encoded: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(item)) {
+      if (value === undefined || name === "items") continue;
+      encoded[name] = value;
+    }
+    if (item.items && item.items.length > 0) {
+      encoded.items = encodeMenuItems(item.items);
+    }
+    return encoded;
+  });
+}
+
+/**
+ * Encode one bounded menu declaration for the Rust binding.
+ *
+ * Colors are packed here so the core never parses CSS, and the byte bound is enforced before the
+ * declaration can cross N-API.
+ */
+export function encodeMenu(
+  items: readonly MenuItem[] | undefined,
+  appearance: MenuAppearance = {},
+): string {
+  const declaration: Record<string, unknown> = {
+    items: encodeMenuItems(items ?? []),
+  };
+  for (const [name, value] of Object.entries(appearance)) {
+    if (value === undefined || value === null) continue;
+    if (name === "loop") {
+      declaration.loopFocus = value === true;
+      continue;
+    }
+    declaration[name] = menuAppearanceColors.includes(name)
+      ? parseColor(value as ColorValue)
+      : value;
+  }
+  const encoded = JSON.stringify(declaration);
+  if (menuTextEncoder.encode(encoded).length > MAX_MENU_JSON_BYTES) {
+    throw new RangeError(
+      `QuickGUI menu declarations are bounded to ${MAX_MENU_JSON_BYTES} bytes`,
+    );
+  }
+  return encoded;
+}
+
+/** Decode the payload of a native `menuselect` event. */
+export function menuSelectionFromEvent(
+  event: QuickGuiEvent,
+): MenuSelectDetails | undefined {
+  if (!event.value) return undefined;
+  try {
+    const parsed = JSON.parse(event.value) as MenuSelectDetails;
+    return typeof parsed?.id === "string" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+interface MenuContextValue {
+  items: () => readonly MenuItem[];
+  appearance: () => MenuAppearance;
+  select: (details: MenuSelectDetails, event: QuickGuiEvent) => void;
+}
+
+interface PopoverMenuContextValue extends MenuContextValue {
+  open: () => boolean;
+  setOpen: (
+    open: boolean,
+    reason: PopoverOpenChangeReason,
+    event: QuickGuiEvent,
+  ) => void;
+  trigger: () => NativeNode | undefined;
+  registerTrigger: (node: NativeNode) => void;
+  popup: () => NativeNode | undefined;
+  registerPopup: (node: NativeNode | undefined) => void;
+  placement: () => PopoverPlacement;
+  gap: () => number;
+  viewportMargin: () => number;
+  dismissOnEscape: () => boolean;
+  dismissOnPointerOutside: () => boolean;
+}
+
+const PopoverMenuContext = createContext<PopoverMenuContextValue | null>(null);
+const ContextMenuContext = createContext<MenuContextValue | null>(null);
+
+function requirePopoverMenu(component: string): PopoverMenuContextValue {
+  const context = useContext(PopoverMenuContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <PopoverMenu.Root>`);
+  }
+  return context;
+}
+
+function requireContextMenu(component: string): MenuContextValue {
+  const context = useContext(ContextMenuContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <ContextMenu.Root>`);
+  }
+  return context;
+}
+
+function menuSelectListener(
+  context: MenuContextValue,
+  handler: ((event: QuickGuiEvent) => void) | undefined,
+): (event: QuickGuiEvent) => void {
+  return (event) => {
+    handler?.(event);
+    const details = menuSelectionFromEvent(event);
+    if (details) context.select(details, event);
+  };
+}
+
+/** Logical root of a declared popover menu. It creates no native element. */
+export function PopoverMenuRoot(props: JSX.PopoverMenuRootProps): NativeNode {
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(
+    props.defaultOpen ?? false,
+  );
+  const [trigger, setTrigger] = createSignal<NativeNode>();
+  const [popup, setPopup] = createSignal<NativeNode>();
+  const open = () => props.open ?? uncontrolledOpen();
+  const context: PopoverMenuContextValue = {
+    open,
+    setOpen(nextOpen, reason, event) {
+      if (props.open === undefined) setUncontrolledOpen(nextOpen);
+      props.onOpenChange?.(nextOpen, { reason, event });
+    },
+    items: () => props.items ?? [],
+    appearance: () => props.appearance ?? {},
+    select(details, event) {
+      props.onSelect?.(details, event);
+      if (details.submenu) return;
+      if (props.open === undefined) setUncontrolledOpen(false);
+      props.onOpenChange?.(false, { reason: "dismiss", event });
+    },
+    trigger,
+    registerTrigger: (node) => setTrigger(() => node),
+    popup,
+    registerPopup: (node) => setPopup(() => node),
+    placement: () => props.placement ?? "bottom-start",
+    gap: () => props.gap ?? 4,
+    viewportMargin: () => props.viewportMargin ?? 8,
+    dismissOnEscape: () => props.dismissOnEscape ?? true,
+    dismissOnPointerOutside: () => props.dismissOnPointerOutside ?? true,
+  };
+  return PopoverMenuContext({
+    value: context,
+    get children() {
+      return props.children as SolidElement;
+    },
+  }) as unknown as NativeNode;
+}
+
+/** Menu trigger. The core supplies its `has-popup`, expansion, and controls relationship. */
+export function PopoverMenuTrigger(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverMenu("PopoverMenu.Trigger");
+  let trigger: NativeNode | undefined;
+  return createPartNode("button", omit(props, "onClick", "ref"), {
+    part: NativePart.PopoverMenuTrigger,
+    get open() {
+      return context.open();
+    },
+    get controls() {
+      // The relationship exists only while the surface is mounted, so a closed menu declares no
+      // dangling target and no signal is written while the surface disposes.
+      return context.open() ? context.popup() : undefined;
+    },
+    ref: (node: NativeNode) => {
+      trigger = node;
+      context.registerTrigger(node);
+      if (typeof props.ref === "function") props.ref(node);
+    },
+    onClick: forwardClick(props.onClick, (event) => {
+      if (trigger) context.registerTrigger(trigger);
+      context.setOpen(!context.open(), "trigger-press", event);
+    }),
+  });
+}
+
+/**
+ * Menu surface anchored to the trigger.
+ *
+ * Rows come from the declared model, so the surface owns only its own paint. It is mounted only
+ * while the menu is open and while a trigger exists to anchor it.
+ */
+export function PopoverMenuPopup(props: JSX.PopoverMenuPopupProps): NativeNode {
+  const context = requirePopoverMenu("PopoverMenu.Popup");
+  return Show({
+    keyed: true,
+    get when() {
+      return context.open() ? context.trigger() : undefined;
+    },
+    children: (anchor: NativeNode) => {
+      const node = createPartNode("view", omit(props, "onDismiss", "onSelect"), {
+        part: NativePart.PopoverMenuPopup,
+        anchor,
+        get menu() {
+          return encodeMenu(context.items(), context.appearance());
+        },
+        get width() {
+          return props.width ?? context.appearance().width ?? 224;
+        },
+        get anchorPlacement() {
+          return context.placement();
+        },
+        get anchorGap() {
+          return context.gap();
+        },
+        get viewportMargin() {
+          return context.viewportMargin();
+        },
+        get dismissOnEscape() {
+          return context.dismissOnEscape();
+        },
+        get dismissOnPointerOutside() {
+          return context.dismissOnPointerOutside();
+        },
+        onSelect: menuSelectListener(context, props.onSelect),
+        onDismiss(event: QuickGuiEvent) {
+          props.onDismiss?.(event);
+          if (!event.defaultPrevented) context.setOpen(false, "dismiss", event);
+        },
+      });
+      context.registerPopup(node);
+      return node;
+    },
+  }) as unknown as NativeNode;
+}
+
+/** Base-UI-shaped compound parts for a declared popover menu. */
+export const PopoverMenu = Object.assign(PopoverMenuRoot, {
+  Root: PopoverMenuRoot,
+  Trigger: PopoverMenuTrigger,
+  Popup: PopoverMenuPopup,
+});
+
+/** Logical root of a declared cursor-point context menu. It creates no native element. */
+export function ContextMenuRoot(props: JSX.ContextMenuRootProps): NativeNode {
+  const context: MenuContextValue = {
+    items: () => props.items ?? [],
+    appearance: () => props.appearance ?? {},
+    select(details, event) {
+      props.onSelect?.(details, event);
+    },
+  };
+  return ContextMenuContext({
+    value: context,
+    get children() {
+      return props.children as SolidElement;
+    },
+  }) as unknown as NativeNode;
+}
+
+/**
+ * Secondary-click target for a declared context menu.
+ *
+ * The core opens its own cursor-point surface, keeps the menu inside the work area, owns submenu
+ * hover intent and safe corridors, and tears the chain down child-first.
+ */
+export function ContextMenuTrigger(
+  props: JSX.ContextMenuTriggerProps,
+): NativeNode {
+  const context = requireContextMenu("ContextMenu.Trigger");
+  return createPartNode("view", omit(props, "onSelect"), {
+    part: NativePart.ContextMenuTrigger,
+    get menu() {
+      return encodeMenu(context.items(), context.appearance());
+    },
+    onSelect: menuSelectListener(context, props.onSelect),
+  });
+}
+
+/** Base-UI-shaped compound parts for a declared context menu. */
+export const ContextMenu = Object.assign(ContextMenuRoot, {
+  Root: ContextMenuRoot,
+  Trigger: ContextMenuTrigger,
+});
+
+
 export function createRenderer(code: () => JSX.Element): WindowRenderer {
   return (window) => {
     const nativeDispose = nativeRender(() => code() as NativeNode, window.root);
@@ -2429,6 +3391,35 @@ export const setProp = universal.setProp;
 export const mergeProps = universal.mergeProps;
 export const applyRef = universal.applyRef;
 export const ref = universal.ref;
+
+/** Easing curves the Rust core exposes. `ease` is an alias for `ease-in-out`. */
+export type TransitionEasing =
+  | "linear"
+  | "ease"
+  | "ease-in"
+  | "ease-out"
+  | "ease-in-out";
+
+/** Transition properties the Rust core can interpolate without a layout pass. */
+export type TransitionPropertyName =
+  | "all"
+  | "background"
+  | "background-color"
+  | "border-color"
+  | "border-width"
+  | "border-radius"
+  | "color"
+  | "box-shadow"
+  | "opacity";
+
+export interface TransitionDeclaration {
+  property?: TransitionPropertyName | readonly TransitionPropertyName[];
+  properties?: TransitionDeclaration["property"];
+  duration?: number | string;
+  easing?: TransitionEasing;
+  timingFunction?: TransitionEasing;
+  maxFps?: number;
+}
 
 export namespace JSX {
   export type Element = SolidElement;
@@ -2496,7 +3487,7 @@ export namespace JSX {
     hoverColor?: number | string;
     activeBackgroundColor?: number | string;
     activeColor?: number | string;
-    transition?: string;
+    transition?: number | string | TransitionDeclaration;
     opacity?: number;
     borderWidth?: number | string;
     borderTopWidth?: number | string;
@@ -2527,6 +3518,24 @@ export namespace JSX {
     userSelect?: "auto" | "text" | "none";
     visibility?: "visible" | "hidden";
     aspectRatio?: number;
+    /** CSS grid track list, an array of tracks, or a count of equal `1fr` tracks. */
+    gridTemplateColumns?: number | string | readonly (number | string)[];
+    gridTemplateRows?: Style["gridTemplateColumns"];
+    gridAutoFlow?: "row" | "column" | "row dense" | "column dense";
+    /** CSS `grid-column` shorthand such as `2`, `2 / 4`, or `span 3`. */
+    gridColumn?: number | string;
+    gridRow?: number | string;
+    gridColumnStart?: number;
+    gridColumnEnd?: number;
+    gridRowStart?: number;
+    gridRowEnd?: number;
+    transitionProperty?: string;
+    transitionDuration?: number | string;
+    transitionTimingFunction?: TransitionEasing;
+    transitionEasing?: TransitionEasing;
+    /** Repaint cadence ceiling while the transition runs. */
+    transitionMaxFps?: number;
+    objectFit?: "fill" | "contain" | "cover" | "scale-down" | "none";
     markdownCodeBackground?: number | string;
     markdownBorderColor?: number | string;
     markdownMutedColor?: number | string;
@@ -2586,6 +3595,35 @@ export namespace JSX {
     onChange?: EventHandler;
     onSubmit?: EventHandler;
     onDismiss?: EventHandler;
+    /** Focused key press. Declare a `tabIndex` to make an ordinary container focusable. */
+    onKeyDown?: EventHandler;
+    onKeyUp?: EventHandler;
+    onMouseDown?: EventHandler;
+    onMouseUp?: EventHandler;
+    onMouseMove?: EventHandler;
+    /** Second press of one exact native multi-click sequence. */
+    onDoubleClick?: EventHandler;
+    onWheel?: EventHandler;
+    /** Secondary-button press. Use `ContextMenu` for a declared native menu. */
+    onContextMenu?: EventHandler;
+    onPinch?: EventHandler;
+    onRotate?: EventHandler;
+    onSmartMagnify?: EventHandler;
+    onPressure?: EventHandler;
+    onFocus?: EventHandler;
+    onBlur?: EventHandler;
+    /** Bounded accelerator table resolved by the core while this element is focused. */
+    keymap?: Keymap;
+    /** Typed binding id dispatched by `keymap`. */
+    onAction?: EventHandler;
+    /** Declared drag payload promoted when this element starts a drag. */
+    draggable?: boolean | DragSource;
+    onDragStart?: EventHandler;
+    onDragEnd?: EventHandler;
+    /** Payload kinds this element accepts, declared ahead of the native drag. */
+    dropKinds?: DropKind | readonly DropKind[];
+    onDrop?: EventHandler;
+    onFilesDropped?: EventHandler;
   }
 
   export interface InputProps extends NativeProps {
@@ -2757,6 +3795,80 @@ export namespace JSX {
 
   export interface FieldsetRootProps extends NativeProps {}
 
+  export interface ImageProps extends NativeProps {
+    /** Filesystem path, `file://` URL, or a base64 `data:` URL. */
+    source: string;
+    /** `fill`, `contain` (default), `cover`, `scale-down`, or `none`. */
+    fit?: "fill" | "contain" | "cover" | "scale-down" | "none";
+    objectFit?: NonNullable<ImageProps["fit"]>;
+  }
+
+  export interface ShaderProps extends NativeProps {
+    /** Complete WGSL bounded and validated by the Rust core. */
+    source: string;
+    /** Up to sixteen floats packed into the core's four fixed parameter vectors. */
+    shaderParameters?: readonly number[] | readonly (readonly number[])[];
+  }
+
+  export interface ProgressProps extends NativeProps {
+    /** Completed amount. Omit, or declare `indeterminate`, for unknown progress. */
+    value?: number;
+    /** Completion maximum. Defaults to `1`. */
+    max?: number;
+    indeterminate?: boolean;
+    /** Human-readable value such as `"3 of 12 files"`, preferred by assistive technology. */
+    valueText?: string;
+  }
+
+  export interface MeterProps extends NativeProps {
+    value?: number;
+    min?: number;
+    max?: number;
+    low?: number;
+    high?: number;
+    optimum?: number;
+  }
+
+  export interface ToggleProps extends NativeProps {
+    pressed?: boolean;
+    defaultPressed?: boolean;
+    onPressedChange?: (pressed: boolean, event: QuickGuiEvent) => void;
+  }
+
+  export interface PopoverMenuRootProps {
+    children?: unknown;
+    /** Bounded menu model rebuilt by the Rust core on every declaration change. */
+    items?: readonly MenuItem[];
+    /** Structural geometry and paint for the declared rows. */
+    appearance?: MenuAppearance;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, details: PopoverOpenChangeDetails) => void;
+    onSelect?: (details: MenuSelectDetails, event: QuickGuiEvent) => void;
+    placement?: PopoverPlacement;
+    gap?: number;
+    viewportMargin?: number;
+    dismissOnEscape?: boolean;
+    dismissOnPointerOutside?: boolean;
+  }
+
+  export interface PopoverMenuPopupProps extends NativeProps {
+    /** Surface width. Defaults to the declared appearance width. */
+    width?: number;
+    onSelect?: EventHandler;
+  }
+
+  export interface ContextMenuRootProps {
+    children?: unknown;
+    items?: readonly MenuItem[];
+    appearance?: MenuAppearance;
+    onSelect?: (details: MenuSelectDetails, event: QuickGuiEvent) => void;
+  }
+
+  export interface ContextMenuTriggerProps extends NativeProps {
+    onSelect?: EventHandler;
+  }
+
   export interface DialogRootProps {
     children?: unknown;
     open?: boolean;
@@ -2779,5 +3891,7 @@ export namespace JSX {
     "virtual-list": VirtualListProps;
     terminal: TerminalProps;
     svg: SvgProps;
+    image: ImageProps;
+    shader: ShaderProps;
   }
 }

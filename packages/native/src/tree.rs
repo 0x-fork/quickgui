@@ -18,6 +18,8 @@ pub(super) enum NodeTag {
     SwiftUiPopover,
     SwiftUiPopoverTrigger,
     SwiftUiPopoverContent,
+    Image,
+    Shader,
 }
 
 impl NodeTag {
@@ -38,6 +40,8 @@ impl NodeTag {
             13 => Ok(Self::SwiftUiPopover),
             14 => Ok(Self::SwiftUiPopoverTrigger),
             15 => Ok(Self::SwiftUiPopoverContent),
+            16 => Ok(Self::Image),
+            17 => Ok(Self::Shader),
             _ => Err(ProtocolError::new(format!("unknown node tag {value}"))),
         }
     }
@@ -806,4 +810,123 @@ impl NativeListState {
         }
         self.children.clone_from(&node.children);
     }
+}
+
+/// Retained decoded image source for one declared `image` node.
+///
+/// A filesystem path stays a lazy core `ImageResource` so decoding runs on the core's bounded
+/// worker pool; an inline `data:` URL is decoded once and retained until its declaration changes.
+pub(super) struct NativeImageState {
+    pub(super) source: Arc<str>,
+    pub(super) parsed: std::result::Result<quickgui::ImageSource, Arc<str>>,
+}
+
+impl NativeImageState {
+    pub(super) fn new(source: Arc<str>) -> Self {
+        let parsed = native_image_source(source.as_ref());
+        Self { source, parsed }
+    }
+
+    pub(super) fn sync(&mut self, source: &str) {
+        if self.source.as_ref() == source {
+            return;
+        }
+        *self = Self::new(Arc::from(source));
+    }
+
+    pub(super) fn element(&self, node: &NativeNode) -> Element {
+        let Ok(source) = &self.parsed else {
+            return div().hidden();
+        };
+        let mut element = quickgui::img(source.clone());
+        if let Some(fit) = node.string(property::OBJECT_FIT) {
+            element = element.object_fit(match fit {
+                "fill" => quickgui::ObjectFit::Fill,
+                "cover" => quickgui::ObjectFit::Cover,
+                "scale-down" => quickgui::ObjectFit::ScaleDown,
+                "none" => quickgui::ObjectFit::None,
+                _ => quickgui::ObjectFit::Contain,
+            });
+        }
+        element
+    }
+}
+
+fn native_image_source(source: &str) -> std::result::Result<quickgui::ImageSource, Arc<str>> {
+    if source.is_empty() {
+        return Err(Arc::from("an image source cannot be empty"));
+    }
+    if let Some(rest) = source.strip_prefix("data:") {
+        let (header, payload) = rest
+            .split_once(',')
+            .ok_or_else(|| Arc::<str>::from("a data URL image needs a comma separator"))?;
+        if !header.contains("base64") {
+            return Err(Arc::from("only base64 data URL images are supported"));
+        }
+        let bytes =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, payload.trim())
+                .map_err(|_| Arc::<str>::from("a data URL image is not valid base64"))?;
+        // Animated formats keep their frames and repeat policy inside the core decoder.
+        if let Ok(animated) = quickgui::AnimatedImage::decode(&bytes)
+            && animated.frame_count() > 1
+        {
+            return Ok(quickgui::ImageSource::from(animated));
+        }
+        return quickgui::Image::decode(&bytes)
+            .map(quickgui::ImageSource::from)
+            .map_err(|error| Arc::from(error.to_string()));
+    }
+    let path = source.strip_prefix("file://").unwrap_or(source);
+    Ok(quickgui::ImageSource::from(
+        quickgui::ImageResource::from_path(path),
+    ))
+}
+
+/// Retained validated WGSL for one declared `shader` node.
+pub(super) struct NativeShaderState {
+    pub(super) source: Arc<str>,
+    pub(super) parsed: std::result::Result<quickgui::CustomShader, Arc<str>>,
+}
+
+impl NativeShaderState {
+    pub(super) fn new(source: Arc<str>) -> Self {
+        let parsed = quickgui::CustomShader::new(source.as_ref())
+            .map_err(|error| Arc::from(error.to_string()));
+        Self { source, parsed }
+    }
+
+    pub(super) fn sync(&mut self, source: &str) {
+        if self.source.as_ref() == source {
+            return;
+        }
+        *self = Self::new(Arc::from(source));
+    }
+
+    pub(super) fn element(&self, node: &NativeNode) -> Element {
+        let Ok(shader) = &self.parsed else {
+            return div().hidden();
+        };
+        quickgui::custom_shader(shader.clone()).shader_parameters(native_shader_parameters(node))
+    }
+}
+
+/// Decode the declared bounded shader parameter vectors.
+///
+/// The core exposes exactly `CUSTOM_SHADER_PARAMETER_VECTORS` four-component vectors, so extra
+/// declared values are ignored instead of growing the uniform.
+pub(super) fn native_shader_parameters(node: &NativeNode) -> quickgui::ShaderParameters {
+    let mut parameters = quickgui::ShaderParameters::new();
+    let Some(declared) = node.string(property::SHADER_PARAMETERS) else {
+        return parameters;
+    };
+    let Ok(values) = serde_json::from_str::<Vec<f32>>(declared) else {
+        return parameters;
+    };
+    for (index, value) in values.into_iter().enumerate() {
+        if index >= quickgui::CUSTOM_SHADER_PARAMETER_VECTORS * 4 {
+            break;
+        }
+        parameters = parameters.float(index, value);
+    }
+    parameters
 }

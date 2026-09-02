@@ -364,3 +364,13 @@ stop on their last frame. macOS Reduce Motion is respected automatically, and
 frames and 64 MiB of unique decoded pixels, while delays faster than 60 Hz are clamped. See
 `cargo run --release --example animated_images` for direct, finite, and asynchronously loaded
 animations.
+
+## JavaScript bindings
+
+The Solid renderer exposes retained `<Image>` and `<Shader>` nodes. `source` accepts a filesystem
+path, a `file://` URL, or a base64 `data:` URL; a path stays a lazy core `ImageResource` so decoding
+runs on the core's bounded worker pool, and an animated format keeps its frames and repeat policy
+inside the core decoder. `fit` selects the core's `ObjectFit`, and `shaderParameters` fills the
+core's four fixed parameter vectors. Explicit playback control and load-state fallbacks are not
+bound, because the core exposes no play/pause or load-state API. See
+[Solid 2 renderer](solid.md#css-grid-transitions-images-and-shaders).

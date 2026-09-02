@@ -311,6 +311,9 @@ pub(super) struct NativeWindowRuntime {
     pub(super) svgs: Rc<RefCell<HashMap<u32, NativeSvgState>>>,
     pub(super) lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
     pub(super) terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
+    pub(super) images: Rc<RefCell<HashMap<u32, NativeImageState>>>,
+    pub(super) shaders: Rc<RefCell<HashMap<u32, NativeShaderState>>>,
+    pub(super) menus: NativeMenuStates,
     #[cfg(target_os = "macos")]
     pub(super) swift_ui_hosts: Rc<RefCell<HashMap<u32, NativeSwiftUiHostState>>>,
     #[cfg(target_os = "macos")]
@@ -334,6 +337,12 @@ impl NativeWindowRuntime {
             svgs: Rc::clone(&self.svgs),
             lists: Rc::clone(&self.lists),
             terminals: Rc::clone(&self.terminals),
+            images: Rc::clone(&self.images),
+            shaders: Rc::clone(&self.shaders),
+            menus: Rc::clone(&self.menus),
+            context_menu: ContextMenuState::new(),
+            context_menu_owner: None,
+            focused_node: None,
             #[cfg(target_os = "macos")]
             swift_ui_hosts: Rc::clone(&self.swift_ui_hosts),
             #[cfg(target_os = "macos")]
@@ -450,6 +459,9 @@ impl NativeRuntime {
             svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
+            images: Rc::new(RefCell::new(HashMap::new())),
+            shaders: Rc::new(RefCell::new(HashMap::new())),
+            menus: Rc::new(RefCell::new(HashMap::new())),
             #[cfg(target_os = "macos")]
             swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
             #[cfg(target_os = "macos")]
@@ -514,6 +526,9 @@ impl NativeRuntime {
             svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
+            images: Rc::new(RefCell::new(HashMap::new())),
+            shaders: Rc::new(RefCell::new(HashMap::new())),
+            menus: Rc::new(RefCell::new(HashMap::new())),
             #[cfg(target_os = "macos")]
             swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
             #[cfg(target_os = "macos")]
@@ -585,6 +600,9 @@ impl NativeRuntime {
             svgs: Rc::new(RefCell::new(HashMap::new())),
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
+            images: Rc::new(RefCell::new(HashMap::new())),
+            shaders: Rc::new(RefCell::new(HashMap::new())),
+            menus: Rc::new(RefCell::new(HashMap::new())),
             swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),
             embedded_views: Rc::clone(&self.embedded_views),
             handle: None,
@@ -680,6 +698,9 @@ impl NativeRuntime {
             application = application.app_paths(paths);
         }
         application = application.fonts(self.fonts.iter().cloned());
+        // Declared menus adopt the core's own contextual navigation, typeahead, activation, and
+        // dismissal bindings instead of a JavaScript keyboard implementation.
+        application = application.bind_keys(quickgui::popover_menu_key_bindings());
         let mut runner = application
             .on_open_urls(move |urls, _cx| {
                 let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())
