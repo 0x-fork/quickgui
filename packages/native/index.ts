@@ -59,6 +59,12 @@ import {
 
 export { NativeNodeTag, PropertyCode } from "./protocol.ts";
 export {
+  MAX_COMPONENT_VALUE_BYTES,
+  MAX_TOOLTIP_TEXT_BYTES,
+  NativePart,
+  type NativePartName,
+} from "./protocol.ts";
+export {
   NativeNode,
   QuickGuiEvent,
   cleanupNativeNodes,

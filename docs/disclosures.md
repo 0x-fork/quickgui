@@ -114,3 +114,25 @@ cargo run --release --example disclosures
 
 The gallery includes a standalone collapsible, single-value accordion, multiple-value accordion,
 retained closed panels, a disabled heading, and application-owned visuals.
+
+## Solid
+
+`@quickgui/solid` exposes these descriptors as `Collapsible.Root` / `Collapsible.Trigger` /
+`Collapsible.Panel` and `Accordion.Root` / `Accordion.Item` / `Accordion.Header` /
+`Accordion.Trigger` / `Accordion.Panel`.
+
+```tsx
+<Accordion.Root value={open()} onValueChange={setOpen} multiple headingLevel={4}>
+  <Accordion.Item value="shipping">
+    <Accordion.Header>
+      <Accordion.Trigger>Shipping</Accordion.Trigger>
+    </Accordion.Header>
+    <Accordion.Panel>…</Accordion.Panel>
+  </Accordion.Item>
+</Accordion.Root>
+```
+
+The renderer owns only the controlled open value; the button semantics, expanded state, panel
+relationship, heading level, and the decision to omit or retain (`keepMounted`) a closed panel come
+from this Rust layer. Single mode replaces the open value and multiple mode toggles within the
+bounded set. See the [Solid renderer guide](solid.md).

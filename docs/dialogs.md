@@ -122,3 +122,38 @@ cargo run --release --example dialogs
 Live VoiceOver wording, pointer backdrop behavior, embedded-native-view occlusion, and mixed-scale
 multi-monitor behavior remain release-candidate acceptance items until recorded on the intended
 macOS build.
+
+## Solid
+
+`@quickgui/solid` exposes this descriptor as `Dialog.Root`, `Dialog.Trigger`, `Dialog.Portal`,
+`Dialog.Backdrop`, `Dialog.Popup`, `Dialog.Title`, `Dialog.Description`, and `Dialog.Close`, with
+`AlertDialog` providing the same parts for the consequential kind. `Dialog.Root` is a logical
+coordinator that creates no native element; `Dialog.Portal` is the viewport overlay root the Rust
+core mounts only while the dialog is open.
+
+```tsx
+const [open, setOpen] = createSignal(false);
+
+<AlertDialog.Root open={open()} onOpenChange={setOpen}>
+  <AlertDialog.Trigger>Delete project</AlertDialog.Trigger>
+  <AlertDialog.Portal>
+    <AlertDialog.Backdrop style={{ backgroundColor: "#0f172a80" }} />
+    <AlertDialog.Popup>
+      <AlertDialog.Title>Delete project?</AlertDialog.Title>
+      <AlertDialog.Description>This cannot be undone.</AlertDialog.Description>
+      <AlertDialog.Close aria-label="Cancel">Cancel</AlertDialog.Close>
+    </AlertDialog.Popup>
+  </AlertDialog.Portal>
+</AlertDialog.Root>
+```
+
+The dismissal policy is declared ahead of time through `dismissOnEscape` and `dismissOnBackdrop`,
+never answered by a JavaScript callback: `AlertDialog` keeps Escape and blocks backdrop dismissal
+by default. Escape and outside presses arrive as one asynchronous event and call
+`onOpenChange(false, { reason: "dismiss" })`; a trigger or close press reports `"trigger-press"` or
+`"close-press"`. The overlay plane, nested topmost focus containment, focus restoration, modal
+accessibility semantics, and part identities all stay in this Rust layer.
+
+`initial_focus(...)` and `restore_focus_to(...)` are not bridged yet, so a Solid dialog uses the
+trap's first enabled Tab stop and the core's `restore_previous_focus` default. This is separate
+from the native alert and file panels in the `Dialog` namespace of `@quickgui/native`.

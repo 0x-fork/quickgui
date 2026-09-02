@@ -114,3 +114,26 @@ cargo run --release --example tabs
 The gallery is one ordinary in-window view—no popover or native child surface. It demonstrates
 horizontal manual activation, vertical automatic activation, disabled-item skipping, looping,
 retained and unmounted panels, application-owned indicators, and wrapped content.
+
+## Solid
+
+`@quickgui/solid` exposes this descriptor as `Tabs.Root`, `Tabs.List`, `Tabs.Tab`,
+`Tabs.Indicator`, and `Tabs.Panel`. Every part repeats the controlled declaration on its own native
+node, so the Rust binding rebuilds `Tabs`/`Tab` and applies the derived list, tab, panel, and
+indicator identities without a JavaScript registry.
+
+```tsx
+<Tabs.Root value={tab()} onValueChange={setTab} orientation="vertical" activation="automatic">
+  <Tabs.List>
+    <Tabs.Tab value="overview">Overview</Tabs.Tab>
+    <Tabs.Tab value="usage" disabled>Usage</Tabs.Tab>
+  </Tabs.List>
+  <Tabs.Panel value="overview">…</Tabs.Panel>
+</Tabs.Root>
+```
+
+`activation="automatic"` maps to `activate_on_focus`, `loop={false}` to `loop_focus(false)`, and
+`keepMounted` to `keep_mounted`. Roving Tab order, arrow/Home/End navigation, disabled-item
+skipping, and inactive-panel unmounting stay in this Rust layer. `Tabs.Indicator` mounts only for
+the active tab and takes its value from the enclosing `Tabs.Tab`, or from an explicit `value` prop
+when placed in the list. See the [Solid renderer guide](solid.md).

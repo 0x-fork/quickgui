@@ -4,6 +4,24 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+### JavaScript tooling
+
+- Added Base-UI-shaped Solid `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`,
+  `Accordion`, `Field`, and `Fieldset` compound parts. Each part is one native node that declares
+  which Rust core part descriptor to rebuild, so the core keeps ownership of part identity, roles,
+  toggle and selected state, roving Tab and arrow navigation, label/description/error
+  relationships, and whether an inactive tab or disclosure panel is mounted at all. Controlled
+  values, scope keys, and item values are declared ahead of time as bounded protocol properties;
+  nothing about a component is answered by a synchronous JavaScript callback.
+- Added Solid `Dialog` and `AlertDialog` compound parts for the Rust core's caller-styled in-window
+  modal surface, separate from the operating-system panels in `@quickgui/native`'s `Dialog`
+  namespace. The overlay portal is mounted by the core only while the dialog is open, and the
+  Escape/backdrop dismissal policy is declared ahead of time instead of answered by a callback.
+- Added a `tooltip` property with `tooltipPlacement`, `tooltipDelay`, `tooltipGap`, and
+  `tooltipViewportMargin` to every Solid host component, projecting the Rust core's delayed,
+  pointer-passive tooltip and its native accessibility description.
+- Raised the mutation protocol to version 19 for the new component-part and tooltip properties.
+
 ## 0.1.1 - 2026-08-31
 
 ### JavaScript tooling

@@ -69,11 +69,13 @@ impl View for NativeView {
             .min_w(0.0)
             .min_h(0.0);
         if let Some(node) = tree.nodes.get(&ROOT_NODE) {
+            let mut part_ids = HashSet::new();
             let mut states = NativeElementStates {
                 markdown: &mut markdown,
                 svgs: &mut svgs,
                 lists: &mut lists,
                 terminals: &mut terminals,
+                part_ids: &mut part_ids,
                 #[cfg(target_os = "macos")]
                 swift_ui_hosts: &mut swift_ui_hosts,
                 #[cfg(target_os = "macos")]
@@ -107,6 +109,13 @@ pub(super) struct NativeElementStates<'a> {
     pub(super) svgs: &'a mut HashMap<u32, NativeSvgState>,
     pub(super) lists: &'a mut HashMap<u32, NativeListState>,
     pub(super) terminals: &'a mut HashMap<u32, NativeTerminalState>,
+    /// Derived component-part element identities already mounted in this render pass.
+    ///
+    /// Nodes without a `part` property keep their unique node-derived identity and never touch
+    /// this set, so the untouched element path costs nothing. Two parts that declare the same
+    /// scope and value would otherwise register one core listener identity twice, which the core
+    /// rejects with a panic; the duplicate mounts without listeners instead.
+    pub(super) part_ids: &'a mut HashSet<u64>,
     #[cfg(target_os = "macos")]
     pub(super) swift_ui_hosts: &'a mut HashMap<u32, NativeSwiftUiHostState>,
     #[cfg(target_os = "macos")]
@@ -481,7 +490,15 @@ pub(super) fn build_element(
         return None;
     }
     let node = tree.nodes.get(&id)?;
-    let element_id = ElementId::new(id as u64);
+    // A component part adopts the Rust descriptor's derived identity so the core's own
+    // `aria-controls`/`labelled-by` relationships and mount policy resolve without a JavaScript
+    // registry. Ordinary nodes keep their unique node identity on the untouched fast path.
+    let part_element_id = native_part_element_id(id, node);
+    let listeners_enabled = match part_element_id {
+        Some(part_element_id) => states.part_ids.insert(part_element_id.as_u64()),
+        None => true,
+    };
+    let element_id = part_element_id.unwrap_or_else(|| ElementId::new(id as u64));
     let mut element = match node.tag {
         NodeTag::Root => return None,
         NodeTag::View => div(),
@@ -504,7 +521,7 @@ pub(super) fn build_element(
             if !multiline && node.boolean(property::PASSWORD).unwrap_or(false) {
                 input = input.password(true);
             }
-            if node.boolean(property::INPUT_LISTENER).unwrap_or(false) {
+            if listeners_enabled && node.boolean(property::INPUT_LISTENER).unwrap_or(false) {
                 let events = Rc::clone(events);
                 // The retained input state already schedules its paint. Rebuilding here would read
                 // the previous JavaScript-controlled value before Bun drains this queued event,
@@ -522,7 +539,10 @@ pub(super) fn build_element(
                 });
                 input = input.on_input(listener);
             }
-            if !multiline && node.boolean(property::SUBMIT_LISTENER).unwrap_or(false) {
+            if listeners_enabled
+                && !multiline
+                && node.boolean(property::SUBMIT_LISTENER).unwrap_or(false)
+            {
                 let events = Rc::clone(events);
                 // Submit has the same controlled-state boundary as input: JavaScript must consume
                 // the queued value before a render can safely read the controlled property again.
@@ -677,6 +697,11 @@ pub(super) fn build_element(
     .id(element_id);
 
     element = apply_properties(element, node);
+    element = apply_tooltip(element, node);
+    // The core part descriptor decides identity, semantics, and whether an inactive panel is
+    // mounted at all. A part that is not mounted contributes no layout, paint, input, or
+    // accessibility node, exactly as the Rust component guides describe.
+    element = apply_part(element, id, node)?;
 
     let anchor_id = node
         .string(property::ANCHOR_TARGET)
@@ -705,7 +730,8 @@ pub(super) fn build_element(
 
         element = attach_dismiss_listener(
             element,
-            node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
+            listeners_enabled
+                && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
             id,
@@ -726,7 +752,8 @@ pub(super) fn build_element(
         }
         element = attach_dismiss_listener(
             element,
-            node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
+            listeners_enabled
+                && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
             id,
@@ -736,7 +763,7 @@ pub(super) fn build_element(
         );
     }
 
-    if node.boolean(property::CLICK_LISTENER).unwrap_or(false) {
+    if listeners_enabled && node.boolean(property::CLICK_LISTENER).unwrap_or(false) {
         let events = Rc::clone(events);
         let listener = cx.listener(element_id, move |_view, cx| {
             enqueue_event(
@@ -752,7 +779,7 @@ pub(super) fn build_element(
         });
         element = element.on_click(listener);
     }
-    if node.boolean(property::HOVER_LISTENER).unwrap_or(false) {
+    if listeners_enabled && node.boolean(property::HOVER_LISTENER).unwrap_or(false) {
         let events = Rc::clone(events);
         let listener = cx.hover_listener(element_id, move |_view, hovered, cx| {
             enqueue_event(
@@ -768,7 +795,7 @@ pub(super) fn build_element(
         });
         element = element.on_hover(listener);
     }
-    if node.boolean(property::POINTER_LISTENER).unwrap_or(false) {
+    if listeners_enabled && node.boolean(property::POINTER_LISTENER).unwrap_or(false) {
         let events = Rc::clone(events);
         let listener = cx.pointer_listener(element_id, move |_view, event, cx| {
             enqueue_event(
@@ -939,6 +966,275 @@ pub(super) fn pointer_event_json(event: &quickgui::PointerEvent) -> String {
         "button": button,
     })
     .to_string()
+}
+
+/// Bounded compound scope key shared by every part of one component instance.
+///
+/// The renderer allocates the key; the Rust binding hashes it into the same [`ElementId`] the
+/// core component would have used, so every derived part identity matches without a registry.
+fn native_part_scope(id: u32, node: &NativeNode) -> ElementId {
+    match node
+        .string(property::SCOPE)
+        .filter(|scope| !scope.is_empty() && scope.len() <= MAX_COMPONENT_VALUE_BYTES)
+    {
+        Some(scope) => ElementId::named(scope),
+        None => ElementId::new(id as u64),
+    }
+}
+
+fn native_part_value(node: &NativeNode, key: u16) -> Option<ElementId> {
+    node.string(key)
+        .filter(|value| !value.is_empty() && value.len() <= MAX_COMPONENT_VALUE_BYTES)
+        .map(ElementId::named)
+}
+
+fn native_toggle_state(node: &NativeNode) -> ToggleState {
+    if node.boolean(property::INDETERMINATE) == Some(true) {
+        ToggleState::Mixed
+    } else {
+        ToggleState::from(node.boolean(property::CHECKED).unwrap_or(false))
+    }
+}
+
+fn native_tabs(id: u32, node: &NativeNode) -> Tabs {
+    let scope = native_part_scope(id, node);
+    let tabs = match native_part_value(node, property::ACTIVE_VALUE) {
+        Some(active) => Tabs::new(scope, active),
+        None => Tabs::without_selection(scope),
+    };
+    let tabs = if node.string(property::ORIENTATION) == Some("vertical") {
+        tabs.vertical()
+    } else {
+        tabs
+    };
+    tabs.activate_on_focus(node.boolean(property::ACTIVATE_ON_FOCUS).unwrap_or(false))
+        .loop_focus(node.boolean(property::LOOP_FOCUS).unwrap_or(true))
+        .keep_mounted(node.boolean(property::KEEP_MOUNTED).unwrap_or(false))
+}
+
+fn native_tab(id: u32, node: &NativeNode) -> Option<Tab> {
+    let value = native_part_value(node, property::PART_VALUE)?;
+    Some(
+        native_tabs(id, node)
+            .tab(value)
+            .disabled(node.boolean(property::DISABLED).unwrap_or(false)),
+    )
+}
+
+fn native_collapsible(id: u32, node: &NativeNode) -> Collapsible {
+    Collapsible::new(
+        native_part_scope(id, node),
+        node.boolean(property::OPEN).unwrap_or(false),
+    )
+    .disabled(node.boolean(property::DISABLED).unwrap_or(false))
+    .keep_mounted(node.boolean(property::KEEP_MOUNTED).unwrap_or(false))
+}
+
+fn native_accordion_item(id: u32, node: &NativeNode) -> Option<AccordionItem> {
+    let value = native_part_value(node, property::PART_VALUE)?;
+    let index = node
+        .number(property::ITEM_INDEX)
+        .unwrap_or(0.0)
+        .clamp(0.0, MAX_NODES as f32) as usize;
+    let mut accordion = Accordion::new(native_part_scope(id, node))
+        .keep_mounted(node.boolean(property::KEEP_MOUNTED).unwrap_or(false));
+    if let Some(level) = node.number(property::HEADING_LEVEL) {
+        accordion = accordion.heading_level(level.clamp(1.0, 6.0) as usize);
+    }
+    Some(
+        accordion
+            .item(value, index, node.boolean(property::OPEN).unwrap_or(false))
+            .disabled(node.boolean(property::DISABLED).unwrap_or(false)),
+    )
+}
+
+fn native_field(id: u32, node: &NativeNode) -> Field {
+    let field = Field::new(native_part_scope(id, node))
+        .disabled(node.boolean(property::DISABLED).unwrap_or(false))
+        .invalid(node.boolean(property::INVALID).unwrap_or(false))
+        .required(node.boolean(property::REQUIRED).unwrap_or(false))
+        .touched(node.boolean(property::TOUCHED).unwrap_or(false))
+        .dirty(node.boolean(property::DIRTY).unwrap_or(false))
+        .filled(node.boolean(property::FILLED).unwrap_or(false));
+    match node.string(property::VALIDATION_MESSAGE) {
+        Some(message) => field.validation_message(message),
+        None => field,
+    }
+}
+
+fn native_dialog(id: u32, node: &NativeNode) -> CoreDialog {
+    let kind = match node.string(property::VARIANT) {
+        Some("alertdialog") => DialogKind::AlertDialog,
+        _ => DialogKind::Dialog,
+    };
+    let mut dialog = CoreDialog::with_kind(
+        native_part_scope(id, node),
+        node.boolean(property::OPEN).unwrap_or(false),
+        kind,
+    );
+    if let Some(dismiss) = node.boolean(property::DISMISS_ON_ESCAPE) {
+        dialog = dialog.dismiss_on_escape(dismiss);
+    }
+    if let Some(dismiss) = node.boolean(property::DISMISS_ON_POINTER_OUTSIDE) {
+        dialog = dialog.dismiss_on_backdrop(dismiss);
+    }
+    dialog
+}
+
+fn native_fieldset(id: u32, node: &NativeNode) -> Fieldset {
+    Fieldset::new(native_part_scope(id, node))
+        .disabled(node.boolean(property::DISABLED).unwrap_or(false))
+}
+
+/// Resolve the identity a component part must mount with, or `None` for an ordinary node.
+pub(super) fn native_part_element_id(id: u32, node: &NativeNode) -> Option<ElementId> {
+    let part = node.string(property::PART)?;
+    Some(match part {
+        "tabs" | "collapsible" | "accordion" | "fieldset" | "field-control" => {
+            native_part_scope(id, node)
+        }
+        "tabs-list" => native_tabs(id, node).list_id(),
+        "tab" => native_tab(id, node)?.tab_id(),
+        "tab-indicator" => native_tab(id, node)?.indicator_id(),
+        "tab-panel" => native_tab(id, node)?.panel_id(),
+        "collapsible-trigger" => native_collapsible(id, node).trigger_id(),
+        "collapsible-panel" => native_collapsible(id, node).panel_id(),
+        "accordion-item" => native_accordion_item(id, node)?.root_id(),
+        "accordion-header" => native_accordion_item(id, node)?.header_id(),
+        "accordion-trigger" => native_accordion_item(id, node)?.trigger_id(),
+        "accordion-panel" => native_accordion_item(id, node)?.panel_id(),
+        "field" => native_field(id, node).root_id(),
+        "field-label" | "field-passive-label" => native_field(id, node).label_id(),
+        "field-description" => native_field(id, node).description_id(),
+        "field-error" => native_field(id, node).error_id(),
+        "fieldset-legend" => native_fieldset(id, node).legend_id(),
+        "fieldset-description" => native_fieldset(id, node).description_id(),
+        "dialog" => native_dialog(id, node).root_id(),
+        "dialog-backdrop" => native_dialog(id, node).backdrop_id(),
+        "dialog-popup" => native_dialog(id, node).popover_id(),
+        "dialog-title" => native_dialog(id, node).title_id(),
+        "dialog-description" => native_dialog(id, node).description_id(),
+        "dialog-close" => native_dialog(id, node).close_id(),
+        _ => return None,
+    })
+}
+
+/// Apply the Rust core part descriptor named by the `part` property.
+///
+/// `None` means the core decided this part is not mounted, such as an inactive tab panel or a
+/// closed collapsible panel without `keepMounted`.
+pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option<Element> {
+    let Some(part) = node.string(property::PART) else {
+        return Some(element);
+    };
+    Some(match part {
+        "checkbox" => Checkbox::new(native_toggle_state(node)).root_part(element),
+        "checkbox-indicator" => Checkbox::new(ToggleState::Off).indicator_part(element),
+        "radio" => Radio::new(node.boolean(property::CHECKED).unwrap_or(false)).root_part(element),
+        "radio-indicator" => Radio::new(false).indicator_part(element),
+        "radio-group" => RadioGroup::new().root_part(element),
+        "switch" => {
+            Switch::new(node.boolean(property::CHECKED).unwrap_or(false)).root_part(element)
+        }
+        "switch-thumb" => Switch::new(false).thumb_part(element),
+        "tabs" => native_tabs(id, node).root_part(element),
+        "tabs-list" => native_tabs(id, node).list_part(element),
+        "tab" => match native_tab(id, node) {
+            Some(tab) => tab.tab_part(element),
+            None => element,
+        },
+        "tab-indicator" => native_tab(id, node)?.indicator_part(element)?,
+        "tab-panel" => native_tab(id, node)?.panel_part(element)?,
+        "collapsible" => native_collapsible(id, node).root_part(element),
+        "collapsible-trigger" => native_collapsible(id, node).trigger_part(element),
+        "collapsible-panel" => native_collapsible(id, node).panel_part(element)?,
+        "accordion" => Accordion::new(native_part_scope(id, node)).root_part(element),
+        "accordion-item" => match native_accordion_item(id, node) {
+            Some(item) => item.root_part(element),
+            None => element,
+        },
+        "accordion-header" => match native_accordion_item(id, node) {
+            Some(item) => item.header_part(element),
+            None => element,
+        },
+        "accordion-trigger" => match native_accordion_item(id, node) {
+            Some(item) => item.trigger_part(element),
+            None => element,
+        },
+        "accordion-panel" => native_accordion_item(id, node)?.panel_part(element)?,
+        "field" => native_field(id, node).root_part(element),
+        "field-label" => native_field(id, node).label_part(element),
+        "field-passive-label" => native_field(id, node).passive_label_part(element),
+        "field-control" => native_field(id, node).control_part(element),
+        "field-description" => native_field(id, node).description_part(element),
+        "field-error" => native_field(id, node).error_part(element),
+        "fieldset" => native_fieldset(id, node).root_part(element),
+        "fieldset-legend" => native_fieldset(id, node).legend_part(element),
+        "fieldset-description" => native_fieldset(id, node).description_part(element),
+        "fieldset-control" => native_fieldset(id, node).control_part(element),
+        // The Rust guide requires the portal root to be mounted only while the dialog is open, so
+        // a closed dialog contributes no overlay, focus trap, backdrop, or accessibility node.
+        "dialog" => {
+            let dialog = native_dialog(id, node);
+            if !dialog.is_open() {
+                return None;
+            }
+            dialog.root_part(element)
+        }
+        "dialog-trigger" => {
+            native_dialog(id, node).trigger_part(ElementId::new(id as u64), element)
+        }
+        "dialog-backdrop" => native_dialog(id, node).backdrop_part(element),
+        "dialog-popup" => native_dialog(id, node).popover_part(element),
+        "dialog-title" => native_dialog(id, node).title_part(element),
+        "dialog-description" => native_dialog(id, node).description_part(element),
+        "dialog-close" => native_dialog(id, node).close_part(
+            node.string(property::ACCESSIBILITY_LABEL)
+                .unwrap_or("Close"),
+            element,
+        ),
+        _ => element,
+    })
+}
+
+/// Attach the core's delayed, pointer-passive tooltip declared by the `tooltip` property.
+pub(super) fn apply_tooltip(element: Element, node: &NativeNode) -> Element {
+    let Some(label) = node
+        .string(property::TOOLTIP)
+        .filter(|label| !label.is_empty())
+    else {
+        return element;
+    };
+    let mut tooltip = Tooltip::text(bounded_tooltip_text(label));
+    if let Some(placement) = node
+        .string(property::TOOLTIP_PLACEMENT)
+        .and_then(parse_anchor_placement)
+    {
+        tooltip = tooltip.placement(placement);
+    }
+    if let Some(milliseconds) = node.number(property::TOOLTIP_DELAY) {
+        tooltip = tooltip.delay(Duration::from_secs_f32(
+            (milliseconds / 1_000.0).clamp(0.0, 10.0),
+        ));
+    }
+    if let Some(gap) = node.number(property::TOOLTIP_GAP) {
+        tooltip = tooltip.gap(gap);
+    }
+    if let Some(margin) = node.number(property::TOOLTIP_VIEWPORT_MARGIN) {
+        tooltip = tooltip.viewport_margin(margin);
+    }
+    element.tooltip(tooltip)
+}
+
+fn bounded_tooltip_text(label: &str) -> Arc<str> {
+    if label.len() <= MAX_TOOLTIP_TEXT_BYTES {
+        return Arc::from(label);
+    }
+    let mut end = MAX_TOOLTIP_TEXT_BYTES;
+    while end > 0 && !label.is_char_boundary(end) {
+        end -= 1;
+    }
+    Arc::from(&label[..end])
 }
 
 pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
@@ -1362,54 +1658,6 @@ fn native_box_shadows(node: &NativeNode) -> Option<Vec<BoxShadow>> {
     )
 }
 
-#[cfg(test)]
-mod paint_tests {
-    use super::*;
-
-    #[test]
-    fn native_border_edges_override_the_uniform_width_independently() {
-        let mut node = NativeNode::new(NodeTag::View);
-        node.set_property(property::BORDER_WIDTH, Some(PropertyValue::Number(1.0)));
-        node.set_property(property::BORDER_TOP_WIDTH, Some(PropertyValue::Number(0.0)));
-        node.set_property(
-            property::BORDER_LEFT_WIDTH,
-            Some(PropertyValue::Number(4.0)),
-        );
-
-        assert_eq!(
-            native_border_widths(&node),
-            Insets {
-                top: 0.0,
-                right: 1.0,
-                bottom: 1.0,
-                left: 4.0,
-            }
-        );
-    }
-
-    #[test]
-    fn native_box_shadow_json_uses_explicit_and_current_text_colors() {
-        let mut node = NativeNode::new(NodeTag::View);
-        node.set_property(property::COLOR, Some(PropertyValue::Color(0xff665544)));
-        node.set_property(
-            property::BOX_SHADOW,
-            Some(PropertyValue::String(Arc::from(
-                r#"[{"offsetX":2,"offsetY":3,"blurRadius":8,"spreadRadius":-1,"color":2150834689,"inset":false},{"offsetX":0,"offsetY":1,"blurRadius":0,"spreadRadius":0,"color":null,"inset":true}]"#,
-            ))),
-        );
-
-        let shadows = native_box_shadows(&node).expect("valid box shadows");
-        assert_eq!(shadows.len(), 2);
-        assert_eq!(shadows[0].offset(), quickgui::Vector::new(2.0, 3.0));
-        assert_eq!(shadows[0].blur(), 8.0);
-        assert_eq!(shadows[0].spread(), -1.0);
-        assert_eq!(shadows[0].color(), unpack_color(0x80332201));
-        assert!(!shadows[0].is_inset());
-        assert_eq!(shadows[1].color(), unpack_color(0xff665544));
-        assert!(shadows[1].is_inset());
-    }
-}
-
 pub(super) fn native_font_family(value: &str) -> Option<quickgui::FontFamily> {
     match value.trim() {
         "sans-serif" | "system-ui" => Some(quickgui::FontFamily::SansSerif),
@@ -1538,4 +1786,52 @@ pub(super) fn accessibility_role(value: &str) -> Option<AccessibilityRole> {
         "label" => AccessibilityRole::Label,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod paint_tests {
+    use super::*;
+
+    #[test]
+    fn native_border_edges_override_the_uniform_width_independently() {
+        let mut node = NativeNode::new(NodeTag::View);
+        node.set_property(property::BORDER_WIDTH, Some(PropertyValue::Number(1.0)));
+        node.set_property(property::BORDER_TOP_WIDTH, Some(PropertyValue::Number(0.0)));
+        node.set_property(
+            property::BORDER_LEFT_WIDTH,
+            Some(PropertyValue::Number(4.0)),
+        );
+
+        assert_eq!(
+            native_border_widths(&node),
+            Insets {
+                top: 0.0,
+                right: 1.0,
+                bottom: 1.0,
+                left: 4.0,
+            }
+        );
+    }
+
+    #[test]
+    fn native_box_shadow_json_uses_explicit_and_current_text_colors() {
+        let mut node = NativeNode::new(NodeTag::View);
+        node.set_property(property::COLOR, Some(PropertyValue::Color(0xff665544)));
+        node.set_property(
+            property::BOX_SHADOW,
+            Some(PropertyValue::String(Arc::from(
+                r#"[{"offsetX":2,"offsetY":3,"blurRadius":8,"spreadRadius":-1,"color":2150834689,"inset":false},{"offsetX":0,"offsetY":1,"blurRadius":0,"spreadRadius":0,"color":null,"inset":true}]"#,
+            ))),
+        );
+
+        let shadows = native_box_shadows(&node).expect("valid box shadows");
+        assert_eq!(shadows.len(), 2);
+        assert_eq!(shadows[0].offset(), quickgui::Vector::new(2.0, 3.0));
+        assert_eq!(shadows[0].blur(), 8.0);
+        assert_eq!(shadows[0].spread(), -1.0);
+        assert_eq!(shadows[0].color(), unpack_color(0x80332201));
+        assert!(!shadows[0].is_inset());
+        assert_eq!(shadows[1].color(), unpack_color(0xff665544));
+        assert!(shadows[1].is_inset());
+    }
 }

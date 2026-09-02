@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   app,
+  MAX_COMPONENT_VALUE_BYTES,
+  MAX_TOOLTIP_TEXT_BYTES,
   NativeNodeTag,
   PropertyCode,
   QuickGuiEvent,
@@ -9,10 +11,21 @@ import {
 import { createSignal, onCleanup } from "solid-js";
 import * as solid from "./index.ts";
 import {
+  Accordion,
+  AlertDialog,
   Button,
+  Checkbox,
+  Collapsible,
+  Dialog,
+  Field,
+  Fieldset,
   Input,
   Markdown,
   Popover,
+  Radio,
+  RadioGroup,
+  Switch,
+  Tabs,
   SystemPopover,
   Svg,
   Terminal,
@@ -34,7 +47,11 @@ describe("Solid universal host", () => {
   test("keeps native application APIs in @quickgui/native", () => {
     expect("app" in solid).toBe(false);
     expect("Window" in solid).toBe(false);
-    expect("Dialog" in solid).toBe(false);
+    // `Dialog` in this package is the caller-styled in-window composition, never the native
+    // alert/file dialog namespace that stays in @quickgui/native.
+    expect("showAlertDialog" in solid.Dialog).toBe(false);
+    expect("showOpenDialog" in solid.Dialog).toBe(false);
+    expect(solid.Dialog.Popup).toBe(solid.DialogPopup);
   });
 
   test("exports only the Content compound part", () => {
@@ -662,5 +679,432 @@ describe("Solid universal host", () => {
     expect([...app.windows.values()]).toEqual([]);
     await Promise.resolve();
     await Promise.resolve();
+  });
+
+  test("exports Base UI-shaped compound parts for every bound core component", () => {
+    expect(Object.keys(Checkbox)).toEqual(["Root", "Indicator"]);
+    expect(Object.keys(Radio)).toEqual(["Root", "Indicator"]);
+    expect(Object.keys(Switch)).toEqual(["Root", "Thumb"]);
+    expect(Object.keys(Tabs)).toEqual([
+      "Root",
+      "List",
+      "Tab",
+      "Indicator",
+      "Panel",
+    ]);
+    expect(Object.keys(Collapsible)).toEqual(["Root", "Trigger", "Panel"]);
+    expect(Object.keys(Accordion)).toEqual([
+      "Root",
+      "Item",
+      "Header",
+      "Trigger",
+      "Panel",
+    ]);
+    expect(Object.keys(Field)).toEqual([
+      "Root",
+      "Label",
+      "Control",
+      "Description",
+      "Error",
+    ]);
+    expect(Object.keys(Fieldset)).toEqual([
+      "Root",
+      "Legend",
+      "Description",
+      "Control",
+    ]);
+    expect(Object.keys(Dialog)).toEqual([
+      "Root",
+      "Trigger",
+      "Portal",
+      "Backdrop",
+      "Popup",
+      "Title",
+      "Description",
+      "Close",
+    ]);
+    expect(Object.keys(AlertDialog)).toEqual(Object.keys(Dialog));
+  });
+
+  test("declares controlled checkbox and switch toggle state ahead of the core click", () => {
+    let checked: boolean | undefined;
+    const checkbox = createComponent(Checkbox.Root, {
+      checked: "indeterminate",
+      onCheckedChange: (next: boolean) => {
+        checked = next;
+      },
+      children: createComponent(Checkbox.Indicator, { children: "–" }),
+    });
+
+    expect(checkbox.properties.get(PropertyCode.Part)).toBe("checkbox");
+    expect(checkbox.properties.get(PropertyCode.Checked)).toBe(false);
+    expect(checkbox.properties.get(PropertyCode.Indeterminate)).toBe(true);
+    expect(checkbox.properties.get(PropertyCode.ClickListener)).toBe(true);
+    checkbox.listeners.get("click")!(new QuickGuiEvent("click", checkbox));
+    expect(checked).toBe(true);
+
+    const toggled = createComponent(Switch.Root, { defaultChecked: true });
+    expect(toggled.properties.get(PropertyCode.Part)).toBe("switch");
+    expect(toggled.properties.get(PropertyCode.Checked)).toBe(true);
+    toggled.listeners.get("click")!(new QuickGuiEvent("click", toggled));
+    expect(toggled.properties.get(PropertyCode.Checked)).toBe(false);
+
+    const thumb = createComponent(Switch.Thumb, {});
+    expect(thumb.properties.get(PropertyCode.Part)).toBe("switch-thumb");
+  });
+
+  test("bounds compound scopes and tooltip text before they cross N-API", () => {
+    const hinted = createComponent(View, {
+      tooltip: "Rename this workspace",
+      tooltipPlacement: "top",
+      tooltipDelay: 250,
+      tooltipGap: 7,
+      tooltipViewportMargin: 8,
+    });
+
+    expect(hinted.properties.get(PropertyCode.Tooltip)).toBe(
+      "Rename this workspace",
+    );
+    expect(hinted.properties.get(PropertyCode.TooltipPlacement)).toBe("top");
+    expect(hinted.properties.get(PropertyCode.TooltipDelay)).toBe(250);
+
+    const overlong = createElement("view");
+    expect(() =>
+      setProp(overlong, "tooltip", "x".repeat(MAX_TOOLTIP_TEXT_BYTES + 1)),
+    ).toThrow("tooltip text is limited");
+    expect(() =>
+      setProp(overlong, "scope", "s".repeat(MAX_COMPONENT_VALUE_BYTES + 1)),
+    ).toThrow("scopes and values are limited");
+  });
+
+  test("shares one scope across controlled tab parts and reports activation", async () => {
+    await app.whenReady();
+    const [value, setValue] = createSignal("overview");
+    let changed: string | undefined;
+    const window = new Window({
+      title: "Tabs",
+      renderer: createRenderer(() =>
+        createComponent(Tabs.Root, {
+          get value() {
+            return value();
+          },
+          onValueChange: (next: string) => {
+            changed = next;
+            setValue(next);
+          },
+          orientation: "vertical",
+          activation: "automatic",
+          loop: false,
+          keepMounted: true,
+          get children() {
+            return [
+              createComponent(Tabs.List, {
+                get children() {
+                  return [
+                    createComponent(Tabs.Tab, {
+                      value: "overview",
+                      children: "Overview",
+                    }),
+                    createComponent(Tabs.Tab, {
+                      value: "usage",
+                      children: "Usage",
+                    }),
+                  ];
+                },
+              }),
+              createComponent(Tabs.Panel, {
+                value: "overview",
+                children: "Overview panel",
+              }),
+              createComponent(Tabs.Panel, {
+                value: "usage",
+                children: "Usage panel",
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    const list = root.children[0]!;
+    const first = list.children[0]!;
+    const second = list.children[1]!;
+    const usagePanel = root.children[2]!;
+    const scope = String(root.properties.get(PropertyCode.Scope));
+
+    expect(root.properties.get(PropertyCode.Part)).toBe("tabs");
+    expect(scope.startsWith("qg-tabs-")).toBe(true);
+    expect(list.properties.get(PropertyCode.Part)).toBe("tabs-list");
+    expect(list.properties.get(PropertyCode.Scope)).toBe(scope);
+    expect(list.properties.get(PropertyCode.Orientation)).toBe("vertical");
+    expect(list.properties.get(PropertyCode.ActivateOnFocus)).toBe(true);
+    expect(list.properties.get(PropertyCode.LoopFocus)).toBe(false);
+    expect(first.properties.get(PropertyCode.Part)).toBe("tab");
+    expect(first.properties.get(PropertyCode.PartValue)).toBe("overview");
+    expect(first.properties.get(PropertyCode.ActiveValue)).toBe("overview");
+    expect(usagePanel.properties.get(PropertyCode.Part)).toBe("tab-panel");
+    expect(usagePanel.properties.get(PropertyCode.PartValue)).toBe("usage");
+    expect(usagePanel.properties.get(PropertyCode.KeepMounted)).toBe(true);
+
+    window._dispatchEvent("click", second.id);
+    expect(changed).toBe("usage");
+    expect(first.properties.get(PropertyCode.ActiveValue)).toBe("usage");
+    expect(usagePanel.properties.get(PropertyCode.ActiveValue)).toBe("usage");
+    window.close();
+  });
+
+  test("controls collapsible and accordion disclosure state through core part properties", async () => {
+    await app.whenReady();
+    const window = new Window({
+      title: "Disclosures",
+      renderer: createRenderer(() => [
+        createComponent(Collapsible.Root, {
+          defaultOpen: false,
+          keepMounted: true,
+          get children() {
+            return [
+              createComponent(Collapsible.Trigger, { children: "Details" }),
+              createComponent(Collapsible.Panel, { children: "Body" }),
+            ];
+          },
+        }),
+        createComponent(Accordion.Root, {
+          defaultValue: "first",
+          headingLevel: 4,
+          get children() {
+            return createComponent(Accordion.Item, {
+              value: "first",
+              index: 0,
+              get children() {
+                return [
+                  createComponent(Accordion.Header, {
+                    get children() {
+                      return createComponent(Accordion.Trigger, {
+                        children: "First",
+                      });
+                    },
+                  }),
+                  createComponent(Accordion.Panel, { children: "Body" }),
+                ];
+              },
+            });
+          },
+        }),
+      ]),
+    });
+
+    const collapsible = window.root.children[0]!;
+    const trigger = collapsible.children[0]!;
+    const panel = collapsible.children[1]!;
+    expect(collapsible.properties.get(PropertyCode.Part)).toBe("collapsible");
+    expect(trigger.properties.get(PropertyCode.Part)).toBe(
+      "collapsible-trigger",
+    );
+    expect(panel.properties.get(PropertyCode.Open)).toBe(false);
+    expect(panel.properties.get(PropertyCode.KeepMounted)).toBe(true);
+    window._dispatchEvent("click", trigger.id);
+    expect(panel.properties.get(PropertyCode.Open)).toBe(true);
+
+    const accordion = window.root.children[1]!;
+    const item = accordion.children[0]!;
+    const header = item.children[0]!;
+    const accordionTrigger = header.children[0]!;
+    const accordionPanel = item.children[1]!;
+    expect(item.properties.get(PropertyCode.Part)).toBe("accordion-item");
+    expect(item.properties.get(PropertyCode.PartValue)).toBe("first");
+    expect(item.properties.get(PropertyCode.ItemIndex)).toBe(0);
+    expect(header.properties.get(PropertyCode.HeadingLevel)).toBe(4);
+    expect(accordionPanel.properties.get(PropertyCode.Open)).toBe(true);
+    window._dispatchEvent("click", accordionTrigger.id);
+    expect(accordionPanel.properties.get(PropertyCode.Open)).toBe(false);
+    window.close();
+  });
+
+  test("projects field and fieldset relationships and inherited disabled state", async () => {
+    await app.whenReady();
+    const window = new Window({
+      title: "Field",
+      renderer: createRenderer(() =>
+        createComponent(Fieldset.Root, {
+          disabled: true,
+          get children() {
+            return [
+              createComponent(Fieldset.Legend, { children: "Account" }),
+              createComponent(Field.Root, {
+                invalid: true,
+                required: true,
+                validationMessage: "Enter an address",
+                get children() {
+                  return [
+                    createComponent(Field.Label, { children: "Email" }),
+                    createComponent(Field.Label, {
+                      passive: true,
+                      children: "Email",
+                    }),
+                    createComponent(Field.Control, {
+                      value: "",
+                      placeholder: "you@example.com",
+                    }),
+                    createComponent(Field.Description, {
+                      children: "We never share it",
+                    }),
+                    createComponent(Field.Error, {
+                      children: "Enter an address",
+                    }),
+                  ];
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const fieldset = window.root.children[0]!;
+    const field = fieldset.children[1]!;
+    const label = field.children[0]!;
+    const passiveLabel = field.children[1]!;
+    const control = field.children[2]!;
+    const description = field.children[3]!;
+    const error = field.children[4]!;
+
+    expect(fieldset.properties.get(PropertyCode.Part)).toBe("fieldset");
+    expect(field.properties.get(PropertyCode.Part)).toBe("field");
+    expect(field.properties.get(PropertyCode.Disabled)).toBe(true);
+    expect(label.properties.get(PropertyCode.Part)).toBe("field-label");
+    expect(passiveLabel.properties.get(PropertyCode.Part)).toBe(
+      "field-passive-label",
+    );
+    expect(control.tag).toBe(NativeNodeTag.Input);
+    expect(control.properties.get(PropertyCode.Part)).toBe("field-control");
+    expect(control.properties.get(PropertyCode.Required)).toBe(true);
+    expect(control.properties.get(PropertyCode.Invalid)).toBe(true);
+    expect(control.properties.get(PropertyCode.ValidationMessage)).toBe(
+      "Enter an address",
+    );
+    expect(description.properties.get(PropertyCode.Part)).toBe(
+      "field-description",
+    );
+    expect(error.properties.get(PropertyCode.Part)).toBe("field-error");
+    expect(
+      new Set(
+        [field, label, control, description, error].map((node) =>
+          node.properties.get(PropertyCode.Scope),
+        ),
+      ).size,
+    ).toBe(1);
+    window.close();
+  });
+
+  test("selects one radio through its group without a native round trip", async () => {
+    await app.whenReady();
+    const selected: string[] = [];
+    const window = new Window({
+      title: "Radios",
+      renderer: createRenderer(() =>
+        createComponent(RadioGroup.Root, {
+          defaultValue: "light",
+          onValueChange: (next: string) => selected.push(next),
+          get children() {
+            return [
+              createComponent(Radio.Root, { value: "light", children: "Light" }),
+              createComponent(Radio.Root, { value: "dark", children: "Dark" }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const group = window.root.children[0]!;
+    const light = group.children[0]!;
+    const dark = group.children[1]!;
+    expect(group.properties.get(PropertyCode.Part)).toBe("radio-group");
+    expect(light.properties.get(PropertyCode.Part)).toBe("radio");
+    expect(light.properties.get(PropertyCode.Checked)).toBe(true);
+    expect(dark.properties.get(PropertyCode.Checked)).toBe(false);
+
+    window._dispatchEvent("click", dark.id);
+    expect(selected).toEqual(["dark"]);
+    expect(light.properties.get(PropertyCode.Checked)).toBe(false);
+    expect(dark.properties.get(PropertyCode.Checked)).toBe(true);
+    window.close();
+  });
+
+  test("declares in-window dialog dismissal policy ahead of every core decision", async () => {
+    await app.whenReady();
+    const changes: Array<{ open: boolean; reason: string }> = [];
+    const window = new Window({
+      title: "Dialogs",
+      renderer: createRenderer(() =>
+        createComponent(AlertDialog.Root, {
+          defaultOpen: false,
+          onOpenChange: (open: boolean, details: { reason: string }) =>
+            changes.push({ open, reason: details.reason }),
+          get children() {
+            return [
+              createComponent(AlertDialog.Trigger, { children: "Delete" }),
+              createComponent(AlertDialog.Portal, {
+                get children() {
+                  return [
+                    createComponent(AlertDialog.Backdrop, {}),
+                    createComponent(AlertDialog.Popup, {
+                      get children() {
+                        return [
+                          createComponent(AlertDialog.Title, {
+                            children: "Delete project?",
+                          }),
+                          createComponent(AlertDialog.Description, {
+                            children: "This cannot be undone.",
+                          }),
+                          createComponent(AlertDialog.Close, {
+                            "aria-label": "Cancel",
+                            children: "Cancel",
+                          }),
+                        ];
+                      },
+                    }),
+                  ];
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const trigger = window.root.children[0]!;
+    const portal = window.root.children[1]!;
+    const popup = portal.children[1]!;
+    const close = popup.children[2]!;
+
+    expect(trigger.properties.get(PropertyCode.Part)).toBe("dialog-trigger");
+    expect(trigger.properties.get(PropertyCode.Variant)).toBe("alertdialog");
+    expect(portal.properties.get(PropertyCode.Part)).toBe("dialog");
+    expect(portal.properties.get(PropertyCode.Open)).toBe(false);
+    expect(popup.properties.get(PropertyCode.Part)).toBe("dialog-popup");
+    // An alert dialog keeps Escape and blocks backdrop dismissal by default.
+    expect(popup.properties.get(PropertyCode.DismissOnEscape)).toBe(true);
+    expect(popup.properties.get(PropertyCode.DismissOnPointerOutside)).toBe(
+      false,
+    );
+    expect(popup.properties.get(PropertyCode.DismissListener)).toBe(true);
+    expect(close.properties.get(PropertyCode.AccessibilityLabel)).toBe(
+      "Cancel",
+    );
+
+    window._dispatchEvent("click", trigger.id);
+    expect(portal.properties.get(PropertyCode.Open)).toBe(true);
+    window._dispatchEvent("dismiss", popup.id);
+    expect(portal.properties.get(PropertyCode.Open)).toBe(false);
+    window._dispatchEvent("click", trigger.id);
+    window._dispatchEvent("click", close.id);
+    expect(changes).toEqual([
+      { open: true, reason: "trigger-press" },
+      { open: false, reason: "dismiss" },
+      { open: true, reason: "trigger-press" },
+      { open: false, reason: "close-press" },
+    ]);
+    window.close();
   });
 });
