@@ -485,10 +485,7 @@ impl UiTree {
             return InputResult::default();
         };
         let previous = state.committed_shared_text();
-        let mut repaint = edit(state);
-        // A settled check whose deadline already elapsed is applied before this edit lands, so an
-        // interaction never observes stale flagged ranges. This adds no timer of its own.
-        repaint |= state.advance_spell_check(Instant::now());
+        let repaint = edit(state);
         let committed = state.committed_shared_text();
         let change = (previous != committed).then_some(InputChange {
             id,

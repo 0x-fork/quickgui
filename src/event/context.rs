@@ -919,6 +919,23 @@ impl EventContext {
         self.push_window_command(WindowCommand::ShowCharacterPalette(handle))
     }
 
+    /// Show the platform dictionary definition for the focused text input's selection or caret
+    /// word in the current window.
+    ///
+    /// The request is applied when the runtime processes window commands; a window without a
+    /// focused text input, an empty target, or a platform without a definition service ignores it.
+    pub fn show_definition_for_selection(&mut self) -> Result<(), WindowCommandError> {
+        let handle = self.current_window_handle()?;
+        self.show_definition_for_selection_handle(handle)
+    }
+
+    pub fn show_definition_for_selection_handle(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.push_window_command(WindowCommand::LookUpSelection(handle))
+    }
+
     /// Opt the current window into native system tabbing.
     pub fn set_tabbing_identifier(
         &mut self,

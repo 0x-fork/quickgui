@@ -342,7 +342,9 @@ input on its next declaration without a registry.
 
 Checking never polls. An accepted edit arms exactly one `SPELL_CHECK_SETTLE_DELAY` (300 ms)
 deadline; a further edit cancels and re-arms it, and a settled or unchecked input holds no deadline
-at all. When the deadline arrives the input hands at most `MAX_SPELLCHECK_BYTES` (16 KiB) of text
+at all. The window event loop pumps that deadline exactly like tooltip and scrollbar deadlines, and
+`TestAppContext::advance_time` does the same, so `focused_input_misspellings(window)` observes the
+settled result deterministically. When the deadline arrives the input hands at most `MAX_SPELLCHECK_BYTES` (16 KiB) of text
 around the caret to the provider and retains at most `MAX_MISSPELLED_RANGES` (512) sorted,
 non-overlapping ranges. Accepted edits shift retained ranges and drop the ranges an edit touched,
 so offsets are never stale between checks.
@@ -423,8 +425,16 @@ falling back to the word at the caret:
 Application::new().bind_keys([KeyBinding::new("ctrl-cmd-d", LookUpSelection, None)])
 ```
 
-`.lookup_on_force_click(true)` marks an input as force-click-aware so a Force Touch trackpad's
-`MousePressureEvent` can trigger the same lookup.
+`cx.show_definition_for_selection()` (and `AppRunner::show_definition_for_selection(handle)` for
+externally pumped hosts) queues the same lookup as a bounded window command, so a menu item or a
+host binding can present the definition for the focused input's selection or caret word without
+touching the input's state directly. A window without a focused input, an empty target, or a
+platform without a definition service ignores the command.
+
+`.lookup_on_force_click(true)` marks an input as force-click-aware. The window runtime routes a
+Force Touch force click (the pressure stage's transition into `PressureStage::Force`, once per
+click) to the focused opted-in input unless a `MousePressureEvent` listener prevented the default,
+so applications do not need their own pressure listener for the standard gesture.
 
 ## Find and replace
 

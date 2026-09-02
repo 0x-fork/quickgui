@@ -555,6 +555,8 @@ struct RuntimeWindow {
     first_presented: bool,
     /// One in-flight corrective inner size requested by `constrain_resize`/`aspect_ratio`.
     resize_correction: Option<Size>,
+    /// The last raw Force Touch pressure stage, so a force click fires once per transition.
+    pressure_stage: i64,
     /// One in-flight corrective outer position requested by `constrain_move`.
     move_correction: Option<Point>,
     focused: bool,

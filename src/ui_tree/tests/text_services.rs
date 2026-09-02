@@ -38,6 +38,17 @@ fn install(provider: TestSpellCheckProvider) -> Rc<TestSpellCheckProvider> {
     provider
 }
 
+/// Pump once to timestamp the armed deadline, then once more after the settle delay elapsed.
+fn settle(tree: &mut UiTree) -> bool {
+    settle_advance(tree).repaint
+}
+
+fn settle_advance(tree: &mut UiTree) -> crate::ui_tree::editing::SpellCheckAdvance {
+    let now = Instant::now();
+    tree.advance_spell_check(now);
+    tree.advance_spell_check(now + SPELL_CHECK_SETTLE_DELAY)
+}
+
 #[test]
 fn settled_checks_pump_on_one_deadline_and_leave_a_clean_tree_asleep() {
     let _provider = install(TestSpellCheckProvider::new().misspelling("helo"));
@@ -79,10 +90,7 @@ fn spelling_actions_replace_learn_and_ignore_through_the_focused_input() {
     let id = ElementId::new(702);
     let mut tree = checked_tree(id, "");
     assert!(tree.input_replace("helo there").repaint);
-    assert!(
-        tree.advance_spell_check(Instant::now() + SPELL_CHECK_SETTLE_DELAY)
-            .repaint
-    );
+    assert!(settle(&mut tree));
     assert_eq!(tree.focused_input_misspellings().len(), 1);
 
     let items = tree.input_spelling_menu_items(1, SpellingMenuLabels::default());

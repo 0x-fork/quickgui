@@ -725,6 +725,14 @@ impl AppRunner {
         self.queue_window_command(handle, WindowCommand::ShowCharacterPalette(handle))
     }
 
+    /// Show the platform dictionary definition for one mounted window's focused text selection.
+    pub fn show_definition_for_selection(
+        &mut self,
+        handle: WindowHandle,
+    ) -> Result<(), WindowCommandError> {
+        self.queue_window_command(handle, WindowCommand::LookUpSelection(handle))
+    }
+
     /// Opt one mounted window into a named native system-tab group, or leave it with `None`.
     pub fn set_window_tabbing_identifier(
         &mut self,

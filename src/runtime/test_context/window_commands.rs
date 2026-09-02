@@ -32,6 +32,10 @@ impl TestAppContext {
                 state.state.document_edited = edited;
             }
             WindowCommand::ShowCharacterPalette(_) => {}
+            WindowCommand::LookUpSelection(_) => {
+                // The installed provider decides whether a definition can be shown headlessly.
+                let _ = state.ui.input_look_up_selection();
+            }
             WindowCommand::SetTabbingIdentifier(_, identifier) => {
                 state.config.tabbing_identifier = identifier;
                 state.state.native_tabbing = state.config.tabbing_identifier.is_some();

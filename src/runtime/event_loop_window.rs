@@ -1133,7 +1133,7 @@ impl Runtime {
                             Some((position, window.ui.mouse_pressure_listener_at(position)))
                         })
                         .unwrap_or((Point::ZERO, None));
-                    self.invoke_mouse_pressure(
+                    let default_allowed = self.invoke_mouse_pressure(
                         event_loop,
                         target,
                         MousePressureEvent {
@@ -1143,6 +1143,17 @@ impl Runtime {
                             modifiers: self.modifiers,
                         },
                     );
+                    let force_click = self.window.as_mut().is_some_and(|window| {
+                        let entered_force = window.pressure_stage < 2 && stage >= 2;
+                        window.pressure_stage = stage;
+                        entered_force
+                    });
+                    if default_allowed && force_click {
+                        // Opted-in text inputs show the dictionary definition once per force click.
+                        if let Some(window) = &self.window {
+                            let _ = window.ui.input_force_click_definition();
+                        }
+                    }
                 }
                 WindowEvent::PinchGesture { delta, phase, .. } => {
                     let (position, target) = self

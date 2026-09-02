@@ -62,6 +62,23 @@ impl TestAppContext {
         Ok(self.window(window)?.ui.focused_text_input_value())
     }
 
+    /// Byte ranges the focused text input currently flags as misspelled or ungrammatical.
+    ///
+    /// Settled checks run through [`Self::advance_time`] exactly like the production event loop,
+    /// so a test advances the injected clock by `SPELL_CHECK_SETTLE_DELAY` after typing.
+    pub fn focused_input_misspellings(
+        &self,
+        window: WindowHandle,
+    ) -> Result<Vec<std::ops::Range<usize>>, TestAppError> {
+        Ok(self
+            .window(window)?
+            .ui
+            .focused_input_misspellings()
+            .iter()
+            .map(crate::Misspelling::range)
+            .collect())
+    }
+
     /// Current deterministic monotonic time used by foreground timers.
     pub fn now(&self) -> Instant {
         self.now.get()

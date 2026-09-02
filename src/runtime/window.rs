@@ -1684,6 +1684,8 @@ pub(crate) enum WindowCommand {
     SetRepresentedFile(WindowHandle, Option<PathBuf>),
     SetDocumentEdited(WindowHandle, bool),
     ShowCharacterPalette(WindowHandle),
+    /// Present the platform dictionary definition for the focused text input's selection.
+    LookUpSelection(WindowHandle),
     SetTabbingIdentifier(WindowHandle, Option<String>),
     SelectNextTab(WindowHandle),
     SelectPreviousTab(WindowHandle),
@@ -1747,6 +1749,7 @@ impl WindowCommand {
             | Self::SetRepresentedFile(handle, _)
             | Self::SetDocumentEdited(handle, _)
             | Self::ShowCharacterPalette(handle)
+            | Self::LookUpSelection(handle)
             | Self::SetTabbingIdentifier(handle, _)
             | Self::SelectNextTab(handle)
             | Self::SelectPreviousTab(handle)

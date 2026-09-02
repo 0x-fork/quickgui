@@ -103,6 +103,11 @@ impl Runtime {
                         tracing::warn!(%error, "could not present the native character palette");
                     }
                 }
+                WindowCommand::LookUpSelection(_) => {
+                    if let Err(error) = state.ui.input_look_up_selection() {
+                        tracing::debug!(%error, "no dictionary definition was presented");
+                    }
+                }
                 WindowCommand::SetTabbingIdentifier(_, identifier) => {
                     if entry.config.tabbing_identifier != identifier {
                         #[cfg(target_os = "macos")]

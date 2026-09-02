@@ -17,7 +17,19 @@ impl TestAppContext {
             progress |= self.close_pending_windows()?;
             progress |= self.rebuild_dirty_windows()?;
             if !progress {
-                return Ok(());
+                // Production pumps settled text checks when the event loop is about to wait, so
+                // a deadline is timestamped at the end of the turn that accepted the edit.
+                let now = self.now.get();
+                let mut repaint = false;
+                for state in self.windows.values_mut() {
+                    if state.ui.advance_spell_check(now).repaint {
+                        state.dirty = true;
+                        repaint = true;
+                    }
+                }
+                if !repaint {
+                    return Ok(());
+                }
             }
         }
         Err(TestAppError::EffectTurnLimit)
@@ -38,6 +50,9 @@ impl TestAppContext {
                 state.dirty = true;
             }
             if state.ui.declarative_animation_due(now) {
+                state.dirty = true;
+            }
+            if state.ui.advance_spell_check(now).repaint {
                 state.dirty = true;
             }
         }

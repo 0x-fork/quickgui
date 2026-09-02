@@ -28,6 +28,7 @@ impl Runtime {
                 animation_deadline,
                 scrollbar_deadline,
                 tooltip_deadline,
+                spell_check_deadline,
                 view_deadline,
                 accessibility_deadline,
             ) = self
@@ -57,6 +58,10 @@ impl Runtime {
                     if state.ui.advance_tooltips(now) {
                         redraw = true;
                     }
+                    let spell_check = state.ui.advance_spell_check(now);
+                    if spell_check.repaint {
+                        redraw = true;
+                    }
                     if state.accessibility_updates.advance(now) {
                         redraw = true;
                     }
@@ -68,11 +73,12 @@ impl Runtime {
                         state.ui.next_animation_deadline(),
                         state.ui.next_scrollbar_deadline(),
                         state.ui.next_tooltip_deadline(),
+                        spell_check.next_deadline,
                         state.view_deadline,
                         state.accessibility_updates.deadline(),
                     )
                 })
-                .unwrap_or((None, None, None, None, None, None));
+                .unwrap_or((None, None, None, None, None, None, None));
             let pending_deadline = self.pending_input.as_ref().map(|pending| pending.deadline);
             let window_deadline = [
                 pending_deadline,
@@ -80,6 +86,7 @@ impl Runtime {
                 animation_deadline,
                 scrollbar_deadline,
                 tooltip_deadline,
+                spell_check_deadline,
                 view_deadline,
                 accessibility_deadline,
             ]

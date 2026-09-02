@@ -581,6 +581,7 @@ impl Runtime {
             fullscreen: matches!(requested_bounds, Some(WindowBounds::Fullscreen(_))),
             first_presented: false,
             resize_correction: None,
+            pressure_stage: 0,
             move_correction: None,
             focused: false,
             visible: false,

@@ -748,3 +748,50 @@ fn explicit_display_centers_new_windows_and_falls_back_safely() {
         Some(DisplayId::new(10))
     );
 }
+
+#[derive(Default)]
+struct SpellCheckedView {
+    value: Arc<str>,
+}
+
+impl View for SpellCheckedView {
+    fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let edit = cx.input_listener("notes", |this, value, cx| {
+            this.value = Arc::from(value);
+            cx.invalidate();
+        });
+        div().child(
+            text_input(self.value.clone())
+                .auto_focus()
+                .spellcheck(true)
+                .on_input(edit),
+        )
+    }
+}
+
+#[test]
+fn settled_spell_checks_run_on_the_event_loop_deadline() {
+    let provider = std::rc::Rc::new(crate::TestSpellCheckProvider::new().misspelling("helo"));
+    crate::set_shared_spell_check_provider(provider);
+    let (mut cx, view) = Application::new()
+        .into_test_context(WindowOptions::default(), SpellCheckedView::default())
+        .unwrap();
+    let window = view.window_handle();
+    assert_eq!(cx.focused(window).unwrap(), Some(ElementId::named("notes")));
+
+    // An accepted edit arms exactly one settle deadline; nothing is flagged before it elapses.
+    cx.simulate_input(window, "helo world").unwrap();
+    assert!(cx.focused_input_misspellings(window).unwrap().is_empty());
+    cx.advance_time(crate::SPELL_CHECK_SETTLE_DELAY - Duration::from_millis(1))
+        .unwrap();
+    assert!(cx.focused_input_misspellings(window).unwrap().is_empty());
+
+    // The deadline pump flags the settled word without any further interaction.
+    cx.advance_time(Duration::from_millis(1)).unwrap();
+    assert_eq!(cx.focused_input_misspellings(window).unwrap(), vec![0..4]);
+
+    // A settled, checked input holds no deadline: more time changes nothing.
+    cx.advance_time(crate::SPELL_CHECK_SETTLE_DELAY).unwrap();
+    assert_eq!(cx.focused_input_misspellings(window).unwrap(), vec![0..4]);
+    crate::clear_spell_check_provider();
+}

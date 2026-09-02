@@ -302,6 +302,7 @@ impl VisualTestContext<'_> {
         let now = self.context.now();
         if let Some(state) = self.context.windows.get_mut(&self.window) {
             state.ui.advance_tooltips(now);
+            state.ui.advance_spell_check(now);
         }
         self.context.render_visual(self.window, false)?;
         Ok(())

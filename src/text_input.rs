@@ -46,6 +46,8 @@ pub(crate) struct TextInputState {
     misspelling_revision: u64,
     /// The single one-shot deadline armed by the last accepted edit.
     settle_deadline: Option<Instant>,
+    /// An accepted edit that has not yet been timestamped by the runtime's next pump.
+    settle_pending: bool,
     last_autocorrection: Option<Autocorrection>,
     /// One provider checking session, released when this input unmounts.
     document: Option<Rc<SpellDocument>>,
@@ -179,6 +181,7 @@ impl TextInputState {
             misspellings: Vec::new(),
             misspelling_revision: 0,
             settle_deadline: None,
+            settle_pending: false,
             last_autocorrection: None,
             document: None,
             highlight_cache: RefCell::new(None),
@@ -855,6 +858,11 @@ impl TextInputState {
     ///
     /// Returns whether flagged ranges changed and a repaint is required.
     pub fn advance_spell_check(&mut self, now: Instant) -> bool {
+        if self.settle_pending {
+            self.settle_pending = false;
+            self.settle_deadline = Some(now + SPELL_CHECK_SETTLE_DELAY);
+            return false;
+        }
         let Some(deadline) = self.settle_deadline else {
             return false;
         };
@@ -868,6 +876,7 @@ impl TextInputState {
     /// Run the settled check immediately, cancelling any armed deadline.
     pub fn run_spell_check(&mut self) -> bool {
         self.settle_deadline = None;
+        self.settle_pending = false;
         let policy = self.text_checking_policy();
         if !policy.checks_after_settle() || self.marked.is_some() {
             return self.discard_misspellings();
@@ -1022,11 +1031,11 @@ impl TextInputState {
     }
 
     fn arm_settle_deadline(&mut self) {
-        if self.text_checking_policy().checks_after_settle() && self.marked.is_none() {
-            self.settle_deadline = Some(Instant::now() + SPELL_CHECK_SETTLE_DELAY);
-        } else {
-            self.settle_deadline = None;
-        }
+        // The deadline is timestamped by the next `advance_spell_check` pump rather than by the
+        // wall clock here, so the runtime's own clock (injected in deterministic tests) owns it.
+        self.settle_deadline = None;
+        self.settle_pending =
+            self.text_checking_policy().checks_after_settle() && self.marked.is_none();
     }
 
     fn discard_misspellings(&mut self) -> bool {
@@ -2111,16 +2120,22 @@ mod tests {
         );
         assert!(input.spell_check_deadline().is_none());
 
+        let start = Instant::now();
         assert!(input.replace_selection("helo world"));
+        assert!(input.spell_check_deadline().is_none());
+        assert!(!input.advance_spell_check(start));
         let first = input
             .spell_check_deadline()
-            .expect("edit arms one deadline");
+            .expect("the first pump after an edit arms one deadline");
+        assert_eq!(first, start + SPELL_CHECK_SETTLE_DELAY);
         assert!(!input.advance_spell_check(first - Duration::from_millis(1)));
         assert!(input.replace_selection("!"));
+        assert!(input.spell_check_deadline().is_none());
+        assert!(!input.advance_spell_check(start + Duration::from_millis(50)));
         let second = input
             .spell_check_deadline()
             .expect("edits re-arm the deadline");
-        assert!(second >= first);
+        assert!(second > first);
 
         assert!(input.set_selection(0, 0));
         assert!(input.advance_spell_check(second));
