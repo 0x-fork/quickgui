@@ -1068,6 +1068,7 @@ fn scrollbars_reveal_on_scroll_then_hide_with_one_deadline() {
     let id = ElementId::new(7);
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     tree.scroll_regions.push(ScrollRegion {
+        rtl: false,
         id,
         bounds,
         scrollbar_bounds: bounds,

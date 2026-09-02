@@ -56,6 +56,12 @@ use crate::{
     virtual_list::{VirtualScrollHandle, VirtualScrollMount},
 };
 
+// Direction-relative layout, sticky positioning, scroll snapping, and text styling additions.
+use crate::{
+    TextAlign, TextDirection,
+    element::{Direction, ScrollSnapStyle, SnapAlign, SnapStrictness},
+};
+
 #[cfg(target_os = "macos")]
 use crate::{ScenePlane, native_view::NativeViewPlacement};
 
@@ -138,6 +144,8 @@ pub(crate) enum UiError {
     },
     #[error("a window cannot retain more than {MAX_TOOLTIPS_PER_WINDOW} tooltips")]
     TooManyTooltips,
+    #[error("a window cannot retain more than {MAX_STICKY_ELEMENTS_PER_WINDOW} sticky elements")]
+    TooManyStickyElements,
     #[error(
         "a window cannot retain more than {MAX_CONTAINER_QUERIES_PER_WINDOW} container queries"
     )]
@@ -156,7 +164,9 @@ enum MeasureContext {
     Text {
         id: TextId,
         content: Arc<str>,
-        style: TextStyle,
+        /// Boxed so one measurement context stays small: the resolved text style carries every
+        /// inherited typography property and dwarfs the image variant otherwise.
+        style: Box<TextStyle>,
         highlights: Option<Arc<[TextHighlight]>>,
     },
     Image {
@@ -332,6 +342,8 @@ impl ExternalDropSnapshot {
 #[derive(Clone, Copy, Debug)]
 struct ScrollRegion {
     id: ElementId,
+    /// Whether the container's inline start edge is on the right, inverting horizontal wheels.
+    rtl: bool,
     /// Pointer/wheel hit bounds for this scrolling container.
     bounds: Rect,
     /// Geometry used by the overlay scrollbar; normally equal to `bounds`.
@@ -591,6 +603,10 @@ pub(crate) struct UiTree {
     visible_tooltip: Option<ElementId>,
     tooltip_overlay: Option<TooltipOverlay>,
     scroll_regions: Vec<ScrollRegion>,
+    /// Bounded snap geometry rebuilt in place by every geometry pass.
+    scroll_snap_geometry: ScrollSnapGeometry,
+    /// The single in-flight snap settle and animation for this window's scroll gesture.
+    scroll_snap: ScrollSnapState,
     scrollbar_drag: Option<ScrollbarDrag>,
     scrollbar_states: HashMap<ElementId, ScrollbarState>,
     hovered_scrollbar: Option<ElementId>,
@@ -951,6 +967,10 @@ use motion::*;
 use painting::*;
 
 pub(crate) use layout::PointerResult;
+pub use layout::{
+    MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW, MAX_SCROLL_SNAP_POINTS_PER_WINDOW,
+    MAX_STICKY_ELEMENTS_PER_WINDOW,
+};
 
 #[cfg(test)]
 mod tests;

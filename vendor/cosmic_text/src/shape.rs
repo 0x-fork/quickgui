@@ -132,6 +132,21 @@ impl fmt::Debug for ShapeBuffer {
     }
 }
 
+/// Extra advance contributed by word spacing for the cluster starting at `index`.
+///
+/// Word spacing applies to the `U+0020` word separator only, matching the CSS default set of
+/// separators for Latin text; other whitespace is left untouched.
+fn word_spacing_advance(attrs: &Attrs<'_>, line: &str, index: usize) -> f32 {
+    let Some(spacing) = attrs.word_spacing_opt else {
+        return 0.0;
+    };
+    if line.as_bytes().get(index) == Some(&b' ') {
+        spacing.0
+    } else {
+        0.0
+    }
+}
+
 fn shape_fallback(
     scratch: &mut ShapeBuffer,
     glyphs: &mut Vec<ShapeGlyph>,
@@ -230,7 +245,8 @@ fn shape_fallback(
 
         let attrs = attrs_list.get_span(start_glyph);
         let x_advance = pos.x_advance as f32 / font_scale
-            + attrs.letter_spacing_opt.map_or(0.0, |spacing| spacing.0);
+            + attrs.letter_spacing_opt.map_or(0.0, |spacing| spacing.0)
+            + word_spacing_advance(&attrs, line, start_glyph);
         let y_advance = pos.y_advance as f32 / font_scale;
         let x_offset = pos.x_offset as f32 / font_scale;
         let y_offset = pos.y_offset as f32 / font_scale;
@@ -548,7 +564,8 @@ fn shape_skip(
             glyph.x_advance = glyph_metrics.advance_width(glyph_id)
                 + span_attrs
                     .letter_spacing_opt
-                    .map_or(0.0, |spacing| spacing.0);
+                    .map_or(0.0, |spacing| spacing.0)
+                + word_spacing_advance(&span_attrs, line, glyph.start);
             glyph.cache_key_flags =
                 override_fake_italic(span_attrs.cache_key_flags, fallback.as_ref(), &span_attrs);
         }
@@ -580,11 +597,12 @@ fn shape_skip_glyphs(
             .char_indices()
             .map(|(chr_idx, codepoint)| {
                 let glyph_id = charmap.map(codepoint);
+                let span_attrs = attrs_list.get_span(start_run + chr_idx);
                 let x_advance = glyph_metrics.advance_width(glyph_id)
-                    + attrs_list
-                        .get_span(start_run + chr_idx)
+                    + span_attrs
                         .letter_spacing_opt
-                        .map_or(0.0, |spacing| spacing.0);
+                        .map_or(0.0, |spacing| spacing.0)
+                    + word_spacing_advance(&span_attrs, line, start_run + chr_idx);
                 let attrs = attrs_list.get_span(start_run + chr_idx);
 
                 ShapeGlyph {
@@ -1283,6 +1301,30 @@ impl VisualLine {
     }
 }
 
+/// Base paragraph direction used when running the Unicode bidirectional algorithm.
+///
+/// `Auto` follows the first strong character of the paragraph. `Ltr` and `Rtl` force the
+/// paragraph embedding level, so neutral characters and punctuation resolve against the declared
+/// direction rather than the content.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum BaseDirection {
+    #[default]
+    Auto,
+    Ltr,
+    Rtl,
+}
+
+impl BaseDirection {
+    /// The paragraph level forced on `unicode_bidi`, if any.
+    pub fn level(self) -> Option<unicode_bidi::Level> {
+        match self {
+            Self::Auto => None,
+            Self::Ltr => Some(unicode_bidi::Level::ltr()),
+            Self::Rtl => Some(unicode_bidi::Level::rtl()),
+        }
+    }
+}
+
 impl ShapeLine {
     /// Creates an empty line.
     ///
@@ -1308,9 +1350,17 @@ impl ShapeLine {
         attrs_list: &AttrsList,
         shaping: Shaping,
         tab_width: u16,
+        base_direction: BaseDirection,
     ) -> Self {
         let mut empty = Self::empty();
-        empty.build(font_system, line, attrs_list, shaping, tab_width);
+        empty.build(
+            font_system,
+            line,
+            attrs_list,
+            shaping,
+            tab_width,
+            base_direction,
+        );
         empty
     }
 
@@ -1328,6 +1378,7 @@ impl ShapeLine {
         attrs_list: &AttrsList,
         shaping: Shaping,
         tab_width: u16,
+        base_direction: BaseDirection,
     ) {
         // Clear stale ellipsis span so it gets recomputed with the current attrs.
         // Without this, reusing a ShapeLine from a previous text (via Cached::Unused)
@@ -1341,9 +1392,11 @@ impl ShapeLine {
         cached_spans.clear();
         cached_spans.extend(spans.drain(..).rev());
 
-        let bidi = unicode_bidi::BidiInfo::new(line, None);
+        // A forced base level applies to every paragraph in the line, so the direction of each
+        // paragraph stays equal to the declared one and the assertion below still holds.
+        let bidi = unicode_bidi::BidiInfo::new(line, base_direction.level());
         let rtl = if bidi.paragraphs.is_empty() {
-            false
+            base_direction == BaseDirection::Rtl
         } else {
             bidi.paragraphs[0].level.is_rtl()
         };

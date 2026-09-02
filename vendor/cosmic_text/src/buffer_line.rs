@@ -5,8 +5,8 @@ use alloc::{string::String, vec::Vec};
 use core::mem;
 
 use crate::{
-    Align, Attrs, AttrsList, Cached, Ellipsize, FontSystem, Hinting, LayoutLine, LayoutRunIter,
-    LineEnding, ShapeLine, Shaping, Wrap,
+    Align, Attrs, AttrsList, BaseDirection, Cached, Ellipsize, FontSystem, Hinting, LayoutLine,
+    LayoutRunIter, LineEnding, ShapeLine, Shaping, Wrap,
 };
 
 /// A line (or paragraph) of text that is shaped and laid out
@@ -20,6 +20,7 @@ pub struct BufferLine {
     layout_opt: Cached<Vec<LayoutLine>>,
     shaping: Shaping,
     metadata: Option<usize>,
+    base_direction: BaseDirection,
 }
 
 impl BufferLine {
@@ -41,6 +42,7 @@ impl BufferLine {
             layout_opt: Cached::Empty,
             shaping,
             metadata: None,
+            base_direction: BaseDirection::default(),
         }
     }
 
@@ -62,6 +64,7 @@ impl BufferLine {
         self.layout_opt.set_unused();
         self.shaping = shaping;
         self.metadata = None;
+        self.base_direction = BaseDirection::default();
     }
 
     /// Get current text
@@ -190,6 +193,7 @@ impl BufferLine {
         // To preserve line endings, it moves to the new line
         self.ending = LineEnding::None;
         new.align = self.align;
+        new.base_direction = self.base_direction;
         new
     }
 
@@ -197,6 +201,23 @@ impl BufferLine {
     pub fn reset(&mut self) {
         self.metadata = None;
         self.reset_shaping();
+    }
+
+    /// Get the base paragraph direction used when shaping this line
+    pub const fn base_direction(&self) -> BaseDirection {
+        self.base_direction
+    }
+
+    /// Set the base paragraph direction, invalidating shaping when it changes
+    ///
+    /// Returns true if the direction changed.
+    pub fn set_base_direction(&mut self, base_direction: BaseDirection) -> bool {
+        if self.base_direction == base_direction {
+            return false;
+        }
+        self.base_direction = base_direction;
+        self.reset_shaping();
+        true
     }
 
     /// Reset shaping and layout caches
@@ -224,6 +245,7 @@ impl BufferLine {
                 &self.attrs_list,
                 self.shaping,
                 tab_width,
+                self.base_direction,
             );
             self.shape_opt.set_used(line);
             self.layout_opt.set_unused();
@@ -310,6 +332,7 @@ impl BufferLine {
             layout_opt: Cached::Empty,
             shaping: Shaping::Advanced,
             metadata: None,
+            base_direction: BaseDirection::default(),
         }
     }
 

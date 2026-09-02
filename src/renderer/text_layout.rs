@@ -168,6 +168,149 @@ pub(super) enum TruncationPlacement {
     },
 }
 
+/// Whether this style actually rewrites `content` before shaping.
+///
+/// Soft-hyphen removal only matters for content that contains one, so ordinary runs keep the
+/// identity projection and every existing truncation and caching path unchanged.
+pub(super) fn rewrites_text_content(content: &str, style: &TextStyle) -> bool {
+    style.transform.is_some() || (style.hyphens == Hyphens::None && content.contains(SOFT_HYPHEN))
+}
+
+/// The soft hyphen: an author-placed break opportunity that is invisible off a break.
+pub(super) const SOFT_HYPHEN: char = '\u{00ad}';
+
+/// Build the shaping input for one text run, mapping it back to the source string.
+///
+/// A case mapping or soft-hyphen removal changes what is shaped but never what the application,
+/// selection, clipboard, or accessibility observe: the returned projection maps every display
+/// index back onto a real boundary of `content`.
+pub(super) fn project_text_content(
+    content: &Arc<str>,
+    highlights: Option<&Arc<[TextHighlight]>>,
+    style: &TextStyle,
+) -> ProjectedText {
+    if !rewrites_text_content(content, style) {
+        return ProjectedText::identity(content.clone(), highlights.cloned());
+    }
+    let strip_soft_hyphens = style.hyphens == Hyphens::None;
+    let mut display = String::with_capacity(content.len());
+    let mut spans: Vec<ProjectionSpan> = Vec::with_capacity(1);
+    let mut at_word_start = true;
+    let mut linear_start: Option<(usize, usize)> = None;
+    let mut buffer = [0u8; 4];
+
+    for (index, character) in content.char_indices() {
+        let original = index..index + character.len_utf8();
+        let display_start = display.len();
+        let linear = if strip_soft_hyphens && character == SOFT_HYPHEN {
+            false
+        } else {
+            match style.transform {
+                None => display.push(character),
+                Some(TextTransform::Uppercase) => {
+                    for mapped in character.to_uppercase() {
+                        display.push_str(mapped.encode_utf8(&mut buffer));
+                    }
+                }
+                Some(TextTransform::Lowercase) => {
+                    for mapped in character.to_lowercase() {
+                        display.push_str(mapped.encode_utf8(&mut buffer));
+                    }
+                }
+                Some(TextTransform::Capitalize) => {
+                    if at_word_start {
+                        for mapped in character.to_uppercase() {
+                            display.push_str(mapped.encode_utf8(&mut buffer));
+                        }
+                    } else {
+                        display.push(character);
+                    }
+                }
+            }
+            display.len() - display_start == original.len()
+        };
+        at_word_start = character.is_whitespace() || character == '-' || character == '_';
+
+        if linear {
+            linear_start.get_or_insert((display_start, original.start));
+            continue;
+        }
+        if let Some((display_from, original_from)) = linear_start.take()
+            && display_from < display_start
+        {
+            spans.push(ProjectionSpan {
+                display: display_from..display_start,
+                original: original_from..original.start,
+            });
+        }
+        spans.push(ProjectionSpan {
+            display: display_start..display.len(),
+            original: original.clone(),
+        });
+    }
+    if let Some((display_from, original_from)) = linear_start
+        && display_from < display.len()
+    {
+        spans.push(ProjectionSpan {
+            display: display_from..display.len(),
+            original: original_from..content.len(),
+        });
+    }
+
+    let projected_highlights = project_mapped_highlights(highlights, &spans);
+    ProjectedText {
+        content: Arc::from(display),
+        highlights: projected_highlights,
+        mapping: TextProjection::Mapped {
+            original_len: content.len(),
+            spans: spans.into(),
+        },
+    }
+}
+
+/// Move highlight ranges from source indices onto the rewritten shaping input.
+pub(super) fn project_mapped_highlights(
+    highlights: Option<&Arc<[TextHighlight]>>,
+    spans: &[ProjectionSpan],
+) -> Option<Arc<[TextHighlight]>> {
+    let highlights = highlights?.as_ref();
+    if highlights.is_empty() {
+        return Some(Arc::from([]));
+    }
+    let mut projected: Vec<TextHighlight> = Vec::with_capacity(highlights.len());
+    for highlight in highlights {
+        for span in spans {
+            let start = span.original.start.max(highlight.range.start);
+            let end = span.original.end.min(highlight.range.end);
+            if start >= end {
+                continue;
+            }
+            let range = if span.display.len() == span.original.len() {
+                span.display.start + start - span.original.start
+                    ..span.display.start + end - span.original.start
+            } else {
+                span.display.clone()
+            };
+            if range.is_empty() {
+                continue;
+            }
+            if let Some(previous) = projected.last_mut()
+                && previous.range.end == range.start
+                && previous.style == highlight.style
+            {
+                previous.range.end = range.end;
+            } else if projected.len() < MAX_TEXT_HIGHLIGHTS {
+                projected.push(TextHighlight {
+                    range,
+                    style: highlight.style.clone(),
+                });
+            }
+        }
+    }
+    projected.sort_unstable_by_key(|highlight| highlight.range.start);
+    Some(projected.into())
+}
+
 pub(super) fn prepare_text_buffer(
     font_system: &mut FontSystem,
     content: &Arc<str>,
@@ -176,11 +319,18 @@ pub(super) fn prepare_text_buffer(
     width: Option<f32>,
     scale: f32,
 ) -> (ProjectedText, Buffer) {
-    let identity = ProjectedText::identity(content.clone(), highlights.cloned());
+    let identity = project_text_content(content, highlights, style);
     let original_buffer = shape_projected_text(font_system, &identity, style, width, scale);
     let Some(overflow) = style.text_overflow.as_ref() else {
         return (identity, original_buffer);
     };
+    // An affix truncation projection is expressed over source indices. Composing it with a
+    // content rewrite is not worth the mapping complexity, so a rewritten run keeps its complete
+    // shaped layout and relies on clipping; the default `…` ellipsis is unaffected because Cosmic
+    // Text applies it inside the buffer.
+    if rewrites_text_content(content, style) {
+        return (identity, original_buffer);
+    }
     if uses_cosmic_ellipsis(overflow) {
         // Cosmic Text retains the original shaped runs and applies Unicode-aware ellipsizing as
         // part of line layout. It therefore handles the common GPUI `…` path in one buffer and
@@ -454,7 +604,7 @@ pub(super) fn affix_highlight_style(
 pub(super) fn should_fragment_basic_text(content: &str, style: &TextStyle) -> bool {
     style.shaping == TextShaping::Basic
         && style.wrap == TextWrap::None
-        && style.align == TextAlign::Left
+        && matches!(style.align, TextAlign::Left | TextAlign::Start)
         && style.text_overflow.is_none()
         && style.line_clamp.is_none()
         && content.len() >= BASIC_FRAGMENT_MIN_BYTES
@@ -511,7 +661,7 @@ pub(super) fn canonical_text_width(
     width: Option<f32>,
 ) -> Option<f32> {
     match (wrap, align, has_text_overflow) {
-        (TextWrap::None, TextAlign::Left, false) => None,
+        (TextWrap::None, TextAlign::Left | TextAlign::Start, false) => None,
         (TextWrap::None | TextWrap::Word | TextWrap::Glyph, _, _) => width,
     }
 }
@@ -712,6 +862,16 @@ pub(super) fn collect_decoration_group(
         }
     }
 
+    if text_decoration.overline && decorations.len() < limit {
+        let color = ui_color(text_decoration.overline_color_opt.unwrap_or(fallback_color));
+        let thickness = (data.underline_metrics.thickness * font_size)
+            .max(1.0)
+            .ceil();
+        // `ascent` is in EM above the baseline; the overline sits on the ascent, like CSS.
+        let y = run.line_y - data.ascent * font_size;
+        push_solid_decoration(decorations, limit, x, y, width, thickness, color, scale);
+    }
+
     if text_decoration.strikethrough && decorations.len() < limit {
         let color = ui_color(
             text_decoration
@@ -835,12 +995,13 @@ pub(super) fn configure_text_buffer(
     let metrics = Metrics::new(style.font_size * scale, style.line_height * scale);
     buffer.set_metrics_and_size(metrics, width.map(|value| value * scale), None);
     buffer.set_monospace_width(style.monospace_width.map(|width| width * scale));
-    buffer.set_wrap(match style.wrap {
-        TextWrap::None => Wrap::None,
-        TextWrap::Word => Wrap::Word,
-        TextWrap::Glyph => Wrap::Glyph,
-    });
+    buffer.set_wrap(cosmic_wrap(style));
     buffer.set_ellipsize(cosmic_ellipsize(style));
+    buffer.set_base_direction(match style.direction {
+        TextDirection::Auto => BaseDirection::Auto,
+        TextDirection::Ltr => BaseDirection::Ltr,
+        TextDirection::Rtl => BaseDirection::Rtl,
+    });
     let mut attrs = Attrs::new()
         .family(glyph_family(&style.family))
         .weight(style.weight)
@@ -848,6 +1009,20 @@ pub(super) fn configure_text_buffer(
         .font_features(style.features.cosmic());
     if style.font_thicken {
         attrs = attrs.cache_key_flags(CacheKeyFlags::FONT_THICKEN);
+    }
+    // Cosmic Text tracks spacing in EM, and the buffer's metrics are already scaled, so a logical
+    // pixel amount converts with the unscaled font size.
+    if style.letter_spacing != 0.0 && style.font_size > 0.0 {
+        attrs = attrs.letter_spacing(style.letter_spacing / style.font_size);
+    }
+    if style.word_spacing != 0.0 && style.font_size > 0.0 {
+        attrs = attrs.word_spacing(style.word_spacing / style.font_size);
+    }
+    if style.overline {
+        attrs = attrs.overline();
+    }
+    if let Some(color) = style.overline_color {
+        attrs = attrs.overline_color(glyph_color(color));
     }
     if let Some(fallbacks) = style.fallbacks.as_ref() {
         attrs = attrs.font_fallbacks(fallbacks.cosmic());
@@ -929,6 +1104,26 @@ pub(super) fn configure_text_buffer(
     buffer.shape_until_scroll(font_system, false);
 }
 
+/// Map QuickGUI's wrapping, word-break, and overflow-wrap declarations onto one Cosmic Text mode.
+///
+/// `word-break` wins over `overflow-wrap`, matching CSS. `KeepAll` is approximated by ordinary
+/// word wrapping: QuickGUI never breaks inside a CJK run in that mode, but it also does not add
+/// the extra CJK break opportunities `Normal` would allow.
+pub(super) fn cosmic_wrap(style: &TextStyle) -> Wrap {
+    let base = match style.wrap {
+        TextWrap::None => return Wrap::None,
+        TextWrap::Word => Wrap::Word,
+        TextWrap::Glyph => Wrap::Glyph,
+    };
+    match (style.word_break, style.overflow_wrap) {
+        (WordBreak::BreakAll, _) => Wrap::Glyph,
+        (WordBreak::KeepAll, _) => Wrap::Word,
+        (WordBreak::Normal, OverflowWrap::Anywhere) => Wrap::Glyph,
+        (WordBreak::Normal, OverflowWrap::BreakWord) => Wrap::WordOrGlyph,
+        (WordBreak::Normal, OverflowWrap::Normal) => base,
+    }
+}
+
 pub(super) fn uses_cosmic_ellipsis(overflow: &TextOverflow) -> bool {
     match overflow {
         TextOverflow::Truncate(affix)
@@ -969,9 +1164,12 @@ pub(super) fn reflow_text_buffer(
 
 pub(super) fn glyph_alignment(align: TextAlign) -> GlyphAlign {
     match align {
-        TextAlign::Left => GlyphAlign::Left,
+        // Logical alignment is resolved against the element's direction while the layout tree is
+        // built, so a shaped buffer only ever sees a physical edge. Mapping the logical variants
+        // to their LTR resolution keeps a directly constructed `TextStyle` sane.
+        TextAlign::Left | TextAlign::Start => GlyphAlign::Left,
         TextAlign::Center => GlyphAlign::Center,
-        TextAlign::Right => GlyphAlign::Right,
+        TextAlign::Right | TextAlign::End => GlyphAlign::Right,
         TextAlign::Justify => GlyphAlign::Justified,
     }
 }

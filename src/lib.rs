@@ -348,6 +348,12 @@ pub use scene::{
     MAX_BOX_SHADOW_EXTENT, PathPrimitive, Quad, Scene, ScenePlane, Shadow, SvgPrimitive, TextAlign,
     TextId, TextOverflow, TextRun, TextShaping, TextStyle, TextWrap, WhiteSpace,
 };
+// Direction-relative layout, sticky positioning, scroll snapping, and text styling additions.
+pub use element::{Direction, SnapAlign, SnapStrictness, StickyInsets};
+pub use scene::{
+    Hyphens, MAX_TEXT_SHADOW_SAMPLES, MAX_TEXT_SPACING, OverflowWrap, TextDirection, TextShadow,
+    TextTransform, WordBreak,
+};
 pub use select::{
     MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VISIBLE_ROWS, SELECT_TYPEAHEAD_TIMEOUT, SelectListState,
     SelectOptionState, SelectPopoverLayout, SelectState,
@@ -398,6 +404,10 @@ pub use tree::{
     tree_key_bindings,
 };
 pub use ui_tree::{MAX_FOCUSED_EVENT_PATH, MAX_MOUSE_EVENT_PATH, MAX_STATIC_TEXT_COPY_BYTES};
+pub use ui_tree::{
+    MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW, MAX_SCROLL_SNAP_POINTS_PER_WINDOW,
+    MAX_STICKY_ELEMENTS_PER_WINDOW,
+};
 pub use virtual_list::{
     FollowMode, ListAlignment, ListOffset, ListState, ListStateStats, MAX_LIST_ITEMS,
     MAX_LIST_OVERSCAN_ITEMS, MAX_MOUNTED_LIST_ITEMS, VirtualList, VisibleRows,

@@ -224,6 +224,37 @@ impl Hash for LetterSpacing {
     }
 }
 
+/// A wrapper for word spacing to get around that f32 doesn't implement Eq and Hash
+#[derive(Clone, Copy, Debug)]
+pub struct WordSpacing(pub f32);
+
+impl PartialEq for WordSpacing {
+    fn eq(&self, other: &Self) -> bool {
+        if self.0.is_nan() {
+            other.0.is_nan()
+        } else {
+            self.0 == other.0
+        }
+    }
+}
+
+impl Eq for WordSpacing {}
+
+impl Hash for WordSpacing {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        const CANONICAL_NAN_BITS: u32 = 0x7fc0_0000;
+
+        let bits = if self.0.is_nan() {
+            CANONICAL_NAN_BITS
+        } else {
+            // Add +0.0 to canonicalize -0.0 to +0.0
+            (self.0 + 0.0).to_bits()
+        };
+
+        bits.hash(hasher);
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum UnderlineStyle {
     #[default]
@@ -298,6 +329,8 @@ pub struct Attrs<'a> {
     pub metrics_opt: Option<CacheMetrics>,
     /// Letter spacing (tracking) in EM
     pub letter_spacing_opt: Option<LetterSpacing>,
+    /// Extra advance added after every word separator (`U+0020`), in EM
+    pub word_spacing_opt: Option<WordSpacing>,
     pub font_features: FontFeatures,
     pub text_decoration: TextDecoration,
 }
@@ -318,6 +351,7 @@ impl<'a> Attrs<'a> {
             cache_key_flags: CacheKeyFlags::empty(),
             metrics_opt: None,
             letter_spacing_opt: None,
+            word_spacing_opt: None,
             font_features: FontFeatures::new(),
             text_decoration: TextDecoration::new(),
         }
@@ -380,6 +414,12 @@ impl<'a> Attrs<'a> {
     /// Set letter spacing (tracking) in EM
     pub const fn letter_spacing(mut self, letter_spacing: f32) -> Self {
         self.letter_spacing_opt = Some(LetterSpacing(letter_spacing));
+        self
+    }
+
+    /// Set word spacing in EM, added after every `U+0020` word separator
+    pub const fn word_spacing(mut self, word_spacing: f32) -> Self {
+        self.word_spacing_opt = Some(WordSpacing(word_spacing));
         self
     }
 
@@ -465,6 +505,8 @@ pub struct AttrsOwned {
     pub metrics_opt: Option<CacheMetrics>,
     /// Letter spacing (tracking) in EM
     pub letter_spacing_opt: Option<LetterSpacing>,
+    /// Extra advance added after every word separator (`U+0020`), in EM
+    pub word_spacing_opt: Option<WordSpacing>,
     pub font_features: FontFeatures,
     pub text_decoration: TextDecoration,
 }
@@ -482,6 +524,7 @@ impl AttrsOwned {
             cache_key_flags: attrs.cache_key_flags,
             metrics_opt: attrs.metrics_opt,
             letter_spacing_opt: attrs.letter_spacing_opt,
+            word_spacing_opt: attrs.word_spacing_opt,
             font_features: attrs.font_features.clone(),
             text_decoration: attrs.text_decoration,
         }
@@ -499,6 +542,7 @@ impl AttrsOwned {
             cache_key_flags: self.cache_key_flags,
             metrics_opt: self.metrics_opt,
             letter_spacing_opt: self.letter_spacing_opt,
+            word_spacing_opt: self.word_spacing_opt,
             font_features: self.font_features.clone(),
             text_decoration: self.text_decoration,
         }

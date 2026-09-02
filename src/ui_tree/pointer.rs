@@ -32,13 +32,16 @@ impl UiTree {
             return Ok(());
         };
         let viewport = Rect::from_size(self.viewport);
+        self.scroll_snap_geometry.clear();
         collect_layout_bounds(
             root,
             &self.taffy,
             &mut self.scroll_offsets,
             &mut self.scroll_end_states,
             &mut self.natural_bounds,
-            Point::ZERO,
+            &mut self.scroll_snap_geometry,
+            None,
+            LayoutFrame::root(Point::ZERO, viewport),
         )?;
         let mut source_order = 0;
         let mut transition_context = StyleTransitionPaintContext {
@@ -77,7 +80,7 @@ impl UiTree {
             &self.selectable_text_indices,
             &mut self.selectable_text_regions,
             self.static_text_selection,
-            Point::ZERO,
+            LayoutFrame::root(Point::ZERO, viewport),
             viewport,
             viewport,
             PaintLayerKey::default(),
@@ -173,13 +176,16 @@ impl UiTree {
         self.hit_regions.clear();
         if let Some(root) = &self.root {
             let viewport = Rect::from_size(self.viewport);
+            self.scroll_snap_geometry.clear();
             collect_layout_bounds(
                 root,
                 &self.taffy,
                 &mut self.scroll_offsets,
                 &mut self.scroll_end_states,
                 &mut self.natural_bounds,
-                Point::ZERO,
+                &mut self.scroll_snap_geometry,
+                None,
+                LayoutFrame::root(Point::ZERO, viewport),
             )?;
             let mut source_order = 0;
             collect_layout_hit_regions(
@@ -189,7 +195,7 @@ impl UiTree {
                 &mut self.scroll_offsets,
                 &self.selectable_text_indices,
                 &mut self.hit_regions,
-                Point::ZERO,
+                LayoutFrame::root(Point::ZERO, viewport),
                 viewport,
                 viewport,
                 PaintLayerKey::default(),
@@ -727,6 +733,10 @@ impl UiTree {
             .virtual_scroll_handles
             .get(&drag.id)
             .is_some_and(|binding| binding.handle.scrollbar_drag_ended());
+        // Releasing a scrollbar thumb ends a scroll just as a momentum phase does.
+        if self.scroll_snap_geometry.container(drag.id).is_some() {
+            self.snap_scroll_container(drag.id, now);
+        }
         ScrollResult {
             changed: true,
             view_dirty,
@@ -988,8 +998,12 @@ impl UiTree {
                 continue;
             }
             let offset = self.scroll_offsets.entry(region.id).or_default();
+            // A right-to-left container keeps offset zero against its right edge, so a physical
+            // horizontal delta moves it the other way along the stored inline axis.
+            let horizontal = if region.rtl { -delta.x } else { delta.x };
+            let previous = *offset;
             let next = Vector::new(
-                (offset.x - delta.x).clamp(0.0, region.max_offset.x),
+                (offset.x - horizontal).clamp(0.0, region.max_offset.x),
                 (offset.y - delta.y).clamp(0.0, region.max_offset.y),
             );
             if next != *offset {
@@ -1005,6 +1019,11 @@ impl UiTree {
                         .is_none_or(|binding| {
                             binding.update_from_input(next.y, region.bounds.height)
                         });
+                // Wheels carry no phase on most platforms. Arm one bounded settle deadline that
+                // the next delta pushes back; it is the only timer scroll snapping ever creates.
+                if self.scroll_snap_geometry.container(region.id).is_some() {
+                    self.arm_scroll_snap(region.id, previous, now);
+                }
                 return ScrollResult {
                     changed: true,
                     view_dirty,

@@ -355,6 +355,7 @@ fn virtual_scroll_uses_the_shared_reveal_hover_and_drag_path() {
         },
     );
     tree.scroll_regions.push(ScrollRegion {
+        rtl: false,
         id,
         bounds,
         scrollbar_bounds: bounds,
@@ -559,6 +560,7 @@ fn overflow_and_virtual_sibling_scrollbars_keep_independent_native_state() {
         },
     );
     let region = |id, bounds, virtual_scroll, source| ScrollRegion {
+        rtl: false,
         id,
         bounds,
         scrollbar_bounds: bounds,
@@ -685,6 +687,7 @@ fn scrollbar_track_captures_drag_and_hover_without_click_through() {
     let id = ElementId::new(8);
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     tree.scroll_regions.push(ScrollRegion {
+        rtl: false,
         id,
         bounds,
         scrollbar_bounds: bounds,
@@ -752,6 +755,7 @@ fn topmost_no_drag_and_overlay_scrollbar_override_drag_region() {
     assert!(tree.is_app_region_drag(Point::new(50.0, 50.0)));
 
     tree.scroll_regions.push(ScrollRegion {
+        rtl: false,
         id: ElementId::new(3),
         bounds,
         scrollbar_bounds: bounds,

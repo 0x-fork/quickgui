@@ -98,13 +98,136 @@ impl TextOverflow {
 }
 
 /// Horizontal alignment of text lines within their element bounds.
+///
+/// [`TextAlign::Start`] and [`TextAlign::End`] are direction relative: they resolve to `Left` and
+/// `Right` in an LTR subtree and to `Right` and `Left` in an RTL one. Resolution happens once per
+/// layout build, so retained shaping never observes an unresolved logical alignment.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum TextAlign {
-    #[default]
     Left,
     Center,
     Right,
     Justify,
+    /// Inline start edge of the resolved layout direction.
+    #[default]
+    Start,
+    /// Inline end edge of the resolved layout direction.
+    End,
+}
+
+/// Base paragraph direction used when shaping bidirectional text.
+///
+/// `Auto` follows the Unicode bidirectional algorithm's first strong character. `Ltr` and `Rtl`
+/// force the paragraph embedding level so neutral characters and punctuation resolve against the
+/// declared direction instead of the content.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum TextDirection {
+    #[default]
+    Auto,
+    Ltr,
+    Rtl,
+}
+
+/// Case mapping applied to non-editable text before shaping.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TextTransform {
+    Uppercase,
+    Lowercase,
+    /// Uppercase the first character of every whitespace-delimited word.
+    Capitalize,
+}
+
+/// Where a line may break inside a run of characters.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum WordBreak {
+    #[default]
+    Normal,
+    /// Allow a break between any two characters.
+    BreakAll,
+    /// Never break inside CJK text; only ordinary soft break opportunities apply.
+    KeepAll,
+}
+
+/// Whether an otherwise unbreakable word may be broken to avoid overflow.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum OverflowWrap {
+    #[default]
+    Normal,
+    /// Break anywhere as soon as the line would overflow.
+    Anywhere,
+    /// Break a long word only when it cannot fit on a line of its own.
+    BreakWord,
+}
+
+/// Whether soft hyphens (`U+00AD`) may become visible break opportunities.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum Hyphens {
+    /// Soft hyphens are removed before shaping and never render.
+    #[default]
+    None,
+    /// Author-placed soft hyphens render as a hyphen when a line breaks there.
+    Manual,
+}
+
+/// Maximum text primitives one blurred text shadow may add to the display list.
+pub const MAX_TEXT_SHADOW_SAMPLES: usize = 5;
+
+/// Alpha applied to each copy of a blur-approximated text shadow.
+const TEXT_SHADOW_BLUR_ALPHA: f32 = 0.45;
+
+/// Maximum absolute logical letter or word spacing retained from one declaration.
+pub const MAX_TEXT_SPACING: f32 = 256.0;
+
+/// Clamp a spacing declaration to a finite, bounded logical-pixel value.
+pub(crate) fn sane_text_spacing(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(-MAX_TEXT_SPACING, MAX_TEXT_SPACING)
+    } else {
+        0.0
+    }
+}
+
+/// One drop shadow painted beneath a text run.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TextShadow {
+    /// Logical horizontal offset.
+    pub offset_x: f32,
+    /// Logical vertical offset.
+    pub offset_y: f32,
+    /// Logical blur radius. Approximated; see [`Element::text_shadow`](crate::Element::text_shadow).
+    pub blur: f32,
+    pub color: Color,
+}
+
+impl TextShadow {
+    /// Maximum absolute logical offset retained for one text shadow.
+    pub const MAX_OFFSET: f32 = 256.0;
+    /// Maximum logical blur radius retained for one text shadow.
+    pub const MAX_BLUR: f32 = 64.0;
+
+    /// Create a bounded text shadow.
+    ///
+    /// Non-finite inputs collapse to zero and offsets and blur are clamped to [`Self::MAX_OFFSET`]
+    /// and [`Self::MAX_BLUR`], so one declaration can never produce unbounded paint geometry.
+    pub fn new(offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
+        let offset = |value: f32| {
+            if value.is_finite() {
+                value.clamp(-Self::MAX_OFFSET, Self::MAX_OFFSET)
+            } else {
+                0.0
+            }
+        };
+        Self {
+            offset_x: offset(offset_x),
+            offset_y: offset(offset_y),
+            blur: if blur.is_finite() {
+                blur.clamp(0.0, Self::MAX_BLUR)
+            } else {
+                0.0
+            },
+            color,
+        }
+    }
 }
 
 /// Text shaping strategy.
@@ -142,11 +265,27 @@ pub struct TextStyle {
     pub underline_thickness: f32,
     pub strikethrough: bool,
     pub strikethrough_color: Option<Color>,
+    /// Whether a line is drawn above the text's ascent.
+    pub overline: bool,
+    pub overline_color: Option<Color>,
     pub align: TextAlign,
     pub wrap: TextWrap,
     pub text_overflow: Option<TextOverflow>,
     pub line_clamp: Option<usize>,
     pub shaping: TextShaping,
+    /// Base paragraph direction used when shaping bidirectional content.
+    pub direction: TextDirection,
+    /// Extra logical-pixel advance added after every glyph cluster.
+    pub letter_spacing: f32,
+    /// Extra logical-pixel advance added after every space character.
+    pub word_spacing: f32,
+    /// Case mapping applied to non-editable text before shaping.
+    pub transform: Option<TextTransform>,
+    pub word_break: WordBreak,
+    pub overflow_wrap: OverflowWrap,
+    pub hyphens: Hyphens,
+    /// Drop shadow painted beneath the glyphs.
+    pub shadow: Option<TextShadow>,
     pub color: Color,
 }
 
@@ -174,11 +313,21 @@ impl TextStyle {
             underline_thickness: 1.0,
             strikethrough: false,
             strikethrough_color: None,
-            align: TextAlign::Left,
+            overline: false,
+            overline_color: None,
+            align: TextAlign::Start,
             wrap: TextWrap::Word,
             text_overflow: None,
             line_clamp: None,
             shaping: TextShaping::Advanced,
+            direction: TextDirection::Auto,
+            letter_spacing: 0.0,
+            word_spacing: 0.0,
+            transform: None,
+            word_break: WordBreak::Normal,
+            overflow_wrap: OverflowWrap::Normal,
+            hyphens: Hyphens::None,
+            shadow: None,
             color,
         }
     }
@@ -327,6 +476,65 @@ impl TextStyle {
     pub(crate) fn has_decorations(&self) -> bool {
         (self.underline != TextUnderline::None && self.underline_thickness > 0.0)
             || self.strikethrough
+            || self.overline
+    }
+
+    /// Draw a line above the text's ascent.
+    pub fn overline(mut self) -> Self {
+        self.overline = true;
+        self
+    }
+
+    /// Draw a colored line above the text's ascent.
+    pub fn overline_color(mut self, color: Color) -> Self {
+        self.overline = true;
+        self.overline_color = Some(color);
+        self
+    }
+
+    /// Force the base paragraph direction used when shaping bidirectional content.
+    pub fn direction(mut self, direction: TextDirection) -> Self {
+        self.direction = direction;
+        self
+    }
+
+    /// Set extra logical-pixel advance after each glyph cluster.
+    pub fn letter_spacing(mut self, spacing: f32) -> Self {
+        self.letter_spacing = sane_text_spacing(spacing);
+        self
+    }
+
+    /// Set extra logical-pixel advance after each space character.
+    pub fn word_spacing(mut self, spacing: f32) -> Self {
+        self.word_spacing = sane_text_spacing(spacing);
+        self
+    }
+
+    /// Apply a case mapping to non-editable text before shaping.
+    pub fn text_transform(mut self, transform: TextTransform) -> Self {
+        self.transform = Some(transform);
+        self
+    }
+
+    pub fn word_break(mut self, word_break: WordBreak) -> Self {
+        self.word_break = word_break;
+        self
+    }
+
+    pub fn overflow_wrap(mut self, overflow_wrap: OverflowWrap) -> Self {
+        self.overflow_wrap = overflow_wrap;
+        self
+    }
+
+    pub fn hyphens(mut self, hyphens: Hyphens) -> Self {
+        self.hyphens = hyphens;
+        self
+    }
+
+    /// Paint one drop shadow beneath the glyphs.
+    pub fn text_shadow(mut self, shadow: TextShadow) -> Self {
+        self.shadow = Some(shadow);
+        self
     }
 
     pub fn align(mut self, align: TextAlign) -> Self {
@@ -1262,12 +1470,67 @@ impl Scene {
 
     pub(crate) fn push_text_in(&mut self, key: PaintLayerKey, mut text: TextRun) {
         text.opacity = sanitize_opacity(text.opacity * self.opacity);
+        self.push_text_shadow_in(key, &text);
         if text.has_visible_paint()
             && let Some(bounds) = clipped_paint_bounds(text.bounds, [text.clip])
         {
             let layer = self.layer_mut(key);
             let index = layer.text.len();
             layer.text.push(text);
+            layer.push_paint(bounds, PrimitiveRef::Text(index));
+        }
+    }
+
+    /// Emit the offset copies that stand in for one text run's drop shadow.
+    ///
+    /// The offset and color are exact. A blur radius is approximated by a bounded, fixed set of
+    /// additional offset copies at reduced alpha, so a declaration can never grow the display
+    /// list without limit. Every copy reuses the run's shaping key: only its bounds and color
+    /// change, so no extra shaping or glyph atlas work is performed.
+    fn push_text_shadow_in(&mut self, key: PaintLayerKey, text: &TextRun) {
+        let Some(shadow) = text.style.shadow else {
+            return;
+        };
+        if shadow.color.a <= 0.0 || text.content.is_empty() {
+            return;
+        }
+        let blur = shadow.blur.max(0.0);
+        let spread = blur * 0.5;
+        let samples: &[(f32, f32, f32)] = if spread <= 0.25 {
+            &[(0.0, 0.0, 1.0)]
+        } else {
+            &[
+                (0.0, 0.0, TEXT_SHADOW_BLUR_ALPHA),
+                (-1.0, -1.0, TEXT_SHADOW_BLUR_ALPHA),
+                (1.0, -1.0, TEXT_SHADOW_BLUR_ALPHA),
+                (-1.0, 1.0, TEXT_SHADOW_BLUR_ALPHA),
+                (1.0, 1.0, TEXT_SHADOW_BLUR_ALPHA),
+            ]
+        };
+        debug_assert!(samples.len() <= MAX_TEXT_SHADOW_SAMPLES);
+        for (dx, dy, alpha) in samples.iter().copied() {
+            let mut copy = text.clone();
+            copy.bounds = Rect::new(
+                text.bounds.x + shadow.offset_x + dx * spread,
+                text.bounds.y + shadow.offset_y + dy * spread,
+                text.bounds.width,
+                text.bounds.height,
+            );
+            copy.style.shadow = None;
+            copy.style.color = shadow.color;
+            copy.style.underline_color = Some(shadow.color);
+            copy.style.strikethrough_color = Some(shadow.color);
+            copy.style.overline_color = Some(shadow.color);
+            copy.opacity = sanitize_opacity(text.opacity * alpha);
+            if !copy.has_visible_paint() {
+                continue;
+            }
+            let Some(bounds) = clipped_paint_bounds(copy.bounds, [copy.clip]) else {
+                continue;
+            };
+            let layer = self.layer_mut(key);
+            let index = layer.text.len();
+            layer.text.push(copy);
             layer.push_paint(bounds, PrimitiveRef::Text(index));
         }
     }
@@ -1548,7 +1811,7 @@ mod tests {
     #[test]
     fn text_wraps_by_default_and_can_opt_out() {
         let style = TextStyle::new(14.0, Color::WHITE);
-        assert_eq!(style.align, TextAlign::Left);
+        assert_eq!(style.align, TextAlign::Start);
         assert_eq!(style.wrap, TextWrap::Word);
         assert_eq!(style.wrap(TextWrap::None).wrap, TextWrap::None);
     }

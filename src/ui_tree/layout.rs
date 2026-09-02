@@ -638,6 +638,7 @@ pub(super) fn build_pending_container_query_subtrees(
         let parent_id = element.runtime_id;
         let inherited_typography = element.resolved_typography.clone();
         let inherited_user_select = element.resolved_user_select;
+        let inherited_direction = element.resolved_direction;
         let child = element
             .children
             .first_mut()
@@ -655,6 +656,7 @@ pub(super) fn build_pending_container_query_subtrees(
             0,
             &inherited_typography,
             inherited_user_select,
+            inherited_direction,
         )?;
         if let ElementKind::ContainerQuery(query) = &mut element.kind {
             query.layout_pending = false;
@@ -670,6 +672,7 @@ pub(super) fn build_pending_container_query_subtrees(
     Ok(false)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build_layout_node(
     taffy: &mut TaffyTree<MeasureContext>,
     seen_ids: &mut HashSet<ElementId>,
@@ -678,6 +681,7 @@ pub(super) fn build_layout_node(
     child_index: usize,
     inherited_typography: &TextStyle,
     inherited_user_select: bool,
+    inherited_direction: Direction,
 ) -> Result<NodeId, UiError> {
     let id = if let Some(id) = element.explicit_id {
         id
@@ -691,6 +695,8 @@ pub(super) fn build_layout_node(
         generated
     };
     element.runtime_id = id;
+    element.resolved_direction = element.direction.unwrap_or(inherited_direction);
+    apply_logical_insets(element);
     element.resolved_typography = element.typography.resolve(inherited_typography);
     // Editable controls must retain a one-to-one mapping between their controlled value and the
     // shaped buffer. Their own viewport already provides web-style clipping and caret scrolling;
@@ -729,7 +735,26 @@ pub(super) fn build_layout_node(
             index,
             &element.resolved_typography,
             element.resolved_user_select,
+            element.resolved_direction,
         )?);
+    }
+
+    // Children have inherited the logical alignment and shaping direction; resolve this
+    // element's own copy against its direction now so nothing downstream of layout ever sees an
+    // unresolved logical value in a retained shaping key.
+    element.resolved_typography.align = resolve_logical_align(
+        element.resolved_typography.align,
+        element.resolved_direction,
+    );
+    if element.resolved_typography.direction == TextDirection::Auto
+        && element.resolved_direction.is_rtl()
+    {
+        element.resolved_typography.direction = TextDirection::Rtl;
+    }
+    // Editable controls never case-map their content: the shaped buffer must stay byte-identical
+    // to the controlled value so caret indices, IME state, and clipboard round-trips agree.
+    if matches!(&element.kind, ElementKind::TextInput(_)) {
+        element.resolved_typography.transform = None;
     }
 
     let node = match &element.kind {
@@ -743,7 +768,7 @@ pub(super) fn build_layout_node(
             MeasureContext::Text {
                 id: TextId::new(id.value()),
                 content: content.clone(),
-                style: element.resolved_typography.clone(),
+                style: Box::new(element.resolved_typography.clone()),
                 highlights: None,
             },
         )?,
@@ -752,7 +777,7 @@ pub(super) fn build_layout_node(
             MeasureContext::Text {
                 id: TextId::new(id.value()),
                 content: styled.content().clone(),
-                style: element.resolved_typography.clone(),
+                style: Box::new(element.resolved_typography.clone()),
                 highlights: Some(styled.shared_highlights().clone()),
             },
         )?,
@@ -813,7 +838,7 @@ pub(super) fn build_layout_node(
                 MeasureContext::Text {
                     id: TextId::new(id.value()),
                     content,
-                    style: element.resolved_typography.clone(),
+                    style: Box::new(element.resolved_typography.clone()),
                     highlights,
                 },
             )?
@@ -826,6 +851,492 @@ pub(super) fn build_layout_node(
     }
     element.taffy_node = Some(node);
     Ok(node)
+}
+
+/// Maximum scroll-snap containers indexed for one rendered window.
+///
+/// Reaching the bound drops later containers from snapping; ordinary scrolling is unaffected.
+pub const MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW: usize = 256;
+
+/// Maximum scroll-snap children indexed across every container in one rendered window.
+pub const MAX_SCROLL_SNAP_POINTS_PER_WINDOW: usize = 4_096;
+
+/// Maximum sticky elements retained in one window's view declaration.
+pub const MAX_STICKY_ELEMENTS_PER_WINDOW: usize = 4_096;
+
+/// Distance within which a `Proximity` container still snaps, as a fraction of its viewport.
+const SCROLL_SNAP_PROXIMITY_FRACTION: f32 = 0.5;
+
+/// Upper bound on the proximity window, in logical pixels.
+const SCROLL_SNAP_PROXIMITY_LIMIT: f32 = 200.0;
+
+/// One scroll container that snaps, as of the last completed geometry pass.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ScrollSnapContainer {
+    pub(super) id: ElementId,
+    pub(super) style: ScrollSnapStyle,
+    /// Painted padding box of the container.
+    pub(super) viewport: Rect,
+    /// Scroll offset the painted geometry was collected at.
+    pub(super) offset: Vector,
+    /// Maximum scroll offset on each axis.
+    pub(super) max_offset: Vector,
+    pub(super) direction: Direction,
+}
+
+/// One snap position contributed by a scroll-snap child.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ScrollSnapPoint {
+    pub(super) container: ElementId,
+    pub(super) align: SnapAlign,
+    pub(super) stop_always: bool,
+    /// Painted bounds of the child.
+    pub(super) bounds: Rect,
+}
+
+/// Bounded per-window scroll-snap geometry, rebuilt in place by each geometry pass.
+///
+/// Both vectors are cleared and refilled rather than reallocated, so a settled window performs no
+/// allocation at all and a scrolling one stays inside the exported bounds.
+#[derive(Debug, Default)]
+pub(super) struct ScrollSnapGeometry {
+    pub(super) containers: Vec<ScrollSnapContainer>,
+    pub(super) points: Vec<ScrollSnapPoint>,
+}
+
+impl ScrollSnapGeometry {
+    pub(super) fn clear(&mut self) {
+        self.containers.clear();
+        self.points.clear();
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.containers.is_empty()
+    }
+
+    pub(super) fn push_container(
+        &mut self,
+        id: ElementId,
+        style: ScrollSnapStyle,
+        viewport: Rect,
+        offset: Vector,
+        max_offset: Vector,
+        direction: Direction,
+    ) {
+        if self.containers.len() >= MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW {
+            return;
+        }
+        self.containers.push(ScrollSnapContainer {
+            id,
+            style,
+            viewport,
+            offset,
+            max_offset,
+            direction,
+        });
+    }
+
+    pub(super) fn push_point(
+        &mut self,
+        container: ElementId,
+        align: SnapAlign,
+        stop_always: bool,
+        bounds: Rect,
+    ) {
+        if self.points.len() >= MAX_SCROLL_SNAP_POINTS_PER_WINDOW {
+            return;
+        }
+        self.points.push(ScrollSnapPoint {
+            container,
+            align,
+            stop_always,
+            bounds,
+        });
+    }
+
+    pub(super) fn container(&self, id: ElementId) -> Option<&ScrollSnapContainer> {
+        self.containers.iter().find(|container| container.id == id)
+    }
+
+    /// Resolve the offset one container should rest at.
+    ///
+    /// `current` is the container's live offset, which may already have moved past the offset the
+    /// retained geometry was collected at; the geometry is only used to recover each child's
+    /// position along the inline axis, so no repaint is required before resolving.
+    /// `gesture_start` is the offset the gesture began from; a child declaring
+    /// `snap_stop_always` between that offset and the settled one takes priority so a fling can
+    /// never skip past it. Returns `None` when nothing should move.
+    pub(super) fn resolve(
+        &self,
+        id: ElementId,
+        gesture_start: Vector,
+        current: Vector,
+    ) -> Option<Vector> {
+        let container = self.container(id)?;
+        let resolved = Vector::new(
+            self.resolve_axis(container, SnapAxis::X, gesture_start.x, current.x),
+            self.resolve_axis(container, SnapAxis::Y, gesture_start.y, current.y),
+        );
+        (resolved != current).then_some(resolved)
+    }
+
+    fn resolve_axis(
+        &self,
+        container: &ScrollSnapContainer,
+        axis: SnapAxis,
+        start: f32,
+        current: f32,
+    ) -> f32 {
+        let Some(strictness) = axis.strictness(container.style) else {
+            return current;
+        };
+        let max_offset = axis.component(container.max_offset);
+        if max_offset <= 0.0 {
+            return current;
+        }
+        let viewport_len = axis.length(container.viewport);
+
+        let mut nearest: Option<(f32, f32)> = None;
+        let mut blocking: Option<(f32, f32)> = None;
+        for point in self
+            .points
+            .iter()
+            .filter(|point| point.container == container.id)
+        {
+            let target = axis
+                .snap_target(container, point, viewport_len)
+                .clamp(0.0, max_offset);
+            let distance = (target - current).abs();
+            if nearest.is_none_or(|(_, best)| distance < best) {
+                nearest = Some((target, distance));
+            }
+            // A `snap_stop_always` child between the gesture's start and where it settled must
+            // capture the gesture instead of being flown past.
+            if point.stop_always
+                && ((start < target && target < current) || (current < target && target < start))
+                && blocking.is_none_or(|(_, best)| distance < best)
+            {
+                blocking = Some((target, distance));
+            }
+        }
+        if let Some((target, _)) = blocking {
+            return target;
+        }
+        let Some((target, distance)) = nearest else {
+            return current;
+        };
+        match strictness {
+            SnapStrictness::Mandatory => target,
+            SnapStrictness::Proximity => {
+                let window = (viewport_len * SCROLL_SNAP_PROXIMITY_FRACTION)
+                    .min(SCROLL_SNAP_PROXIMITY_LIMIT);
+                if distance <= window { target } else { current }
+            }
+        }
+    }
+}
+
+/// One axis of scroll-snap resolution.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum SnapAxis {
+    X,
+    Y,
+}
+
+impl SnapAxis {
+    fn component(self, value: Vector) -> f32 {
+        match self {
+            Self::X => value.x,
+            Self::Y => value.y,
+        }
+    }
+
+    fn length(self, rect: Rect) -> f32 {
+        match self {
+            Self::X => rect.width,
+            Self::Y => rect.height,
+        }
+    }
+
+    fn strictness(self, style: ScrollSnapStyle) -> Option<SnapStrictness> {
+        match self {
+            Self::X => style.x,
+            Self::Y => style.y,
+        }
+    }
+
+    /// The offset at which `point` would sit at its declared alignment.
+    ///
+    /// Painted bounds already include the container's current translation, so the child's
+    /// inline-start distance is recovered by adding the offset the geometry was collected at.
+    fn snap_target(
+        self,
+        container: &ScrollSnapContainer,
+        point: &ScrollSnapPoint,
+        viewport_len: f32,
+    ) -> f32 {
+        let viewport = container.viewport;
+        let (position, length) = match self {
+            Self::X if container.direction.is_rtl() => (
+                viewport.right() - point.bounds.right() + container.offset.x,
+                point.bounds.width,
+            ),
+            Self::X => (
+                point.bounds.x - viewport.x + container.offset.x,
+                point.bounds.width,
+            ),
+            Self::Y => (
+                point.bounds.y - viewport.y + container.offset.y,
+                point.bounds.height,
+            ),
+        };
+        match point.align {
+            SnapAlign::Start => position,
+            SnapAlign::Center => position - (viewport_len - length) * 0.5,
+            SnapAlign::End => position - (viewport_len - length),
+        }
+    }
+}
+
+/// Reject view declarations that retain more sticky elements than one window may track.
+pub(super) fn validate_sticky_limits(root: &Element) -> Result<(), UiError> {
+    fn visit(element: &Element, count: &mut usize) -> Result<(), UiError> {
+        if element.sticky.is_some() {
+            *count += 1;
+            if *count > MAX_STICKY_ELEMENTS_PER_WINDOW {
+                return Err(UiError::TooManyStickyElements);
+            }
+        }
+        for child in &element.children {
+            visit(child, count)?;
+        }
+        Ok(())
+    }
+
+    visit(root, &mut 0)
+}
+
+/// Resolve a direction-relative [`TextAlign`] into a physical edge.
+pub(super) fn resolve_logical_align(align: TextAlign, direction: Direction) -> TextAlign {
+    match (align, direction) {
+        (TextAlign::Start, Direction::Ltr) | (TextAlign::End, Direction::Rtl) => TextAlign::Left,
+        (TextAlign::Start, Direction::Rtl) | (TextAlign::End, Direction::Ltr) => TextAlign::Right,
+        (align, _) => align,
+    }
+}
+
+/// Fold direction-relative padding, margin, and border declarations into physical Taffy edges.
+///
+/// This runs once per element per layout build, before its Taffy node is created, so the layout
+/// engine only ever sees resolved physical values and no per-frame work is added.
+pub(super) fn apply_logical_insets(element: &mut Element) {
+    let Some(logical) = element.logical_insets.as_deref().copied() else {
+        return;
+    };
+    let rtl = element.resolved_direction.is_rtl();
+    let (padding_left, padding_right) = if rtl {
+        (logical.padding_end, logical.padding_start)
+    } else {
+        (logical.padding_start, logical.padding_end)
+    };
+    let (border_left, border_right) = if rtl {
+        (logical.border_end, logical.border_start)
+    } else {
+        (logical.border_start, logical.border_end)
+    };
+    if let Some(value) = padding_left {
+        element.layout.padding.left = taffy::style::LengthPercentage::length(value);
+    }
+    if let Some(value) = padding_right {
+        element.layout.padding.right = taffy::style::LengthPercentage::length(value);
+    }
+    if let Some(value) = border_left {
+        element.layout.border.left = taffy::style::LengthPercentage::length(value);
+    }
+    if let Some(value) = border_right {
+        element.layout.border.right = taffy::style::LengthPercentage::length(value);
+    }
+    // In-flow horizontal positions are mirrored inside the parent's content box after layout, so
+    // an inline-start margin is always the Taffy `left` margin regardless of direction.
+    if let Some(value) = logical.margin_start {
+        element.layout.margin.left = taffy::style::LengthPercentageAuto::length(value);
+    }
+    if let Some(value) = logical.margin_end {
+        element.layout.margin.right = taffy::style::LengthPercentageAuto::length(value);
+    }
+}
+
+/// The coordinate frame one element's children are placed in.
+///
+/// A frame carries everything the three geometry walks (bounds collection, hit-region
+/// collection, and paint) need to turn a Taffy-relative child location into painted geometry:
+/// the translated origin, whether horizontal positions mirror, the containing block a sticky
+/// child may not leave, and the viewport of the nearest ancestor scroll container.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct LayoutFrame {
+    /// Horizontal origin term. See [`frame_rect`] for how `mirror` changes its meaning.
+    pub origin_x: f32,
+    pub origin_y: f32,
+    /// Whether children are placed right to left inside this frame.
+    pub mirror: bool,
+    /// Painted content box of the parent; a sticky child never leaves it.
+    pub containing_block: Rect,
+    /// Painted viewport of the nearest ancestor scroll container, or the window viewport.
+    pub scroll_viewport: Rect,
+}
+
+impl LayoutFrame {
+    /// The root frame: no mirroring, the window viewport as both containing block and viewport.
+    pub(super) fn root(origin: Point, viewport: Rect) -> Self {
+        Self {
+            origin_x: origin.x,
+            origin_y: origin.y,
+            mirror: false,
+            containing_block: viewport,
+            scroll_viewport: viewport,
+        }
+    }
+}
+
+/// Place one child's Taffy-relative layout box inside its parent frame.
+///
+/// In a left-to-right frame `origin_x` is the painted position of the parent's border-box left
+/// edge (already translated by scrolling) and the child is placed at `origin_x + location.x`. In
+/// a right-to-left frame `origin_x` is precomputed by [`child_frame`] so that the same box lands
+/// mirrored inside the parent's content box, which is why the child's own width is subtracted
+/// instead of added.
+pub(super) fn frame_rect(frame: LayoutFrame, layout: &taffy::tree::Layout) -> Rect {
+    let x = if frame.mirror {
+        frame.origin_x - layout.location.x - layout.size.width
+    } else {
+        frame.origin_x + layout.location.x
+    };
+    Rect::new(
+        x,
+        frame.origin_y + layout.location.y,
+        layout.size.width,
+        layout.size.height,
+    )
+}
+
+/// Apply CSS-style sticky offsets to an already-placed element box.
+///
+/// Sticking is a painted-geometry adjustment only: the element keeps the space it occupies in
+/// flow, so scrolling never invalidates layout. The shift is clamped so the element can never
+/// leave its containing block, which is what releases a pinned header at the end of its section.
+pub(super) fn apply_sticky(element: &Element, natural: Rect, frame: LayoutFrame) -> Rect {
+    let Some(insets) = element.sticky else {
+        return natural;
+    };
+    if insets.is_empty() {
+        return natural;
+    }
+    let viewport = frame.scroll_viewport;
+    let block = frame.containing_block;
+    let mut shift_x = 0.0_f32;
+    if let Some(left) = insets.left {
+        shift_x = shift_x.max(viewport.x + left - natural.x);
+    }
+    if let Some(right) = insets.right {
+        shift_x = shift_x.min(viewport.right() - right - natural.right());
+    }
+    if shift_x > 0.0 {
+        shift_x = shift_x.min((block.right() - natural.right()).max(0.0));
+    } else if shift_x < 0.0 {
+        shift_x = shift_x.max((block.x - natural.x).min(0.0));
+    }
+
+    let mut shift_y = 0.0_f32;
+    if let Some(top) = insets.top {
+        shift_y = shift_y.max(viewport.y + top - natural.y);
+    }
+    if let Some(bottom) = insets.bottom {
+        shift_y = shift_y.min(viewport.bottom() - bottom - natural.bottom());
+    }
+    if shift_y > 0.0 {
+        shift_y = shift_y.min((block.bottom() - natural.bottom()).max(0.0));
+    } else if shift_y < 0.0 {
+        shift_y = shift_y.max((block.y - natural.y).min(0.0));
+    }
+
+    Rect::new(
+        natural.x + shift_x,
+        natural.y + shift_y,
+        natural.width,
+        natural.height,
+    )
+}
+
+/// Place one child inside its parent frame, including any sticky offset.
+pub(super) fn positioned_rect(
+    element: &Element,
+    frame: LayoutFrame,
+    layout: &taffy::tree::Layout,
+) -> Rect {
+    apply_sticky(element, frame_rect(frame, layout), frame)
+}
+
+/// The painted padding box of an element, given its border-box bounds and Taffy layout.
+pub(super) fn padding_box(bounds: Rect, layout: &taffy::tree::Layout) -> Rect {
+    Rect::new(
+        bounds.x + layout.border.left,
+        bounds.y + layout.border.top,
+        (bounds.width - layout.border.left - layout.border.right).max(0.0),
+        (bounds.height - layout.border.top - layout.border.bottom).max(0.0),
+    )
+}
+
+/// The painted content box of an element, given its border-box bounds and Taffy layout.
+pub(super) fn content_box(bounds: Rect, layout: &taffy::tree::Layout) -> Rect {
+    let left = layout.border.left + layout.padding.left;
+    let right = layout.border.right + layout.padding.right;
+    let top = layout.border.top + layout.padding.top;
+    let bottom = layout.border.bottom + layout.padding.bottom;
+    Rect::new(
+        bounds.x + left,
+        bounds.y + top,
+        (bounds.width - left - right).max(0.0),
+        (bounds.height - top - bottom).max(0.0),
+    )
+}
+
+/// Build the frame this element's children are placed in.
+///
+/// `scroll` is the already-clamped scroll translation for a scrolling container, expressed as a
+/// distance from the container's inline start edge. `scrolls` says whether this element is the
+/// scroll container that owns that offset, which makes its padding box the sticky viewport for
+/// everything below it.
+pub(super) fn child_frame(
+    element: &Element,
+    layout: &taffy::tree::Layout,
+    bounds: Rect,
+    scroll: Vector,
+    scrolls: bool,
+    parent: LayoutFrame,
+) -> LayoutFrame {
+    let content = content_box(bounds, layout);
+    let origin_x = if element.resolved_direction.is_rtl() {
+        // Mirror inside the content box: a child at Taffy offset `location.x` with width `w`
+        // lands at `content.left + content.width - (location.x - content_inset) - w`. Folding the
+        // constant part into the origin keeps `frame_rect` branch-light. Scrolling an RTL
+        // container moves content to the right as the offset grows, because offset zero already
+        // rests against the inline start edge on the right.
+        let content_inset = content.x - bounds.x;
+        bounds.x + 2.0 * content_inset + content.width + scroll.x
+    } else {
+        bounds.x - scroll.x
+    };
+    LayoutFrame {
+        origin_x,
+        origin_y: bounds.y - scroll.y,
+        mirror: element.resolved_direction.is_rtl(),
+        containing_block: content,
+        scroll_viewport: if scrolls {
+            padding_box(bounds, layout)
+        } else {
+            parent.scroll_viewport
+        },
+    }
 }
 
 pub(super) fn apply_scroll_end_revision(
@@ -856,13 +1367,16 @@ pub(super) fn apply_scroll_end_revision(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn collect_layout_bounds(
     element: &Element,
     taffy: &TaffyTree<MeasureContext>,
     scroll_offsets: &mut HashMap<ElementId, Vector>,
     scroll_end_states: &mut HashMap<ElementId, ScrollEndState>,
     bounds: &mut HashMap<ElementId, Rect>,
-    parent_origin: Point,
+    snap: &mut ScrollSnapGeometry,
+    snap_container: Option<ElementId>,
+    parent_frame: LayoutFrame,
 ) -> Result<(), UiError> {
     if element.is_display_none() {
         return Ok(());
@@ -871,12 +1385,7 @@ pub(super) fn collect_layout_bounds(
         .taffy_node
         .expect("layout nodes are assigned before bounds collection");
     let layout = taffy.layout(node)?;
-    let element_bounds = Rect::new(
-        parent_origin.x + layout.location.x,
-        parent_origin.y + layout.location.y,
-        layout.size.width,
-        layout.size.height,
-    );
+    let element_bounds = positioned_rect(element, parent_frame, layout);
     bounds.insert(element.runtime_id, element_bounds);
 
     let is_scrollable = !matches!(&element.kind, ElementKind::TextInput(_))
@@ -913,7 +1422,35 @@ pub(super) fn collect_layout_bounds(
         scroll_end_states.remove(&element.runtime_id);
     }
 
-    let child_origin = Point::new(element_bounds.x - scroll.x, element_bounds.y - scroll.y);
+    if let Some(container) = snap_container
+        && let Some(align) = element.snap_align
+    {
+        snap.push_point(container, align, element.snap_stop_always, element_bounds);
+    }
+    let child_frame = child_frame(
+        element,
+        layout,
+        element_bounds,
+        scroll,
+        is_scrollable,
+        parent_frame,
+    );
+    let child_snap_container = if is_scrollable && element.scroll_snap.is_some() {
+        snap.push_container(
+            element.runtime_id,
+            element.scroll_snap.unwrap_or_default(),
+            child_frame.scroll_viewport,
+            scroll,
+            Vector::new(
+                (layout.content_size.width - layout.size.width).max(0.0),
+                (layout.content_size.height - layout.size.height).max(0.0),
+            ),
+            element.resolved_direction,
+        );
+        Some(element.runtime_id)
+    } else {
+        snap_container
+    };
     for child in &element.children {
         collect_layout_bounds(
             child,
@@ -921,7 +1458,9 @@ pub(super) fn collect_layout_bounds(
             scroll_offsets,
             scroll_end_states,
             bounds,
-            child_origin,
+            snap,
+            child_snap_container,
+            child_frame,
         )?;
     }
     Ok(())

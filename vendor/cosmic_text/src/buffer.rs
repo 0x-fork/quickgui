@@ -8,10 +8,10 @@ use core::{cmp, fmt};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    render_decoration, Affinity, Align, Attrs, AttrsList, BidiParagraphs, BorrowedWithFontSystem,
-    BufferLine, Color, Cursor, DecorationSpan, Ellipsize, FontSystem, Hinting, LayoutCursor,
-    LayoutGlyph, LayoutLine, LineEnding, LineIter, Motion, Renderer, Scroll, ShapeLine, Shaping,
-    Wrap,
+    render_decoration, Affinity, Align, Attrs, AttrsList, BaseDirection, BidiParagraphs,
+    BorrowedWithFontSystem, BufferLine, Color, Cursor, DecorationSpan, Ellipsize, FontSystem,
+    Hinting, LayoutCursor, LayoutGlyph, LayoutLine, LineEnding, LineIter, Motion, Renderer, Scroll,
+    ShapeLine, Shaping, Wrap,
 };
 
 bitflags::bitflags! {
@@ -343,6 +343,7 @@ pub struct Buffer {
     monospace_width: Option<f32>,
     tab_width: u16,
     hinting: Hinting,
+    base_direction: BaseDirection,
     /// Dirty flags tracking which properties changed since last layout
     dirty: DirtyFlags,
 }
@@ -361,6 +362,7 @@ impl Clone for Buffer {
             monospace_width: self.monospace_width,
             tab_width: self.tab_width,
             hinting: self.hinting,
+            base_direction: self.base_direction,
             dirty: self.dirty,
         }
     }
@@ -392,6 +394,7 @@ impl Buffer {
             monospace_width: None,
             tab_width: 8,
             hinting: Hinting::default(),
+            base_direction: BaseDirection::default(),
             dirty: DirtyFlags::empty(),
         }
     }
@@ -790,6 +793,29 @@ impl Buffer {
         }
     }
 
+    /// Get the base paragraph direction used when shaping this buffer
+    pub const fn base_direction(&self) -> BaseDirection {
+        self.base_direction
+    }
+
+    /// Force the base paragraph direction of every line in this buffer.
+    ///
+    /// `Auto` restores the Unicode bidirectional algorithm's own first-strong-character rule.
+    pub fn set_base_direction(&mut self, base_direction: BaseDirection) {
+        if self.base_direction == base_direction {
+            return;
+        }
+        self.base_direction = base_direction;
+        let mut changed = false;
+        for line in &mut self.lines {
+            changed |= line.set_base_direction(base_direction);
+        }
+        if changed {
+            self.dirty |= DirtyFlags::RELAYOUT;
+            self.redraw = true;
+        }
+    }
+
     /// Get the current `tab_width`
     pub const fn tab_width(&self) -> u16 {
         self.tab_width
@@ -924,6 +950,11 @@ impl Buffer {
                 line.set_align(alignment);
             });
         }
+
+        let base_direction = self.base_direction;
+        self.lines.iter_mut().for_each(|line| {
+            line.set_base_direction(base_direction);
+        });
 
         self.scroll = Scroll::default();
     }
@@ -1075,6 +1106,11 @@ impl Buffer {
 
         self.lines.iter_mut().for_each(|line| {
             line.set_align(alignment);
+        });
+
+        let base_direction = self.base_direction;
+        self.lines.iter_mut().for_each(|line| {
+            line.set_base_direction(base_direction);
         });
 
         self.scroll = Scroll::default();
@@ -1685,6 +1721,11 @@ impl BorrowedWithFontSystem<'_, Buffer> {
     /// Set the current [`Ellipsize`].
     pub fn set_ellipsize(&mut self, ellipsize: Ellipsize) {
         self.inner.set_ellipsize(ellipsize);
+    }
+
+    /// Force the base paragraph direction of every line in this buffer.
+    pub fn set_base_direction(&mut self, base_direction: BaseDirection) {
+        self.inner.set_base_direction(base_direction);
     }
 
     /// Set the current buffer dimensions.

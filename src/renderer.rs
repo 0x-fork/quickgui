@@ -14,8 +14,8 @@ use glyphon::{
     Shaping as GlyphShaping, Style as GlyphStyle, SwashCache, TextArea, TextAtlas, TextBounds,
     TextRenderer, Viewport, Wrap,
     cosmic_text::{
-        Align as GlyphAlign, CacheKeyFlags, DecorationSpan, Ellipsize, EllipsizeHeightLimit,
-        LayoutGlyph, LayoutRun, UnderlineStyle as GlyphUnderlineStyle,
+        Align as GlyphAlign, BaseDirection, CacheKeyFlags, DecorationSpan, Ellipsize,
+        EllipsizeHeightLimit, LayoutGlyph, LayoutRun, UnderlineStyle as GlyphUnderlineStyle,
     },
 };
 use thiserror::Error;
@@ -33,9 +33,9 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 
 use crate::{
     AssetError, Assets, Color as UiColor, FontFallbacks, FontFamily, FontFeatures, FontSource,
-    MAX_TEXT_HIGHLIGHTS, PerformanceProfile, Point, Quad, Rect, RenderStats, Scene, ScenePlane,
-    Size, TextAlign, TextHighlight, TextId, TextOverflow, TextShaping, TextStyle, TextUnderline,
-    TextWrap,
+    Hyphens, MAX_TEXT_HIGHLIGHTS, OverflowWrap, PerformanceProfile, Point, Quad, Rect, RenderStats,
+    Scene, ScenePlane, Size, TextAlign, TextDirection, TextHighlight, TextId, TextOverflow,
+    TextShaping, TextStyle, TextTransform, TextUnderline, TextWrap, WordBreak,
     assets::resolve_fonts,
     custom_shader_renderer::CustomShaderRenderer,
     font::{glyph_family, normalize_fallbacks},
@@ -973,7 +973,84 @@ struct TextLayoutKey {
     text_overflow: Option<TextOverflow>,
     line_clamp: Option<usize>,
     shaping: TextShaping,
+    /// Shaping-relevant properties added by the extended text-styling API.
+    extras: TextShapingExtras,
     scale: f32,
+}
+
+/// The extended text-styling properties that change shaped output.
+///
+/// These are part of the retained shaping key so a cached layout is only reused for a run whose
+/// spacing, direction, case mapping, and break behavior are all identical. Purely visual
+/// properties, such as a text shadow, deliberately stay out of it.
+#[derive(Clone, Copy, Debug)]
+struct TextShapingExtras {
+    overline: bool,
+    overline_color: Option<UiColor>,
+    direction: TextDirection,
+    letter_spacing: f32,
+    word_spacing: f32,
+    transform: Option<TextTransform>,
+    word_break: WordBreak,
+    overflow_wrap: OverflowWrap,
+    hyphens: Hyphens,
+}
+
+impl TextShapingExtras {
+    fn from_style(style: &TextStyle) -> Self {
+        Self {
+            overline: style.overline,
+            overline_color: style.overline_color,
+            direction: style.direction,
+            letter_spacing: style.letter_spacing,
+            word_spacing: style.word_spacing,
+            transform: style.transform,
+            word_break: style.word_break,
+            overflow_wrap: style.overflow_wrap,
+            hyphens: style.hyphens,
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn canonical(
+        self,
+    ) -> (
+        bool,
+        Option<[u32; 4]>,
+        TextDirection,
+        u32,
+        u32,
+        Option<TextTransform>,
+        WordBreak,
+        OverflowWrap,
+        Hyphens,
+    ) {
+        (
+            self.overline,
+            optional_color_bits(self.overline_color),
+            self.direction,
+            (self.letter_spacing + 0.0).to_bits(),
+            (self.word_spacing + 0.0).to_bits(),
+            self.transform,
+            self.word_break,
+            self.overflow_wrap,
+            self.hyphens,
+        )
+    }
+}
+
+impl PartialEq for TextShapingExtras {
+    fn eq(&self, other: &Self) -> bool {
+        self.canonical() == other.canonical()
+    }
+}
+
+impl Eq for TextShapingExtras {}
+
+impl Hash for TextShapingExtras {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.canonical().hash(state);
+    }
 }
 
 impl PartialEq for TextLayoutKey {
@@ -1003,6 +1080,7 @@ impl PartialEq for TextLayoutKey {
             && self.text_overflow == other.text_overflow
             && self.line_clamp == other.line_clamp
             && self.shaping == other.shaping
+            && self.extras == other.extras
             && self.scale.to_bits() == other.scale.to_bits()
     }
 }
@@ -1046,6 +1124,7 @@ impl TextLayoutKey {
             && self.wrap == other.wrap
             && self.line_clamp == other.line_clamp
             && self.shaping == other.shaping
+            && self.extras == other.extras
             && self.scale.to_bits() == other.scale.to_bits()
     }
 }
@@ -1075,6 +1154,7 @@ impl Hash for TextLayoutKey {
         self.text_overflow.hash(state);
         self.line_clamp.hash(state);
         self.shaping.hash(state);
+        self.extras.hash(state);
         self.scale.to_bits().hash(state);
     }
 }
@@ -1152,6 +1232,16 @@ struct ProjectedText {
 #[derive(Clone, Debug)]
 enum TextProjection {
     Identity,
+    /// A one-to-one content rewrite such as a case mapping or soft-hyphen removal.
+    ///
+    /// `spans` covers the whole display and original strings in order. A span whose display and
+    /// original lengths agree maps linearly; one that does not (a case mapping that changes the
+    /// UTF-8 length, or a removed character) snaps to its nearest edge, which keeps selection and
+    /// copy anchored to real boundaries of the source string.
+    Mapped {
+        original_len: usize,
+        spans: Arc<[ProjectionSpan]>,
+    },
     Truncated {
         original_len: usize,
         retained: Arc<[ProjectionSpan]>,
@@ -1179,6 +1269,25 @@ impl ProjectedText {
         let mut index = index.min(self.content.len());
         while !self.content.is_char_boundary(index) {
             index -= 1;
+        }
+        if let TextProjection::Mapped {
+            original_len,
+            spans,
+        } = &self.mapping
+        {
+            for span in spans.iter() {
+                if index >= span.display.start && index <= span.display.end {
+                    if span.display.len() == span.original.len() {
+                        return span.original.start + (index - span.display.start);
+                    }
+                    return if index * 2 <= span.display.start + span.display.end {
+                        span.original.start
+                    } else {
+                        span.original.end
+                    };
+                }
+            }
+            return *original_len;
         }
         let TextProjection::Truncated {
             original_len,
@@ -1211,6 +1320,26 @@ impl ProjectedText {
     }
 
     fn original_to_display(&self, index: usize) -> usize {
+        if let TextProjection::Mapped {
+            original_len,
+            spans,
+        } = &self.mapping
+        {
+            let index = index.min(*original_len);
+            for span in spans.iter() {
+                if index >= span.original.start && index <= span.original.end {
+                    if span.display.len() == span.original.len() {
+                        return span.display.start + (index - span.original.start);
+                    }
+                    return if index * 2 <= span.original.start + span.original.end {
+                        span.display.start
+                    } else {
+                        span.display.end
+                    };
+                }
+            }
+            return self.content.len();
+        }
         let TextProjection::Truncated {
             original_len,
             retained,
@@ -1237,6 +1366,39 @@ impl ProjectedText {
     }
 
     fn display_ranges_for_original(&self, range: Range<usize>) -> Vec<Range<usize>> {
+        if let TextProjection::Mapped {
+            original_len,
+            spans,
+        } = &self.mapping
+        {
+            let start = range.start.min(*original_len);
+            let end = range.end.min(*original_len).max(start);
+            if start == end {
+                return Vec::new();
+            }
+            let mut merged: Vec<Range<usize>> = Vec::with_capacity(2);
+            for span in spans.iter() {
+                let overlap_start = start.max(span.original.start);
+                let overlap_end = end.min(span.original.end);
+                if overlap_start >= overlap_end {
+                    continue;
+                }
+                let projected = if span.display.len() == span.original.len() {
+                    span.display.start + overlap_start - span.original.start
+                        ..span.display.start + overlap_end - span.original.start
+                } else {
+                    span.display.clone()
+                };
+                if let Some(previous) = merged.last_mut()
+                    && projected.start <= previous.end
+                {
+                    previous.end = previous.end.max(projected.end);
+                } else {
+                    merged.push(projected);
+                }
+            }
+            return merged;
+        }
         let TextProjection::Truncated {
             original_len,
             retained,

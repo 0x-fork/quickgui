@@ -14,6 +14,22 @@ Implemented now:
   self-contained signed production packaging; this is a first vertical slice, not yet parity with
   the Rust framework surface or a published JavaScript release;
 - macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
+- inherited right-to-left layout direction with post-layout mirroring of paint, hit testing, and
+  accessibility geometry inside each parent content box, logical `ps`/`pe`/`ms`/`me`/`border_s`/
+  `border_e` edges, right-origin horizontal scrolling with inverted wheels, logical
+  `text_start()`/`text_end()` alignment, and a forced bidirectional base paragraph direction, with
+  document-order focus and logical caret movement preserved;
+- CSS-style sticky positioning relative to the nearest scroll container, clamped to the parent box
+  so a pinned header releases at its section end, affecting paint and hit testing only with no
+  relayout, no per-frame allocation, and a hard `MAX_STICKY_ELEMENTS_PER_WINDOW` bound;
+- per-axis scroll snapping with mandatory/proximity strictness, start/center/end child alignment,
+  `snap_stop_always()` gesture capture, and resolution at momentum end, at a bounded settle
+  deadline for phaseless wheels, at scrollbar release, or programmatically, animating through the
+  existing motion machinery on exact deadlines and leaving no idle source behind;
+- extended text styling with offset-exact text shadows and a bounded blur approximation, letter and
+  word spacing, non-editable case mapping that keeps selection and copy mapped to the original
+  string, overline decorations, `word_break`/`overflow_wrap` break control, and soft-hyphen
+  handling, all folded into the canonical retained shaping key;
 - validated immutable Rust-core application identity, app-scoped standard path resolution with
   explicit overrides, and bounded startup snapshots for OS/version/architecture/hostname and
   preferred locale/languages, shared directly by runner, view, event, and deterministic test

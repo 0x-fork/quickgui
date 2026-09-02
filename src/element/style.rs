@@ -758,4 +758,122 @@ impl Element {
         };
         self
     }
+
+    // ---------------------------------------------------------------------------------------
+    // Direction-relative alignment and extended text styling.
+    //
+    // Everything below inherits through the subtree like the other typography helpers and is
+    // resolved once per layout build, so retained shaping keys stay canonical.
+    // ---------------------------------------------------------------------------------------
+
+    /// Align text to the inline start edge (left in LTR, right in RTL).
+    pub fn text_start(self) -> Self {
+        self.text_align(TextAlign::Start)
+    }
+
+    /// Align text to the inline end edge (right in LTR, left in RTL).
+    pub fn text_end(self) -> Self {
+        self.text_align(TextAlign::End)
+    }
+
+    /// Force the base paragraph direction used when shaping bidirectional text.
+    ///
+    /// [`Element::rtl`] already sets this for its subtree. Use this helper to override shaping
+    /// direction without mirroring layout.
+    pub fn text_direction(mut self, direction: TextDirection) -> Self {
+        self.typography.direction = Some(direction);
+        self
+    }
+
+    /// Paint one drop shadow beneath this subtree's glyphs.
+    ///
+    /// The offset and color are exact. `blur` is approximated: the shadow is painted as a set of
+    /// offset copies spread over the blur radius with proportionally reduced alpha, which reads
+    /// like a soft shadow but is not a true Gaussian blur. Offsets are clamped to
+    /// [`TextShadow::MAX_OFFSET`] and the blur radius to [`TextShadow::MAX_BLUR`].
+    pub fn text_shadow(mut self, offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
+        self.typography.shadow = Some(Some(TextShadow::new(offset_x, offset_y, blur, color)));
+        self
+    }
+
+    /// Remove any inherited text shadow.
+    pub fn text_shadow_none(mut self) -> Self {
+        self.typography.shadow = Some(None);
+        self
+    }
+
+    /// Add `spacing` logical pixels of advance after every glyph cluster.
+    pub fn letter_spacing(mut self, spacing: f32) -> Self {
+        self.typography.letter_spacing = Some(sane_text_spacing(spacing));
+        self
+    }
+
+    /// Add `spacing` logical pixels of advance after every space character.
+    pub fn word_spacing(mut self, spacing: f32) -> Self {
+        self.typography.word_spacing = Some(sane_text_spacing(spacing));
+        self
+    }
+
+    /// Case-map non-editable text before shaping.
+    ///
+    /// The transform applies to [`text`](crate::text) and [`styled_text`](crate::styled_text)
+    /// content only. Selection, copy, and accessibility keep reporting the original string, and
+    /// editable [`text_input`](crate::text_input) content is never transformed so that its value,
+    /// caret indices, and IME state stay byte-identical to the controlled value.
+    pub fn text_transform(mut self, transform: TextTransform) -> Self {
+        self.typography.transform = Some(Some(transform));
+        self
+    }
+
+    /// Render text uppercased.
+    pub fn uppercase(self) -> Self {
+        self.text_transform(TextTransform::Uppercase)
+    }
+
+    /// Render text lowercased.
+    pub fn lowercase(self) -> Self {
+        self.text_transform(TextTransform::Lowercase)
+    }
+
+    /// Render every word's first character uppercased.
+    pub fn capitalize(self) -> Self {
+        self.text_transform(TextTransform::Capitalize)
+    }
+
+    /// Remove an inherited case mapping.
+    pub fn text_transform_none(mut self) -> Self {
+        self.typography.transform = Some(None);
+        self
+    }
+
+    /// Draw a line above this subtree's text.
+    pub fn overline(mut self) -> Self {
+        self.typography.overline = Some(true);
+        self
+    }
+
+    /// Draw a colored line above this subtree's text.
+    pub fn overline_color(mut self, color: Color) -> Self {
+        self.typography.overline = Some(true);
+        self.typography.overline_color = Some(Some(color));
+        self
+    }
+
+    /// Choose where a line may break inside a run of characters.
+    pub fn word_break(mut self, word_break: WordBreak) -> Self {
+        self.typography.word_break = Some(word_break);
+        self
+    }
+
+    /// Choose whether an otherwise unbreakable word may be broken to avoid overflow.
+    pub fn overflow_wrap(mut self, overflow_wrap: OverflowWrap) -> Self {
+        self.typography.overflow_wrap = Some(overflow_wrap);
+        self
+    }
+
+    /// Choose whether author-placed soft hyphens (`U+00AD`) may render at a break.
+    pub fn hyphens(mut self, hyphens: Hyphens) -> Self {
+        self.typography.hyphens = Some(hyphens);
+        self
+    }
 }

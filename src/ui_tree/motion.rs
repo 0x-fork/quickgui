@@ -754,6 +754,7 @@ impl DetachedTree {
             self.seen_ids
                 .insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
             validate_container_query_limits(&root)?;
+            validate_sticky_limits(&root)?;
             let inherited = TextStyle::default();
             let root_node = build_layout_node(
                 &mut self.taffy,
@@ -763,6 +764,7 @@ impl DetachedTree {
                 0,
                 &inherited,
                 false,
+                Direction::Ltr,
             )?;
             compute_detached_layout(&mut self.taffy, root_node, viewport, scale_factor, renderer)?;
             compute_container_query_child_layouts(&root, &mut self.taffy, scale_factor, renderer)?;
@@ -870,14 +872,21 @@ impl DetachedTree {
         for playback in self.animations.values_mut() {
             playback.seen = false;
         }
+        // Detached overlay trees never declare scroll-snap containers, so this scratch geometry
+        // stays empty and never allocates.
+        let mut snap = ScrollSnapGeometry::default();
+        let frame = LayoutFrame::root(origin, viewport);
         collect_layout_bounds(
             &self.root,
             &self.taffy,
             &mut self.scroll_offsets,
             &mut self.scroll_end_states,
             &mut self.natural_bounds,
-            origin,
+            &mut snap,
+            None,
+            frame,
         )?;
+        debug_assert!(snap.is_empty());
 
         self.paint_bounds.clear();
         let hovered = HashSet::new();
@@ -927,7 +936,7 @@ impl DetachedTree {
             &selectable_text_indices,
             &mut selectable_text_regions,
             None,
-            origin,
+            frame,
             viewport,
             viewport,
             layer,
@@ -1110,5 +1119,190 @@ impl TooltipOverlay {
             viewport,
             source_order,
         )
+    }
+}
+
+/// How long a scroll container may keep receiving wheel deltas before it is considered settled.
+///
+/// Platforms that report gesture phases resolve at the momentum end phase instead; this bounded
+/// delay is the fallback for plain wheels that carry no phase.
+pub(crate) const SCROLL_SNAP_SETTLE_DELAY: Duration = Duration::from_millis(90);
+
+/// Duration of the animation that carries a settled scroll container to its snap position.
+pub(crate) const SCROLL_SNAP_DURATION: Duration = Duration::from_millis(220);
+
+/// One scroll gesture waiting to be resolved into a snap position.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PendingScrollSnap {
+    pub(crate) container: ElementId,
+    /// Offset the gesture started from, used to honor `snap_stop_always` children.
+    pub(crate) gesture_start: Vector,
+    pub(crate) settle_at: Instant,
+}
+
+/// The in-flight animation carrying one container to its snap position.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ScrollSnapAnimation {
+    pub(crate) container: ElementId,
+    pub(crate) from: Vector,
+    pub(crate) to: Vector,
+    pub(crate) start: Instant,
+    pub(crate) end: Instant,
+}
+
+/// Retained scroll-snap state for one window.
+///
+/// A window has exactly one pointer, so it can only be mid-gesture in one container at a time:
+/// this holds at most one pending settle and one running animation, and both are dropped the
+/// moment they resolve, so a settled window keeps no timer alive.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ScrollSnapState {
+    pub(crate) pending: Option<PendingScrollSnap>,
+    pub(crate) animation: Option<ScrollSnapAnimation>,
+}
+
+impl ScrollSnapState {
+    /// The next instant snapping must run.
+    ///
+    /// A pending gesture wakes exactly once, at its settle deadline. A running travel must present
+    /// every frame until it lands, so it reports its own start instant, which is always already
+    /// due; the travel clears itself at its end and leaves no deadline behind.
+    pub(crate) fn deadline(&self) -> Option<Instant> {
+        match (self.pending, self.animation) {
+            (Some(pending), Some(animation)) => Some(pending.settle_at.min(animation.start)),
+            (Some(pending), None) => Some(pending.settle_at),
+            (None, Some(animation)) => Some(animation.start),
+            (None, None) => None,
+        }
+    }
+}
+
+/// Smooth, decelerating progress for a snap animation.
+fn scroll_snap_easing(phase: f32) -> f32 {
+    let phase = phase.clamp(0.0, 1.0);
+    1.0 - (1.0 - phase).powi(3)
+}
+
+impl UiTree {
+    /// Note that a snapping container received scroll input and arm its settle deadline.
+    ///
+    /// The first call of a gesture records the offset the gesture began from so a
+    /// `snap_stop_always` child can capture a fling that would otherwise pass over it.
+    pub(super) fn arm_scroll_snap(
+        &mut self,
+        container: ElementId,
+        gesture_start: Vector,
+        now: Instant,
+    ) {
+        let gesture_start = self
+            .scroll_snap
+            .pending
+            .filter(|pending| pending.container == container)
+            .map_or(gesture_start, |pending| pending.gesture_start);
+        self.scroll_snap.animation = None;
+        self.scroll_snap.pending = Some(PendingScrollSnap {
+            container,
+            gesture_start,
+            settle_at: now.checked_add(SCROLL_SNAP_SETTLE_DELAY).unwrap_or(now),
+        });
+    }
+
+    /// Resolve any pending snap immediately, as at a native momentum end phase.
+    ///
+    /// Returns true when the retained scroll offsets changed and the window must repaint.
+    pub fn scroll_gesture_ended(&mut self, now: Instant) -> bool {
+        if let Some(pending) = &mut self.scroll_snap.pending {
+            pending.settle_at = now;
+        }
+        self.advance_scroll_snap(now)
+    }
+
+    /// Snap the container that owns `id` to its nearest position without waiting.
+    ///
+    /// This is the keyboard and programmatic-scroll entry point: it starts the same bounded
+    /// animation a gesture would, from the offset the caller scrolled to.
+    pub fn snap_scroll_container(&mut self, id: ElementId, now: Instant) -> bool {
+        let gesture_start = self.scroll_offsets.get(&id).copied().unwrap_or_default();
+        self.scroll_snap.pending = Some(PendingScrollSnap {
+            container: id,
+            gesture_start,
+            settle_at: now,
+        });
+        self.scroll_snap.animation = None;
+        self.advance_scroll_snap(now)
+    }
+
+    /// The next instant at which scroll snapping must run, if any.
+    pub(crate) fn next_scroll_snap_deadline(&self) -> Option<Instant> {
+        self.scroll_snap.deadline()
+    }
+
+    /// Advance pending settles and the running snap animation.
+    ///
+    /// Returns true when a retained scroll offset changed. Both the pending settle and the
+    /// animation clear themselves once resolved, so no idle source survives the gesture.
+    pub(crate) fn advance_scroll_snap(&mut self, now: Instant) -> bool {
+        let mut changed = false;
+        if let Some(pending) = self
+            .scroll_snap
+            .pending
+            .filter(|pending| pending.settle_at <= now)
+        {
+            self.scroll_snap.pending = None;
+            changed |= self.begin_scroll_snap(pending, now);
+        }
+        if let Some(animation) = self.scroll_snap.animation {
+            let offset = self.scroll_offsets.entry(animation.container).or_default();
+            let total = animation
+                .end
+                .saturating_duration_since(animation.start)
+                .as_secs_f32();
+            let phase = if total <= 0.0 {
+                1.0
+            } else {
+                (now.saturating_duration_since(animation.start).as_secs_f32() / total)
+                    .clamp(0.0, 1.0)
+            };
+            let eased = scroll_snap_easing(phase);
+            let next = Vector::new(
+                animation.from.x + (animation.to.x - animation.from.x) * eased,
+                animation.from.y + (animation.to.y - animation.from.y) * eased,
+            );
+            if *offset != next {
+                *offset = next;
+                changed = true;
+            }
+            if phase >= 1.0 {
+                self.scroll_snap.animation = None;
+            }
+        }
+        changed
+    }
+
+    /// Resolve one settled gesture into a snap target and start moving toward it.
+    fn begin_scroll_snap(&mut self, pending: PendingScrollSnap, now: Instant) -> bool {
+        let from = self
+            .scroll_offsets
+            .get(&pending.container)
+            .copied()
+            .unwrap_or_default();
+        let Some(target) =
+            self.scroll_snap_geometry
+                .resolve(pending.container, pending.gesture_start, from)
+        else {
+            return false;
+        };
+        if !self.animations_enabled || self.reduce_motion {
+            self.scroll_offsets.insert(pending.container, target);
+            return true;
+        }
+        self.scroll_snap.animation = Some(ScrollSnapAnimation {
+            container: pending.container,
+            from,
+            to: target,
+            start: now,
+            end: now.checked_add(SCROLL_SNAP_DURATION).unwrap_or(now),
+        });
+        false
     }
 }
