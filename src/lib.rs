@@ -74,8 +74,8 @@ mod scheduler;
 mod select;
 mod selection_control;
 mod slider;
-mod splitter;
 mod spell;
+mod splitter;
 mod spring;
 mod styled_text;
 mod svg;
@@ -404,10 +404,6 @@ pub use slider::{
     SliderLargeIncrement, SliderMaximum, SliderMinimum, SliderOrientation, SliderState,
     SliderThumb, slider, slider_key_bindings,
 };
-pub use splitter::{
-    MAX_SPLITTER_PANES, Splitter, SplitterCollapse, SplitterDecrease, SplitterHandle,
-    SplitterIncrease, SplitterMaximum, SplitterMinimum, SplitterOrientation, SplitterPane,
-    SplitterState, splitter_key_bindings,
 #[cfg(any(test, feature = "test-support"))]
 pub use spell::TestSpellCheckProvider;
 pub use spell::{
@@ -421,6 +417,11 @@ pub use spell::{
     set_grammar_highlight_style, set_misspelling_highlight_style, set_shared_spell_check_provider,
     set_spell_check_provider, show_definition_for, spell_check_provider, spelling_menu_items,
     word_range_at,
+};
+pub use splitter::{
+    MAX_SPLITTER_PANES, Splitter, SplitterCollapse, SplitterDecrease, SplitterHandle,
+    SplitterIncrease, SplitterMaximum, SplitterMinimum, SplitterOrientation, SplitterPane,
+    SplitterState, splitter_key_bindings,
 };
 pub use spring::{SpringAnimation, SpringConfig, SpringPlayback, SpringState, SpringTarget};
 pub use styled_text::{
