@@ -20,6 +20,7 @@
     "dialog.ts",
     "integrations.ts",
     "native-tree.ts",
+    "routing.ts",
     "single-instance.ts",
     "system.ts",
     "tray.ts",

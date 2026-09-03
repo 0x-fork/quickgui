@@ -77,6 +77,7 @@ mod popover_menu;
 mod preview_card;
 mod progress;
 mod renderer;
+mod router;
 mod runtime;
 mod scene;
 mod scheduler;
@@ -432,6 +433,12 @@ pub use quickgui_system::{
 };
 // Window lifecycle events, stacking/input policy, and persistable restore geometry.
 pub use renderer::MAX_GRADIENTS_PER_FRAME;
+pub use router::{
+    MAX_ROUTE_DEPTH, MAX_ROUTE_DESTINATION_BYTES, MAX_ROUTE_HISTORY_ENTRIES, MAX_ROUTE_ID_BYTES,
+    MAX_ROUTE_PATTERN_BYTES, MAX_ROUTE_QUERY_PAIRS, MAX_ROUTE_SEGMENTS, MAX_ROUTES,
+    RouteDefinition, RouteLocation, RouteMatch, RouteParameter, RouteQueryPair, Router,
+    RouterError, RouterSnapshot,
+};
 pub use runtime::{
     App, AppError, Application, ClickListener, ContextMenuListener, CursorGrabMode,
     DesktopIntegrationSupport, DismissListener, Drag, DragListener, DropListener,

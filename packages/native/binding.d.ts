@@ -14,6 +14,24 @@ export declare class NativePowerAssertion {
   release(): boolean
 }
 
+/**
+ * Synchronous binding for core-owned, CPU-only route matching and memory history.
+ *
+ * This object never reaches the application or window runtime and therefore never waits for the
+ * native main thread. Solid turns the snapshots returned by its mutation methods into signals.
+ */
+export declare class NativeRouter {
+  constructor(routes: Array<NativeRouteDefinition>, initialDestination?: string | undefined | null)
+  state(): NativeRouterState
+  resolve(destination: string): NativeRouteLocation
+  isActive(destination: string, end?: boolean | undefined | null): boolean
+  push(destination: string): NativeRouterState
+  replace(destination: string): NativeRouterState
+  go(delta: number): NativeRouterState
+  back(): NativeRouterState
+  forward(): NativeRouterState
+}
+
 export declare function abortAppHost(message: string): void
 
 export declare function addCrashExtraParameter(key: string, value: string): Promise<boolean>
@@ -506,6 +524,39 @@ export interface NativeRelaunchOptions {
   arguments?: Array<string>
   clearArguments?: boolean
   workingDirectory?: string
+}
+
+export interface NativeRouteDefinition {
+  id: string
+  path?: string
+  parentId?: string
+}
+
+export interface NativeRouteLocation {
+  href: string
+  pathname: string
+  search: string
+  hash: string
+  query: Array<NativeRouteValue>
+}
+
+export interface NativeRouteMatch {
+  routeIds: Array<string>
+  params: Array<NativeRouteValue>
+}
+
+export interface NativeRouterState {
+  location: NativeRouteLocation
+  matched?: NativeRouteMatch
+  historyIndex: number
+  historyLength: number
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export interface NativeRouteValue {
+  name: string
+  value: string
 }
 
 export interface NativeSaveDialogOptions {

@@ -10473,3 +10473,5 @@ export namespace JSX {
     shader: ShaderProps;
   }
 }
+
+export * from "./router.ts";

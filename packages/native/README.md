@@ -40,6 +40,11 @@ Solid's `createRenderer(() => <App />)` to `Window`. The QuickGUI CLI owns the a
 packaged and development applications, so application code never calls `app.run()`. The native
 package remains the renderer-neutral layer for additional JavaScript reconcilers.
 
+The package also re-exports the Rust core's `Router`: a synchronous, CPU-only route table and
+bounded memory history with normalized locations, decoded parameters and query pairs, and
+back/forward traversal. `@quickgui/solid` projects those snapshots into its declarative routing
+components; other renderers can consume the same core object directly.
+
 From the repository root:
 
 ```console

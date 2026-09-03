@@ -105,6 +105,64 @@ outside window-bound rendering or event dispatch instead of guessing from focus 
 The binding projects the same identity exposed by Rust's `ViewContext::window_handle` and
 `EventContext::window_handle`.
 
+## Routing
+
+`@quickgui/solid` exports `Router`, `Route`, `Link`, `Outlet`, `useRouter`, `useLocation`,
+`useParams`, `useSearchParams`, and `useNavigate`. The Solid layer collects the static route
+declarations and renders the selected component chain. Pattern compilation, location
+normalization, decoded parameters and query pairs, active-path checks, and bounded memory history
+belong to QuickGUI's Rust core and are re-exposed by `@quickgui/native`.
+
+```tsx
+import {
+  Link,
+  Outlet,
+  Route,
+  Router,
+  Text,
+  View,
+  useParams,
+} from "@quickgui/solid";
+
+function Shell() {
+  return (
+    <View>
+      <Link href="/" end>Home</Link>
+      <Link href="/projects">Projects</Link>
+      <Outlet />
+    </View>
+  );
+}
+
+function Project() {
+  const params = useParams();
+  return <Text>Project: {params().projectId}</Text>;
+}
+
+function Routes() {
+  return (
+    <Router initialPath="/">
+      <Route path="/" component={Shell}>
+        <Route path="/" component={() => <Text>Home</Text>} />
+        <Route path="/projects/:projectId" component={Project} />
+      </Route>
+    </Router>
+  );
+}
+```
+
+Child patterns may be absolute or parent-relative. Pathless routes create layouts, an empty child
+path creates an index route, `:name` and `:name?` declare required and optional parameters, and a
+final `*` or `*name` captures the remaining path. `Link` supports `replace`, exact active matching
+with `end`, and `activeStyle`/`inactiveStyle`; it also opts out of a surrounding custom title-bar
+drag region. Query-only and fragment-only destinations retain the current pathname. Repeated query
+names remain ordered pairs in the core snapshot and become arrays in `useSearchParams()`.
+
+This is deliberately an internal memory router, not a browser URL adapter. One router retains at
+most 1,024 declarations and 256 history entries. Applications that do not use Solid can import
+`Router` from `@quickgui/native` and operate on the same synchronous, CPU-only core snapshots.
+See the complete runnable [`routing-solid` example](../examples/routing-solid).
+
 Use the `Dialog` namespace for operating-system prompts. Passing a `Window` first attaches a native
 sheet; omit it to present application-modal UI. Alert dialogs resolve with the zero-based index of
 the selected button, and semantic roles preserve the platform's default and cancel keyboard

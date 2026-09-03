@@ -12,6 +12,16 @@ cd examples/system-api-solid
 bun run dev
 ```
 
+The Solid routing example declares nested layouts, dynamic and wildcard routes, query-only
+navigation, active `Link` styling, and back/forward controls. Rust owns pattern matching,
+normalization, decoded values, and the bounded memory history; Solid owns only declaration
+collection and rendering:
+
+```console
+cd examples/routing-solid
+bun run dev
+```
+
 The cursor gallery covers every typed GPUI-compatible native cursor and its CSS/Tailwind name.
 Hover changes use the retained hit stack and schedule no cursor-owned frame:
 

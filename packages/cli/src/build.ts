@@ -79,6 +79,7 @@ interface StagedBuild extends BuildResult {
 export const nativeExports = [
   "NativeCpuUsageSampler",
   "NativePowerAssertion",
+  "NativeRouter",
   "abortAppHost",
   "addCrashExtraParameter",
   "addHostedRecentDocument",

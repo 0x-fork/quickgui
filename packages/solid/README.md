@@ -1,8 +1,9 @@
 # @quickgui/solid
 
 Solid 2 renderer for QuickGUI. It exports unstyled `View`, `Text`, `Button`, `Input`, `TextArea`,
-retained core `Markdown`, variable-height `VirtualList`, compound in-window `Popover` and
-native-window `SystemPopover` parts, and `createRenderer`.
+retained core `Markdown`, variable-height `VirtualList`, core-backed `Router`, `Route`, `Link`, and
+`Outlet`, compound in-window `Popover` and native-window `SystemPopover` parts, and
+`createRenderer`.
 Import native application/window APIs from `@quickgui/native` and reactive primitives from
 `solid-js` itself.
 
@@ -140,6 +141,9 @@ The CLI owns the native application loop; application source does not call `app.
 
 See the [Solid renderer guide](../../docs/solid.md) and the
 [runnable example](../../examples/solid/app.tsx). The
+[routing example](../../examples/routing-solid/app.tsx) demonstrates nested layouts, dynamic
+parameters, query navigation, active links, wildcard fallback, and core-owned back/forward
+history. The
 [AI chat example](../../examples/ai-chat-solid/app.tsx) demonstrates controlled input and live
 streaming Markdown over a tail-following virtual transcript with the Vercel AI SDK and DeepSeek.
 The [alert-dialog example](../../examples/alert-dialog-solid/app.tsx) demonstrates information,

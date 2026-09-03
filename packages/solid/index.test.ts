@@ -93,6 +93,11 @@ describe("Solid universal host", () => {
   test("keeps native application APIs in @quickgui/native", () => {
     expect("app" in solid).toBe(false);
     expect("Window" in solid).toBe(false);
+    expect(solid.Router).toBeTypeOf("function");
+    expect(solid.Route).toBeTypeOf("function");
+    expect(solid.Link).toBeTypeOf("function");
+    expect(solid.Outlet).toBeTypeOf("function");
+    expect("A" in solid).toBe(false);
     // `Dialog` in this package is the caller-styled in-window composition, never the native
     // alert/file dialog namespace that stays in @quickgui/native.
     expect("showAlertDialog" in solid.Dialog).toBe(false);

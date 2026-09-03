@@ -129,6 +129,14 @@ cd examples/solid
 bun run dev
 ```
 
+The routing example uses the Rust core for matching and memory history while Solid renders nested
+layouts, links, dynamic parameters, queries, and fallback routes:
+
+```console
+cd examples/routing-solid
+bun run dev
+```
+
 The complete DeepSeek streaming example uses QuickGUI core Markdown:
 
 ```console

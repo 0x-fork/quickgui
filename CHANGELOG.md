@@ -6,6 +6,11 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### Framework
 
+- Added a renderer-neutral Rust `Router` with bounded pattern compilation, normalized internal
+  locations, decoded parameters and query pairs, active matching, and memory-history traversal;
+  `@quickgui/native` re-exposes it and `@quickgui/solid` adds `Router`, `Route`, `Link`, `Outlet`,
+  and reactive hooks. The new `routing-solid` example covers nested layouts, dynamic and wildcard
+  routes, query navigation, and back/forward controls.
 - A tooltip is pointer-passive by default: `TooltipState::hoverable` now starts `false`, so the
   popup never takes the pointer and reaching it closes the tooltip, as an AppKit help tag does.
   Base UI defaults the other way; call `hoverable(true)` for a popup worth hovering.
