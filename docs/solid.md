@@ -621,7 +621,12 @@ levels inside a context menu are declared with the `items` model rather than `Me
 `Dialog` and `AlertDialog` compose the Rust core's caller-styled modal surface, which is separate
 from the operating-system alert and file panels in the `Dialog` namespace of `@quickgui/native`.
 `Dialog.Root` is a logical coordinator that creates no native element, and `Dialog.Portal` is the
-viewport overlay root the core mounts only while the dialog is open:
+viewport overlay root the core mounts only while the dialog is open. Like a DOM portal, it renders
+against the window rather than the element that declared it: the host lifts every unanchored
+overlay (`Dialog.Portal`, `AlertDialog.Portal`, `Drawer.Portal`, `Toast.Portal`, and any view with
+`overlay`) under the window root, so `inset: 0` and `100%` sizes on the portal and its backdrop
+cover the whole window. Anchored popups such as `Popover.Portal` and `Menu.Portal` stay where they
+are declared, because their placement already resolves against the anchor's window bounds.
 
 ```tsx
 const [open, setOpen] = createSignal(false);

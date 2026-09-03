@@ -250,6 +250,7 @@ impl View for NativeView {
                 lists: &mut lists,
                 terminals: &mut terminals,
                 part_ids: &mut part_ids,
+                portals: Vec::new(),
                 images: &mut images,
                 background_images: &mut background_images,
                 shaders: &mut shaders,
@@ -264,7 +265,9 @@ impl View for NativeView {
             };
             root = root.children(node.children.iter().filter_map(|id| {
                 build_element(*id, window, &tree, &self.events, &mut states, cx, 0)
+                    .and_then(|element| hoist_portal(element, &mut states))
             }));
+            root = root.children(std::mem::take(&mut states.portals));
         }
         let events = Rc::clone(&self.events);
         let menu_action = cx.action_listener(
@@ -398,6 +401,13 @@ pub(super) struct NativeElementStates<'a> {
     /// scope and value would otherwise register one core listener identity twice, which the core
     /// rejects with a panic; the duplicate mounts without listeners instead.
     pub(super) part_ids: &'a mut HashSet<u64>,
+    /// Viewport portals lifted out of the subtree that declared them, in declaration order.
+    ///
+    /// A dialog root, drawer sheet, or toast viewport declared inside a panel is an overlay whose
+    /// insets and percentage sizes must resolve against the window, exactly as a DOM portal
+    /// renders into the document body. They mount under the window root once the ordinary tree
+    /// is built; anchored popups stay where they are declared.
+    pub(super) portals: Vec<Element>,
     pub(super) images: &'a mut HashMap<u32, NativeImageState>,
     /// Retained decoded raster backgrounds, decoded once per declared source.
     pub(super) background_images: &'a mut HashMap<u32, NativeBackgroundImageState>,
@@ -1380,11 +1390,24 @@ pub(super) fn build_element(
         NodeTag::Root | NodeTag::View | NodeTag::Button => {
             element = element.children(node.children.iter().filter_map(|child| {
                 build_element(*child, window, tree, events, states, cx, depth + 1)
+                    .and_then(|element| hoist_portal(element, states))
             }));
         }
     }
     Some(element)
 }
+
+/// Keep an ordinary child in place, or lift a viewport portal out to mount under the window root.
+fn hoist_portal(element: Element, states: &mut NativeElementStates<'_>) -> Option<Element> {
+    if !element.is_viewport_portal() || states.portals.len() >= MAX_HOSTED_PORTALS {
+        return Some(element);
+    }
+    states.portals.push(element);
+    None
+}
+
+/// Portals lifted to the window root per render pass; anything beyond this stays in place.
+const MAX_HOSTED_PORTALS: usize = 64;
 
 pub(super) fn attach_dismiss_listener(
     mut element: Element,
@@ -2557,9 +2580,17 @@ pub(super) fn apply_dimension(
             DimensionKind::Width => element.w(*value),
             DimensionKind::Height => element.h(*value),
         },
-        Some(PropertyValue::String(value)) if value.as_ref() == "100%" => match kind {
-            DimensionKind::Width => element.w_full(),
-            DimensionKind::Height => element.h_full(),
+        // A CSS percentage sizes against the parent, exactly like the `100%` shorthand did.
+        Some(PropertyValue::String(value)) => match value
+            .strip_suffix('%')
+            .and_then(|percent| percent.trim().parse::<f32>().ok())
+            .filter(|percent| percent.is_finite() && *percent >= 0.0)
+        {
+            Some(percent) => match kind {
+                DimensionKind::Width => element.w_fraction(percent / 100.0),
+                DimensionKind::Height => element.h_fraction(percent / 100.0),
+            },
+            None => element,
         },
         _ => element,
     }

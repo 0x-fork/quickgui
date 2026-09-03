@@ -953,7 +953,7 @@ fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
     );
     assert!(matches!(snapshot.status, TerminalStatus::Exited { .. }));
     let root_bounds = cx
-        .element_bounds(window, ElementId::new(ROOT_ELEMENT_ID))
+        .element_bounds(window, ElementId::new(crate::ROOT_ELEMENT_ID))
         .unwrap();
     let terminal_bounds = cx
         .element_bounds(window, ElementId::new(terminal_id as u64))
@@ -7758,4 +7758,172 @@ fn a_declared_scroll_area_measures_its_geometry_and_the_thumb_follows_a_drag() {
         (dragged.y - (thumb_bounds.y + 48.0)).abs() < 0.5,
         "thumb moved to {dragged:?}"
     );
+}
+
+#[test]
+fn a_declared_table_cell_with_text_children_builds_a_consistent_accessibility_tree() {
+    let table_id = 640;
+    let row_id = 642;
+    let mut tree = NativeTree::default();
+    let mut table = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "table",
+        &[
+            (property::SCOPE, "files"),
+            (
+                property::COLUMNS,
+                r#"[{"id":"name","label":"Name","width":160},{"id":"size","label":"Size","track":"1fr"}]"#,
+            ),
+        ],
+        &[],
+    );
+    table.set_property(property::ROW_COUNT, Some(PropertyValue::Number(2.0)));
+    table.set_property(property::ROW_HEIGHT, Some(PropertyValue::Number(24.0)));
+    table.set_property(property::WIDTH, Some(PropertyValue::Number(400.0)));
+    table.set_property(property::HEIGHT, Some(PropertyValue::Number(200.0)));
+    insert_component_node(&mut tree, table_id, ROOT_NODE, table);
+    let mut row = component_part_node(NodeTag::View, table_id, "table-row", &[], &[]);
+    row.set_property(property::ROW_INDEX, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, row_id, table_id, row);
+    for (cell_id, text_id, column, value) in [
+        (643, 644, "name", "notes.txt"),
+        (645, 646, "size", "12 KB"),
+    ] {
+        let cell = component_part_node(
+            NodeTag::View,
+            row_id,
+            "table-cell",
+            &[(property::PART_VALUE, column)],
+            &[],
+        );
+        insert_component_node(&mut tree, cell_id, row_id, cell);
+        let mut text = NativeNode::new(NodeTag::Text);
+        text.parent = Some(cell_id);
+        text.text = Arc::from(value);
+        insert_component_node(&mut tree, text_id, cell_id, text);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    // Every child a node lists must be a node of the same update: an assistive client aborts on
+    // a dangling child, which is how a table cell with text used to take the process down.
+    let update = cx.accessibility_update(window).unwrap();
+    let emitted = update
+        .nodes
+        .iter()
+        .map(|(id, _)| *id)
+        .collect::<std::collections::HashSet<_>>();
+    let orphans = update
+        .nodes
+        .iter()
+        .flat_map(|(_, node)| node.children().iter().copied())
+        .filter(|child| !emitted.contains(child))
+        .map(|child| child.0)
+        .collect::<Vec<_>>();
+    assert_eq!(orphans, Vec::<u64>::new());
+    // The declared text reaches the client under the cells the core mounted it in.
+    let root = ElementId::named("files");
+    for (text_id, column) in [(644_u64, 0), (646, 1)] {
+        let cell = TableState::cell_id(root, TableCellPosition { row: 0, column });
+        let listed = update
+            .nodes
+            .iter()
+            .find(|(id, _)| id.0 == cell.as_u64())
+            .map(|(_, node)| node.children().iter().map(|id| id.0).collect::<Vec<_>>());
+        assert_eq!(listed, Some(vec![text_id]));
+        assert!(emitted.iter().any(|id| id.0 == text_id));
+    }
+}
+
+#[test]
+fn a_declared_percentage_width_sizes_against_the_parent() {
+    let parent_id = 660;
+    let child_id = 661;
+    let mut tree = NativeTree::default();
+    let mut parent = NativeNode::new(NodeTag::View);
+    parent.parent = Some(ROOT_NODE);
+    parent.set_property(property::WIDTH, Some(PropertyValue::Number(400.0)));
+    parent.set_property(property::HEIGHT, Some(PropertyValue::Number(40.0)));
+    insert_component_node(&mut tree, parent_id, ROOT_NODE, parent);
+    let mut child = NativeNode::new(NodeTag::View);
+    child.parent = Some(parent_id);
+    child.set_property(property::WIDTH, Some(PropertyValue::String(Arc::from("62%"))));
+    child.set_property(property::HEIGHT, Some(PropertyValue::String(Arc::from("50%"))));
+    insert_component_node(&mut tree, child_id, parent_id, child);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    // A CSS percentage resolves against the parent's box, exactly as `100%` always did.
+    let bounds = cx
+        .element_bounds(window, ElementId::new(child_id as u64))
+        .unwrap();
+    assert!((bounds.width - 248.0).abs() < 0.5, "{bounds:?}");
+    assert!((bounds.height - 20.0).abs() < 0.5, "{bounds:?}");
+}
+
+#[test]
+fn a_dialog_declared_inside_a_panel_covers_the_window() {
+    let panel_id = 670;
+    let portal_id = 671;
+    let backdrop_id = 672;
+    let popup_id = 673;
+    let dialog = [(property::SCOPE, "confirm")];
+    let mut tree = NativeTree::default();
+    let mut panel = NativeNode::new(NodeTag::View);
+    panel.parent = Some(ROOT_NODE);
+    panel.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+    panel.set_property(property::HEIGHT, Some(PropertyValue::Number(100.0)));
+    insert_component_node(&mut tree, panel_id, ROOT_NODE, panel);
+    let portal = component_part_node(
+        NodeTag::View,
+        panel_id,
+        "dialog",
+        &dialog,
+        &[(property::OPEN, true)],
+    );
+    insert_component_node(&mut tree, portal_id, panel_id, portal);
+    let mut backdrop = component_part_node(
+        NodeTag::View,
+        portal_id,
+        "dialog-backdrop",
+        &dialog,
+        &[(property::OPEN, true)],
+    );
+    backdrop.set_property(property::WIDTH, Some(PropertyValue::String(Arc::from("100%"))));
+    backdrop.set_property(property::HEIGHT, Some(PropertyValue::String(Arc::from("100%"))));
+    insert_component_node(&mut tree, backdrop_id, portal_id, backdrop);
+    let mut popup = component_part_node(
+        NodeTag::View,
+        portal_id,
+        "dialog-popup",
+        &dialog,
+        &[(property::OPEN, true)],
+    );
+    popup.set_property(property::WIDTH, Some(PropertyValue::Number(120.0)));
+    popup.set_property(property::HEIGHT, Some(PropertyValue::Number(60.0)));
+    insert_component_node(&mut tree, popup_id, portal_id, popup);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    // The portal is a viewport overlay, so it mounts under the window root and its insets and
+    // percentage sizes resolve against the window rather than the 200x100 panel that declared it.
+    let core = quickgui::Dialog::new("confirm", true);
+    let window_bounds = cx
+        .element_bounds(window, ElementId::new(crate::ROOT_ELEMENT_ID))
+        .unwrap();
+    assert!(window_bounds.width > 200.0 && window_bounds.height > 100.0, "{window_bounds:?}");
+    assert_eq!(cx.element_bounds(window, core.root_id()).unwrap(), window_bounds);
+    assert_eq!(cx.element_bounds(window, core.backdrop_id()).unwrap(), window_bounds);
+    let popup = cx.element_bounds(window, core.popover_id()).unwrap();
+    assert!((popup.width - 120.0).abs() < 0.5 && (popup.height - 60.0).abs() < 0.5, "{popup:?}");
 }

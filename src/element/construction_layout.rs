@@ -361,6 +361,18 @@ impl Element {
         self.layout.display == Display::None
     }
 
+    /// Whether this element is a viewport overlay whose box is meant to be laid out against the
+    /// window rather than against the parent that declared it.
+    ///
+    /// [`Self::overlay`] removes an element from normal flow, but layout still resolves its
+    /// insets and percentage sizes against its parent. A host that composes trees from
+    /// declarations uses this to mount such an element under the window root instead, which is
+    /// what a portal means; anchored overlays are excluded because their placement already
+    /// resolves against the anchor's window bounds.
+    pub fn is_viewport_portal(&self) -> bool {
+        self.portal && self.anchor.is_none()
+    }
+
     /// Paint this element subtree while retaining its existing display mode.
     pub fn visible(mut self) -> Self {
         self.visibility = Visibility::Visible;
@@ -1001,6 +1013,22 @@ impl Element {
         self
     }
 
+    /// Size the width as a fraction of the parent's width, where `1.0` is [`Self::w_full`].
+    ///
+    /// Non-finite and negative fractions are clamped to zero rather than handed to layout.
+    pub fn w_fraction(mut self, fraction: f32) -> Self {
+        self.layout.size.width = Dimension::percent(finite_fraction(fraction));
+        self
+    }
+
+    /// Size the height as a fraction of the parent's height, where `1.0` is [`Self::h_full`].
+    ///
+    /// Non-finite and negative fractions are clamped to zero rather than handed to layout.
+    pub fn h_fraction(mut self, fraction: f32) -> Self {
+        self.layout.size.height = Dimension::percent(finite_fraction(fraction));
+        self
+    }
+
     pub fn min_w(mut self, width: f32) -> Self {
         self.layout.min_size.width = Dimension::length(width);
         self
@@ -1235,5 +1263,14 @@ impl Element {
     pub fn snap_stop_always(mut self) -> Self {
         self.snap_stop_always = true;
         self
+    }
+}
+
+/// Clamp a caller-provided fraction to a finite, non-negative value for layout.
+fn finite_fraction(fraction: f32) -> f32 {
+    if fraction.is_finite() {
+        fraction.max(0.0)
+    } else {
+        0.0
     }
 }

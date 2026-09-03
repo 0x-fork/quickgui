@@ -6,6 +6,17 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### Framework
 
+- Fixed the accessibility tree listing a child whose node the update did not carry: a descendant
+  the last frame never painted, such as a virtual list's row column inside a body with no room
+  yet, now leaves its parent's child list too, so an assistive client no longer aborts on an
+  unresolved id. A hosted table cell with text children took the process down this way whenever a
+  screen reader was attached.
+- Added `Element::w_fraction` and `Element::h_fraction`, which size an element as a fraction of
+  its parent the way `w_full` and `h_full` size it to the whole, and `Element::is_viewport_portal`,
+  which tells a host composing trees from declarations that an overlay's box is meant to be laid
+  out against the window rather than its declaring parent.
+- `TestAppContext::accessibility_update` is available under the `test-support` feature, so a host
+  can assert on the exact tree a screen reader would receive.
 - Added `LayoutBoundsHandle` and `Element::report_bounds`: an application-owned receiver for the
   window-relative bounds QuickGUI painted for one element, written during the paint already being
   performed and corrected in exactly one frame when the bounds change, so behavior can match real
@@ -555,6 +566,13 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### JavaScript tooling
 
+- Percentage `width` and `height` values now size against the parent: `width: "62%"` on a
+  `Meter.Indicator`, `Progress.Indicator`, or `Slider.Indicator` fills that share of its track,
+  where previously only the literal `"100%"` resolved.
+- Viewport portals mount under the window root. A `Dialog.Portal`, `AlertDialog.Portal`,
+  `Drawer.Portal`, `Toast.Portal`, or any `overlay` view declared inside a panel now covers the
+  window, as a DOM portal renders into the document body, instead of laying out inside the panel
+  that declared it; anchored popups stay where they are declared.
 - Scroll areas now measure their viewport, content, and scrollbar extents from painted bounds, so
   `viewportSize` and `contentSize` are optional overrides, the thumb is positioned by the core, and
   thumb drags track the pointer. Splitters rescale their retained sizes to the extent flex layout

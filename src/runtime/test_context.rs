@@ -792,8 +792,12 @@ impl TestAppContext {
         Ok(self.window(window)?.state)
     }
 
-    #[cfg(test)]
-    pub(crate) fn accessibility_update(
+    /// Build the accessibility tree QuickGUI would hand a platform adapter for one window.
+    ///
+    /// The update is the same one a live screen reader receives, so a test can assert on the
+    /// roles, names, and structure of what an assistive client sees.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn accessibility_update(
         &mut self,
         window: WindowHandle,
     ) -> Result<accesskit::TreeUpdate, TestAppError> {

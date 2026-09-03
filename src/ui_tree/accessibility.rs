@@ -88,10 +88,16 @@ pub(super) fn build_accessibility_nodes(
         node.set_scroll_x(scroll.x as f64);
         node.set_scroll_y(scroll.y as f64);
     }
+    // A child only joins the list when this update will also carry its node: a descendant the
+    // last frame never painted (its parent clipped it away entirely, or it has not been laid out
+    // yet) has no bounds, and an assistive client aborts on a child id it cannot resolve.
     let mut children = element
         .children
         .iter()
-        .filter(|child| context.accessible_ids.contains(&child.runtime_id))
+        .filter(|child| {
+            context.accessible_ids.contains(&child.runtime_id)
+                && context.element_bounds.contains_key(&child.runtime_id)
+        })
         .map(|child| accessibility_id(child.runtime_id))
         .collect::<Vec<_>>();
     let text_input = context.text_inputs.get(&element.runtime_id).zip(
