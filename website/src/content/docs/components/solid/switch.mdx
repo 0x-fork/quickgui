@@ -1,0 +1,38 @@
+An on/off control with a root track and independently styled thumb.
+
+## Import
+
+Import `Switch` from `@quickgui/solid`.
+
+```tsx
+import { Switch } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Switch.Root checked={enabled()} onCheckedChange={setEnabled}>
+  <Switch.Thumb />
+</Switch.Root>
+```
+
+## Anatomy
+
+- `Switch.Root`
+- `Switch.Thumb`
+
+```tsx
+<Switch.Root>
+  <Switch.Thumb />
+</Switch.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `checked` | Controlled checked state. |
+| `defaultChecked` | Initial checked state when the component owns it. |
+| `onCheckedChange` | Reports the checked state accepted by the core. |
+| `disabled` | Prevents interaction and exposes the disabled state. |
+

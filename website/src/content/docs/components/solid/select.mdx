@@ -1,0 +1,82 @@
+A single- or multiple-choice picker whose option surface is rendered in a native popover window.
+
+## Import
+
+Import `Select` from `@quickgui/solid`.
+
+```tsx
+import { Select } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Select.Root
+  ariaLabel="Theme"
+  items={[
+    { value: "system", label: "System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ]}
+  value={theme()}
+  onValueChange={setTheme}
+/>
+```
+
+## Anatomy
+
+- `Select.Root`
+- `Select.Trigger`
+- `Select.Option`
+- `Select.Label`
+- `Select.Value`
+- `Select.Icon`
+- `Select.Backdrop`
+- `Select.Portal`
+- `Select.Positioner`
+- `Select.Popup`
+- `Select.Arrow`
+- `Select.List`
+- `Select.Item`
+- `Select.ItemText`
+- `Select.ItemIndicator`
+- `Select.Group`
+- `Select.GroupLabel`
+- `Select.Separator`
+- `Select.ScrollUpArrow`
+- `Select.ScrollDownArrow`
+
+```tsx
+<Select.Root>
+  <Select.Trigger />
+  <Select.Option />
+  <Select.Label />
+  <Select.Value />
+  <Select.Icon />
+  <Select.Backdrop />
+  <Select.Portal />
+  <Select.Positioner />
+  <Select.Popup />
+  <Select.Arrow />
+  <Select.List />
+  <Select.Item />
+  <Select.ItemText />
+  <Select.ItemIndicator />
+  <Select.Group />
+  <Select.GroupLabel />
+  <Select.Separator />
+  <Select.ScrollUpArrow />
+  <Select.ScrollDownArrow />
+</Select.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `items` | Bounded declaration model used for options or keyboard navigation. |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `defaultValue` | Initial value when the component owns its state. |
+| `multiple` | Allows more than one value to be selected or opened. |
+| `onValueChange` | Reports the value accepted by the core. |
+

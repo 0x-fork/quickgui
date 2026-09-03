@@ -1,0 +1,50 @@
+The SwiftUI bridge mounts real native SwiftUI controls inside a Solid-rendered QuickGUI window on macOS.
+
+## Host
+
+`Host` is one retained QuickGUI layout leaf backed by `NSHostingView`. Put SwiftUI bridge components below it.
+
+```tsx
+import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
+
+<Host matchContents>
+  <Button label="Continue" onPress={continueFlow} />
+</Host>
+```
+
+## Native controls
+
+The bridge exports `Button`, `Slider`, `Toggle`, `ProgressView`, `Stepper`, `TextField`, `SecureField`, `Picker`, `SegmentedControl`, `DatePicker`, `ColorPicker`, and `Gauge`. Each one has a dedicated reference page in the sidebar.
+
+## Controlled values
+
+Values remain controlled by Solid. Native changes arrive through the matching callback.
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 340 }}>
+  <Slider
+    value={volume()}
+    min={0}
+    max={1}
+    step={0.05}
+    label="Volume"
+    onValueChange={setVolume}
+  />
+</Host>
+```
+
+## Sizing
+
+By default, QuickGUI lays out `Host` like any other retained node. Set `matchContents` to use SwiftUI's intrinsic size on both axes, or choose `{ horizontal: true }` or `{ vertical: true }`.
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 360 }}>
+  <Picker selection={theme()} options={themes} onSelectionChange={setTheme} />
+</Host>
+```
+
+## Platform support
+
+<Note title="MACOS ONLY">
+  SwiftUI hosting is the macOS bridge. Use ordinary `@quickgui/solid` components for cross-platform UI.
+</Note>

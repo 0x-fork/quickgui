@@ -1,0 +1,82 @@
+Filters suggestions for free-form text without requiring a selected value.
+
+## Import
+
+Import `Autocomplete` from `@quickgui/solid`.
+
+```tsx
+import { Autocomplete } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Autocomplete.Root
+  ariaLabel="Search commands"
+  items={commands}
+  inputValue={query()}
+  filterMode="fuzzy"
+  onInputValueChange={setQuery}
+  onCommit={(details) => run(details.inputValue ?? "")}
+/>
+```
+
+## Anatomy
+
+- `Autocomplete.Root`
+- `Autocomplete.Input`
+- `Autocomplete.Option`
+- `Autocomplete.Label`
+- `Autocomplete.Value`
+- `Autocomplete.Icon`
+- `Autocomplete.InputGroup`
+- `Autocomplete.Clear`
+- `Autocomplete.Portal`
+- `Autocomplete.Positioner`
+- `Autocomplete.Popup`
+- `Autocomplete.Arrow`
+- `Autocomplete.Status`
+- `Autocomplete.Empty`
+- `Autocomplete.List`
+- `Autocomplete.Item`
+- `Autocomplete.ItemIndicator`
+- `Autocomplete.Group`
+- `Autocomplete.GroupLabel`
+- `Autocomplete.Collection`
+- `Autocomplete.Separator`
+
+```tsx
+<Autocomplete.Root>
+  <Autocomplete.Input />
+  <Autocomplete.Option />
+  <Autocomplete.Label />
+  <Autocomplete.Value />
+  <Autocomplete.Icon />
+  <Autocomplete.InputGroup />
+  <Autocomplete.Clear />
+  <Autocomplete.Portal />
+  <Autocomplete.Positioner />
+  <Autocomplete.Popup />
+  <Autocomplete.Arrow />
+  <Autocomplete.Status />
+  <Autocomplete.Empty />
+  <Autocomplete.List />
+  <Autocomplete.Item />
+  <Autocomplete.ItemIndicator />
+  <Autocomplete.Group />
+  <Autocomplete.GroupLabel />
+  <Autocomplete.Collection />
+  <Autocomplete.Separator />
+</Autocomplete.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `items` | Bounded declaration model used for options or keyboard navigation. |
+| `inputValue` | Editable query text used by a combobox or autocomplete. |
+| `filterMode` | Core-owned contains, prefix, fuzzy, or disabled filtering. |
+| `onInputValueChange` | Reports the editable query text retained by the core. |
+| `onCommit` | Reports one explicit commit boundary and its final value details. |
+

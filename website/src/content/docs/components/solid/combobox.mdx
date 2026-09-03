@@ -1,0 +1,96 @@
+Combines editable text, filtering, optional chips, and a native suggestion surface.
+
+## Import
+
+Import `Combobox` from `@quickgui/solid`.
+
+```tsx
+import { Combobox } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Combobox.Root
+  ariaLabel="Framework"
+  items={frameworks}
+  value={framework()}
+  inputValue={query()}
+  filterMode="fuzzy"
+  onValueChange={setFramework}
+  onInputValueChange={setQuery}
+/>
+```
+
+## Anatomy
+
+- `Combobox.Root`
+- `Combobox.Input`
+- `Combobox.Option`
+- `Combobox.Label`
+- `Combobox.Value`
+- `Combobox.Icon`
+- `Combobox.InputGroup`
+- `Combobox.Clear`
+- `Combobox.Trigger`
+- `Combobox.Chips`
+- `Combobox.Chip`
+- `Combobox.ChipRemove`
+- `Combobox.Backdrop`
+- `Combobox.Portal`
+- `Combobox.Positioner`
+- `Combobox.Popup`
+- `Combobox.Arrow`
+- `Combobox.Status`
+- `Combobox.Empty`
+- `Combobox.List`
+- `Combobox.Row`
+- `Combobox.Item`
+- `Combobox.ItemIndicator`
+- `Combobox.Group`
+- `Combobox.GroupLabel`
+- `Combobox.Collection`
+- `Combobox.Separator`
+
+```tsx
+<Combobox.Root>
+  <Combobox.Input />
+  <Combobox.Option />
+  <Combobox.Label />
+  <Combobox.Value />
+  <Combobox.Icon />
+  <Combobox.InputGroup />
+  <Combobox.Clear />
+  <Combobox.Trigger />
+  <Combobox.Chips />
+  <Combobox.Chip />
+  <Combobox.ChipRemove />
+  <Combobox.Backdrop />
+  <Combobox.Portal />
+  <Combobox.Positioner />
+  <Combobox.Popup />
+  <Combobox.Arrow />
+  <Combobox.Status />
+  <Combobox.Empty />
+  <Combobox.List />
+  <Combobox.Row />
+  <Combobox.Item />
+  <Combobox.ItemIndicator />
+  <Combobox.Group />
+  <Combobox.GroupLabel />
+  <Combobox.Collection />
+  <Combobox.Separator />
+</Combobox.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `items` | Bounded declaration model used for options or keyboard navigation. |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `inputValue` | Editable query text used by a combobox or autocomplete. |
+| `multiple` | Allows more than one value to be selected or opened. |
+| `filterMode` | Core-owned contains, prefix, fuzzy, or disabled filtering. |
+| `onValueChange` | Reports the value accepted by the core. |
+

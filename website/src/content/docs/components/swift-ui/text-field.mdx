@@ -1,0 +1,32 @@
+A controlled native SwiftUI text field with edit and submit callbacks.
+
+## Import
+
+Import `TextField` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, TextField } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 280 }}>
+  <TextField
+    value={name()}
+    placeholder="Name"
+    onValueChange={setName}
+    onSubmit={save}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `placeholder` | Text shown while the editable value is empty. |
+| `onValueChange` | Reports the value accepted by the core. |
+| `onSubmit` | Runs when the native field submits its current value. |
+

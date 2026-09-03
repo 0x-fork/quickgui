@@ -1,0 +1,38 @@
+A controlled SwiftUI picker with menu, segmented, radio-group, and inline styles.
+
+## Import
+
+Import `Picker` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, Picker } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents>
+  <Picker
+    label="Theme"
+    selection={theme()}
+    options={[
+      { value: "system", label: "System" },
+      { value: "light", label: "Light" },
+      { value: "dark", label: "Dark" },
+    ]}
+    style="menu"
+    onSelectionChange={setTheme}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `selection` | Controlled selection for a table, native picker, or color control. |
+| `options` | Ordered native picker options. |
+| `label` | Visible native SwiftUI control label. |
+| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `onSelectionChange` | Reports the selected native picker option or color. |
+

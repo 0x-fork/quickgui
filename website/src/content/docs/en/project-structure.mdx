@@ -1,0 +1,55 @@
+A generated project stays intentionally small. Your TSX runs in a Bun worker while QuickGUI keeps the platform event loop on the native main thread.
+
+## Generated files
+
+```text
+my-app/
+├── src/
+│   └── app.tsx
+├── package.json
+├── quickgui.config.ts
+└── tsconfig.json
+```
+
+Put application UI in `src/`. Add files and directories to production bundles through the `resources` option.
+
+## Application entry
+
+The entry module waits for the native app, creates windows, and passes a Solid root to `createRenderer`.
+
+```tsx
+await app.whenReady();
+
+new Window({
+  title: "Notes",
+  renderer: createRenderer(() => <NotesApp />),
+});
+```
+
+Source modules may use ordinary Bun APIs. Keep native application and window work asynchronous at the hosted boundary.
+
+## Configuration
+
+`quickgui.config.ts` tells the CLI what to compile and package.
+
+```tsx
+import { defineConfig } from "@quickgui/cli";
+
+export default defineConfig({
+  entry: "src/app.tsx",
+  productName: "Notes",
+  identifier: "dev.example.notes",
+  resources: ["assets"],
+});
+```
+
+Release-only options cover icons, signing, notarization, the Mac App Store, and updater manifests.
+
+## Packages
+
+| Package | Purpose |
+| --- | --- |
+| `@quickgui/native` | Application, windows, menus, dialogs, notifications, and native services |
+| `@quickgui/solid` | Solid renderer, primitives, components, and routing |
+| `@quickgui/solid/swift-ui` | Native SwiftUI controls hosted from Solid on macOS |
+| `@quickgui/cli` | Project creation, development, and production packaging |

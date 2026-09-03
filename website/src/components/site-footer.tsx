@@ -1,14 +1,16 @@
 import { useTranslation } from 'react-i18next'
 import { site } from '../lib/site'
+import type { Locale } from '../i18n'
 
 const LINKS = [
-  { labelKey: 'nav.docs', href: site.links.docs },
-  { label: 'GitHub', href: site.links.github },
-  { label: 'crates.io', href: site.links.crate },
+  { labelKey: 'nav.docs', href: site.links.docs, external: false },
+  { label: 'GitHub', href: site.links.github, external: true },
+  { label: 'crates.io', href: site.links.crate, external: true },
 ] as const
 
 export function SiteFooter() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const current = (i18n.language as Locale) ?? 'en'
 
   return (
     <footer>
@@ -20,9 +22,13 @@ export function SiteFooter() {
           {LINKS.map((link) => (
             <a
               key={link.href}
-              href={link.href}
-              target="_blank"
-              rel="noreferrer"
+              href={
+                link.external || current === 'en'
+                  ? link.href
+                  : `/${current}${link.href}`
+              }
+              target={link.external ? '_blank' : undefined}
+              rel={link.external ? 'noreferrer' : undefined}
               className="transition-colors hover:text-foreground"
             >
               {'labelKey' in link ? t(link.labelKey) : link.label}

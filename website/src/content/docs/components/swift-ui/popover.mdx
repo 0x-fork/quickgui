@@ -1,0 +1,49 @@
+Presents a native SwiftUI popover from a composed SwiftUI trigger.
+
+## Import
+
+Import `Popover` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, Popover } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Popover
+  isPresented={open()}
+  onIsPresentedChange={setOpen}
+  attachmentAnchor="bottom"
+  arrowEdge="top"
+>
+  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Content>
+    <QuickGUIHostView width={280} height={120}>
+      <SettingsPanel />
+    </QuickGUIHostView>
+  </Popover.Content>
+</Popover>
+```
+
+## Anatomy
+
+- `Popover.Trigger`
+- `Popover.Content`
+
+```tsx
+<Popover isPresented={open()} onIsPresentedChange={setOpen}>
+  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Content>{/* SwiftUI-hosted content */}</Popover.Content>
+</Popover>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `isPresented` | Controlled native SwiftUI popover presentation state. |
+| `onIsPresentedChange` | Reports native SwiftUI popover presentation changes. |
+| `attachmentAnchor` | Anchor point on the composed SwiftUI trigger. |
+| `arrowEdge` | Preferred edge for the native SwiftUI popover arrow. |
+

@@ -1,0 +1,36 @@
+A controlled native slider with continuous or stepped values.
+
+## Import
+
+Import `Slider` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, Slider } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 360 }}>
+  <Slider
+    value={volume()}
+    min={0}
+    max={1}
+    step={0.05}
+    label="Volume"
+    onValueChange={setVolume}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `min` | Minimum accepted value. |
+| `max` | Maximum accepted value. |
+| `step` | Increment used by keyboard, pointer, or native control input. |
+| `label` | Visible native SwiftUI control label. |
+| `onValueChange` | Reports the value accepted by the core. |
+

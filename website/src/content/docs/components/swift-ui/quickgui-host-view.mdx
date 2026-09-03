@@ -1,0 +1,32 @@
+Reverse-hosts one ordinary QuickGUI subtree inside a SwiftUI hierarchy.
+
+## Import
+
+Import `QuickGUIHostView` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, QuickGUIHostView } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents>
+  <QuickGUIHostView width={280} height={120}>
+    <View style={{ width: 280, height: 120, padding: 16 }}>
+      <Text>Ordinary QuickGUI content</Text>
+    </View>
+  </QuickGUIHostView>
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `width` | Declared logical width. |
+| `height` | Declared logical height. |
+| `matchContents` | Uses the hosted subtree’s intrinsic width, height, or both. |
+| `background` | Clear color for the reverse-hosted QuickGUI WGPU surface. |
+| `children` | Content mounted inside the component. |
+

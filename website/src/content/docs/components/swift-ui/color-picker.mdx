@@ -1,0 +1,32 @@
+A native SwiftUI color well that returns CSS-style RGBA color strings.
+
+## Import
+
+Import `ColorPicker` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, ColorPicker } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents>
+  <ColorPicker
+    label="Accent"
+    selection={accent()}
+    supportsOpacity
+    onSelectionChange={setAccent}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `selection` | Controlled selection for a table, native picker, or color control. |
+| `label` | Visible native SwiftUI control label. |
+| `supportsOpacity` | Allows alpha selection in the native color panel. |
+| `onSelectionChange` | Reports the selected native picker option or color. |
+

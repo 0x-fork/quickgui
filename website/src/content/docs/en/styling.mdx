@@ -1,0 +1,78 @@
+QuickGUI styles retained native nodes with a typed `style` object. The names are familiar, but values are resolved by QuickGUI rather than a browser.
+
+## The style prop
+
+```tsx
+<View
+  style={{
+    width: 360,
+    padding: 20,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e4e4e7",
+  }}
+>
+  <Text style={{ color: "#18181b", fontSize: 15 }}>Settings</Text>
+</View>
+```
+
+Numbers are logical pixels. Percentage strings resolve against the available parent size.
+
+## Flexbox
+
+Flexbox is the default layout tool for rows, columns, alignment, gaps, wrapping, and flexible sizing.
+
+```tsx
+<View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10 }}>
+  <Avatar.Root>{/* … */}</Avatar.Root>
+  <View style={{ flex: 1 }}><Text>Ada Lovelace</Text></View>
+  <Button><Text>Follow</Text></Button>
+</View>
+```
+
+## Grid
+
+Use CSS Grid-style tracks for two-dimensional layouts.
+
+```tsx
+<View
+  style={{
+    display: "grid",
+    gridTemplateColumns: "220px 1fr",
+    gridTemplateRows: "auto 1fr",
+    gap: 12,
+  }}
+>
+  <Sidebar />
+  <Editor />
+</View>
+```
+
+## Text and color
+
+Text inherits typography and color through the retained tree. Use CSS color strings and system font families.
+
+```tsx
+<Text style={{ color: "#6b7280", fontSize: 13, lineHeight: 18, fontWeight: 500 }}>
+  Last saved just now
+</Text>
+```
+
+## Interaction states
+
+Declare hover, active, focus, disabled, and selected paint directly on the node. The core applies the state without a JavaScript round trip.
+
+```tsx
+<Button
+  style={{
+    backgroundColor: "#ffffff",
+    hoverBackgroundColor: "#f4f4f5",
+    activeBackgroundColor: "#e4e4e7",
+    focusOutline: "2px solid #f97316",
+    outlineOffset: 2,
+  }}
+>
+  <Text>Continue</Text>
+</Button>
+```

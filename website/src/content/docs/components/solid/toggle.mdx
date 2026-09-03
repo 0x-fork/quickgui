@@ -1,0 +1,39 @@
+A pressable control that retains an on or off pressed state.
+
+## Import
+
+Import `Toggle` from `@quickgui/solid`.
+
+```tsx
+import { Toggle } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Toggle.Root pressed={bold()} onPressedChange={setBold}>
+  <Text>B</Text>
+  <Toggle.Indicator />
+</Toggle.Root>
+```
+
+## Anatomy
+
+- `Toggle.Root`
+- `Toggle.Indicator`
+
+```tsx
+<Toggle.Root>
+  <Toggle.Indicator />
+</Toggle.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `pressed` | Controlled pressed state. |
+| `defaultPressed` | Initial pressed state when the component owns it. |
+| `onPressedChange` | Reports the pressed state accepted by the core. |
+| `disabled` | Prevents interaction and exposes the disabled state. |
+

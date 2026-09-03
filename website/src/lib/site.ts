@@ -8,7 +8,7 @@ export const site = {
   version: '0.1.0',
   links: {
     github: 'https://github.com/egoist/quickgui',
-    docs: 'https://github.com/egoist/quickgui/blob/main/docs/README.md',
+    docs: '/docs',
     viewApi: 'https://github.com/egoist/quickgui/blob/main/docs/view-api.md',
     solid: 'https://github.com/egoist/quickgui/blob/main/docs/solid.md',
     cli: 'https://github.com/egoist/quickgui/blob/main/docs/cli.md',

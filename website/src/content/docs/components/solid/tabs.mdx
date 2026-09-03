@@ -1,0 +1,51 @@
+Switches between labeled panels with automatic or manual keyboard activation.
+
+## Import
+
+Import `Tabs` from `@quickgui/solid`.
+
+```tsx
+import { Tabs } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Tabs.Root value={tab()} onValueChange={setTab}>
+  <Tabs.List>
+    <Tabs.Tab value="general" index={0}>General</Tabs.Tab>
+    <Tabs.Tab value="advanced" index={1}>Advanced</Tabs.Tab>
+    <Tabs.Indicator />
+  </Tabs.List>
+  <Tabs.Panel value="general"><General /></Tabs.Panel>
+  <Tabs.Panel value="advanced"><Advanced /></Tabs.Panel>
+</Tabs.Root>
+```
+
+## Anatomy
+
+- `Tabs.Root`
+- `Tabs.List`
+- `Tabs.Tab`
+- `Tabs.Indicator`
+- `Tabs.Panel`
+
+```tsx
+<Tabs.Root>
+  <Tabs.List />
+  <Tabs.Tab />
+  <Tabs.Indicator />
+  <Tabs.Panel />
+</Tabs.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `defaultValue` | Initial value when the component owns its state. |
+| `onValueChange` | Reports the value accepted by the core. |
+| `orientation` | Horizontal or vertical layout and keyboard direction. |
+| `activation` | Whether focus or an explicit press activates a tab. |
+

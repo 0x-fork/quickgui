@@ -88,13 +88,10 @@ export function SiteHeader({ stats }: { stats: RepoStats }) {
             </a>
           ))}
           <a
-            href={site.links.docs}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 transition-colors hover:text-foreground"
+            href={current === 'en' ? site.links.docs : `/${current}${site.links.docs}`}
+            className="transition-colors hover:text-foreground"
           >
             {t('nav.docs')}
-            <span className="i-lucide-arrow-up-right size-3" aria-hidden />
           </a>
         </nav>
 

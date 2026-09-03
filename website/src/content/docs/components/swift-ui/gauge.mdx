@@ -1,0 +1,36 @@
+A native SwiftUI gauge with linear and circular accessory styles.
+
+## Import
+
+Import `Gauge` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, Gauge } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents>
+  <Gauge
+    value={storageUsed()}
+    min={0}
+    max={100}
+    label="Storage"
+    currentValueLabel={String(storageUsed()) + "%"}
+    style="accessoryCircularCapacity"
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `min` | Minimum accepted value. |
+| `max` | Maximum accepted value. |
+| `label` | Visible native SwiftUI control label. |
+| `currentValueLabel` | Readable label for the current native progress or gauge value. |
+| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+

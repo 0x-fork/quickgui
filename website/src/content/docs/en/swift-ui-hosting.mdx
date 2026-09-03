@@ -1,0 +1,62 @@
+SwiftUI modifiers let Solid declare native appearance while reverse hosting lets SwiftUI content contain an ordinary QuickGUI subtree.
+
+## Modifiers
+
+Import modifier factories from `@quickgui/solid/swift-ui/modifiers` and apply them in order.
+
+```tsx
+import { Button, Host } from "@quickgui/solid/swift-ui";
+import { buttonStyle, controlSize, tint } from "@quickgui/solid/swift-ui/modifiers";
+
+<Host matchContents>
+  <Button
+    label="Create project"
+    modifiers={[
+      buttonStyle("borderedProminent"),
+      controlSize("large"),
+      tint("#f97316"),
+    ]}
+  />
+</Host>
+```
+
+Available factories include `buttonStyle`, `buttonBorderShape`, `controlSize`, `labelStyle`, `tint`, and `disabled`.
+
+## Liquid Glass
+
+On systems that provide it, the SwiftUI button bridge can request the native glass button style. The operating system remains responsible for the final rendering.
+
+```tsx
+<Button label="Continue" modifiers={[buttonStyle("glass")]} />
+```
+
+## Reverse hosting
+
+`QuickGUIHostView` mounts one ordinary QuickGUI subtree back inside a SwiftUI hierarchy.
+
+```tsx
+<Host matchContents>
+  <QuickGUIHostView width={320} height={180}>
+    <View style={{ width: 320, height: 180, padding: 16 }}>
+      <Text>QuickGUI content inside SwiftUI</Text>
+    </View>
+  </QuickGUIHostView>
+</Host>
+```
+
+## SwiftUI popover
+
+The SwiftUI `Popover` composes a native SwiftUI trigger. Its content can use `QuickGUIHostView` when the popover body is built with ordinary QuickGUI components.
+
+```tsx
+<Host matchContents>
+  <Popover isPresented={open()} onIsPresentedChange={setOpen}>
+    <Popover.Trigger render={<Button label="Open" />} />
+    <Popover.Content>
+      <QuickGUIHostView width={280} height={140}>
+        <SettingsPanel />
+      </QuickGUIHostView>
+    </Popover.Content>
+  </Popover>
+</Host>
+```

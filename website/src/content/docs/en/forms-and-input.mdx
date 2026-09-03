@@ -1,0 +1,63 @@
+QuickGUI form controls keep text services and interaction in the native core while exposing familiar controlled values to Solid.
+
+## Text input
+
+`Input` is single-line by default. `TextArea` is the multiline convenience component.
+
+```tsx
+<Input
+  value={name()}
+  placeholder="Project name"
+  onInput={(event) => setName(event.value ?? "")}
+/>
+
+<TextArea
+  value={notes()}
+  placeholder="Notes"
+  onInput={(event) => setNotes(event.value ?? "")}
+/>
+```
+
+## Fields
+
+`Field` connects a control to its label, description, validity, and error content.
+
+```tsx
+<Field.Root required invalid={!email()} validationMessage="Enter an email address">
+  <Field.Label><Text>Email</Text></Field.Label>
+  <Field.Control value={email()} onInput={(event) => setEmail(event.value ?? "")} />
+  <Field.Description><Text>Used for account recovery.</Text></Field.Description>
+  <Field.Error><Text>Enter an email address.</Text></Field.Error>
+</Field.Root>
+```
+
+## Choices
+
+Use `Checkbox` or `Switch` for independent boolean state, `RadioGroup` for one value, and `ToggleGroup` for toolbar-style pressed state.
+
+```tsx
+<RadioGroup.Root value={theme()} onValueChange={setTheme}>
+  <Radio.Root value="light"><Radio.Indicator /><Text>Light</Text></Radio.Root>
+  <Radio.Root value="dark"><Radio.Indicator /><Text>Dark</Text></Radio.Root>
+</RadioGroup.Root>
+```
+
+## Select
+
+`Select`, `Combobox`, and `Autocomplete` declare a bounded item model. QuickGUI filters and paints the native option surface.
+
+```tsx
+<Select.Root
+  ariaLabel="Theme"
+  items={[
+    { value: "system", label: "System" },
+    { value: "dark", label: "Dark" },
+  ]}
+  value={theme()}
+  onValueChange={setTheme}
+/>
+```
+
+## Events
+
+Low-level inputs report a `QuickGuiEvent`; compound value callbacks receive the normalized value first and the event second. Native decisions are delivered asynchronously after the core handles the interaction.

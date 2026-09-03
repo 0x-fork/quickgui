@@ -1,0 +1,31 @@
+A controlled native SwiftUI on/off switch.
+
+## Import
+
+Import `Toggle` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, Toggle } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents>
+  <Toggle
+    label="Notifications"
+    isOn={notifications()}
+    onIsOnChange={setNotifications}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `isOn` | Controlled SwiftUI toggle value. |
+| `label` | Visible native SwiftUI control label. |
+| `onIsOnChange` | Reports the value accepted by the native SwiftUI toggle. |
+| `modifiers` | Ordered SwiftUI view modifiers applied to the hosted control. |
+

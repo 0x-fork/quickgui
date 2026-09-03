@@ -1,0 +1,32 @@
+A determinate or indeterminate native SwiftUI progress indicator.
+
+## Import
+
+Import `ProgressView` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, ProgressView } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 320 }}>
+  <ProgressView
+    value={completed()}
+    total={100}
+    label="Exporting"
+    currentValueLabel={String(completed()) + "%"}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `total` | Denominator for determinate SwiftUI progress. |
+| `label` | Visible native SwiftUI control label. |
+| `currentValueLabel` | Readable label for the current native progress or gauge value. |
+
