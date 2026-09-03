@@ -7949,15 +7949,6 @@ fn a_context_menu_declared_with_item_parts_and_no_items_opens_the_core_surface()
             &[(property::SELECT_LISTENER, true)],
         ),
     );
-fn a_declared_button_pressed_with_the_mouse_focuses_without_visible_focus_styles() {
-    let button_id = 690;
-    let mut tree = NativeTree::default();
-    let mut button = NativeNode::new(NodeTag::Button);
-    button.parent = Some(ROOT_NODE);
-    button.set_property(property::WIDTH, Some(PropertyValue::Number(120.0)));
-    button.set_property(property::HEIGHT, Some(PropertyValue::Number(32.0)));
-    button.set_property(property::CLICK_LISTENER, Some(PropertyValue::Bool(true)));
-    tree.nodes.insert(button_id, button);
     tree.nodes
         .get_mut(&ROOT_NODE)
         .unwrap()
@@ -8030,7 +8021,87 @@ fn a_date_segment_declared_without_children_shows_the_core_text() {
         &[],
     );
     insert_component_node(&mut tree, month_id, date_id, month);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    // The core owns the digits, so an empty segment declaration still reads "09" on screen and
+    // to an assistive client, exactly as the docs describe.
+    let update = cx.accessibility_update(window).unwrap();
+    assert!(
+        update
+            .nodes
+            .iter()
+            .any(|(_, node)| node.label() == Some("09") || node.value() == Some("09")),
+        "{:?}",
+        update
+            .nodes
+            .iter()
+            .map(|(_, node)| (node.role(), node.label().map(str::to_owned)))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn a_declared_button_pressed_with_the_mouse_focuses_without_visible_focus_styles() {
+    let button_id = 690;
+    let mut tree = NativeTree::default();
+    let mut button = NativeNode::new(NodeTag::Button);
+    button.parent = Some(ROOT_NODE);
+    button.set_property(property::WIDTH, Some(PropertyValue::Number(120.0)));
+    button.set_property(property::HEIGHT, Some(PropertyValue::Number(32.0)));
+    button.set_property(property::CLICK_LISTENER, Some(PropertyValue::Bool(true)));
+    tree.nodes.insert(button_id, button);
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
         .push(button_id);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let button = ElementId::new(button_id as u64);
+    cx.run_until_idle().unwrap();
+
+    // The hosted binding has no pointer path of its own: the press reaches the core's window-level
+    // pointer dispatch, which focuses the button the way a native click does, so focus lands but
+    // its styles stay hidden until the keyboard is used, like CSS `:focus-visible`.
+    cx.simulate_mouse_down(
+        window,
+        button,
+        quickgui::MouseDownEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(10.0, 10.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 1,
+            first_mouse: false,
+        },
+    )
+    .unwrap();
+    cx.simulate_mouse_up(
+        window,
+        button,
+        quickgui::MouseUpEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(10.0, 10.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(button));
+    assert!(!cx.focus_visible(window).unwrap());
+
+    // Tab is keyboard input, so the focus it lands — here the same button — shows its styles.
+    cx.simulate_keystrokes(window, "tab").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(button));
+    assert!(cx.focus_visible(window).unwrap());
+}
+
+#[test]
 fn a_declared_table_scrollbar_track_press_and_drag_scroll_the_body() {
     let table_id = 660;
     let header_id = 661;
@@ -8084,58 +8155,6 @@ fn a_declared_table_scrollbar_track_press_and_drag_scroll_the_body() {
     let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
     let window = view.window_handle();
     cx.run_until_idle().unwrap();
-
-    // The core owns the digits, so an empty segment declaration still reads "09" on screen and
-    // to an assistive client, exactly as the docs describe.
-    let update = cx.accessibility_update(window).unwrap();
-    assert!(
-        update
-            .nodes
-            .iter()
-            .any(|(_, node)| node.label() == Some("09") || node.value() == Some("09")),
-        "{:?}",
-        update
-            .nodes
-            .iter()
-            .map(|(_, node)| (node.role(), node.label().map(str::to_owned)))
-            .collect::<Vec<_>>()
-    );
-    let button = ElementId::new(button_id as u64);
-    cx.run_until_idle().unwrap();
-
-    // The hosted binding has no pointer path of its own: the press reaches the core's window-level
-    // pointer dispatch, which focuses the button the way a native click does, so focus lands but
-    // its styles stay hidden until the keyboard is used, like CSS `:focus-visible`.
-    cx.simulate_mouse_down(
-        window,
-        button,
-        quickgui::MouseDownEvent {
-            button: quickgui::MouseButton::Left,
-            position: quickgui::Point::new(10.0, 10.0),
-            modifiers: quickgui::Modifiers::empty(),
-            click_count: 1,
-            first_mouse: false,
-        },
-    )
-    .unwrap();
-    cx.simulate_mouse_up(
-        window,
-        button,
-        quickgui::MouseUpEvent {
-            button: quickgui::MouseButton::Left,
-            position: quickgui::Point::new(10.0, 10.0),
-            modifiers: quickgui::Modifiers::empty(),
-            click_count: 1,
-        },
-    )
-    .unwrap();
-    assert_eq!(cx.focused(window).unwrap(), Some(button));
-    assert!(!cx.focus_visible(window).unwrap());
-
-    // Tab is keyboard input, so the focus it lands — here the same button — shows its styles.
-    cx.simulate_keystrokes(window, "tab").unwrap();
-    assert_eq!(cx.focused(window).unwrap(), Some(button));
-    assert!(cx.focus_visible(window).unwrap());
     let mounted = merged_component_change(&events, table_id);
     assert_eq!(mounted["visibleRange"]["start"], serde_json::json!(0));
 
