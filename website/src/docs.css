@@ -58,7 +58,7 @@ html[data-docs-theme='dark'] {
 
 .docs-frame {
   width: calc(100% - 32px);
-  max-width: 1600px;
+  max-width: 1440px;
   margin-inline: auto;
 }
 
@@ -343,7 +343,7 @@ html[data-docs-theme='dark'] {
 
 .docs-article {
   width: 100%;
-  max-width: 680px;
+  max-width: 688px;
   margin: 0 auto;
   color: var(--docs-text);
   font-size: 16px;
@@ -929,7 +929,7 @@ html[data-docs-theme='dark'] {
   }
 
   .docs-article {
-    max-width: 680px;
+    max-width: 688px;
   }
 }
 
