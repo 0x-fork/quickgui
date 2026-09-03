@@ -2189,7 +2189,7 @@ function MeterDemo() {
             index={0}
             style={{
               position: "absolute",
-              left: Math.round((value() / 100) * (GAUGE_WIDTH - 14)),
+              left: Math.round((value() / 100) * GAUGE_WIDTH - 7),
               top: 4,
               width: 14,
               height: 14,
@@ -2945,8 +2945,8 @@ function SliderDemo() {
   const [range, setRange] = createSignal<readonly number[]>([20, 70]);
 
   // The look of an AppKit slider: a 4px track with the accent fill to the left of a 20px white
-  // knob that carries a hairline and a soft shadow. Pressing anywhere on the control jumps the
-  // nearest knob there and continues as a drag, which is the core's own pointer policy.
+  // knob that carries a hairline and a soft shadow. The whole 24px-tall control is the hit target:
+  // pressing anywhere in it jumps the nearest knob there and continues as a core-owned drag.
   const KNOB = 20;
   const control = () =>
     ({
@@ -2958,7 +2958,9 @@ function SliderDemo() {
       height: 24,
     }) as const;
   // The core owns the value; the application owns where the knob is painted.
-  const thumbLeft = (value: number) => Math.round((value / 100) * (GAUGE_WIDTH - KNOB));
+  // Slider's default center alignment maps the value to the knob's center, not its leading edge.
+  const thumbLeft = (value: number) =>
+    Math.round((value / 100) * GAUGE_WIDTH - KNOB / 2);
   const track = () =>
     ({
       display: "flex",

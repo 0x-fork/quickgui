@@ -5749,6 +5749,179 @@ fn a_declared_slider_reports_the_cores_commit_boundary_and_formatted_value() {
 }
 
 #[test]
+fn slider_control_owns_the_hit_area_and_controlled_echoes_keep_the_upper_thumb() {
+    let root_id = 936;
+    let control_id = 937;
+    let track_id = 938;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "slider",
+        "price-drag",
+        &[
+            (property::MINIMUM, 0.0),
+            (property::MAXIMUM, 100.0),
+            (property::STEP, 1.0),
+            (property::MIN_STEPS_BETWEEN_VALUES, 5.0),
+        ],
+        &[(property::VALUES, "[20,70]")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        control_id,
+        root_id,
+        NodeTag::View,
+        "slider-control",
+        "price-drag",
+        &[(property::WIDTH, 200.0), (property::HEIGHT, 24.0)],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        track_id,
+        control_id,
+        NodeTag::View,
+        "slider-track",
+        "price-drag",
+        &[(property::WIDTH, 200.0), (property::HEIGHT, 4.0)],
+        &[],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let slider = Slider::new(
+        ElementId::named("price-drag"),
+        &SliderState::range(0.0, 100.0, &[20.0, 70.0]),
+    );
+    let control = cx.element_bounds(window, slider.control_id()).unwrap();
+    let track = cx.element_bounds(window, slider.track_id()).unwrap();
+    assert_eq!(control.height, 24.0);
+    assert_eq!(track.height, 4.0);
+
+    let point = |fraction: f32| {
+        quickgui::Point::new(
+            control.x + control.width * fraction,
+            control.y + control.height - 1.0,
+        )
+    };
+    let pointer = |phase, position| {
+        captured_pointer(
+            phase,
+            position,
+            quickgui::Vector::default(),
+            quickgui::Size::ZERO,
+        )
+    };
+    let redeclare = |cx: &mut quickgui::TestAppContext, values: &serde_json::Value| {
+        cx.update(view, |view, cx| {
+            view.tree
+                .borrow_mut()
+                .nodes
+                .get_mut(&root_id)
+                .unwrap()
+                .set_property(
+                    property::VALUES,
+                    Some(PropertyValue::String(Arc::from(values.to_string().as_str()))),
+                );
+            cx.invalidate();
+        })
+        .unwrap();
+        cx.run_until_idle().unwrap();
+    };
+
+    // A press near the upper thumb lands in Control's 24px box, outside the 4px Track, and the
+    // full Control width is the value coordinate space.
+    cx.simulate_pointer(
+        window,
+        slider.control_id(),
+        pointer(quickgui::PointerPhase::Down, point(0.75)),
+    )
+    .unwrap();
+    let first = component_change(&events, root_id);
+    assert_eq!(first["values"], serde_json::json!([20.0, 75.0]));
+    assert_eq!(first["dragging"], true);
+
+    // Solid immediately echoes the controlled value. That acknowledgement must not rebuild the
+    // state and silently return the active thumb to index zero.
+    redeclare(&mut cx, &first["values"]);
+    let (active, dragging) = cx
+        .read(view, |view| {
+            let state = &view.components.sliders.values().next().unwrap().state;
+            (state.active_thumb(), state.is_dragging())
+        })
+        .unwrap();
+    assert_eq!(active, 1);
+    assert!(dragging);
+
+    cx.simulate_pointer(
+        window,
+        slider.control_id(),
+        pointer(quickgui::PointerPhase::Move, point(0.85)),
+    )
+    .unwrap();
+    let second = component_change(&events, root_id);
+    assert_eq!(second["values"], serde_json::json!([20.0, 85.0]));
+
+    cx.simulate_pointer(
+        window,
+        slider.control_id(),
+        pointer(quickgui::PointerPhase::Move, point(0.90)),
+    )
+    .unwrap();
+    let third = component_change(&events, root_id);
+    assert_eq!(third["values"], serde_json::json!([20.0, 90.0]));
+    cx.simulate_pointer(
+        window,
+        slider.control_id(),
+        pointer(quickgui::PointerPhase::Up, point(0.90)),
+    )
+    .unwrap();
+    let released = component_change(&events, root_id);
+    assert_eq!(released["values"], serde_json::json!([20.0, 90.0]));
+    assert_eq!(released["committed"], true);
+
+    // Even after release, late controlled echoes are acknowledgements rather than new values that
+    // can rewind the thumb. A genuinely new declaration still reseeds the settled slider.
+    redeclare(&mut cx, &second["values"]);
+    redeclare(&mut cx, &third["values"]);
+    let values = cx
+        .read(view, |view| {
+            view.components
+                .sliders
+                .values()
+                .next()
+                .unwrap()
+                .state
+                .values()
+                .to_vec()
+        })
+        .unwrap();
+    assert_eq!(values, vec![20.0, 90.0]);
+
+    redeclare(&mut cx, &serde_json::json!([10.0, 95.0]));
+    let values = cx
+        .read(view, |view| {
+            view.components
+                .sliders
+                .values()
+                .next()
+                .unwrap()
+                .state
+                .values()
+                .to_vec()
+        })
+        .unwrap();
+    assert_eq!(values, vec![10.0, 95.0]);
+}
+
+#[test]
 fn a_declared_number_field_scrub_area_steps_through_the_core() {
     let root_id = 940;
     let group_id = 941;

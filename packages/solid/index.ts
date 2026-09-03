@@ -4243,7 +4243,7 @@ export function useSliderState(): () => SliderState {
   return context ? context.state : () => settledSlider;
 }
 
-/** Application-owned slider track. The core attaches this slider's captured pointer arithmetic. */
+/** Application-owned slider track painted inside the interactive Control. */
 export function SliderTrack(props: JSX.NativeScopedProps): NativeNode {
   return createPartNode("view", props, { part: NativePart.SliderTrack });
 }
@@ -4258,7 +4258,7 @@ export function SliderIndicator(props: JSX.NativeScopedProps): NativeNode {
   return createPartNode("view", props, { part: NativePart.SliderIndicator });
 }
 
-/** Structural control box the track and thumbs are laid out inside. */
+/** Clickable control box the track and thumbs are laid out inside. */
 export function SliderControl(props: JSX.NativeScopedProps): NativeNode {
   return createPartNode("view", props, { part: NativePart.SliderControl });
 }

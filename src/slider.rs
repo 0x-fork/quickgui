@@ -761,9 +761,10 @@ impl Slider {
 
     /// Decorate an application-owned track.
     ///
-    /// The track carries the slider's pointer capture. Attach a
-    /// [`crate::ViewContext::pointer_listener`] registered for [`Self::track_id`] and forward the
-    /// event to [`SliderState::apply_pointer`] with the size the caller laid out.
+    /// Base UI uses [`Self::control_part`] as the larger interactive surface. A declaration that
+    /// omits Control can keep the earlier behavior by attaching a
+    /// [`crate::ViewContext::pointer_listener`] registered for [`Self::track_id`] and forwarding
+    /// the event to [`SliderState::apply_pointer`] with the size the caller laid out.
     pub fn track_part(self, track: Element) -> Element {
         track
             .id(self.track_id())
@@ -790,8 +791,7 @@ impl Slider {
     /// Base UI separates the Control — the region a press acts on — from the Track it paints.
     /// Attach a [`crate::ViewContext::pointer_listener`] registered for [`Self::control_id`] and
     /// forward the event to [`SliderState::apply_pointer_change`] with the size the caller laid
-    /// out. A caller that already put the pointer listener on [`Self::track_part`] keeps working
-    /// unchanged; this part only adds a second, outer place to put it.
+    /// out. A caller that omits this part can keep pointer capture on [`Self::track_part`].
     pub fn control_part(self, control: Element) -> Element {
         control
             .id(self.control_id())

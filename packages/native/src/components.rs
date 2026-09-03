@@ -67,6 +67,8 @@ pub(super) const MAX_COMPONENT_ITEMS: usize = 256;
 
 const DEFAULT_SLIDER_MAXIMUM: f32 = 100.0;
 const DEFAULT_SPLITTER_SIZE: f32 = 100.0;
+/// Most reported slider values kept until JavaScript declares them back.
+const MAX_SLIDER_ECHOES: usize = 32;
 /// Most reported splitter sizes kept until JavaScript declares them back.
 ///
 /// A controlled owner echoes every report as its next `values` declaration one or more frames
@@ -235,11 +237,42 @@ pub(super) struct NativeSliderState {
     pub(super) committed: bool,
     owner: u32,
     listens: bool,
+    /// Whether this declaration has Base UI's outer interactive Control part.
+    has_control: bool,
     /// Everything but the values, so an unchanged declaration never rebuilds the retained state.
     props: Arc<str>,
     declared: Vec<f64>,
     reported: Vec<f64>,
+    /// Values reported to JavaScript that no declaration has echoed back yet, oldest first.
+    ///
+    /// Pointer capture stays native while controlled values make an asynchronous round trip.
+    /// Recognizing those echoes prevents a lagging declaration from rebuilding the state and
+    /// resetting the active range thumb in the middle of its drag.
+    echoes: VecDeque<Vec<f64>>,
     reported_dragging: bool,
+}
+
+impl NativeSliderState {
+    /// Acknowledge this and every older value the hosted owner echoed in order.
+    fn acknowledge(&mut self, values: &[f64]) -> bool {
+        let Some(position) = self
+            .echoes
+            .iter()
+            .position(|echo| echo.as_slice() == values)
+        else {
+            return false;
+        };
+        self.echoes.drain(..=position);
+        true
+    }
+
+    /// Remember one reported value until JavaScript declares it back.
+    fn expect_echo(&mut self, values: &[f64]) {
+        if self.echoes.len() == MAX_SLIDER_ECHOES {
+            self.echoes.pop_front();
+        }
+        self.echoes.push_back(values.to_vec());
+    }
 }
 
 /// Resolve one bounded declared `format` name into the core's shared value formatter.
@@ -400,6 +433,17 @@ impl NativeComponentStates {
     /// crosses back to the hosted runtime.
     pub(super) fn sync(&mut self, tree: &NativeTree, window: u32, events: &EventQueue) {
         self.sync_aligned(tree, window, events);
+        // Base UI makes Control, not its thin painted Track, the slider's interactive surface.
+        // Collect controls up front because the retained tree does not guarantee parent-first
+        // iteration order.
+        let slider_controls = tree
+            .nodes
+            .iter()
+            .filter_map(|(id, node)| {
+                (node.string(property::PART) == Some(SLIDER_CONTROL_PART))
+                    .then(|| component_key(*id, node))
+            })
+            .collect::<HashSet<_>>();
         // The surface parts a picker declares are separate nodes, so they are collected once and
         // handed to the picker they name rather than re-walked per instance.
         let picker_surfaces = gather_picker_surfaces(tree);
@@ -419,7 +463,7 @@ impl NativeComponentStates {
             match part {
                 SLIDER_PART if sliders.len() < MAX_COMPONENT_INSTANCES => {
                     sliders.insert(key);
-                    self.sync_slider(key, *id, node);
+                    self.sync_slider(key, *id, node, slider_controls.contains(&key));
                 }
                 SPLITTER_PART if splitters.len() < MAX_COMPONENT_INSTANCES => {
                     splitters.insert(key);
@@ -514,7 +558,7 @@ impl NativeComponentStates {
         self.sync_menus(tree, window, events);
     }
 
-    fn sync_slider(&mut self, key: u64, id: u32, node: &NativeNode) {
+    fn sync_slider(&mut self, key: u64, id: u32, node: &NativeNode, has_control: bool) {
         let minimum = f64::from(node.number(property::MINIMUM).unwrap_or(0.0));
         let maximum = f64::from(
             node.number(property::MAXIMUM)
@@ -525,8 +569,7 @@ impl NativeComponentStates {
             declared.push(0.0);
         }
         declared.truncate(MAX_SLIDER_THUMBS);
-        let build = |values: &[f64]| {
-            let mut state = SliderState::range(minimum, maximum, values);
+        let configure = |mut state: SliderState| {
             if let Some(step) = node.number(property::STEP) {
                 state = state.step(f64::from(step));
             }
@@ -550,7 +593,7 @@ impl NativeComponentStates {
                 })
                 .disabled(node.boolean(property::DISABLED).unwrap_or(false))
         };
-        let state = build(&declared);
+        let state = configure(SliderState::range(minimum, maximum, &declared));
         let listens = declares_change(node);
         let normalized = state.values().to_vec();
         let format = node
@@ -574,19 +617,33 @@ impl NativeComponentStates {
             Some(retained) => {
                 retained.owner = id;
                 retained.listens = listens;
+                retained.has_control = has_control;
                 retained.format = format;
-                if retained.declared != normalized {
+                let declaration_changed = retained.declared != normalized;
+                let acknowledged = declaration_changed && retained.acknowledge(&normalized);
+                if declaration_changed {
                     retained.declared = normalized.clone();
+                }
+                let shape_changed = retained.state.thumb_count() != state.thumb_count();
+                let reseed = declaration_changed
+                    && !acknowledged
+                    && !retained.state.is_dragging();
+                if reseed || shape_changed {
+                    let active = retained.state.active_thumb();
                     retained.reported = normalized;
+                    retained.echoes.clear();
                     retained.props = props;
                     retained.state = state;
-                } else if retained.props != props {
-                    // Only a changed declaration rebuilds the retained state: rebuilding every
-                    // frame would drop the core's own active thumb and `data-dragging` flag.
-                    let values = retained.state.values().to_vec();
+                    retained.state.set_active_thumb(active);
+                } else if retained.props != props && !retained.state.is_dragging() {
                     let active = retained.state.active_thumb();
+                    let values = retained.state.values().to_vec();
                     retained.props = props;
-                    retained.state = build(&values);
+                    // Rebuild changed bounds and constraints only once a captured drag has ended;
+                    // until then the in-flight interaction owns both its values and transient
+                    // state. Keeping the old fingerprint defers this branch to the next frame.
+                    retained.state =
+                        configure(SliderState::range(minimum, maximum, &values));
                     retained.state.set_active_thumb(active);
                 }
             }
@@ -599,9 +656,11 @@ impl NativeComponentStates {
                         committed: false,
                         owner: id,
                         listens,
+                        has_control,
                         props,
                         declared: normalized.clone(),
                         reported: normalized,
+                        echoes: VecDeque::new(),
                         reported_dragging: false,
                     },
                 );
@@ -818,12 +877,16 @@ impl NativeComponentStates {
             let values = retained.state.values().to_vec();
             let dragging = retained.state.is_dragging();
             let committed = std::mem::take(&mut retained.committed);
-            if values == retained.reported && dragging == retained.reported_dragging && !committed {
+            let values_changed = values != retained.reported;
+            if !values_changed && dragging == retained.reported_dragging && !committed {
                 continue;
             }
             retained.reported = values.clone();
             retained.reported_dragging = dragging;
             if retained.listens {
+                if values_changed {
+                    retained.expect_echo(&values);
+                }
                 // `onValueCommitted` is the core's own pointer boundary: it flags the frame the
                 // captured gesture released, never a value JavaScript has to debounce itself.
                 let slider = Slider::new(ElementId::new(0), &retained.state);
@@ -1355,6 +1418,26 @@ fn slider_accessor(key: u64) -> StateAccessor<NativeView, SliderState> {
     })
 }
 
+/// Attach one declared slider's captured pointer arithmetic to its interactive surface.
+fn slider_pointer_part(
+    element: Element,
+    listener_id: ElementId,
+    key: u64,
+    cx: &mut ViewContext<'_, NativeView>,
+) -> Element {
+    let drag = cx.pointer_listener(listener_id, move |view, event, cx| {
+        let retained = view.components.sliders.entry(key).or_default();
+        let change = retained.state.apply_pointer_change(event, event.size);
+        if change.committed {
+            retained.committed = true;
+        }
+        if change.changed || change.committed {
+            cx.invalidate();
+        }
+    });
+    element.on_pointer(drag)
+}
+
 /// A per-instance accessor from the hosted view to one declared splitter's retained state.
 fn splitter_accessor(key: u64) -> StateAccessor<NativeView, SplitterState> {
     StateAccessor::new(move |view: &mut NativeView| {
@@ -1449,32 +1532,29 @@ pub(super) fn apply_component_part(
             };
             let slider = Slider::new(root, &retained.state);
             let element = slider.track_part(element);
-            if !listeners_enabled {
+            if !listeners_enabled || retained.has_control {
                 return element;
             }
-            // The core delivers the captured track's own laid-out size with the event, so the
-            // binding never re-derives geometry the layout already decided, and it reports the
-            // core's own commit boundary rather than inventing one.
-            let drag = cx.pointer_listener(slider.track_id(), move |view, event, cx| {
-                let retained = view.components.sliders.entry(key).or_default();
-                let change = retained.state.apply_pointer_change(event, event.size);
-                if change.committed {
-                    retained.committed = true;
-                }
-                if change.changed || change.committed {
-                    cx.invalidate();
-                }
-            });
-            element.on_pointer(drag)
+            // Older declarations without Control keep using Track as their interactive surface.
+            slider_pointer_part(element, slider.track_id(), key, cx)
         }
         SLIDER_RANGE_PART | SLIDER_INDICATOR_PART => match components.sliders.get(&key) {
             Some(retained) => Slider::new(root, &retained.state).indicator_part(element),
             None => element,
         },
-        SLIDER_CONTROL_PART => match components.sliders.get(&key) {
-            Some(retained) => Slider::new(root, &retained.state).control_part(element),
-            None => element,
-        },
+        SLIDER_CONTROL_PART => {
+            let Some(retained) = components.sliders.get(&key) else {
+                return element;
+            };
+            let slider = Slider::new(root, &retained.state);
+            let element = slider.control_part(element);
+            if !listeners_enabled {
+                return element;
+            }
+            // The Control's full laid-out box is the press and drag coordinate space, matching
+            // Base UI while leaving the nested Track free to stay visually thin.
+            slider_pointer_part(element, slider.control_id(), key, cx)
+        }
         SLIDER_LABEL_PART => match components.sliders.get(&key) {
             Some(retained) => Slider::new(root, &retained.state).label_part(element),
             None => element,
