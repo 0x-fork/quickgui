@@ -67,6 +67,12 @@ pub(super) const MAX_COMPONENT_ITEMS: usize = 256;
 
 const DEFAULT_SLIDER_MAXIMUM: f32 = 100.0;
 const DEFAULT_SPLITTER_SIZE: f32 = 100.0;
+/// Most reported splitter sizes kept until JavaScript declares them back.
+///
+/// A controlled owner echoes every report as its next `values` declaration one or more frames
+/// later, so the queue only has to cover that latency. Dropping the oldest entry under load
+/// costs one avoidable reseed, never correctness.
+const MAX_SPLITTER_ECHOES: usize = 32;
 
 /// One declared toolbar or toggle-group entry.
 #[derive(Debug, Default, Deserialize)]
@@ -254,6 +260,13 @@ pub(super) struct NativeSplitterState {
     listens: bool,
     declared: Vec<f32>,
     reported: Vec<f32>,
+    /// Sizes reported to JavaScript that no declaration has echoed back yet, oldest first.
+    ///
+    /// The controlled round trip is asynchronous: a `values` declaration can carry sizes the
+    /// core reported several frames ago while a captured drag has moved on. Recognizing such an
+    /// echo keeps it from reseeding the retained state to a value the pointer already passed,
+    /// which is what left a dragged handle behind the cursor and rewound it after the release.
+    echoes: VecDeque<Vec<f32>>,
     /// The painted bounds of every pane, so the state's total tracks the real laid-out extent
     /// instead of the declared sizes; a handle then follows the pointer one logical pixel per
     /// pixel even when flex layout shrank or grew the panes.
@@ -262,6 +275,26 @@ pub(super) struct NativeSplitterState {
 }
 
 impl NativeSplitterState {
+    /// Whether `sizes` echoes a report JavaScript had not declared back yet.
+    ///
+    /// Echoes arrive in the order they were reported, so everything up to the match is
+    /// acknowledged along with it.
+    fn acknowledge(&mut self, sizes: &[f32]) -> bool {
+        let Some(position) = self.echoes.iter().position(|echo| echo.as_slice() == sizes) else {
+            return false;
+        };
+        self.echoes.drain(..=position);
+        true
+    }
+
+    /// Remember one reported size until JavaScript declares it back.
+    fn expect_echo(&mut self, sizes: &[f32]) {
+        if self.echoes.len() == MAX_SPLITTER_ECHOES {
+            self.echoes.pop_front();
+        }
+        self.echoes.push_back(sizes.to_vec());
+    }
+
     /// Keep one retained bounds handle per declared pane.
     fn allocate_pane_bounds(&mut self, panes: usize) {
         let panes = panes.min(MAX_SPLITTER_PANES);
@@ -590,22 +623,20 @@ impl NativeComponentStates {
         }
         declared.truncate(MAX_SPLITTER_PANES);
         let panes = declared_panes(node);
-        let build = |sizes: &[f32]| {
-            let mut state = SplitterState::new(orientation, sizes);
-            for (index, pane) in panes.iter().enumerate() {
-                if let Some(minimum) = pane.min {
-                    state = state.min_size(index, minimum);
-                }
-                if pane.collapsible {
-                    state = state.collapsible(index, true);
-                }
+        let step = node.number(property::STEP).unwrap_or(0.0);
+        // Pane constraints are applied to whichever sizes a state holds, so a changed minimum,
+        // collapsibility, or step reaches the retained state without rebuilding it: a rebuild
+        // would forget the size a collapsed pane restores to and the captured drag in flight.
+        let constrain = |mut state: SplitterState| {
+            for index in 0..state.pane_count() {
+                let pane = panes.get(index);
+                state = state
+                    .min_size(index, pane.and_then(|pane| pane.min).unwrap_or(0.0))
+                    .collapsible(index, pane.is_some_and(|pane| pane.collapsible));
             }
-            match node.number(property::STEP) {
-                Some(step) => state.keyboard_step(step),
-                None => state,
-            }
+            state.keyboard_step(step)
         };
-        let state = build(&declared);
+        let state = constrain(SplitterState::new(orientation, &declared));
         let listens = declares_change(node);
         let normalized = state.sizes().to_vec();
         match self.splitters.get_mut(&key) {
@@ -614,13 +645,26 @@ impl NativeComponentStates {
                 retained.listens = listens;
                 retained.orientation = orientation;
                 retained.allocate_pane_bounds(normalized.len());
-                if retained.declared != normalized {
+                // A changed declaration reseeds the state only when it is a new value from the
+                // application. An echo of sizes the core itself reported carries nothing the
+                // state does not already hold, and while a captured drag is in progress the
+                // drag owns the sizes: JavaScript learns of every move asynchronously and would
+                // otherwise hand back a lagging value that the next incremental delta builds on.
+                let reseed = if retained.declared != normalized {
                     retained.declared = normalized.clone();
+                    !retained.acknowledge(&normalized) && !retained.state.is_dragging()
+                } else {
+                    false
+                };
+                if reseed
+                    || retained.state.axis() != orientation
+                    || retained.state.pane_count() != normalized.len()
+                {
                     retained.reported = normalized;
+                    retained.echoes.clear();
                     retained.state = state;
                 } else {
-                    let sizes = retained.state.sizes().to_vec();
-                    retained.state = build(&sizes);
+                    retained.state = constrain(retained.state);
                 }
             }
             None => {
@@ -632,6 +676,7 @@ impl NativeComponentStates {
                         listens,
                         declared: normalized.clone(),
                         reported: normalized,
+                        echoes: VecDeque::new(),
                         pane_bounds: Vec::new(),
                         orientation,
                     },
@@ -809,6 +854,7 @@ impl NativeComponentStates {
             }
             retained.reported = sizes.clone();
             if retained.listens {
+                retained.expect_echo(&sizes);
                 enqueue_component_change(
                     events,
                     window,
@@ -1264,6 +1310,7 @@ impl Default for NativeSplitterState {
             owner: 0,
             listens: false,
             declared: Vec::new(),
+            echoes: VecDeque::new(),
             reported: Vec::new(),
         }
     }

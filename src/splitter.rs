@@ -1,6 +1,6 @@
 use crate::{
     AccessibilityOrientation, AccessibilityRole, AccessibilityValueRange, CursorStyle, Element,
-    ElementId, KeyBinding, PointerEvent, StateAccessor, ViewContext,
+    ElementId, KeyBinding, PointerEvent, PointerPhase, StateAccessor, ViewContext,
 };
 
 /// Maximum panes managed by one splitter.
@@ -90,6 +90,8 @@ pub struct SplitterState {
     collapsible: [bool; MAX_SPLITTER_PANES],
     panes: usize,
     keyboard_step: f32,
+    /// Whether a captured pointer is between its press and its release on one of the handles.
+    dragging: bool,
 }
 
 impl SplitterState {
@@ -113,6 +115,7 @@ impl SplitterState {
             collapsible: [false; MAX_SPLITTER_PANES],
             panes: sizes.len(),
             keyboard_step: DEFAULT_KEYBOARD_STEP,
+            dragging: false,
         };
         for (index, size) in sizes.iter().enumerate() {
             state.sizes[index] = finite_nonnegative(*size);
@@ -198,6 +201,16 @@ impl SplitterState {
         self.keyboard_step
     }
 
+    /// Whether a captured pointer is currently dragging one of this splitter's handles.
+    ///
+    /// [`Self::apply_pointer`] raises the flag on the press that starts a capture and lowers it
+    /// on the release or cancel that ends it; keyboard resizing never sets it. A controlled owner
+    /// that learns of sizes asynchronously uses it to tell a size the pointer is still moving
+    /// from one the gesture settled on.
+    pub const fn is_dragging(&self) -> bool {
+        self.dragging
+    }
+
     /// The inclusive bounds one handle can move its preceding pane between.
     pub fn handle_bounds(&self, handle: usize) -> Option<(f32, f32)> {
         if handle >= self.handle_count() {
@@ -253,8 +266,13 @@ impl SplitterState {
     /// Apply one captured pointer event for a handle, using the event's own motion.
     ///
     /// Pointer capture reports motion since the preceding captured event, so a splitter needs no
-    /// container geometry and stays correct while the pointer is outside the window.
+    /// container geometry and stays correct while the pointer is outside the window. The event's
+    /// phase also maintains [`Self::is_dragging`]. Returns whether any size changed.
     pub fn apply_pointer(&mut self, handle: usize, event: &PointerEvent) -> bool {
+        if handle >= self.handle_count() {
+            return false;
+        }
+        self.dragging = matches!(event.phase, PointerPhase::Down | PointerPhase::Move);
         let delta = match self.orientation {
             SplitterOrientation::Horizontal => event.delta.x,
             SplitterOrientation::Vertical => event.delta.y,
@@ -515,6 +533,11 @@ impl SplitterHandle {
 
     pub const fn bounds(self) -> (f32, f32) {
         (self.lower, self.upper)
+    }
+
+    /// Whether a captured pointer is currently dragging this splitter's handles.
+    pub const fn is_dragging(self) -> bool {
+        self.splitter.state.dragging
     }
 
     pub fn is_collapsible(self) -> bool {
@@ -928,6 +951,39 @@ mod tests {
                     .is_some())
             )
         );
+    }
+
+    #[test]
+    fn a_captured_drag_is_reported_from_its_press_to_its_release() {
+        let mut state = SplitterState::new(SplitterOrientation::Horizontal, &[200.0, 300.0]);
+        let event = |phase, delta| PointerEvent {
+            phase,
+            delta: Vector::new(delta, 0.0),
+            ..drag(0.0)
+        };
+        assert!(!state.is_dragging());
+        assert!(!state.apply_pointer(0, &event(PointerPhase::Down, 0.0)));
+        assert!(state.is_dragging());
+        assert!(state.apply_pointer(0, &event(PointerPhase::Move, 10.0)));
+        assert!(state.is_dragging());
+        assert_eq!(state.sizes(), &[210.0, 290.0]);
+        assert!(
+            Splitter::new("workspace", &state)
+                .handle(0)
+                .expect("handle")
+                .is_dragging()
+        );
+        assert!(!state.apply_pointer(0, &event(PointerPhase::Up, 0.0)));
+        assert!(!state.is_dragging());
+        assert!(!state.apply_pointer(0, &event(PointerPhase::Down, 0.0)));
+        assert!(state.is_dragging());
+        assert!(!state.apply_pointer(0, &event(PointerPhase::Cancel, 0.0)));
+        assert!(!state.is_dragging());
+        // A handle that does not exist neither resizes nor starts a drag, and a key never does.
+        assert!(!state.apply_pointer(1, &event(PointerPhase::Down, 0.0)));
+        assert!(!state.is_dragging());
+        assert!(state.step(0, true));
+        assert!(!state.is_dragging());
     }
 
     #[test]
