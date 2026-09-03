@@ -495,16 +495,21 @@ pub(super) fn apply_context_menu(
         .string(property::MENU)
         .and_then(NativeMenuDeclaration::parse);
     // A context menu declares its rows either as one bounded JSON model or as the Base UI-shaped
-    // child item parts; the child parts unmount and contribute the same core row model.
-    let rows: Rc<[PopoverMenuItem]> = match &declaration {
-        Some(_) => Rc::from(Vec::new()),
-        None => Rc::from(context_menu_rows(id, tree)),
+    // child item parts; the child parts unmount and contribute the same core row model. A
+    // declaration with no entries of its own (a binding always declares one for its appearance)
+    // still leaves the rows to the child parts rather than opening an empty surface.
+    let declared_entries = declaration
+        .as_ref()
+        .is_some_and(|declaration| !declaration.entries().is_empty());
+    let rows: Rc<[PopoverMenuItem]> = if declared_entries {
+        Rc::from(Vec::new())
+    } else {
+        Rc::from(context_menu_rows(id, tree))
     };
-    let Some(declaration) =
-        declaration.or_else(|| (!rows.is_empty()).then(NativeMenuDeclaration::default))
-    else {
+    if !declared_entries && rows.is_empty() {
         return state.target_part(element_id, element);
-    };
+    }
+    let declaration = declaration.unwrap_or_default();
     let style = declaration.style();
     let entries: Rc<[NativeMenuEntry]> = Rc::from(declaration.entries().to_vec());
     let loops = declaration.loops_focus();

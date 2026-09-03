@@ -1071,7 +1071,9 @@ all (`"none"`) inside the declared row.
 
 Civil values are ISO strings with no time zone: `YYYY-MM-DD` for a date or a calendar day,
 `HH:MM` or `HH:MM:SS` for a time. The core owns segment arithmetic, digit entry, leap years, month
-and year movement, and each field's validity.
+and year movement, and each field's validity. A `Segment` declared without children shows the
+core's digits, or that segment's placeholder while it is empty; give it children to render the
+text yourself.
 
 ```tsx
 <NumberField.Root scope="qty" value={quantity()} min={0} max={99} step={1} onValueChange={setQuantity}>

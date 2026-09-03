@@ -253,6 +253,13 @@ application remains authoritative for the controlled invalid flag and message. F
 descriptors retain only IDs, six booleans, and an optional bounded shared message; they allocate no
 registry and add no idle work.
 
+The caret is painted in the input's text colour, so a dark field on a light surface and a light
+field on a dark one both show it, and it blinks the way an AppKit field does: solid for
+`CARET_BLINK_HALF_PERIOD` (530 ms) after focus, an edit, or a caret move, then alternating. The
+blink is not an animation loop. The paint that draws the caret derives the phase from its own time
+and remembers what it drew, and the runtime arms exactly one deadline for the next toggle while an
+input is focused, so an idle window with no focused input schedules nothing.
+
 Text areas preserve normalized newlines, wrap and hit-test visual lines, keep the caret visible in
 both axes, and support Up/Down/Page navigation, macOS word/line/document shortcuts, drag
 selection, IME composition, and the same native-style auto-hiding scrollbar as other scroll

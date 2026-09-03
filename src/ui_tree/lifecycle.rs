@@ -657,6 +657,23 @@ impl UiTree {
         changed
     }
 
+    /// Whether the focused input's caret toggled since it was last painted.
+    ///
+    /// This is a one-shot check per toggle, not an animation loop: the paint that follows records
+    /// the phase it drew, and nothing is due again until the next half period elapses.
+    pub(crate) fn advance_caret_blink(&self, now: Instant) -> bool {
+        self.focused
+            .and_then(|focused| self.text_inputs.get(&focused))
+            .is_some_and(|input| input.caret_toggle_due(now))
+    }
+
+    /// When the focused input's caret next toggles, if any input is focused and blinking.
+    pub(crate) fn next_caret_blink_deadline(&self, now: Instant) -> Option<Instant> {
+        self.focused
+            .and_then(|focused| self.text_inputs.get(&focused))
+            .and_then(|input| input.next_caret_toggle(now))
+    }
+
     pub(crate) fn next_scrollbar_deadline(&self) -> Option<Instant> {
         self.scrollbar_states
             .values()

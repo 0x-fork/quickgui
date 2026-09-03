@@ -43,6 +43,7 @@ impl TestAppContext {
                         state.ui.declarative_animation_frame_requested();
                     state.ui.advance_animations(now);
                     state.ui.advance_scrollbars(now);
+                    state.ui.advance_caret_blink(now);
                     scene.clear(state.config.background);
                     state
                         .ui

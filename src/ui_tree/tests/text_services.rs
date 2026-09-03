@@ -225,3 +225,63 @@ fn undo_routing_prefers_a_focused_text_input() {
     assert!(manager.undo_unless_handled(tree.text_input_claims_undo(), &mut applied));
     assert_eq!(applied, 1);
 }
+
+#[test]
+fn the_focused_caret_blinks_on_one_deadline_per_toggle_and_restarts_on_edits() {
+    use crate::CARET_BLINK_HALF_PERIOD;
+    use std::time::Duration;
+
+    let id = ElementId::new(702);
+    let mut tree = UiTree::new();
+    let mut renderer = TestTextLayout;
+    let mut scene = Scene::new();
+    tree.set_root(
+        div()
+            .size(300.0, 100.0)
+            .child(text_input("hello").id(id).w(200.0)),
+        Size::new(300.0, 100.0),
+        1.0,
+        &mut renderer,
+    )
+    .unwrap();
+    let t0 = Instant::now();
+
+    // Nothing is focused, so nothing is armed: an idle window schedules no wake-up at all.
+    tree.paint_at(&mut scene, &mut renderer, t0).unwrap();
+    assert_eq!(tree.next_caret_blink_deadline(t0), None);
+    assert!(!tree.advance_caret_blink(t0 + Duration::from_secs(5)));
+
+    // Focus starts the solid phase; the first toggle is exactly one half period away.
+    assert!(tree.focus(id));
+    tree.paint_at(&mut scene, &mut renderer, t0).unwrap();
+    assert_eq!(
+        tree.next_caret_blink_deadline(t0),
+        Some(t0 + CARET_BLINK_HALF_PERIOD)
+    );
+    assert!(!tree.advance_caret_blink(t0 + Duration::from_millis(100)));
+    let toggled = t0 + CARET_BLINK_HALF_PERIOD + Duration::from_millis(70);
+    assert!(tree.advance_caret_blink(toggled));
+
+    // The paint that follows records the hidden phase, so the same toggle is not due twice, and
+    // the next deadline is the next toggle rather than the next frame.
+    tree.paint_at(&mut scene, &mut renderer, toggled).unwrap();
+    assert!(!tree.advance_caret_blink(toggled));
+    assert_eq!(
+        tree.next_caret_blink_deadline(toggled),
+        Some(t0 + CARET_BLINK_HALF_PERIOD * 2)
+    );
+
+    // An edit makes the caret solid again from the moment it is painted.
+    assert!(tree.input_replace("hello!").repaint);
+    let edited = toggled + Duration::from_millis(50);
+    tree.paint_at(&mut scene, &mut renderer, edited).unwrap();
+    assert_eq!(
+        tree.next_caret_blink_deadline(edited),
+        Some(edited + CARET_BLINK_HALF_PERIOD)
+    );
+
+    // Blurring disarms the blink entirely.
+    assert!(tree.blur());
+    tree.paint_at(&mut scene, &mut renderer, edited).unwrap();
+    assert_eq!(tree.next_caret_blink_deadline(edited), None);
+}

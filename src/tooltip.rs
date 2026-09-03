@@ -2,8 +2,8 @@ use std::{cell::RefCell, fmt, rc::Rc, sync::Arc, time::Duration};
 
 use crate::{
     AccessibilityRole, AnchorAlign, AnchorPlacement, AnchorPlacementHandle, AnchorSide,
-    AsyncViewContext, Color, Element, ElementId, EventContext, IntoElement, MouseButton, Point,
-    StateAccessor, Task, ViewContext, anchor_placement, div, text,
+    AsyncViewContext, Color, Element, ElementId, EventContext, IntoElement, LayoutBoundsHandle,
+    MouseButton, Point, StateAccessor, Task, ViewContext, anchor_placement, div, text,
 };
 
 /// Native-style delay before a newly hovered tooltip becomes visible.
@@ -422,6 +422,9 @@ pub struct TooltipState {
     close_delay: Option<Duration>,
     provider: TooltipProvider,
     placement_handle: AnchorPlacementHandle,
+    /// The trigger's painted rectangle, so a cursor-tracking tooltip can pin its other axis to
+    /// the trigger's edge from the very first frame it opens.
+    trigger_bounds: LayoutBoundsHandle,
     cursor: Option<Point>,
     trigger_hovered: bool,
     popup_hovered: bool,
@@ -466,6 +469,7 @@ impl TooltipState {
             close_delay: None,
             provider: TooltipProvider::new(),
             placement_handle: AnchorPlacementHandle::new(),
+            trigger_bounds: LayoutBoundsHandle::new(),
             cursor: None,
             trigger_hovered: false,
             popup_hovered: false,
@@ -684,16 +688,22 @@ impl TooltipState {
         }
         if self.track_cursor_axis.tracks_any() {
             let tracking = access.clone();
+            // The pointer is tracked while it rests on the trigger, open or not, so the popup
+            // appears at the pointer instead of jumping there on the first move after opening.
             let moved = cx.mouse_move_listener(self.trigger_id, move |view, event, cx| {
                 let position = event.position;
                 let state = tracking.get(view);
-                if !state.open || state.cursor == Some(position) {
+                if state.cursor == Some(position) {
                     return;
                 }
                 state.cursor = Some(position);
-                cx.invalidate();
+                if state.open {
+                    cx.invalidate();
+                }
             });
-            trigger = trigger.on_mouse_move(moved);
+            trigger = trigger
+                .on_mouse_move(moved)
+                .report_bounds(self.trigger_bounds.clone());
         }
         trigger
     }
@@ -790,7 +800,13 @@ impl TooltipState {
             return None;
         }
         let cursor = self.cursor?;
-        let anchor = self.placement_handle.resolved()?.anchor;
+        // The trigger's own painted rectangle is known before the tooltip ever opens; the
+        // resolved placement is the fallback for a trigger painted before it reported bounds.
+        let anchor = self.trigger_bounds.bounds().or_else(|| {
+            self.placement_handle
+                .resolved()
+                .map(|resolved| resolved.anchor)
+        })?;
         let side = self.resolved_side();
         let pinned_x = match side {
             AnchorSide::Left => anchor.x,
@@ -1270,7 +1286,8 @@ mod tests {
             .move_pointer(crate::Point::new(120.0, 210.0))
             .unwrap();
         assert!(cx.read(view, |view| view.tooltip.is_open()).unwrap());
-        // The first open still anchors to the trigger: nothing has reported its rectangle yet.
+        // A hover alone anchors the first open to the trigger; the pointer's own position only
+        // arrives with a move event, which the live runtime delivers alongside the hover.
         let first = cx.element_bounds(window, "popup").unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(first.bottom(), 200.0 - 6.0);

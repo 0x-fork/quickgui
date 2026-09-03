@@ -488,9 +488,10 @@ tooltip schedules a single task and opening another cancels it, so a settled gro
 `hoverable(false)` makes the popup pointer-passive, so it can neither keep itself open nor take
 hover from what it floats over. `close_on_click(false)` keeps the tooltip open when the trigger is
 pressed. `track_cursor_axis(...)` follows the pointer on `X`, `Y`, or `Both`; the untracked axis
-stays pinned to the trigger's edge, and tracking only applies while the tooltip is open and after
-the first painted frame has reported the trigger rectangle. `disabled(true)` refuses to open and
-closes an open tooltip immediately.
+stays pinned to the edge of the trigger's painted bounds. The pointer is recorded while it rests on
+the trigger, before the tooltip opens, so the popup appears at the pointer on its first frame
+rather than opening on the trigger and jumping on the next move. `disabled(true)` refuses to open
+and closes an open tooltip immediately.
 
 `side`, `align`, `side_offset`, and `collision_padding` are the same bounded positioner geometry the
 popover uses, and `arrow_part` follows the resolved placement rather than the declared preference

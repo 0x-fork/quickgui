@@ -2660,6 +2660,14 @@ pub(super) fn apply_field_part(
                 return Some(element);
             };
             let descriptor = DateField::new(root).segment(segment);
+            // The core owns the digits and the placeholder of every segment, so a segment declared
+            // without children of its own shows the core's text; a caller that renders the text
+            // itself keeps its children untouched.
+            let element = if node.children.is_empty() {
+                element.child(text(retained.state.segment_text(segment)))
+            } else {
+                element
+            };
             let element = descriptor.segment_part(&retained.state, element);
             if !listeners_enabled {
                 return Some(element);
@@ -2683,6 +2691,11 @@ pub(super) fn apply_field_part(
                 return None;
             }
             let descriptor = TimeField::new(root).segment(segment);
+            let element = if node.children.is_empty() {
+                element.child(text(retained.state.segment_text(segment)))
+            } else {
+                element
+            };
             let element = descriptor.segment_part(&retained.state, element);
             if !listeners_enabled {
                 return Some(element);

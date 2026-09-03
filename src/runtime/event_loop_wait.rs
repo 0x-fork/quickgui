@@ -56,6 +56,9 @@ impl Runtime {
                     if state.ui.advance_scrollbars(now) {
                         redraw = true;
                     }
+                    if state.ui.advance_caret_blink(now) {
+                        redraw = true;
+                    }
                     if state.ui.advance_tooltips(now) {
                         redraw = true;
                     }
@@ -72,7 +75,14 @@ impl Runtime {
                     (
                         state.image_assets.next_loading_deadline(),
                         state.ui.next_animation_deadline(),
-                        state.ui.next_scrollbar_deadline(),
+                        // The caret toggle shares the scrollbar's one-shot deadline slot.
+                        [
+                            state.ui.next_scrollbar_deadline(),
+                            state.ui.next_caret_blink_deadline(now),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .min(),
                         state.ui.next_tooltip_deadline(),
                         spell_check.next_deadline,
                         state.view_deadline,

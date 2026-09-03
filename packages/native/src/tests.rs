@@ -5599,9 +5599,12 @@ fn declared_tooltip_parts_mount_only_while_the_core_holds_them_open() {
     );
     assert!(cx.contains_element(window, tooltip_popup_id(root)).unwrap());
     cx.run_until_idle().unwrap();
+    // A cursor-tracking trigger reports its painted bounds, so the harness paints at idle and the
+    // core resolves the declared `top` against the room above a trigger sitting at the top of the
+    // window: it flips to `bottom`, and that resolved side is what JavaScript reads.
     assert_eq!(
         component_change(&events, trigger_id)["placement"]["side"],
-        serde_json::json!("top")
+        serde_json::json!("bottom")
     );
 
     // A disabled tooltip cancels its pending deadline and closes, so nothing is mounted at all.
@@ -7926,4 +7929,117 @@ fn a_dialog_declared_inside_a_panel_covers_the_window() {
     assert_eq!(cx.element_bounds(window, core.backdrop_id()).unwrap(), window_bounds);
     let popup = cx.element_bounds(window, core.popover_id()).unwrap();
     assert!((popup.width - 120.0).abs() < 0.5 && (popup.height - 60.0).abs() < 0.5, "{popup:?}");
+}
+
+#[test]
+fn a_context_menu_declared_with_item_parts_and_no_items_opens_the_core_surface() {
+    let target_id = 330;
+    let rename_id = 331;
+    let delete_id = 332;
+    let mut tree = NativeTree::default();
+    // A binding always declares the menu appearance, so the JSON model can arrive with no rows of
+    // its own; the Base UI-shaped child parts are the rows then.
+    tree.nodes.insert(
+        target_id,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            CONTEXT_MENU_TRIGGER_PART,
+            &[(property::MENU, r#"{"items":[]}"#)],
+            &[(property::SELECT_LISTENER, true)],
+        ),
+    );
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(target_id);
+    for (id, value, label) in [(rename_id, "rename", "Rename"), (delete_id, "delete", "Delete")] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            target_id,
+            NodeTag::View,
+            "menu-item",
+            "files",
+            &[],
+            &[
+                (property::PART_VALUE, value),
+                (property::ACCESSIBILITY_LABEL, label),
+            ],
+            &[(property::CLICK_LISTENER, true)],
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(12, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        quickgui::Application::new().bind_keys(quickgui::popover_menu_key_bindings()),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    let target = ElementId::new(target_id as u64);
+    assert!(cx.contains_element(window, target).unwrap());
+    cx.simulate_context_menu(
+        window,
+        target,
+        quickgui::Point::new(40.0, 24.0),
+        quickgui::Modifiers::empty(),
+    )
+    .unwrap();
+    assert_eq!(
+        cx.windows().len(),
+        2,
+        "the child item parts open the core's cursor-point surface"
+    );
+}
+
+#[test]
+fn a_date_segment_declared_without_children_shows_the_core_text() {
+    let date_id = 700;
+    let month_id = 701;
+    let mut tree = NativeTree::default();
+    let date = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "date-field",
+        &[
+            (property::SCOPE, "due"),
+            (property::CIVIL_VALUE, "2026-09-03"),
+            (property::SEGMENT_ORDER, "mdy"),
+        ],
+        &[],
+    );
+    insert_component_node(&mut tree, date_id, ROOT_NODE, date);
+    let month = component_part_node(
+        NodeTag::View,
+        date_id,
+        "date-field-segment",
+        &[(property::SCOPE, "due"), (property::SEGMENT, "month")],
+        &[],
+    );
+    insert_component_node(&mut tree, month_id, date_id, month);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    // The core owns the digits, so an empty segment declaration still reads "09" on screen and
+    // to an assistive client, exactly as the docs describe.
+    let update = cx.accessibility_update(window).unwrap();
+    assert!(
+        update
+            .nodes
+            .iter()
+            .any(|(_, node)| node.label() == Some("09") || node.value() == Some("09")),
+        "{:?}",
+        update
+            .nodes
+            .iter()
+            .map(|(_, node)| (node.role(), node.label().map(str::to_owned)))
+            .collect::<Vec<_>>()
+    );
 }

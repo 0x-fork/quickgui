@@ -589,6 +589,12 @@ impl ContextMenuPopoverView {
             {
                 self.cancel_pending_hover();
             }
+            // The row goes dark once the pointer has left it, as a native menu's does, unless it
+            // anchors an open submenu the pointer is on its way to.
+            let anchors_open_submenu = self.submenu.is_some() && self.submenu_anchor == Some(index);
+            if !anchors_open_submenu && self.menu.unhighlight(index) {
+                cx.invalidate();
+            }
             return;
         }
 

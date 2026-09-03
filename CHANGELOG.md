@@ -6,6 +6,19 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### Framework
 
+- A menu row lit by the pointer goes dark when the pointer leaves it (`PopoverMenu::unhighlight`),
+  in the in-window `Menu` surfaces and the context menu alike; a row anchoring an open submenu and
+  a highlight the keyboard moved elsewhere are left alone. The last hovered row previously stayed
+  highlighted after the pointer left the menu.
+- A cursor-tracking tooltip (`track_cursor_axis`) now records the pointer while it rests on the
+  trigger before the tooltip opens and pins its other axis to the trigger's painted bounds, so the
+  popup appears at the pointer instead of opening on the trigger's centre and jumping on the next
+  move.
+- The text caret is painted in the input's own text colour and blinks on AppKit's cadence
+  (`CARET_BLINK_HALF_PERIOD`, 530 ms): solid after focus, an edit, or a caret move, then
+  alternating. The runtime wakes exactly once per toggle while an input is focused and never
+  otherwise; the caret was previously a fixed light grey that vanished on light backgrounds and
+  never blinked.
 - Fixed the accessibility tree listing a child whose node the update did not carry: a descendant
   the last frame never painted, such as a virtual list's row column inside a body with no room
   yet, now leaves its parent's child list too, so an assistive client no longer aborts on an
@@ -566,6 +579,13 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### JavaScript tooling
 
+- `DateField.Segment` and `TimeField.Segment` declared without children now show the core's own
+  digits and placeholder for that segment, as the docs always described; they previously mounted as
+  empty boxes unless the application rendered the text itself.
+- A `ContextMenu.Trigger` whose declared item list is empty now opens the core's surface from its
+  `Menu.Item` child parts; the binding's always-present appearance declaration used to shadow the
+  parts and open nothing.
+- Added `Menu.popup` to the components gallery's Context Menu tab, next to the two in-window shapes.
 - Percentage `width` and `height` values now size against the parent: `width: "62%"` on a
   `Meter.Indicator`, `Progress.Indicator`, or `Slider.Indicator` fills that share of its track,
   where previously only the literal `"100%"` resolved.

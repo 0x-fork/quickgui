@@ -52,6 +52,39 @@ pub(crate) struct TextInputState {
     /// One provider checking session, released when this input unmounts.
     document: Option<Rc<SpellDocument>>,
     highlight_cache: RefCell<Option<HighlightCache>>,
+    /// The caret blink QuickGUI paints while this input is focused.
+    blink: Option<CaretBlink>,
+}
+
+/// The phase of one focused input's blinking caret.
+///
+/// The caret is solid for one half period after every edit or caret move and then alternates, as
+/// AppKit's does. Nothing here runs on its own: the paint that draws the caret derives the phase
+/// from its own time, and the runtime wakes exactly once per toggle while an input is focused.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CaretBlink {
+    /// When the caret last became solid: focus, an edit, or a caret move.
+    epoch: Instant,
+    /// The caret and text length the epoch was armed for, so a change restarts the phase.
+    caret: usize,
+    len: usize,
+    /// The phase the last paint drew, so a due toggle is reported exactly once.
+    painted_phase: u64,
+}
+
+/// Half of the caret blink period: solid for this long, then hidden for this long.
+pub const CARET_BLINK_HALF_PERIOD: Duration = Duration::from_millis(530);
+
+impl CaretBlink {
+    fn phase(&self, now: Instant) -> u64 {
+        let elapsed = now.saturating_duration_since(self.epoch);
+        (elapsed.as_micros() / CARET_BLINK_HALF_PERIOD.as_micros()) as u64
+    }
+
+    /// The next instant the caret toggles.
+    fn next_toggle(&self, now: Instant) -> Instant {
+        self.epoch + CARET_BLINK_HALF_PERIOD * (self.phase(now) as u32 + 1)
+    }
 }
 
 /// One memoized merge of controlled runs and projected spelling runs.
@@ -185,6 +218,7 @@ impl TextInputState {
             last_autocorrection: None,
             document: None,
             highlight_cache: RefCell::new(None),
+            blink: None,
         }
     }
 
@@ -247,6 +281,47 @@ impl TextInputState {
 
     pub fn caret(&self) -> usize {
         self.caret
+    }
+
+    /// Whether the caret is drawn at `now`, arming or restarting the blink as needed.
+    ///
+    /// Called by the paint of a focused input: a fresh focus, an edit, or a caret move restarts
+    /// the solid phase, and the phase drawn is remembered so the runtime's toggle wake-up fires
+    /// once per toggle rather than every frame.
+    pub(crate) fn caret_visible_at(&mut self, now: Instant) -> bool {
+        let len = self.text.len();
+        let restart = self
+            .blink
+            .is_none_or(|blink| blink.caret != self.caret || blink.len != len);
+        if restart {
+            self.blink = Some(CaretBlink {
+                epoch: now,
+                caret: self.caret,
+                len,
+                painted_phase: 0,
+            });
+            return true;
+        }
+        let blink = self.blink.as_mut().expect("the blink was armed above");
+        let phase = blink.phase(now);
+        blink.painted_phase = phase;
+        phase.is_multiple_of(2)
+    }
+
+    /// Stop blinking: the input lost focus, so the next focus starts solid again.
+    pub(crate) fn clear_caret_blink(&mut self) {
+        self.blink = None;
+    }
+
+    /// When the blinking caret next toggles, if it is blinking at all.
+    pub(crate) fn next_caret_toggle(&self, now: Instant) -> Option<Instant> {
+        self.blink.map(|blink| blink.next_toggle(now))
+    }
+
+    /// Whether a toggle became due since the last paint, so the caret needs a repaint.
+    pub(crate) fn caret_toggle_due(&self, now: Instant) -> bool {
+        self.blink
+            .is_some_and(|blink| blink.phase(now) != blink.painted_phase)
     }
 
     pub fn anchor(&self) -> usize {

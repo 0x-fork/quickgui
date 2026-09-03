@@ -570,6 +570,7 @@ pub use terminal::{
     TerminalPaddingColor, TerminalScrollState, TerminalSnapshot, TerminalStatus, TerminalStyle,
     TerminalTheme,
 };
+pub use text_input::CARET_BLINK_HALF_PERIOD;
 pub use toast::{
     DEFAULT_TOAST_LIMIT, DEFAULT_TOAST_SWIPE_THRESHOLD, DEFAULT_TOAST_TIMEOUT, MAX_TOAST_DURATION,
     MAX_TOAST_SWIPE_THRESHOLD, MAX_TOAST_TEXT_BYTES, MAX_TOASTS, Toast, ToastEntry, ToastId,

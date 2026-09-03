@@ -767,6 +767,20 @@ impl PopoverMenu {
         true
     }
 
+    /// Drop the highlight from `index` when the pointer leaves it, returning whether it changed.
+    ///
+    /// A native menu shows no highlighted row once the pointer has left the surface, so a row
+    /// the pointer lit up goes dark when it leaves; a highlight the keyboard moved elsewhere in
+    /// the meantime is left alone.
+    pub fn unhighlight(&mut self, index: usize) -> bool {
+        if self.active != Some(index) {
+            return false;
+        }
+        self.active = None;
+        self.clear_typeahead();
+        true
+    }
+
     pub fn select_previous(&mut self) -> bool {
         self.move_active(false)
     }
@@ -1266,7 +1280,13 @@ impl PopoverMenu {
             dismiss,
             open_submenu,
             move |view, index, hovered, cx| {
-                if hovered && access(view).highlight(index) {
+                let menu = access(view);
+                let changed = if hovered {
+                    menu.highlight(index)
+                } else {
+                    menu.unhighlight(index)
+                };
+                if changed {
                     cx.invalidate();
                 }
             },
@@ -2822,6 +2842,25 @@ mod tests {
             cx.read(view, |view| view.changes.clone()).unwrap(),
             vec![true, false]
         );
+    }
+
+    #[test]
+    fn a_pointer_leaving_a_row_drops_its_highlight_but_not_one_the_keyboard_moved() {
+        let mut menu = sample_menu();
+        let active = |menu: &PopoverMenu| menu.active_item().and_then(PopoverMenuItem::id);
+        assert!(menu.highlight(4));
+        assert_eq!(active(&menu), Some(ElementId::from("sidebar")));
+
+        // Leaving the lit row leaves nothing highlighted, as a native menu would show.
+        assert!(menu.unhighlight(4));
+        assert!(active(&menu).is_none());
+        assert!(!menu.unhighlight(4));
+
+        // A highlight the keyboard has since moved elsewhere survives the stale row's exit.
+        assert!(menu.highlight(4));
+        assert!(menu.select_next());
+        assert!(!menu.unhighlight(4));
+        assert_eq!(active(&menu), Some(ElementId::from("light")));
     }
 
     #[test]

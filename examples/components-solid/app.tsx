@@ -1,4 +1,10 @@
-import { app, Appearance, Window, type AppearanceMode } from "@quickgui/native";
+import {
+  app,
+  Appearance,
+  Menu as NativeMenu,
+  Window,
+  type AppearanceMode,
+} from "@quickgui/native";
 import {
   Accordion,
   AlertDialog,
@@ -93,12 +99,15 @@ interface Palette {
   faint: string;
   border: string;
   accent: string;
+  /** The accent a filled control shows while hovered, so its text stays readable. */
+  accentHover: string;
   onAccent: string;
   selection: string;
   popup: string;
   backdrop: string;
   track: string;
   danger: string;
+  dangerHover: string;
 }
 
 const lightPalette: Palette = {
@@ -114,12 +123,14 @@ const lightPalette: Palette = {
   faint: "#8b94a3",
   border: "#d9dde4",
   accent: "#2563eb",
+  accentHover: "#1d4fd7",
   onAccent: "#ffffff",
   selection: "#dbe6fd",
   popup: "#ffffff",
   backdrop: "#1e293b66",
   track: "#e4e7ec",
   danger: "#b42318",
+  dangerHover: "#9a1d14",
 };
 
 const darkPalette: Palette = {
@@ -135,12 +146,14 @@ const darkPalette: Palette = {
   faint: "#6e7a8c",
   border: "#2a3446",
   accent: "#5b93f7",
+  accentHover: "#7aa7ff",
   onAccent: "#08111f",
   selection: "#1f2d47",
   popup: "#171e2a",
   backdrop: "#010409aa",
   track: "#252f41",
   danger: "#f0736a",
+  dangerHover: "#f58c84",
 };
 
 const [appearance, setAppearance] = createSignal<AppearanceMode>("light");
@@ -362,6 +375,10 @@ function Btn(props: {
         ...controlStyle(),
         backgroundColor: props.primary === true ? p().accent : p().control,
         borderColor: props.primary === true ? p().accent : p().border,
+        // A filled button darkens its own fill on hover instead of taking the neutral hover
+        // background, which would put its light label on a light surface.
+        hoverBackgroundColor:
+          props.primary === true ? p().accentHover : p().controlHover,
         opacity: props.disabled === true ? 0.5 : 1,
       }}
       onClick={() => props.onClick()}
@@ -442,8 +459,12 @@ function AccordionDemo() {
                     height: 34,
                     paddingLeft: 12,
                     paddingRight: 12,
+                    // The ring is drawn inside the header with the item's own corner radius, so
+                    // it never lands on top of the rounded 1px border around the item.
+                    borderRadius: 9,
                     hoverBackgroundColor: p().controlHover,
                     focusOutline: `2px solid ${p().accent}`,
+                    outlineOffset: -2,
                   }}
                 >
                   <Text style={{ fontSize: 12, color: p().ink }}>
@@ -526,6 +547,7 @@ function AlertDialogDemo() {
                     ...controlStyle(),
                     backgroundColor: p().danger,
                     borderColor: p().danger,
+                    hoverBackgroundColor: p().dangerHover,
                   }}
                   onClick={() => {
                     setOutcome("deleted");
@@ -1120,6 +1142,7 @@ function ComboboxReadout(props: {
 function ContextMenuDemo() {
   const [command, setCommand] = createSignal("nothing yet");
   const [parts, setParts] = createSignal("nothing yet");
+  const [native, setNative] = createSignal("nothing yet");
 
   const target = () =>
     ({
@@ -1136,7 +1159,7 @@ function ContextMenuDemo() {
   return (
     <Panel
       title="Context menu"
-      hint="Two shapes of the same core adapter: a declared JSON row model, and the Base UI row parts. Both open at the exact secondary-click point."
+      hint="Three ways to answer a secondary click: the core's in-window surface from a declared JSON row model, the same surface from Base UI row parts, and the operating system's own menu through Menu.popup from @quickgui/native."
     >
       <ContextMenu.Root
         scope="ctx-json"
@@ -1154,8 +1177,10 @@ function ContextMenuDemo() {
         </ContextMenu.Trigger>
       </ContextMenu.Root>
 
+      {/* The child parts are the rows; the surface they sit on is still the declared appearance. */}
       <ContextMenu.Root
         scope="ctx-parts"
+        appearance={menuAppearance()}
         onSelect={(details) => setParts(details.id)}
       >
         <ContextMenu.Trigger style={target()}>
@@ -1167,7 +1192,24 @@ function ContextMenuDemo() {
         </ContextMenu.Trigger>
       </ContextMenu.Root>
 
-      <Note text={`json → ${command()} · parts → ${parts()}`} />
+      {/* The system menu is AppKit's own NSMenu: it opens at the cursor and resolves on close. */}
+      <View
+        style={{ ...target(), display: "flex" }}
+        onContextMenu={() => {
+          void NativeMenu.popup([
+            { label: "Reveal in Finder", click: () => setNative("reveal") },
+            { label: "Get Info", click: () => setNative("info") },
+            { type: "separator" },
+            { label: "Move to Trash", click: () => setNative("trash") },
+          ]).then(() => {
+            if (native() === "nothing yet") setNative("dismissed");
+          });
+        }}
+      >
+        <Muted text="Right-click: the system's native menu" />
+      </View>
+
+      <Note text={`json → ${command()} · parts → ${parts()} · native → ${native()}`} />
     </Panel>
   );
 }
@@ -2402,6 +2444,7 @@ function PopoverDemo() {
               ...controlStyle(),
               backgroundColor: p().accent,
               borderColor: p().accent,
+              hoverBackgroundColor: p().accentHover,
             }}
           >
             <Text style={{ fontSize: 12, color: p().onAccent }}>Account</Text>
@@ -2882,6 +2925,10 @@ function SliderDemo() {
   const [committed, setCommitted] = createSignal<number | undefined>();
   const [range, setRange] = createSignal<readonly number[]>([20, 70]);
 
+  // The look of an AppKit slider: a 4px track with the accent fill to the left of a 20px white
+  // knob that carries a hairline and a soft shadow. Pressing anywhere on the control jumps the
+  // nearest knob there and continues as a drag, which is the core's own pointer policy.
+  const KNOB = 20;
   const control = () =>
     ({
       position: "relative",
@@ -2889,30 +2936,42 @@ function SliderDemo() {
       flexDirection: "row",
       alignItems: "center",
       width: GAUGE_WIDTH,
-      height: 22,
+      height: 24,
     }) as const;
-  // The core owns the value; the application owns where the thumb is painted.
-  const thumbLeft = (value: number) => Math.round((value / 100) * (GAUGE_WIDTH - 16));
+  // The core owns the value; the application owns where the knob is painted.
+  const thumbLeft = (value: number) => Math.round((value / 100) * (GAUGE_WIDTH - KNOB));
   const track = () =>
     ({
       display: "flex",
       flexDirection: "row",
       width: GAUGE_WIDTH,
-      height: 6,
-      borderRadius: 3,
+      height: 4,
+      borderRadius: 2,
       backgroundColor: p().track,
+      borderWidth: 1,
+      borderColor: p().border,
+    }) as const;
+  const fill = () =>
+    ({
+      height: 4,
+      borderRadius: 2,
+      marginTop: -1,
+      marginLeft: -1,
+      backgroundColor: p().accent,
     }) as const;
   const thumb = (value: number) =>
     ({
       position: "absolute",
       left: thumbLeft(value),
-      top: 3,
-      width: 16,
-      height: 16,
-      borderRadius: 8,
-      backgroundColor: p().accent,
-      borderWidth: 2,
-      borderColor: p().panel,
+      top: 2,
+      width: KNOB,
+      height: KNOB,
+      borderRadius: KNOB / 2,
+      backgroundColor: p().panel,
+      borderWidth: 1,
+      borderColor: p().border,
+      boxShadow: "0 1px 2px #0000003d",
+      activeBackgroundColor: p().controlHover,
       focusOutline: `2px solid ${p().accent}`,
       outlineOffset: 2,
     }) as const;
@@ -2946,12 +3005,7 @@ function SliderDemo() {
           <Slider.Track scope="sl-volume" style={track()}>
             <Slider.Indicator
               scope="sl-volume"
-              style={{
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: p().accent,
-                width: Math.round(((volume()[0] ?? 0) / 100) * GAUGE_WIDTH),
-              }}
+              style={{ ...fill(), width: `${volume()[0] ?? 0}%` }}
             />
           </Slider.Track>
           <Slider.Thumb scope="sl-volume" index={0} style={thumb(volume()[0] ?? 0)} />
@@ -2979,13 +3033,9 @@ function SliderDemo() {
             <Slider.Range
               scope="sl-range"
               style={{
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: p().accent,
+                ...fill(),
                 marginLeft: Math.round(((range()[0] ?? 0) / 100) * GAUGE_WIDTH),
-                width: Math.round(
-                  (((range()[1] ?? 0) - (range()[0] ?? 0)) / 100) * GAUGE_WIDTH,
-                ),
+                width: `${(range()[1] ?? 0) - (range()[0] ?? 0)}%`,
               }}
             />
           </Slider.Track>
@@ -3593,13 +3643,14 @@ function TooltipDemo() {
   return (
     <Panel
       title="Tooltip"
-      hint="A provider shares one warm group deadline across its triggers, so the second tooltip in a row opens without waiting again."
+      hint="A provider shares one warm group deadline across its triggers, so the second tooltip in a row opens without waiting again. Both are hoverable={false}, like a native help tag: the popup never takes the pointer, so reaching it closes the tooltip."
     >
       <Tooltip.Provider delay={500} closeDelay={120} timeout={400}>
         <Row>
           <Tooltip.Root
             side="top"
             sideOffset={8}
+            hoverable={false}
             onOpenChange={setOpen}
             onPlacementChange={(details) =>
               setPlacement(`${details.side}/${details.align}`)
@@ -3629,7 +3680,12 @@ function TooltipDemo() {
             </Tooltip.Positioner>
           </Tooltip.Root>
 
-          <Tooltip.Root side="right" sideOffset={8} trackCursorAxis="x">
+          <Tooltip.Root
+            side="bottom"
+            sideOffset={8}
+            trackCursorAxis="x"
+            hoverable={false}
+          >
             <Tooltip.Trigger style={controlStyle()}>
               <Text style={{ fontSize: 12, color: p().ink }}>Tracks the cursor</Text>
             </Tooltip.Trigger>
@@ -3737,10 +3793,10 @@ function TableDemo() {
         <For each={visible()}>
           {(row, index) => (
             <Table.Row index={range().start + index()}>
-              <Table.Cell column="name" style={{ paddingLeft: 10, justifyContent: "center" }}>
+              <Table.Cell column="name" style={{ paddingLeft: 10 }}>
                 <Text style={{ fontSize: 12, color: p().ink }}>{row.name}</Text>
               </Table.Cell>
-              <Table.Cell column="size" style={{ paddingRight: 10, justifyContent: "center" }}>
+              <Table.Cell column="size" style={{ paddingRight: 10, justifyContent: "flex-end" }}>
                 <Text style={{ fontSize: 12, color: p().muted, textAlign: "end" }}>
                   {`${row.size} KB`}
                 </Text>
@@ -3796,15 +3852,19 @@ function TreeDemo() {
     return splice ? { setChildren: splice } : {};
   };
 
-  const flattened = (): readonly TreeNodeDeclaration[] => {
+  // The rows the core can mount, in tree order, each with the depth that indents it.
+  type FlatRow = { node: TreeNodeDeclaration; depth: number };
+  const flattened = (): readonly FlatRow[] => {
     const splice = loaded();
-    const walk = (list: readonly TreeNodeDeclaration[]): TreeNodeDeclaration[] =>
+    const walk = (list: readonly TreeNodeDeclaration[], depth: number): FlatRow[] =>
       list.flatMap((node) => {
         const children =
           splice && splice.id === node.id ? splice.children : (node.children ?? []);
-        return expanded().includes(node.id) ? [node, ...walk(children)] : [node];
+        return expanded().includes(node.id)
+          ? [{ node, depth }, ...walk(children, depth + 1)]
+          : [{ node, depth }];
       });
-    return walk(nodes);
+    return walk(nodes, 0);
   };
   const visible = () => flattened().slice(range().start, range().end);
 
@@ -3845,10 +3905,16 @@ function TreeDemo() {
         }}
       >
         <For each={visible()}>
-          {(node) => (
+          {({ node, depth }) => (
             <Tree.Row
               nodeId={node.id}
-              style={{ paddingLeft: 10, justifyContent: "center" }}
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "center",
+                height: 26,
+                paddingLeft: 10 + depth * 16,
+              }}
             >
               <Text style={{ fontSize: 12, color: p().ink }}>
                 {node.label ?? node.id}
@@ -3871,8 +3937,14 @@ function TreeDemo() {
 interface Demo {
   id: string;
   label: string;
+  /** Where the component's shape comes from: Base UI's catalog, or QuickGUI's own set. */
+  source?: "QuickGUI";
   render: () => unknown;
 }
+
+/** The catalog a demo's parts and props follow. */
+const sourceOf = (demo: Demo | undefined): string =>
+  demo === undefined ? "" : demo.source === "QuickGUI" ? "QuickGUI component" : "Base UI part set";
 
 const DEMOS: readonly Demo[] = [
   { id: "accordion", label: "Accordion", render: () => <AccordionDemo /> },
@@ -3880,13 +3952,13 @@ const DEMOS: readonly Demo[] = [
   { id: "autocomplete", label: "Autocomplete", render: () => <AutocompleteDemo /> },
   { id: "avatar", label: "Avatar", render: () => <AvatarDemo /> },
   { id: "button", label: "Button", render: () => <ButtonDemo /> },
-  { id: "calendar", label: "Calendar", render: () => <CalendarDemo /> },
+  { id: "calendar", source: "QuickGUI", label: "Calendar", render: () => <CalendarDemo /> },
   { id: "checkbox", label: "Checkbox", render: () => <CheckboxDemo /> },
   { id: "checkbox-group", label: "Checkbox Group", render: () => <CheckboxGroupDemo /> },
   { id: "collapsible", label: "Collapsible", render: () => <CollapsibleDemo /> },
   { id: "combobox", label: "Combobox", render: () => <ComboboxDemo /> },
   { id: "context-menu", label: "Context Menu", render: () => <ContextMenuDemo /> },
-  { id: "date-field", label: "Date Field", render: () => <DateFieldDemo /> },
+  { id: "date-field", source: "QuickGUI", label: "Date Field", render: () => <DateFieldDemo /> },
   { id: "dialog", label: "Dialog", render: () => <DialogDemo /> },
   { id: "drawer", label: "Drawer", render: () => <DrawerDemo /> },
   { id: "field", label: "Field", render: () => <FieldDemo /> },
@@ -3907,17 +3979,17 @@ const DEMOS: readonly Demo[] = [
   { id: "select", label: "Select", render: () => <SelectDemo /> },
   { id: "separator", label: "Separator", render: () => <SeparatorDemo /> },
   { id: "slider", label: "Slider", render: () => <SliderDemo /> },
-  { id: "splitter", label: "Splitter", render: () => <SplitterDemo /> },
+  { id: "splitter", source: "QuickGUI", label: "Splitter", render: () => <SplitterDemo /> },
   { id: "switch", label: "Switch", render: () => <SwitchDemo /> },
   { id: "tabs", label: "Tabs", render: () => <TabsDemo /> },
-  { id: "time-field", label: "Time Field", render: () => <TimeFieldDemo /> },
+  { id: "time-field", source: "QuickGUI", label: "Time Field", render: () => <TimeFieldDemo /> },
   { id: "toast", label: "Toast", render: () => <ToastDemo /> },
   { id: "toggle", label: "Toggle", render: () => <ToggleDemo /> },
   { id: "toggle-group", label: "Toggle Group", render: () => <ToggleGroupDemo /> },
   { id: "toolbar", label: "Toolbar", render: () => <ToolbarDemo /> },
   { id: "tooltip", label: "Tooltip", render: () => <TooltipDemo /> },
-  { id: "table", label: "Table", render: () => <TableDemo /> },
-  { id: "tree", label: "Tree", render: () => <TreeDemo /> },
+  { id: "table", source: "QuickGUI", label: "Table", render: () => <TableDemo /> },
+  { id: "tree", source: "QuickGUI", label: "Tree", render: () => <TreeDemo /> },
 ];
 
 function Gallery() {
@@ -3959,11 +4031,14 @@ function Gallery() {
             borderColor: p().border,
           }}
         >
+          {/* The traffic lights sit at (16, 18); the title clears them and centres on their row. */}
           <View
             style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
               height: 52,
               flexShrink: 0,
-              justifyContent: "center",
               paddingLeft: 82,
               appRegion: "drag",
             }}
@@ -3972,7 +4047,15 @@ function Gallery() {
               Components
             </Text>
           </View>
-          <View style={{ flex: 1, overflowY: "scroll" }}>
+          <View
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              flex: 1,
+              minHeight: 0,
+              overflowY: "scroll",
+            }}
+          >
             <Tabs.List
               style={{
                 display: "flex",
@@ -4046,9 +4129,12 @@ function Gallery() {
               appRegion: "drag",
             }}
           >
-            <Text style={{ fontSize: 15, fontWeight: 700, color: p().ink }}>
-              {current()?.label ?? ""}
-            </Text>
+            <View style={{ display: "flex", flexDirection: "row", alignItems: "baseline", gap: 10 }}>
+              <Text style={{ fontSize: 15, fontWeight: 700, color: p().ink }}>
+                {current()?.label ?? ""}
+              </Text>
+              <Text style={{ fontSize: 11, color: p().faint }}>{sourceOf(current())}</Text>
+            </View>
             <Text style={{ fontSize: 11, color: p().faint }}>
               {`${DEMOS.length} components · ${appearance()} appearance · ${Math.round(viewport().width)}×${Math.round(viewport().height)}`}
             </Text>

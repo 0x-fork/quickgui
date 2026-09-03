@@ -1358,11 +1358,17 @@ pub(super) fn paint_element(
                         );
                     }
                 }
+                // The caret is the text's own colour, as a native field's is, and it blinks on
+                // AppKit's cadence: solid after every edit or caret move, then alternating.
                 if is_focused && selection.is_empty() {
-                    scene.push_quad_in(
-                        layer,
-                        Quad::new(caret_bounds, Color::rgb8(226, 232, 240)).clip(text_clip),
-                    );
+                    if input_state.caret_visible_at(paint_time) {
+                        scene.push_quad_in(
+                            layer,
+                            Quad::new(caret_bounds, style.color).clip(text_clip),
+                        );
+                    }
+                } else {
+                    input_state.clear_caret_blink();
                 }
                 if let Some(marked) = input_state.marked()
                     && !marked.is_empty()
