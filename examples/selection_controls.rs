@@ -79,8 +79,12 @@ impl GalleryColors {
 struct SelectionControlsDemo {
     save_automatically: bool,
     index_workspace: ToggleState,
+    /// The three boxes a parent checkbox derives its own state from.
+    exports: [bool; 3],
     density: Density,
     sync_settings: bool,
+    /// A read-only switch: focusable, in the Tab sequence, and refusing every toggle.
+    audit_logging: bool,
     light: bool,
     status: Arc<str>,
 }
@@ -90,8 +94,10 @@ impl Default for SelectionControlsDemo {
         Self {
             save_automatically: true,
             index_workspace: ToggleState::Mixed,
+            exports: [true, false, false],
             density: Density::Comfortable,
             sync_settings: false,
+            audit_logging: true,
             light: false,
             status: Arc::from("Tab through controls; arrow keys move inside the radio group."),
         }
@@ -271,6 +277,40 @@ impl View for SelectionControlsDemo {
             view.status = Arc::from(format!("Workspace index: {:?}", view.index_workspace));
             cx.invalidate();
         });
+        // The parent derives its own tri-state from the children and tells the example which way
+        // activating it moves the whole group; no child registry is retained anywhere.
+        let export_all = cx.listener("export-all", |view, cx| {
+            let Some(checked) = Checkbox::parent(view.exports).parent_next_checked() else {
+                return;
+            };
+            view.exports = [checked; 3];
+            view.status = Arc::from(if checked {
+                "Every export selected"
+            } else {
+                "Exports cleared"
+            });
+            cx.invalidate();
+        });
+        let mut export_child = |index: usize| {
+            cx.listener(
+                match index {
+                    0 => "export-notes",
+                    1 => "export-images",
+                    _ => "export-history",
+                },
+                move |view: &mut Self, cx: &mut EventContext| {
+                    view.exports[index] = !view.exports[index];
+                    view.status = Arc::from(format!(
+                        "Exports: {:?}",
+                        Checkbox::parent(view.exports).state()
+                    ));
+                    cx.invalidate();
+                },
+            )
+        };
+        let export_notes = export_child(0);
+        let export_images = export_child(1);
+        let export_history = export_child(2);
         let compact = cx.listener("density-compact", |view, cx| {
             view.density = Density::Compact;
             view.status = Arc::from("Compact density selected");
@@ -293,6 +333,19 @@ impl View for SelectionControlsDemo {
             } else {
                 "Settings sync disabled"
             });
+            cx.invalidate();
+        });
+        // A read-only switch answers `None`, so the listener writes nothing at all.
+        let audit = cx.listener("audit-logging", |view, cx| {
+            match Switch::new(view.audit_logging)
+                .read_only(true)
+                .next_checked()
+            {
+                Some(checked) => view.audit_logging = checked,
+                None => {
+                    view.status = Arc::from("Audit logging is managed and cannot be changed here");
+                }
+            }
             cx.invalidate();
         });
         let theme = cx.listener("theme", |view, cx| {
@@ -338,6 +391,42 @@ impl View for SelectionControlsDemo {
                     .id("index-workspace")
                     .on_click(index),
             );
+
+        let parent_control = Checkbox::parent(self.exports);
+        let export_labels = [
+            ("export-notes", "Notes", export_notes),
+            ("export-images", "Images", export_images),
+            ("export-history", "History", export_history),
+        ];
+        let mut exports = div().flex_col().gap_2().child(
+            parent_control
+                .root_part(
+                    Self::control_root(div(), colors)
+                        .child(Self::checkbox_indicator(parent_control, colors))
+                        .child(Self::copy(
+                            "Export everything",
+                            "Derived from the boxes below: all, none, or mixed.",
+                            colors.muted,
+                        )),
+                )
+                .id("export-all")
+                .on_click(export_all),
+        );
+        for (index, (id, label, listener)) in export_labels.into_iter().enumerate() {
+            let child = Checkbox::new(self.exports[index]);
+            exports = exports.child(
+                child
+                    .root_part(
+                        Self::control_root(div(), colors)
+                            .ml(24.0)
+                            .child(Self::checkbox_indicator(child, colors))
+                            .child(Self::copy(label, "", colors.muted)),
+                    )
+                    .id(id)
+                    .on_click(listener),
+            );
+        }
+        let checks = checks.child(exports);
 
         let compact_control = Radio::new(self.density == Density::Compact);
         let comfortable_control = Radio::new(self.density == Density::Comfortable);
@@ -389,6 +478,7 @@ impl View for SelectionControlsDemo {
 
         let sync_control = Switch::new(self.sync_settings);
         let managed_control = Switch::new(false);
+        let audit_control = Switch::new(self.audit_logging).read_only(true);
         let switches = div()
             .flex_col()
             .gap_2()
@@ -419,6 +509,20 @@ impl View for SelectionControlsDemo {
                     )
                     .id("managed-setting")
                     .disabled(true),
+            )
+            .child(
+                audit_control
+                    .root_part(
+                        Self::control_root(div(), colors)
+                            .child(Self::switch_track(audit_control, colors))
+                            .child(Self::copy(
+                                "Audit logging",
+                                "Read-only: still focusable and still in the Tab sequence, but every toggle is refused.",
+                                colors.muted,
+                            )),
+                    )
+                    .id("audit-logging")
+                    .on_click(audit),
             );
 
         div()

@@ -17,6 +17,7 @@ impl UiTree {
             scroll_offsets: HashMap::new(),
             scroll_end_states: HashMap::with_capacity(8),
             virtual_scroll_handles: HashMap::with_capacity(8),
+            anchor_placement_handles: Vec::new(),
             natural_bounds: HashMap::with_capacity(256),
             element_bounds: HashMap::with_capacity(256),
             hit_regions: Vec::with_capacity(128),
@@ -298,6 +299,8 @@ impl UiTree {
                 self.pending_tooltip = None;
                 self.visible_tooltip = None;
             }
+            self.anchor_placement_handles.clear();
+            collect_anchor_placement_handles(root, &mut self.anchor_placement_handles);
             self.virtual_scroll_handles.clear();
             sync_virtual_scrolls(
                 root,
@@ -714,6 +717,24 @@ impl UiTree {
                 .refresh_mount_after_measurement(&mut binding.mount);
         }
         result
+    }
+
+    /// Whether any bound anchored element resolved to a different placement during the last paint.
+    ///
+    /// The runtime uses this edge-triggered revision comparison to request one correcting frame so
+    /// an application that draws from [`crate::AnchorPlacementHandle`] converges immediately after
+    /// a flip. An unchanged placement reports nothing and creates no redraw source.
+    pub(crate) fn take_anchor_placement_update(&mut self) -> bool {
+        let mut changed = false;
+        for binding in &mut self.anchor_placement_handles {
+            let revision = binding.handle.revision();
+            if revision == binding.revision {
+                continue;
+            }
+            binding.revision = revision;
+            changed = true;
+        }
+        changed
     }
 
     #[cfg(test)]

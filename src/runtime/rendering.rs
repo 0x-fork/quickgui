@@ -233,6 +233,12 @@ impl Runtime {
             let cursor = desired_cursor(state, point);
             set_cursor_if_changed(state, cursor);
         }
+        // Anchored placement is resolved while painting. When a surface actually flipped, the
+        // application's arrow, transform origin, or available-space sizing is one frame behind, so
+        // request exactly one correcting frame; an unchanged placement requests none.
+        if state.ui.take_anchor_placement_update() {
+            state.view_dirty = true;
+        }
         let variable_list_measurement_update = state.ui.take_variable_list_measurement_update();
         let variable_list_measurements_changed = variable_list_measurement_update.changed;
         let declarative_animation_frame_requested =

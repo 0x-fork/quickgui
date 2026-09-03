@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
+use std::time::Duration;
+
 use quickgui::{
-    AccessibilityRole, AnchorPlacement, Application, BoxShadow, Color, Element, EventContext,
-    IntoElement, Popover, PopoverKind, View, ViewContext, WindowAppearance, button, div, text,
+    AccessibilityRole, AnchorAlign, AnchorPlacement, AnchorPlacementHandle, AnchorSide,
+    Application, BoxShadow, Color, Element, EventContext, IntoElement, Popover, PopoverHoverState,
+    PopoverKind, View, ViewContext, WindowAppearance, button, div, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
@@ -14,12 +17,30 @@ fn main() -> Result<(), quickgui::AppError> {
     })
 }
 
-#[derive(Default)]
 struct PopoverGallery {
     account_open: bool,
     nested_open: bool,
     actions_open: bool,
+    /// Hover opening is framework behavior on exact one-shot deadlines, not an application timer.
+    preview: PopoverHoverState,
+    /// The placement QuickGUI resolved for the preview surface on the previous painted frame.
+    preview_placement: AnchorPlacementHandle,
     status: Option<Arc<str>>,
+}
+
+impl Default for PopoverGallery {
+    fn default() -> Self {
+        Self {
+            account_open: false,
+            nested_open: false,
+            actions_open: false,
+            preview: PopoverHoverState::new()
+                .delay(Duration::from_millis(250))
+                .close_delay(Duration::from_millis(120)),
+            preview_placement: AnchorPlacementHandle::new(),
+            status: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -71,6 +92,7 @@ impl PopoverGallery {
         self.account_open = false;
         self.nested_open = false;
         self.actions_open = false;
+        self.preview.close_now();
     }
 
     fn select(&mut self, value: &'static str, cx: &mut EventContext) {
@@ -94,6 +116,18 @@ impl View for PopoverGallery {
             .kind(PopoverKind::Menu)
             .placement(AnchorPlacement::TopEnd)
             .initial_focus("duplicate");
+        // Base UI-shaped positioner props. `side`/`align` are preferences; the arrow follows the
+        // placement QuickGUI actually resolved, so it stays on the popup edge that faces the
+        // trigger even when the surface flips near a window edge.
+        let preview = Popover::new("preview-trigger", "preview-popover", self.preview.is_open())
+            .side(AnchorSide::Top)
+            .align(AnchorAlign::Center)
+            .side_offset(12.0)
+            .collision_padding(16.0)
+            .arrow_size(12.0)
+            .arrow_padding(10.0)
+            .track_placement(&self.preview_placement);
+        let preview_state = preview.state();
 
         let toggle_account = cx.listener(account.trigger_id(), move |this, cx| {
             let opening = !this.account_open;
@@ -230,8 +264,56 @@ impl View for PopoverGallery {
                             .bottom(24.0)
                             .on_click(toggle_actions)
                             .accessibility_label("Document actions"),
+                    )
+                    .child(
+                        gallery_trigger(
+                            self.preview.trigger_part_with(
+                                cx,
+                                preview,
+                                preview_access(),
+                                div(),
+                            ),
+                            "Hover for details",
+                        )
+                        .absolute()
+                        .left(24.0)
+                        .bottom(24.0)
+                        .accessibility_label("Release details"),
                     ),
             );
+
+        if preview.is_open() {
+            let popup = gallery_popover(
+                self.preview.popup_part_with(cx, preview, preview_access(), div()),
+                240.0,
+                palette,
+            )
+            .relative()
+            .gap_2()
+            .child(preview.title_part(text("Release 0.1").font_semibold()))
+            .child(
+                preview.description_part(
+                    text("Hover opening, the grace interval back to this surface, and the arrow edge are all framework behavior.")
+                        .wrap()
+                        .text_sm()
+                        .text_color(palette.muted),
+                ),
+            )
+            .child(
+                text(format!(
+                    "resolved side {:?}, align {:?}, available height {:.0}",
+                    preview_state.side, preview_state.align, preview_state.available_height
+                ))
+                .text_sm()
+                .text_color(palette.muted),
+            )
+            .child(
+                preview.arrow_part(div()).w(12.0).h(12.0).rotate_degrees(45.0).bg(palette.popover),
+            );
+            root = root.child(
+                preview.tracked_positioner_part(div().child(popup), &self.preview_placement),
+            );
+        }
 
         if account.is_open() {
             let mut popover = gallery_popover(account.popover_part(div()), 180.0, palette)
@@ -313,6 +395,14 @@ impl View for PopoverGallery {
 
         root
     }
+}
+
+/// One per-instance accessor to the gallery's hover state.
+///
+/// A view that owns a single popover can pass the `fn` pointer form instead; this shows the
+/// accessor entry point a host with many declared popovers uses.
+fn preview_access() -> quickgui::StateAccessor<PopoverGallery, PopoverHoverState> {
+    quickgui::StateAccessor::new(|view: &mut PopoverGallery| &mut view.preview)
 }
 
 fn gallery_trigger(trigger: Element, label: &'static str) -> Element {

@@ -1,8 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    Application, Color, Element, Event, EventContext, Tab, Tabs, TabsState, Transition, View,
-    ViewContext, div, text,
+    AnchorPlacement, AnchorPlacementHandle, Application, Color, Element, Event, EventContext, Tab,
+    Tabs, TabsState, Transition, View, ViewContext, div, text,
 };
 
 const COLOR_TRANSITION: Duration = Duration::from_millis(100);
@@ -52,6 +52,8 @@ impl Default for Palette {
 struct TabsDemo {
     workspace: TabsState,
     preferences: TabsState,
+    /// The active tab's laid-out geometry, published by the framework while it paints.
+    workspace_indicator: AnchorPlacementHandle,
     status: Arc<str>,
 }
 
@@ -60,6 +62,7 @@ impl Default for TabsDemo {
         Self {
             workspace: TabsState::new("overview"),
             preferences: TabsState::new("editor"),
+            workspace_indicator: AnchorPlacementHandle::new(),
             status: Arc::from(
                 "Horizontal tabs use Left/Right then Enter or Space. Vertical tabs activate with Up/Down.",
             ),
@@ -82,7 +85,12 @@ impl TabsDemo {
             .child(text(description).text_sm().text_color(palette.muted).wrap())
     }
 
-    fn horizontal_tab(tab: Tab, label: &'static str, palette: Palette) -> Element {
+    fn horizontal_tab(
+        tab: Tab,
+        label: &'static str,
+        palette: Palette,
+        indicator: &AnchorPlacementHandle,
+    ) -> Element {
         let active = tab.is_active();
         let root = div()
             .relative()
@@ -108,18 +116,13 @@ impl TabsDemo {
             .disabled_style(|state| state.opacity(0.38))
             .transition(Transition::colors(COLOR_TRANSITION))
             .child(text(label).text_sm().font_medium())
-            .children(
-                tab.indicator_part(
-                    div()
-                        .absolute()
-                        .left(9.0)
-                        .right(9.0)
-                        .bottom(0.0)
-                        .h(2.0)
-                        .rounded(1.0)
-                        .bg(palette.accent),
-                ),
-            );
+            // QuickGUI anchors the indicator to the tab that is really active and publishes
+            // that tab's laid-out box, so the example never re-derives either.
+            .children(tab.tracked_indicator_part(
+                div().h(2.0).w(96.0).rounded(1.0).bg(palette.accent),
+                AnchorPlacement::Bottom,
+                indicator,
+            ));
         tab.tab_part(root)
     }
 
@@ -213,19 +216,19 @@ impl View for TabsDemo {
         let settings = workspace.tab("settings");
 
         let select_overview = cx.listener(overview.tab_id(), |view, cx| {
-            if view.workspace.select("overview") {
+            if view.workspace.select_at("overview", 0) {
                 view.status = Arc::from("Overview selected");
                 cx.invalidate();
             }
         });
         let select_files = cx.listener(files.tab_id(), |view, cx| {
-            if view.workspace.select("files") {
+            if view.workspace.select_at("files", 1) {
                 view.status = Arc::from("Files selected");
                 cx.invalidate();
             }
         });
         let select_settings = cx.listener(settings.tab_id(), |view, cx| {
-            if view.workspace.select("settings") {
+            if view.workspace.select_at("settings", 3) {
                 view.status = Arc::from("Workspace settings selected");
                 cx.invalidate();
             }
@@ -251,15 +254,15 @@ impl View for TabsDemo {
                         .bg(palette.background)
                         .accessibility_label("Workspace sections")
                         .child(
-                            Self::horizontal_tab(overview, "Overview", palette)
+                            Self::horizontal_tab(overview, "Overview", palette, &self.workspace_indicator)
                                 .on_click(select_overview),
                         )
                         .child(
-                            Self::horizontal_tab(files, "Files", palette).on_click(select_files),
+                            Self::horizontal_tab(files, "Files", palette, &self.workspace_indicator).on_click(select_files),
                         )
-                        .child(Self::horizontal_tab(history, "History", palette))
+                        .child(Self::horizontal_tab(history, "History", palette, &self.workspace_indicator))
                         .child(
-                            Self::horizontal_tab(settings, "Settings", palette)
+                            Self::horizontal_tab(settings, "Settings", palette, &self.workspace_indicator)
                                 .on_click(select_settings),
                         ),
                 ))
@@ -423,7 +426,11 @@ impl View for TabsDemo {
                     .child(workspace_card)
                     .child(preferences_card)
                     .child(
-                        text(self.status.clone())
+                        text(format!(
+                            "{} · activation direction {:?}",
+                            self.status,
+                            workspace.activation_direction()
+                        ))
                             .w_full()
                             .max_w(760.0)
                             .text_sm()

@@ -439,14 +439,13 @@ pub(super) fn collect_layout_hit_regions(
             }
             AnchorTarget::Point(point) => Rect::new(point.x, point.y, 0.0, 0.0),
         };
-        place_anchored(
+        resolve_anchored(
             anchor_bounds,
             Size::new(layout.size.width, layout.size.height),
             viewport,
-            anchor.placement,
-            anchor.gap,
-            anchor.viewport_margin,
+            AnchorGeometry::of(&anchor),
         )
+        .bounds
     } else {
         natural
     };
@@ -647,14 +646,19 @@ pub(super) fn paint_element(
             }
             AnchorTarget::Point(point) => Rect::new(point.x, point.y, 0.0, 0.0),
         };
-        place_anchored(
+        let resolved = resolve_anchored(
             anchor_bounds,
             Size::new(layout.size.width, layout.size.height),
             viewport,
-            anchor.placement,
-            anchor.gap,
-            anchor.viewport_margin,
-        )
+            AnchorGeometry::of(&anchor),
+        );
+        // The declared placement is a preference. Publishing the placement this frame actually
+        // used is what lets an application draw a flip-aware arrow or size a popup to the room it
+        // was given without re-deriving the collision decision QuickGUI just made.
+        if let Some(handle) = &element.anchor_placement {
+            handle.report(resolved);
+        }
+        resolved.bounds
     } else {
         natural
     };

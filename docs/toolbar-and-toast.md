@@ -69,6 +69,23 @@ group.
 
 Item values must be unique inside one toolbar.
 
+### Parts
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `Toolbar::root_part(element)` | the Toolbar role, orientation, and the single roving Tab stop |
+| Button | `ToolbarEntry::button_part(element)` | the item contract plus the Button role |
+| Link | `ToolbarEntry::link_part(element)` | the item contract plus the Link role |
+| Input | `ToolbarEntry::input_part(element)` | the item contract, keeping whatever role the control already declares |
+| Group | `Toolbar::group_part(element)` | a labelling and structural unit that creates no second focus scope |
+| Separator | `Toolbar::separator_part(element)` | the Separator role across the toolbar's cross axis, never focusable |
+
+`ToolbarItem::focusable_when_disabled(bool)` is Base UI's `focusableWhenDisabled`, and a toolbar
+defaults it to `true`: skipping an unavailable item entirely hides it from keyboard users, who then
+cannot discover that the command exists. The item still reports as disabled and still refuses
+pointer focus; only keyboard reachability changes. `Element::focusable_when_disabled()` is the
+underlying primitive.
+
 ## Toggle and toggle group
 
 `Toggle` is a button that stays pressed. It is deliberately **not** a checkbox: assistive technology
@@ -115,10 +132,62 @@ let id = self.toasts.push(
 );
 ```
 
-`ToastViewport` decorates the caller's viewport, and `ToastViewport::toast(entry)` returns the parts
-for one queued toast: `root_part`, `title_part`, `description_part`, `action_part`, and
-`close_part`. The root is labelled by its title and described by its description when one is
-present.
+`ToastViewport` decorates the caller's viewport, and `ToastViewport::toasts(&manager)` walks the
+queue newest first, handing each toast its own descriptor. The root is labelled by its title and
+described by its description when one is present.
+
+### Parts
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Provider | `ToastManager` itself | the shared `timeout`, `limit`, swipe direction and threshold |
+| Portal | `ToastViewport::portal_part(element)` | a window-level overlay that deliberately does not block pointer input |
+| Viewport | `ToastViewport::viewport_part(element)` | the group the stack lives in |
+| Positioner | `ToastParts::positioner_part(element)` | a stable identity for the wrapper that places one toast |
+| Root | `ToastParts::root_part(element)` | the live region, the role, focus, and the title/description relationships |
+| Content | `ToastParts::content_part(element)` | a stable identity for the inner content wrapper |
+| Title / Description | `title_part` / `description_part` | the targets the root points at |
+| Action / Close | `action_part` / `close_part` | button semantics with no visual defaults |
+
+`ToastViewport::toast(entry)` still returns the parts for a single entry; it defaults to the top of
+the stack because it has no queue to count against.
+
+### The provider, the limit, and the stack
+
+`ToastManager` is the provider. `timeout(...)` is the auto-dismiss duration a queued toast inherits
+when it declares none, and `limit(n)` — three by default — leaves the newest `n` toasts ordinary and
+flags every older one `ToastEntry::is_limited`. Limiting is presentation only: a limited toast is
+still queued, still announces, and still counts down, so an application collapses it behind the
+stack rather than hiding a message that will never come back.
+
+`set_expanded(bool)` is Base UI's expanded stack, normally driven from the viewport's own hover or
+focus. Each descriptor carries `index()` (Base UI's `data-index`, counting from the newest),
+`is_limited()`, and `is_expanded()`. `offset(pitch)` turns the index into a stacking offset: Base UI
+derives its own offset from measured heights, and QuickGUI never measures on the application's
+behalf, so the caller passes the pitch it wants — a small peek while collapsed, a full row height
+plus gap while expanded.
+
+### The manager API
+
+`add` and `push` queue a toast; `close(id)` and `dismiss(id)` remove one; `close_all()` and
+`clear()` empty the queue. Each pair is the same operation under Base UI's name and QuickGUI's
+original name, and both stay supported.
+
+`update(id, toast, now)` replaces a queued toast's content and re-arms its countdown while keeping
+its identity, its position in the stack, and any swipe in flight — so a message can change without
+the toast jumping or re-announcing as new. `promise(loading, now)` queues a persistent
+`ToastKind::Loading` toast and `resolve(id, toast, now)` turns it into its success or error result.
+QuickGUI owns no future: the application drives both halves from the foreground task it already
+spawned, and neither call schedules a timer.
+
+### Swipe to dismiss
+
+`swipe_direction(...)` and `swipe_threshold(...)` declare Base UI's swipe-to-dismiss, and
+`apply_swipe(id, event)` takes the captured pointer events from a toast root. Motion is projected
+onto the declared direction and clamped at zero, so a toast can never be dragged the wrong way, and
+`ToastEntry::swipe_movement` exposes the distance for the application to translate the toast by.
+Releasing past the threshold dismisses the toast and reports `dismissed`; releasing short resets the
+movement to zero and leaves it queued. The gesture is pure pointer capture and schedules nothing.
 
 ### Announcements
 
@@ -153,6 +222,7 @@ handling.
 | `MAX_TOASTS` | 8 | Toasts retained in one queue. |
 | `MAX_TOAST_TEXT_BYTES` | 512 | UTF-8 bytes retained by one title, description, or action label. |
 | `MAX_TOAST_DURATION` | 60 s | Longest auto-dismiss duration retained by one toast. |
+| `MAX_TOAST_SWIPE_THRESHOLD` | 512 | Longest swipe distance one toast may require, in logical pixels. |
 
 Longer text is truncated on a character boundary instead of retained.
 

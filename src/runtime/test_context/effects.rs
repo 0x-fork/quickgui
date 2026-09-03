@@ -65,9 +65,11 @@ impl TestAppContext {
                             .paint(&mut scene, &mut renderer, viewport, scale_factor, now)
                             .map_err(|error| TestAppError::View(error.to_string()))?;
                     }
+                    let placement_changed = state.ui.take_anchor_placement_update();
+                    state.dirty |= placement_changed;
                     let update = state.ui.take_variable_list_measurement_update();
                     state.dirty |= update.view_dirty;
-                    update.changed
+                    update.changed || placement_changed
                 };
                 if measurements_changed {
                     self.run_until_idle()?;
@@ -124,6 +126,9 @@ impl TestAppContext {
             .ui
             .paint_at(&mut scene, &mut layout, now)
             .map_err(|error| TestAppError::View(error.to_string()))?;
+        // Mirror the production frame: a surface that flipped away from its declared placement
+        // publishes the resolved value here, so the owning view redraws once against it.
+        state.dirty |= state.ui.take_anchor_placement_update();
         state.retained_geometry_ready = true;
         Ok(())
     }

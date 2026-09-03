@@ -1,13 +1,47 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::{AccessibilityRole, Element, ElementId, MAX_VALIDATION_MESSAGE_BYTES};
+
+/// Longest revalidation debounce one field may declare.
+pub const MAX_FIELD_VALIDATION_DEBOUNCE: Duration = Duration::from_secs(10);
 
 const FIELD_ROOT_ID_TAG: u64 = 0x6669_656c_645f_726f;
 const FIELD_LABEL_ID_TAG: u64 = 0x6669_656c_645f_6c61;
 const FIELD_DESCRIPTION_ID_TAG: u64 = 0x6669_656c_645f_6465;
 const FIELD_ERROR_ID_TAG: u64 = 0x6669_656c_645f_6572;
+const FIELD_ITEM_ID_TAG: u64 = 0x6669_656c_645f_6974;
+const FIELD_VALIDITY_ID_TAG: u64 = 0x6669_656c_645f_7661;
 const FIELDSET_LEGEND_ID_TAG: u64 = 0x6669_656c_6473_6c67;
 const FIELDSET_DESCRIPTION_ID_TAG: u64 = 0x6669_656c_6473_6465;
+
+/// When a field's controlled validity is expected to be recomputed.
+///
+/// This is Base UI's `validationMode`. QuickGUI never runs the application's validation rule
+/// itself — the rule is application logic and may reach a database — so the mode is a contract the
+/// field publishes and [`Field::should_validate`] answers against the event that just happened.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FieldValidationMode {
+    /// Validate only when the enclosing form is submitted.
+    #[default]
+    OnSubmit,
+    /// Validate when the control loses focus, and on every submit.
+    OnBlur,
+    /// Validate on every change, and on blur and submit.
+    OnChange,
+}
+
+/// What just happened to a field's value or focus.
+///
+/// Pass one to [`Field::should_validate`] from the listener that already handles it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FieldValidationTrigger {
+    /// The controlled value changed.
+    Change,
+    /// The control lost focus.
+    Blur,
+    /// The enclosing form was submitted.
+    Submit,
+}
 
 /// Caller-owned state projected consistently across every unstyled field part.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -41,6 +75,8 @@ pub struct Field {
     state: FieldState,
     validation_message: Option<Arc<str>>,
     validation_message_truncated: bool,
+    validation_mode: FieldValidationMode,
+    validation_debounce: Duration,
 }
 
 impl Field {
@@ -50,6 +86,8 @@ impl Field {
             state: FieldState::default(),
             validation_message: None,
             validation_message_truncated: false,
+            validation_mode: FieldValidationMode::OnSubmit,
+            validation_debounce: Duration::ZERO,
         }
     }
 
@@ -71,6 +109,16 @@ impl Field {
 
     pub fn error_id(&self) -> ElementId {
         derived_field_id(self.control_id, FIELD_ERROR_ID_TAG)
+    }
+
+    /// Stable identity of the item wrapper around one label/control/description row.
+    pub fn item_id(&self) -> ElementId {
+        derived_field_id(self.control_id, FIELD_ITEM_ID_TAG)
+    }
+
+    /// Stable identity of the validity part.
+    pub fn validity_id(&self) -> ElementId {
+        derived_field_id(self.control_id, FIELD_VALIDITY_ID_TAG)
     }
 
     pub const fn state(&self) -> FieldState {
@@ -105,6 +153,61 @@ impl Field {
     pub fn filled(mut self, filled: bool) -> Self {
         self.state.filled = filled;
         self
+    }
+
+    /// Declare when the controlled validity is expected to be recomputed, Base UI's
+    /// `validationMode`.
+    pub const fn validation_mode(mut self, mode: FieldValidationMode) -> Self {
+        self.validation_mode = mode;
+        self
+    }
+
+    /// Wait this long after a change before revalidating, Base UI's `validationDebounceTime`.
+    ///
+    /// The interval is an exact one-shot deadline the application schedules with
+    /// [`crate::AsyncViewContext::sleep`]; QuickGUI never polls, and a field that is not being
+    /// typed into owns nothing. It applies to [`FieldValidationTrigger::Change`] only — a blur or
+    /// a submit is a deliberate boundary and validates immediately. Clamped to
+    /// [`MAX_FIELD_VALIDATION_DEBOUNCE`].
+    pub fn validation_debounce(mut self, debounce: Duration) -> Self {
+        self.validation_debounce = debounce.min(MAX_FIELD_VALIDATION_DEBOUNCE);
+        self
+    }
+
+    pub const fn validation_mode_value(&self) -> FieldValidationMode {
+        self.validation_mode
+    }
+
+    pub const fn validation_debounce_value(&self) -> Duration {
+        self.validation_debounce
+    }
+
+    /// Whether the declared mode expects this event to recompute validity.
+    ///
+    /// A submit always validates; a blur validates on `OnBlur` and `OnChange`; a change validates
+    /// only on `OnChange`.
+    pub const fn should_validate(&self, trigger: FieldValidationTrigger) -> bool {
+        match (self.validation_mode, trigger) {
+            (_, FieldValidationTrigger::Submit) => true,
+            (FieldValidationMode::OnSubmit, _) => false,
+            (FieldValidationMode::OnBlur, FieldValidationTrigger::Blur) => true,
+            (FieldValidationMode::OnBlur, FieldValidationTrigger::Change) => false,
+            (FieldValidationMode::OnChange, _) => true,
+        }
+    }
+
+    /// How long to wait before recomputing validity for this event, when it validates at all.
+    ///
+    /// Returns `None` when the declared mode ignores the event, and `Some(Duration::ZERO)` when it
+    /// validates immediately, so a listener can branch once instead of re-deriving the policy.
+    pub const fn validation_delay(&self, trigger: FieldValidationTrigger) -> Option<Duration> {
+        if !self.should_validate(trigger) {
+            return None;
+        }
+        match trigger {
+            FieldValidationTrigger::Change => Some(self.validation_debounce),
+            FieldValidationTrigger::Blur | FieldValidationTrigger::Submit => Some(Duration::ZERO),
+        }
     }
 
     /// Retain the message used by form reports and native accessibility.
@@ -172,6 +275,34 @@ impl Field {
                 control.validation_message_retained(message, self.validation_message_truncated);
         }
         control
+    }
+
+    /// Decorate the caller-owned wrapper around one label/control/description row.
+    ///
+    /// Base UI's Field.Item groups the parts of a single field inside a larger fieldset so the row
+    /// can be styled and laid out as one unit. QuickGUI supplies the stable identity and propagates
+    /// the field's disabled state; layout and appearance stay application-owned.
+    pub fn item_part(&self, item: Element) -> Element {
+        let item = item.id(self.item_id()).app_region_no_drag();
+        if self.state.disabled {
+            item.disabled(true)
+        } else {
+            item
+        }
+    }
+
+    /// Decorate a caller-owned part that is shown only for a chosen validity, Base UI's
+    /// Field.Validity.
+    ///
+    /// `visible` is the application's own predicate over [`Self::state`] — "invalid and touched",
+    /// "valid and dirty", whatever the product means. QuickGUI removes the part from layout, paint,
+    /// input, and the accessibility tree when the predicate is false, exactly as
+    /// [`Self::error_part`] does, so an unmatched validity costs nothing.
+    pub fn validity_part(&self, visible: bool, validity: Element) -> Element {
+        validity
+            .id(self.validity_id())
+            .accessibility_role(AccessibilityRole::Label)
+            .when(!visible, Element::hidden)
     }
 
     /// Decorate visible supplementary help for the control.
@@ -477,5 +608,104 @@ mod tests {
         assert_eq!(root.visual.background, Some(Color::rgb8(9, 8, 7)));
         assert!(fieldset.field("company").state().disabled);
         assert!(fieldset.control_part(text_input("")).accessibility.disabled);
+    }
+
+    #[test]
+    fn validation_modes_answer_each_trigger_and_debounce_only_changes() {
+        let on_submit = Field::new("email");
+        assert_eq!(
+            on_submit.validation_mode_value(),
+            FieldValidationMode::OnSubmit
+        );
+        assert!(on_submit.should_validate(FieldValidationTrigger::Submit));
+        assert!(!on_submit.should_validate(FieldValidationTrigger::Blur));
+        assert!(!on_submit.should_validate(FieldValidationTrigger::Change));
+
+        let on_blur = Field::new("email").validation_mode(FieldValidationMode::OnBlur);
+        assert!(on_blur.should_validate(FieldValidationTrigger::Submit));
+        assert!(on_blur.should_validate(FieldValidationTrigger::Blur));
+        assert!(!on_blur.should_validate(FieldValidationTrigger::Change));
+
+        let on_change = Field::new("email")
+            .validation_mode(FieldValidationMode::OnChange)
+            .validation_debounce(Duration::from_millis(250));
+        assert!(on_change.should_validate(FieldValidationTrigger::Change));
+        assert_eq!(
+            on_change.validation_debounce_value(),
+            Duration::from_millis(250)
+        );
+
+        // A change waits for the declared debounce; a blur or submit is a deliberate boundary.
+        assert_eq!(
+            on_change.validation_delay(FieldValidationTrigger::Change),
+            Some(Duration::from_millis(250))
+        );
+        assert_eq!(
+            on_change.validation_delay(FieldValidationTrigger::Blur),
+            Some(Duration::ZERO)
+        );
+        assert_eq!(
+            on_change.validation_delay(FieldValidationTrigger::Submit),
+            Some(Duration::ZERO)
+        );
+        assert_eq!(
+            on_submit.validation_delay(FieldValidationTrigger::Change),
+            None
+        );
+        assert_eq!(
+            on_blur.validation_delay(FieldValidationTrigger::Change),
+            None
+        );
+
+        // The debounce is bounded rather than trusted.
+        assert_eq!(
+            Field::new("email")
+                .validation_debounce(Duration::from_secs(3_600))
+                .validation_debounce_value(),
+            MAX_FIELD_VALIDATION_DEBOUNCE
+        );
+        assert_eq!(
+            Field::new("email").validation_debounce_value(),
+            Duration::ZERO
+        );
+    }
+
+    #[test]
+    fn item_and_validity_parts_carry_identities_and_cost_nothing_when_unmatched() {
+        let field = Field::new("email").invalid(true).touched(true);
+        let ids = [
+            field.root_id(),
+            field.label_id(),
+            field.description_id(),
+            field.error_id(),
+            field.item_id(),
+            field.validity_id(),
+        ];
+        for (index, id) in ids.iter().enumerate() {
+            assert_ne!(*id, field.control_id());
+            assert!(!ids[..index].contains(id));
+        }
+
+        let item = field.item_part(div().bg(Color::rgb8(1, 2, 3)));
+        assert_eq!(item.explicit_id, Some(field.item_id()));
+        assert_eq!(item.visual.background, Some(Color::rgb8(1, 2, 3)));
+        assert!(!item.accessibility.disabled);
+        // A disabled field propagates into the row it groups.
+        assert!(
+            Field::new("email")
+                .disabled(true)
+                .item_part(div())
+                .accessibility
+                .disabled
+        );
+
+        // The application supplies the predicate; QuickGUI only removes the unmatched part.
+        let shown = field.validity_part(field.state().invalid && field.state().touched, div());
+        assert_eq!(shown.explicit_id, Some(field.validity_id()));
+        assert_eq!(shown.accessibility.role, AccessibilityRole::Label);
+        assert!(!shown.is_display_none());
+        let hidden = field.validity_part(false, div());
+        assert!(hidden.is_display_none());
+        assert_eq!(hidden.visual.background, None);
     }
 }

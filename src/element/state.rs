@@ -202,6 +202,30 @@ impl Element {
         self
     }
 
+    /// Keep this element in the keyboard Tab sequence even while it is disabled.
+    ///
+    /// This is Base UI's `focusableWhenDisabled`, and it exists for composite widgets — a toolbar
+    /// above all — where skipping an unavailable item hides it from keyboard users entirely. The
+    /// element still reports as disabled, still refuses pointer focus, and still does not activate;
+    /// only keyboard reachability changes.
+    pub fn focusable_when_disabled(mut self) -> Self {
+        self.focusable = true;
+        self.focusable_when_disabled = true;
+        self
+    }
+
+    /// Expose that a control shows a value the user may read and copy but not change.
+    ///
+    /// This is the web's `readonly`, not `disabled`: a read-only control stays focusable, stays in
+    /// the Tab sequence, and keeps its value in the accessible name, while a disabled one leaves
+    /// the sequence entirely. Components that own their own editing behavior — the number field,
+    /// select, combobox, checkbox, radio, and switch — refuse changes on their own state as well as
+    /// projecting this.
+    pub fn accessibility_read_only(mut self, read_only: bool) -> Self {
+        self.accessibility.read_only = read_only;
+        self
+    }
+
     /// Expose web-style invalid state to paint and the native accessibility tree.
     pub fn invalid(mut self, invalid: bool) -> Self {
         self.accessibility.invalid = invalid;

@@ -169,3 +169,29 @@ exclusion all come from this Rust layer rather than a JavaScript reimplementatio
 `checked` accepts `true`, `false`, or `"indeterminate"` and maps onto `ToggleState`.
 `onCheckedChange` receives the next value and the originating event. See the
 [Solid renderer guide](solid.md) for the full binding table.
+
+## Read-only controls and parent checkboxes
+
+`Checkbox::read_only`, `Radio::read_only`, `RadioGroup::read_only`, and `Switch::read_only` are Base
+UI's `readOnly`. Unlike `disabled`, a read-only control stays focusable and stays in the Tab
+sequence: it shows a value the user may read and copy but not change. The state is projected to the
+native accessibility tree through `Element::accessibility_read_only`, and the transition itself is
+refused through the descriptor:
+
+```rust,ignore
+// A read-only control answers `None`, so the listener writes nothing at all.
+match Switch::new(view.audit_logging).read_only(true).next_checked() {
+    Some(checked) => view.audit_logging = checked,
+    None => {}
+}
+```
+
+`Checkbox::next_state()` returns the tri-state transition a click should make — mixed and off both
+move to on — or `None` when the checkbox refuses. `Radio::accepts_selection()` answers the same
+question for a radio, and `Switch::next_checked()` for a switch. Asking before writing is what makes
+`readOnly` a framework contract rather than a styling hint.
+
+`Checkbox::parent(children)` is Base UI's parent checkbox: it derives on, off, or mixed from the
+checked values the application is already rendering, and `parent_next_checked()` reports the value
+activating the parent moves the whole group to. QuickGUI retains no child registry, so the
+derivation stays a pure function of the caller's own data.

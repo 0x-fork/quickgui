@@ -1,10 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use quickgui::{
-    AnchorPlacement, Animation, AnimationExt as _, AnimationPhase, Application, Color,
+    AnchorPlacement, AnchorSide, Animation, AnimationExt as _, AnimationPhase, Application, Color,
     ContextMenuLayout, ContextMenuState, Element, PopoverMenu, PopoverMenuItem,
-    PopoverMenuItemKind, PopoverMenuItemState, TitleBarStyle, Tooltip, View, ViewContext, button,
-    div, ease_out_quint, popover_menu_key_bindings, text,
+    PopoverMenuItemKind, PopoverMenuItemState, TitleBarStyle, Tooltip, TooltipProvider,
+    TooltipState, View, ViewContext, button, div, ease_out_quint, popover_menu_key_bindings, text,
 };
 
 fn main() -> Result<(), quickgui::AppError> {
@@ -21,10 +21,35 @@ fn main() -> Result<(), quickgui::AppError> {
         })
 }
 
-#[derive(Default)]
 struct TooltipContextDemo {
     context_menu: ContextMenuState,
+    /// One shared group: the first hint waits, the next adjacent one opens instantly.
+    hints: TooltipProvider,
+    save_hint: TooltipState,
+    share_hint: TooltipState,
     status: Option<Arc<str>>,
+}
+
+impl Default for TooltipContextDemo {
+    fn default() -> Self {
+        let hints = TooltipProvider::new()
+            .delay(Duration::from_millis(400))
+            .close_delay(Duration::from_millis(80));
+        Self {
+            context_menu: ContextMenuState::default(),
+            save_hint: TooltipState::new("save-hint", "save-hint-popup")
+                .provider(&hints)
+                .side(AnchorSide::Bottom)
+                .side_offset(10.0),
+            share_hint: TooltipState::new("share-hint", "share-hint-popup")
+                .provider(&hints)
+                .side(AnchorSide::Bottom)
+                .side_offset(10.0)
+                .hoverable(false),
+            hints,
+            status: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -173,6 +198,43 @@ impl View for TooltipContextDemo {
             },
             Self::menu_item,
         );
+
+        let (save_trigger, save_popup) = hint_row(
+            cx,
+            &self.save_hint,
+            |view| &mut view.save_hint,
+            "Save",
+            "Grouped compound parts: the first hint waits 400 ms, the next opens instantly, and the arrow follows the side the popup really landed on.",
+        );
+        let (share_trigger, share_popup) = hint_row(
+            cx,
+            &self.share_hint,
+            |view| &mut view.share_hint,
+            "Share",
+            "This popup is not hoverable, so it never takes the pointer away from what it floats over.",
+        );
+        let mut grouped_hints = div()
+            .relative()
+            .flex_row()
+            .items_center()
+            .gap_3()
+            .child(save_trigger)
+            .child(share_trigger)
+            .child(
+                text(if self.hints.is_warm() {
+                    "Hint group warm — the next hint opens instantly"
+                } else {
+                    "Hint group cool — the next hint waits for the full delay"
+                })
+                .text_sm()
+                .text_color(Color::rgb8(146, 154, 171)),
+            );
+        if let Some(popup) = save_popup {
+            grouped_hints = grouped_hints.child(popup);
+        }
+        if let Some(popup) = share_popup {
+            grouped_hints = grouped_hints.child(popup);
+        }
         let tooltip_click = cx.listener("tooltip-button", |this, cx| {
             this.status = Some(Arc::from("Tooltip trigger clicked"));
             cx.invalidate();
@@ -292,9 +354,72 @@ impl View for TooltipContextDemo {
                                     .child(text("i").font_bold()),
                             ),
                     )
+                    .child(grouped_hints)
                     .child(context_surface),
             )
     }
+}
+
+/// Build one grouped, compound-part tooltip trigger and its caller-owned popup.
+///
+/// QuickGUI owns the hover deadlines, the tooltip role and description relationship, anchored
+/// placement, the resolved-placement report the arrow follows, and Escape dismissal. Every colour,
+/// radius, and shadow below is application presentation.
+fn hint_row(
+    cx: &mut ViewContext<'_, TooltipContextDemo>,
+    state: &TooltipState,
+    access: fn(&mut TooltipContextDemo) -> &mut TooltipState,
+    label: &'static str,
+    body: &'static str,
+) -> (Element, Option<Element>) {
+    let trigger = state
+        .trigger_part(
+            cx,
+            access,
+            button()
+                .h(42.0)
+                .px_4()
+                .flex_row()
+                .items_center()
+                .rounded_lg()
+                .border(1.0, Color::rgb8(69, 76, 91))
+                .bg(Color::rgb8(34, 38, 47))
+                .hover(|style| style.bg(Color::rgb8(44, 50, 62)))
+                .child(label),
+        )
+        .accessibility_label(label);
+    if !state.is_open() {
+        return (trigger, None);
+    }
+    let popup = state
+        .popup_part(
+            cx,
+            access,
+            div()
+                .relative()
+                .max_w(280.0)
+                .px_3()
+                .py_2()
+                .rounded_md()
+                .border(1.0, Color::rgb8(73, 91, 116))
+                .bg(Color::rgb8(31, 38, 49))
+                .shadow_lg(),
+        )
+        .child(
+            text(body)
+                .wrap()
+                .text_sm()
+                .text_color(Color::rgb8(224, 230, 240)),
+        )
+        .child(
+            state
+                .arrow_part(div())
+                .w(10.0)
+                .h(10.0)
+                .rotate_degrees(45.0)
+                .bg(Color::rgb8(31, 38, 49)),
+        );
+    (trigger, Some(state.positioner_part(div().child(popup))))
 }
 
 #[cfg(test)]

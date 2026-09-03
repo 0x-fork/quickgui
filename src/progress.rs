@@ -1,6 +1,105 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
-use crate::{AccessibilityRole, AccessibilityValueRange, Element, div};
+use crate::{AccessibilityRole, AccessibilityValueRange, Element, ElementId, div};
+
+const PROGRESS_LABEL_ID_TAG: u64 = 0x2f81_bd06_5c39_7ae4;
+const PROGRESS_VALUE_ID_TAG: u64 = 0x9e40_37cc_18b5_d26f;
+const PROGRESS_TRACK_ID_TAG: u64 = 0x6ad2_5f13_e708_49bb;
+const PROGRESS_INDICATOR_ID_TAG: u64 = 0xb174_c9e2_3a56_08fd;
+
+/// How far along a task one [`Progress`] indicator reports being.
+///
+/// Base UI publishes the same three states as `data-progressing`, `data-complete`, and
+/// `data-indeterminate`. QuickGUI has no style sheet, so the application reads the value and
+/// chooses its own presentation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ProgressStatus {
+    /// A determinate indicator that has not reached its maximum.
+    #[default]
+    Progressing,
+    /// A determinate indicator that reached its maximum.
+    Complete,
+    /// Work whose completion is unknown.
+    Indeterminate,
+}
+
+impl ProgressStatus {
+    pub const fn is_progressing(self) -> bool {
+        matches!(self, Self::Progressing)
+    }
+
+    pub const fn is_complete(self) -> bool {
+        matches!(self, Self::Complete)
+    }
+
+    pub const fn is_indeterminate(self) -> bool {
+        matches!(self, Self::Indeterminate)
+    }
+}
+
+/// A copyable render-state snapshot for one unstyled progress indicator.
+///
+/// Build one with [`Progress::state`]. It carries what Base UI exposes as `data-*` attributes so an
+/// application can style a track, fill, label, and value without re-deriving them from the numbers.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ProgressPartState {
+    /// Which of the three Base UI states this indicator is in.
+    pub status: ProgressStatus,
+    /// The clamped value, or `None` while indeterminate.
+    pub value: Option<f64>,
+    /// The upper bound of the range.
+    pub maximum: f64,
+    /// The `0.0..=1.0` completion fraction, or `None` while indeterminate.
+    pub completion: Option<f32>,
+}
+
+/// A bounded value formatter shared by [`Progress`] and [`Meter`].
+///
+/// This is QuickGUI's counterpart of Base UI's `format` prop. QuickGUI never renders the result
+/// itself: the application puts it inside its own `value_part`, and assistive technology reads it
+/// unless an explicit [`Progress::value_text`] overrides it, which is Base UI's `getAriaValueText`
+/// precedence.
+#[derive(Clone)]
+pub struct ValueFormat(Arc<dyn Fn(f64, f64) -> Arc<str>>);
+
+impl ValueFormat {
+    /// Build a formatter from `value` and the range's upper bound.
+    pub fn new(format: impl Fn(f64, f64) -> Arc<str> + 'static) -> Self {
+        Self(Arc::new(format))
+    }
+
+    /// Format a whole-number percentage of the range, the Base UI default shape.
+    pub fn percent() -> Self {
+        Self::new(|value, maximum| {
+            let ratio = if maximum > 0.0 { value / maximum } else { 0.0 };
+            Arc::from(format!("{:.0}%", (ratio * 100.0).clamp(0.0, 100.0)))
+        })
+    }
+
+    /// Format the raw value against its bound, such as `"3 of 12"`.
+    pub fn fraction() -> Self {
+        Self::new(|value, maximum| Arc::from(format!("{value:.0} of {maximum:.0}")))
+    }
+
+    /// Apply the formatter.
+    pub fn apply(&self, value: f64, maximum: f64) -> Arc<str> {
+        (self.0)(value, maximum)
+    }
+}
+
+impl fmt::Debug for ValueFormat {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ValueFormat")
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for ValueFormat {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
 
 /// Determinate or indeterminate task-completion semantics for one unstyled progress indicator.
 ///
@@ -14,9 +113,11 @@ use crate::{AccessibilityRole, AccessibilityValueRange, Element, div};
 #[derive(Clone, Debug, PartialEq)]
 #[must_use = "a Progress descriptor has no effect until one of its parts is mounted"]
 pub struct Progress {
+    id: Option<ElementId>,
     value: Option<f64>,
     maximum: f64,
     value_text: Option<Arc<str>>,
+    format: Option<ValueFormat>,
 }
 
 impl Progress {
@@ -26,9 +127,11 @@ impl Progress {
     pub fn new(value: f64, maximum: f64) -> Self {
         let maximum = normalized_maximum(maximum);
         Self {
+            id: None,
             value: Some(clamped(value, 0.0, maximum)),
             maximum,
             value_text: None,
+            format: None,
         }
     }
 
@@ -40,9 +143,11 @@ impl Progress {
     /// Create an indicator for work whose completion is unknown.
     pub fn indeterminate() -> Self {
         Self {
+            id: None,
             value: None,
             maximum: 1.0,
             value_text: None,
+            format: None,
         }
     }
 
@@ -54,6 +159,90 @@ impl Progress {
         let text = text.into();
         self.value_text = (!text.is_empty()).then_some(text);
         self
+    }
+
+    /// Give this indicator a stable identity so its label and value parts can be related to it.
+    ///
+    /// Without an identity the parts are still decorated, but QuickGUI cannot point the root's
+    /// accessible name and description at them, so the application supplies its own
+    /// `accessibility_label`. Existing code that never declares an identity is unchanged.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Attach a bounded value formatter, Base UI's `format` prop.
+    ///
+    /// The result is what [`Self::display_value`] returns for a caller-owned value part, and what
+    /// assistive technology reads unless [`Self::value_text`] overrides it.
+    pub fn format(mut self, format: ValueFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    /// Which of Base UI's three progress states this indicator is in.
+    pub fn status(&self) -> ProgressStatus {
+        match self.value {
+            None => ProgressStatus::Indeterminate,
+            Some(value) if value >= self.maximum => ProgressStatus::Complete,
+            Some(_) => ProgressStatus::Progressing,
+        }
+    }
+
+    /// A copyable snapshot of what Base UI exposes as `data-*` attributes.
+    pub fn state(&self) -> ProgressPartState {
+        ProgressPartState {
+            status: self.status(),
+            value: self.value,
+            maximum: self.maximum,
+            completion: self.completion(),
+        }
+    }
+
+    /// The formatted text for a caller-owned value part, or `None` while indeterminate.
+    pub fn display_value(&self) -> Option<Arc<str>> {
+        let value = self.value?;
+        self.format
+            .as_ref()
+            .map(|format| format.apply(value, self.maximum))
+            .or_else(|| self.value_text.clone())
+    }
+
+    /// The text assistive technology reads for the value, if any.
+    ///
+    /// An explicit [`Self::value_text`] wins over [`Self::format`], matching Base UI's
+    /// `getAriaValueText` precedence.
+    pub fn accessible_value(&self) -> Option<Arc<str>> {
+        self.value_text.clone().or_else(|| {
+            let value = self.value?;
+            self.format
+                .as_ref()
+                .map(|format| format.apply(value, self.maximum))
+        })
+    }
+
+    /// Stable identity of the label part, when this indicator declares one.
+    pub fn label_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_LABEL_ID_TAG))
+    }
+
+    /// Stable identity of the value part, when this indicator declares one.
+    pub fn value_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_VALUE_ID_TAG))
+    }
+
+    /// Stable identity of the track part, when this indicator declares one.
+    pub fn track_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_TRACK_ID_TAG))
+    }
+
+    /// Stable identity of the indicator part, when this indicator declares one.
+    pub fn indicator_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_INDICATOR_ID_TAG))
     }
 
     pub const fn value(&self) -> Option<f64> {
@@ -85,18 +274,61 @@ impl Progress {
             Some(value) => AccessibilityValueRange::new(value, 0.0, self.maximum),
             None => AccessibilityValueRange::indeterminate(0.0, self.maximum),
         };
-        let root = root
+        let mut root = root
             .accessibility_role(AccessibilityRole::ProgressIndicator)
             .accessibility_value_range(range);
-        match &self.value_text {
-            Some(text) => root.accessibility_value(text.clone()),
+        if let Some(id) = self.id {
+            root = root.id(id);
+        }
+        if let Some(label) = self.label_id() {
+            root = root.accessibility_labelled_by(label);
+        }
+        if let Some(value) = self.value_id() {
+            root = root.accessibility_described_by(value);
+        }
+        match self.accessible_value() {
+            Some(text) => root.accessibility_value(text),
             None => root,
+        }
+    }
+
+    /// Decorate the caller-owned track that the fill is measured inside.
+    ///
+    /// The track is decoration: the root already carries the numeric value and bounds, so the track
+    /// and everything under it stay out of the accessible name.
+    pub fn track_part(&self, track: Element) -> Element {
+        let track = track.accessibility_hidden(true);
+        match self.track_id() {
+            Some(id) => track.id(id),
+            None => track,
         }
     }
 
     /// Hide an application-owned fill or animation from the accessible name.
     pub fn indicator_part(&self, indicator: Element) -> Element {
-        indicator.accessibility_hidden(true)
+        let indicator = indicator.accessibility_hidden(true);
+        match self.indicator_id() {
+            Some(id) => indicator.id(id),
+            None => indicator,
+        }
+    }
+
+    /// Assign the stable mounted label target the root points at.
+    pub fn label_part(&self, label: Element) -> Element {
+        match self.label_id() {
+            Some(id) => label.id(id),
+            None => label,
+        }
+    }
+
+    /// Assign the stable mounted value target the root points at.
+    ///
+    /// Put [`Self::display_value`] inside it; QuickGUI never renders the text itself.
+    pub fn value_part(&self, value: Element) -> Element {
+        match self.value_id() {
+            Some(id) => value.id(id),
+            None => value,
+        }
     }
 }
 
@@ -105,15 +337,18 @@ impl Progress {
 /// A meter reports a level inside a known range—disk usage, battery charge, a score—rather than
 /// the progress of a task. Optional low, high, and optimum markers let an application color the
 /// gauge without inventing thresholds inside the framework.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[must_use = "a Meter descriptor has no effect until one of its parts is mounted"]
 pub struct Meter {
+    id: Option<ElementId>,
     value: f64,
     minimum: f64,
     maximum: f64,
     low: Option<f64>,
     high: Option<f64>,
     optimum: Option<f64>,
+    value_text: Option<Arc<str>>,
+    format: Option<ValueFormat>,
 }
 
 impl Meter {
@@ -127,12 +362,15 @@ impl Meter {
             (minimum, maximum)
         };
         Self {
+            id: None,
             value: clamped(value, minimum, maximum),
             minimum,
             maximum,
             low: None,
             high: None,
             optimum: None,
+            value_text: None,
+            format: None,
         }
     }
 
@@ -152,6 +390,69 @@ impl Meter {
     pub fn optimum(mut self, optimum: f64) -> Self {
         self.optimum = Some(clamped(optimum, self.minimum, self.maximum));
         self
+    }
+
+    /// Give this meter a stable identity so its label and value parts can be related to it.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Attach a bounded value formatter, Base UI's `format` prop.
+    pub fn format(mut self, format: ValueFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    /// Attach a human-readable value that assistive technology prefers over the raw number.
+    ///
+    /// This is Base UI's `getAriaValueText`; an empty string clears it. It wins over
+    /// [`Self::format`].
+    pub fn value_text(mut self, text: impl Into<Arc<str>>) -> Self {
+        let text = text.into();
+        self.value_text = (!text.is_empty()).then_some(text);
+        self
+    }
+
+    /// The formatted text for a caller-owned value part.
+    pub fn display_value(&self) -> Option<Arc<str>> {
+        self.format
+            .as_ref()
+            .map(|format| format.apply(self.value, self.maximum))
+            .or_else(|| self.value_text.clone())
+    }
+
+    /// The text assistive technology reads for the value, if any.
+    pub fn accessible_value(&self) -> Option<Arc<str>> {
+        self.value_text.clone().or_else(|| {
+            self.format
+                .as_ref()
+                .map(|format| format.apply(self.value, self.maximum))
+        })
+    }
+
+    /// Stable identity of the label part, when this meter declares one.
+    pub fn label_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_LABEL_ID_TAG))
+    }
+
+    /// Stable identity of the value part, when this meter declares one.
+    pub fn value_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_VALUE_ID_TAG))
+    }
+
+    /// Stable identity of the track part, when this meter declares one.
+    pub fn track_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_TRACK_ID_TAG))
+    }
+
+    /// Stable identity of the indicator part, when this meter declares one.
+    pub fn indicator_id(&self) -> Option<ElementId> {
+        self.id
+            .map(|id| derived_progress_id(id, PROGRESS_INDICATOR_ID_TAG))
     }
 
     pub const fn value(&self) -> f64 {
@@ -199,17 +500,60 @@ impl Meter {
 
     /// Decorate an application-owned root without adding layout or appearance.
     pub fn root_part(&self, root: Element) -> Element {
-        root.accessibility_role(AccessibilityRole::Meter)
+        let mut root = root
+            .accessibility_role(AccessibilityRole::Meter)
             .accessibility_value_range(AccessibilityValueRange::new(
                 self.value,
                 self.minimum,
                 self.maximum,
-            ))
+            ));
+        if let Some(id) = self.id {
+            root = root.id(id);
+        }
+        if let Some(label) = self.label_id() {
+            root = root.accessibility_labelled_by(label);
+        }
+        if let Some(value) = self.value_id() {
+            root = root.accessibility_described_by(value);
+        }
+        match self.accessible_value() {
+            Some(text) => root.accessibility_value(text),
+            None => root,
+        }
+    }
+
+    /// Decorate the caller-owned track that the fill is measured inside.
+    pub fn track_part(&self, track: Element) -> Element {
+        let track = track.accessibility_hidden(true);
+        match self.track_id() {
+            Some(id) => track.id(id),
+            None => track,
+        }
     }
 
     /// Hide an application-owned fill from the accessible name.
     pub fn indicator_part(&self, indicator: Element) -> Element {
-        indicator.accessibility_hidden(true)
+        let indicator = indicator.accessibility_hidden(true);
+        match self.indicator_id() {
+            Some(id) => indicator.id(id),
+            None => indicator,
+        }
+    }
+
+    /// Assign the stable mounted label target the root points at.
+    pub fn label_part(&self, label: Element) -> Element {
+        match self.label_id() {
+            Some(id) => label.id(id),
+            None => label,
+        }
+    }
+
+    /// Assign the stable mounted value target the root points at.
+    pub fn value_part(&self, value: Element) -> Element {
+        match self.value_id() {
+            Some(id) => value.id(id),
+            None => value,
+        }
     }
 }
 
@@ -225,6 +569,22 @@ pub fn progress(value: f64, maximum: f64) -> Element {
 /// This shorthand is equivalent to `Meter::new(value, minimum, maximum).root_part(div())`.
 pub fn meter(value: f64, minimum: f64, maximum: f64) -> Element {
     Meter::new(value, minimum, maximum).root_part(div())
+}
+
+fn derived_progress_id(parent: ElementId, tag: u64) -> ElementId {
+    let mut hash = parent.as_u64() ^ tag;
+    hash ^= hash >> 30;
+    hash = hash.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    hash ^= hash >> 27;
+    hash = hash.wrapping_mul(0x94d0_49bb_1331_11eb);
+    hash ^= hash >> 31;
+    for _ in 0..4 {
+        if hash != 0 && hash != parent.as_u64() && hash != u64::MAX {
+            return ElementId::new(hash);
+        }
+        hash = hash.wrapping_add(tag | 1);
+    }
+    unreachable!("four distinct candidates cannot all match three reserved progress IDs")
 }
 
 fn normalized_maximum(maximum: f64) -> f64 {
@@ -342,6 +702,11 @@ mod tests {
             let download = Progress::new(40.0, 100.0).value_text("40 percent");
             let unknown = Progress::indeterminate();
             let disk = Meter::new(72.0, 0.0, 100.0).low(20.0).high(80.0);
+            // The identified indicator takes its accessible name and description from its own
+            // mounted label and value parts instead of a copied string.
+            let upload = Progress::new(6.0, 8.0)
+                .id("upload")
+                .format(ValueFormat::fraction());
             div()
                 .child(
                     download
@@ -354,6 +719,19 @@ mod tests {
                         .child(text("Scanning")),
                 )
                 .child(disk.root_part(div().id("disk").accessibility_label("Disk usage")))
+                .child(
+                    upload
+                        .root_part(div())
+                        .child(upload.label_part(text("Upload")))
+                        .child(upload.value_part(text(
+                            upload.display_value().unwrap_or_else(|| Arc::from("")),
+                        )))
+                        .child(
+                            upload
+                                .track_part(div().w(200.0))
+                                .child(upload.indicator_part(div().w(150.0))),
+                        ),
+                )
         }
     }
 
@@ -387,6 +765,28 @@ mod tests {
         assert_eq!(disk.role(), accesskit::Role::Meter);
         assert_eq!(disk.numeric_value(), Some(72.0));
 
+        let identified = Progress::new(6.0, 8.0)
+            .id("upload")
+            .format(ValueFormat::fraction());
+        let upload = node("upload".into());
+        assert_eq!(upload.role(), accesskit::Role::ProgressIndicator);
+        assert_eq!(upload.numeric_value(), Some(6.0));
+        assert_eq!(upload.max_numeric_value(), Some(8.0));
+        assert_eq!(upload.value(), Some("6 of 8"));
+        assert_eq!(identified.status(), ProgressStatus::Progressing);
+        let label = identified.label_id().expect("declared label identity");
+        let value = identified.value_id().expect("declared value identity");
+        assert_eq!(
+            upload.labelled_by(),
+            &[accesskit::NodeId(label.as_u64())][..]
+        );
+        assert_eq!(
+            upload.described_by(),
+            &[accesskit::NodeId(value.as_u64())][..]
+        );
+        assert_eq!(node(label).role(), accesskit::Role::Label);
+        assert!(cx.contains_element(window, value).unwrap());
+
         let renders = cx.render_count(window).unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(cx.render_count(window).unwrap(), renders);
@@ -402,5 +802,168 @@ mod tests {
         let gauge = meter(1.0, 0.0, 4.0);
         assert_eq!(gauge.accessibility.role, AccessibilityRole::Meter);
         assert!(gauge.children.is_empty());
+    }
+
+    #[test]
+    fn progress_status_covers_the_three_base_ui_states() {
+        assert_eq!(
+            Progress::new(3.0, 12.0).status(),
+            ProgressStatus::Progressing
+        );
+        assert_eq!(Progress::new(12.0, 12.0).status(), ProgressStatus::Complete);
+        // The value is clamped first, so an over-large value is complete rather than out of range.
+        assert_eq!(Progress::new(99.0, 12.0).status(), ProgressStatus::Complete);
+        assert_eq!(
+            Progress::indeterminate().status(),
+            ProgressStatus::Indeterminate
+        );
+        assert!(ProgressStatus::Progressing.is_progressing());
+        assert!(ProgressStatus::Complete.is_complete());
+        assert!(ProgressStatus::Indeterminate.is_indeterminate());
+        assert_eq!(ProgressStatus::default(), ProgressStatus::Progressing);
+
+        let state = Progress::new(3.0, 12.0).state();
+        assert_eq!(
+            state,
+            ProgressPartState {
+                status: ProgressStatus::Progressing,
+                value: Some(3.0),
+                maximum: 12.0,
+                completion: Some(0.25),
+            }
+        );
+        let unknown = Progress::indeterminate().state();
+        assert_eq!(unknown.status, ProgressStatus::Indeterminate);
+        assert_eq!(unknown.value, None);
+        assert_eq!(unknown.completion, None);
+    }
+
+    #[test]
+    fn value_formatters_are_bounded_and_aria_text_wins_over_formatting() {
+        let percent = Progress::new(3.0, 12.0).format(ValueFormat::percent());
+        assert_eq!(percent.display_value().as_deref(), Some("25%"));
+        assert_eq!(percent.accessible_value().as_deref(), Some("25%"));
+
+        let fraction = Progress::new(3.0, 12.0).format(ValueFormat::fraction());
+        assert_eq!(fraction.display_value().as_deref(), Some("3 of 12"));
+
+        // An explicit value text is Base UI's `getAriaValueText` and wins for assistive technology,
+        // while the visible value part keeps the formatted string.
+        let both = Progress::new(3.0, 12.0)
+            .format(ValueFormat::percent())
+            .value_text("3 of 12 files");
+        assert_eq!(both.display_value().as_deref(), Some("25%"));
+        assert_eq!(both.accessible_value().as_deref(), Some("3 of 12 files"));
+        assert_eq!(
+            both.root_part(div()).accessibility.value.as_deref(),
+            Some("3 of 12 files")
+        );
+
+        // An indeterminate indicator has no value to format.
+        assert_eq!(
+            Progress::indeterminate()
+                .format(ValueFormat::percent())
+                .display_value(),
+            None
+        );
+
+        // A custom formatter is an ordinary bounded closure and never runs on an idle frame.
+        let custom = Progress::new(2.0, 4.0).format(ValueFormat::new(|value, maximum| {
+            Arc::from(format!("{value}/{maximum}"))
+        }));
+        assert_eq!(custom.display_value().as_deref(), Some("2/4"));
+        let shared = ValueFormat::percent();
+        assert_eq!(shared, shared.clone());
+        assert_ne!(shared, ValueFormat::percent());
+        assert!(format!("{shared:?}").contains("ValueFormat"));
+        assert_eq!(ValueFormat::percent().apply(1.0, 0.0).as_ref(), "0%");
+    }
+
+    #[test]
+    fn identified_progress_parts_relate_without_adding_appearance() {
+        let progress = Progress::new(40.0, 100.0)
+            .id("download")
+            .format(ValueFormat::percent());
+        let label = progress.label_id().expect("declared label identity");
+        let value = progress.value_id().expect("declared value identity");
+        let track = progress.track_id().expect("declared track identity");
+        let indicator = progress
+            .indicator_id()
+            .expect("declared indicator identity");
+        for (index, id) in [label, value, track, indicator].iter().enumerate() {
+            assert_ne!(*id, "download".into());
+            assert_ne!(*id, ElementId::new(0));
+            assert_ne!(*id, ElementId::new(u64::MAX));
+            assert!(![label, value, track, indicator][..index].contains(id));
+        }
+
+        let root = progress.root_part(div());
+        assert_eq!(root.explicit_id, Some("download".into()));
+        assert_eq!(root.accessibility.relations.labelled_by(), Some(label));
+        assert_eq!(root.accessibility.relations.described_by(), Some(value));
+        assert_eq!(root.accessibility.value.as_deref(), Some("40%"));
+        assert_eq!(root.visual.background, None);
+
+        let track_part = progress.track_part(div().bg(Color::rgb8(1, 2, 3)));
+        assert_eq!(track_part.explicit_id, Some(track));
+        assert!(track_part.accessibility.hidden);
+        assert_eq!(track_part.visual.background, Some(Color::rgb8(1, 2, 3)));
+        let indicator_part = progress.indicator_part(div());
+        assert_eq!(indicator_part.explicit_id, Some(indicator));
+        assert!(indicator_part.accessibility.hidden);
+        assert_eq!(
+            progress.label_part(text("Download")).explicit_id,
+            Some(label)
+        );
+        assert_eq!(progress.value_part(text("40%")).explicit_id, Some(value));
+
+        // An indicator that declares no identity keeps the original unrelated decoration.
+        let plain = Progress::new(1.0, 2.0);
+        assert_eq!(plain.label_id(), None);
+        let root = plain.root_part(div());
+        assert_eq!(root.explicit_id, None);
+        assert_eq!(root.accessibility.relations.labelled_by(), None);
+        assert_eq!(plain.label_part(text("Loading")).explicit_id, None);
+        assert!(plain.track_part(div()).accessibility.hidden);
+    }
+
+    #[test]
+    fn meter_parts_share_the_progress_shape_without_a_task_status() {
+        let meter = Meter::new(72.0, 0.0, 100.0)
+            .id("disk")
+            .low(20.0)
+            .high(80.0)
+            .format(ValueFormat::percent());
+        assert_eq!(meter.display_value().as_deref(), Some("72%"));
+        assert_eq!(meter.accessible_value().as_deref(), Some("72%"));
+
+        let labelled = meter.clone().value_text("72 percent full");
+        assert_eq!(
+            labelled.accessible_value().as_deref(),
+            Some("72 percent full")
+        );
+        assert_eq!(labelled.display_value().as_deref(), Some("72%"));
+        assert_eq!(
+            Meter::new(1.0, 0.0, 2.0).value_text("").accessible_value(),
+            None
+        );
+
+        let root = meter.root_part(div());
+        assert_eq!(root.explicit_id, Some("disk".into()));
+        assert_eq!(root.accessibility.role, AccessibilityRole::Meter);
+        assert_eq!(root.accessibility.relations.labelled_by(), meter.label_id());
+        assert_eq!(
+            root.accessibility.relations.described_by(),
+            meter.value_id()
+        );
+        assert_eq!(root.accessibility.value.as_deref(), Some("72%"));
+        assert!(meter.track_part(div()).accessibility.hidden);
+        assert!(meter.indicator_part(div()).accessibility.hidden);
+        assert_eq!(
+            meter.label_part(text("Disk usage")).explicit_id,
+            meter.label_id()
+        );
+        assert_eq!(meter.value_part(text("72%")).explicit_id, meter.value_id());
+        assert_eq!(Meter::new(1.0, 0.0, 2.0).label_id(), None);
     }
 }

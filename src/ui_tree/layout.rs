@@ -1505,21 +1505,6 @@ pub(super) fn report_variable_list_layout_measurements(
     Ok(changed)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum AnchorSide {
-    Top,
-    Bottom,
-    Left,
-    Right,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum AnchorAlign {
-    Start,
-    Center,
-    End,
-}
-
 pub(super) fn place_anchored(
     anchor: Rect,
     size: Size,
@@ -1528,6 +1513,66 @@ pub(super) fn place_anchored(
     gap: f32,
     margin: f32,
 ) -> Rect {
+    resolve_anchored(
+        anchor,
+        size,
+        viewport,
+        AnchorGeometry {
+            placement,
+            gap,
+            align_offset: 0.0,
+            margin,
+            sticky: true,
+        },
+    )
+    .bounds
+}
+
+/// The declared geometry one anchored surface is placed with.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct AnchorGeometry {
+    pub placement: AnchorPlacement,
+    pub gap: f32,
+    pub align_offset: f32,
+    pub margin: f32,
+    pub sticky: bool,
+}
+
+impl AnchorGeometry {
+    pub(super) fn of(anchor: &AnchorStyle) -> Self {
+        Self {
+            placement: anchor.placement,
+            gap: anchor.gap,
+            align_offset: anchor.align_offset,
+            margin: anchor.viewport_margin,
+            sticky: anchor.sticky,
+        }
+    }
+}
+
+/// Place an anchored surface and report which side and alignment the placement actually used.
+///
+/// [`place_anchored`] keeps the rectangle-only signature its existing callers use; this is the
+/// same computation with the resolved placement and remaining room retained, so an application
+/// that binds [`crate::AnchorPlacementHandle`] never has to re-derive a flip QuickGUI already made.
+pub(super) fn resolve_anchored(
+    anchor: Rect,
+    size: Size,
+    viewport: Rect,
+    geometry: AnchorGeometry,
+) -> ResolvedAnchorPlacement {
+    let AnchorGeometry {
+        placement,
+        gap,
+        align_offset,
+        margin,
+        sticky,
+    } = geometry;
+    let align_offset = if align_offset.is_finite() {
+        align_offset
+    } else {
+        0.0
+    };
     let (preferred_side, preferred_align) = anchor_placement_parts(placement);
     let inner = viewport.inset(Insets::all(margin.max(0.0)));
     let gap = gap.max(0.0);
@@ -1559,9 +1604,29 @@ pub(super) fn place_anchored(
         })
         .unwrap_or(preferred_align);
     let mut origin = anchored_origin(anchor, size, side, align, gap);
-    origin.x = clamp_surface_axis(origin.x, size.width, inner.x, inner.right());
-    origin.y = clamp_surface_axis(origin.y, size.height, inner.y, inner.bottom());
-    Rect::new(origin.x, origin.y, size.width, size.height)
+    // The cross-axis offset is declared relative to the anchor, so it is applied before the
+    // surface is clamped: an offset can shift a popup along its trigger but never off screen.
+    if side.is_vertical() {
+        origin.x += align_offset;
+    } else {
+        origin.y += align_offset;
+    }
+    if sticky {
+        origin.x = clamp_surface_axis(origin.x, size.width, inner.x, inner.right());
+        origin.y = clamp_surface_axis(origin.y, size.height, inner.y, inner.bottom());
+    }
+    let room = available_anchor_space(anchor, inner, side, gap);
+    let available = match side {
+        AnchorSide::Top | AnchorSide::Bottom => Size::new(inner.width.max(0.0), room),
+        AnchorSide::Left | AnchorSide::Right => Size::new(room, inner.height.max(0.0)),
+    };
+    ResolvedAnchorPlacement {
+        placement: crate::anchor_placement(side, align),
+        anchor,
+        bounds: Rect::new(origin.x, origin.y, size.width, size.height),
+        available,
+        anchor_hidden: viewport.intersection(anchor).is_none(),
+    }
 }
 
 pub(super) fn anchor_placement_parts(placement: AnchorPlacement) -> (AnchorSide, AnchorAlign) {
@@ -1582,12 +1647,7 @@ pub(super) fn anchor_placement_parts(placement: AnchorPlacement) -> (AnchorSide,
 }
 
 pub(super) fn opposite_anchor_side(side: AnchorSide) -> AnchorSide {
-    match side {
-        AnchorSide::Top => AnchorSide::Bottom,
-        AnchorSide::Bottom => AnchorSide::Top,
-        AnchorSide::Left => AnchorSide::Right,
-        AnchorSide::Right => AnchorSide::Left,
-    }
+    side.opposite()
 }
 
 pub(super) fn available_anchor_space(

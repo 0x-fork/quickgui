@@ -5,6 +5,107 @@ All notable user-facing changes to QuickGUI are recorded here.
 ## Unreleased
 
 ### Framework
+- Aligned the remaining Base UI form and navigation components. `Tabs` gained
+  `TabsState::select_at` activation-direction tracking, `Tabs::activation_direction`, and
+  `Tab::anchored_indicator_part` / `tracked_indicator_part`, which keep a caller-owned indicator on
+  the tab that is really active and publish that tab's laid-out box as `TabsIndicatorGeometry`.
+  `Toolbar` gained Button, Link, Input, Group, and Separator parts and `focusable_when_disabled`
+  items. `Checkbox`, `Radio`, `RadioGroup`, and `Switch` gained `read_only` with the matching
+  `next_state` / `accepts_selection` / `next_checked` refusal contracts, plus `Checkbox::parent` for
+  a registry-free indeterminate derivation. `Dialog` gained `viewport_part` and `DialogState`, which
+  holds a dialog mounted for the application's own exit transition on an exact deadline and reports
+  Base UI's `onOpenChangeComplete`. `Field` gained `item_part`, `validity_part`, `validation_mode`,
+  and a bounded `validation_debounce` answered through `should_validate` and `validation_delay`.
+- Added `Element::focusable_when_disabled`, Base UI's `focusableWhenDisabled`. A disabled control
+  normally leaves the Tab sequence; a composite widget — a toolbar above all — can opt one item back
+  in so keyboard users can still discover that the command exists. The element still reports as
+  disabled and still refuses pointer focus.
+- Aligned `Toast` with Base UI's provider, parts, and manager API. `ToastManager` became the
+  provider: `timeout` sets the inherited auto-dismiss duration, `limit` (three by default) flags
+  older toasts `ToastEntry::is_limited` without silencing them, and `set_expanded` carries the
+  expanded stack. `add`, `update`, `close`, and `close_all` join `push`, `dismiss`, and `clear`, and
+  `promise`/`resolve` queue a persistent `ToastKind::Loading` toast and turn it into its result
+  while keeping the same identity and stack position — QuickGUI owns no future, so the application
+  drives both halves from the task it already spawned. `apply_swipe` implements swipe-to-dismiss
+  from captured pointer events with a bounded `swipe_threshold`, a declared `swipe_direction`, and
+  the movement exposed for the application to translate the toast by. `portal_part`,
+  `positioner_part`, and `content_part` join the viewport, root, title, description, action, and
+  close decorators, and `ToastViewport::toasts` hands each toast its stack `index`, limited flag,
+  expanded flag, and an `offset(pitch)` helper. `ToastEntry` and `ToastManager` no longer derive
+  `Eq` because swipe movement is measured in logical pixels; they still derive `PartialEq`.
+- Aligned `NumberField` with Base UI's compound parts and props. `group_part`, `scrub_area_part`,
+  and `scrub_area_cursor_part` join the root, input, and stepper decorators.
+  `NumberFieldState::apply_scrub` turns a captured pointer drag into whole steps at a bounded
+  `scrub_sensitivity`, retaining the unconverted remainder for the gesture so a slow drag moves one
+  step at a time, with `scrub_direction`, `is_scrubbing`, and `scrub_position` for a caller-owned
+  cursor. `small_step` (Alt) and `large_step` (Shift) default to a tenth and ten times the step and
+  reach the keyboard, wheel, and scrub through `NumberFieldStepSize` and `step_with_modifiers`;
+  `snap_on_step` lands a stepped value on the step grid; `allow_wheel_scrub(false)` opts out of
+  focused wheel stepping; and `read_only` refuses every change while staying focusable, unlike
+  `disabled`. `required` and a copyable `NumberFieldPartState` complete the snapshot. `step_by`,
+  `wheel`, and every other existing method keep their original behavior.
+- Added `Element::accessibility_read_only`, projected as AccessKit's read-only state. This is the
+  web's `readonly` rather than `disabled`: the control keeps its place in the Tab sequence and its
+  value in the accessible name while refusing changes.
+- Aligned `Slider` with Base UI's compound parts and props. `label_part`, `value_part`,
+  `control_part`, and `indicator_part` (a Base UI-named alias of `range_part`) join the root, track,
+  and thumb decorators, and the root now points its accessible name and description at the mounted
+  label and value. `SliderState::min_steps_between_values` holds a whole-step gap open between
+  adjacent thumbs, `thumb_alignment` plus `SliderThumb::offset` implement Base UI's `thumbAlignment`
+  without moving the numeric contract, and `apply_pointer_change` exposes the `onValueCommitted`
+  boundary and the `data-dragging` flag while `apply_pointer` keeps its original return exactly.
+  `Slider::display_value` and `SliderThumb::value_text` apply the shared `ValueFormat`, and
+  `SliderThumb::state()` returns a copyable `SliderThumbState` carrying `data-index`, dragging, and
+  disabled state.
+- Aligned `Progress` and `Meter` with Base UI's compound parts. `track_part`, `label_part`, and
+  `value_part` join the existing root and indicator decorators; declaring `.id(...)` derives their
+  identities and points the root's accessible name and description at the mounted label and value.
+  `Progress::status()` reports `ProgressStatus::{Progressing, Complete, Indeterminate}` and
+  `Progress::state()` returns a copyable `ProgressPartState`. `ValueFormat` is the bounded `format`
+  hook — `percent()`, `fraction()`, or any closure — with `display_value()` for a caller-owned value
+  part and `accessible_value()` for assistive technology, where an explicit `value_text` keeps Base
+  UI's `getAriaValueText` precedence. `Meter` gained the same `id`, `format`, `value_text`, and
+  parts. Descriptors without an identity behave exactly as before.
+- Added `TooltipProvider` and `TooltipState`, the Base UI-shaped compound tooltip. Provider, Root,
+  Trigger, Portal/Positioner, Popup, and Arrow parts sit on caller-owned elements in the ordinary
+  view tree, with `delay`, `close_delay`, `hoverable`, `close_on_click`, `disabled`,
+  `track_cursor_axis` (`None`/`X`/`Y`/`Both`), bounded `side`/`align`/`side_offset`/
+  `collision_padding`, a resolved-placement arrow, framework-owned Escape dismissal, and a copyable
+  `TooltipPartState` snapshot. A shared provider makes an adjacent trigger open instantly while the
+  group stays warm; that warm window is itself one exact deadline, so a settled group owns no task
+  or timer. Bounded by `MAX_TOOLTIP_DELAY`, `MAX_TOOLTIP_GROUP_TIMEOUT`, `MAX_TOOLTIP_SIDE_OFFSET`,
+  and `MAX_TOOLTIP_COLLISION_PADDING`. The existing framework-owned `Element::tooltip(...)` overlay
+  is unchanged and remains the shortest path to a native-style hint.
+- Aligned `Popover` with Base UI's compound-part API. `side`, `align`, `side_offset`,
+  `align_offset`, `collision_padding`, `sticky`, `anchor_element`, `anchor_point`,
+  `anchor_trigger`, and `modal` join the existing `placement`, `anchor_gap`, and `viewport_margin`
+  props, which keep working and now have Base UI-named aliases writing the same bounded value.
+  `portal_part`, `arrow_part`, and `viewport_part` join the trigger, positioner, popup, backdrop,
+  title, description, and close parts, and `Popover::state()` returns a copyable `PopoverPartState`
+  carrying `open`, `modal`, `side`, `align`, `anchor_hidden`, and the measured anchor and available
+  sizes an application needs to size a popup. Bounded by the new `MAX_POPOVER_SIDE_OFFSET`,
+  `MAX_POPOVER_ALIGN_OFFSET`, `MAX_POPOVER_COLLISION_PADDING`, and `MAX_POPOVER_ARROW_SIZE`.
+- Added resolved anchor placement reporting. A declared `AnchorPlacement` is only a preference: the
+  retained tree flips the side and re-aligns the cross axis whenever it does not fit.
+  `Element::report_anchor_placement(handle)` publishes the placement, anchor rectangle, placed
+  rectangle, remaining room, and anchor-hidden state into an application-owned
+  `AnchorPlacementHandle` during the paint QuickGUI was already performing, and exactly one
+  correcting frame is requested when that value changes — an unchanged placement requests none, so
+  a settled window stays settled. `Popover::track_placement` feeds it back so `arrow_part` pins the
+  caller-owned arrow to the popup edge that really faces the anchor instead of guessing from the
+  preferred side. `AnchorSide`, `AnchorAlign`, `anchor_placement`, and `ResolvedAnchorPlacement` are
+  public.
+- Added `Element::anchor_align_offset` and `Element::anchor_sticky`: a cross-axis shift applied
+  before collision handling, so it can slide an anchored surface along its anchor but never off
+  screen, and an opt-out from QuickGUI's default clamping for a surface that should leave the
+  viewport with a scrolling anchor.
+- Added `PopoverHoverState`, Base UI's Trigger `openOnHover`. A hovered trigger opens after `delay`
+  (300 ms by default) and closes after `close_delay` once neither the trigger nor a hoverable popup
+  is hovered, so the pointer can cross the side-offset gap. Both are exact one-shot deadlines
+  bounded by `MAX_POPOVER_HOVER_DELAY`; entering or leaving cancels the outstanding task rather
+  than polling, a zero delay applies in the same controlled update with no task at all, and
+  `open_now`/`close_now`/`toggle` cancel any deadline so a click and a hover cannot fight. Both
+  `fn`-pointer and `StateAccessor` entry points are supplied.
 - Added compositing layers: an element that declares a transform beyond a pure translation, a
   subtree blur or drop shadow, a backdrop effect, or a non-normal blend mode now renders its whole
   subtree — Glyphon text included — into a bounded offscreen texture and composites it back through

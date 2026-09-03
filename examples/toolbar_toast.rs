@@ -96,7 +96,9 @@ impl Default for ToolbarToastDemo {
             alignment,
             marks: ToggleGroupState::multiple(),
             inspector: false,
-            toasts: ToastManager::new(),
+            // Base UI's provider settings: three visible toasts, the rest flagged limited, and a
+            // 48-point rightward swipe to dismiss.
+            toasts: ToastManager::new().limit(3).swipe_threshold(48.0),
             expiry: None,
         }
     }
@@ -155,9 +157,14 @@ impl ToolbarToastDemo {
         let items = toolbar_items();
         let toolbar = Toolbar::new("commands", &self.toolbar, &items);
         let mut root = toolbar
-            .root_part(div().flex_row().gap_2())
+            .root_part(div().flex_row().items_center().gap_2())
             .accessibility_label("Document commands");
-        for (item, (_, label)) in items.into_iter().zip(COMMANDS) {
+        // Base UI's Toolbar.Group and Toolbar.Separator: a labelling and structural unit and a
+        // divider that never takes focus, both inside the toolbar's single roving Tab stop.
+        let mut group = toolbar
+            .group_part(div().flex_row().gap_2())
+            .accessibility_label("File commands");
+        for (index, (item, (_, label))) in items.into_iter().zip(COMMANDS).enumerate() {
             let entry = toolbar.item(item.value()).expect("declared item");
             let value = item.value();
             let clicked = cx.listener(entry.item_id(), move |view: &mut Self, cx| {
@@ -175,11 +182,11 @@ impl ToolbarToastDemo {
                 );
                 cx.invalidate();
             });
-            root = root.child(
+            group = group.child(
                 entry.key_part(
                     cx,
                     entry
-                        .item_part(
+                        .button_part(
                             Self::chrome(colors, false)
                                 .child(text(label))
                                 .on_click(clicked),
@@ -188,8 +195,15 @@ impl ToolbarToastDemo {
                     Self::toolbar_state,
                 ),
             );
+            if index + 1 == COMMANDS.len() - 1 {
+                root = root.child(group);
+                root = root.child(toolbar.separator_part(div().w(1.0).h(20.0).bg(colors.border)));
+                group = toolbar
+                    .group_part(div().flex_row().gap_2())
+                    .accessibility_label("Destructive commands");
+            }
         }
-        root
+        root.child(group)
     }
 
     fn alignment(&self, cx: &mut ViewContext<'_, Self>, colors: Palette) -> Element {
@@ -272,9 +286,14 @@ impl ToolbarToastDemo {
     fn toasts_surface(&self, cx: &mut ViewContext<'_, Self>, colors: Palette) -> Element {
         let viewport = ToastViewport::new("toasts");
         let mut surface = viewport.viewport_part(div().flex_col().gap_2().w(320.0));
-        for entry in self.toasts.entries() {
-            let parts = viewport.toast(entry);
-            let id = entry.id();
+        // `toasts` walks the queue newest first and hands each descriptor its own stack index, the
+        // provider's limited flag, the expanded state, and any swipe in flight.
+        for parts in viewport.toasts(&self.toasts).collect::<Vec<_>>() {
+            let id = parts.id();
+            let entry = self
+                .toasts
+                .entry(id)
+                .expect("the descriptor came from this queue");
             let dismiss = cx.listener(parts.close_id(), move |view: &mut Self, cx| {
                 view.toasts.dismiss(id);
                 cx.invalidate();
@@ -291,6 +310,14 @@ impl ToolbarToastDemo {
                     view.toasts.resume(id, now)
                 };
                 if changed {
+                    cx.invalidate();
+                }
+            });
+
+            // Base UI's swipe-to-dismiss: QuickGUI owns the threshold and the queue, the example
+            // owns the translation it draws while the gesture is in flight.
+            let swipe = cx.pointer_listener(parts.root_id(), move |view: &mut Self, event, cx| {
+                if view.toasts.apply_swipe(id, event).changed {
                     cx.invalidate();
                 }
             });
@@ -345,15 +372,18 @@ impl ToolbarToastDemo {
             );
             card = card.child(controls);
 
+            let root = parts.key_part(
+                cx,
+                parts
+                    .root_part(div().child(parts.content_part(card)))
+                    .focus(|state| state.border(2.0, colors.accent))
+                    .opacity(if parts.is_limited() { 0.5 } else { 1.0 })
+                    .on_hover(hover)
+                    .on_pointer(swipe),
+                Self::toasts,
+            );
             surface = surface.child(
-                parts.key_part(
-                    cx,
-                    parts
-                        .root_part(card)
-                        .focus(|state| state.border(2.0, colors.accent))
-                        .on_hover(hover),
-                    Self::toasts,
-                ),
+                parts.positioner_part(div().translate(parts.swipe_movement(), 0.0).child(root)),
             );
         }
         surface

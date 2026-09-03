@@ -259,6 +259,30 @@ pub(super) fn sync_virtual_scrolls(
     }
 }
 
+/// Collect every mounted element that publishes its resolved anchor placement.
+///
+/// The walk keeps declaration order and records the revision each handle already carried, so the
+/// post-paint comparison only reports placements that actually moved. A `display: none` subtree is
+/// never placed, so it publishes nothing.
+pub(super) fn collect_anchor_placement_handles(
+    element: &Element,
+    handles: &mut Vec<RetainedAnchorPlacement>,
+) {
+    if element.is_display_none() {
+        return;
+    }
+    if let Some(handle) = &element.anchor_placement {
+        let revision = handle.revision();
+        handles.push(RetainedAnchorPlacement {
+            handle: handle.clone(),
+            revision,
+        });
+    }
+    for child in &element.children {
+        collect_anchor_placement_handles(child, handles);
+    }
+}
+
 pub(super) fn sync_animations(
     element: &Element,
     animations: &mut HashMap<ElementId, AnimationPlayback>,

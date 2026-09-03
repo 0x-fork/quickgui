@@ -452,6 +452,56 @@ declarations. Duration animations and springs inside custom content re-resolve o
 tree; hiding it drops their playback and deadline together. Text tooltips also become the trigger's
 native accessibility description.
 
+### Compound tooltip parts
+
+`TooltipState` is the Base UI-shaped counterpart of that declaration. `.tooltip(...)` stays the
+shortest path to a native-style hint and is unchanged; reach for `TooltipState` when the application
+needs to own the popup's element tree in the ordinary view, keep the popup hoverable, follow the
+pointer, or share timing across a group of triggers.
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Provider | `TooltipProvider` | shared `delay`, `close_delay`, and the `timeout` warm window |
+| Root | `TooltipState::new(trigger_id, popup_id)` | retained open state, hover deadlines, derived part identities |
+| Trigger | `trigger_part(cx, access, element)` | hover deadlines, `described_by` while open, close-on-press, cursor tracking |
+| Portal / Positioner | `portal_part(element)` / `positioner_part(element)` | anchoring, flip and shift, side offset, collision padding, placement reporting |
+| Popup | `popup_part(cx, access, element)` | the Tooltip role, Escape dismissal, hoverable grace, pointer passivity when not hoverable |
+| Arrow | `arrow_part(element)` | absolute placement on the edge the popup really landed on |
+
+```rust,ignore
+let hints = TooltipProvider::new()
+    .delay(Duration::from_millis(400))
+    .close_delay(Duration::from_millis(80));
+let save = TooltipState::new("save", "save-popup")
+    .provider(&hints)
+    .side(AnchorSide::Bottom)
+    .side_offset(10.0);
+```
+
+`delay` and `close_delay` are exact one-shot deadlines bounded by `MAX_TOOLTIP_DELAY`; a state may
+override either for one trigger. `timeout` (bounded by `MAX_TOOLTIP_GROUP_TIMEOUT`) is the window
+during which the group stays warm after a tooltip closes, so moving along a toolbar opens each
+neighbour instantly instead of waiting again. Warmth is itself one deadline: closing a grouped
+tooltip schedules a single task and opening another cancels it, so a settled group owns nothing.
+`TooltipPartState::instant` reports whether the current tooltip skipped the delay.
+
+`hoverable(false)` makes the popup pointer-passive, so it can neither keep itself open nor take
+hover from what it floats over. `close_on_click(false)` keeps the tooltip open when the trigger is
+pressed. `track_cursor_axis(...)` follows the pointer on `X`, `Y`, or `Both`; the untracked axis
+stays pinned to the trigger's edge, and tracking only applies while the tooltip is open and after
+the first painted frame has reported the trigger rectangle. `disabled(true)` refuses to open and
+closes an open tooltip immediately.
+
+`side`, `align`, `side_offset`, and `collision_padding` are the same bounded positioner geometry the
+popover uses, and `arrow_part` follows the resolved placement rather than the declared preference
+through the same `AnchorPlacementHandle` reporting. Escape dismissal is framework-owned: the popup
+carries a dismissal listener that closes the state directly.
+
+Each part method has a `_with` counterpart taking a `StateAccessor` for a host that renders many
+declared tooltips through one view. Keyboard focus does not open a compound tooltip — QuickGUI has
+no focus listener primitive yet — so an application that wants focus opening calls `open_now()`
+where it already tracks focus.
+
 Web-style context menus use a targeted secondary-click listener and the same edge-aware placement
 engine at the original logical pointer position:
 

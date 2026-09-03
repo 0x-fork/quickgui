@@ -948,6 +948,106 @@ fn point_anchors_sanitize_geometry_and_default_to_zero_gap() {
 }
 
 #[test]
+fn anchor_geometry_builders_are_bounded_and_only_apply_to_anchored_elements() {
+    let anchored = crate::div()
+        .anchor_to("trigger", AnchorPlacement::TopEnd)
+        .anchor_gap(-4.0)
+        .anchor_align_offset(f32::NAN)
+        .anchor_sticky(false)
+        .viewport_margin(-1.0);
+    let anchor = anchored.anchor.expect("element anchor");
+    assert_eq!(anchor.gap, 0.0);
+    assert_eq!(anchor.align_offset, 0.0);
+    assert_eq!(anchor.viewport_margin, 0.0);
+    assert!(!anchor.sticky);
+
+    let defaults = crate::div().anchor_to("trigger", AnchorPlacement::TopEnd);
+    let anchor = defaults.anchor.expect("element anchor");
+    assert_eq!(anchor.align_offset, 0.0);
+    assert!(anchor.sticky);
+
+    // The builders are inert on an element that declares no anchor at all.
+    let plain = crate::div().anchor_align_offset(12.0).anchor_sticky(false);
+    assert!(plain.anchor.is_none());
+}
+
+#[test]
+fn anchor_placement_handles_publish_only_real_changes() {
+    let handle = crate::AnchorPlacementHandle::new();
+    assert_eq!(handle.resolved(), None);
+    assert_eq!(
+        handle.placement_or(AnchorPlacement::LeftEnd),
+        AnchorPlacement::LeftEnd
+    );
+    assert_eq!(handle.revision(), 0);
+    assert!(format!("{handle:?}").contains("AnchorPlacementHandle"));
+
+    let resolved = crate::ResolvedAnchorPlacement {
+        placement: AnchorPlacement::TopStart,
+        anchor: crate::Rect::new(1.0, 2.0, 3.0, 4.0),
+        bounds: crate::Rect::new(5.0, 6.0, 7.0, 8.0),
+        available: crate::Size::new(9.0, 10.0),
+        anchor_hidden: false,
+    };
+    let bound = handle.clone();
+    bound.report(resolved);
+    assert_eq!(handle.resolved(), Some(resolved));
+    assert_eq!(handle.revision(), 1);
+    assert_eq!(
+        handle.placement_or(AnchorPlacement::LeftEnd),
+        AnchorPlacement::TopStart
+    );
+    assert_eq!(resolved.side(), crate::AnchorSide::Top);
+    assert_eq!(resolved.align(), crate::AnchorAlign::Start);
+
+    // An unchanged placement never bumps the revision, so it requests no correcting frame.
+    handle.report(resolved);
+    assert_eq!(handle.revision(), 1);
+    handle.report(crate::ResolvedAnchorPlacement {
+        anchor_hidden: true,
+        ..resolved
+    });
+    assert_eq!(handle.revision(), 2);
+
+    handle.clear();
+    assert_eq!(handle.resolved(), None);
+    assert_eq!(handle.revision(), 3);
+    handle.clear();
+    assert_eq!(handle.revision(), 3);
+    assert_eq!(handle, bound);
+    assert_ne!(handle, crate::AnchorPlacementHandle::new());
+}
+
+#[test]
+fn anchor_sides_and_alignments_round_trip_through_placements() {
+    let placements = [
+        AnchorPlacement::TopStart,
+        AnchorPlacement::Top,
+        AnchorPlacement::TopEnd,
+        AnchorPlacement::BottomStart,
+        AnchorPlacement::Bottom,
+        AnchorPlacement::BottomEnd,
+        AnchorPlacement::LeftStart,
+        AnchorPlacement::Left,
+        AnchorPlacement::LeftEnd,
+        AnchorPlacement::RightStart,
+        AnchorPlacement::Right,
+        AnchorPlacement::RightEnd,
+    ];
+    for placement in placements {
+        let side = crate::AnchorSide::of(placement);
+        let align = crate::AnchorAlign::of(placement);
+        assert_eq!(crate::anchor_placement(side, align), placement);
+        assert_eq!(side.opposite().opposite(), side);
+        assert_ne!(side.opposite(), side);
+        assert_eq!(
+            side.is_vertical(),
+            matches!(side, crate::AnchorSide::Top | crate::AnchorSide::Bottom)
+        );
+    }
+}
+
+#[test]
 fn text_areas_have_multiline_semantics_and_wrapping_defaults() {
     let element = text_area("one\ntwo").placeholder("Notes");
     assert_eq!(

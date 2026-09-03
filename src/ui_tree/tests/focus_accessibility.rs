@@ -1063,6 +1063,121 @@ fn oversized_anchored_surfaces_pin_to_the_viewport_margin() {
 }
 
 #[test]
+fn anchored_placement_reports_the_side_alignment_and_room_it_actually_used() {
+    let fits = resolve_anchored(
+        Rect::new(50.0, 50.0, 30.0, 20.0),
+        Size::new(80.0, 40.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        AnchorGeometry {
+            placement: AnchorPlacement::BottomStart,
+            gap: 8.0,
+            align_offset: 0.0,
+            margin: 8.0,
+            sticky: true,
+        },
+    );
+    assert_eq!(fits.placement, AnchorPlacement::BottomStart);
+    assert_eq!(fits.bounds, Rect::new(50.0, 78.0, 80.0, 40.0));
+    assert_eq!(fits.anchor, Rect::new(50.0, 50.0, 30.0, 20.0));
+    // 172 (inner bottom) - 70 (anchor bottom) - 8 (gap) on the primary axis, inner width across.
+    assert_eq!(fits.available, Size::new(224.0, 94.0));
+    assert!(!fits.anchor_hidden);
+
+    // A flip reports the side it landed on, not the side that was asked for.
+    let flipped = resolve_anchored(
+        Rect::new(70.0, 150.0, 30.0, 20.0),
+        Size::new(80.0, 48.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        AnchorGeometry {
+            placement: AnchorPlacement::BottomStart,
+            gap: 8.0,
+            align_offset: 0.0,
+            margin: 8.0,
+            sticky: true,
+        },
+    );
+    assert_eq!(flipped.placement, AnchorPlacement::TopStart);
+    assert_eq!(flipped.bounds, Rect::new(70.0, 94.0, 80.0, 48.0));
+    assert_eq!(flipped.available, Size::new(224.0, 134.0));
+
+    // An alternate alignment is reported the same way.
+    let realigned = resolve_anchored(
+        Rect::new(210.0, 40.0, 20.0, 24.0),
+        Size::new(96.0, 40.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        AnchorGeometry {
+            placement: AnchorPlacement::BottomStart,
+            gap: 8.0,
+            align_offset: 0.0,
+            margin: 8.0,
+            sticky: true,
+        },
+    );
+    assert_eq!(realigned.placement, AnchorPlacement::BottomEnd);
+
+    // An anchor that scrolled out of the window is reported as hidden.
+    let hidden = resolve_anchored(
+        Rect::new(50.0, 400.0, 30.0, 20.0),
+        Size::new(80.0, 40.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        AnchorGeometry {
+            placement: AnchorPlacement::BottomStart,
+            gap: 8.0,
+            align_offset: 0.0,
+            margin: 8.0,
+            sticky: true,
+        },
+    );
+    assert!(hidden.anchor_hidden);
+}
+
+#[test]
+fn cross_axis_offsets_shift_before_clamping_and_sticky_placement_can_be_disabled() {
+    let geometry = |align_offset: f32, sticky: bool| AnchorGeometry {
+        placement: AnchorPlacement::BottomStart,
+        gap: 8.0,
+        align_offset,
+        margin: 8.0,
+        sticky,
+    };
+    let shifted = resolve_anchored(
+        Rect::new(50.0, 50.0, 30.0, 20.0),
+        Size::new(80.0, 40.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        geometry(12.0, true),
+    );
+    assert_eq!(shifted.bounds, Rect::new(62.0, 78.0, 80.0, 40.0));
+
+    // A sticky surface is clamped back inside the collision viewport.
+    let clamped = resolve_anchored(
+        Rect::new(50.0, 50.0, 30.0, 20.0),
+        Size::new(80.0, 40.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        geometry(400.0, true),
+    );
+    assert_eq!(clamped.bounds.x, 152.0);
+
+    // A non-sticky surface stays locked to its anchor and leaves the viewport with it.
+    let loose = resolve_anchored(
+        Rect::new(50.0, 50.0, 30.0, 20.0),
+        Size::new(80.0, 40.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        geometry(400.0, false),
+    );
+    assert_eq!(loose.bounds.x, 450.0);
+    assert_eq!(loose.placement, AnchorPlacement::BottomStart);
+
+    // A non-finite offset is ignored rather than poisoning the placement.
+    let broken = resolve_anchored(
+        Rect::new(50.0, 50.0, 30.0, 20.0),
+        Size::new(80.0, 40.0),
+        Rect::new(0.0, 0.0, 240.0, 180.0),
+        geometry(f32::NAN, true),
+    );
+    assert_eq!(broken.bounds, Rect::new(50.0, 78.0, 80.0, 40.0));
+}
+
+#[test]
 fn scrollbars_reveal_on_scroll_then_hide_with_one_deadline() {
     let mut tree = UiTree::new();
     let id = ElementId::new(7);
