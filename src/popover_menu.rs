@@ -1672,6 +1672,10 @@ pub struct MenuCloseParent;
 
 /// Default dwell before a hovered menu trigger opens, matching Base UI's 100 ms.
 pub const DEFAULT_MENU_HOVER_DELAY: Duration = Duration::from_millis(100);
+/// Default grace period when the pointer leaves a hover-opened menu trigger.
+///
+/// This keeps a submenu mounted while the pointer crosses the structural gap into its popup.
+pub const DEFAULT_MENU_CLOSE_DELAY: Duration = Duration::from_millis(100);
 
 /// Bounded controlled state for one unstyled menu surface built from Base UI's compound parts.
 ///
@@ -1735,7 +1739,7 @@ impl MenuState {
             open_on_hover: false,
             hoverable_popup: true,
             delay: DEFAULT_MENU_HOVER_DELAY,
-            close_delay: Duration::ZERO,
+            close_delay: DEFAULT_MENU_CLOSE_DELAY,
             placement_handle: AnchorPlacementHandle::new(),
             trigger_hovered: false,
             popup_hovered: false,
@@ -1800,6 +1804,7 @@ impl MenuState {
     }
 
     /// Set how long the menu waits before closing once the pointer leaves, Base UI's `closeDelay`.
+    /// Defaults to [`DEFAULT_MENU_CLOSE_DELAY`] so the pointer can cross into a submenu popup.
     pub fn close_delay(mut self, close_delay: Duration) -> Self {
         self.close_delay = close_delay.min(MAX_POPOVER_HOVER_DELAY);
         self
@@ -2096,6 +2101,9 @@ impl MenuState {
             if click_access.get(view).toggle() {
                 let open = click_access.get(view).is_open();
                 click_change(view, open, cx);
+                if open {
+                    cx.focus(FocusHandle::new(click_access.get(view).popup_id()));
+                }
                 cx.invalidate();
             }
         });
@@ -2891,6 +2899,38 @@ mod tests {
         let renders = cx.render_count(window).unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    #[test]
+    fn default_close_delay_bridges_the_gap_from_trigger_to_popup() {
+        let menu = MenuState::new("menu-trigger", "menu-popup")
+            .open_on_hover(true)
+            .delay(Duration::ZERO);
+        let (mut cx, view) = TestAppContext::new(MenuHost::new(menu)).unwrap();
+        let window = view.window_handle();
+
+        cx.visual(window)
+            .unwrap()
+            .move_pointer(crate::Point::new(10.0, 10.0))
+            .unwrap();
+        assert!(cx.read(view, |view| view.menu.is_open()).unwrap());
+
+        let popup = cx.element_bounds(window, "menu-popup").unwrap();
+        cx.visual(window)
+            .unwrap()
+            .move_pointer(crate::Point::new(10.0, popup.y - 4.0))
+            .unwrap();
+        assert!(cx.read(view, |view| view.menu.is_open()).unwrap());
+        assert!(cx.read(view, |view| view.menu.is_pending()).unwrap());
+
+        cx.visual(window)
+            .unwrap()
+            .move_pointer(crate::Point::new(popup.x + 10.0, popup.y + 10.0))
+            .unwrap();
+        assert!(cx.read(view, |view| view.menu.is_open()).unwrap());
+        assert!(!cx.read(view, |view| view.menu.is_pending()).unwrap());
+        cx.advance_time(DEFAULT_MENU_CLOSE_DELAY).unwrap();
+        assert!(cx.read(view, |view| view.menu.is_open()).unwrap());
     }
 
     #[derive(Default)]

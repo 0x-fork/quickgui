@@ -1178,6 +1178,54 @@ fn cross_axis_offsets_shift_before_clamping_and_sticky_placement_can_be_disabled
 }
 
 #[test]
+fn nested_anchor_uses_the_painted_position_inside_an_anchored_parent() {
+    let root = div().size(500.0, 400.0).relative().children([
+        div()
+            .id("parent-anchor")
+            .absolute()
+            .left(100.0)
+            .top(80.0)
+            .size(40.0, 20.0),
+        div()
+            .id("parent-positioner")
+            .anchor_to("parent-anchor", AnchorPlacement::BottomStart)
+            .child(
+                div()
+                    .id("parent-popup")
+                    .size(200.0, 200.0)
+                    .flex_col()
+                    .children([
+                        div().h(120.0).flex_none(),
+                        div().id("submenu-anchor").w_full().h(30.0).flex_none(),
+                        div()
+                            .id("submenu-positioner")
+                            .anchor_to("submenu-anchor", AnchorPlacement::RightStart)
+                            .child(div().id("submenu-popup").size(100.0, 80.0).clickable()),
+                    ]),
+            ),
+    ]);
+    let mut tree = UiTree::new();
+    let mut renderer = TestTextLayout;
+    tree.set_root(root, Size::new(500.0, 400.0), 1.0, &mut renderer)
+        .unwrap();
+    let mut scene = Scene::new();
+    tree.paint(&mut scene, &mut renderer).unwrap();
+
+    let anchor = tree.element_bounds("submenu-anchor".into()).unwrap();
+    let popup = tree.element_bounds("submenu-positioner".into()).unwrap();
+    assert_eq!(anchor, Rect::new(100.0, 228.0, 200.0, 30.0));
+    assert_eq!(popup, Rect::new(308.0, 228.0, 100.0, 80.0));
+
+    // The layout-only hover refresh follows the same resolved nesting, so its hit regions do not
+    // jump back to the submenu's pre-anchor layout position.
+    let point = Point::new(320.0, 240.0);
+    tree.refresh_hover_after_layout(Some(point)).unwrap();
+    tree.pointer_button(Some(point), true, false, Instant::now(), &mut renderer);
+    let released = tree.pointer_button(Some(point), false, false, Instant::now(), &mut renderer);
+    assert_eq!(released.clicked, Some("submenu-popup".into()));
+}
+
+#[test]
 fn scrollbars_reveal_on_scroll_then_hide_with_one_deadline() {
     let mut tree = UiTree::new();
     let id = ElementId::new(7);

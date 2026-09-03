@@ -516,7 +516,7 @@ impl NativePopoverStates {
             state = state.close_delay(close_delay);
         }
         state = state
-            .hoverable(node.boolean(property::HOVERABLE).unwrap_or(true))
+            .hoverable(node.boolean(property::HOVERABLE).unwrap_or(false))
             .close_on_click(node.boolean(property::CLOSE_ON_CLICK).unwrap_or(true))
             .track_cursor_axis(match node.string(property::TRACK_CURSOR_AXIS) {
                 Some("x") => TooltipCursorAxis::X,

@@ -407,6 +407,7 @@ pub(super) fn collect_layout_hit_regions(
     element: &Element,
     taffy: &TaffyTree<MeasureContext>,
     natural_bounds: &HashMap<ElementId, Rect>,
+    resolved_bounds: &mut HashMap<ElementId, Rect>,
     scroll_offsets: &mut HashMap<ElementId, Vector>,
     selectable_text_indices: &HashMap<ElementId, usize>,
     hit_regions: &mut Vec<HitRegion>,
@@ -431,15 +432,14 @@ pub(super) fn collect_layout_hit_regions(
     let natural = positioned_rect(element, parent_origin, layout);
     let bounds = if let Some(anchor) = element.anchor {
         let anchor_bounds = match anchor.target {
-            AnchorTarget::Element(target) => {
-                natural_bounds
-                    .get(&target)
-                    .copied()
-                    .ok_or(UiError::MissingAnchor {
-                        element: element.runtime_id,
-                        anchor: target,
-                    })?
-            }
+            AnchorTarget::Element(target) => resolved_bounds
+                .get(&target)
+                .or_else(|| natural_bounds.get(&target))
+                .copied()
+                .ok_or(UiError::MissingAnchor {
+                    element: element.runtime_id,
+                    anchor: target,
+                })?,
             AnchorTarget::Point(point) => Rect::new(point.x, point.y, 0.0, 0.0),
         };
         resolve_anchored(
@@ -464,6 +464,7 @@ pub(super) fn collect_layout_hit_regions(
     } else {
         bounds
     };
+    resolved_bounds.insert(element.runtime_id, bounds);
     let opens_group = !translated
         && resolved_layer_effects(
             element,
@@ -574,6 +575,7 @@ pub(super) fn collect_layout_hit_regions(
             child,
             taffy,
             natural_bounds,
+            resolved_bounds,
             scroll_offsets,
             selectable_text_indices,
             hit_regions,
@@ -643,15 +645,14 @@ pub(super) fn paint_element(
     let natural = positioned_rect(element, parent_origin, layout);
     let bounds = if let Some(anchor) = element.anchor {
         let anchor_bounds = match anchor.target {
-            AnchorTarget::Element(target) => {
-                natural_bounds
-                    .get(&target)
-                    .copied()
-                    .ok_or(UiError::MissingAnchor {
-                        element: element.runtime_id,
-                        anchor: target,
-                    })?
-            }
+            AnchorTarget::Element(target) => element_bounds
+                .get(&target)
+                .or_else(|| natural_bounds.get(&target))
+                .copied()
+                .ok_or(UiError::MissingAnchor {
+                    element: element.runtime_id,
+                    anchor: target,
+                })?,
             AnchorTarget::Point(point) => Rect::new(point.x, point.y, 0.0, 0.0),
         };
         let resolved = resolve_anchored(

@@ -485,8 +485,9 @@ neighbour instantly instead of waiting again. Warmth is itself one deadline: clo
 tooltip schedules a single task and opening another cancels it, so a settled group owns nothing.
 `TooltipPartState::instant` reports whether the current tooltip skipped the delay.
 
-`hoverable(false)` makes the popup pointer-passive, so it can neither keep itself open nor take
-hover from what it floats over. `close_on_click(false)` keeps the tooltip open when the trigger is
+The popup is pointer-passive by default, like an AppKit help tag: it can neither keep itself open
+nor take hover from what it floats over, so reaching it closes the tooltip. `hoverable(true)` opts
+into Base UI's default, where the pointer may rest on the popup. `close_on_click(false)` keeps the tooltip open when the trigger is
 pressed. `track_cursor_axis(...)` follows the pointer on `X`, `Y`, or `Both`; the untracked axis
 stays pinned to the edge of the trigger's painted bounds. The pointer is recorded while it rests on
 the trigger, before the tooltip opens, so the popup appears at the pointer on its first frame

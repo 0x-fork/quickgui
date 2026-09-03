@@ -269,7 +269,8 @@ const placement = usePopoverPlacement();
 
 `anchor` accepts another node or one `{ x, y }` logical point, which is Base UI's virtual element.
 `openOnHover` hands the open value to the core's own exact deadline — a hovered trigger opens after
-`delay` and closes after `closeDelay` once neither the trigger nor a hoverable popup is hovered —
+`delay` and closes after `closeDelay` once neither the trigger nor a `hoverable` popup (off by
+default, as a native help tag is) is hovered —
 and the resulting open value comes back through `onOpenChange` with a `"hover"` reason.
 
 ### Tooltips

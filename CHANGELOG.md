@@ -6,6 +6,9 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### Framework
 
+- A tooltip is pointer-passive by default: `TooltipState::hoverable` now starts `false`, so the
+  popup never takes the pointer and reaching it closes the tooltip, as an AppKit help tag does.
+  Base UI defaults the other way; call `hoverable(true)` for a popup worth hovering.
 - A menu row lit by the pointer goes dark when the pointer leaves it (`PopoverMenu::unhighlight`),
   in the in-window `Menu` surfaces and the context menu alike; a row anchoring an open submenu and
   a highlight the keyboard moved elsewhere are left alone. The last hovered row previously stayed
@@ -604,6 +607,8 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### JavaScript tooling
 
+- `Tooltip.Root`'s `hoverable` defaults to `false`; declare `hoverable` to keep a tooltip open while
+  the pointer rests on its popup.
 - `DateField.Segment` and `TimeField.Segment` declared without children now show the core's own
   digits and placeholder for that segment, as the docs always described; they previously mounted as
   empty boxes unless the application rendered the text itself.

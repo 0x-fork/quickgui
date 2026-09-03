@@ -6725,7 +6725,7 @@ fn declared_menu_parts_mount_the_core_rows_and_report_what_it_activated() {
         &[],
         &[],
         &[
-            (property::OPEN, true),
+            (property::OPEN, false),
             (property::COMPONENT_CHANGE_LISTENER, true),
         ],
     );
@@ -6845,6 +6845,32 @@ fn declared_menu_parts_mount_the_core_rows_and_report_what_it_activated() {
     let (mut cx, view) = mounted_menu_view(tree, Rc::clone(&events));
     let window = view.window_handle();
 
+    let trigger = menu_trigger_id(ElementId::named("edit"));
+    let popup = menu_popup_id(ElementId::named("edit"));
+    assert!(!cx.contains_element(window, popup).unwrap());
+    cx.click(window, trigger).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change_field(&events, trigger_id, "open")["open"],
+        serde_json::json!(true)
+    );
+    assert_eq!(cx.focused(window).unwrap(), Some(popup));
+
+    // Opening from the trigger transfers the menu key context to the popup, so Arrow Down moves
+    // the retained roving highlight rather than remaining on the trigger.
+    cx.simulate_keystrokes(window, "down").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .menu_compound
+            .menus
+            .get(&ElementId::named("edit").as_u64())
+            .and_then(|instance| instance.menu.active_index()))
+            .unwrap(),
+        Some(3)
+    );
+
     // The declared rows become the core's own model, so each row mounts under the identity the
     // model derived and the popup points its active descendant at exactly that identity.
     let items = [
@@ -6879,6 +6905,39 @@ fn declared_menu_parts_mount_the_core_rows_and_report_what_it_activated() {
     ] {
         assert!(cx.contains_element(window, element).unwrap());
     }
+
+    // A pointer highlight clears when that pointer leaves the row, so its styled state cannot
+    // remain stuck after the cursor moves back to the trigger.
+    let compact_center = element_center(&mut cx, window, compact);
+    cx.visual(window)
+        .unwrap()
+        .move_pointer(compact_center)
+        .unwrap();
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .menu_compound
+            .menus
+            .get(&ElementId::named("edit").as_u64())
+            .and_then(|instance| instance.menu.active_index()))
+            .unwrap(),
+        Some(4)
+    );
+    let trigger_center = element_center(&mut cx, window, trigger);
+    cx.visual(window)
+        .unwrap()
+        .move_pointer(trigger_center)
+        .unwrap();
+    assert_eq!(
+        cx.read(view, |view| view
+            .components
+            .menu_compound
+            .menus
+            .get(&ElementId::named("edit").as_u64())
+            .and_then(|instance| instance.menu.active_index()))
+            .unwrap(),
+        None
+    );
 
     // A checkbox row toggles inside the core's model and stays open, exactly as Base UI does.
     cx.click(window, wrap).unwrap();
@@ -6932,6 +6991,7 @@ fn a_declared_submenu_trigger_is_a_row_of_its_parent_and_the_trigger_of_its_own_
     let submenu_positioner_id = 1_426;
     let submenu_popup_id = 1_427;
     let nested_item_id = 1_428;
+    let second_nested_item_id = 1_429;
 
     let mut tree = NativeTree::default();
     declare_aligned_part(
@@ -6954,7 +7014,10 @@ fn a_declared_submenu_trigger_is_a_row_of_its_parent_and_the_trigger_of_its_own_
         "file",
         &[],
         &[],
-        &[(property::OPEN, true)],
+        &[
+            (property::OPEN, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
     );
     declare_aligned_part(
         &mut tree,
@@ -7042,9 +7105,23 @@ fn a_declared_submenu_trigger_is_a_row_of_its_parent_and_the_trigger_of_its_own_
         ],
         &[(property::COMPONENT_CHANGE_LISTENER, true)],
     );
+    declare_aligned_part(
+        &mut tree,
+        second_nested_item_id,
+        submenu_popup_id,
+        NodeTag::View,
+        "menu-item",
+        "recent",
+        &[],
+        &[
+            (property::PART_VALUE, "readme"),
+            (property::ACCESSIBILITY_LABEL, "README.md"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
 
     let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
-    let (cx, view) = mounted_menu_view(tree, Rc::clone(&events));
+    let (mut cx, view) = mounted_menu_view(tree, Rc::clone(&events));
     let window = view.window_handle();
 
     // The nested level anchors to the row identity its parent's model derived, so exactly one
@@ -7063,17 +7140,81 @@ fn a_declared_submenu_trigger_is_a_row_of_its_parent_and_the_trigger_of_its_own_
     );
 
     // The nested level is its own compound: its popup and rows mount under its own scope.
-    let nested_items = [PopoverMenuItem::action(
-        ElementId::named("notes"),
-        "notes.md",
-        (),
-    )];
+    let nested_items = [
+        PopoverMenuItem::action(ElementId::named("notes"), "notes.md", ()),
+        PopoverMenuItem::action(ElementId::named("readme"), "README.md", ()),
+    ];
     assert!(
         cx.contains_element(window, menu_popup_id(ElementId::named("recent")))
             .unwrap()
     );
     assert!(
         cx.contains_element(window, menu_row_id("recent", &nested_items, 0))
+            .unwrap()
+    );
+
+    // Right transfers the key context into the submenu, where Down advances its own highlight.
+    let parent_popup = menu_popup_id(ElementId::named("file"));
+    let child_popup = menu_popup_id(ElementId::named("recent"));
+    assert_eq!(cx.focused(window).unwrap(), Some(parent_popup));
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(child_popup));
+    let active_before_down = cx
+        .read(view, |view| {
+            view.components
+                .menu_compound
+                .menus
+                .get(&ElementId::named("recent").as_u64())
+                .and_then(|instance| instance.menu.active_index())
+        })
+        .unwrap();
+    cx.simulate_keystrokes(window, "down").unwrap();
+    cx.run_until_idle().unwrap();
+    let active_after_down = cx
+        .read(view, |view| {
+            view.components
+                .menu_compound
+                .menus
+                .get(&ElementId::named("recent").as_u64())
+                .and_then(|instance| instance.menu.active_index())
+        })
+        .unwrap();
+    assert_ne!(active_after_down, active_before_down);
+
+    // Left closes only the child and returns to its trigger on the parent's key-context path;
+    // Right can reopen it from there.
+    cx.simulate_keystrokes(window, "left").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(row));
+    assert!(!cx.contains_element(window, child_popup).unwrap());
+    assert!(cx.contains_element(window, parent_popup).unwrap());
+    cx.simulate_keystrokes(window, "right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(child_popup));
+
+    // A command closes its whole open chain, not just the submenu it belongs to.
+    let nested_row = menu_row_id("recent", &nested_items, 0);
+    cx.click(window, nested_row).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change_field(&events, nested_item_id, "activated")["activated"],
+        serde_json::json!("notes")
+    );
+    assert_eq!(
+        component_change_field(&events, submenu_trigger_id, "open")["open"],
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        component_change_field(&events, trigger_id, "open")["open"],
+        serde_json::json!(false)
+    );
+    assert!(
+        !cx.contains_element(window, menu_popup_id(ElementId::named("recent")))
+            .unwrap()
+    );
+    assert!(
+        !cx.contains_element(window, menu_popup_id(ElementId::named("file")))
             .unwrap()
     );
 }

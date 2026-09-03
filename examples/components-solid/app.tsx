@@ -236,6 +236,7 @@ const menuRowStyle = () =>
     paddingRight: 10,
     height: 28,
     borderRadius: 6,
+    hoverBackgroundColor: p().selection,
   }) as const;
 
 const pickerAppearance = (): PickerAppearance => ({
@@ -1321,12 +1322,14 @@ function DialogDemo() {
               Escape, the backdrop, and the close control all restore focus to the trigger.
             </Dialog.Description>
             {/* Dialog.Viewport is the scrollable dialog body: the core owns its overflow. */}
+            {/* The viewport clips to its box, so it keeps room for the field's outset ring. */}
             <Dialog.Viewport
               style={{
                 display: "flex",
                 flexDirection: "column",
                 gap: 8,
                 maxHeight: 160,
+                padding: 4,
               }}
             >
               <Input
@@ -1334,7 +1337,7 @@ function DialogDemo() {
                 multiline
                 placeholder="Release notes"
                 onInput={(event) => setNotes(event.value ?? "")}
-                style={{ ...inputStyle(), width: 320, height: 64, paddingTop: 6 }}
+                style={{ ...inputStyle(), width: "100%", height: 64, paddingTop: 6 }}
               />
             </Dialog.Viewport>
             <Row>
@@ -1823,7 +1826,7 @@ function MenuRowLabel(props: { label: string }) {
     <Text
       style={{
         fontSize: 12,
-        color: state().highlighted ? p().onAccent : p().ink,
+        color: state().highlighted ? p().accent : p().ink,
       }}
     >
       {props.label}
@@ -1841,13 +1844,32 @@ function MenuRow(props: {
       value={props.value}
       label={props.label}
       onClick={() => props.onActivate(props.value)}
-      style={{
-        ...menuRowStyle(),
-        hoverBackgroundColor: p().selection,
-      }}
+      style={menuRowStyle()}
     >
       <MenuRowLabel label={props.label} />
     </Menu.Item>
+  );
+}
+
+function MenuCheckboxIndicator() {
+  const state = useMenuItemState();
+  return (
+    <Show when={state().checked}>
+      <Menu.CheckboxItemIndicator>
+        <Text style={{ fontSize: 12, color: p().accent }}>✓</Text>
+      </Menu.CheckboxItemIndicator>
+    </Show>
+  );
+}
+
+function MenuRadioIndicator() {
+  const state = useMenuItemState();
+  return (
+    <Show when={state().checked}>
+      <Menu.RadioItemIndicator>
+        <Text style={{ fontSize: 12, color: p().accent }}>●</Text>
+      </Menu.RadioItemIndicator>
+    </Show>
   );
 }
 
@@ -1860,7 +1882,7 @@ function MenuDemo() {
   return (
     <Panel
       title="Menu"
-      hint="The Base UI menu compound: application-styled rows whose identity, roving highlight, toggle policy, radio exclusivity, and closing are all the core's."
+      hint="The Base UI menu compound: application-styled rows whose identity, keyboard navigation, roving highlight, toggle policy, radio exclusivity, and closing are all the core's."
     >
       <Menu.Root
         open={open()}
@@ -1908,27 +1930,24 @@ function MenuDemo() {
               style={menuRowStyle()}
             >
               <MenuRowLabel label="Wrap lines" />
-              <Menu.CheckboxItemIndicator>
-                <Text style={{ fontSize: 12, color: p().accent }}>✓</Text>
-              </Menu.CheckboxItemIndicator>
+              <MenuCheckboxIndicator />
             </Menu.CheckboxItem>
             <Menu.RadioGroup
               name="density"
               value={density()}
               onValueChange={setDensity}
+              style={{ display: "flex", flexDirection: "column" }}
             >
               <For each={["compact", "cozy"]}>
                 {(value) => (
                   <Menu.RadioItem value={value} label={value} style={menuRowStyle()}>
                     <MenuRowLabel label={value} />
-                    <Menu.RadioItemIndicator>
-                      <Text style={{ fontSize: 12, color: p().accent }}>●</Text>
-                    </Menu.RadioItemIndicator>
+                    <MenuRadioIndicator />
                   </Menu.RadioItem>
                 )}
               </For>
             </Menu.RadioGroup>
-            <Menu.SubmenuRoot>
+            <Menu.SubmenuRoot closeDelay={100}>
               <Menu.SubmenuTrigger
                 value="recent"
                 label="Open recent"
@@ -3643,14 +3662,13 @@ function TooltipDemo() {
   return (
     <Panel
       title="Tooltip"
-      hint="A provider shares one warm group deadline across its triggers, so the second tooltip in a row opens without waiting again. Both are hoverable={false}, like a native help tag: the popup never takes the pointer, so reaching it closes the tooltip."
+      hint="A provider shares one warm group deadline across its triggers, so the second tooltip in a row opens without waiting again. Like a native help tag, the popup never takes the pointer, so reaching it closes the tooltip; hoverable opts into Base UI's hover-through."
     >
       <Tooltip.Provider delay={500} closeDelay={120} timeout={400}>
         <Row>
           <Tooltip.Root
             side="top"
             sideOffset={8}
-            hoverable={false}
             onOpenChange={setOpen}
             onPlacementChange={(details) =>
               setPlacement(`${details.side}/${details.align}`)
@@ -3680,12 +3698,7 @@ function TooltipDemo() {
             </Tooltip.Positioner>
           </Tooltip.Root>
 
-          <Tooltip.Root
-            side="bottom"
-            sideOffset={8}
-            trackCursorAxis="x"
-            hoverable={false}
-          >
+          <Tooltip.Root side="bottom" sideOffset={8} trackCursorAxis="x">
             <Tooltip.Trigger style={controlStyle()}>
               <Text style={{ fontSize: 12, color: p().ink }}>Tracks the cursor</Text>
             </Tooltip.Trigger>

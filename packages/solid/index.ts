@@ -9757,6 +9757,7 @@ export namespace JSX {
     /** Trigger `openOnHover` default for the whole level. */
     openOnHover?: boolean;
     delay?: number;
+    /** Grace period before a hover-opened level closes. Defaults to 100 ms. */
     closeDelay?: number;
     side?: "top" | "bottom" | "left" | "right";
     align?: "start" | "center" | "end";
@@ -9770,6 +9771,7 @@ export namespace JSX {
     /** Open after `delay` while the pointer rests on the trigger. */
     openOnHover?: boolean;
     delay?: number;
+    /** Grace period before a hover-opened level closes. Defaults to 100 ms. */
     closeDelay?: number;
   }
 
@@ -9843,7 +9845,11 @@ export namespace JSX {
     onOpenChange?: (open: boolean, event: QuickGuiEvent) => void;
     /** Cancel any pending deadline and close. The trigger stays focusable. */
     disabled?: boolean;
-    /** Let the pointer cross into the popup without closing. Defaults to `true`. */
+    /**
+     * Let the pointer cross into the popup without closing. Defaults to `false`: a tooltip is a
+     * passive help tag like AppKit's, and reaching its popup closes it. Base UI defaults to
+     * `true`; opt in for a popup with content worth hovering.
+     */
     hoverable?: boolean;
     /** Follow the cursor on one axis, both, or neither. */
     trackCursorAxis?: TooltipCursorAxis;

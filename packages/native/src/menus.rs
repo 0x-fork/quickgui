@@ -522,6 +522,26 @@ impl NativeMenuCompounds {
             .menu
             .item_element_id(menu_popup_id(ElementId::new(binding.menu)), binding.index)
     }
+
+    /// This level followed by every menu level whose submenu row owns it.
+    fn menu_chain_to_root(&self, menu: u64) -> Vec<u64> {
+        let mut chain = Vec::new();
+        let mut current = Some(menu);
+        while let Some(key) = current {
+            if chain.contains(&key) {
+                break;
+            }
+            chain.push(key);
+            current = self.menus.iter().find_map(|(parent, instance)| {
+                instance
+                    .rows
+                    .iter()
+                    .any(|row| row.submenu == Some(key))
+                    .then_some(*parent)
+            });
+        }
+        chain
+    }
 }
 
 /// A per-instance accessor from the hosted view to one declared menu level's surface state.
@@ -1011,7 +1031,7 @@ fn open_change(
     }
 }
 
-/// Move the roving highlight onto a hovered row, exactly as the core's own menus do.
+/// Follow one row's hover state without clearing a highlight the keyboard has since moved.
 fn highlight_on_hover(
     element: Element,
     binding: MenuRowBinding,
@@ -1019,12 +1039,15 @@ fn highlight_on_hover(
     cx: &mut ViewContext<'_, NativeView>,
 ) -> Element {
     let hover = cx.hover_listener(row_id, move |view: &mut NativeView, hovered, cx| {
-        if !*hovered {
+        let Some(instance) = view.components.menu_compound.menus.get_mut(&binding.menu) else {
             return;
-        }
-        if let Some(instance) = view.components.menu_compound.menus.get_mut(&binding.menu)
-            && instance.menu.highlight(binding.index)
-        {
+        };
+        let changed = if *hovered {
+            instance.menu.highlight(binding.index)
+        } else {
+            instance.menu.unhighlight(binding.index)
+        };
+        if changed {
             cx.invalidate();
         }
     });
@@ -1039,32 +1062,50 @@ fn activate_menu_row(
     events: &EventQueue,
     cx: &mut EventContext,
 ) {
-    let Some(instance) = view.components.menu_compound.menus.get_mut(&binding.menu) else {
-        return;
+    let (row, close, checked, link) = {
+        let Some(instance) = view.components.menu_compound.menus.get_mut(&binding.menu) else {
+            return;
+        };
+        let Some(row) = instance.rows.get(binding.index).cloned() else {
+            return;
+        };
+        let Some(activation) = instance.menu.activate(binding.index) else {
+            return;
+        };
+        let close = match &activation {
+            PopoverMenuActivation::Command { close_menu, .. } => *close_menu,
+            PopoverMenuActivation::Submenu { .. } => false,
+        };
+        let checked = instance
+            .menu
+            .item_part_state(binding.index, false)
+            .and_then(|state| state.checked);
+        let link = match &activation {
+            PopoverMenuActivation::Command { action, .. } => action
+                .downcast_ref::<quickgui::OpenMenuLink>()
+                .map(|link| Arc::clone(&link.url)),
+            PopoverMenuActivation::Submenu { .. } => None,
+        };
+        (row, close, checked, link)
     };
-    let Some(row) = instance.rows.get(binding.index).cloned() else {
-        return;
-    };
-    let Some(activation) = instance.menu.activate(binding.index) else {
-        return;
-    };
-    let close = match &activation {
-        PopoverMenuActivation::Command { close_menu, .. } => *close_menu,
-        PopoverMenuActivation::Submenu { .. } => false,
-    };
-    let checked = instance
-        .menu
-        .item_part_state(binding.index, false)
-        .and_then(|state| state.checked);
-    let link = match &activation {
-        PopoverMenuActivation::Command { action, .. } => action
-            .downcast_ref::<quickgui::OpenMenuLink>()
-            .map(|link| Arc::clone(&link.url)),
-        PopoverMenuActivation::Submenu { .. } => None,
-    };
-    if close && instance.state.close_now() && instance.listens {
-        let target = instance.trigger_node;
-        enqueue_component_change(events, window, target, serde_json::json!({ "open": false }));
+    if close {
+        let chain = view
+            .components
+            .menu_compound
+            .menu_chain_to_root(binding.menu);
+        for key in chain {
+            let Some(instance) = view.components.menu_compound.menus.get_mut(&key) else {
+                continue;
+            };
+            if instance.state.close_now() && instance.listens {
+                enqueue_component_change(
+                    events,
+                    window,
+                    instance.trigger_node,
+                    serde_json::json!({ "open": false }),
+                );
+            }
+        }
     }
     if row.clicks {
         enqueue_event(
@@ -1181,6 +1222,13 @@ fn menu_popup_keyboard(
             open_highlighted_submenu(view, key, window, &submenu_events, cx);
         },
     ));
+    let close_events = Rc::clone(events);
+    popup = popup.on_action(cx.action_listener(
+        popup_id,
+        move |view: &mut NativeView, _: &quickgui::PopoverMenuClose, cx| {
+            close_menu_level(view, key, window, &close_events, cx);
+        },
+    ));
     popup.on_key_down(
         cx.key_down_listener(popup_id, move |view: &mut NativeView, event, cx| {
             if event.modifiers.intersects(
@@ -1221,6 +1269,33 @@ fn update_menu(
     }
 }
 
+/// Close the focused level and return focus to its trigger on the parent menu's focus path.
+fn close_menu_level(
+    view: &mut NativeView,
+    key: u64,
+    window: u32,
+    events: &EventQueue,
+    cx: &mut EventContext,
+) {
+    let Some(instance) = view.components.menu_compound.menus.get_mut(&key) else {
+        return;
+    };
+    let trigger = instance.state.trigger_id();
+    if !instance.state.close_now() {
+        return;
+    }
+    if instance.listens {
+        enqueue_component_change(
+            events,
+            window,
+            instance.trigger_node,
+            serde_json::json!({ "open": false }),
+        );
+    }
+    cx.focus(quickgui::FocusHandle::new(trigger));
+    cx.invalidate();
+}
+
 /// Open the nested level the highlighted row declares, Base UI's Right-arrow behavior.
 fn open_highlighted_submenu(
     view: &mut NativeView,
@@ -1245,17 +1320,17 @@ fn open_highlighted_submenu(
     let Some(instance) = view.components.menu_compound.menus.get_mut(&child) else {
         return;
     };
-    if !instance.state.open_now() {
-        return;
-    }
+    let changed = instance.state.open_now();
+    let popup = instance.state.popup_id();
     let listens = view
         .tree
         .borrow()
         .nodes
         .get(&node)
         .is_some_and(declares_change);
-    if listens {
+    if changed && listens {
         enqueue_component_change(events, window, node, serde_json::json!({ "open": true }));
     }
+    cx.focus(quickgui::FocusHandle::new(popup));
     cx.invalidate();
 }

@@ -190,10 +190,12 @@ impl UiTree {
             )?;
             let mut source_order = 0;
             let styled_focus = self.styled_focus();
+            let mut resolved_bounds = HashMap::new();
             collect_layout_hit_regions(
                 root,
                 &self.taffy,
                 &self.natural_bounds,
+                &mut resolved_bounds,
                 &mut self.scroll_offsets,
                 &self.selectable_text_indices,
                 &mut self.hit_regions,

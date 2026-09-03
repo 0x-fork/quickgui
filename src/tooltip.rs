@@ -459,7 +459,7 @@ impl TooltipState {
             open: false,
             instant: false,
             disabled: false,
-            hoverable: true,
+            hoverable: false,
             close_on_click: true,
             track_cursor_axis: TooltipCursorAxis::None,
             placement: AnchorPlacement::Top,
@@ -510,6 +510,10 @@ impl TooltipState {
     }
 
     /// Choose whether the pointer may rest on the popup itself, Base UI's Popup `hoverable`.
+    ///
+    /// A tooltip is a passive help tag by default, as AppKit's is: the popup never takes the
+    /// pointer, so reaching it closes the tooltip. Base UI defaults the other way; opt in for a
+    /// popup that carries something worth hovering.
     pub const fn hoverable(mut self, hoverable: bool) -> Self {
         self.hoverable = hoverable;
         self
