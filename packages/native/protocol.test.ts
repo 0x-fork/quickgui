@@ -8,10 +8,13 @@ import {
   MAX_DECLARED_OPTIONS,
   MAX_DECLARED_TREE_NODES,
   MAX_DRAG_JSON_BYTES,
+  MAX_FILTERS_PER_ELEMENT,
+  MAX_GRADIENT_STOPS,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
   MAX_MENUBAR_MENUS,
   MAX_OPTIONS_JSON_BYTES,
+  MAX_STYLE_DECLARATION_BYTES,
   MAX_TABLE_COLUMNS,
   MAX_TABLE_ROWS,
   MAX_TOASTS,
@@ -47,8 +50,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v22", () => {
-    expect(PROTOCOL_VERSION).toBe(22);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v23", () => {
+    expect(PROTOCOL_VERSION).toBe(23);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -448,5 +451,100 @@ describe("binary mutation protocol", () => {
 
     expect(batch.mutationCount).toBe(16);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
+  });
+
+  test("encodes extended text, box, and layout styling under protocol v23", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.Text);
+    batch.setProperty(1, PropertyCode.TextAlign, "start");
+    batch.setProperty(1, PropertyCode.LetterSpacing, 0.4);
+    batch.setProperty(1, PropertyCode.WordSpacing, 2);
+    batch.setProperty(1, PropertyCode.TextTransform, "uppercase");
+    batch.setProperty(1, PropertyCode.TextShadow, "0 2px 4px #00000080");
+    batch.setProperty(1, PropertyCode.TextDecorationLine, "underline overline");
+    batch.setProperty(1, PropertyCode.TextDecorationColor, 0xff2266dd, true);
+    batch.setProperty(1, PropertyCode.TextDecorationStyle, "wavy");
+    batch.setProperty(1, PropertyCode.TextDecorationThickness, 2);
+    batch.setProperty(1, PropertyCode.WordBreak, "break-all");
+    batch.setProperty(1, PropertyCode.OverflowWrap, "anywhere");
+    batch.setProperty(1, PropertyCode.Hyphens, "manual");
+    batch.setProperty(1, PropertyCode.TextDirection, "rtl");
+
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Direction, "rtl");
+    batch.setProperty(2, PropertyCode.PaddingStart, 12);
+    batch.setProperty(2, PropertyCode.PaddingEnd, 4);
+    batch.setProperty(2, PropertyCode.MarginStart, 6);
+    batch.setProperty(2, PropertyCode.MarginEnd, 2);
+    batch.setProperty(2, PropertyCode.BorderStartWidth, 3);
+    batch.setProperty(2, PropertyCode.BorderEndWidth, 1);
+
+    batch.createElement(3, NativeNodeTag.View);
+    batch.setProperty(
+      3,
+      PropertyCode.BackgroundGradient,
+      "linear-gradient(135deg, #0f172a, #1e3a8a 60%, #38bdf8)",
+    );
+    batch.setProperty(3, PropertyCode.BorderTopLeftRadius, 16);
+    batch.setProperty(3, PropertyCode.BorderTopRightRadius, 4);
+    batch.setProperty(3, PropertyCode.BorderBottomRightRadius, 16);
+    batch.setProperty(3, PropertyCode.BorderBottomLeftRadius, 4);
+    batch.setProperty(3, PropertyCode.BorderStyle, "dashed");
+    batch.setProperty(3, PropertyCode.OutlineWidth, 2);
+    batch.setProperty(3, PropertyCode.OutlineColor, 0xff38bdf8, true);
+    batch.setProperty(3, PropertyCode.OutlineOffset, 3);
+    batch.setProperty(3, PropertyCode.OutlineStyle, "dotted");
+    batch.setProperty(3, PropertyCode.BackgroundImage, "/assets/paper.png");
+    batch.setProperty(3, PropertyCode.BackgroundSize, "cover");
+    batch.setProperty(3, PropertyCode.BackgroundRepeat, "no-repeat");
+    batch.setProperty(3, PropertyCode.BackgroundPosition, "center");
+    batch.setProperty(3, PropertyCode.Filter, "saturate(1.4) blur(2px)");
+    batch.setProperty(3, PropertyCode.BackdropFilter, "blur(18px)");
+    batch.setProperty(3, PropertyCode.Transform, "rotate(3deg) scale(1.02)");
+    batch.setProperty(3, PropertyCode.TransformOrigin, "left top");
+    batch.setProperty(3, PropertyCode.MixBlendMode, "multiply");
+    batch.setProperty(
+      3,
+      PropertyCode.HoverBackgroundGradient,
+      "linear-gradient(90deg, #111827, #334155)",
+    );
+    batch.setProperty(3, PropertyCode.HoverOutline, "2px solid #f8fafc");
+    batch.setProperty(3, PropertyCode.HoverTransform, "translate(0, -2px)");
+    batch.setProperty(3, PropertyCode.ActiveTransform, "scale(0.98)");
+    batch.setProperty(3, PropertyCode.ActiveOutline, "1px solid #94a3b8");
+    batch.setProperty(
+      3,
+      PropertyCode.ActiveBackgroundGradient,
+      "linear-gradient(90deg, #0b1220, #1f2937)",
+    );
+    batch.setProperty(3, PropertyCode.FocusBackgroundColor, 0xff1f2937, true);
+    batch.setProperty(3, PropertyCode.FocusColor, 0xfff8fafc, true);
+    batch.setProperty(
+      3,
+      PropertyCode.FocusBackgroundGradient,
+      "radial-gradient(circle at 50% 0%, #1d4ed8, #0f172a)",
+    );
+    batch.setProperty(3, PropertyCode.FocusOutline, "2px solid #60a5fa");
+    batch.setProperty(3, PropertyCode.FocusTransform, "scale(1.01)");
+
+    batch.createElement(4, NativeNodeTag.View);
+    batch.setProperty(4, PropertyCode.Position, "sticky");
+    batch.setProperty(4, PropertyCode.Top, 0);
+    batch.setProperty(4, PropertyCode.OverflowX, "scroll");
+    batch.setProperty(4, PropertyCode.ScrollSnapType, "x mandatory");
+    batch.setProperty(4, PropertyCode.ScrollSnapAlign, "start");
+    batch.setProperty(4, PropertyCode.ScrollSnapStop, "always");
+
+    expect(batch.mutationCount).toBe(60);
+    expect(batch.finish().byteLength).toBeGreaterThan(10);
+  });
+
+  test("keeps every extended styling code inside the declared property space", () => {
+    // The Rust binding rejects any property code past its own `property::LAST`, so the two must
+    // stay in step whenever a declaration is added.
+    expect(PropertyCode.ScrollSnapStop).toBe(291);
+    expect(MAX_STYLE_DECLARATION_BYTES).toBe(4096);
+    expect(MAX_GRADIENT_STOPS).toBe(8);
+    expect(MAX_FILTERS_PER_ELEMENT).toBe(8);
   });
 });

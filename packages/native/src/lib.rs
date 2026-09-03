@@ -79,7 +79,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 22;
+const PROTOCOL_VERSION: u16 = 23;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -339,7 +339,64 @@ mod property {
     pub const DISCLOSURE: u16 = 237;
     pub const LOADING_LABEL: u16 = 238;
     pub const COMMIT_LISTENER: u16 = 239;
-    pub const LAST: u16 = COMMIT_LISTENER;
+    // Extended text styling.
+    pub const LETTER_SPACING: u16 = 240;
+    pub const WORD_SPACING: u16 = 241;
+    pub const TEXT_TRANSFORM: u16 = 242;
+    pub const TEXT_SHADOW: u16 = 243;
+    pub const TEXT_DECORATION_LINE: u16 = 244;
+    pub const TEXT_DECORATION_COLOR: u16 = 245;
+    pub const TEXT_DECORATION_STYLE: u16 = 246;
+    pub const TEXT_DECORATION_THICKNESS: u16 = 247;
+    pub const WORD_BREAK: u16 = 248;
+    pub const OVERFLOW_WRAP: u16 = 249;
+    pub const HYPHENS: u16 = 250;
+    pub const TEXT_DIRECTION: u16 = 251;
+    // Direction-relative layout.
+    pub const DIRECTION: u16 = 252;
+    pub const PADDING_START: u16 = 253;
+    pub const PADDING_END: u16 = 254;
+    pub const MARGIN_START: u16 = 255;
+    pub const MARGIN_END: u16 = 256;
+    pub const BORDER_START_WIDTH: u16 = 257;
+    pub const BORDER_END_WIDTH: u16 = 258;
+    // Extended box styling.
+    pub const BACKGROUND_GRADIENT: u16 = 259;
+    pub const BORDER_TOP_LEFT_RADIUS: u16 = 260;
+    pub const BORDER_TOP_RIGHT_RADIUS: u16 = 261;
+    pub const BORDER_BOTTOM_RIGHT_RADIUS: u16 = 262;
+    pub const BORDER_BOTTOM_LEFT_RADIUS: u16 = 263;
+    pub const BORDER_STYLE: u16 = 264;
+    pub const OUTLINE_WIDTH: u16 = 265;
+    pub const OUTLINE_COLOR: u16 = 266;
+    pub const OUTLINE_OFFSET: u16 = 267;
+    pub const OUTLINE_STYLE: u16 = 268;
+    pub const BACKGROUND_IMAGE: u16 = 269;
+    pub const BACKGROUND_SIZE: u16 = 270;
+    pub const BACKGROUND_REPEAT: u16 = 271;
+    pub const BACKGROUND_POSITION: u16 = 272;
+    pub const FILTER: u16 = 273;
+    pub const BACKDROP_FILTER: u16 = 274;
+    pub const TRANSFORM: u16 = 275;
+    pub const TRANSFORM_ORIGIN: u16 = 276;
+    pub const MIX_BLEND_MODE: u16 = 277;
+    // Hover, active, and focus state styling the core's `ElementStateStyle` supports.
+    pub const HOVER_BACKGROUND_GRADIENT: u16 = 278;
+    pub const HOVER_OUTLINE: u16 = 279;
+    pub const HOVER_TRANSFORM: u16 = 280;
+    pub const ACTIVE_BACKGROUND_GRADIENT: u16 = 281;
+    pub const ACTIVE_OUTLINE: u16 = 282;
+    pub const ACTIVE_TRANSFORM: u16 = 283;
+    pub const FOCUS_BACKGROUND_COLOR: u16 = 284;
+    pub const FOCUS_COLOR: u16 = 285;
+    pub const FOCUS_BACKGROUND_GRADIENT: u16 = 286;
+    pub const FOCUS_OUTLINE: u16 = 287;
+    pub const FOCUS_TRANSFORM: u16 = 288;
+    // Scroll snapping.
+    pub const SCROLL_SNAP_TYPE: u16 = 289;
+    pub const SCROLL_SNAP_ALIGN: u16 = 290;
+    pub const SCROLL_SNAP_STOP: u16 = 291;
+    pub const LAST: u16 = SCROLL_SNAP_STOP;
 }
 
 #[derive(Default)]
@@ -831,6 +888,7 @@ mod events;
 mod pickers;
 mod popover_menu;
 mod runtime;
+mod styles;
 mod tree;
 mod view;
 
@@ -842,6 +900,7 @@ use events::*;
 use pickers::*;
 use popover_menu::*;
 use runtime::*;
+use styles::*;
 use tree::*;
 use view::*;
 

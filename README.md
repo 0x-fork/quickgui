@@ -175,6 +175,24 @@ cd examples/system-api-solid
 bun run dev
 ```
 
+The styling example declares text alignment, the extended text styles, gradients, per-corner radii,
+dashed borders, outlines, filters, transforms with a hover variant, blend modes, a backdrop blur,
+right-to-left layout, sticky headers, and scroll snapping:
+
+```console
+cd examples/styling-solid
+bun run dev
+```
+
+The components example puts every compound component the Solid package binds in one window: select,
+combobox, autocomplete, virtual table and tree, slider, number field, splitter, toolbar, toggle
+group, date and time fields, calendar, menubar, popover and context menus, dialog, tabs, and toasts:
+
+```console
+cd examples/components-solid
+bun run dev
+```
+
 This creates and runs the platform-native development host while loading `app.tsx` from disk (an
 `.app` bundle on macOS). Rust framework examples remain available directly through Cargo:
 

@@ -12,6 +12,11 @@ pub(super) struct NativeView {
     pub(super) terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
     /// Retained decoded image sources keyed by their declaring node.
     pub(super) images: Rc<RefCell<HashMap<u32, NativeImageState>>>,
+    /// Retained decoded raster backgrounds keyed by their declaring node.
+    ///
+    /// A `bg_image` needs a decoded core `Image` rather than the lazy resource an `<Image>` node
+    /// uses, so each declared source is decoded exactly once and kept until it changes.
+    pub(super) background_images: Rc<RefCell<HashMap<u32, NativeBackgroundImageState>>>,
     /// Retained validated application shaders keyed by their declaring node.
     pub(super) shaders: Rc<RefCell<HashMap<u32, NativeShaderState>>>,
     /// Retained in-window popover-menu models keyed by their declaring node.
@@ -197,6 +202,12 @@ impl View for NativeView {
                 .get(id)
                 .is_some_and(|node| node.tag == NodeTag::Image)
         });
+        let mut background_images = self.background_images.borrow_mut();
+        background_images.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.string(property::BACKGROUND_IMAGE).is_some())
+        });
         let mut shaders = self.shaders.borrow_mut();
         shaders.retain(|id, _| {
             tree.nodes
@@ -234,6 +245,7 @@ impl View for NativeView {
                 terminals: &mut terminals,
                 part_ids: &mut part_ids,
                 images: &mut images,
+                background_images: &mut background_images,
                 shaders: &mut shaders,
                 components,
                 menus: Rc::clone(&self.menus),
@@ -338,6 +350,8 @@ pub(super) struct NativeElementStates<'a> {
     /// rejects with a panic; the duplicate mounts without listeners instead.
     pub(super) part_ids: &'a mut HashSet<u64>,
     pub(super) images: &'a mut HashMap<u32, NativeImageState>,
+    /// Retained decoded raster backgrounds, decoded once per declared source.
+    pub(super) background_images: &'a mut HashMap<u32, NativeBackgroundImageState>,
     pub(super) shaders: &'a mut HashMap<u32, NativeShaderState>,
     /// This pass's retained component instances, already reseeded from the declaration.
     ///
@@ -972,6 +986,7 @@ pub(super) fn build_element(
     }
 
     element = apply_properties(element, node);
+    element = apply_background_image(element, id, node, states.background_images);
     element = apply_tooltip(element, node);
     // The core part descriptor decides identity, semantics, and whether an inactive panel is
     // mounted at all. A part that is not mounted contributes no layout, paint, input, or
@@ -2073,31 +2088,38 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     if let Some(color) = node.color(property::COLOR) {
         element = element.text_color(color);
     }
-    let hover_background = node.color(property::HOVER_BACKGROUND_COLOR);
-    let hover_color = node.color(property::HOVER_COLOR);
-    if hover_background.is_some() || hover_color.is_some() {
-        element = element.hover(move |mut style| {
-            if let Some(color) = hover_background {
-                style = style.bg(color);
-            }
-            if let Some(color) = hover_color {
-                style = style.text_color(color);
-            }
-            style
-        });
+    let hover = native_state_style(
+        node,
+        property::HOVER_BACKGROUND_COLOR,
+        property::HOVER_COLOR,
+        property::HOVER_BACKGROUND_GRADIENT,
+        property::HOVER_OUTLINE,
+        property::HOVER_TRANSFORM,
+    );
+    if hover.declared() {
+        element = element.hover(move |style| hover.apply(style));
     }
-    let active_background = node.color(property::ACTIVE_BACKGROUND_COLOR);
-    let active_color = node.color(property::ACTIVE_COLOR);
-    if active_background.is_some() || active_color.is_some() {
-        element = element.active(move |mut style| {
-            if let Some(color) = active_background {
-                style = style.bg(color);
-            }
-            if let Some(color) = active_color {
-                style = style.text_color(color);
-            }
-            style
-        });
+    let active = native_state_style(
+        node,
+        property::ACTIVE_BACKGROUND_COLOR,
+        property::ACTIVE_COLOR,
+        property::ACTIVE_BACKGROUND_GRADIENT,
+        property::ACTIVE_OUTLINE,
+        property::ACTIVE_TRANSFORM,
+    );
+    if active.declared() {
+        element = element.active(move |style| active.apply(style));
+    }
+    let focus = native_state_style(
+        node,
+        property::FOCUS_BACKGROUND_COLOR,
+        property::FOCUS_COLOR,
+        property::FOCUS_BACKGROUND_GRADIENT,
+        property::FOCUS_OUTLINE,
+        property::FOCUS_TRANSFORM,
+    );
+    if focus.declared() {
+        element = element.focus(move |style| focus.apply(style));
     }
     if let Some(transition) = native_transition(node) {
         element = element.transition(transition);
@@ -2141,8 +2163,12 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     if let Some(value) = node.string(property::TEXT_ALIGN) {
         element = element.text_align(match value {
             "center" => TextAlign::Center,
-            "right" | "end" => TextAlign::Right,
+            "right" => TextAlign::Right,
             "justify" => TextAlign::Justify,
+            // `start` and `end` are direction relative in the core; they must not collapse into
+            // the physical left and right edges before an RTL subtree can resolve them.
+            "start" => TextAlign::Start,
+            "end" => TextAlign::End,
             _ => TextAlign::Left,
         });
     }
@@ -2169,15 +2195,17 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     {
         element = element.overflow_hidden();
     }
-    if node
-        .string(property::OVERFLOW_Y)
-        .is_some_and(|value| matches!(value, "auto" | "scroll"))
-        || node
-            .string(property::OVERFLOW)
-            .is_some_and(|value| matches!(value, "auto" | "scroll"))
-    {
-        element = element.overflow_y_scroll();
-    }
+    let scrolls =
+        |value: Option<&str>| value.is_some_and(|value| matches!(value, "auto" | "scroll"));
+    let scrolls_y =
+        scrolls(node.string(property::OVERFLOW_Y)) || scrolls(node.string(property::OVERFLOW));
+    let scrolls_x = scrolls(node.string(property::OVERFLOW_X));
+    element = match (scrolls_x, scrolls_y) {
+        (true, true) => element.overflow_scroll(),
+        (true, false) => element.overflow_x_scroll(),
+        (false, true) => element.overflow_y_scroll(),
+        (false, false) => element,
+    };
     if let Some(value) = node.number(property::SCROLL_TO_END_REVISION) {
         element = element.scroll_to_end(value.max(0.0) as u64);
     }
@@ -2235,24 +2263,43 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     if hit_slop != quickgui::Insets::default() {
         element = element.hit_slop(hit_slop);
     }
+    // A sticky element keeps its in-flow box, so its insets declare where it pins inside the
+    // nearest scroll container instead of displacing it.
+    let sticky = node.string(property::POSITION) == Some("sticky");
     if let Some(value) = node.string(property::POSITION) {
-        element = if value == "absolute" {
-            element.absolute()
-        } else {
-            element.relative()
+        element = match value {
+            "absolute" => element.absolute(),
+            "sticky" => element.sticky(),
+            _ => element.relative(),
         };
     }
     if let Some(value) = node.number(property::TOP) {
-        element = element.top(value);
+        element = if sticky {
+            element.sticky_top(value)
+        } else {
+            element.top(value)
+        };
     }
     if let Some(value) = node.number(property::RIGHT) {
-        element = element.right(value);
+        element = if sticky {
+            element.sticky_right(value)
+        } else {
+            element.right(value)
+        };
     }
     if let Some(value) = node.number(property::BOTTOM) {
-        element = element.bottom(value);
+        element = if sticky {
+            element.sticky_bottom(value)
+        } else {
+            element.bottom(value)
+        };
     }
     if let Some(value) = node.number(property::LEFT) {
-        element = element.left(value);
+        element = if sticky {
+            element.sticky_left(value)
+        } else {
+            element.left(value)
+        };
     }
     if let Some(value) = node.string(property::USER_SELECT) {
         element = match value {
@@ -2271,6 +2318,9 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     if let Some(value) = node.number(property::ASPECT_RATIO) {
         element = element.aspect_ratio(value);
     }
+    element = apply_text_styles(element, node);
+    element = apply_box_styles(element, node);
+    element = apply_layout_styles(element, node);
     element
 }
 

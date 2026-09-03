@@ -768,6 +768,178 @@ their first occurrence; anything past `MAX_DECLARED_OPTIONS` (4096), `MAX_TABLE_
 `componentChangeFromEvent(event)` and `commitFromEvent(event)` decode a raw payload when an
 application wants to handle one directly.
 
+## Extended text styling
+
+Every text-bearing node inherits these through its subtree exactly as the Rust core's own
+typography does. The core owns shaping, case mapping, break opportunities, and the retained shaping
+key; JavaScript only names the value.
+
+| Prop | Values | Notes |
+| --- | --- | --- |
+| `textAlign` | `left`, `center`, `right`, `justify`, `start`, `end` | `start` and `end` stay logical across the boundary and resolve against the inherited `direction` in the core |
+| `letterSpacing` | number or `<n>px` | Clamped by the core to ±256 logical pixels |
+| `wordSpacing` | number or `<n>px` | Extra advance after every space character |
+| `textTransform` | `none`, `uppercase`, `lowercase`, `capitalize` | Non-editable text only; selection, copy, and accessibility keep the original string, and an `Input` is never transformed |
+| `textShadow` | `"x y blur color"`, `{ offsetX, offsetY, blur?, color? }`, or `none` | Offset and color are exact; blur is the core's bounded approximation. An omitted color adopts the element's own `color` |
+| `textDecoration` / `textDecorationLine` | space-separated `underline`, `line-through`, `overline`, or `none` | Combinable |
+| `textDecorationColor` | color | Applied to whichever lines were declared |
+| `textDecorationStyle` | `solid`, `double`, `wavy` | `double` selects the core's two-line underline; `wavy` its GPU-rendered spell-checker underline |
+| `textDecorationThickness` | number or `<n>px` | Adopts the closest native thickness the core exposes: 0, 1, 2, 4, or 8 |
+| `wordBreak` | `normal`, `break-all`, `keep-all` | |
+| `overflowWrap` | `normal`, `anywhere`, `break-word` | |
+| `hyphens` | `none`, `manual`, `auto` | The core renders author-placed soft hyphens (`U+00AD`) and never hyphenates from a dictionary, so `auto` adopts the same manual behavior |
+| `textDirection` | `auto`, `ltr`, `rtl` | Base paragraph direction used while shaping, without mirroring layout |
+
+```tsx
+<Text
+  style={{
+    textAlign: "center",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    textShadow: "0 3px 10px #38bdf8aa",
+    textDecoration: "underline",
+    textDecorationStyle: "wavy",
+    textDecorationColor: "#f97316",
+  }}
+>
+  Release notes
+</Text>
+```
+
+## Direction-relative layout, sticky positioning, and scroll snapping
+
+`direction` is inherited by the whole subtree. In an RTL subtree the core mirrors in-flow positions,
+physical horizontal insets, and margins for paint, hit testing, and accessibility together, and
+horizontal scrolling starts at the right edge. Padding and borders stay physical; the logical props
+below follow the direction instead.
+
+| Prop | Values | Notes |
+| --- | --- | --- |
+| `direction` | `ltr`, `rtl` | Inherited by every descendant that does not declare its own |
+| `paddingStart` / `paddingEnd` | number or `<n>px` | Also spelled `paddingInlineStart` / `paddingInlineEnd` |
+| `marginStart` / `marginEnd` | number or `<n>px` | Also spelled `marginInlineStart` / `marginInlineEnd` |
+| `borderStartWidth` / `borderEndWidth` | number or `<n>px` | Also spelled `borderInlineStartWidth` / `borderInlineEndWidth` |
+| `position: "sticky"` | with `top`, `right`, `bottom`, `left` | Insets become the core's sticky offsets: the element keeps its space in flow and pins inside the nearest scroll container, so scrolling never relayouts |
+| `overflowX` | `visible`, `hidden`, `auto`, `scroll` | `auto` and `scroll` both select the core's horizontal scroll container; declaring it alongside a scrolling `overflowY` selects both axes |
+| `scrollSnapType` | `x` / `y` / `both`, optionally with `mandatory` or `proximity` | An axis without a strictness declares `proximity`, matching CSS |
+| `scrollSnapAlign` | `start`, `center`, `end` | Declared on the snap child |
+| `scrollSnapStop` | `normal`, `always` | `always` forbids a gesture from passing over this child |
+
+```tsx
+<View style={{ height: 240, overflowY: "scroll" }}>
+  <View style={{ position: "sticky", top: 0, height: 28 }}>
+    <Text>Inbox</Text>
+  </View>
+</View>
+
+<View style={{ overflowX: "scroll", scrollSnapType: "x mandatory", flexDirection: "row" }}>
+  <View style={{ width: 200, flexShrink: 0, scrollSnapAlign: "start", scrollSnapStop: "always" }} />
+</View>
+```
+
+Snapping resolves at a native momentum end phase, at a bounded settle deadline for wheels without
+phases, at scrollbar release, or programmatically, then animates to the target on exact deadlines
+and leaves the window settled. Sticky elements are bounded per window by the core's own
+`MAX_STICKY_ELEMENTS_PER_WINDOW`, and snap containers and points by
+`MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW` and `MAX_SCROLL_SNAP_POINTS_PER_WINDOW`.
+
+## Gradients, outlines, filters, transforms, and blending
+
+`background` accepts a color, a CSS gradient function, or the declared object form; the Rust binding
+parses whichever arrives into one bounded core `Gradient` and the renderer clears the other
+property, so a declaration is never ambiguous. `backgroundColor` stays color-only.
+
+| Prop | Values | Notes |
+| --- | --- | --- |
+| `background` / `backgroundGradient` | color, `linear-gradient(…)`, `radial-gradient(…)`, `conic-gradient(…)`, or `GradientDeclaration` | At most eight stops; extra stops are dropped in source order |
+| `borderRadius` | number, `<n>px`, or a one-to-four value shorthand | More than four radii throws a `TypeError` |
+| `borderTopLeftRadius` and the other three corners | number or `<n>px` | Override the shorthand per corner |
+| `borderStyle` | `solid`, `dashed`, `dotted` | Dash geometry is analytic arc length along the rounded outline |
+| `outline` | CSS shorthand such as `2px dashed #38bdf8`, a plain width, or `none` | Split by the renderer into the width, style, and color the core declares separately |
+| `outlineWidth`, `outlineColor`, `outlineOffset`, `outlineStyle` | | Painted outside the border box; never affects layout |
+| `backgroundImage` | path, `file://`, or base64 `data:` URL | Decoded once per declaration and retained until it changes; a source that cannot be decoded paints nothing |
+| `backgroundSize` | `auto`, `cover`, `contain`, or `<w> <h>` | |
+| `backgroundRepeat` | `no-repeat`, `repeat`, `repeat-x`, `repeat-y` | Tiles are capped by the core's `MAX_BACKGROUND_IMAGE_TILES` |
+| `backgroundPosition` | keywords or percentages, such as `right bottom` or `50% 0%` | |
+| `filter` | CSS filter-function list, or an array of them | `brightness`, `contrast`, `saturate`, `grayscale`, `invert`, `sepia`, `hue-rotate`, `opacity`, `blur`, `drop-shadow` |
+| `backdropFilter` | the same list | Colour filters plus one blur applied to what is already painted behind the element |
+| `transform` | CSS transform-function list, an array, or `{ a, b, c, d, tx, ty }` | `translate`, `translateX/Y`, `scale`, `scaleX/Y`, `rotate`, `skew`, `skewX/Y`, `matrix` |
+| `transformOrigin` | keywords or percentages, such as `left top` | Fraction of the border box; defaults to the centre |
+| `mixBlendMode` | `normal`, `multiply`, `screen`, `darken`, `lighten`, `overlay`, `difference`, `exclusion`, `hard-light`, `color-dodge`, `color-burn` | |
+
+```tsx
+<View
+  style={{
+    background: "linear-gradient(135deg, #1d4ed8, #38bdf8 60%, #a855f7)",
+    borderRadius: "22px 6px 22px 6px",
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "#f97316",
+    outline: "2px solid #a855f7",
+    outlineOffset: 4,
+    filter: "saturate(1.4) blur(2px)",
+    transform: "rotate(-3deg) scale(1.02)",
+    mixBlendMode: "multiply",
+  }}
+/>
+
+<View
+  style={{
+    background: { type: "radial", shape: "circle", center: { x: 0.3, y: 0.2 }, stops: ["#1d4ed8", "#0f172a"] },
+  }}
+/>
+```
+
+A colour-only `filter` chain is one per-primitive matrix and allocates nothing. Adding `blur()` or
+`drop-shadow()`, any transform beyond a whole-pixel translation, a `backdropFilter`, or a
+non-`normal` `mixBlendMode` promotes the element to a compositing group, whose per-frame cost and
+bounds are described in [graphics](graphics.md). Transforms are paint-only: layout, measurement, and
+reported bounds never move, and pointer positions are inverse-mapped so clicks follow the painted
+pixels.
+
+Hover, active, and focus variants exist for exactly the three things the core's `ElementStateStyle`
+can swap — the gradient, the outline ring, and the transform — alongside the existing colors:
+
+| State | Props |
+| --- | --- |
+| hover | `hoverBackgroundColor`, `hoverColor`, `hoverBackground`, `hoverOutline`, `hoverTransform` |
+| active | `activeBackgroundColor`, `activeColor`, `activeBackground`, `activeOutline`, `activeTransform` |
+| focus | `focusBackgroundColor`, `focusColor`, `focusBackground`, `focusOutline`, `focusTransform` |
+
+```tsx
+<Button
+  style={{
+    hoverBackground: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
+    hoverTransform: "scale(1.03) translate(0, -2px)",
+    focusOutline: "2px solid #60a5fa",
+    outlineOffset: 3,
+  }}
+>
+  Publish
+</Button>
+```
+
+A state outline uses the element's own `outlineOffset`, because that is the one offset the core's
+state style carries. Gradients are swapped rather than interpolated: only the transitionable solid
+background, border, radius, shadow, opacity, and text color animate.
+
+Every declaration on this page is bounded before it crosses N-API. A gradient, filter, transform,
+outline, or text-shadow string past `MAX_STYLE_DECLARATION_BYTES` (4 096) throws a `TypeError` in
+JavaScript, and a declaration the Rust grammar does not cover — an unknown filter function, a color
+outside the supported CSS grammar, an unparsable angle — declares nothing at all instead of reaching
+a core constructor. Colors inside these strings accept the same `#rgb`, `#rrggbb`, `#rrggbbaa`,
+`rgb()`, `rgba()`, `transparent`, `black`, and `white` grammar the renderer packs everywhere else.
+
+Two examples cover all of this end to end:
+
+```console
+cd examples/styling-solid
+bun run dev
+
+cd examples/components-solid
+bun run dev
+```
+
 ## Tooltips
 
 Any host component accepts a `tooltip` string plus `tooltipPlacement`, `tooltipDelay` (milliseconds,
@@ -1209,7 +1381,10 @@ titlebars, traffic-light positioning, declared close and quit interception, menu
 system submenus, native window-tab commands, controlled selection controls, tab sets, disclosures,
 and field/fieldset composition, controlled in-window dialogs and alert dialogs, delayed native
 tooltips, declared popover and context menus, CSS Grid layout, complete paint transitions, retained
-images and application shaders, progress/meter/toggle parts, sliders, range sliders, splitters,
+images and application shaders, extended text styling, direction-relative layout, sticky
+positioning and scroll snapping, gradients, per-corner radii, border and outline rings, raster
+backgrounds, filters, backdrop effects, transforms, and blend modes, progress/meter/toggle parts,
+sliders, range sliders, splitters,
 toolbars, and toggle groups, declared option sources with core-rendered popover rows, virtual
 tables and trees, number fields, date and time fields, month grids, in-window menubars, declared
 toast queues, declared keyboard, mouse, gesture,

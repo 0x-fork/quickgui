@@ -24,6 +24,7 @@ import {
   MAX_OPTIONS_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
+  MAX_STYLE_DECLARATION_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativeNode,
   NativePart,
@@ -84,7 +85,6 @@ const properties: Record<string, PropertyEntry> = {
   marginRight: { code: PropertyCode.MarginRight },
   marginBottom: { code: PropertyCode.MarginBottom },
   marginLeft: { code: PropertyCode.MarginLeft },
-  background: { code: PropertyCode.BackgroundColor, color: true },
   backgroundColor: { code: PropertyCode.BackgroundColor, color: true },
   color: { code: PropertyCode.Color, color: true },
   hoverBackgroundColor: {
@@ -304,6 +304,130 @@ const properties: Record<string, PropertyEntry> = {
     code: PropertyCode.ShaderParameters,
     normalize: normalizeShaderParameters,
   },
+
+  // Extended text styling. Every one of these inherits through the subtree exactly as the Rust
+  // core's own typography does.
+  letterSpacing: { code: PropertyCode.LetterSpacing },
+  wordSpacing: { code: PropertyCode.WordSpacing },
+  textTransform: { code: PropertyCode.TextTransform },
+  textShadow: {
+    code: PropertyCode.TextShadow,
+    normalize: normalizeStyleDeclaration,
+  },
+  textDecoration: { code: PropertyCode.TextDecorationLine },
+  textDecorationLine: { code: PropertyCode.TextDecorationLine },
+  textDecorationColor: { code: PropertyCode.TextDecorationColor, color: true },
+  textDecorationStyle: { code: PropertyCode.TextDecorationStyle },
+  textDecorationThickness: { code: PropertyCode.TextDecorationThickness },
+  wordBreak: { code: PropertyCode.WordBreak },
+  overflowWrap: { code: PropertyCode.OverflowWrap },
+  wordWrap: { code: PropertyCode.OverflowWrap },
+  hyphens: { code: PropertyCode.Hyphens },
+  textDirection: { code: PropertyCode.TextDirection },
+
+  // Direction-relative layout.
+  direction: { code: PropertyCode.Direction },
+  paddingStart: { code: PropertyCode.PaddingStart },
+  paddingInlineStart: { code: PropertyCode.PaddingStart },
+  paddingEnd: { code: PropertyCode.PaddingEnd },
+  paddingInlineEnd: { code: PropertyCode.PaddingEnd },
+  marginStart: { code: PropertyCode.MarginStart },
+  marginInlineStart: { code: PropertyCode.MarginStart },
+  marginEnd: { code: PropertyCode.MarginEnd },
+  marginInlineEnd: { code: PropertyCode.MarginEnd },
+  borderStartWidth: { code: PropertyCode.BorderStartWidth },
+  borderInlineStartWidth: { code: PropertyCode.BorderStartWidth },
+  borderEndWidth: { code: PropertyCode.BorderEndWidth },
+  borderInlineEndWidth: { code: PropertyCode.BorderEndWidth },
+
+  // Extended box styling.
+  borderTopLeftRadius: { code: PropertyCode.BorderTopLeftRadius },
+  borderTopRightRadius: { code: PropertyCode.BorderTopRightRadius },
+  borderBottomRightRadius: { code: PropertyCode.BorderBottomRightRadius },
+  borderBottomLeftRadius: { code: PropertyCode.BorderBottomLeftRadius },
+  borderStyle: { code: PropertyCode.BorderStyle },
+  outlineWidth: { code: PropertyCode.OutlineWidth },
+  outlineColor: { code: PropertyCode.OutlineColor, color: true },
+  outlineOffset: { code: PropertyCode.OutlineOffset },
+  outlineStyle: { code: PropertyCode.OutlineStyle },
+  backgroundImage: { code: PropertyCode.BackgroundImage },
+  backgroundSize: { code: PropertyCode.BackgroundSize },
+  backgroundRepeat: { code: PropertyCode.BackgroundRepeat },
+  backgroundPosition: { code: PropertyCode.BackgroundPosition },
+  filter: { code: PropertyCode.Filter, normalize: normalizeStyleDeclaration },
+  backdropFilter: {
+    code: PropertyCode.BackdropFilter,
+    normalize: normalizeStyleDeclaration,
+  },
+  transform: {
+    code: PropertyCode.Transform,
+    normalize: normalizeStyleDeclaration,
+  },
+  transformOrigin: { code: PropertyCode.TransformOrigin },
+  mixBlendMode: { code: PropertyCode.MixBlendMode },
+
+  // State styling the core's own `ElementStateStyle` supports.
+  hoverOutline: {
+    code: PropertyCode.HoverOutline,
+    normalize: normalizeStyleDeclaration,
+  },
+  hoverTransform: {
+    code: PropertyCode.HoverTransform,
+    normalize: normalizeStyleDeclaration,
+  },
+  activeOutline: {
+    code: PropertyCode.ActiveOutline,
+    normalize: normalizeStyleDeclaration,
+  },
+  activeTransform: {
+    code: PropertyCode.ActiveTransform,
+    normalize: normalizeStyleDeclaration,
+  },
+  focusBackgroundColor: {
+    code: PropertyCode.FocusBackgroundColor,
+    color: true,
+  },
+  focusColor: { code: PropertyCode.FocusColor, color: true },
+  focusOutline: {
+    code: PropertyCode.FocusOutline,
+    normalize: normalizeStyleDeclaration,
+  },
+  focusTransform: {
+    code: PropertyCode.FocusTransform,
+    normalize: normalizeStyleDeclaration,
+  },
+
+  // Scroll snapping.
+  scrollSnapType: { code: PropertyCode.ScrollSnapType },
+  scrollSnapAlign: { code: PropertyCode.ScrollSnapAlign },
+  scrollSnapStop: { code: PropertyCode.ScrollSnapStop },
+};
+
+/** Background properties that accept either one color or one declared gradient. */
+const backgroundProperties: Record<
+  string,
+  { color: PropertyCode; gradient: PropertyCode }
+> = {
+  background: {
+    color: PropertyCode.BackgroundColor,
+    gradient: PropertyCode.BackgroundGradient,
+  },
+  backgroundGradient: {
+    color: PropertyCode.BackgroundColor,
+    gradient: PropertyCode.BackgroundGradient,
+  },
+  hoverBackground: {
+    color: PropertyCode.HoverBackgroundColor,
+    gradient: PropertyCode.HoverBackgroundGradient,
+  },
+  activeBackground: {
+    color: PropertyCode.ActiveBackgroundColor,
+    gradient: PropertyCode.ActiveBackgroundGradient,
+  },
+  focusBackground: {
+    color: PropertyCode.FocusBackgroundColor,
+    gradient: PropertyCode.FocusBackgroundGradient,
+  },
 };
 
 /**
@@ -339,6 +463,10 @@ const colorProperties = new Set([
   PropertyCode.ActiveBackgroundColor,
   PropertyCode.ActiveColor,
   PropertyCode.BorderColor,
+  PropertyCode.TextDecorationColor,
+  PropertyCode.OutlineColor,
+  PropertyCode.FocusBackgroundColor,
+  PropertyCode.FocusColor,
   PropertyCode.MarkdownCodeBackground,
   PropertyCode.MarkdownBorderColor,
   PropertyCode.MarkdownMutedColor,
@@ -380,6 +508,23 @@ function setProperty(
   }
   if (name === "transition") {
     setTransition(node, value);
+    return;
+  }
+  const backgroundEntry = backgroundProperties[name];
+  if (backgroundEntry) {
+    setBackground(node, backgroundEntry, value);
+    return;
+  }
+  if (name === "outline") {
+    setOutline(node, value);
+    return;
+  }
+  if (name === "borderRadius") {
+    setNativeProperty(
+      node,
+      PropertyCode.BorderRadius,
+      normalizeCornerRadius(value),
+    );
     return;
   }
   const event = eventName(name);
@@ -546,6 +691,120 @@ function setFlex(node: NativeNode, value: PropertyInput): void {
   if (parts.length >= 3) {
     setNativeProperty(node, PropertyCode.FlexBasis, normalizeLength(parts[2]));
   }
+}
+
+/**
+ * Declare either a solid background color or one bounded core gradient.
+ *
+ * The Rust binding parses the CSS `linear-gradient()` / `radial-gradient()` / `conic-gradient()`
+ * grammar and the equivalent object form into the core's own `Gradient`, so the renderer only has
+ * to decide which of the two properties one declaration belongs to and clear the other.
+ */
+function setBackground(
+  node: NativeNode,
+  entry: { color: PropertyCode; gradient: PropertyCode },
+  value: PropertyInput,
+): void {
+  if (value === null || value === undefined || value === false) {
+    setNativeProperty(node, entry.color, null);
+    setNativeProperty(node, entry.gradient, null);
+    return;
+  }
+  if (isRecord(value) || (typeof value === "string" && isGradient(value))) {
+    setNativeProperty(node, entry.color, null);
+    setNativeProperty(node, entry.gradient, normalizeStyleDeclaration(value));
+    return;
+  }
+  setNativeProperty(node, entry.gradient, null);
+  setNativeProperty(node, entry.color, parseColor(value as number | string), {
+    color: true,
+  });
+}
+
+function isGradient(value: string): boolean {
+  return /(?:^|\s)(?:linear|radial|conic)-gradient\(/.test(value.trim());
+}
+
+/**
+ * Split the CSS `outline` shorthand into the width, style, and color the core declares separately.
+ */
+function setOutline(node: NativeNode, value: PropertyInput): void {
+  const clear = () => {
+    for (const code of [
+      PropertyCode.OutlineWidth,
+      PropertyCode.OutlineColor,
+      PropertyCode.OutlineStyle,
+    ]) {
+      setNativeProperty(node, code, null);
+    }
+  };
+  if (value === null || value === undefined || value === false) {
+    clear();
+    return;
+  }
+  clear();
+  if (typeof value === "number") {
+    setNativeProperty(node, PropertyCode.OutlineWidth, value);
+    return;
+  }
+  const shorthand = String(value).trim();
+  if (shorthand === "" || shorthand === "none") {
+    setNativeProperty(node, PropertyCode.OutlineStyle, "none");
+    return;
+  }
+  for (const token of shorthand.split(/\s+/).filter(Boolean)) {
+    if (token === "solid" || token === "dashed" || token === "dotted") {
+      setNativeProperty(node, PropertyCode.OutlineStyle, token);
+      continue;
+    }
+    const width = normalizeLength(token);
+    if (typeof width === "number") {
+      setNativeProperty(node, PropertyCode.OutlineWidth, width);
+      continue;
+    }
+    setNativeProperty(node, PropertyCode.OutlineColor, parseColor(token), {
+      color: true,
+    });
+  }
+}
+
+/** A uniform radius stays a number; a one-to-four value shorthand travels as its CSS text. */
+function normalizeCornerRadius(value: PropertyInput): number | string | null {
+  if (value === null || value === undefined || value === false) return null;
+  if (typeof value === "number") return value;
+  const text = String(value).trim();
+  if (text === "") return null;
+  if (/\s/.test(text)) {
+    if (text.split(/\s+/).length > 4) {
+      throw new TypeError(
+        "QuickGUI borderRadius accepts one to four corner radii",
+      );
+    }
+    return text;
+  }
+  return normalizeLength(text);
+}
+
+/**
+ * Bound one gradient, filter, transform, outline, or text-shadow declaration.
+ *
+ * An array joins into a CSS list, an object becomes the JSON form the Rust binding deserializes,
+ * and anything past `MAX_STYLE_DECLARATION_BYTES` is refused instead of reaching the boundary.
+ */
+function normalizeStyleDeclaration(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const text = Array.isArray(value)
+    ? value.map((entry) => String(entry)).join(" ")
+    : isRecord(value)
+      ? JSON.stringify(value)
+      : String(value).trim();
+  if (text === "") return null;
+  if (text.length > MAX_STYLE_DECLARATION_BYTES) {
+    throw new TypeError(
+      `QuickGUI style declarations are limited to ${MAX_STYLE_DECLARATION_BYTES} bytes`,
+    );
+  }
+  return text;
 }
 
 function normalizeValue(
@@ -1042,7 +1301,16 @@ function isLengthProperty(code: PropertyCode): boolean {
     (code >= PropertyCode.Top && code <= PropertyCode.Left) ||
     code === PropertyCode.AnchorGap ||
     code === PropertyCode.ViewportMargin ||
-    (code >= PropertyCode.HitSlop && code <= PropertyCode.HitSlopLeft)
+    (code >= PropertyCode.HitSlop && code <= PropertyCode.HitSlopLeft) ||
+    code === PropertyCode.LetterSpacing ||
+    code === PropertyCode.WordSpacing ||
+    code === PropertyCode.TextDecorationThickness ||
+    (code >= PropertyCode.PaddingStart &&
+      code <= PropertyCode.BorderEndWidth) ||
+    (code >= PropertyCode.BorderTopLeftRadius &&
+      code <= PropertyCode.BorderBottomLeftRadius) ||
+    code === PropertyCode.OutlineWidth ||
+    code === PropertyCode.OutlineOffset
   );
 }
 
@@ -4770,7 +5038,8 @@ export namespace JSX {
     marginRight?: number | string;
     marginBottom?: number | string;
     marginLeft?: number | string;
-    background?: number | string;
+    /** A color, a CSS gradient function string, or the declared gradient object form. */
+    background?: number | string | GradientDeclaration;
     backgroundColor?: number | string;
     color?: number | string;
     hoverBackgroundColor?: number | string;
@@ -4800,7 +5069,7 @@ export namespace JSX {
     overflowY?: Style["overflow"];
     cursor?: string;
     appRegion?: "drag" | "no-drag";
-    position?: "relative" | "absolute";
+    position?: "relative" | "absolute" | "sticky";
     top?: number | string;
     right?: number | string;
     bottom?: number | string;
@@ -4834,6 +5103,142 @@ export namespace JSX {
     markdownBlockGap?: number;
     markdownCodeFontSize?: number;
     scrollToEndRevision?: number;
+
+    /** Extra advance after every glyph cluster, clamped by the core to +/-256 logical pixels. */
+    letterSpacing?: number | string;
+    /** Extra advance after every space character, clamped by the core to +/-256 logical pixels. */
+    wordSpacing?: number | string;
+    /** Case mapping applied to non-editable text before shaping. Inputs are never transformed. */
+    textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
+    /** `"x y blur color"`, the object form, or `"none"`. Blur is a bounded approximation. */
+    textShadow?: string | TextShadowDeclaration;
+    /** Space-separated `underline`, `line-through`, and `overline`, or `none`. */
+    textDecoration?: TextDecorationLine;
+    textDecorationLine?: TextDecorationLine;
+    textDecorationColor?: number | string;
+    textDecorationStyle?: "solid" | "double" | "wavy";
+    /** Adopts the closest native underline thickness: 0, 1, 2, 4, or 8 logical pixels. */
+    textDecorationThickness?: number | string;
+    wordBreak?: "normal" | "break-all" | "keep-all";
+    overflowWrap?: "normal" | "anywhere" | "break-word";
+    /** Author-placed soft hyphens only; the core never hyphenates from a dictionary. */
+    hyphens?: "none" | "manual" | "auto";
+    /** Base paragraph direction used while shaping, without mirroring layout. */
+    textDirection?: "auto" | "ltr" | "rtl";
+
+    /** Inline layout direction inherited by this whole subtree. */
+    direction?: "ltr" | "rtl";
+    paddingStart?: number | string;
+    paddingEnd?: number | string;
+    marginStart?: number | string;
+    marginEnd?: number | string;
+    borderStartWidth?: number | string;
+    borderEndWidth?: number | string;
+
+    /** A color, a CSS gradient function, or the declared gradient object form. */
+    backgroundGradient?: number | string | GradientDeclaration;
+    borderTopLeftRadius?: number | string;
+    borderTopRightRadius?: number | string;
+    borderBottomRightRadius?: number | string;
+    borderBottomLeftRadius?: number | string;
+    borderStyle?: "solid" | "dashed" | "dotted";
+    /** CSS `outline` shorthand, a plain width, or `none`. Outlines never affect layout. */
+    outline?: number | string;
+    outlineWidth?: number | string;
+    outlineColor?: number | string;
+    outlineOffset?: number | string;
+    outlineStyle?: "solid" | "dashed" | "dotted" | "none";
+    /** Path, `file://`, or base64 `data:` URL decoded once and painted inside the rounded box. */
+    backgroundImage?: string;
+    backgroundSize?: "auto" | "cover" | "contain" | (string & {});
+    backgroundRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+    backgroundPosition?: string;
+    /** CSS filter-function list. `blur()` and `drop-shadow()` promote a compositing group. */
+    filter?: string | readonly string[];
+    /** Colour filters and one blur applied to whatever is already painted behind this element. */
+    backdropFilter?: string | readonly string[];
+    /** CSS transform-function list, or the `matrix()` object form. Paint only; layout never moves. */
+    transform?: string | readonly string[] | TransformMatrix;
+    /** Fraction of the border box a transform acts around. Defaults to the centre. */
+    transformOrigin?: string;
+    mixBlendMode?: BlendMode;
+
+    hoverBackground?: number | string | GradientDeclaration;
+    hoverOutline?: string;
+    hoverTransform?: string | readonly string[] | TransformMatrix;
+    activeBackground?: number | string | GradientDeclaration;
+    activeOutline?: string;
+    activeTransform?: string | readonly string[] | TransformMatrix;
+    focusBackground?: number | string | GradientDeclaration;
+    focusBackgroundColor?: number | string;
+    focusColor?: number | string;
+    focusOutline?: string;
+    focusTransform?: string | readonly string[] | TransformMatrix;
+
+    /** Snap axis and strictness, such as `"x mandatory"` or `"y proximity"`. */
+    scrollSnapType?: string;
+    scrollSnapAlign?: "start" | "center" | "end";
+    scrollSnapStop?: "normal" | "always";
+  }
+
+  /** Combinable decoration lines. `none` clears an inherited decoration. */
+  export type TextDecorationLine =
+    | "none"
+    | "underline"
+    | "overline"
+    | "line-through"
+    | (string & {});
+
+  export type BlendMode =
+    | "normal"
+    | "multiply"
+    | "screen"
+    | "darken"
+    | "lighten"
+    | "overlay"
+    | "difference"
+    | "exclusion"
+    | "hard-light"
+    | "color-dodge"
+    | "color-burn";
+
+  export interface TextShadowDeclaration {
+    offsetX: number;
+    offsetY: number;
+    blur?: number;
+    /** Omitted, the shadow adopts the element's own text color. */
+    color?: string;
+  }
+
+  /** A CSS `matrix(a, b, c, d, tx, ty)` in the core's own component order. */
+  export interface TransformMatrix {
+    a: number;
+    b: number;
+    c: number;
+    d: number;
+    tx: number;
+    ty: number;
+  }
+
+  /** One gradient stop. A bare color string spaces evenly with its neighbours. */
+  export type GradientStop = string | { color: string; position?: number };
+
+  /**
+   * The declared object form of a gradient.
+   *
+   * At most eight stops are retained by the core; extra stops are dropped in source order.
+   */
+  export interface GradientDeclaration {
+    type: "linear" | "radial" | "conic";
+    /** Linear gradient angle in CSS degrees; `0` points to the top. */
+    angle?: number;
+    /** Conic gradient start angle in CSS degrees. */
+    fromAngle?: number;
+    shape?: "circle" | "ellipse";
+    extent?: "closest-side" | "farthest-side" | "farthest-corner";
+    center?: { x: number; y: number };
+    interpolation?: "linear-srgb" | "srgb" | "oklab";
+    stops: readonly GradientStop[];
   }
 
   export interface NativeProps extends Style {
