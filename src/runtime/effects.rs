@@ -306,6 +306,10 @@ impl Runtime {
         if let Some(state) = &mut self.window {
             let previous_focus = state.ui.focused();
             let mut deferred_focus = false;
+            // Focus that stays on the same element can still change how it paints: a listener
+            // focusing the keyboard-focused control from a click hides its ring, and only a
+            // repaint shows that, since the focused element itself did not change.
+            let mut focus_repaint = false;
             let selection_changed =
                 cx.clear_text_selection && state.ui.clear_static_text_selection();
             if let Some(request) = cx.focus {
@@ -313,19 +317,20 @@ impl Runtime {
                     Some(id) => {
                         if state.ui.is_focusable(id) {
                             state.pending_focus = None;
-                            state.ui.focus(id);
+                            focus_repaint = state.ui.focus(id);
                         } else {
                             // The caller may be opening a view that declares this focus handle in
                             // the rebuild requested by the same event. Keep the request for exactly
-                            // that rebuild instead of adding a timer or requiring a second event.
-                            state.pending_focus = Some(id);
+                            // that rebuild instead of adding a timer or requiring a second event,
+                            // together with the input making it, which has ended by then.
+                            state.pending_focus = Some(state.ui.pending_focus(id));
                             state.view_dirty = true;
                             deferred_focus = true;
                         }
                     }
                     None => {
                         state.pending_focus = None;
-                        state.ui.blur();
+                        focus_repaint = state.ui.blur();
                     }
                 }
             }
@@ -346,6 +351,7 @@ impl Runtime {
             if (force_redraw
                 || cx.invalidate
                 || focus_changed
+                || focus_repaint
                 || deferred_focus
                 || selection_changed)
                 && state.scheduler.invalidate()

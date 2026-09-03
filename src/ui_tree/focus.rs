@@ -131,20 +131,133 @@ impl UiTree {
             .collect()
     }
 
+    /// Whether the focused element paints its focus styles, like CSS `:focus-visible`.
+    pub fn focus_visible(&self) -> bool {
+        self.focus_visible
+    }
+
+    /// The element whose focus styles paint this frame.
+    ///
+    /// Focus styles follow focus visibility, except on a text input or text area: a native text
+    /// field always shows its focus ring whichever device focused it, so an editor is exempt from
+    /// the pointer rule. Carets, cursors, and accessibility keep following the real focus.
+    pub(super) fn styled_focus(&self) -> Option<ElementId> {
+        self.focused
+            .filter(|id| self.focus_visible || self.text_inputs.contains_key(id))
+    }
+
+    /// Record the device whose event dispatch starts now.
+    ///
+    /// Every focus change until the matching [`Self::end_input_dispatch`] resolves its visibility
+    /// from this device, so no listener has to carry the answer itself. A nested begin keeps the
+    /// outer device: Enter activating a button dispatches the click inside the key event, and the
+    /// focus that click lands is still keyboard-driven.
+    pub(crate) fn begin_input_dispatch(&mut self, modality: InputModality) -> InputDispatchScope {
+        let outermost = self.input_modality.is_none();
+        if outermost {
+            self.input_modality = Some(modality);
+        }
+        InputDispatchScope { outermost }
+    }
+
+    /// Close the scope opened by [`Self::begin_input_dispatch`].
+    pub(crate) fn end_input_dispatch(&mut self, scope: InputDispatchScope) {
+        if scope.outermost {
+            self.input_modality = None;
+        }
+    }
+
+    /// Capture a focus request for the rebuild it waits on, with the device making it now.
+    pub(crate) fn pending_focus(&self, element: ElementId) -> PendingFocus {
+        PendingFocus {
+            element,
+            modality: self.input_modality,
+        }
+    }
+
+    /// Paint the focused element's focus styles without moving focus.
+    ///
+    /// Tab and the arrows are how a keyboard user finds focus, so a press that moves nothing — the
+    /// only focusable control, a roving group at its edge, a key the application handles itself —
+    /// still shows where focus already is. Returns whether the paint changes.
+    pub(crate) fn reveal_focus(&mut self) -> bool {
+        let changed = self.focused.is_some() && !self.focus_visible;
+        self.focus_visible = true;
+        changed
+    }
+
+    /// How a focus change made by `modality` paints, given the visibility it replaces.
+    fn focus_visibility_for(&self, modality: Option<InputModality>) -> bool {
+        match modality {
+            Some(InputModality::Pointer) => false,
+            Some(InputModality::Keyboard) => true,
+            None => self.focus_visible,
+        }
+    }
+
+    /// Move focus as the input being dispatched would, or programmatically outside any input.
     pub fn focus(&mut self, id: ElementId) -> bool {
-        self.set_focus(id, true)
+        self.focus_as(id, self.input_modality)
     }
 
+    /// Move focus as if `modality` were delivering the event that requested it.
+    ///
+    /// This applies a deferred [`PendingFocus`] after the rebuild it waited for, once the dispatch
+    /// that made the request has already ended.
+    pub(crate) fn focus_as(&mut self, id: ElementId, modality: Option<InputModality>) -> bool {
+        let visible = self.focus_visibility_for(modality);
+        self.set_focus(id, true, visible)
+    }
+
+    /// A press focuses without a ring: the pointer already shows the user what they pressed.
     pub(super) fn focus_from_pointer(&mut self, id: ElementId) -> bool {
-        self.set_focus(id, false)
+        self.set_focus(id, false, false)
     }
 
-    pub(super) fn set_focus(&mut self, id: ElementId, show_tooltip: bool) -> bool {
+    /// Apply the production press default to a named element without hit-test geometry.
+    ///
+    /// A real press focuses the innermost interactive element under the pointer when a pointer may
+    /// focus it. A semantic test names its target instead of a point, so the same policy walks the
+    /// retained parent chain up from that target. Returns whether the paint changes.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn press_target(&mut self, id: ElementId) -> bool {
+        let target = {
+            let Some(root) = &self.root else {
+                return false;
+            };
+            let mut current = Some(id);
+            let mut target = None;
+            for _ in 0..MAX_FOCUSED_EVENT_PATH {
+                let Some(candidate) = current else {
+                    break;
+                };
+                let Some(element) = find_element(root, candidate) else {
+                    break;
+                };
+                let enabled = !element.accessibility.disabled;
+                if enabled && element.focusable && element.focus_on_pointer {
+                    target = Some(candidate);
+                    break;
+                }
+                if (enabled && (element.clickable || element.pointer_listener))
+                    || element.blocks_pointer
+                {
+                    break;
+                }
+                current = self.parents.get(&candidate).copied();
+            }
+            target
+        };
+        target.is_some_and(|target| self.focus_from_pointer(target))
+    }
+
+    pub(super) fn set_focus(&mut self, id: ElementId, show_tooltip: bool, visible: bool) -> bool {
         if !self.focusable_ids.contains(&id) {
             return false;
         }
-        let mut changed = self.focused != Some(id);
+        let mut changed = self.focused != Some(id) || self.focus_visible != visible;
         self.focused = Some(id);
+        self.focus_visible = visible;
         if self.text_inputs.contains_key(&id) {
             changed |= self.clear_static_text_selection();
         }
@@ -155,6 +268,9 @@ impl UiTree {
     }
 
     pub fn blur(&mut self) -> bool {
+        // A press on empty space or a key that drops focus decides the visibility the next focus
+        // inherits, so a later programmatic focus follows the device the user last used.
+        self.focus_visible = self.focus_visibility_for(self.input_modality);
         let changed = self.focused.take().is_some();
         if changed {
             changed | self.reconcile_tooltip(Instant::now())
@@ -163,6 +279,10 @@ impl UiTree {
         }
     }
 
+    /// Move focus to the next or previous Tab stop.
+    ///
+    /// Tab traversal is keyboard input by definition, so the focus it lands always shows its ring,
+    /// including when the only Tab stop keeps focus and merely gains the ring.
     pub fn focus_next(&mut self, reverse: bool) -> bool {
         if self.focus_order.is_empty() {
             return false;
@@ -182,7 +302,7 @@ impl UiTree {
             None => 0,
         };
         let next = self.focus_order[next_index];
-        self.focus(next)
+        self.set_focus(next, true, true)
     }
 
     pub fn activate_focused(&self) -> Option<ElementId> {

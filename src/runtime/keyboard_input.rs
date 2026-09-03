@@ -526,7 +526,12 @@ impl Runtime {
         if pending.focus != focused {
             return true;
         }
-        self.replay_pending_keys(event_loop, pending.keys)
+        // The replay delivers presses the user made, so it is keyboard input even though a timer
+        // rather than a native key event started it.
+        let scope = self.begin_input_dispatch(InputModality::Keyboard);
+        let continued = self.replay_pending_keys(event_loop, pending.keys);
+        self.end_input_dispatch(scope);
+        continued
     }
 
     pub(super) fn handle_pressed_key_fallback(
@@ -612,8 +617,12 @@ impl Runtime {
                 Key::Tab => {
                     let previous_focus =
                         self.window.as_ref().and_then(|window| window.ui.focused());
-                    if let Some(window) = &mut self.window {
-                        window.ui.focus_next(modifiers.contains(Modifiers::SHIFT));
+                    if let Some(window) = &mut self.window
+                        && window.ui.focus_next(modifiers.contains(Modifiers::SHIFT))
+                        && window.scheduler.invalidate()
+                    {
+                        // The only Tab stop keeps focus but gains its ring, which is paint-only.
+                        window.window.request_redraw();
                     }
                     self.announce_focus_change(event_loop, previous_focus);
                 }
@@ -677,9 +686,7 @@ impl Runtime {
         let Some(target) = target else {
             return;
         };
-        if let Some(window) = &mut self.window {
-            window.ui.focus(target);
-        }
+        self.focus_element(target);
         self.announce_focus_change(event_loop, previous_focus);
         self.invoke_click(event_loop, target);
     }
@@ -714,9 +721,7 @@ impl Runtime {
             return false;
         };
         let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
-        if let Some(window) = &mut self.window {
-            window.ui.focus(target.id);
-        }
+        self.focus_element(target.id);
         self.announce_focus_change(event_loop, previous_focus);
         if target.activate {
             self.invoke_click(event_loop, target.id);

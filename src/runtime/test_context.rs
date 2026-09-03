@@ -324,7 +324,9 @@ struct TestWindow {
     state: WindowState,
     system_appearance: WindowAppearance,
     dirty: bool,
-    pending_focus: Option<ElementId>,
+    /// A focus request waiting for the rebuild that introduces its target, with the simulated
+    /// input that made it, exactly as the production window keeps one.
+    pending_focus: Option<PendingFocus>,
     render_count: usize,
     retained_geometry_ready: bool,
     requested_animation_frame: bool,

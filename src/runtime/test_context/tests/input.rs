@@ -795,3 +795,122 @@ fn settled_spell_checks_run_on_the_event_loop_deadline() {
     assert_eq!(cx.focused_input_misspellings(window).unwrap(), vec![0..4]);
     crate::clear_spell_check_provider();
 }
+
+/// Three ways a listener can move focus — from a click, from a mouse press, and from a keyboard
+/// action — plus plain controls for the press default, Tab, arrows, and Enter to land on.
+struct FocusVisibilityView;
+
+impl View for FocusVisibilityView {
+    fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let root = cx.focus_handle("visibility-root");
+        let target = cx.focus_handle("visibility-target");
+        let focus_from_click = cx.listener("visibility-click", move |_this, cx| cx.focus(target));
+        let focus_from_press =
+            cx.mouse_down_listener("visibility-press", move |_this, _event, cx| {
+                cx.focus(target);
+            });
+        let focus_from_action =
+            cx.action_listener("visibility-root", move |_this, _: &SaveForTest, cx| {
+                cx.focus(target);
+            });
+        div()
+            .focus_scope(root)
+            .on_action(focus_from_action)
+            .children([
+                button()
+                    .id("visibility-click")
+                    .on_click(focus_from_click)
+                    .child("Focus by click"),
+                div()
+                    .id("visibility-press")
+                    .size(40.0, 40.0)
+                    .on_mouse_down(MouseButton::Left, focus_from_press),
+                button().track_focus(target).child("Target"),
+                button().id("visibility-plain").clickable().child("Plain"),
+            ])
+    }
+}
+
+#[test]
+fn focus_visibility_follows_the_input_that_moved_focus() {
+    let (mut cx, view) = Application::new()
+        .bind_keys([KeyBinding::new("ctrl-s", SaveForTest, None)])
+        .into_test_context(WindowOptions::default(), FocusVisibilityView)
+        .unwrap();
+    let window = view.window_handle();
+    let click = ElementId::named("visibility-click");
+    let target = ElementId::named("visibility-target");
+    let plain = ElementId::named("visibility-plain");
+    let press = |button| MouseDownEvent {
+        button,
+        position: Point::new(4.0, 4.0),
+        modifiers: Modifiers::empty(),
+        click_count: 1,
+        first_mouse: false,
+    };
+
+    // A fresh window paints the focus styles of a programmatic focus.
+    cx.focus(window, plain).unwrap();
+    assert!(cx.focus_visible(window).unwrap());
+
+    // A click whose listener focuses lands pointer focus: no focus styles.
+    cx.click(window, click).unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(target));
+    assert!(!cx.focus_visible(window).unwrap());
+
+    // A programmatic focus keeps the hidden answer.
+    cx.focus(window, plain).unwrap();
+    assert!(!cx.focus_visible(window).unwrap());
+
+    // An action listener that focuses in response to a key lands visible focus.
+    cx.simulate_keystrokes(window, "ctrl-s").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(target));
+    assert!(cx.focus_visible(window).unwrap());
+
+    // A mouse press whose listener focuses lands pointer focus again.
+    cx.simulate_mouse_down(window, "visibility-press", press(MouseButton::Left))
+        .unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(target));
+    assert!(!cx.focus_visible(window).unwrap());
+
+    // Tab moves focus with the keyboard and shows it.
+    cx.simulate_keystrokes(window, "tab").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(plain));
+    assert!(cx.focus_visible(window).unwrap());
+
+    // A press with no listener of its own applies the production press default: the pressed
+    // button takes pointer focus and paints no focus styles.
+    cx.simulate_mouse_down(window, click, press(MouseButton::Left))
+        .unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(click));
+    assert!(!cx.focus_visible(window).unwrap());
+    cx.simulate_mouse_up(
+        window,
+        click,
+        MouseUpEvent {
+            button: MouseButton::Left,
+            position: Point::new(4.0, 4.0),
+            modifiers: Modifiers::empty(),
+            click_count: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(click));
+
+    // An arrow key that moves nothing reveals the focus already there.
+    cx.simulate_keystrokes(window, "down").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(click));
+    assert!(cx.focus_visible(window).unwrap());
+
+    // A right press never applies the press default, so focus and its styles stay put.
+    cx.simulate_mouse_down(window, plain, press(MouseButton::Right))
+        .unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(click));
+    assert!(cx.focus_visible(window).unwrap());
+
+    // Enter activates the focused button inside the key dispatch, so the focus its click listener
+    // lands is still keyboard-driven and stays visible.
+    cx.simulate_keystrokes(window, "enter").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(target));
+    assert!(cx.focus_visible(window).unwrap());
+}

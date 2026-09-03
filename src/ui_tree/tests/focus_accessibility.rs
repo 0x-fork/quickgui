@@ -1371,3 +1371,189 @@ fn pointer_focus_can_be_disabled_without_disabling_button_activation_or_keyboard
     assert!(tree.focus(sidebar_button_id));
     assert_eq!(tree.focused(), Some(sidebar_button_id));
 }
+
+#[test]
+fn pointer_focus_hides_focus_styles_until_keyboard_input_reveals_them() {
+    let focus_color = Color::rgb8(0, 0, 255);
+    let root = div().size(200.0, 40.0).flex_row().children([
+        button()
+            .id("first")
+            .size(80.0, 32.0)
+            .flex_none()
+            .clickable()
+            .focus(|style| style.bg(focus_color)),
+        button()
+            .id("second")
+            .size(80.0, 32.0)
+            .flex_none()
+            .clickable()
+            .focus(|style| style.bg(focus_color)),
+    ]);
+    let first = ElementId::named("first");
+    let second = ElementId::named("second");
+    let mut tree = UiTree::new();
+    let mut renderer = TestTextLayout;
+    let mut scene = Scene::new();
+    tree.set_root(root, Size::new(200.0, 40.0), 1.0, &mut renderer)
+        .unwrap();
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    let focus_painted = |scene: &Scene| {
+        scene
+            .edge_quads()
+            .iter()
+            .any(|quad| quad.fill == focus_color)
+    };
+    assert!(!focus_painted(&scene));
+    let now = Instant::now();
+
+    // A click focuses the button but paints no focus styles: the pointer shows what was pressed.
+    let first_point = Point::new(40.0, 16.0);
+    tree.pointer_button(Some(first_point), true, false, now, &mut renderer);
+    tree.pointer_button(Some(first_point), false, false, now, &mut renderer);
+    assert_eq!(tree.focused(), Some(first));
+    assert!(!tree.focus_visible());
+    assert_eq!(tree.styled_focus(), None);
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert!(!focus_painted(&scene));
+
+    // A programmatic focus outside any input keeps the hidden answer.
+    assert!(tree.focus(second));
+    assert!(!tree.focus_visible());
+
+    // Tab is keyboard input, so the focus it lands paints its styles.
+    assert!(tree.focus_next(false));
+    assert_eq!(tree.focused(), Some(first));
+    assert!(tree.focus_visible());
+    assert_eq!(tree.styled_focus(), Some(first));
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert!(focus_painted(&scene));
+
+    // A programmatic focus now keeps the visible answer instead.
+    assert!(tree.focus(second));
+    assert!(tree.focus_visible());
+
+    // Clicking the keyboard-focused button keeps focus there but hides the styles again.
+    let second_point = Point::new(120.0, 16.0);
+    tree.pointer_button(Some(second_point), true, false, now, &mut renderer);
+    tree.pointer_button(Some(second_point), false, false, now, &mut renderer);
+    assert_eq!(tree.focused(), Some(second));
+    assert!(!tree.focus_visible());
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert!(!focus_painted(&scene));
+
+    // A navigation key that moves nothing still reveals the focus already there, exactly once.
+    assert!(tree.reveal_focus());
+    assert!(tree.focus_visible());
+    assert!(!tree.reveal_focus());
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert!(focus_painted(&scene));
+}
+
+#[test]
+fn input_dispatch_scopes_decide_the_visibility_of_focus_moved_inside_them() {
+    let mut root = div()
+        .child(button().id(10_u64).clickable())
+        .child(button().id(20_u64).clickable());
+    assign_runtime_ids(&mut root);
+    let mut tree = UiTree::new();
+    tree.root = Some(root);
+    tree.rebuild_focus_index();
+    let first = ElementId::new(10);
+    let second = ElementId::new(20);
+    assert!(tree.focus_visible());
+
+    // A focus moved while a pointer event is dispatched — a listener's `cx.focus` — hides.
+    let pointer = tree.begin_input_dispatch(InputModality::Pointer);
+    assert!(tree.focus(first));
+    assert!(!tree.focus_visible());
+    tree.end_input_dispatch(pointer);
+
+    // Outside any dispatch the current answer is inherited.
+    assert!(tree.focus(second));
+    assert!(!tree.focus_visible());
+
+    // A focus moved while a key event is dispatched shows, and a click nested inside that key
+    // event — Enter activating a button — is still keyboard input.
+    let key = tree.begin_input_dispatch(InputModality::Keyboard);
+    assert!(tree.focus(first));
+    assert!(tree.focus_visible());
+    let nested = tree.begin_input_dispatch(InputModality::Pointer);
+    assert!(tree.focus(second));
+    assert!(tree.focus_visible());
+    tree.end_input_dispatch(nested);
+    assert!(tree.focus(first));
+    assert!(tree.focus_visible());
+    tree.end_input_dispatch(key);
+
+    // Re-focusing the visible element from a pointer changes only the paint, which is reported
+    // as a change so the window repaints; repeating it changes nothing.
+    let pointer = tree.begin_input_dispatch(InputModality::Pointer);
+    assert!(tree.focus(first));
+    assert!(!tree.focus_visible());
+    assert!(!tree.focus(first));
+    tree.end_input_dispatch(pointer);
+
+    // A deferred request carries the device that made it past the end of its dispatch, so the
+    // focus it lands after the rebuild paints as if the target had already been mounted.
+    let key = tree.begin_input_dispatch(InputModality::Keyboard);
+    let request = tree.pending_focus(second);
+    tree.end_input_dispatch(key);
+    assert_eq!(request.modality, Some(InputModality::Keyboard));
+    assert!(tree.focus_as(request.element, request.modality));
+    assert_eq!(tree.focused(), Some(second));
+    assert!(tree.focus_visible());
+    assert_eq!(tree.pending_focus(first).modality, None);
+
+    // Dropping focus inside a pointer dispatch leaves a hidden answer for the next programmatic
+    // focus; inside a key dispatch a visible one.
+    let pointer = tree.begin_input_dispatch(InputModality::Pointer);
+    assert!(tree.blur());
+    tree.end_input_dispatch(pointer);
+    assert!(tree.focus(first));
+    assert!(!tree.focus_visible());
+    let key = tree.begin_input_dispatch(InputModality::Keyboard);
+    assert!(tree.blur());
+    tree.end_input_dispatch(key);
+    assert!(tree.focus(first));
+    assert!(tree.focus_visible());
+}
+
+#[test]
+fn a_text_input_paints_its_focus_styles_however_it_was_focused() {
+    let focus_color = Color::rgb8(0, 128, 0);
+    let root = div().size(200.0, 40.0).child(
+        text_input("")
+            .id("field")
+            .size(160.0, 32.0)
+            .focus(|style| style.bg(focus_color)),
+    );
+    let field = ElementId::named("field");
+    let mut tree = UiTree::new();
+    let mut renderer = TestTextLayout;
+    let mut scene = Scene::new();
+    tree.set_root(root, Size::new(200.0, 40.0), 1.0, &mut renderer)
+        .unwrap();
+    tree.paint(&mut scene, &mut renderer).unwrap();
+
+    let point = Point::new(20.0, 16.0);
+    let now = Instant::now();
+    tree.pointer_button(Some(point), true, false, now, &mut renderer);
+    tree.pointer_button(Some(point), false, false, now, &mut renderer);
+    assert_eq!(tree.focused(), Some(field));
+    // The press hid focus, yet a text field is styled like a native one that always shows its
+    // ring: the styled focus is the field even though nothing else would paint focus styles now.
+    assert!(!tree.focus_visible());
+    assert_eq!(tree.styled_focus(), Some(field));
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert!(
+        scene
+            .edge_quads()
+            .iter()
+            .any(|quad| quad.fill == focus_color)
+    );
+}

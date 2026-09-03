@@ -104,6 +104,15 @@ Hover, active, focus, validation, and drag-state variants are paint-only. Add
 text color, opacity, and bounded shadow list without rebuilding the view or rerunning Taffy. Layout
 values use `AnimationExt::with_animation`; see [Declarative motion](animations.md).
 
+The `focus` variant paints only while focus is *visible*, like CSS `:focus-visible`. Focus that a
+pointer press lands — including a `cx.focus(...)` a listener performs while a press is being
+dispatched — paints no focus styles; focus that a key lands — Tab, a roving arrow, or a listener
+focusing in response to a key — paints them, and Tab or an arrow that moves nothing reveals the
+focus already there. A `cx.focus(...)` outside any input dispatch keeps the current visibility. Text
+inputs and text areas always paint their focus styles, as a native text field always shows its
+ring. Keyboard focus, accessibility focus, and focus traps are unaffected; only the styles are
+gated.
+
 ## Flexbox and spacing
 
 The fluent surface includes GPUI's everyday flex vocabulary rather than requiring direct

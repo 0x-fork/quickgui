@@ -21,7 +21,12 @@ impl Element {
         self
     }
 
-    /// Paint-only styling while this element owns keyboard focus.
+    /// Paint-only styling while this element owns keyboard focus and that focus is visible.
+    ///
+    /// Like CSS `:focus-visible`, focus a pointer press lands paints none of this, focus a key
+    /// lands paints all of it, and a programmatic focus keeps the visibility that was current.
+    /// Text inputs and text areas are exempt and paint it whenever focused, as a native text field
+    /// always shows its ring.
     pub fn focus(mut self, style: impl FnOnce(ElementStateStyle) -> ElementStateStyle) -> Self {
         self.focus = style(ElementStateStyle::default());
         self

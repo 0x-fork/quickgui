@@ -143,9 +143,9 @@ impl Runtime {
             let image_resolution_changed = image_assets.finish_resolve_frame();
             request_animation_frame |= image_resolution_changed;
             if let Some(request) = state.pending_focus.take()
-                && state.ui.is_focusable(request)
+                && state.ui.is_focusable(request.element)
             {
-                state.ui.focus(request);
+                state.ui.focus_as(request.element, request.modality);
             }
             if previous_mounted_focus != state.ui.focused() {
                 mounted_focus_previous = Some(previous_mounted_focus);

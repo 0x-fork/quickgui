@@ -88,13 +88,16 @@ pub(super) fn push_background_image(
 /// Interaction, focus, and validation states override the element's own transform with the same
 /// precedence the paint styles use. This is resolved before the element's box is recorded so a
 /// whole subtree translation can be folded into that box instead of allocating a group texture.
+///
+/// `styled_focus` is the element whose focus styles paint this frame — see
+/// `UiTree::styled_focus` — which is the focused element only while focus is visible.
 pub(super) fn resolved_transform(
     element: &Element,
     hovered: &HashSet<ElementId>,
     pressed: Option<ElementId>,
     dragging: Option<ElementId>,
     drag_over: Option<ElementId>,
-    focused: Option<ElementId>,
+    styled_focus: Option<ElementId>,
 ) -> (Transform2D, Point) {
     let empty = ElementStateStyle::default();
     let interaction = if drag_over == Some(element.runtime_id) {
@@ -108,7 +111,7 @@ pub(super) fn resolved_transform(
     } else {
         &empty
     };
-    let focus = if focused == Some(element.runtime_id) {
+    let focus = if styled_focus == Some(element.runtime_id) {
         &element.focus
     } else {
         &empty
@@ -411,7 +414,7 @@ pub(super) fn collect_layout_hit_regions(
     pressed: Option<ElementId>,
     dragging: Option<ElementId>,
     drag_over: Option<ElementId>,
-    focused: Option<ElementId>,
+    styled_focus: Option<ElementId>,
     parent_origin: LayoutFrame,
     parent_clip: Rect,
     viewport: Rect,
@@ -452,7 +455,7 @@ pub(super) fn collect_layout_hit_regions(
     // Mirror the paint path: a pure translation moves the painted box, anything else transforms
     // it through a compositing group whose accumulated matrix the hit region carries.
     let (declared_transform, transform_origin) =
-        resolved_transform(element, hovered, pressed, dragging, drag_over, focused);
+        resolved_transform(element, hovered, pressed, dragging, drag_over, styled_focus);
     let window_transform =
         declared_transform.around(transform_origin_point(bounds, transform_origin));
     let translated = window_transform.is_translation();
@@ -578,7 +581,7 @@ pub(super) fn collect_layout_hit_regions(
             pressed,
             dragging,
             drag_over,
-            focused,
+            styled_focus,
             child_origin,
             child_clip,
             viewport,
@@ -589,6 +592,11 @@ pub(super) fn collect_layout_hit_regions(
     Ok(())
 }
 
+/// Paint one element and its subtree.
+///
+/// `styled_focus` is the element whose focus styles paint — see `UiTree::styled_focus`. It is the
+/// focused element only while focus is visible, except that a focused text input is always styled,
+/// which is also why it can stand in for the real focus when this function paints a caret.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn paint_element(
     element: &Element,
@@ -600,7 +608,7 @@ pub(super) fn paint_element(
     pressed: Option<ElementId>,
     dragging: Option<ElementId>,
     drag_over: Option<ElementId>,
-    focused: Option<ElementId>,
+    styled_focus: Option<ElementId>,
     scale_factor: f32,
     scene: &mut Scene,
     renderer: &mut impl TextLayoutEngine,
@@ -666,7 +674,7 @@ pub(super) fn paint_element(
     // here — children, clips, and hit bounds follow it for free — while anything else opens a
     // compositing group below.
     let (declared_transform, transform_origin) =
-        resolved_transform(element, hovered, pressed, dragging, drag_over, focused);
+        resolved_transform(element, hovered, pressed, dragging, drag_over, styled_focus);
     let window_transform =
         declared_transform.around(transform_origin_point(bounds, transform_origin));
     let translated = window_transform.is_translation();
@@ -733,7 +741,7 @@ pub(super) fn paint_element(
     } else {
         &empty_state
     };
-    let focus_state = if focused == Some(element.runtime_id) {
+    let focus_state = if styled_focus == Some(element.runtime_id) {
         &element.focus
     } else {
         &empty_state
@@ -1229,7 +1237,8 @@ pub(super) fn paint_element(
                     .then(|| input_state.shared_highlights())
                     .filter(|highlights| !highlights.is_empty());
                 let text_id = TextId::new(element.runtime_id.value());
-                let is_focused = focused == Some(element.runtime_id);
+                // A focused text input is always the styled focus, so this is the real focus too.
+                let is_focused = styled_focus == Some(element.runtime_id);
                 let content_size = if content.is_empty() {
                     Size::new(0.0, style.line_height)
                 } else if let Some(highlights) = &highlights {
@@ -1543,7 +1552,7 @@ pub(super) fn paint_element(
             pressed,
             dragging,
             drag_over,
-            focused,
+            styled_focus,
             scale_factor,
             scene,
             renderer,

@@ -1,6 +1,51 @@
 use super::*;
 
 impl Runtime {
+    /// Open the dispatch scope for one input event on the active window, if there is one.
+    ///
+    /// The scope is what lets focus styles follow the input device like CSS `:focus-visible`:
+    /// every focus change until [`Self::end_input_dispatch`] — a listener's `cx.focus`, the
+    /// retained press default, Tab traversal, a roving arrow — resolves its visibility from the
+    /// device recorded here instead of from a flag each of those paths would have to carry.
+    pub(super) fn begin_input_dispatch(
+        &mut self,
+        modality: InputModality,
+    ) -> Option<InputDispatchScope> {
+        self.window
+            .as_mut()
+            .map(|window| window.ui.begin_input_dispatch(modality))
+    }
+
+    /// Close the scope from [`Self::begin_input_dispatch`]; a window the event closed needs none.
+    pub(super) fn end_input_dispatch(&mut self, scope: Option<InputDispatchScope>) {
+        if let (Some(scope), Some(window)) = (scope, self.window.as_mut()) {
+            window.ui.end_input_dispatch(scope);
+        }
+    }
+
+    /// Show the focused element's focus styles for a navigation key that may move nothing.
+    pub(super) fn reveal_focus(&mut self) {
+        if let Some(window) = &mut self.window
+            && window.ui.reveal_focus()
+            && window.scheduler.invalidate()
+        {
+            window.window.request_redraw();
+        }
+    }
+
+    /// Move focus on the active window and repaint when only its focus styles changed.
+    ///
+    /// `announce_focus_change` rebuilds the view when the focused element changes; this covers a
+    /// focus that stays put while its visibility flips, which is paint-only.
+    pub(super) fn focus_element(&mut self, id: ElementId) {
+        if let Some(window) = &mut self.window
+            && window.ui.focus(id)
+            && window.scheduler.invalidate()
+        {
+            window.window.request_redraw();
+        }
+    }
+
     pub(super) fn invoke_click(&mut self, event_loop: &ActiveEventLoop, id: ElementId) {
         let activation_target = self
             .window
@@ -38,9 +83,7 @@ impl Runtime {
             return;
         };
         let previous_focus = self.window.as_ref().and_then(|window| window.ui.focused());
-        if let Some(window) = &mut self.window {
-            window.ui.focus(target);
-        }
+        self.focus_element(target);
         self.announce_focus_change(event_loop, previous_focus);
         let clickable = self
             .window

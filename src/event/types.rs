@@ -968,6 +968,19 @@ pub enum Key {
     Other,
 }
 
+impl Key {
+    /// Whether pressing this key reveals focus even when it moves nothing.
+    ///
+    /// Tab and the arrows are the keys a keyboard user presses to find where focus is, so a press
+    /// paints the focus styles of the element that already has focus, like CSS `:focus-visible`.
+    pub(crate) fn reveals_focus(&self) -> bool {
+        matches!(
+            self,
+            Key::Tab | Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight
+        )
+    }
+}
+
 /// One normalized key press delivered through the focused element path.
 ///
 /// Key listeners run after keymap actions have had a chance to consume the keystroke and before

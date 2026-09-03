@@ -1437,7 +1437,17 @@ can swap — the gradient, the outline ring, and the transform — alongside the
 | --- | --- |
 | hover | `hoverBackgroundColor`, `hoverColor`, `hoverBackground`, `hoverOutline`, `hoverTransform` |
 | active | `activeBackgroundColor`, `activeColor`, `activeBackground`, `activeOutline`, `activeTransform` |
-| focus | `focusBackgroundColor`, `focusColor`, `focusBackground`, `focusOutline`, `focusTransform` |
+| focus | `focusBackgroundColor`, `focusColor`, `focusBackground`, `focusOutline`, `focusTransform` — painted only while focus is visible, like CSS `:focus-visible` |
+
+Focus styles follow focus visibility. A pointer press that lands focus — a click on a button, an
+accordion trigger, a tab — paints none of them, because the pointer already shows what was
+pressed; Tab, Shift-Tab, a roving arrow, or a listener that focuses in response to a key paints
+them, because the ring is how a keyboard user finds focus. A focus moved from code outside any
+input keeps whatever visibility was current, and pressing Tab or an arrow that moves nothing
+reveals the focus that is already there. Text inputs and text areas are the exception and paint
+their focus styles whenever focused, the way a native text field always shows its ring. The
+element still owns keyboard focus, accessibility focus, and its focus trap either way; only the
+styles are gated.
 
 ```tsx
 <Button
