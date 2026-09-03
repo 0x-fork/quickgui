@@ -903,9 +903,10 @@ function AlignedPickerParts() {
             { value: "swift", label: "Swift" },
           ]}
           style={{ ...controlStyle, width: 200, justifyContent: "flex-start" }}
-        />
+        >
+          <ComboboxChips />
+        </Combobox.Root>
       </Row>
-      <ComboboxChips />
       <SelectStateLine />
     </Panel>
   );

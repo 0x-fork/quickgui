@@ -21,6 +21,14 @@ pub const MAX_BOX_SHADOW_EXTENT: f32 = 1_000_000.0;
 pub struct TextId(u64);
 
 impl TextId {
+    /// Derive a stable sibling identity for a paint-only copy of this run.
+    ///
+    /// Shadow copies share the primary run's content but carry their own decoration colors, so
+    /// they retain their own shaped entry instead of contending with the primary for one id.
+    pub(crate) const fn derived(self, salt: u64) -> Self {
+        Self(self.0.rotate_left(17) ^ (0x9E37_79B9_7F4A_7C15_u64.wrapping_mul(salt + 1)))
+    }
+
     pub const fn new(value: u64) -> Self {
         Self(value)
     }
@@ -2535,8 +2543,9 @@ impl Scene {
             ]
         };
         debug_assert!(samples.len() <= MAX_TEXT_SHADOW_SAMPLES);
-        for (dx, dy, alpha) in samples.iter().copied() {
+        for (sample, (dx, dy, alpha)) in samples.iter().copied().enumerate() {
             let mut copy = text.clone();
+            copy.id = text.id.derived(sample as u64);
             copy.bounds = Rect::new(
                 text.bounds.x + shadow.offset_x + dx * spread,
                 text.bounds.y + shadow.offset_y + dy * spread,

@@ -1968,3 +1968,49 @@ fn visual_nested_groups_compose_recursively() {
     );
     assert_pixel_near(&snapshot, 10, 10, [255, 255, 255, 255]);
 }
+
+struct TextShadowVisualView;
+
+impl View for TextShadowVisualView {
+    fn render(&mut self, _cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        div().size_full().bg(Color::rgb8(20, 20, 24)).p_4().child(
+            text("Shadowed")
+                .text_size(28.0)
+                .text_color(Color::WHITE)
+                .text_shadow(3.0, 3.0, 4.0, Color::rgb8(255, 40, 40)),
+        )
+    }
+}
+
+#[test]
+fn visual_text_shadow_copies_render_through_the_gpu_text_system() {
+    let (mut cx, view) = Application::new()
+        .into_test_context(
+            WindowOptions::default().size(240.0, 80.0),
+            TextShadowVisualView,
+        )
+        .unwrap();
+    let mut visual = cx.visual(view.window_handle()).unwrap();
+    // Every blurred shadow sample is a paint-only copy of the run; the GPU text system must accept
+    // all of them in one frame and keep the frame byte-identical when nothing changes.
+    let first = visual.capture_screenshot().unwrap();
+    let second = visual.capture_screenshot().unwrap();
+    assert_eq!(
+        second
+            .assert_matches(&first, crate::VisualTolerance::EXACT)
+            .unwrap()
+            .differing_pixels,
+        0
+    );
+    let shadow_pixels = first
+        .rgba()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|pixel| pixel[0] > 150 && pixel[1] < 120 && pixel[2] < 120)
+        .count();
+    assert!(
+        shadow_pixels > 20,
+        "the shadow copies must paint red pixels, got {shadow_pixels}"
+    );
+}

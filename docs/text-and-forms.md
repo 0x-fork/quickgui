@@ -549,8 +549,10 @@ text("Soft drop shadow").text_shadow(2.0, 2.0, 6.0, Color::rgba8(0, 0, 0, 200))
 The offset and color are exact: the run is painted a second time at the offset, in the shadow
 color, beneath the real text. The blur radius is **approximated** — a non-zero blur paints four
 extra copies spread over the radius at 45% alpha instead of a true Gaussian blur. A shadow adds at
-most `MAX_TEXT_SHADOW_SAMPLES` (5) text primitives to the display list, reuses the run's shaping
-key, and never splits the shaping cache. Offsets are clamped to `TextShadow::MAX_OFFSET` (256) and
+most `MAX_TEXT_SHADOW_SAMPLES` (5) text primitives to the display list. Each copy carries a derived
+text identity, so the GPU text system retains one bounded shaped entry per copy beside the primary
+run instead of reshaping the primary entry every frame (decoration colors are part of the shaping
+key, and the copies recolor their decorations). Offsets are clamped to `TextShadow::MAX_OFFSET` (256) and
 the blur to `TextShadow::MAX_BLUR` (64). In a styled-text run, spans that declare their own
 highlight color keep that color in the shadow copy, so shadows suit uniformly colored text.
 `text_shadow_none()` clears an inherited shadow.

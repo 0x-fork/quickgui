@@ -9,6 +9,7 @@ import {
   runWithOwner,
   Show,
   type Element as SolidElement,
+  untrack,
   useContext,
 } from "solid-js";
 import {
@@ -1993,13 +1994,14 @@ function createPopoverRoot(
   surface: PopoverSurface,
   props: JSX.PopoverRootProps,
 ): NativeNode {
-  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(
-    props.defaultOpen ?? false,
-  );
-  const [anchor, setAnchor] = createSignal<NativeNode>();
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
+  const [anchor, setAnchor] = createSignal<NativeNode | undefined>(undefined, {
+    ownedWrite: true,
+  });
   const [placement, setPlacement] =
     createSignal<AnchorPlacementDetails>(unresolvedPlacement);
-  const [declared, setDeclared] = createSignal<AnchorPositioning>({});
+  const [declared, setDeclared] = createSignal<AnchorPositioning>({}, { ownedWrite: true });
   const triggers = new Set<NativeNode>();
   const open = () => props.open ?? uncontrolledOpen();
 
@@ -2576,7 +2578,7 @@ export function CheckboxRoot(props: JSX.CheckboxProps): NativeNode {
     );
   }
   const [uncontrolled, setUncontrolled] = createSignal<CheckedState>(
-    props.defaultChecked ?? false,
+    untrack(() => props.defaultChecked ?? false),
   );
   const checked = () => props.checked ?? uncontrolled();
   return createPartNode(
@@ -2644,7 +2646,7 @@ const RadioGroupContext = createContext<RadioGroupContextValue | null>(null);
 
 /** Semantic radio-group root. The core supplies roving Tab and arrow behavior from the tree. */
 export function RadioGroupRoot(props: JSX.RadioGroupProps): NativeNode {
-  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue);
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultValue));
   const value = () => props.value ?? uncontrolled();
   const context: RadioGroupContextValue = {
     value,
@@ -2673,9 +2675,8 @@ export function RadioGroupRoot(props: JSX.RadioGroupProps): NativeNode {
 /** Controlled radio root. Inside a `RadioGroup` its selection comes from the group value. */
 export function RadioRoot(props: JSX.RadioProps): NativeNode {
   const group = useContext(RadioGroupContext);
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultChecked ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultChecked ?? false,
+  ));
   const checked = () =>
     group ? group.value() === props.value : (props.checked ?? uncontrolled());
   return createPartNode(
@@ -2719,9 +2720,8 @@ export const RadioGroup = Object.assign(RadioGroupRoot, {
 
 /** Controlled, unstyled switch root/track carrying the core's switch role. */
 export function SwitchRoot(props: JSX.SwitchProps): NativeNode {
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultChecked ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultChecked ?? false,
+  ));
   const checked = () => props.checked ?? uncontrolled();
   return createPartNode(
     "button",
@@ -2800,7 +2800,7 @@ function tabsPartProps(context: TabsContextValue): object {
 /** Controlled, unstyled tab set. The core owns roving focus, arrow keys, and panel mounting. */
 export function TabsRoot(props: JSX.TabsRootProps): NativeNode {
   const scope = createComponentScope("qg-tabs");
-  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue);
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultValue));
   const [tabsState, setTabsState] = createSignal<TabsState>(settledTabs);
   const value = () => props.value ?? uncontrolled();
   const context: TabsContextValue = {
@@ -2998,9 +2998,8 @@ function collapsiblePartProps(context: CollapsibleContextValue): object {
 /** Controlled, unstyled disclosure root. */
 export function CollapsibleRoot(props: JSX.CollapsibleRootProps): NativeNode {
   const scope = createComponentScope("qg-collapsible");
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultOpen ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
   const open = () => props.open ?? uncontrolled();
   const context: CollapsibleContextValue = {
     scope,
@@ -3135,7 +3134,7 @@ function accordionOpenValues(value: string | readonly string[] | null | undefine
 export function AccordionRoot(props: JSX.AccordionRootProps): NativeNode {
   const scope = createComponentScope("qg-accordion");
   const [uncontrolled, setUncontrolled] = createSignal<string[]>(
-    accordionOpenValues(props.defaultValue),
+    untrack(() => accordionOpenValues(props.defaultValue)),
   );
   const open = () =>
     props.value === undefined ? uncontrolled() : accordionOpenValues(props.value);
@@ -3553,9 +3552,8 @@ function createDialogRoot(
   const scope = createComponentScope(
     variant === "alertdialog" ? "qg-alert-dialog" : "qg-dialog",
   );
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultOpen ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
   const open = () => props.open ?? uncontrolled();
   const context: DialogContextValue = {
     scope,
@@ -3911,9 +3909,8 @@ export const Meter = Object.assign(MeterRoot, {
 
 /** Controlled toggle button. A toggle is a button that stays pressed, not a checkbox. */
 export function ToggleRoot(props: JSX.ToggleProps): NativeNode {
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultPressed ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultPressed ?? false,
+  ));
   const pressed = () => props.pressed ?? uncontrolled();
   return createPartNode(
     "button",
@@ -4174,7 +4171,7 @@ function componentChangeListener<T>(
  */
 export function SliderRoot(props: JSX.SliderProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<readonly number[]>(
-    props.defaultValue ?? [0],
+    untrack(() => props.defaultValue ?? [0]),
   );
   const [state, setState] = createSignal<SliderState>(settledSlider);
   const values = () => props.value ?? uncontrolled();
@@ -4311,7 +4308,7 @@ export const Slider = Object.assign(SliderRoot, {
  */
 export function SplitterRoot(props: JSX.SplitterProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<readonly number[]>(
-    props.defaultValue ?? [],
+    untrack(() => props.defaultValue ?? []),
   );
   const sizes = () => props.value ?? uncontrolled();
   return createPartNode(
@@ -4361,7 +4358,7 @@ export const Splitter = Object.assign(SplitterRoot, {
  */
 export function ToolbarRoot(props: JSX.ToolbarProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
-    props.defaultActive,
+    untrack(() => props.defaultActive),
   );
   const active = () => props.active ?? uncontrolled();
   return createPartNode(
@@ -4434,7 +4431,7 @@ export const Toolbar = Object.assign(ToolbarRoot, {
  */
 export function ToggleGroupRoot(props: JSX.ToggleGroupProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<readonly string[]>(
-    props.defaultValue ?? [],
+    untrack(() => props.defaultValue ?? []),
   );
   const pressed = () => props.value ?? uncontrolled();
   return createPartNode(
@@ -4835,9 +4832,8 @@ function menuSelectListener(
 
 /** Logical root of a declared popover menu. It creates no native element. */
 export function PopoverMenuRoot(props: JSX.PopoverMenuRootProps): NativeNode {
-  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(
-    props.defaultOpen ?? false,
-  );
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
   const [trigger, setTrigger] = createSignal<NativeNode>();
   const [popup, setPopup] = createSignal<NativeNode>();
   const open = () => props.open ?? uncontrolledOpen();
@@ -5111,11 +5107,10 @@ function createMenuRoot(
   submenu: boolean,
   props: JSX.MenuRootProps,
 ): NativeNode {
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultOpen ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
   const [state, setState] = createSignal<MenuSurfaceState>(settledMenu);
-  const [declared, setDeclared] = createSignal<AnchorPositioning>({});
+  const [declared, setDeclared] = createSignal<AnchorPositioning>({}, { ownedWrite: true });
   const open = () => props.open ?? uncontrolled();
   const context: MenuCompoundContextValue = {
     scope: props.scope ?? createComponentScope("qg-menu"),
@@ -5531,7 +5526,7 @@ export function MenuCheckboxItemIndicator(props: JSX.NativeProps): NativeNode {
 /** A radio group. The core keeps exactly one of its rows checked. */
 export function MenuRadioGroup(props: JSX.MenuRadioGroupProps): NativeNode {
   const context = requireMenu("Menu.RadioGroup");
-  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue);
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultValue));
   const value = () => props.value ?? uncontrolled();
   const group: MenuRadioGroupContextValue = {
     value,
@@ -5796,7 +5791,7 @@ function encodePickerAppearance(
  */
 export function SelectRoot(props: JSX.SelectProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
-    props.defaultValue,
+    untrack(() => props.defaultValue),
   );
   const [uncontrolledValues, setUncontrolledValues] = createSignal<
     readonly string[]
@@ -6349,7 +6344,7 @@ export const Select = Object.assign(SelectRoot, {
  */
 export function ComboboxRoot(props: JSX.ComboboxProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
-    props.defaultValue,
+    untrack(() => props.defaultValue),
   );
   const [uncontrolledValues, setUncontrolledValues] = createSignal<
     readonly string[]
@@ -6745,7 +6740,7 @@ export interface TreeNodeDeclaration {
  */
 export function TreeRoot(props: JSX.TreeProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<readonly string[]>(
-    props.defaultExpanded ?? [],
+    untrack(() => props.defaultExpanded ?? []),
   );
   const expanded = () => props.expanded ?? uncontrolled();
   return createPartNode(
@@ -6831,7 +6826,7 @@ export const Tree = Object.assign(TreeRoot, {
  */
 export function NumberFieldRoot(props: JSX.NumberFieldProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<number | undefined>(
-    props.defaultValue,
+    untrack(() => props.defaultValue),
   );
   const [scrub, setScrubState] = createSignal<NumberFieldState>(
     settledNumberField,
@@ -7376,12 +7371,11 @@ export function TooltipProvider(props: JSX.TooltipProviderProps): NativeNode {
 /** Logical tooltip root. It creates no native element of its own. */
 export function TooltipRoot(props: JSX.TooltipRootProps): NativeNode {
   const provider = optionalContext(TooltipProviderContext);
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultOpen ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
   const [placement, setPlacement] =
     createSignal<AnchorPlacementDetails>(unresolvedPlacement);
-  const [declared, setDeclared] = createSignal<AnchorPositioning>({});
+  const [declared, setDeclared] = createSignal<AnchorPositioning>({}, { ownedWrite: true });
   const open = () => props.open ?? uncontrolled();
   const context: TooltipContextValue = {
     scope: createComponentScope("qg-tooltip"),
@@ -7574,7 +7568,7 @@ export const Toast = Object.assign(ToastRoot, {
  */
 export function DateFieldRoot(props: JSX.DateFieldProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
-    props.defaultValue,
+    untrack(() => props.defaultValue),
   );
   const value = () => props.value ?? uncontrolled();
   return createPartNode(
@@ -7623,7 +7617,7 @@ export const DateField = Object.assign(DateFieldRoot, {
  */
 export function TimeFieldRoot(props: JSX.TimeFieldProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
-    props.defaultValue,
+    untrack(() => props.defaultValue),
   );
   const value = () => props.value ?? uncontrolled();
   return createPartNode(
@@ -7684,7 +7678,7 @@ export const TimeField = Object.assign(TimeFieldRoot, {
  */
 export function CalendarRoot(props: JSX.CalendarProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
-    props.defaultValue,
+    untrack(() => props.defaultValue),
   );
   const value = () => props.value ?? uncontrolled();
   return createPartNode(
@@ -7755,7 +7749,7 @@ export const Calendar = Object.assign(CalendarRoot, {
  */
 export function MenubarRoot(props: JSX.MenubarProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<number | undefined>(
-    props.defaultOpen,
+    untrack(() => props.defaultOpen),
   );
   const open = () => (props.open === undefined ? uncontrolled() : props.open ?? undefined);
   return createPartNode(
@@ -7910,7 +7904,7 @@ const CheckboxGroupContext = createContext<CheckboxGroupContextValue | null>(
 export function CheckboxGroupRoot(props: JSX.CheckboxGroupProps): NativeNode {
   const scope = createComponentScope("qg-checkbox-group");
   const [uncontrolled, setUncontrolled] = createSignal<readonly string[]>(
-    props.defaultValue ?? [],
+    untrack(() => props.defaultValue ?? []),
   );
   const values = () => props.value ?? uncontrolled();
   const context: CheckboxGroupContextValue = { scope };
@@ -7974,9 +7968,8 @@ function requirePreviewCard(component: string): PreviewCardContextValue {
  */
 export function PreviewCardRoot(props: JSX.PreviewCardRootProps): NativeNode {
   const scope = createComponentScope("qg-preview-card");
-  const [uncontrolled, setUncontrolled] = createSignal(
-    props.defaultOpen ?? false,
-  );
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
   const open = () => props.open ?? uncontrolled();
   const context: PreviewCardContextValue = {
     scope,
@@ -8325,7 +8318,7 @@ function requireOtpField(component: string): OtpFieldContextValue {
  */
 export function OtpFieldRoot(props: JSX.OtpFieldRootProps): NativeNode {
   const scope = createComponentScope("qg-otp-field");
-  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue ?? "");
+  const [uncontrolled, setUncontrolled] = createSignal(untrack(() => props.defaultValue ?? ""));
   const value = () => props.value ?? uncontrolled();
   const context: OtpFieldContextValue = { scope };
   return createPartNode(
@@ -8439,9 +8432,8 @@ const settledDrawerSwipe: DrawerSwipeState = { swiping: false, swipeOffset: 0 };
  */
 export function DrawerRoot(props: JSX.DrawerRootProps): NativeNode {
   const scope = createComponentScope("qg-drawer");
-  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(
-    props.defaultOpen ?? false,
-  );
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(untrack(() => props.defaultOpen ?? false,
+  ));
   const [swipe, setSwipe] = createSignal<DrawerSwipeState>(settledDrawerSwipe);
   const open = () => props.open ?? uncontrolledOpen();
   const context: DrawerContextValue = {
@@ -8697,7 +8689,7 @@ export function NavigationMenuRoot(
 ): NativeNode {
   const scope = createComponentScope("qg-navigation-menu");
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
-    props.defaultValue,
+    untrack(() => props.defaultValue),
   );
   const value = () => props.value ?? uncontrolled();
   const context: NavigationMenuContextValue = { scope };
