@@ -1,18 +1,11 @@
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { GitHubButton } from './github-button'
+import { LanguageMenu } from './language-menu'
 import { Logo } from './logo'
 import { site } from '../lib/site'
 import type { RepoStats } from '../lib/stats'
 import {
-  LOCALE_LABELS,
-  SUPPORTED_LOCALES,
   localePath,
   type Locale,
 } from '../i18n'
@@ -22,46 +15,6 @@ const NAV_ITEMS = [
   { key: 'nav.code', href: '#code' },
   { key: 'nav.quickstart', href: '#quickstart' },
 ] as const
-
-function LanguageMenu() {
-  const { t, i18n } = useTranslation()
-  const current = (i18n.language as Locale) ?? 'en'
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={t('common.language')}
-          className="flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 font-mono text-xs text-foreground/90 transition-colors hover:bg-muted"
-        >
-          <span className="i-lucide-globe size-3.5" aria-hidden />
-          {LOCALE_LABELS[current]}
-          <span
-            className="i-lucide-chevron-down size-3 opacity-60"
-            aria-hidden
-          />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-32">
-        {SUPPORTED_LOCALES.map((locale) => (
-          <DropdownMenuItem key={locale} asChild>
-            <a
-              href={localePath(locale)}
-              aria-current={locale === current ? 'page' : undefined}
-              className="flex items-center justify-between gap-4"
-            >
-              {LOCALE_LABELS[locale]}
-              {locale === current ? (
-                <span className="i-lucide-check size-3.5" aria-hidden />
-              ) : null}
-            </a>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
 
 export function SiteHeader({ stats }: { stats: RepoStats }) {
   const { t, i18n } = useTranslation()
@@ -96,7 +49,11 @@ export function SiteHeader({ stats }: { stats: RepoStats }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <LanguageMenu />
+          <LanguageMenu
+            locale={current}
+            label={t('common.language')}
+            hrefForLocale={localePath}
+          />
           <GitHubButton stats={stats} />
           <Button asChild size="sm" className="hidden h-8 px-3.5 sm:inline-flex">
             <a href="#quickstart">{t('common.getStarted')}</a>

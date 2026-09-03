@@ -196,6 +196,7 @@
         "tailwind-merge": "^3.6.0",
         "tailwindcss": "^4.1.18",
         "tw-animate-css": "^1.4.0",
+        "zbsearch": "4.0.0",
       },
       "devDependencies": {
         "@cloudflare/vite-plugin": "^1.26.0",
@@ -208,9 +209,14 @@
         "@types/node": "^26.4.0",
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
+        "github-slugger": "^2.0.0",
+        "mdast-util-to-string": "^4.0.0",
         "rehype-slug": "^6.0.0",
         "remark-gfm": "^4.0.1",
+        "remark-mdx": "^3.1.1",
+        "remark-parse": "^11.0.0",
         "typescript": "^6.0.2",
+        "unified": "^11.0.5",
         "vite": "^8.0.0",
         "wrangler": "^4.127.1",
       },
@@ -1674,6 +1680,8 @@
     "youch": ["youch@4.1.0-beta.10", "", { "dependencies": { "@poppinss/colors": "^4.1.5", "@poppinss/dumper": "^0.6.4", "@speed-highlight/core": "^1.2.7", "cookie": "^1.0.2", "youch-core": "^0.3.3" } }, "sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ=="],
 
     "youch-core": ["youch-core@0.3.3", "", { "dependencies": { "@poppinss/exception": "^1.2.2", "error-stack-parser-es": "^1.0.5" } }, "sha512-ho7XuGjLaJ2hWHoK8yFnsUGy2Y5uDpqSTq1FkHLK4/oqKtyUU1AFbOOxY4IpC9f0fTLjwYbslUz0Po5BpD1wrA=="],
+
+    "zbsearch": ["zbsearch@4.0.0", "", {}, "sha512-gm4zfO31n2ZdruTTRQoWVWO4Q2+zrDt2GlrvIc+5JulRQNAm4IanCxER82vQ7Ug96FYkGqWUJBXFe1kGAcDWaQ=="],
 
     "zod": ["zod@4.1.8", "", {}, "sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ=="],
 

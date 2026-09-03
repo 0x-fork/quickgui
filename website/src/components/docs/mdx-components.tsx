@@ -96,9 +96,21 @@ function MdxHeading({
   )
 }
 
+function MdxTable({
+  children,
+  ...props
+}: ComponentPropsWithoutRef<'table'>) {
+  return (
+    <div className="docs-table-wrap">
+      <table {...props}>{children}</table>
+    </div>
+  )
+}
+
 export function getDocsMdxComponents(locale: Locale) {
   return {
     pre: MdxPre,
+    table: MdxTable,
     h2: (props: ComponentPropsWithoutRef<'h2'>) => <MdxHeading level={2} {...props} />,
     h3: (props: ComponentPropsWithoutRef<'h3'>) => <MdxHeading level={3} {...props} />,
     a: ({ href, ...props }: ComponentPropsWithoutRef<'a'>) => (

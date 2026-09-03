@@ -1,12 +1,12 @@
 import {
   useEffect,
+  useId,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { Logo } from '../logo'
 import {
   COMPONENT_NAV_GROUPS,
@@ -21,12 +21,16 @@ import {
   type DocsSlug,
 } from '../../lib/docs'
 import {
-  LOCALE_LABELS,
-  SUPPORTED_LOCALES,
   localePath,
   type Locale,
 } from '../../i18n'
 import { site } from '../../lib/site'
+import { LanguageMenu } from '../language-menu'
+import {
+  prefetchDocsSearch,
+  searchDocs,
+  type DocsSearchHit,
+} from '../../lib/docs-search'
 
 type DocsTheme = 'light' | 'dark'
 export type DocsArea = 'guide' | 'components' | 'swift-ui'
@@ -72,6 +76,11 @@ const ui = {
     search: 'Search',
     searchDocs: 'Search documentation',
     noResults: 'No documentation found.',
+    searchPrompt: 'Search every guide, component, and API.',
+    searching: 'Searching documentation…',
+    searchError: 'Search is unavailable. Try again.',
+    searchResults: '{{count}} results',
+    closeSearch: 'Close search',
     onThisPage: 'On this page',
     menu: 'Menu',
     previous: 'Previous page',
@@ -97,6 +106,11 @@ const ui = {
     search: '搜索',
     searchDocs: '搜索文档',
     noResults: '未找到相关文档。',
+    searchPrompt: '搜索所有指南、组件和 API。',
+    searching: '正在搜索文档…',
+    searchError: '搜索暂时不可用，请重试。',
+    searchResults: '{{count}} 个结果',
+    closeSearch: '关闭搜索',
     onThisPage: '本页内容',
     menu: '菜单',
     previous: '上一页',
@@ -122,6 +136,11 @@ const ui = {
     search: '検索',
     searchDocs: 'ドキュメントを検索',
     noResults: '該当するドキュメントはありません。',
+    searchPrompt: 'すべてのガイド、コンポーネント、API を検索します。',
+    searching: 'ドキュメントを検索中…',
+    searchError: '検索を利用できません。もう一度お試しください。',
+    searchResults: '{{count}} 件の結果',
+    closeSearch: '検索を閉じる',
     onThisPage: 'このページの内容',
     menu: 'メニュー',
     previous: '前のページ',
@@ -296,6 +315,50 @@ function DocsOutline({
   )
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const terms = query
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length)
+
+  if (!terms.length) return text
+  const pattern = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'gi')
+
+  return text.split(pattern).map((part, index) =>
+    terms.some((term) => term.toLocaleLowerCase() === part.toLocaleLowerCase()) ? (
+      <mark key={`${part}-${index}`}>{part}</mark>
+    ) : (
+      part
+    ),
+  )
+}
+
+function resultSnippet(hit: DocsSearchHit, query: string): string {
+  const source = hit.document.content || hit.document.keywords
+  if (!source) return ''
+
+  const lowerSource = source.toLocaleLowerCase()
+  const terms = query
+    .trim()
+    .toLocaleLowerCase()
+    .split(/\s+/)
+    .filter((term) => term.length > 1)
+  const match = terms.reduce((best, term) => {
+    const index = lowerSource.indexOf(term)
+    return index >= 0 && index < best ? index : best
+  }, Number.POSITIVE_INFINITY)
+  const center = Number.isFinite(match) ? match : 0
+  const start = Math.max(0, center - 45)
+  const end = Math.min(source.length, start + 150)
+  const snippet = source.slice(start, end).trim()
+  return `${start ? '…' : ''}${snippet}${end < source.length ? '…' : ''}`
+}
+
 function SearchDialog({
   open,
   locale,
@@ -306,36 +369,117 @@ function SearchDialog({
   onClose: () => void
 }) {
   const [query, setQuery] = useState('')
+  const [results, setResults] = useState<DocsSearchHit[]>([])
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  const groups = useMemo(() => navGroups(locale), [locale])
-  const pages = useMemo(() => groups.flatMap((group) => group.items), [groups])
+  const dialogRef = useRef<HTMLElement>(null)
+  const resultsId = useId()
+  const navigate = useNavigate()
+  const labels = ui[locale]
 
   useEffect(() => {
     if (!open) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const previousOverflow = document.body.style.overflow
     setQuery('')
-    requestAnimationFrame(() => inputRef.current?.focus())
-  }, [open])
+    setResults([])
+    setStatus('idle')
+    setActiveIndex(0)
+    document.body.style.overflow = 'hidden'
+    prefetchDocsSearch(locale)
+    const frame = requestAnimationFrame(() => inputRef.current?.focus())
 
-  const results = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase()
-    if (!needle) return pages
-    return pages.filter((page) =>
-      `${page.title} ${page.description} ${page.terms}`
-        .toLocaleLowerCase()
-        .includes(needle),
-    )
-  }, [pages, query])
+    return () => {
+      cancelAnimationFrame(frame)
+      document.body.style.overflow = previousOverflow
+      previouslyFocused?.focus()
+    }
+  }, [locale, open])
+
+  useEffect(() => {
+    if (!open) return
+    const term = query.trim()
+    if (!term) {
+      setResults([])
+      setStatus('idle')
+      setActiveIndex(0)
+      return
+    }
+
+    let cancelled = false
+    setStatus('loading')
+    const timeout = window.setTimeout(() => {
+      void searchDocs(locale, term)
+        .then((hits) => {
+          if (cancelled) return
+          setResults(hits)
+          setStatus('ready')
+          setActiveIndex(0)
+        })
+        .catch(() => {
+          if (!cancelled) setStatus('error')
+        })
+    }, 70)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [locale, open, query])
+
+  useEffect(() => {
+    if (!open || !results[activeIndex]) return
+    document
+      .getElementById(`${resultsId}-${activeIndex}`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex, open, results, resultsId])
 
   if (!open) return null
+
+  function selectResult(hit: DocsSearchHit) {
+    onClose()
+    void navigate(hit.document.url)
+  }
+
+  function resultArea(hit: DocsSearchHit): string {
+    if (hit.document.area === 'swift-ui') return labels.swiftUi
+    if (hit.document.area === 'solid') return labels.components
+    return labels.guide
+  }
 
   return (
     <div className="docs-search-backdrop" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="docs-search-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={ui[locale].searchDocs}
+        aria-label={labels.searchDocs}
         onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            onClose()
+            return
+          }
+          if (event.key !== 'Tab') return
+
+          const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+            'input, button, a[href]:not([tabindex="-1"])',
+          )
+          if (!focusable?.length) return
+          const first = focusable[0]
+          const last = focusable[focusable.length - 1]
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last.focus()
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first.focus()
+          }
+        }}
       >
         <div className="docs-search-field">
           <span className="i-lucide-search" aria-hidden />
@@ -343,22 +487,105 @@ function SearchDialog({
             ref={inputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={ui[locale].searchDocs}
-            aria-label={ui[locale].searchDocs}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown' && results.length) {
+                event.preventDefault()
+                setActiveIndex((current) => (current + 1) % results.length)
+              } else if (event.key === 'ArrowUp' && results.length) {
+                event.preventDefault()
+                setActiveIndex((current) =>
+                  current === 0 ? results.length - 1 : current - 1,
+                )
+              } else if (event.key === 'Home' && results.length) {
+                event.preventDefault()
+                setActiveIndex(0)
+              } else if (event.key === 'End' && results.length) {
+                event.preventDefault()
+                setActiveIndex(results.length - 1)
+              } else if (event.key === 'Enter' && results[activeIndex]) {
+                event.preventDefault()
+                selectResult(results[activeIndex])
+              }
+            }}
+            placeholder={labels.searchDocs}
+            aria-label={labels.searchDocs}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls={resultsId}
+            aria-expanded={results.length > 0}
+            aria-activedescendant={
+              results[activeIndex] ? `${resultsId}-${activeIndex}` : undefined
+            }
           />
-          <button type="button" onClick={onClose}>Esc</button>
+          <button type="button" onClick={onClose} aria-label={labels.closeSearch}>
+            Esc
+          </button>
         </div>
         <div className="docs-search-results">
+          <div className="docs-search-status" aria-live="polite">
+            {status === 'loading'
+              ? labels.searching
+              : status === 'ready' && results.length
+                  ? labels.searchResults.replace('{{count}}', String(results.length))
+                  : ''}
+          </div>
+
+          {status === 'idle' ? (
+            <div className="docs-search-empty">
+              <span className="i-lucide-files" aria-hidden />
+              <p>{labels.searchPrompt}</p>
+            </div>
+          ) : null}
+          {status === 'ready' && !results.length ? (
+            <div className="docs-search-empty">
+              <span className="i-lucide-search-x" aria-hidden />
+              <p>{labels.noResults}</p>
+            </div>
+          ) : null}
+          {status === 'error' ? (
+            <div className="docs-search-empty docs-search-error">
+              <span className="i-lucide-circle-alert" aria-hidden />
+              <p>{labels.searchError}</p>
+            </div>
+          ) : null}
+
           {results.length ? (
-            results.map((result) => (
-              <a href={localize(locale, result.path)} key={result.path}>
-                <span>{result.title}</span>
-                <small>{result.description}</small>
-              </a>
-            ))
-          ) : (
-            <p>{ui[locale].noResults}</p>
-          )}
+            <ul id={resultsId} role="listbox" aria-label={labels.searchResults.replace('{{count}}', String(results.length))}>
+              {results.map((result, index) => {
+                const title = result.document.section || result.document.pageTitle
+                const snippet = resultSnippet(result, query)
+                return (
+                  <li
+                    id={`${resultsId}-${index}`}
+                    key={result.id}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                  >
+                    <Link
+                      to={result.document.url}
+                      tabIndex={-1}
+                      onClick={onClose}
+                      onMouseMove={() => setActiveIndex(index)}
+                    >
+                      <span className="docs-search-result-path">
+                        {resultArea(result)}
+                        <span aria-hidden>›</span>
+                        {result.document.pageTitle}
+                      </span>
+                      <strong>
+                        <HighlightedText text={title} query={query} />
+                      </strong>
+                      {snippet ? (
+                        <small>
+                          <HighlightedText text={snippet} query={query} />
+                        </small>
+                      ) : null}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
         </div>
       </section>
     </div>
@@ -373,6 +600,7 @@ function DocsHeader({
   menuOpen,
   onMenuToggle,
   onSearch,
+  onSearchPrepare,
   onThemeToggle,
 }: {
   area: DocsArea
@@ -382,6 +610,7 @@ function DocsHeader({
   menuOpen: boolean
   onMenuToggle: () => void
   onSearch: () => void
+  onSearchPrepare: () => void
   onThemeToggle: () => void
 }) {
   const labels = ui[locale]
@@ -416,43 +645,34 @@ function DocsHeader({
             type="button"
             className="docs-search-button"
             onClick={onSearch}
+            onFocus={onSearchPrepare}
+            onPointerEnter={onSearchPrepare}
             aria-label={labels.searchDocs}
           >
             <span className="i-lucide-search" aria-hidden />
             <span>{labels.search}</span>
             <kbd>⌘ K</kbd>
           </button>
-          <label className="docs-language-select">
-            <span className="sr-only">{labels.language}</span>
-            <select
-              value={locale}
-              aria-label={labels.language}
-              onChange={(event) => {
-                window.location.assign(
-                  localize(event.currentTarget.value as Locale, currentPath),
-                )
-              }}
-            >
-              {SUPPORTED_LOCALES.map((candidate) => (
-                <option key={candidate} value={candidate}>
-                  {LOCALE_LABELS[candidate]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <LanguageMenu
+            locale={locale}
+            label={labels.language}
+            hrefForLocale={(candidate) => localize(candidate, currentPath)}
+          />
           <button
             type="button"
             className="docs-theme-button"
             onClick={onThemeToggle}
+            aria-pressed={theme === 'dark'}
             aria-label={labels.theme.replace(
               '{{theme}}',
               theme === 'light' ? labels.dark : labels.light,
             )}
           >
-            <span
-              className={theme === 'light' ? 'i-lucide-sun' : 'i-lucide-moon'}
-              aria-hidden
-            />
+            <span className="docs-theme-thumb" aria-hidden>
+              <span
+                className={theme === 'light' ? 'i-lucide-sun' : 'i-lucide-moon'}
+              />
+            </span>
           </button>
           <a
             className="docs-github-link"
@@ -517,8 +737,22 @@ export function DocsShell({
 
   useEffect(() => {
     const saved = window.localStorage.getItem('quickgui-docs-theme')
-    if (saved === 'light' || saved === 'dark') setTheme(saved)
+    if (saved === 'light' || saved === 'dark') {
+      setTheme(saved)
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark')
+    }
   }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.docsTheme = theme
+    root.classList.toggle('dark', theme === 'dark')
+    return () => {
+      delete root.dataset.docsTheme
+      root.classList.remove('dark')
+    }
+  }, [theme])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -553,6 +787,7 @@ export function DocsShell({
         menuOpen={mobilePanel === 'menu'}
         onMenuToggle={() => setMobilePanel((current) => current === 'menu' ? null : 'menu')}
         onSearch={() => setSearchOpen(true)}
+        onSearchPrepare={() => prefetchDocsSearch(locale)}
         onThemeToggle={toggleTheme}
       />
 
