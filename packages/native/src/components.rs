@@ -23,6 +23,14 @@ pub(super) const SLIDER_TRACK_PART: &str = "slider-track";
 pub(super) const SLIDER_RANGE_PART: &str = "slider-range";
 /// Declared part name of one slider thumb.
 pub(super) const SLIDER_THUMB_PART: &str = "slider-thumb";
+/// Declared part name of a slider label.
+pub(super) const SLIDER_LABEL_PART: &str = "slider-label";
+/// Declared part name of a slider value readout.
+pub(super) const SLIDER_VALUE_PART: &str = "slider-value";
+/// Declared part name of a slider control box.
+pub(super) const SLIDER_CONTROL_PART: &str = "slider-control";
+/// Declared part name of a slider indicator, Base UI's name for the range fill.
+pub(super) const SLIDER_INDICATOR_PART: &str = "slider-indicator";
 /// Declared part name of a splitter root.
 pub(super) const SPLITTER_PART: &str = "splitter";
 /// Declared part name of one splitter pane.
@@ -33,6 +41,16 @@ pub(super) const SPLITTER_HANDLE_PART: &str = "splitter-handle";
 pub(super) const TOOLBAR_PART: &str = "toolbar";
 /// Declared part name of one toolbar item.
 pub(super) const TOOLBAR_ITEM_PART: &str = "toolbar-item";
+/// Declared part name of one toolbar button.
+pub(super) const TOOLBAR_BUTTON_PART: &str = "toolbar-button";
+/// Declared part name of one toolbar link.
+pub(super) const TOOLBAR_LINK_PART: &str = "toolbar-link";
+/// Declared part name of one toolbar input.
+pub(super) const TOOLBAR_INPUT_PART: &str = "toolbar-input";
+/// Declared part name of one toolbar group.
+pub(super) const TOOLBAR_GROUP_PART: &str = "toolbar-group";
+/// Declared part name of one toolbar separator.
+pub(super) const TOOLBAR_SEPARATOR_PART: &str = "toolbar-separator";
 /// Declared part name of a toggle-group root.
 pub(super) const TOGGLE_GROUP_PART: &str = "toggle-group";
 /// Declared part name of one toggle-group item.
@@ -58,6 +76,13 @@ pub(super) struct DeclaredItem {
     pub(super) value: String,
     #[serde(default)]
     pub(super) disabled: bool,
+    /// Base UI's `focusableWhenDisabled`. A disabled toolbar item stays discoverable by default.
+    #[serde(default = "default_focusable_when_disabled")]
+    pub(super) focusable_when_disabled: bool,
+}
+
+const fn default_focusable_when_disabled() -> bool {
+    true
 }
 
 /// One declared splitter pane constraint.
@@ -172,10 +197,28 @@ pub(super) fn name_of(names: &[String], id: ElementId) -> Option<String> {
 #[derive(Default)]
 pub(super) struct NativeSliderState {
     pub(super) state: SliderState,
+    /// The bounded `format` name a `Slider.Value` renders through, if one was declared.
+    pub(super) format: Option<Arc<str>>,
+    /// Set by the core's own pointer boundary, cleared once the commit has been reported.
+    pub(super) committed: bool,
     owner: u32,
     listens: bool,
+    /// Everything but the values, so an unchanged declaration never rebuilds the retained state.
+    props: Arc<str>,
     declared: Vec<f64>,
     reported: Vec<f64>,
+    reported_dragging: bool,
+}
+
+/// Resolve one bounded declared `format` name into the core's shared value formatter.
+///
+/// An unknown name declares no formatter at all, so the raw number is reported unchanged.
+pub(super) fn declared_value_format(name: Option<&str>) -> Option<ValueFormat> {
+    match name {
+        Some("percent") => Some(ValueFormat::percent()),
+        Some("fraction") => Some(ValueFormat::fraction()),
+        _ => None,
+    }
 }
 
 /// One retained splitter instance.
@@ -244,8 +287,14 @@ pub(super) struct NativeComponentStates {
     pub(super) autocompletes: HashMap<u64, NativeAutocompleteState>,
     pub(super) tables: HashMap<u64, NativeTableState>,
     pub(super) trees: HashMap<u64, NativeTreeState>,
+    pub(super) tabs: HashMap<u64, NativeTabsState>,
+    pub(super) fields: HashMap<u64, NativeFieldState>,
+    pub(super) dialogs: HashMap<u64, NativeDialogState>,
+    pub(super) gauges: HashMap<u64, NativeGaugeState>,
     /// Retained Base UI parity instances declared in this window.
     pub(super) base_ui: NativeBaseUiStates,
+    /// Retained Base UI-aligned popover and tooltip instances declared in this window.
+    pub(super) popovers: NativePopoverStates,
 }
 
 impl NativeComponentStates {
@@ -256,6 +305,7 @@ impl NativeComponentStates {
     /// pass leaves as one asynchronous `componentchange` event, which is the only way a result
     /// crosses back to the hosted runtime.
     pub(super) fn sync(&mut self, tree: &NativeTree, window: u32, events: &EventQueue) {
+        self.sync_aligned(tree, window, events);
         let mut sliders = HashSet::new();
         let mut splitters = HashSet::new();
         let mut toolbars = HashSet::new();
@@ -355,6 +405,9 @@ impl NativeComponentStates {
         self.report_fields(window, events);
         self.report_pickers(window, events);
         self.sync_base_ui(tree, window, events);
+        let mut popovers = std::mem::take(&mut self.popovers);
+        popovers.sync(tree, window, events);
+        self.popovers = popovers;
     }
 
     fn sync_slider(&mut self, key: u64, id: u32, node: &NativeNode) {
@@ -376,6 +429,16 @@ impl NativeComponentStates {
             if let Some(large_step) = node.number(property::LARGE_STEP) {
                 state = state.large_step(f64::from(large_step));
             }
+            if let Some(steps) = node
+                .number(property::MIN_STEPS_BETWEEN_VALUES)
+                .filter(|steps| *steps >= 0.0 && *steps < MAX_COMPONENT_VALUES as f32)
+            {
+                state = state.min_steps_between_values(steps as usize);
+            }
+            state = state.thumb_alignment(match node.string(property::THUMB_ALIGNMENT) {
+                Some("edge") => SliderThumbAlignment::Edge,
+                _ => SliderThumbAlignment::Center,
+            });
             state
                 .orientation(match node.string(property::ORIENTATION) {
                     Some("vertical") => SliderOrientation::Vertical,
@@ -386,19 +449,39 @@ impl NativeComponentStates {
         let state = build(&declared);
         let listens = declares_change(node);
         let normalized = state.values().to_vec();
+        let format = node
+            .string(property::FORMAT)
+            .filter(|name| name.len() <= MAX_COMPONENT_VALUE_BYTES)
+            .map(Arc::from);
+        let props = declaration_fingerprint(
+            node,
+            &[
+                property::MINIMUM,
+                property::MAXIMUM,
+                property::STEP,
+                property::LARGE_STEP,
+                property::MIN_STEPS_BETWEEN_VALUES,
+                property::THUMB_ALIGNMENT,
+                property::ORIENTATION,
+                property::DISABLED,
+            ],
+        );
         match self.sliders.get_mut(&key) {
             Some(retained) => {
                 retained.owner = id;
                 retained.listens = listens;
+                retained.format = format;
                 if retained.declared != normalized {
                     retained.declared = normalized.clone();
                     retained.reported = normalized;
+                    retained.props = props;
                     retained.state = state;
-                } else {
-                    // The declaration is unchanged, so the core keeps the values and active thumb
-                    // it decided; everything else in the declaration is replayed onto them.
+                } else if retained.props != props {
+                    // Only a changed declaration rebuilds the retained state: rebuilding every
+                    // frame would drop the core's own active thumb and `data-dragging` flag.
                     let values = retained.state.values().to_vec();
                     let active = retained.state.active_thumb();
+                    retained.props = props;
                     retained.state = build(&values);
                     retained.state.set_active_thumb(active);
                 }
@@ -408,10 +491,14 @@ impl NativeComponentStates {
                     key,
                     NativeSliderState {
                         state,
+                        format,
+                        committed: false,
                         owner: id,
                         listens,
+                        props,
                         declared: normalized.clone(),
                         reported: normalized,
+                        reported_dragging: false,
                     },
                 );
             }
@@ -487,7 +574,9 @@ impl NativeComponentStates {
         let items = declared_items
             .iter()
             .map(|item| {
-                ToolbarItem::new(ElementId::named(item.value.as_str())).disabled(item.disabled)
+                ToolbarItem::new(ElementId::named(item.value.as_str()))
+                    .disabled(item.disabled)
+                    .focusable_when_disabled(item.focusable_when_disabled)
             })
             .collect::<Vec<_>>();
         let orientation = match node.string(property::ORIENTATION) {
@@ -603,16 +692,29 @@ impl NativeComponentStates {
     fn report(&mut self, window: u32, events: &EventQueue) {
         for retained in self.sliders.values_mut() {
             let values = retained.state.values().to_vec();
-            if values == retained.reported {
+            let dragging = retained.state.is_dragging();
+            let committed = std::mem::take(&mut retained.committed);
+            if values == retained.reported && dragging == retained.reported_dragging && !committed {
                 continue;
             }
             retained.reported = values.clone();
+            retained.reported_dragging = dragging;
             if retained.listens {
+                // `onValueCommitted` is the core's own pointer boundary: it flags the frame the
+                // captured gesture released, never a value JavaScript has to debounce itself.
+                let slider = Slider::new(ElementId::new(0), &retained.state);
+                let display = declared_value_format(retained.format.as_deref())
+                    .map(|format| slider.display_value(&format).to_string());
                 enqueue_component_change(
                     events,
                     window,
                     retained.owner,
-                    serde_json::json!({ "values": values }),
+                    serde_json::json!({
+                        "values": values,
+                        "dragging": dragging,
+                        "committed": committed,
+                        "displayValue": display,
+                    }),
                 );
             }
         }
@@ -665,6 +767,391 @@ impl NativeComponentStates {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Base UI-aligned tabs, fields, dialogs, and gauges
+//
+// Each of these components was already bound as a stateless part descriptor. What is retained
+// here is only what the core itself decides and the declaration cannot: which way the tab
+// selection travelled, where the active tab was really laid out, which triggers a field's
+// validation mode answers, when a dialog's exit transition finished, and what a progress or meter
+// value formats to. Every one of them leaves as one asynchronous `componentchange` event.
+// ---------------------------------------------------------------------------
+
+/// One retained tab set.
+#[derive(Default)]
+pub(super) struct NativeTabsState {
+    pub(super) state: TabsState,
+    /// The active tab's laid-out box, published by the core during the paint it already performed.
+    pub(super) geometry: AnchorPlacementHandle,
+    owner: u32,
+    listens: bool,
+    reported: Option<serde_json::Value>,
+}
+
+/// One retained field.
+#[derive(Default)]
+pub(super) struct NativeFieldState {
+    owner: u32,
+    listens: bool,
+    reported: Option<serde_json::Value>,
+}
+
+/// One retained dialog, holding the surface mounted for its own exit transition.
+#[derive(Default)]
+pub(super) struct NativeDialogState {
+    pub(super) state: DialogState,
+    pub(super) exit: Duration,
+    /// A declared open value the binding has not handed to the core's transition yet.
+    pub(super) pending: Option<bool>,
+    declared_open: bool,
+    owner: u32,
+    listens: bool,
+    reported: Option<bool>,
+}
+
+impl NativeDialogState {
+    /// Whether the surface is mounted this frame.
+    ///
+    /// A pending close keeps it mounted exactly when the declared exit transition is longer than
+    /// nothing at all, so a dialog with no transition still disappears on the frame it closed.
+    pub(super) fn is_mounted(&self) -> bool {
+        match self.pending {
+            Some(true) => true,
+            Some(false) => self.exit > Duration::ZERO,
+            None => self.declared_open || self.state.is_mounted(),
+        }
+    }
+}
+
+/// One retained progress bar or meter.
+#[derive(Default)]
+pub(super) struct NativeGaugeState {
+    owner: u32,
+    listens: bool,
+    reported: Option<serde_json::Value>,
+}
+
+/// Base UI's `Field.Root validationMode`.
+pub(super) fn declared_validation_mode(node: &NativeNode) -> FieldValidationMode {
+    match node.string(property::VALIDATION_MODE) {
+        Some("onBlur") => FieldValidationMode::OnBlur,
+        Some("onChange") => FieldValidationMode::OnChange,
+        _ => FieldValidationMode::OnSubmit,
+    }
+}
+
+/// Base UI's `Field.Root validationDebounceTime`, in milliseconds.
+pub(super) fn declared_validation_debounce(node: &NativeNode) -> Duration {
+    match node.number(property::VALIDATION_DEBOUNCE_TIME) {
+        Some(ms) if ms.is_finite() && ms >= 0.0 => {
+            Duration::from_secs_f32(ms / 1000.0).min(MAX_FIELD_VALIDATION_DEBOUNCE)
+        }
+        _ => Duration::ZERO,
+    }
+}
+
+/// Read one declared bounded array of booleans, such as a parent checkbox's children.
+pub(super) fn declared_flags(node: &NativeNode, key: u16) -> Vec<bool> {
+    let Some(source) = bounded_json(node, key) else {
+        return Vec::new();
+    };
+    let Ok(values) = serde_json::from_str::<Vec<bool>>(source) else {
+        return Vec::new();
+    };
+    values.into_iter().take(MAX_COMPONENT_ITEMS).collect()
+}
+
+impl NativeComponentStates {
+    /// Reseed the Base UI-aligned tab, field, dialog, and gauge instances declared this frame.
+    fn sync_aligned(&mut self, tree: &NativeTree, window: u32, events: &EventQueue) {
+        // A tab names its own position, so the core records which way the selection travelled.
+        let mut indices: HashMap<u64, HashMap<ElementId, usize>> = HashMap::new();
+        for (id, node) in &tree.nodes {
+            if node.string(property::PART) != Some("tab") {
+                continue;
+            }
+            let Some(value) = native_part_value(node, property::PART_VALUE) else {
+                continue;
+            };
+            let entry = indices.entry(component_key(*id, node)).or_default();
+            if entry.len() < MAX_COMPONENT_ITEMS {
+                entry.insert(value, declared_index(node));
+            }
+        }
+
+        let mut tabs = HashSet::new();
+        let mut fields = HashSet::new();
+        let mut dialogs = HashSet::new();
+        let mut gauges = HashSet::new();
+        for (id, node) in &tree.nodes {
+            let Some(part) = node.string(property::PART) else {
+                continue;
+            };
+            let key = component_key(*id, node);
+            match part {
+                "tabs" if tabs.len() < MAX_COMPONENT_INSTANCES => {
+                    tabs.insert(key);
+                    let retained = self.tabs.entry(key).or_default();
+                    retained.owner = *id;
+                    retained.listens = declares_change(node);
+                    match native_part_value(node, property::ACTIVE_VALUE) {
+                        Some(active) => {
+                            let index = indices
+                                .get(&key)
+                                .and_then(|values| values.get(&active))
+                                .copied()
+                                .unwrap_or(0);
+                            retained.state.select_at(active, index);
+                        }
+                        None => {
+                            retained.state.clear();
+                        }
+                    }
+                }
+                "field" if fields.len() < MAX_COMPONENT_INSTANCES => {
+                    fields.insert(key);
+                    let retained = self.fields.entry(key).or_default();
+                    retained.owner = *id;
+                    retained.listens = declares_change(node);
+                }
+                "dialog" if dialogs.len() < MAX_COMPONENT_INSTANCES => {
+                    dialogs.insert(key);
+                    let declared_open = node.boolean(property::OPEN).unwrap_or(false);
+                    let retained = self.dialogs.entry(key).or_default();
+                    retained.owner = *id;
+                    retained.listens = declares_change(node);
+                    retained.exit = declared_deadline(node, property::EXIT_DURATION);
+                    if retained.declared_open != declared_open {
+                        retained.declared_open = declared_open;
+                        retained.pending = Some(declared_open);
+                    }
+                }
+                "progress" | "meter" if gauges.len() < MAX_COMPONENT_INSTANCES => {
+                    gauges.insert(key);
+                    let retained = self.gauges.entry(key).or_default();
+                    retained.owner = *id;
+                    retained.listens = declares_change(node);
+                }
+                _ => {}
+            }
+        }
+        self.tabs.retain(|key, _| tabs.contains(key));
+        self.fields.retain(|key, _| fields.contains(key));
+        self.dialogs.retain(|key, _| dialogs.contains(key));
+        self.gauges.retain(|key, _| gauges.contains(key));
+
+        for (id, node) in &tree.nodes {
+            let Some(part) = node.string(property::PART) else {
+                continue;
+            };
+            let key = component_key(*id, node);
+            match part {
+                "tabs" => self.report_tabs(key, node, window, events),
+                "field" => self.report_field(key, node, window, events),
+                "progress" | "meter" => self.report_gauge(key, part, id, node, window, events),
+                _ => {}
+            }
+        }
+        for retained in self.dialogs.values_mut() {
+            let complete = retained.state.open_change_complete();
+            if complete == retained.reported {
+                continue;
+            }
+            retained.reported = complete;
+            if let (true, Some(complete)) = (retained.listens, complete) {
+                enqueue_component_change(
+                    events,
+                    window,
+                    retained.owner,
+                    serde_json::json!({ "openChangeComplete": complete }),
+                );
+            }
+        }
+    }
+
+    fn report_tabs(&mut self, key: u64, node: &NativeNode, window: u32, events: &EventQueue) {
+        let Some(retained) = self.tabs.get_mut(&key) else {
+            return;
+        };
+        let tabs = Tabs::from_state(ElementId::new(key), &retained.state);
+        let geometry = tabs.indicator_geometry(&retained.geometry);
+        let snapshot = serde_json::json!({
+            "activationDirection": match tabs.activation_direction() {
+                TabsActivationDirection::Left => "left",
+                TabsActivationDirection::Right => "right",
+                TabsActivationDirection::Up => "up",
+                TabsActivationDirection::Down => "down",
+                TabsActivationDirection::None => "none",
+            },
+            "indicator": geometry.map(|geometry| serde_json::json!({
+                "left": geometry.left,
+                "top": geometry.top,
+                "width": geometry.width,
+                "height": geometry.height,
+            })),
+        });
+        if retained.reported.as_ref() == Some(&snapshot) {
+            return;
+        }
+        retained.reported = Some(snapshot.clone());
+        let _ = node;
+        if retained.listens {
+            enqueue_component_change(events, window, retained.owner, snapshot);
+        }
+    }
+
+    fn report_field(&mut self, key: u64, node: &NativeNode, window: u32, events: &EventQueue) {
+        let Some(retained) = self.fields.get_mut(&key) else {
+            return;
+        };
+        // The core owns the validation-mode contract, so the binding reports its answers rather
+        // than letting JavaScript re-derive which triggers validate and after how long.
+        let field = Field::new(ElementId::new(key))
+            .validation_mode(declared_validation_mode(node))
+            .validation_debounce(declared_validation_debounce(node));
+        let delay = |trigger| {
+            field
+                .validation_delay(trigger)
+                .map(|delay| delay.as_secs_f64() * 1000.0)
+        };
+        let snapshot = serde_json::json!({
+            "validation": {
+                "change": field.should_validate(FieldValidationTrigger::Change),
+                "blur": field.should_validate(FieldValidationTrigger::Blur),
+                "submit": field.should_validate(FieldValidationTrigger::Submit),
+            },
+            "validationDelay": {
+                "change": delay(FieldValidationTrigger::Change),
+                "blur": delay(FieldValidationTrigger::Blur),
+                "submit": delay(FieldValidationTrigger::Submit),
+            },
+        });
+        if retained.reported.as_ref() == Some(&snapshot) {
+            return;
+        }
+        retained.reported = Some(snapshot.clone());
+        if retained.listens {
+            enqueue_component_change(events, window, retained.owner, snapshot);
+        }
+    }
+
+    fn report_gauge(
+        &mut self,
+        key: u64,
+        part: &str,
+        id: &u32,
+        node: &NativeNode,
+        window: u32,
+        events: &EventQueue,
+    ) {
+        let Some(retained) = self.gauges.get_mut(&key) else {
+            return;
+        };
+        let format = declared_value_format(node.string(property::FORMAT));
+        let snapshot = if part == "progress" {
+            let progress = native_progress(*id, node);
+            serde_json::json!({
+                "status": match progress.status() {
+                    ProgressStatus::Complete => "complete",
+                    ProgressStatus::Indeterminate => "indeterminate",
+                    ProgressStatus::Progressing => "progressing",
+                },
+                "displayValue": progress.display_value().map(|value| value.to_string()),
+                "completion": progress.completion(),
+            })
+        } else {
+            let meter = native_meter(*id, node);
+            serde_json::json!({
+                "status": "progressing",
+                "displayValue": meter.display_value().map(|value| value.to_string()),
+                "completion": Some(meter.completion()),
+            })
+        };
+        let _ = format;
+        if retained.reported.as_ref() == Some(&snapshot) {
+            return;
+        }
+        retained.reported = Some(snapshot.clone());
+        if retained.listens {
+            enqueue_component_change(events, window, retained.owner, snapshot);
+        }
+    }
+}
+
+/// Read one bounded declared millisecond transition, clamped by the core itself.
+fn declared_deadline(node: &NativeNode, key: u16) -> Duration {
+    match node.number(key) {
+        Some(ms) if ms.is_finite() && ms >= 0.0 => {
+            Duration::from_secs_f32(ms / 1000.0).min(MAX_DIALOG_TRANSITION)
+        }
+        _ => Duration::ZERO,
+    }
+}
+
+/// A per-instance accessor from the hosted view to one declared dialog's retained state.
+fn dialog_accessor(key: u64) -> StateAccessor<NativeView, DialogState> {
+    StateAccessor::new(move |view: &mut NativeView| {
+        &mut view.components.dialogs.entry(key).or_default().state
+    })
+}
+
+/// Apply one declared dialog part, including the exit transition the core holds it mounted for.
+pub(super) fn apply_dialog_part(
+    element: Element,
+    part: &str,
+    id: u32,
+    node: &NativeNode,
+    components: &NativeComponentStates,
+    cx: &mut ViewContext<'_, NativeView>,
+    listeners_enabled: bool,
+) -> Option<Element> {
+    if part != "dialog" && part != "dialog-viewport" {
+        return Some(element);
+    }
+    let key = component_key(id, node);
+    let dialog = native_dialog(id, node);
+    if part == "dialog-viewport" {
+        return Some(dialog.viewport_part(element));
+    }
+    let Some(retained) = components.dialogs.get(&key) else {
+        return dialog.is_open().then(|| dialog.root_part(element));
+    };
+    // The declared open value is handed to the core's own transition on the next event-loop turn,
+    // which is the only place a `DialogState` can arm its exact deadline.
+    if listeners_enabled && retained.pending.is_some() {
+        let enter = declared_deadline(node, property::ENTER_DURATION);
+        let exit = retained.exit;
+        // Dropping the handle would cancel the task, so it is detached: the transition belongs
+        // to the core from here on.
+        if let Ok(task) = cx.spawn(move |task_cx| async move {
+            let _ = task_cx
+                .update(move |view: &mut NativeView, cx| {
+                    let entry = view.components.dialogs.entry(key).or_default();
+                    let Some(open) = entry.pending.take() else {
+                        return;
+                    };
+                    let state = std::mem::take(&mut entry.state)
+                        .enter_duration(enter)
+                        .exit_duration(exit);
+                    entry.state = state;
+                    dialog_accessor(key)
+                        .get(view)
+                        .set_open_with(open, dialog_accessor(key), cx);
+                    // The completion is published on the next pass, so the window is asked for
+                    // exactly one frame even when the transition finished with no task at all.
+                    cx.invalidate();
+                })
+                .await;
+        }) {
+            task.detach();
+        }
+    }
+    if !retained.is_mounted() {
+        return None;
+    }
+    Some(dialog.root_part(element))
 }
 
 pub(super) fn enqueue_component_change(
@@ -787,6 +1274,28 @@ pub(super) fn apply_component_part(
     let key = component_key(id, node);
     let root = ElementId::new(key);
     match part {
+        // An indicator that declares a placement is kept on the tab that is really active and
+        // publishes that tab's laid-out box back through the core's own placement handle.
+        "tab-indicator" => {
+            let Some(retained) = components.tabs.get(&key) else {
+                return element;
+            };
+            let Some(value) = native_part_value(node, property::PART_VALUE) else {
+                return element;
+            };
+            let Some(placement) = node
+                .string(property::ANCHOR_PLACEMENT)
+                .and_then(parse_anchor_placement)
+            else {
+                return element;
+            };
+            let tab = Tabs::from_state(root, &retained.state).tab(value);
+            if !tab.is_active() {
+                return element;
+            }
+            tab.tracked_indicator_part(element, placement, &retained.geometry)
+                .expect("an active tab always mounts its indicator")
+        }
         SLIDER_PART => {
             let Some(retained) = components.sliders.get(&key) else {
                 return element;
@@ -810,18 +1319,35 @@ pub(super) fn apply_component_part(
             if !listeners_enabled {
                 return element;
             }
-            let access = slider_accessor(key);
             // The core delivers the captured track's own laid-out size with the event, so the
-            // binding never re-derives geometry the layout already decided.
+            // binding never re-derives geometry the layout already decided, and it reports the
+            // core's own commit boundary rather than inventing one.
             let drag = cx.pointer_listener(slider.track_id(), move |view, event, cx| {
-                if access.get(view).apply_pointer(event, event.size) {
+                let retained = view.components.sliders.entry(key).or_default();
+                let change = retained.state.apply_pointer_change(event, event.size);
+                if change.committed {
+                    retained.committed = true;
+                }
+                if change.changed || change.committed {
                     cx.invalidate();
                 }
             });
             element.on_pointer(drag)
         }
-        SLIDER_RANGE_PART => match components.sliders.get(&key) {
-            Some(retained) => Slider::new(root, &retained.state).range_part(element),
+        SLIDER_RANGE_PART | SLIDER_INDICATOR_PART => match components.sliders.get(&key) {
+            Some(retained) => Slider::new(root, &retained.state).indicator_part(element),
+            None => element,
+        },
+        SLIDER_CONTROL_PART => match components.sliders.get(&key) {
+            Some(retained) => Slider::new(root, &retained.state).control_part(element),
+            None => element,
+        },
+        SLIDER_LABEL_PART => match components.sliders.get(&key) {
+            Some(retained) => Slider::new(root, &retained.state).label_part(element),
+            None => element,
+        },
+        SLIDER_VALUE_PART => match components.sliders.get(&key) {
+            Some(retained) => Slider::new(root, &retained.state).value_part(element),
             None => element,
         },
         SLIDER_THUMB_PART => {
@@ -881,7 +1407,19 @@ pub(super) fn apply_component_part(
                 .root_part(element),
             None => element,
         },
-        TOOLBAR_ITEM_PART => {
+        TOOLBAR_GROUP_PART => match components.toolbars.get(&key) {
+            Some(retained) => Toolbar::new(root, &retained.state, &retained.items)
+                .orientation(retained.orientation)
+                .group_part(element),
+            None => element,
+        },
+        TOOLBAR_SEPARATOR_PART => match components.toolbars.get(&key) {
+            Some(retained) => Toolbar::new(root, &retained.state, &retained.items)
+                .orientation(retained.orientation)
+                .separator_part(element),
+            None => element,
+        },
+        TOOLBAR_ITEM_PART | TOOLBAR_BUTTON_PART | TOOLBAR_LINK_PART | TOOLBAR_INPUT_PART => {
             let Some(retained) = components.toolbars.get(&key) else {
                 return element;
             };
@@ -894,7 +1432,14 @@ pub(super) fn apply_component_part(
             let Some(entry) = toolbar.item(value) else {
                 return element;
             };
-            let element = entry.item_part(element);
+            // Base UI's Button, Link, and Input each keep the roving-focus contract and differ
+            // only in the role the core projects for them.
+            let element = match part {
+                TOOLBAR_BUTTON_PART => entry.button_part(element),
+                TOOLBAR_LINK_PART => entry.link_part(element),
+                TOOLBAR_INPUT_PART => entry.input_part(element),
+                _ => entry.item_part(element),
+            };
             if !listeners_enabled {
                 return element;
             }
@@ -978,11 +1523,14 @@ pub(super) fn component_part_element_id(id: u32, node: &NativeNode) -> Option<El
     Some(match part {
         SLIDER_PART | SPLITTER_PART | TOOLBAR_PART | TOGGLE_GROUP_PART => root,
         SLIDER_TRACK_PART => slider().track_id(),
-        SLIDER_RANGE_PART => slider().range_id(),
+        SLIDER_RANGE_PART | SLIDER_INDICATOR_PART => slider().range_id(),
         SLIDER_THUMB_PART => slider().thumb_id(declared_index(node)),
+        SLIDER_LABEL_PART => slider().label_id(),
+        SLIDER_VALUE_PART => slider().value_id(),
+        SLIDER_CONTROL_PART => slider().control_id(),
         SPLITTER_PANE_PART => splitter().pane_id(declared_index(node)),
         SPLITTER_HANDLE_PART => splitter().handle_id(declared_index(node)),
-        TOOLBAR_ITEM_PART => {
+        TOOLBAR_ITEM_PART | TOOLBAR_BUTTON_PART | TOOLBAR_LINK_PART | TOOLBAR_INPUT_PART => {
             Toolbar::new(root, &ToolbarState::empty(), &[]).item_id(declared_item_value(node)?)
         }
         TOGGLE_GROUP_ITEM_PART => {
@@ -1013,6 +1561,12 @@ pub(super) const NUMBER_FIELD_INPUT_PART: &str = "number-field-input";
 pub(super) const NUMBER_FIELD_INCREMENT_PART: &str = "number-field-increment";
 /// Declared part name of a number-field decrement stepper.
 pub(super) const NUMBER_FIELD_DECREMENT_PART: &str = "number-field-decrement";
+/// Declared part name of a number-field group box.
+pub(super) const NUMBER_FIELD_GROUP_PART: &str = "number-field-group";
+/// Declared part name of a number-field scrub area.
+pub(super) const NUMBER_FIELD_SCRUB_AREA_PART: &str = "number-field-scrub-area";
+/// Declared part name of a number-field scrub cursor.
+pub(super) const NUMBER_FIELD_SCRUB_AREA_CURSOR_PART: &str = "number-field-scrub-area-cursor";
 /// Declared part name of a date-field root.
 pub(super) const DATE_FIELD_PART: &str = "date-field";
 /// Declared part name of one date-field segment.
@@ -1043,6 +1597,12 @@ pub(super) const TOAST_DESCRIPTION_PART: &str = "toast-description";
 pub(super) const TOAST_ACTION_PART: &str = "toast-action";
 /// Declared part name of one toast close control.
 pub(super) const TOAST_CLOSE_PART: &str = "toast-close";
+/// Declared part name of a toast portal boundary.
+pub(super) const TOAST_PORTAL_PART: &str = "toast-portal";
+/// Declared part name of one toast positioner.
+pub(super) const TOAST_POSITIONER_PART: &str = "toast-positioner";
+/// Declared part name of one toast content box.
+pub(super) const TOAST_CONTENT_PART: &str = "toast-content";
 
 /// Every component key seen in one declaration pass, so stale instances are dropped.
 #[derive(Default)]
@@ -1086,10 +1646,13 @@ pub(super) fn declaration_fingerprint(node: &NativeNode, keys: &[u16]) -> Arc<st
 pub(super) struct NativeNumberFieldState {
     pub(super) state: NumberFieldState,
     pub(super) repeat_deadline: Option<Instant>,
+    /// Set by the core's own commit boundary, cleared once the commit has been reported.
+    pub(super) committed: bool,
     owner: u32,
     listens: bool,
     declaration: Arc<str>,
     reported: Arc<str>,
+    reported_scrubbing: bool,
 }
 
 impl Default for NativeNumberFieldState {
@@ -1097,10 +1660,12 @@ impl Default for NativeNumberFieldState {
         Self {
             state: NumberFieldState::empty(),
             repeat_deadline: None,
+            committed: false,
             owner: 0,
             listens: false,
             declaration: Arc::from(""),
             reported: Arc::from(""),
+            reported_scrubbing: false,
         }
     }
 }
@@ -1191,9 +1756,12 @@ pub(super) struct NativeToastState {
     /// Declared identifier per queued toast, aligned with the core's own opaque ids.
     pub(super) ids: Vec<(Arc<str>, ToastId)>,
     pub(super) deadline: Option<Instant>,
+    /// The stack pitch a caller-owned viewport declared, so the core computes each toast's offset.
+    pub(super) pitch: f32,
     owner: u32,
     listens: bool,
     declaration: Arc<str>,
+    reported: Option<serde_json::Value>,
 }
 
 impl NativeToastState {
@@ -1205,6 +1773,54 @@ impl NativeToastState {
             .find(|(value, _)| value.as_ref() == declared)
             .map(|(_, id)| *id)?;
         self.manager.entry(id)
+    }
+
+    /// The core-owned parts of one declared toast, carrying its stack index and flags.
+    ///
+    /// `ToastViewport::toasts` is what hands each toast its index, limited flag, and expanded
+    /// flag; a bare `toast(entry)` would report index zero for every one of them.
+    pub(super) fn parts(&self, root: ElementId, declared: &str) -> Option<ToastParts> {
+        let id = self.entry(declared)?.id();
+        ToastViewport::new(root)
+            .toasts(&self.manager)
+            .find(|parts| parts.id() == id)
+    }
+
+    /// Everything the core decided about the queue, as one bounded reportable snapshot.
+    fn snapshot(&self) -> serde_json::Value {
+        let viewport = ToastViewport::new(ElementId::new(0));
+        let entries = viewport
+            .toasts(&self.manager)
+            .filter_map(|parts| {
+                let declared = self
+                    .ids
+                    .iter()
+                    .find(|(_, id)| *id == parts.id())
+                    .map(|(value, _)| value.to_string())?;
+                Some(serde_json::json!({
+                    "id": declared,
+                    "index": parts.index(),
+                    "type": toast_kind_name(parts.kind()),
+                    "limited": parts.is_limited(),
+                    "expanded": parts.is_expanded(),
+                    "swiping": parts.is_swiping(),
+                    "swipeMovement": parts.swipe_movement(),
+                    "offset": parts.offset(self.pitch),
+                }))
+            })
+            .collect::<Vec<_>>();
+        serde_json::Value::Array(entries)
+    }
+}
+
+/// Base UI's `type` for one queued toast.
+fn toast_kind_name(kind: ToastKind) -> &'static str {
+    match kind {
+        ToastKind::Info => "info",
+        ToastKind::Success => "success",
+        ToastKind::Warning => "warning",
+        ToastKind::Error => "error",
+        ToastKind::Loading => "loading",
     }
 }
 
@@ -1222,6 +1838,9 @@ struct DeclaredToast {
     action: Option<String>,
     #[serde(default)]
     kind: Option<String>,
+    /// Base UI's own name for `kind`. Either declaration reaches the same core `ToastKind`.
+    #[serde(default, rename = "type")]
+    kind_alias: Option<String>,
     /// Auto-dismiss duration in milliseconds. A missing or non-positive value stays persistent.
     #[serde(default)]
     duration: Option<f64>,
@@ -1294,8 +1913,14 @@ impl NativeComponentStates {
                 property::MINIMUM,
                 property::MAXIMUM,
                 property::STEP,
+                property::SMALL_STEP,
+                property::LARGE_STEP,
                 property::PRECISION,
                 property::DISABLED,
+                property::READ_ONLY,
+                property::REQUIRED,
+                property::SNAP_ON_STEP,
+                property::ALLOW_WHEEL_SCRUB,
             ],
         );
         let listens = declares_change(node);
@@ -1326,6 +1951,34 @@ impl NativeComponentStates {
                 let precision = (precision as u32).min(u32::from(MAX_NUMBER_FIELD_PRECISION));
                 state = state.precision(precision as u8);
             }
+            // Base UI's modifier steps: Alt takes the small step, Shift the large one. A missing
+            // declaration keeps the core's own tenth-and-tenfold defaults.
+            if let Some(small_step) = node.number(property::SMALL_STEP) {
+                state = state.small_step(f64::from(small_step));
+            }
+            if let Some(large_step) = node.number(property::LARGE_STEP) {
+                state = state.large_step(f64::from(large_step));
+            }
+            if let Some(sensitivity) = node
+                .number(property::PITCH)
+                .filter(|value| value.is_finite() && *value > 0.0)
+            {
+                state =
+                    state.scrub_sensitivity(sensitivity.min(MAX_NUMBER_FIELD_SCRUB_SENSITIVITY));
+            }
+            state = state
+                .scrub_direction(match node.string(property::ORIENTATION) {
+                    Some("vertical") => NumberFieldScrubDirection::Vertical,
+                    Some("both") => NumberFieldScrubDirection::Both,
+                    _ => NumberFieldScrubDirection::Horizontal,
+                })
+                .snap_on_step(node.boolean(property::SNAP_ON_STEP).unwrap_or(false))
+                .allow_wheel_scrub(node.boolean(property::ALLOW_WHEEL_SCRUB).unwrap_or(true))
+                // `readOnly` is the web's `readonly`, not `disabled`: the control keeps its place
+                // in the Tab sequence and its value in the accessible name while refusing changes.
+                .read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
+                .required(node.boolean(property::REQUIRED).unwrap_or(false))
+                .disabled(node.boolean(property::DISABLED).unwrap_or(false));
             retained.declaration = declaration;
             retained.reported = state.text().clone();
             retained.state = state;
@@ -1513,6 +2166,40 @@ impl NativeComponentStates {
         let retained = self.toasts.entry(key).or_default();
         retained.owner = id;
         retained.listens = listens;
+        retained.pitch = node
+            .number(property::PITCH)
+            .filter(|pitch| pitch.is_finite())
+            .unwrap_or(0.0);
+        // `Toast.Provider` props: the inherited auto-dismiss duration, the visible stack bound,
+        // and the swipe contract. Every one of them is clamped by the core itself.
+        let timeout = match node.number(property::TIMEOUT) {
+            Some(ms) if ms.is_finite() && ms > 0.0 => {
+                Duration::from_millis(ms as u64).min(MAX_TOAST_DURATION)
+            }
+            _ => DEFAULT_TOAST_TIMEOUT,
+        };
+        let limit = node
+            .number(property::LIMIT)
+            .filter(|limit| limit.is_finite() && *limit >= 1.0)
+            .map_or(DEFAULT_TOAST_LIMIT, |limit| limit as usize);
+        let direction = match node.string(property::SWIPE_DIRECTION) {
+            Some("left") => ToastSwipeDirection::Left,
+            Some("up") => ToastSwipeDirection::Up,
+            Some("down") => ToastSwipeDirection::Down,
+            _ => ToastSwipeDirection::Right,
+        };
+        let mut manager = std::mem::take(&mut retained.manager)
+            .timeout(timeout)
+            .limit(limit)
+            .swipe_direction(direction);
+        if let Some(threshold) = node
+            .number(property::STEP)
+            .filter(|value| value.is_finite() && *value > 0.0)
+        {
+            manager = manager.swipe_threshold(threshold.min(MAX_TOAST_SWIPE_THRESHOLD));
+        }
+        manager.set_expanded(node.boolean(property::STACK_EXPANDED).unwrap_or(false));
+        retained.manager = manager;
         if retained.declaration != declaration {
             retained.declaration = declaration;
             let now = Instant::now();
@@ -1534,13 +2221,14 @@ impl NativeComponentStates {
                     next.push((declared_id, existing));
                     continue;
                 }
-                let mut toast =
-                    CoreToast::new(entry.title.as_str()).kind(match entry.kind.as_deref() {
-                        Some("success") => ToastKind::Success,
-                        Some("warning") => ToastKind::Warning,
-                        Some("error") => ToastKind::Error,
-                        _ => ToastKind::Info,
-                    });
+                let declared_kind = entry.kind.as_deref().or(entry.kind_alias.as_deref());
+                let mut toast = CoreToast::new(entry.title.as_str()).kind(match declared_kind {
+                    Some("success") => ToastKind::Success,
+                    Some("warning") => ToastKind::Warning,
+                    Some("error") => ToastKind::Error,
+                    Some("loading") => ToastKind::Loading,
+                    _ => ToastKind::Info,
+                });
                 if let Some(description) = entry.description.as_deref().filter(|v| !v.is_empty()) {
                     toast = toast.description(description);
                 }
@@ -1569,11 +2257,15 @@ impl NativeComponentStates {
     pub(super) fn report_fields(&mut self, window: u32, events: &EventQueue) {
         for retained in self.number_fields.values_mut() {
             let text = retained.state.text().clone();
-            if text == retained.reported {
+            let scrubbing = retained.state.is_scrubbing();
+            let committed = std::mem::take(&mut retained.committed);
+            if text == retained.reported && scrubbing == retained.reported_scrubbing && !committed {
                 continue;
             }
             retained.reported = text.clone();
+            retained.reported_scrubbing = scrubbing;
             if retained.listens {
+                let snapshot = retained.state.state();
                 enqueue_component_change(
                     events,
                     window,
@@ -1582,6 +2274,10 @@ impl NativeComponentStates {
                         "value": retained.state.value(),
                         "text": text.as_ref(),
                         "valid": retained.state.is_valid(),
+                        "scrubbing": scrubbing,
+                        "committed": committed,
+                        "readOnly": snapshot.read_only,
+                        "required": snapshot.required,
                     }),
                 );
             }
@@ -1658,18 +2354,26 @@ impl NativeComponentStates {
                 .filter(|(_, id)| retained.manager.entry(*id).is_none())
                 .map(|(declared, _)| declared.to_string())
                 .collect::<Vec<_>>();
-            if dismissed.is_empty() {
-                continue;
-            }
             retained
                 .ids
                 .retain(|(_, id)| retained.manager.entry(*id).is_some());
+            let snapshot = retained.snapshot();
+            let moved = retained.reported.as_ref() != Some(&snapshot);
+            if dismissed.is_empty() && !moved {
+                continue;
+            }
+            retained.reported = Some(snapshot.clone());
             if retained.listens {
+                let mut payload = serde_json::Map::new();
+                if !dismissed.is_empty() {
+                    payload.insert("dismissed".to_owned(), serde_json::Value::from(dismissed));
+                }
+                payload.insert("toasts".to_owned(), snapshot);
                 enqueue_component_change(
                     events,
                     window,
                     retained.owner,
-                    serde_json::json!({ "dismissed": dismissed }),
+                    serde_json::Value::Object(payload),
                 );
             }
         }
@@ -1760,13 +2464,16 @@ pub(super) fn apply_field_part(
                     cx.invalidate();
                 }
             });
-            let access = number_field_accessor(key);
             let commits = node.boolean(property::COMMIT_LISTENER).unwrap_or(false);
             let commit_events = Rc::clone(events);
             let commit = cx.submit_listener(field.input_id(), move |view, _value, cx| {
-                let state = access.get(view);
+                let retained = view.components.number_fields.entry(key).or_default();
+                let state = &mut retained.state;
                 let changed = state.commit();
                 let value = state.value();
+                // Base UI's `onValueCommitted` boundary: the core decided the committed value,
+                // and the report says so on the same frame.
+                retained.committed = true;
                 if commits {
                     enqueue_event(
                         &commit_events,
@@ -1785,6 +2492,29 @@ pub(super) fn apply_field_part(
                 }
             });
             Some(element.on_input(edit).on_submit(commit))
+        }
+        NUMBER_FIELD_GROUP_PART => Some(NumberField::new(root).group_part(element)),
+        NUMBER_FIELD_SCRUB_AREA_CURSOR_PART => {
+            Some(NumberField::new(root).scrub_area_cursor_part(element))
+        }
+        NUMBER_FIELD_SCRUB_AREA_PART => {
+            let Some(retained) = components.number_fields.get(&key) else {
+                return Some(element);
+            };
+            let field = NumberField::new(root);
+            let element = field.scrub_area_part(&retained.state, element);
+            if !listeners_enabled {
+                return Some(element);
+            }
+            // The core turns the captured drag into whole steps at its own bounded sensitivity and
+            // keeps the unconverted remainder, so a slow drag moves one step at a time.
+            let access = number_field_accessor(key);
+            let scrub = cx.pointer_listener(field.scrub_area_id(), move |view, event, cx| {
+                if access.get(view).apply_scrub(event) {
+                    cx.invalidate();
+                }
+            });
+            Some(element.on_pointer(scrub))
         }
         NUMBER_FIELD_INCREMENT_PART | NUMBER_FIELD_DECREMENT_PART => {
             let Some(retained) = components.number_fields.get(&key) else {
@@ -1923,15 +2653,19 @@ pub(super) fn apply_field_part(
             }
             Some(ToastViewport::new(root).viewport_part(element))
         }
+        TOAST_PORTAL_PART => Some(ToastViewport::new(root).portal_part(element)),
         TOAST_PART
         | TOAST_TITLE_PART
         | TOAST_DESCRIPTION_PART
         | TOAST_ACTION_PART
-        | TOAST_CLOSE_PART => {
+        | TOAST_CLOSE_PART
+        | TOAST_POSITIONER_PART
+        | TOAST_CONTENT_PART => {
             let retained = components.toasts.get(&key)?;
             let declared = node.string(property::PART_VALUE)?;
-            let entry = retained.entry(declared)?;
-            let parts = ToastViewport::new(root).toast(entry);
+            // `ToastViewport::toasts` hands each toast its stack index, limited flag, and expanded
+            // flag; a bare `toast(entry)` would report index zero for every one of them.
+            let parts = retained.parts(root, declared)?;
             let toast_id = parts.id();
             match part {
                 TOAST_PART => {
@@ -1939,8 +2673,23 @@ pub(super) fn apply_field_part(
                     if !listeners_enabled {
                         return Some(element);
                     }
-                    Some(parts.key_part_with(cx, element, toast_accessor(key)))
+                    // Swipe-to-dismiss is the core's own captured-pointer arithmetic against a
+                    // bounded threshold and the declared direction.
+                    let swipe = cx.pointer_listener(parts.root_id(), move |view, event, cx| {
+                        let manager = &mut view.components.toasts.entry(key).or_default().manager;
+                        let change = manager.apply_swipe(toast_id, event);
+                        if change.changed || change.dismissed {
+                            cx.invalidate();
+                        }
+                    });
+                    Some(
+                        parts
+                            .key_part_with(cx, element, toast_accessor(key))
+                            .on_pointer(swipe),
+                    )
                 }
+                TOAST_POSITIONER_PART => Some(parts.positioner_part(element)),
+                TOAST_CONTENT_PART => Some(parts.content_part(element)),
                 TOAST_TITLE_PART => Some(parts.title_part(element)),
                 TOAST_DESCRIPTION_PART => Some(parts.description_part(element)),
                 TOAST_ACTION_PART => Some(parts.action_part(element)),
@@ -1978,6 +2727,9 @@ pub(super) fn field_part_element_id(
         NUMBER_FIELD_INPUT_PART => NumberField::new(root).input_id(),
         NUMBER_FIELD_INCREMENT_PART => NumberField::new(root).increment_id(),
         NUMBER_FIELD_DECREMENT_PART => NumberField::new(root).decrement_id(),
+        NUMBER_FIELD_GROUP_PART => NumberField::new(root).group_id(),
+        NUMBER_FIELD_SCRUB_AREA_PART => NumberField::new(root).scrub_area_id(),
+        NUMBER_FIELD_SCRUB_AREA_CURSOR_PART => NumberField::new(root).scrub_area_cursor_id(),
         DATE_FIELD_SEGMENT_PART => DateField::new(root).segment_id(declared_date_segment(node)?),
         TIME_FIELD_SEGMENT_PART => TimeField::new(root).segment_id(declared_time_segment(node)?),
         CALENDAR_WEEK_PART => Calendar::new(root).week_id(declared_index(node)),
@@ -1986,19 +2738,23 @@ pub(super) fn field_part_element_id(
                 .and_then(parse_civil_date)?,
         ),
         MENUBAR_ITEM_PART => Menubar::new(root).item_id(declared_index(node)),
+        TOAST_PORTAL_PART => ToastViewport::new(root).portal_id(),
         TOAST_PART
         | TOAST_TITLE_PART
         | TOAST_DESCRIPTION_PART
         | TOAST_ACTION_PART
-        | TOAST_CLOSE_PART => {
+        | TOAST_CLOSE_PART
+        | TOAST_POSITIONER_PART
+        | TOAST_CONTENT_PART => {
             let retained = components.toasts.get(&key)?;
-            let entry = retained.entry(node.string(property::PART_VALUE)?)?;
-            let parts = ToastViewport::new(root).toast(entry);
+            let parts = retained.parts(root, node.string(property::PART_VALUE)?)?;
             match part {
                 TOAST_PART => parts.root_id(),
                 TOAST_TITLE_PART => parts.title_id(),
                 TOAST_DESCRIPTION_PART => parts.description_id(),
                 TOAST_ACTION_PART => parts.action_id(),
+                TOAST_POSITIONER_PART => parts.positioner_id(),
+                TOAST_CONTENT_PART => parts.content_id(),
                 _ => parts.close_id(),
             }
         }

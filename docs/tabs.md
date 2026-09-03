@@ -159,4 +159,30 @@ indicator identities without a JavaScript registry.
 `keepMounted` to `keep_mounted`. Roving Tab order, arrow/Home/End navigation, disabled-item
 skipping, and inactive-panel unmounting stay in this Rust layer. `Tabs.Indicator` mounts only for
 the active tab and takes its value from the enclosing `Tabs.Tab`, or from an explicit `value` prop
-when placed in the list. See the [Solid renderer guide](solid.md).
+when placed in the list.
+
+Declaring `index` on each `Tabs.Tab` is what lets the core record which way the selection
+travelled, and declaring `placement` on `Tabs.Indicator` asks it to keep the indicator anchored to
+the tab that is really active and to publish that tab's laid-out box during the paint QuickGUI was
+already performing. `useTabsState()` reports both:
+
+```tsx
+function Views() {
+  const tabs = useTabsState();
+  return (
+    <Tabs.Root value={tab()} onValueChange={setTab}>
+      <Tabs.List>
+        <Tabs.Tab value="list" index={0}>List</Tabs.Tab>
+        <Tabs.Tab value="grid" index={1}>Grid</Tabs.Tab>
+        <Tabs.Indicator placement="bottom" style={{ height: 2 }} />
+      </Tabs.List>
+      <Panel direction={tabs().activationDirection} width={tabs().indicator?.width} />
+    </Tabs.Root>
+  );
+}
+```
+
+`activationDirection` is Base UI's `data-activation-direction`, so a panel transition can run the
+right way without JavaScript comparing indices, and the indicator geometry is the core's own
+measurement rather than one taken in the hosted runtime. See the
+[Solid renderer guide](solid.md#selection-tab-disclosure-and-field-parts).

@@ -385,3 +385,41 @@ number field's stepper repeat, and it exists only while a stepper is held.
 
 State changes rebuild only when the caller's listener requests invalidation. Every component in this
 page returns a settled window to zero extra frames.
+
+## Solid: the Base UI-aligned parts
+
+`Slider` gained `Label`, `Value`, `Control`, and `Indicator` (Base UI's name for the range fill)
+alongside the existing root, track, and thumb parts, plus `minStepsBetweenValues`,
+`thumbAlignment`, and a bounded `format` of `"percent"` or `"fraction"`:
+
+```tsx
+const slider = useSliderState();
+
+<Slider.Root scope="volume" value={volume()} min={0} max={100} step={5} format="percent"
+  onValueChange={setVolume} onValueCommitted={commit}>
+  <Slider.Label scope="volume"><Text>Volume</Text></Slider.Label>
+  <Slider.Value scope="volume"><Text>{slider().displayValue}</Text></Slider.Value>
+  <Slider.Control scope="volume">
+    <Slider.Track scope="volume">
+      <Slider.Indicator scope="volume" />
+    </Slider.Track>
+  </Slider.Control>
+  <Slider.Thumb scope="volume" index={0} style={{ opacity: slider().dragging ? 0.8 : 1 }} />
+</Slider.Root>
+```
+
+`onValueCommitted` is the core's own captured-pointer boundary, and `useSliderState().dragging` is
+its `data-dragging` flag; neither is a debounce or a guess in JavaScript. A keyboard change reports
+through `onValueChange` alone, because the core exposes no keyboard commit.
+
+`NumberField` gained `Group`, `ScrubArea`, and `ScrubAreaCursor`, plus `smallStep` (Alt),
+`largeStep` (Shift), `snapOnStep`, `allowWheelScrub`, `readOnly`, `required`, `scrubDirection`,
+`scrubSensitivity`, and `onValueCommitted`. The core turns a captured drag into whole steps at the
+declared sensitivity, keeping the unconverted remainder so a slow drag moves one step at a time, and
+`useNumberFieldState().scrubbing` is what a caller-drawn cursor styles from. `readOnly` refuses every
+change while the control stays focusable, unlike `disabled`.
+
+`Progress` and `Meter` gained `Track`, `Label`, and `Value` parts and the same bounded `format`.
+`useGaugeState()` reports the core's derived `status` — `"progressing"`, `"complete"`, or
+`"indeterminate"` — the formatted `displayValue`, and the `completion` fraction. See
+[Solid 2 renderer](solid.md#range-and-feedback-parts).

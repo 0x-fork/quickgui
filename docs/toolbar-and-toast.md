@@ -263,3 +263,60 @@ its JavaScript binding. Native macOS menus remain the application menu; see
 `ToastManager` retains only its bounded queue of shared strings. None of them retains an item
 registry, task, timer, observer, animation, GPU resource, or idle scheduler source. Navigation scans
 the caller's own item slice on an explicit keypress and at no other time.
+
+## Solid: the Base UI-aligned parts
+
+`Toolbar` gained `Button`, `Link`, `Input`, `Group`, and `Separator`. All three item parts share the
+one roving Tab stop and differ only in the role the core projects; the group and separator are
+structural and take the toolbar's own axis. An item declared `focusableWhenDisabled` in the
+toolbar's `items` keeps its place in the Tab sequence while disabled, so a keyboard user can still
+discover the command; arrow navigation still skips it and it still refuses pointer focus.
+
+```tsx
+<Toolbar.Root scope="actions" items={[
+  { value: "cut" },
+  { value: "docs" },
+  { value: "paste", disabled: true, focusableWhenDisabled: true },
+]}>
+  <Toolbar.Group scope="actions">
+    <Toolbar.Button scope="actions" partValue="cut">Cut</Toolbar.Button>
+    <Toolbar.Link scope="actions" partValue="docs">Docs</Toolbar.Link>
+  </Toolbar.Group>
+  <Toolbar.Separator scope="actions" />
+  <Toolbar.Item scope="actions" partValue="paste">Paste</Toolbar.Item>
+</Toolbar.Root>
+```
+
+`Toast` gained `Provider`, `Portal`, `Positioner`, and `Content` parts and a Base UI-shaped manager.
+The provider owns the declared queue and the provider props — the inherited `timeout`, the visible
+stack `limit`, the `expanded` stack, the `swipeDirection`, and the stack `pitch` the core turns into
+each toast's own offset:
+
+```tsx
+function Notices() {
+  const toasts = useToastManager();
+  return (
+    <Toast.Viewport>
+      <For each={toasts.stack()}>
+        {(entry) => (
+          <Toast.Positioner toastId={entry.id} style={{ top: entry.offset }}>
+            <Toast.Root toastId={entry.id} style={{ opacity: entry.limited ? 0.6 : 1 }}>
+              <Toast.Content toastId={entry.id}>
+                <Toast.Title toastId={entry.id}><Text>{entry.type}</Text></Toast.Title>
+                <Toast.Close toastId={entry.id}><Text>×</Text></Toast.Close>
+              </Toast.Content>
+            </Toast.Root>
+          </Toast.Positioner>
+        )}
+      </For>
+    </Toast.Viewport>
+  );
+}
+```
+
+`add`, `update`, `close`, and `closeAll` change the declaration; `promise` queues a persistent
+`"loading"` toast and turns it into its result while keeping the same identity and stack position,
+because QuickGUI owns no future and the application drives both halves from the task it already
+spawned. The stack index, the `limited` and `expanded` flags, each toast's `offset`, and the live
+swipe displacement all come back from the core through `stack()`. See
+[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).

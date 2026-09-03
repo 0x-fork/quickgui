@@ -1047,6 +1047,26 @@ pub(super) fn build_element(
                 listeners_enabled,
             )?;
         }
+        element = apply_dialog_part(
+            element,
+            part,
+            id,
+            node,
+            states.components,
+            cx,
+            listeners_enabled,
+        )?;
+        if owns_popover_part(part) {
+            element = apply_popover_part(
+                element,
+                part,
+                id,
+                node,
+                states.components,
+                cx,
+                listeners_enabled,
+            )?;
+        }
     }
     element = apply_controls(element, node, tree);
 
@@ -1090,7 +1110,14 @@ pub(super) fn build_element(
         let dismiss_on_pointer_outside = node
             .boolean(property::DISMISS_ON_POINTER_OUTSIDE)
             .unwrap_or(true);
-        let mut popover = Popover::new(ElementId::new(anchor_id as u64), element_id, true)
+        // The anchor is another retained node, so it is anchored to the identity that node
+        // really mounts under rather than to its raw node id.
+        let anchor_element_id = tree
+            .nodes
+            .get(&anchor_id)
+            .and_then(|anchor| native_part_element_id(anchor_id, anchor))
+            .unwrap_or_else(|| ElementId::new(u64::from(anchor_id)));
+        let mut popover = Popover::new(anchor_element_id, element_id, true)
             .kind(if part == Some(POPOVER_MENU_POPUP_PART) {
                 PopoverKind::Menu
             } else {
@@ -1115,6 +1142,7 @@ pub(super) fn build_element(
             element,
             listeners_enabled
                 && !base_ui_owns_dismiss(declared_part)
+                && !popover_part_owns_dismiss(declared_part)
                 && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
@@ -1138,6 +1166,7 @@ pub(super) fn build_element(
             element,
             listeners_enabled
                 && !base_ui_owns_dismiss(declared_part)
+                && !popover_part_owns_dismiss(declared_part)
                 && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
@@ -1411,6 +1440,19 @@ pub(super) fn native_part_value(node: &NativeNode, key: u16) -> Option<ElementId
         .map(ElementId::named)
 }
 
+/// Build the declared checkbox descriptor.
+///
+/// A checkbox that declares `parent` folds its declared children's checked booleans through the
+/// core, so its on/mixed/off state is derived rather than retained separately anywhere.
+fn native_checkbox(node: &NativeNode) -> Checkbox {
+    let checkbox = if node.boolean(property::PARENT).unwrap_or(false) {
+        Checkbox::parent(declared_flags(node, property::VALUES))
+    } else {
+        Checkbox::new(native_toggle_state(node))
+    };
+    checkbox.read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
+}
+
 fn native_toggle_state(node: &NativeNode) -> ToggleState {
     if node.boolean(property::INDETERMINATE) == Some(true) {
         ToggleState::Mixed
@@ -1471,8 +1513,10 @@ fn native_accordion_item(id: u32, node: &NativeNode) -> Option<AccordionItem> {
     )
 }
 
-fn native_field(id: u32, node: &NativeNode) -> Field {
+pub(super) fn native_field(id: u32, node: &NativeNode) -> Field {
     let field = Field::new(native_part_scope(id, node))
+        .validation_mode(declared_validation_mode(node))
+        .validation_debounce(declared_validation_debounce(node))
         .disabled(node.boolean(property::DISABLED).unwrap_or(false))
         .invalid(node.boolean(property::INVALID).unwrap_or(false))
         .required(node.boolean(property::REQUIRED).unwrap_or(false))
@@ -1485,7 +1529,7 @@ fn native_field(id: u32, node: &NativeNode) -> Field {
     }
 }
 
-fn native_dialog(id: u32, node: &NativeNode) -> CoreDialog {
+pub(super) fn native_dialog(id: u32, node: &NativeNode) -> CoreDialog {
     let kind = match node.string(property::VARIANT) {
         Some("alertdialog") => DialogKind::AlertDialog,
         _ => DialogKind::Dialog,
@@ -1524,6 +1568,9 @@ pub(super) fn native_part_element_id_with(
     if let Some(derived) = base_ui_part_element_id(part, id, node, components) {
         return Some(derived);
     }
+    if let Some(derived) = popover_part_element_id(part, id, node, components) {
+        return Some(derived);
+    }
     native_part_element_id(id, node)
 }
 
@@ -1554,6 +1601,18 @@ pub(super) fn native_part_element_id(id: u32, node: &NativeNode) -> Option<Eleme
         "field-label" | "field-passive-label" => native_field(id, node).label_id(),
         "field-description" => native_field(id, node).description_id(),
         "field-error" => native_field(id, node).error_id(),
+        "field-item" => native_field(id, node).item_id(),
+        "field-validity" => native_field(id, node).validity_id(),
+        "progress" | "meter" => native_part_scope(id, node),
+        "progress-track" => native_progress(id, node).track_id()?,
+        "progress-indicator" => native_progress(id, node).indicator_id()?,
+        "progress-label" => native_progress(id, node).label_id()?,
+        "progress-value" => native_progress(id, node).value_id()?,
+        "meter-track" => native_meter(id, node).track_id()?,
+        "meter-indicator" => native_meter(id, node).indicator_id()?,
+        "meter-label" => native_meter(id, node).label_id()?,
+        "meter-value" => native_meter(id, node).value_id()?,
+        "dialog-viewport" => native_dialog(id, node).viewport_id(),
         "fieldset-legend" => native_fieldset(id, node).legend_id(),
         "fieldset-description" => native_fieldset(id, node).description_id(),
         "dialog" => native_dialog(id, node).root_id(),
@@ -1562,6 +1621,12 @@ pub(super) fn native_part_element_id(id: u32, node: &NativeNode) -> Option<Eleme
         "dialog-title" => native_dialog(id, node).title_id(),
         "dialog-description" => native_dialog(id, node).description_id(),
         "dialog-close" => native_dialog(id, node).close_id(),
+        // The stateless halves of the Base UI-aligned popover and tooltip compounds, so an
+        // anchored surface elsewhere in the tree resolves the same identity the part mounts under.
+        POPOVER_TRIGGER_PART => popover_trigger_id(native_part_scope(id, node)),
+        POPOVER_POPUP_PART => popover_surface_id(native_part_scope(id, node)),
+        TOOLTIP_TRIGGER_PART => tooltip_trigger_id(native_part_scope(id, node)),
+        TOOLTIP_POPUP_PART => tooltip_popup_id(native_part_scope(id, node)),
         _ => return None,
     })
 }
@@ -1575,14 +1640,19 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
         return Some(element);
     };
     Some(match part {
-        "checkbox" => Checkbox::new(native_toggle_state(node)).root_part(element),
+        "checkbox" => native_checkbox(node).root_part(element),
         "checkbox-indicator" => Checkbox::new(ToggleState::Off).indicator_part(element),
-        "radio" => Radio::new(node.boolean(property::CHECKED).unwrap_or(false)).root_part(element),
+        "radio" => Radio::new(node.boolean(property::CHECKED).unwrap_or(false))
+            .read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
+            .root_part(element),
         "radio-indicator" => Radio::new(false).indicator_part(element),
-        "radio-group" => RadioGroup::new().root_part(element),
-        "switch" => {
-            Switch::new(node.boolean(property::CHECKED).unwrap_or(false)).root_part(element)
-        }
+        "radio-group" => RadioGroup::new()
+            .read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
+            .required(node.boolean(property::REQUIRED).unwrap_or(false))
+            .root_part(element),
+        "switch" => Switch::new(node.boolean(property::CHECKED).unwrap_or(false))
+            .read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
+            .root_part(element),
         "switch-thumb" => Switch::new(false).thumb_part(element),
         "tabs" => native_tabs(id, node).root_part(element),
         "tabs-list" => native_tabs(id, node).list_part(element),
@@ -1615,10 +1685,19 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
         "field-control" => native_field(id, node).control_part(element),
         "field-description" => native_field(id, node).description_part(element),
         "field-error" => native_field(id, node).error_part(element),
-        "progress" => native_progress(node).root_part(element),
-        "progress-indicator" => native_progress(node).indicator_part(element),
-        "meter" => native_meter(node).root_part(element),
-        "meter-indicator" => native_meter(node).indicator_part(element),
+        "field-item" => native_field(id, node).item_part(element),
+        "field-validity" => native_field(id, node)
+            .validity_part(node.boolean(property::OPEN).unwrap_or(true), element),
+        "progress" => native_progress(id, node).root_part(element),
+        "progress-indicator" => native_progress(id, node).indicator_part(element),
+        "progress-track" => native_progress(id, node).track_part(element),
+        "progress-label" => native_progress(id, node).label_part(element),
+        "progress-value" => native_progress(id, node).value_part(element),
+        "meter" => native_meter(id, node).root_part(element),
+        "meter-indicator" => native_meter(id, node).indicator_part(element),
+        "meter-track" => native_meter(id, node).track_part(element),
+        "meter-label" => native_meter(id, node).label_part(element),
+        "meter-value" => native_meter(id, node).value_part(element),
         "toggle" => {
             Toggle::new(node.boolean(property::PRESSED).unwrap_or(false)).root_part(element)
         }
@@ -1627,15 +1706,11 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
         "fieldset-legend" => native_fieldset(id, node).legend_part(element),
         "fieldset-description" => native_fieldset(id, node).description_part(element),
         "fieldset-control" => native_fieldset(id, node).control_part(element),
-        // The Rust guide requires the portal root to be mounted only while the dialog is open, so
-        // a closed dialog contributes no overlay, focus trap, backdrop, or accessibility node.
-        "dialog" => {
-            let dialog = native_dialog(id, node);
-            if !dialog.is_open() {
-                return None;
-            }
-            dialog.root_part(element)
-        }
+        // The Rust guide requires the portal root to be mounted only while the dialog is open,
+        // so a closed dialog contributes no overlay, focus trap, backdrop, or accessibility node.
+        // `apply_dialog_part` owns that decision, because the core may hold a closing dialog
+        // mounted for its own exit transition.
+        "dialog" => element,
         "dialog-trigger" => {
             native_dialog(id, node).trigger_part(ElementId::new(id as u64), element)
         }
@@ -1923,12 +1998,20 @@ fn native_transition_properties(list: &str) -> TransitionProperties {
 }
 
 /// Build the declared progress descriptor.
-pub(super) fn native_progress(node: &NativeNode) -> Progress {
+///
+/// Declaring the compound scope derives the track, label, and value identities and points the
+/// root's accessible name and description at whichever of them the application mounted.
+pub(super) fn native_progress(id: u32, node: &NativeNode) -> Progress {
     let maximum = f64::from(node.number(property::MAXIMUM).unwrap_or(1.0));
     let indeterminate = node.boolean(property::INDETERMINATE).unwrap_or(false);
     let progress = match node.number(property::VALUE) {
         Some(value) if !indeterminate => Progress::new(f64::from(value), maximum),
         _ => Progress::indeterminate(),
+    };
+    let progress = progress.id(native_part_scope(id, node));
+    let progress = match declared_value_format(node.string(property::FORMAT)) {
+        Some(format) => progress.format(format),
+        None => progress,
     };
     match node.string(property::VALUE_TEXT) {
         Some(text) => progress.value_text(text),
@@ -1937,7 +2020,7 @@ pub(super) fn native_progress(node: &NativeNode) -> Progress {
 }
 
 /// Build the declared meter descriptor.
-pub(super) fn native_meter(node: &NativeNode) -> Meter {
+pub(super) fn native_meter(id: u32, node: &NativeNode) -> Meter {
     let mut meter = Meter::new(
         f64::from(node.number(property::VALUE).unwrap_or(0.0)),
         f64::from(node.number(property::MINIMUM).unwrap_or(0.0)),
@@ -1952,7 +2035,14 @@ pub(super) fn native_meter(node: &NativeNode) -> Meter {
     if let Some(optimum) = node.number(property::OPTIMUM) {
         meter = meter.optimum(f64::from(optimum));
     }
-    meter
+    meter = meter.id(native_part_scope(id, node));
+    if let Some(format) = declared_value_format(node.string(property::FORMAT)) {
+        meter = meter.format(format);
+    }
+    match node.string(property::VALUE_TEXT) {
+        Some(text) => meter.value_text(text),
+        None => meter,
+    }
 }
 
 /// Relate a caller-declared `controls` target that is still mounted in the retained tree.

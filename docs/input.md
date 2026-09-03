@@ -631,3 +631,33 @@ ordinary container focusable. `onDragOver` is not bound because drag hovering is
 window rather than through a per-element listener, and physical key `code` values are not reported
 because the core normalizes keys to a layout-independent command identity. See
 [Solid 2 renderer](solid.md#keyboard-mouse-gesture-and-drag-events).
+
+## Solid: the tooltip compound
+
+`Element::tooltip` is bound as the `tooltip` prop every native node accepts. The composable
+`TooltipProvider`/`TooltipState` compound is bound separately as `Tooltip`:
+
+```tsx
+<Tooltip.Provider delay={600} closeDelay={200} timeout={400}>
+  <Tooltip.Root trackCursorAxis="x" hoverable>
+    <Tooltip.Trigger delay={120} closeOnClick={false}>Save</Tooltip.Trigger>
+    <Tooltip.Positioner side="top" sideOffset={7} collisionPadding={8}>
+      <Tooltip.Popup>
+        <Text>Save the current draft</Text>
+        <Tooltip.Arrow />
+      </Tooltip.Popup>
+    </Tooltip.Positioner>
+  </Tooltip.Root>
+</Tooltip.Provider>
+```
+
+The trigger is the one part mounted whether the tooltip is open or closed, so `Tooltip.Root` and
+`Tooltip.Positioner` route their declarations onto it; the portal, positioner, popup, and arrow are
+mounted only while the core holds the tooltip open. `disabled` cancels any pending deadline and
+closes while the trigger stays focusable, Escape dismissal belongs to the core, and
+`useTooltipPlacement()` reports the side and alignment it really resolved to.
+
+One shared provider makes an adjacent trigger open instantly while the group stays warm, and that
+warm window is itself one exact deadline, so a settled group owns no task or timer. Unlike Base UI's
+DOM-less provider, `Tooltip.Provider` is one ordinary element — which is also where the group's
+deadlines are declared. See [Solid 2 renderer](solid.md#tooltips).

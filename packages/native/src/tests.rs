@@ -2266,14 +2266,14 @@ fn range_and_feedback_parts_adopt_core_value_ranges() {
         property::VALUE_TEXT,
         Some(PropertyValue::String(Arc::from("3 of 12 files"))),
     );
-    let declared = native_progress(&progress);
+    let declared = native_progress(41, &progress);
     assert_eq!(declared.value(), Some(3.0));
     assert_eq!(declared.maximum(), 12.0);
     assert_eq!(declared.completion(), Some(0.25));
     assert!(apply_part(div(), 41, &progress).is_some());
 
     progress.set_property(property::INDETERMINATE, Some(PropertyValue::Bool(true)));
-    assert!(native_progress(&progress).is_indeterminate());
+    assert!(native_progress(41, &progress).is_indeterminate());
 
     let mut meter = component_part_node(NodeTag::View, ROOT_NODE, "meter", &[], &[]);
     meter.set_property(property::VALUE, Some(PropertyValue::Number(20.0)));
@@ -2281,7 +2281,7 @@ fn range_and_feedback_parts_adopt_core_value_ranges() {
     meter.set_property(property::MAXIMUM, Some(PropertyValue::Number(100.0)));
     meter.set_property(property::LOW, Some(PropertyValue::Number(25.0)));
     meter.set_property(property::HIGH, Some(PropertyValue::Number(75.0)));
-    let declared = native_meter(&meter);
+    let declared = native_meter(42, &meter);
     assert_eq!(declared.completion(), 0.2);
     assert!(declared.is_low());
     assert!(!declared.is_high());
@@ -2815,7 +2815,7 @@ fn declared_sliders_keep_independent_values_and_report_them_asynchronously() {
     cx.run_until_idle().unwrap();
     assert_eq!(
         component_change(&events, first_id),
-        serde_json::json!({ "values": [20.0] })
+        serde_json::json!({ "values": [20.0], "dragging": false, "committed": false, "displayValue": null })
     );
 
     // The second slider never moved, so it reports nothing at all.
@@ -2829,7 +2829,7 @@ fn declared_sliders_keep_independent_values_and_report_them_asynchronously() {
     cx.run_until_idle().unwrap();
     assert_eq!(
         component_change(&events, second_id),
-        serde_json::json!({ "values": [0.0] })
+        serde_json::json!({ "values": [0.0], "dragging": false, "committed": false, "displayValue": null })
     );
 
     // The core keeps the value it decided until JavaScript commits the matching declaration, and
@@ -2897,7 +2897,7 @@ fn declared_range_slider_thumbs_move_independently_through_the_core() {
     cx.run_until_idle().unwrap();
     assert_eq!(
         component_change(&events, root_id),
-        serde_json::json!({ "values": [20.0, 90.0] })
+        serde_json::json!({ "values": [20.0, 90.0], "dragging": false, "committed": false, "displayValue": null })
     );
 
     cx.focus(window, slider.thumb_id(0)).unwrap();
@@ -2905,7 +2905,7 @@ fn declared_range_slider_thumbs_move_independently_through_the_core() {
     cx.run_until_idle().unwrap();
     assert_eq!(
         component_change(&events, root_id),
-        serde_json::json!({ "values": [10.0, 90.0] })
+        serde_json::json!({ "values": [10.0, 90.0], "dragging": false, "committed": false, "displayValue": null })
     );
 }
 
@@ -5283,5 +5283,1344 @@ fn malformed_base_ui_declarations_decline_instead_of_panicking() {
             .borrow()
             .iter()
             .all(|event| event.kind != "componentchange")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Base UI-aligned popovers, tooltips, range parts, toasts, tabs, toolbars,
+// fields, selection controls, and dialogs
+//
+// Every test below declares the compound exactly the way the Solid renderer does and then asks
+// the core what it decided. Nothing here re-derives geometry, a deadline, or a resolved side in
+// the binding: the assertions read the identity the core mounted and the asynchronous payload it
+// reported.
+// ---------------------------------------------------------------------------
+
+/// Declare one part node under a shared scope and attach it to its parent.
+#[allow(clippy::too_many_arguments)]
+fn declare_aligned_part(
+    tree: &mut NativeTree,
+    id: u32,
+    parent: u32,
+    tag: NodeTag,
+    part: &str,
+    scope: &str,
+    numbers: &[(u16, f32)],
+    strings: &[(u16, &str)],
+    flags: &[(u16, bool)],
+) {
+    let mut owned = vec![(property::SCOPE, scope)];
+    owned.extend_from_slice(strings);
+    let mut node = component_part_node(tag, parent, part, &owned, flags);
+    for (key, value) in numbers {
+        node.set_property(*key, Some(PropertyValue::Number(*value)));
+    }
+    insert_component_node(tree, id, parent, node);
+}
+
+/// The centre of one mounted element, for a pointer gesture the core owns.
+fn element_center(
+    cx: &mut quickgui::TestAppContext,
+    window: quickgui::WindowHandle,
+    element: ElementId,
+) -> quickgui::Point {
+    let bounds = cx.element_bounds(window, element).unwrap();
+    quickgui::Point::new(
+        bounds.x + bounds.width / 2.0,
+        bounds.y + bounds.height / 2.0,
+    )
+}
+
+/// One captured pointer event the core's own drag arithmetic consumes.
+///
+/// `TestAppContext` simulates targeted mouse events, not pointer capture, so a captured gesture is
+/// delivered to the retained instance the same way the binding's own listener delivers it.
+fn captured_pointer(
+    phase: quickgui::PointerPhase,
+    position: quickgui::Point,
+    delta: quickgui::Vector,
+    size: quickgui::Size,
+) -> quickgui::PointerEvent {
+    quickgui::PointerEvent {
+        phase,
+        position,
+        origin: position,
+        local_position: position,
+        local_origin: position,
+        delta,
+        button: quickgui::MouseButton::Left,
+        modifiers: quickgui::Modifiers::default(),
+        size,
+    }
+}
+
+#[test]
+fn declared_popover_parts_mount_the_core_surface_and_report_the_resolved_placement() {
+    let root_id = 900;
+    let trigger_id = 901;
+    let positioner_id = 902;
+    let popup_id = 903;
+    let arrow_id = 904;
+    let viewport_id = 905;
+    let title_id = 906;
+    let close_id = 907;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "popover",
+        "account",
+        &[],
+        &[],
+        &[],
+    );
+    // The trigger is mounted whether the surface is open or closed, so it carries the whole
+    // declaration and owns the retained instance.
+    declare_aligned_part(
+        &mut tree,
+        trigger_id,
+        root_id,
+        NodeTag::Button,
+        "popover-trigger",
+        "account",
+        &[
+            (property::SIDE_OFFSET, 10.0),
+            (property::ALIGN_OFFSET, 4.0),
+            (property::COLLISION_PADDING, 12.0),
+        ],
+        &[(property::SIDE, "top"), (property::ALIGN, "end")],
+        &[
+            (property::OPEN, true),
+            (property::MODAL, true),
+            (property::STICKY, false),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    for (id, parent, tag, part) in [
+        (positioner_id, root_id, NodeTag::View, "popover-positioner"),
+        (popup_id, positioner_id, NodeTag::View, "popover-popup"),
+        (arrow_id, popup_id, NodeTag::View, "popover-arrow"),
+        (viewport_id, popup_id, NodeTag::View, "popover-viewport"),
+        (title_id, popup_id, NodeTag::View, "popover-title"),
+        (close_id, popup_id, NodeTag::Button, "popover-close"),
+    ] {
+        declare_aligned_part(&mut tree, id, parent, tag, part, "account", &[], &[], &[]);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("account");
+    let popover = quickgui::Popover::new(popover_trigger_id(root), popover_surface_id(root), true);
+
+    for element in [
+        popover.trigger_id(),
+        popover.popover_id(),
+        popover.positioner_id(),
+        popover.arrow_id(),
+        popover.viewport_id(),
+        popover.title_id(),
+        popover.close_id(),
+    ] {
+        assert!(cx.contains_element(window, element).unwrap());
+    }
+
+    // The declared side and align are only a preference; the retained tree publishes the side the
+    // surface really ended up on and the binding reports exactly that.
+    // The placement is published during the paint QuickGUI was already performing, and the core
+    // requests exactly one correcting frame when it changes.
+    cx.element_bounds(window, popover.positioner_id()).unwrap();
+    cx.run_until_idle().unwrap();
+    let reported = component_change(&events, trigger_id);
+    let placement = &reported["placement"];
+    assert!(
+        matches!(placement["side"].as_str(), Some("top" | "bottom")),
+        "the core resolved a real side: {placement}"
+    );
+    assert!(placement["anchorWidth"].as_f64().unwrap() > 0.0);
+    assert!(placement["availableHeight"].as_f64().unwrap() >= 0.0);
+    assert_eq!(placement["anchorHidden"], serde_json::json!(false));
+
+    // Closing the declaration unmounts every surface part, exactly as the core decides.
+    cx.update(view, |view, cx| {
+        let mut tree = view.tree.borrow_mut();
+        tree.nodes
+            .get_mut(&trigger_id)
+            .unwrap()
+            .set_property(property::OPEN, Some(PropertyValue::Bool(false)));
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    assert!(!cx.contains_element(window, popover.popover_id()).unwrap());
+    assert!(!cx.contains_element(window, popover.arrow_id()).unwrap());
+    assert!(cx.contains_element(window, popover.trigger_id()).unwrap());
+}
+
+#[test]
+fn a_declared_popover_trigger_opens_on_hover_through_the_core_deadline() {
+    let root_id = 910;
+    let trigger_id = 911;
+    let positioner_id = 912;
+    let popup_id = 913;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "popover",
+        "hovered",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        trigger_id,
+        root_id,
+        NodeTag::Button,
+        "popover-trigger",
+        "hovered",
+        &[(property::DELAY, 0.0), (property::CLOSE_DELAY, 0.0)],
+        &[],
+        &[
+            (property::OPEN_ON_HOVER, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        positioner_id,
+        root_id,
+        NodeTag::View,
+        "popover-positioner",
+        "hovered",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        popup_id,
+        positioner_id,
+        NodeTag::View,
+        "popover-popup",
+        "hovered",
+        &[],
+        &[],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("hovered");
+    let surface = popover_surface_id(root);
+    assert!(!cx.contains_element(window, surface).unwrap());
+
+    let center = element_center(&mut cx, window, popover_trigger_id(root));
+    cx.visual(window).unwrap().move_pointer(center).unwrap();
+    assert!(cx.contains_element(window, surface).unwrap());
+    assert_eq!(component_change(&events, trigger_id)["open"], true);
+}
+
+#[test]
+fn declared_tooltip_parts_mount_only_while_the_core_holds_them_open() {
+    let provider_id = 920;
+    let root_id = 921;
+    let trigger_id = 922;
+    let positioner_id = 923;
+    let popup_id = 924;
+    let arrow_id = 925;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        provider_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "tooltip-provider",
+        "hints",
+        &[
+            (property::DELAY, 0.0),
+            (property::CLOSE_DELAY, 0.0),
+            (property::TIMEOUT, 400.0),
+        ],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        provider_id,
+        NodeTag::View,
+        "tooltip",
+        "save-hint",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        trigger_id,
+        root_id,
+        NodeTag::Button,
+        "tooltip-trigger",
+        "save-hint",
+        &[(property::SIDE_OFFSET, 9.0)],
+        &[
+            (property::PROVIDER, "hints"),
+            (property::SIDE, "top"),
+            (property::TRACK_CURSOR_AXIS, "x"),
+        ],
+        &[
+            (property::OPEN, true),
+            (property::HOVERABLE, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    for (id, parent, tag, part) in [
+        (positioner_id, root_id, NodeTag::View, "tooltip-positioner"),
+        (popup_id, positioner_id, NodeTag::View, "tooltip-popup"),
+        (arrow_id, popup_id, NodeTag::View, "tooltip-arrow"),
+    ] {
+        declare_aligned_part(&mut tree, id, parent, tag, part, "save-hint", &[], &[], &[]);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("save-hint");
+    assert!(
+        cx.contains_element(window, tooltip_trigger_id(root))
+            .unwrap()
+    );
+    assert!(cx.contains_element(window, tooltip_popup_id(root)).unwrap());
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, trigger_id)["placement"]["side"],
+        serde_json::json!("top")
+    );
+
+    // A disabled tooltip cancels its pending deadline and closes, so nothing is mounted at all.
+    cx.update(view, |view, cx| {
+        let mut tree = view.tree.borrow_mut();
+        let node = tree.nodes.get_mut(&trigger_id).unwrap();
+        node.set_property(property::OPEN, Some(PropertyValue::Bool(false)));
+        node.set_property(property::DISABLED, Some(PropertyValue::Bool(true)));
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    assert!(!cx.contains_element(window, tooltip_popup_id(root)).unwrap());
+    assert!(
+        !cx.contains_element(window, tooltip_popup_id(root)).unwrap(),
+        "a disabled tooltip cancels its deadline and mounts no popup"
+    );
+}
+
+#[test]
+fn a_declared_slider_reports_the_cores_commit_boundary_and_formatted_value() {
+    let root_id = 930;
+    let track_id = 931;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "slider",
+        "volume",
+        &[
+            (property::MINIMUM, 0.0),
+            (property::MAXIMUM, 100.0),
+            (property::STEP, 10.0),
+            (property::MIN_STEPS_BETWEEN_VALUES, 1.0),
+        ],
+        &[
+            (property::VALUES, "[20]"),
+            (property::FORMAT, "percent"),
+            (property::THUMB_ALIGNMENT, "edge"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    for (id, part) in [
+        (track_id, "slider-track"),
+        (932, "slider-indicator"),
+        (933, "slider-label"),
+        (934, "slider-value"),
+        (935, "slider-control"),
+    ] {
+        let parent = if part == "slider-indicator" {
+            track_id
+        } else {
+            root_id
+        };
+        declare_aligned_part(
+            &mut tree,
+            id,
+            parent,
+            NodeTag::View,
+            part,
+            "volume",
+            &[],
+            &[],
+            &[],
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let slider = Slider::new(
+        ElementId::named("volume"),
+        &SliderState::range(0.0, 100.0, &[20.0]),
+    );
+    for element in [
+        slider.track_id(),
+        slider.range_id(),
+        slider.label_id(),
+        slider.value_id(),
+        slider.control_id(),
+    ] {
+        assert!(cx.contains_element(window, element).unwrap());
+    }
+
+    // A captured drag reports the core's own dragging flag while it is in flight and its commit
+    // boundary on release; the binding never invents either one.
+    let track = cx.element_bounds(window, slider.track_id()).unwrap();
+    let size = quickgui::Size::new(track.width, track.height);
+    cx.update(view, |view, cx| {
+        let retained = view
+            .components
+            .sliders
+            .get_mut(&ElementId::named("volume").as_u64())
+            .expect("the declared slider is retained");
+        let change = retained.state.apply_pointer_change(
+            &captured_pointer(
+                quickgui::PointerPhase::Down,
+                quickgui::Point::new(track.x + track.width * 0.8, track.y),
+                quickgui::Vector::default(),
+                size,
+            ),
+            size,
+        );
+        assert!(change.changed);
+        assert!(!change.committed);
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    let dragging = component_change(&events, root_id);
+    assert_eq!(dragging["dragging"], true);
+    assert_eq!(dragging["committed"], false);
+    assert_eq!(dragging["displayValue"], serde_json::json!("80%"));
+
+    cx.update(view, |view, cx| {
+        let retained = view
+            .components
+            .sliders
+            .get_mut(&ElementId::named("volume").as_u64())
+            .expect("the declared slider is retained");
+        let change = retained.state.apply_pointer_change(
+            &captured_pointer(
+                quickgui::PointerPhase::Up,
+                quickgui::Point::new(track.x + track.width * 0.8, track.y),
+                quickgui::Vector::default(),
+                size,
+            ),
+            size,
+        );
+        // The core owns the commit boundary; the binding only records that it happened.
+        assert!(change.committed);
+        retained.committed = true;
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    let committed = component_change(&events, root_id);
+    assert_eq!(committed["committed"], true);
+    assert_eq!(committed["dragging"], false);
+}
+
+#[test]
+fn a_declared_number_field_scrub_area_steps_through_the_core() {
+    let root_id = 940;
+    let group_id = 941;
+    let scrub_id = 942;
+    let cursor_id = 943;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "number-field",
+        "quantity",
+        &[
+            (property::MINIMUM, 0.0),
+            (property::MAXIMUM, 100.0),
+            (property::STEP, 1.0),
+            (property::SMALL_STEP, 0.5),
+            (property::LARGE_STEP, 5.0),
+            (property::PITCH, 2.0),
+        ],
+        &[(property::VALUES, "[10]")],
+        &[
+            (property::SNAP_ON_STEP, true),
+            (property::ALLOW_WHEEL_SCRUB, false),
+            (property::REQUIRED, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        group_id,
+        root_id,
+        NodeTag::View,
+        "number-field-group",
+        "quantity",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        scrub_id,
+        group_id,
+        NodeTag::View,
+        "number-field-scrub-area",
+        "quantity",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        cursor_id,
+        scrub_id,
+        NodeTag::View,
+        "number-field-scrub-area-cursor",
+        "quantity",
+        &[],
+        &[],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let field = NumberField::new(ElementId::named("quantity"));
+    for element in [
+        field.group_id(),
+        field.scrub_area_id(),
+        field.scrub_area_cursor_id(),
+    ] {
+        assert!(cx.contains_element(window, element).unwrap());
+    }
+
+    // The core turns the captured drag into whole steps at the declared sensitivity, keeping the
+    // unconverted remainder so a slow drag moves one step at a time.
+    let center = element_center(&mut cx, window, field.scrub_area_id());
+    let key = ElementId::named("quantity").as_u64();
+    cx.update(view, |view, cx| {
+        let state = &mut view
+            .components
+            .number_fields
+            .get_mut(&key)
+            .expect("the declared number field is retained")
+            .state;
+        assert!(state.apply_scrub(&captured_pointer(
+            quickgui::PointerPhase::Down,
+            center,
+            quickgui::Vector::default(),
+            quickgui::Size::new(40.0, 40.0),
+        )));
+        assert!(state.apply_scrub(&captured_pointer(
+            quickgui::PointerPhase::Move,
+            quickgui::Point::new(center.x + 20.0, center.y),
+            quickgui::Vector::new(20.0, 0.0),
+            quickgui::Size::new(40.0, 40.0),
+        )));
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    let scrubbing = component_change(&events, root_id);
+    assert_eq!(scrubbing["scrubbing"], true);
+    assert_eq!(scrubbing["required"], true);
+    assert!(scrubbing["value"].as_f64().unwrap() > 10.0);
+
+    cx.update(view, |view, cx| {
+        let state = &mut view
+            .components
+            .number_fields
+            .get_mut(&key)
+            .expect("the declared number field is retained")
+            .state;
+        assert!(state.end_scrub());
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(component_change(&events, root_id)["scrubbing"], false);
+}
+
+#[test]
+fn a_read_only_number_field_refuses_every_change_while_staying_focusable() {
+    let root_id = 950;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "number-field",
+        "locked",
+        &[(property::STEP, 1.0)],
+        &[(property::VALUES, "[7]")],
+        &[(property::READ_ONLY, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        951,
+        root_id,
+        NodeTag::Input,
+        "number-field-input",
+        "locked",
+        &[],
+        &[],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let field = NumberField::new(ElementId::named("locked"));
+    // Read-only is not disabled: the input still takes focus.
+    cx.focus(window, field.input_id()).unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(field.input_id()));
+    // Every mutator refuses while the control is read-only, and the value is untouched.
+    let refused = cx
+        .update(view, |view, _cx| {
+            let state = &mut view
+                .components
+                .number_fields
+                .get_mut(&ElementId::named("locked").as_u64())
+                .expect("the declared number field is retained")
+                .state;
+            (state.step_by(1.0), state.set_text("42"), state.value())
+        })
+        .unwrap();
+    assert_eq!(refused, (false, false, Some(7.0)));
+}
+
+#[test]
+fn a_declared_toast_provider_limits_the_stack_and_reports_each_toasts_geometry() {
+    let viewport_id = 960;
+    let portal_id = 961;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        viewport_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "toast-viewport",
+        "notices",
+        &[(property::LIMIT, 2.0), (property::PITCH, 12.0)],
+        &[
+            (
+                property::TOASTS,
+                r#"[{"id":"a","title":"Saved","type":"success"},
+                    {"id":"b","title":"Uploading","type":"loading"},
+                    {"id":"c","title":"Failed","type":"error"}]"#,
+            ),
+            (property::SWIPE_DIRECTION, "left"),
+        ],
+        &[
+            (property::STACK_EXPANDED, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        portal_id,
+        viewport_id,
+        NodeTag::View,
+        "toast-portal",
+        "notices",
+        &[],
+        &[],
+        &[],
+    );
+    let mut next = 962;
+    for declared in ["a", "b", "c"] {
+        let root = next;
+        declare_aligned_part(
+            &mut tree,
+            root,
+            portal_id,
+            NodeTag::View,
+            "toast",
+            "notices",
+            &[],
+            &[(property::PART_VALUE, declared)],
+            &[],
+        );
+        declare_aligned_part(
+            &mut tree,
+            root + 1,
+            root,
+            NodeTag::View,
+            "toast-content",
+            "notices",
+            &[],
+            &[(property::PART_VALUE, declared)],
+            &[],
+        );
+        next += 2;
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, _view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    cx.run_until_idle().unwrap();
+    let reported = component_change(&events, viewport_id);
+    let toasts = reported["toasts"]
+        .as_array()
+        .expect("the queue is reported");
+    assert_eq!(toasts.len(), 3);
+    // The newest toast is index zero, the declared limit flags the oldest without silencing it,
+    // and each offset is the core's own `index * pitch`.
+    assert_eq!(toasts[0]["id"], serde_json::json!("c"));
+    assert_eq!(toasts[0]["type"], serde_json::json!("error"));
+    assert_eq!(toasts[0]["index"], serde_json::json!(0));
+    assert_eq!(toasts[0]["offset"], serde_json::json!(0.0));
+    assert_eq!(toasts[1]["offset"], serde_json::json!(12.0));
+    assert_eq!(toasts[1]["type"], serde_json::json!("loading"));
+    assert_eq!(toasts[2]["limited"], serde_json::json!(true));
+    assert_eq!(toasts[0]["expanded"], serde_json::json!(true));
+}
+
+#[test]
+fn declared_tabs_report_the_cores_activation_direction_and_indicator_geometry() {
+    let root_id = 970;
+    let list_id = 971;
+    let first_id = 972;
+    let second_id = 973;
+    let indicator_id = 974;
+    let declare = |tree: &mut NativeTree, id, parent, tag, part, value: &str, index: f32| {
+        declare_aligned_part(
+            tree,
+            id,
+            parent,
+            tag,
+            part,
+            "views",
+            &[(property::ITEM_INDEX, index)],
+            &[
+                (property::ACTIVE_VALUE, "list"),
+                (property::PART_VALUE, value),
+                (property::ANCHOR_PLACEMENT, "bottom"),
+            ],
+            &[],
+        );
+    };
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "tabs",
+        "views",
+        &[],
+        &[(property::ACTIVE_VALUE, "list")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    declare(
+        &mut tree,
+        list_id,
+        root_id,
+        NodeTag::View,
+        "tabs-list",
+        "",
+        0.0,
+    );
+    declare(
+        &mut tree,
+        first_id,
+        list_id,
+        NodeTag::Button,
+        "tab",
+        "list",
+        0.0,
+    );
+    declare(
+        &mut tree,
+        second_id,
+        list_id,
+        NodeTag::Button,
+        "tab",
+        "grid",
+        1.0,
+    );
+    declare(
+        &mut tree,
+        indicator_id,
+        list_id,
+        NodeTag::View,
+        "tab-indicator",
+        "list",
+        0.0,
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let active = Tabs::new(ElementId::named("views"), ElementId::named("list")).tab("list");
+    // The indicator publishes the active tab's laid-out box during paint.
+    cx.element_bounds(window, active.indicator_id()).unwrap();
+    cx.run_until_idle().unwrap();
+    let first = component_change(&events, root_id);
+    assert_eq!(first["activationDirection"], serde_json::json!("none"));
+    let indicator = &first["indicator"];
+    assert!(indicator["width"].as_f64().unwrap() > 0.0);
+
+    // Moving the declaration forward makes the core record the direction the selection travelled.
+    cx.update(view, |view, cx| {
+        let mut tree = view.tree.borrow_mut();
+        for id in [root_id, list_id, first_id, second_id, indicator_id] {
+            tree.nodes.get_mut(&id).unwrap().set_property(
+                property::ACTIVE_VALUE,
+                Some(PropertyValue::String(Arc::from("grid"))),
+            );
+        }
+        tree.nodes.get_mut(&indicator_id).unwrap().set_property(
+            property::PART_VALUE,
+            Some(PropertyValue::String(Arc::from("grid"))),
+        );
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, root_id)["activationDirection"],
+        serde_json::json!("right")
+    );
+}
+
+#[test]
+fn declared_toolbar_button_link_input_group_and_separator_parts_share_one_roving_stop() {
+    let root_id = 980;
+    let group_id = 981;
+    let button_id = 982;
+    let link_id = 983;
+    let input_id = 984;
+    let separator_id = 985;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "toolbar",
+        "actions",
+        &[],
+        &[(
+            property::ITEMS,
+            r#"[{"value":"cut"},{"value":"docs"},{"value":"search"},
+                {"value":"paste","disabled":true,"focusableWhenDisabled":true}]"#,
+        )],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        group_id,
+        root_id,
+        NodeTag::View,
+        "toolbar-group",
+        "actions",
+        &[],
+        &[],
+        &[],
+    );
+    for (id, part, value) in [
+        (button_id, "toolbar-button", "cut"),
+        (link_id, "toolbar-link", "docs"),
+        (input_id, "toolbar-input", "search"),
+        (986, "toolbar-item", "paste"),
+    ] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            group_id,
+            if part == "toolbar-input" {
+                NodeTag::Input
+            } else {
+                NodeTag::Button
+            },
+            part,
+            "actions",
+            &[],
+            &[(property::PART_VALUE, value)],
+            &[],
+        );
+    }
+    declare_aligned_part(
+        &mut tree,
+        separator_id,
+        root_id,
+        NodeTag::View,
+        "toolbar-separator",
+        "actions",
+        &[],
+        &[],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let toolbar_items = [
+        ToolbarItem::new(ElementId::named("cut")),
+        ToolbarItem::new(ElementId::named("docs")),
+        ToolbarItem::new(ElementId::named("search")),
+        ToolbarItem::new(ElementId::named("paste")).disabled(true),
+    ];
+    let toolbar = Toolbar::new(
+        ElementId::named("actions"),
+        &ToolbarState::empty(),
+        &toolbar_items,
+    );
+    for value in ["cut", "docs", "search", "paste"] {
+        assert!(
+            cx.contains_element(window, toolbar.item_id(ElementId::named(value)))
+                .unwrap(),
+            "{value} mounted"
+        );
+    }
+
+    // Arrow navigation skips the disabled item, so the roving stop lands on the last enabled one.
+    cx.focus(window, toolbar.item_id(ElementId::named("cut")))
+        .unwrap();
+    cx.simulate_keystrokes(window, "right right right").unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "active": "search" })
+    );
+
+    // `focusableWhenDisabled` is about the Tab sequence: the disabled command stays discoverable.
+    let paste = toolbar.item_id(ElementId::named("paste"));
+    cx.focus(window, paste).unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(paste));
+}
+
+#[test]
+fn a_declared_field_reports_the_cores_validation_contract_and_mounts_item_and_validity() {
+    let root_id = 990;
+    let item_id = 991;
+    let validity_id = 992;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "field",
+        "email",
+        &[(property::VALIDATION_DEBOUNCE_TIME, 250.0)],
+        &[(property::VALIDATION_MODE, "onChange")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        item_id,
+        root_id,
+        NodeTag::View,
+        "field-item",
+        "email",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        validity_id,
+        root_id,
+        NodeTag::View,
+        "field-validity",
+        "email",
+        &[],
+        &[],
+        &[(property::OPEN, true)],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let field = Field::new(ElementId::named("email"));
+    assert!(cx.contains_element(window, field.item_id()).unwrap());
+    assert!(cx.contains_element(window, field.validity_id()).unwrap());
+
+    cx.run_until_idle().unwrap();
+    let reported = component_change(&events, root_id);
+    assert_eq!(reported["validation"]["change"], true);
+    assert_eq!(reported["validation"]["blur"], true);
+    assert_eq!(reported["validation"]["submit"], true);
+    assert_eq!(reported["validationDelay"]["change"], 250.0);
+    assert_eq!(reported["validationDelay"]["blur"], 0.0);
+}
+
+#[test]
+fn read_only_selection_controls_and_a_parent_checkbox_derive_their_state_from_the_core() {
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        1000,
+        ROOT_NODE,
+        NodeTag::Button,
+        "checkbox",
+        "mixed",
+        &[],
+        &[(property::VALUES, "[true,false,true]")],
+        &[(property::PARENT, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        1001,
+        ROOT_NODE,
+        NodeTag::Button,
+        "switch",
+        "locked-switch",
+        &[],
+        &[],
+        &[(property::CHECKED, true), (property::READ_ONLY, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        1002,
+        ROOT_NODE,
+        NodeTag::Button,
+        "radio",
+        "locked-radio",
+        &[],
+        &[],
+        &[(property::READ_ONLY, true)],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    for id in [1000u32, 1001, 1002] {
+        assert!(
+            cx.contains_element(window, ElementId::new(u64::from(id)))
+                .unwrap(),
+            "{id} mounted"
+        );
+    }
+    // A read-only control refuses every change while keeping its place in the Tab sequence.
+    assert_eq!(
+        quickgui::Switch::new(true).read_only(true).next_checked(),
+        None
+    );
+    assert!(
+        !quickgui::Radio::new(false)
+            .read_only(true)
+            .accepts_selection()
+    );
+    assert_eq!(
+        Checkbox::parent([true, false, true]).state(),
+        ToggleState::Mixed
+    );
+}
+
+#[test]
+fn a_declared_dialog_viewport_mounts_and_the_exit_transition_reports_its_completion() {
+    let root_id = 1010;
+    let popup_id = 1011;
+    let viewport_id = 1012;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "dialog",
+        "confirm",
+        &[(property::EXIT_DURATION, 40.0)],
+        &[],
+        &[
+            (property::OPEN, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        popup_id,
+        root_id,
+        NodeTag::View,
+        "dialog-popup",
+        "confirm",
+        &[],
+        &[],
+        &[(property::OPEN, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        viewport_id,
+        popup_id,
+        NodeTag::View,
+        "dialog-viewport",
+        "confirm",
+        &[],
+        &[],
+        &[(property::OPEN, true)],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let dialog = quickgui::Dialog::new("confirm", true);
+    assert!(cx.contains_element(window, dialog.viewport_id()).unwrap());
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "openChangeComplete": true })
+    );
+
+    // The core holds a closing dialog mounted for exactly the declared exit transition.
+    cx.update(view, |view, cx| {
+        let mut tree = view.tree.borrow_mut();
+        for id in [root_id, popup_id, viewport_id] {
+            tree.nodes
+                .get_mut(&id)
+                .unwrap()
+                .set_property(property::OPEN, Some(PropertyValue::Bool(false)));
+        }
+        cx.invalidate();
+    })
+    .unwrap();
+    cx.advance_frame().unwrap();
+    assert!(cx.contains_element(window, dialog.root_id()).unwrap());
+    cx.advance_time(Duration::from_millis(60)).unwrap();
+    cx.run_until_idle().unwrap();
+    assert!(!cx.contains_element(window, dialog.root_id()).unwrap());
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "openChangeComplete": false })
+    );
+}
+
+#[test]
+fn declared_progress_and_meter_parts_report_the_cores_status_and_formatted_value() {
+    let progress_id = 1020;
+    let meter_id = 1030;
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        progress_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "progress",
+        "upload",
+        &[(property::VALUE, 3.0), (property::MAXIMUM, 4.0)],
+        &[(property::FORMAT, "fraction")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    for (offset, part) in [
+        (1u32, "progress-track"),
+        (2, "progress-indicator"),
+        (3, "progress-label"),
+        (4, "progress-value"),
+    ] {
+        let parent = if part == "progress-indicator" {
+            progress_id + 1
+        } else {
+            progress_id
+        };
+        declare_aligned_part(
+            &mut tree,
+            progress_id + offset,
+            parent,
+            NodeTag::View,
+            part,
+            "upload",
+            &[],
+            &[],
+            &[],
+        );
+    }
+    declare_aligned_part(
+        &mut tree,
+        meter_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "meter",
+        "storage",
+        &[
+            (property::VALUE, 50.0),
+            (property::MINIMUM, 0.0),
+            (property::MAXIMUM, 100.0),
+        ],
+        &[(property::FORMAT, "percent")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    for (offset, part) in [
+        (1u32, "meter-track"),
+        (2, "meter-label"),
+        (3, "meter-value"),
+    ] {
+        declare_aligned_part(
+            &mut tree,
+            meter_id + offset,
+            meter_id,
+            NodeTag::View,
+            part,
+            "storage",
+            &[],
+            &[],
+            &[],
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let progress = Progress::new(3.0, 4.0).id("upload");
+    for element in [
+        progress.track_id(),
+        progress.indicator_id(),
+        progress.label_id(),
+        progress.value_id(),
+    ] {
+        assert!(cx.contains_element(window, element.unwrap()).unwrap());
+    }
+    cx.run_until_idle().unwrap();
+    let reported = component_change(&events, progress_id);
+    assert_eq!(reported["status"], serde_json::json!("progressing"));
+    assert_eq!(reported["displayValue"], serde_json::json!("3 of 4"));
+    assert_eq!(
+        component_change(&events, meter_id)["displayValue"],
+        serde_json::json!("50%")
+    );
+}
+
+#[test]
+fn malformed_aligned_declarations_declare_nothing_instead_of_panicking() {
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        1100,
+        ROOT_NODE,
+        NodeTag::Button,
+        "popover-trigger",
+        "broken-popover",
+        &[
+            (property::SIDE_OFFSET, f32::MAX),
+            (property::ALIGN_OFFSET, f32::MIN),
+            (property::COLLISION_PADDING, -1.0),
+        ],
+        &[
+            (property::SIDE, "sideways"),
+            (property::ALIGN, "middle"),
+            (property::ANCHOR_POINT, "not,a,point"),
+            (property::ANCHOR_TARGET, "4294967295"),
+        ],
+        &[(property::OPEN, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        1101,
+        ROOT_NODE,
+        NodeTag::Button,
+        "tooltip-trigger",
+        "broken-tooltip",
+        &[(property::DELAY, -5.0), (property::SIDE_OFFSET, f32::MAX)],
+        &[
+            (property::PROVIDER, "missing"),
+            (property::TRACK_CURSOR_AXIS, "diagonal"),
+        ],
+        &[(property::OPEN, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        1102,
+        ROOT_NODE,
+        NodeTag::View,
+        "toast-viewport",
+        "broken-toasts",
+        &[(property::LIMIT, -3.0), (property::PITCH, f32::NAN)],
+        &[
+            (property::TOASTS, "{not json"),
+            (property::SWIPE_DIRECTION, "sideways"),
+        ],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        1103,
+        ROOT_NODE,
+        NodeTag::Button,
+        "checkbox",
+        "broken-parent",
+        &[],
+        &[(property::VALUES, "[1,2,3]")],
+        &[(property::PARENT, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        1104,
+        ROOT_NODE,
+        NodeTag::View,
+        "field",
+        "broken-field",
+        &[(property::VALIDATION_DEBOUNCE_TIME, f32::INFINITY)],
+        &[(property::VALIDATION_MODE, "whenever")],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    assert!(
+        cx.contains_element(window, ElementId::named("broken-toasts"))
+            .unwrap()
+    );
+    for scope in ["broken-popover", "broken-tooltip"] {
+        let root = ElementId::named(scope);
+        let trigger = if scope == "broken-popover" {
+            popover_trigger_id(root)
+        } else {
+            tooltip_trigger_id(root)
+        };
+        assert!(
+            cx.contains_element(window, trigger).unwrap(),
+            "{scope} mounted"
+        );
+    }
+    assert!(
+        cx.contains_element(
+            window,
+            Field::new(ElementId::named("broken-field")).root_id()
+        )
+        .unwrap(),
+        "a field root mounts under the identity the core derives from its control"
+    );
+    assert!(
+        cx.contains_element(window, ElementId::new(1103)).unwrap(),
+        "a checkbox mounts under its own node identity"
+    );
+    // A parent checkbox whose declared children are not booleans folds an empty set, which the
+    // core answers with `Off` rather than a panic.
+    assert_eq!(
+        Checkbox::parent(declared_flags(
+            &component_part_node(NodeTag::Button, ROOT_NODE, "checkbox", &[], &[]),
+            property::VALUES,
+        ))
+        .state(),
+        ToggleState::Off
     );
 }

@@ -15,8 +15,10 @@ import {
   NavigationMenu,
   NumberField,
   OtpField,
+  Popover,
   PopoverMenu,
   PreviewCard,
+  Progress,
   ScrollArea,
   Select,
   Separator,
@@ -29,8 +31,15 @@ import {
   Toast,
   ToggleGroup,
   Toolbar,
+  Tooltip,
   Tree,
   View,
+  useGaugeState,
+  useNumberFieldState,
+  usePopoverPlacement,
+  useSliderState,
+  useTabsState,
+  useToastManager,
   type ScrollAreaState,
   type ToastDeclaration,
   type TreeNodeDeclaration,
@@ -662,23 +671,20 @@ function SurfacesAndFeedback() {
     <Panel title="Tabs, dialogs, and toasts">
       <Tabs.Root value={tab()} onValueChange={setTab} activation="automatic">
         <Tabs.List style={{ display: "flex", flexDirection: "row", gap: 4 }}>
-          <Tabs.Tab value="overview" style={controlStyle}>
+          <Tabs.Tab value="overview" index={0} style={controlStyle}>
             <Text style={{ fontSize: 12, color: ink }}>Overview</Text>
-            <Tabs.Indicator
-              style={{
-                position: "absolute",
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 2,
-                backgroundColor: accent,
-              }}
-            />
           </Tabs.Tab>
-          <Tabs.Tab value="usage" style={controlStyle}>
+          <Tabs.Tab value="usage" index={1} style={controlStyle}>
             <Text style={{ fontSize: 12, color: ink }}>Usage</Text>
           </Tabs.Tab>
+          {/* A declared placement keeps the indicator on the tab that is really active and
+              publishes that tab's laid-out box back through `useTabsState`. */}
+          <Tabs.Indicator
+            placement="bottom"
+            style={{ height: 2, backgroundColor: accent }}
+          />
         </Tabs.List>
+        <TabsDirection />
         <Tabs.Panel value="overview" style={{ paddingTop: 8 }}>
           <Text style={{ fontSize: 12, color: muted }}>
             An inactive panel is not mounted at all, so it contributes no layout or paint.
@@ -827,6 +833,9 @@ function ComponentsExample() {
         <SurfacesAndFeedback />
         <IdentityAndGrouping />
         <CodesSheetsAndNavigation />
+        <AlignedPopoverAndTooltip />
+        <AlignedRangeParts />
+        <AlignedToastStack />
       </View>
     </View>
   );
@@ -1116,6 +1125,330 @@ function CodesSheetsAndNavigation() {
       </NavigationMenu.Root>
       <Text style={{ fontSize: 12, color: muted }}>open panel: {navValue()}</Text>
     </Panel>
+  );
+}
+
+/**
+ * The Base UI-aligned popover and tooltip compounds.
+ *
+ * The declared side is only a preference: the core reports the placement it really used, and this
+ * panel prints it rather than measuring anything itself.
+ */
+function AlignedPopoverAndTooltip() {
+  const [open, setOpen] = createSignal(false);
+  return (
+    <Panel title="Popover and tooltip parts">
+      <Popover.Root
+        open={open()}
+        onOpenChange={setOpen}
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        collisionPadding={12}
+      >
+        <Row>
+          <Popover.Trigger
+            style={{
+              paddingLeft: 12,
+              paddingRight: 12,
+              paddingTop: 6,
+              paddingBottom: 6,
+              borderRadius: 8,
+              backgroundColor: accent,
+            }}
+          >
+            <Text style={{ fontSize: 12 }}>Account</Text>
+          </Popover.Trigger>
+          <ResolvedPlacement />
+        </Row>
+        <Popover.Positioner>
+          <Popover.Popup
+            style={{
+              width: 220,
+              padding: 12,
+              borderRadius: 10,
+              backgroundColor: surface,
+              borderColor: border,
+              borderWidth: 1,
+            }}
+          >
+            <Popover.Arrow
+              style={{ width: 10, height: 10, backgroundColor: surface }}
+            />
+            <Popover.Title>
+              <Text style={{ fontSize: 12, fontWeight: 700 }}>Signed in</Text>
+            </Popover.Title>
+            <Popover.Viewport style={{ maxHeight: 120 }}>
+              <Text style={{ fontSize: 12, color: muted }}>ada@example.com</Text>
+            </Popover.Viewport>
+            <Popover.Close>
+              <Text style={{ fontSize: 12, color: accent }}>Done</Text>
+            </Popover.Close>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Root>
+
+      <Tooltip.Provider delay={400} closeDelay={120} timeout={400}>
+        <Tooltip.Root side="top" sideOffset={7}>
+          <Tooltip.Trigger
+            style={{
+              paddingLeft: 12,
+              paddingRight: 12,
+              paddingTop: 6,
+              paddingBottom: 6,
+              borderRadius: 8,
+              borderColor: border,
+              borderWidth: 1,
+            }}
+          >
+            <Text style={{ fontSize: 12 }}>Hover for a hint</Text>
+          </Tooltip.Trigger>
+          <Tooltip.Positioner>
+            <Tooltip.Popup
+              style={{
+                paddingLeft: 8,
+                paddingRight: 8,
+                paddingTop: 4,
+                paddingBottom: 4,
+                borderRadius: 6,
+                backgroundColor: "#0b0f17",
+                borderColor: border,
+                borderWidth: 1,
+              }}
+            >
+              <Text style={{ fontSize: 11 }}>The core owns every deadline</Text>
+              <Tooltip.Arrow
+                style={{ width: 8, height: 8, backgroundColor: "#0b0f17" }}
+              />
+            </Tooltip.Popup>
+          </Tooltip.Positioner>
+        </Tooltip.Root>
+      </Tooltip.Provider>
+    </Panel>
+  );
+}
+
+function ResolvedPlacement() {
+  const placement = usePopoverPlacement();
+  return (
+    <Text style={{ fontSize: 12, color: muted }}>
+      resolved: {placement().side}/{placement().align}
+    </Text>
+  );
+}
+
+/** Slider, number-field, and progress parts, all reporting what the core decided. */
+function AlignedRangeParts() {
+  const [volume, setVolume] = createSignal<readonly number[]>([40]);
+  const [committed, setCommitted] = createSignal<number | undefined>();
+  const [quantity, setQuantity] = createSignal(8);
+  return (
+    <Panel title="Range parts and reported state">
+      <Slider.Root
+        scope="aligned-volume"
+        value={volume()}
+        min={0}
+        max={100}
+        step={5}
+        format="percent"
+        onValueChange={setVolume}
+        onValueCommitted={([next]) => setCommitted(next)}
+      >
+        <Row>
+          <Slider.Label scope="aligned-volume">
+            <Text style={{ fontSize: 12, color: muted }}>Volume</Text>
+          </Slider.Label>
+          <SliderReadout />
+        </Row>
+        <Slider.Control scope="aligned-volume">
+          <Slider.Track
+            scope="aligned-volume"
+            style={{ height: 6, borderRadius: 3, backgroundColor: border }}
+          >
+            <Slider.Indicator
+              scope="aligned-volume"
+              style={{
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: accent,
+                width: `${volume()[0] ?? 0}%`,
+              }}
+            />
+          </Slider.Track>
+        </Slider.Control>
+        <Slider.Thumb
+          scope="aligned-volume"
+          index={0}
+          style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: ink }}
+        />
+      </Slider.Root>
+      <Text style={{ fontSize: 12, color: muted }}>
+        committed: {committed() === undefined ? "—" : String(committed())}
+      </Text>
+
+      <NumberField.Root
+        scope="aligned-quantity"
+        value={quantity()}
+        min={0}
+        max={99}
+        step={1}
+        smallStep={0.5}
+        largeStep={10}
+        snapOnStep
+        required
+        onValueChange={(next) => setQuantity(next ?? 0)}
+      >
+        <NumberField.Group scope="aligned-quantity">
+          <Row>
+            <NumberField.Decrement scope="aligned-quantity">
+              <Text style={{ fontSize: 12 }}>−</Text>
+            </NumberField.Decrement>
+            <NumberField.Input
+              scope="aligned-quantity"
+              style={{ width: 64, borderColor: border, borderWidth: 1, borderRadius: 6 }}
+            />
+            <NumberField.Increment scope="aligned-quantity">
+              <Text style={{ fontSize: 12 }}>+</Text>
+            </NumberField.Increment>
+            <NumberField.ScrubArea
+              scope="aligned-quantity"
+              style={{
+                width: 36,
+                height: 24,
+                borderRadius: 6,
+                borderColor: border,
+                borderWidth: 1,
+              }}
+            >
+              <NumberFieldScrubCursor />
+            </NumberField.ScrubArea>
+          </Row>
+        </NumberField.Group>
+      </NumberField.Root>
+
+      <Progress.Root scope="aligned-upload" value={3} max={4} format="fraction">
+        <Row>
+          <Progress.Label scope="aligned-upload">
+            <Text style={{ fontSize: 12, color: muted }}>Uploading</Text>
+          </Progress.Label>
+          <GaugeReadout />
+        </Row>
+        <Progress.Track
+          scope="aligned-upload"
+          style={{ height: 6, borderRadius: 3, backgroundColor: border }}
+        >
+          <Progress.Indicator
+            scope="aligned-upload"
+            style={{ height: 6, borderRadius: 3, backgroundColor: accent, width: "75%" }}
+          />
+        </Progress.Track>
+      </Progress.Root>
+    </Panel>
+  );
+}
+
+function SliderReadout() {
+  const slider = useSliderState();
+  return (
+    <Text style={{ fontSize: 12, color: slider().dragging ? accent : muted }}>
+      {slider().displayValue ?? "—"}
+    </Text>
+  );
+}
+
+function NumberFieldScrubCursor() {
+  const field = useNumberFieldState();
+  return (
+    <NumberField.ScrubAreaCursor
+      scope="aligned-quantity"
+      style={{
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: field().scrubbing ? accent : border,
+      }}
+    />
+  );
+}
+
+function GaugeReadout() {
+  const gauge = useGaugeState();
+  return (
+    <Text style={{ fontSize: 12, color: muted }}>
+      {gauge().displayValue ?? "—"} ({gauge().status})
+    </Text>
+  );
+}
+
+/** The toast provider, its manager, and the stack geometry the core reports. */
+function AlignedToastStack() {
+  return (
+    <Toast.Provider timeout={4000} limit={3} pitch={8} swipeDirection="right">
+      <AlignedToastPanel />
+    </Toast.Provider>
+  );
+}
+
+function AlignedToastPanel() {
+  const toasts = useToastManager();
+  return (
+    <Panel title="Toast provider and manager">
+      <Row>
+        <Button
+          style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}
+          onClick={() => toasts.add({ title: "Saved", type: "success" })}
+        >
+          <Text style={{ fontSize: 12 }}>Push</Text>
+        </Button>
+        <Button
+          style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}
+          onClick={() => toasts.closeAll()}
+        >
+          <Text style={{ fontSize: 12 }}>Clear</Text>
+        </Button>
+      </Row>
+      <Toast.Viewport style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <For each={toasts.stack()}>
+          {(entry) => (
+            <Toast.Positioner toastId={entry.id}>
+              <Toast.Root
+                toastId={entry.id}
+                style={{
+                  padding: 8,
+                  borderRadius: 8,
+                  backgroundColor: surface,
+                  borderColor: border,
+                  borderWidth: 1,
+                  opacity: entry.limited ? 0.6 : 1,
+                }}
+              >
+                <Toast.Content toastId={entry.id}>
+                  <Row>
+                    <Toast.Title toastId={entry.id}>
+                      <Text style={{ fontSize: 12 }}>{entry.type}</Text>
+                    </Toast.Title>
+                    <Text style={{ fontSize: 11, color: muted }}>#{entry.index}</Text>
+                    <Toast.Close toastId={entry.id}>
+                      <Text style={{ fontSize: 12, color: muted }}>×</Text>
+                    </Toast.Close>
+                  </Row>
+                </Toast.Content>
+              </Toast.Root>
+            </Toast.Positioner>
+          )}
+        </For>
+      </Toast.Viewport>
+    </Panel>
+  );
+}
+
+function TabsDirection() {
+  const tabs = useTabsState();
+  return (
+    <Text style={{ fontSize: 12, color: muted }}>
+      activation direction: {tabs().activationDirection}
+      {tabs().indicator ? ` · indicator ${Math.round(tabs().indicator!.width)}px` : ""}
+    </Text>
   );
 }
 
