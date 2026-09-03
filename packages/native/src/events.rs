@@ -188,6 +188,7 @@ impl NativeKeymap {
 /// Listeners are additive and independent; an element that declares none keeps the untouched fast
 /// path with no core listener registration at all.
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn attach_input_listeners(
     mut element: Element,
     element_id: ElementId,
@@ -196,6 +197,7 @@ pub(super) fn attach_input_listeners(
     events: &EventQueue,
     node: &NativeNode,
     cx: &mut ViewContext<'_, NativeView>,
+    core_owns_scroll_wheel: bool,
 ) -> Element {
     let declared = |key: u16| node.boolean(key).unwrap_or(false);
     let keymap = node
@@ -354,7 +356,7 @@ pub(super) fn attach_input_listeners(
         element = element.on_mouse_move(listener);
     }
 
-    if declared(property::SCROLL_LISTENER) {
+    if declared(property::SCROLL_LISTENER) && !core_owns_scroll_wheel {
         let queue = Rc::clone(events);
         let listener = cx.scroll_wheel_listener(element_id, move |_view, event, cx| {
             let pixels = event.delta.pixel_delta(DEFAULT_SCROLL_LINE_HEIGHT);

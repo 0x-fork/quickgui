@@ -390,6 +390,50 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 
 ### JavaScript tooling
+- Bound the eight Base UI parity components to `@quickgui/native` and `@quickgui/solid`, bumping
+  the mutation protocol to v24. Solid gained `Separator`, `Avatar` (`Root`/`Image`/`Fallback`),
+  `CheckboxGroup` whose members are ordinary `Checkbox.Root` nodes with `value` or `parent`,
+  `PreviewCard` (`Root`/`Trigger`/`Portal`/`Backdrop`/`Positioner`/`Popup`/`Arrow`), `ScrollArea`
+  (`Root`/`Viewport`/`Content`/`Scrollbar`/`Thumb`/`Corner`), `OtpField` (`Root`/`Input`/
+  `Separator`), `Drawer` (`Root`/`Trigger`/`Portal`/`Backdrop`/`Viewport`/`Popup`/`Content`/
+  `Title`/`Description`/`Close`/`SwipeArea`), and `NavigationMenu` (`Root`/`List`/`Item`/`Trigger`/
+  `Icon`/`Content`/`Link`/`Portal`/`Positioner`/`Popup`/`Viewport`/`Arrow`/`Backdrop`), using Base
+  UI's own prop names throughout — `delay` on `Avatar.Fallback`, `delay`/`closeDelay` on
+  `PreviewCard.Trigger`, `orientation`/`keepMounted` on `ScrollArea.Scrollbar`, `length`,
+  `validationType`, `mask`, `readOnly`, `autoSubmit` on `OtpField.Root`, `modal`, `swipeDirection`,
+  `snapPoints`, `snapPoint`, `disablePointerDismissal` on `Drawer.Root`, and `value`,
+  `orientation`, `delay`, `closeDelay` on `NavigationMenu.Root`.
+- Kept every one of them on the declared-part scheme: each root allocates one bounded scope, the
+  Rust binding rebuilds the matching core descriptor and applies its exact identity, semantics,
+  keyboard behavior, and mount policy, and JavaScript reimplements none of it. A closed preview
+  card, drawer, or navigation panel contributes no element at all; a scrollbar for an axis that
+  cannot scroll is unmounted unless `keepMounted` is declared; an avatar mounts exactly one of its
+  image and fallback.
+- Reported everything the core decides as one asynchronous `componentchange` event — the avatar
+  loading status, the checked value set, a preview card's open value, a scroll area's clamped
+  offset and its eight derived style flags, the OTP code plus its separate completion edge, the
+  drawer's open value, snap point, and live swipe, and the navigation menu's open item, roving Tab
+  stop, and activation direction — surfaced through `onLoadingStatusChange`, `onValueChange`,
+  `onOpenChange`, `onScrollStateChange`, `onComplete`, `onSnapPointChange`, `onSwipeChange`, and
+  `onActivationDirectionChange`, plus `useScrollAreaState()` and `useDrawerSwipe()` for reading the
+  same state anywhere inside a subtree.
+- Declared ahead of the core everything it must decide synchronously: eleven new property codes
+  (`delay`, `closeDelay`, `length`, `mask`, `readOnly`, `autoSubmit`, `swipeDirection`,
+  `viewportSize`, `contentSize`, `overflowEdgeThreshold`, `disablePointerDismissal`) and the
+  existing scope, item, value, and orientation declarations. Because the hosted boundary has no
+  layout observer, a scroll area declares the `viewportSize` and `contentSize` extents it laid out
+  and the core owns every offset, overflow flag, and thumb measurement derived from them.
+- Made a duplicate listener impossible rather than fatal: a part whose activation, editing,
+  gesture, or dismissal the core owns — a grouped checkbox, a navigation-menu trigger, an OTP slot,
+  a scroll area's scrollbar, thumb, and wheel, a drawer's swipe area, and every popup's dismissal —
+  now drops the declared listener for that same edge instead of registering a second one for the
+  identity. Malformed `items`, `values`, `viewportSize`, or `contentSize` declarations, a duplicate
+  navigation-menu value, an empty or oversized snap-point list, and an out-of-range OTP length all
+  decline or clamp instead of reaching a core constructor that would panic.
+- Added the eight components to `examples/components-solid`, binding tables and worked examples to
+  `docs/solid.md`, a Solid section to `docs/base-ui-components.md`, and nine Rust binding tests
+  through `TestAppContext` plus seven Solid tests and two protocol tests covering identity, mount
+  policy, reported payloads, bounds, and malformed declarations.
 - Added the extended styling surface to `@quickgui/native` and `@quickgui/solid`, bumping the
   mutation protocol to v23. Text-bearing nodes gained `letterSpacing`, `wordSpacing`,
   `textTransform`, `textShadow`, `textDecoration`/`textDecorationColor`/`textDecorationStyle`/

@@ -79,7 +79,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 23;
+const PROTOCOL_VERSION: u16 = 24;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -396,7 +396,21 @@ mod property {
     pub const SCROLL_SNAP_TYPE: u16 = 289;
     pub const SCROLL_SNAP_ALIGN: u16 = 290;
     pub const SCROLL_SNAP_STOP: u16 = 291;
-    pub const LAST: u16 = SCROLL_SNAP_STOP;
+    // Base UI separators, avatars, checkbox groups, preview cards, scroll areas, OTP fields,
+    // drawers, and navigation menus. Every one of these is declared ahead of the core's decision,
+    // because a hosted renderer can never be asked a synchronous question.
+    pub const DELAY: u16 = 292;
+    pub const CLOSE_DELAY: u16 = 293;
+    pub const LENGTH: u16 = 294;
+    pub const MASK: u16 = 295;
+    pub const READ_ONLY: u16 = 296;
+    pub const AUTO_SUBMIT: u16 = 297;
+    pub const SWIPE_DIRECTION: u16 = 298;
+    pub const VIEWPORT_SIZE: u16 = 299;
+    pub const CONTENT_SIZE: u16 = 300;
+    pub const OVERFLOW_EDGE_THRESHOLD: u16 = 301;
+    pub const DISABLE_POINTER_DISMISSAL: u16 = 302;
+    pub const LAST: u16 = DISABLE_POINTER_DISMISSAL;
 }
 
 #[derive(Default)]
@@ -882,6 +896,7 @@ fn wait<'a, T>(
 }
 
 mod api;
+mod base_ui;
 mod collections;
 mod components;
 mod events;
@@ -894,6 +909,7 @@ mod view;
 
 pub use api::*;
 
+use base_ui::*;
 use collections::*;
 use components::*;
 use events::*;

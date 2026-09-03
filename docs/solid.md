@@ -768,6 +768,143 @@ their first occurrence; anything past `MAX_DECLARED_OPTIONS` (4096), `MAX_TABLE_
 `componentChangeFromEvent(event)` and `commitFromEvent(event)` decode a raw payload when an
 application wants to handle one directly.
 
+## Separators, avatars, checkbox groups, and preview cards
+
+Every component in this section and the next declares the Rust core's own
+[Base UI parity parts](base-ui-components.md). The compound names and prop names follow Base UI
+wherever the core supports them; each one allocates a scope internally, so the parts of one
+instance find each other with no `scope` to repeat and no registry.
+
+| Component | Parts | Declared props | Reported through | Core guide |
+| --- | --- | --- | --- | --- |
+| `Separator` | `Root` | `orientation` (`"horizontal"`/`"vertical"`) | — | [Base UI components](base-ui-components.md) |
+| `Avatar` | `Root`, `Image`, `Fallback` | `ariaLabel` on the root, `src` on the image, `delay` (ms) on the fallback | `onLoadingStatusChange(status, event)` | [Base UI components](base-ui-components.md) |
+| `CheckboxGroup` | `Root` plus `Checkbox.Root value` / `Checkbox.Root parent` children | `allValues`, `value`/`defaultValue`, `disabled` | `onValueChange(values, event)` | [Base UI components](base-ui-components.md) |
+| `PreviewCard` | `Root`, `Trigger`, `Portal`, `Backdrop`, `Positioner`, `Popup`, `Arrow` | `open`/`defaultOpen`, `placement`, `gap`, `viewportMargin` on the root; `delay` and `closeDelay` (ms) on the trigger | `onOpenChange(open, event)` | [Base UI components](base-ui-components.md) |
+
+A separator retains nothing at all: it is one node that gains the Separator role and an
+orientation, and it never joins the Tab sequence.
+
+An avatar's load status is application-reported in the core, so the binding drives it from the
+declared image source's own load outcome and reports every transition. The core decides which of
+the image and the fallback is mounted, so an avatar is announced exactly once however it renders,
+and `Avatar.Fallback delay` is the exact deadline that keeps a fast decode from flashing initials.
+
+```tsx
+<Avatar.Root ariaLabel="Ada Lovelace" onLoadingStatusChange={setStatus}>
+  <Avatar.Image src="./ada.png" />
+  <Avatar.Fallback delay={120}><Text>AL</Text></Avatar.Fallback>
+</Avatar.Root>
+```
+
+Inside a `CheckboxGroup.Root`, an ordinary `Checkbox.Root` becomes a member of the group:
+`value` names the declared value it toggles and `parent` makes it the group's parent checkbox,
+whose on/mixed/off state is derived from the children rather than retained separately. The core
+owns the click behavior for both, so neither declares an `onClick` of its own.
+
+```tsx
+<CheckboxGroup.Root allValues={["red", "green", "blue"]} value={colors()} onValueChange={setColors}>
+  <Checkbox.Root parent><Text>All colours</Text></Checkbox.Root>
+  <For each={["red", "green", "blue"]}>
+    {(value) => (
+      <Checkbox.Root value={value}>
+        <Text>{value}</Text>
+        <Checkbox.Indicator />
+      </Checkbox.Root>
+    )}
+  </For>
+</CheckboxGroup.Root>
+```
+
+A preview card's trigger is a **Link**, not a button: it previews a destination. Hover arms the
+core's exact open deadline, leaving both the trigger and the popup arms the close deadline, and
+focus opens it at once. A closed card mounts no positioner, popup, or arrow at all; the popup's
+Escape and outside-press dismissal belong to the core, so it declares no `onDismiss` of its own.
+
+## Scroll areas, OTP fields, drawers, and navigation menus
+
+| Component | Parts | Declared props | Reported through | Core guide |
+| --- | --- | --- | --- | --- |
+| `ScrollArea` | `Root`, `Viewport`, `Content`, `Scrollbar`, `Thumb`, `Corner` | `viewportSize`, `contentSize`, `overflowEdgeThreshold` on the root; `orientation` and `keepMounted` on a scrollbar | `onScrollStateChange(state, event)` and `useScrollAreaState()` | [Base UI components](base-ui-components.md) |
+| `OtpField` | `Root`, `Input`, `Separator` | `value`/`defaultValue`, `length`, `validationType`, `mask`, `disabled`, `readOnly`, `required`, `autoSubmit`; `index` on a slot | `onValueChange(value, event)`, `onComplete(value, event)` | [Base UI components](base-ui-components.md) |
+| `Drawer` | `Root`, `Trigger`, `Portal`, `Backdrop`, `Viewport`, `Popup`, `Content`, `Title`, `Description`, `Close`, `SwipeArea` | `open`/`defaultOpen`, `modal`, `swipeDirection`, `snapPoints`, `snapPoint`, `disablePointerDismissal` | `onOpenChange`, `onSnapPointChange(index, event)`, `onSwipeChange(swipe, event)` and `useDrawerSwipe()` | [Base UI components](base-ui-components.md) |
+| `NavigationMenu` | `Root`, `List`, `Item`, `Trigger`, `Icon`, `Content`, `Link`, `Portal`, `Positioner`, `Popup`, `Viewport`, `Arrow`, `Backdrop` | `value`/`defaultValue`, `orientation`, `delay`, `closeDelay`, `loopFocus`, `placement`, optional `items`; `value` on an item | `onValueChange(value, event)`, `onActivationDirectionChange(direction, event)` | [Base UI components](base-ui-components.md) |
+
+A scroll area is the caller-styled alternative to QuickGUI's built-in overlay scrollbars, which
+stay the default on any ordinary `overflowY: "scroll"` container. The core owns the clamped
+offsets, the derived overflow flags, the thumb arithmetic, and the captured pointer contract for
+thumb drags and track presses; the viewport is clipped and the application applies the reported
+offset as a paint-only transform, so the two never fight over the same wheel event.
+
+QuickGUI has no layout observer at the hosted boundary, so the extents the arithmetic needs are
+declared ahead of the core's decision like every other bounded property: `viewportSize` and
+`contentSize` are the boxes the application laid out. Everything else comes back:
+
+```tsx
+<ScrollArea.Root
+  viewportSize={{ width: 260, height: 160 }}
+  contentSize={{ width: 260, height: rows.length * 22 }}
+  onScrollStateChange={setScroll}
+>
+  <ScrollArea.Viewport>
+    <ScrollArea.Content style={{ transform: `translateY(${-(scroll()?.offset.y ?? 0)}px)` }}>
+      {/* rows */}
+    </ScrollArea.Content>
+  </ScrollArea.Viewport>
+  <ScrollArea.Scrollbar orientation="vertical">
+    <ScrollArea.Thumb />
+  </ScrollArea.Scrollbar>
+</ScrollArea.Root>
+```
+
+`useScrollAreaState()` reads the same `data-`-like render state inside the subtree: `scrolling`,
+`hovering`, `hasOverflowX` / `hasOverflowY`, and the four overflow-edge flags. A scrollbar for an
+axis that cannot scroll is not mounted at all unless `keepMounted` is declared; the core keeps
+that flag per scroll area, so one kept scrollbar keeps the whole area's scrollbars and corner
+mounted, and a mounted-but-useless scrollbar is hidden from assistive technology.
+
+An OTP field's slots are the core's own text inputs. Accepted characters fill and advance, typing
+over a filled slot replaces it, a paste distributes across consecutive slots, Backspace clears in
+place and then walks back, Delete clears without moving, and the arrows plus Home and End move
+between slots — every one of those inside the core, so a slot declares no `onInput` of its own.
+`autoSubmit` routes through the core's own form submission, validating exactly as Return would.
+
+```tsx
+<OtpField.Root length={6} value={code()} onValueChange={setCode} onComplete={verify}>
+  <For each={[0, 1, 2, 3, 4, 5]}>{(index) => <OtpField.Input index={index} />}</For>
+</OtpField.Root>
+```
+
+A drawer reuses the core's dialog machinery for focus containment, Escape, backdrop dismissal, and
+focus restoration; `modal` selects `true` (contain focus and project modal semantics), `"trap-focus"`
+(contain focus only), or `false`. A snap point at or below `1` is a fraction of the viewport extent
+and a larger one is an absolute pixel extent. The swipe the core decides — `swiping` and a never
+negative `swipeOffset` — comes back through `onSwipeChange` and `useDrawerSwipe()`, and the
+application applies the offset as a paint-only transform so a drag never relayouts. A closed drawer
+contributes no overlay, focus trap, backdrop, or swipe surface at all.
+
+A navigation menu's root is a Navigation landmark, its list carries the List role and orientation,
+and each trigger is a Button with `has-popup`, expanded state, and a controls relationship to its
+open panel. Every part inside a `NavigationMenu.Item` inherits that item's `value`, so a
+composition never repeats it. The ordered model comes from the mounted `Item` children in
+declaration order; declare `items` on the root when a disabled item or a model the children do not
+spell out is needed.
+
+Hovering a trigger opens after `delay` when every panel is closed and switches immediately when one
+is already open; leaving both the trigger and the popup arms `closeDelay`. Arrow keys along the
+orientation plus Home and End move the bar's single Tab stop between enabled triggers, Enter and
+Space open, and Escape closes without leaving the bar. `onActivationDirectionChange` reports
+`"left"`, `"right"`, `"up"`, `"down"`, or `null`, so an application can slide its panel the way the
+user's attention travelled; QuickGUI never animates the panel itself.
+
+Every declaration here is bounded exactly as the Rust binding bounds it:
+`MAX_CHECKBOX_GROUP_VALUES` (256), `MAX_OTP_LENGTH` (12), `MAX_DRAWER_SNAP_POINTS` (8),
+`MAX_NAVIGATION_MENU_ITEMS` (64), `MAX_AVATAR_FALLBACK_DELAY_MS` / `MAX_PREVIEW_CARD_DELAY_MS` /
+`MAX_NAVIGATION_MENU_DELAY_MS` (10 000 ms each), and `MAX_SCROLL_AREA_OVERFLOW_THRESHOLD` (256 px).
+A malformed declaration declares nothing at all rather than reaching a core constructor that would
+panic on it, and a part whose activation, editing, gesture, or dismissal the core owns ignores a
+declared listener for that same edge rather than registering it twice.
+
 ## Extended text styling
 
 Every text-bearing node inherits these through its subtree exactly as the Rust core's own
@@ -1387,7 +1524,8 @@ backgrounds, filters, backdrop effects, transforms, and blend modes, progress/me
 sliders, range sliders, splitters,
 toolbars, and toggle groups, declared option sources with core-rendered popover rows, virtual
 tables and trees, number fields, date and time fields, month grids, in-window menubars, declared
-toast queues, declared keyboard, mouse, gesture,
+toast queues, separators, avatars, checkbox groups, preview cards, caller-styled scroll areas, OTP
+fields, drawers, and navigation menus, declared keyboard, mouse, gesture,
 accelerator, and drag-and-drop events, a stable real-`.app` development host, and self-contained
 production packaging on the current macOS target. It is not yet the full Rust rendering API surface:
 popover arrows and backdrops, animated-image playback control, native child views, accessibility
@@ -1400,5 +1538,11 @@ core offers closes a live native popover and a render pass owns no `EventContext
 committed while the surface is open therefore lands on the frame the close already schedules. And a
 declared table or tree header, row, and cell carries content only — the core assigns their identity
 and interaction — so an interactive control belongs inside a cell as an ordinary child node.
+
+A third belongs to the Base UI parity set: a scroll area declares the viewport and content extents
+it laid out, because the hosted boundary has no layout observer and the core's offset, overflow,
+and thumb arithmetic must be answered without asking JavaScript a synchronous question. Everything
+derived from those extents stays the core's, and the scrollbar track defaults to the declared
+viewport extent along its axis until a press reports the exact size the core laid out.
 
 Return to the [documentation index](README.md).

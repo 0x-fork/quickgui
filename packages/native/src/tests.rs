@@ -4399,3 +4399,889 @@ fn declared_scroll_snapping_sticky_insets_and_logical_spacing_reach_the_core_bui
     );
     drop(apply_properties(div(), &sticky));
 }
+
+// ---------------------------------------------------------------------------
+// Base UI parity components
+//
+// Separators, avatars, checkbox groups, preview cards, scroll areas, OTP fields, drawers, and
+// navigation menus follow the same contract as every other declared component: the declaration is
+// the source of truth, the core owns behavior and mount policy, and everything the core decides
+// leaves as one asynchronous `componentchange` event.
+// ---------------------------------------------------------------------------
+
+fn base_ui_application() -> quickgui::Application {
+    collection_application()
+        .bind_keys(quickgui::otp_field_key_bindings())
+        .bind_keys(quickgui::navigation_menu_key_bindings())
+}
+
+fn mounted_base_ui_view(
+    tree: NativeTree,
+    events: EventQueue,
+) -> (
+    quickgui::TestAppContext,
+    quickgui::TestWindowHandle<NativeView>,
+) {
+    let view = component_part_view(91, tree, events);
+    quickgui::TestAppContext::from_application(
+        base_ui_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .expect("the hosted Base UI view mounts")
+}
+
+/// Declare one avatar and its image and fallback parts under one shared scope.
+fn declare_avatar(tree: &mut NativeTree, base: u32, scope: &str, source: &str) {
+    insert_component_node(
+        tree,
+        base,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "avatar",
+            &[
+                (property::SCOPE, scope),
+                (property::ACCESSIBILITY_LABEL, "Ada Lovelace"),
+            ],
+            &[(property::COMPONENT_CHANGE_LISTENER, true)],
+        ),
+    );
+    insert_component_node(
+        tree,
+        base + 1,
+        base,
+        component_part_node(
+            NodeTag::Image,
+            base,
+            "avatar-image",
+            &[(property::SCOPE, scope), (property::VALUE, source)],
+            &[],
+        ),
+    );
+    insert_component_node(
+        tree,
+        base + 2,
+        base,
+        component_part_node(
+            NodeTag::View,
+            base,
+            "avatar-fallback",
+            &[(property::SCOPE, scope)],
+            &[],
+        ),
+    );
+}
+
+#[test]
+fn declared_separators_and_avatars_adopt_core_identity_and_report_the_load_outcome() {
+    let separator_id = 700;
+    let loaded_base = 710;
+    let broken_base = 720;
+    let mut tree = NativeTree::default();
+    insert_component_node(
+        &mut tree,
+        separator_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "separator",
+            &[(property::ORIENTATION, "vertical")],
+            &[],
+        ),
+    );
+    declare_avatar(&mut tree, loaded_base, "member", RED_PIXEL_PNG);
+    declare_avatar(
+        &mut tree,
+        broken_base,
+        "stranger",
+        "data:image/png;base64,not-base64!!",
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    // A separator is stateless, so it keeps the ordinary node identity and only gains semantics.
+    assert!(
+        cx.contains_element(window, ElementId::new(separator_id as u64))
+            .unwrap()
+    );
+
+    let loaded = quickgui::Avatar::new("member", "Ada Lovelace");
+    assert!(cx.contains_element(window, loaded.root_id()).unwrap());
+    assert!(cx.contains_element(window, loaded.image_id()).unwrap());
+    // A loaded avatar mounts no fallback at all, so the name is announced exactly once.
+    assert!(!cx.contains_element(window, loaded.fallback_id()).unwrap());
+
+    let broken = quickgui::Avatar::new("stranger", "Ada Lovelace");
+    assert!(!cx.contains_element(window, broken.image_id()).unwrap());
+    assert!(cx.contains_element(window, broken.fallback_id()).unwrap());
+
+    assert_eq!(
+        component_change(&events, loaded_base),
+        serde_json::json!({ "loadingStatus": "loaded" })
+    );
+    assert_eq!(
+        component_change(&events, broken_base),
+        serde_json::json!({ "loadingStatus": "error" })
+    );
+}
+
+#[test]
+fn a_declared_avatar_fallback_delay_holds_the_fallback_back_for_exactly_one_deadline() {
+    let base = 730;
+    let mut tree = NativeTree::default();
+    declare_avatar(&mut tree, base, "member", RED_PIXEL_PNG);
+    tree.nodes
+        .get_mut(&base)
+        .unwrap()
+        .set_property(property::DELAY, Some(PropertyValue::Number(200.0)));
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let avatar = quickgui::Avatar::new("member", "Ada Lovelace");
+
+    // While the declared delay is armed neither part is mounted, so a fast decode never flashes
+    // initials on screen.
+    assert!(!cx.contains_element(window, avatar.image_id()).unwrap());
+    assert!(!cx.contains_element(window, avatar.fallback_id()).unwrap());
+    assert_eq!(
+        component_change(&events, base),
+        serde_json::json!({ "loadingStatus": "loading" })
+    );
+
+    // The resolved outcome applies on the very next frame, long before the fallback deadline.
+    cx.advance_time(std::time::Duration::from_millis(50))
+        .unwrap();
+    cx.run_until_idle().unwrap();
+    assert!(cx.contains_element(window, avatar.image_id()).unwrap());
+    assert_eq!(
+        component_change(&events, base),
+        serde_json::json!({ "loadingStatus": "loaded" })
+    );
+}
+
+#[test]
+fn declared_checkbox_groups_derive_the_parent_state_and_stay_independent() {
+    let colors_id = 740;
+    let sizes_id = 741;
+    let mut tree = NativeTree::default();
+    for (id, scope, items, values) in [
+        (
+            colors_id,
+            "colors",
+            r#"["red","green","blue"]"#,
+            r#"["green"]"#,
+        ),
+        (sizes_id, "sizes", r#"["small","large"]"#, r#"[]"#),
+    ] {
+        insert_component_node(
+            &mut tree,
+            id,
+            ROOT_NODE,
+            component_part_node(
+                NodeTag::View,
+                ROOT_NODE,
+                "checkbox-group",
+                &[
+                    (property::SCOPE, scope),
+                    (property::ITEMS, items),
+                    (property::VALUES, values),
+                ],
+                &[(property::COMPONENT_CHANGE_LISTENER, true)],
+            ),
+        );
+    }
+    for (index, value) in ["red", "green", "blue"].iter().enumerate() {
+        insert_component_node(
+            &mut tree,
+            750 + index as u32,
+            colors_id,
+            component_part_node(
+                NodeTag::Button,
+                colors_id,
+                "checkbox-group-item",
+                &[(property::SCOPE, "colors"), (property::PART_VALUE, value)],
+                &[],
+            ),
+        );
+    }
+    insert_component_node(
+        &mut tree,
+        760,
+        colors_id,
+        component_part_node(
+            NodeTag::Button,
+            colors_id,
+            "checkbox-group-parent",
+            &[(property::SCOPE, "colors")],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        761,
+        sizes_id,
+        component_part_node(
+            NodeTag::Button,
+            sizes_id,
+            "checkbox-group-item",
+            &[(property::SCOPE, "sizes"), (property::PART_VALUE, "small")],
+            &[],
+        ),
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let colors_state = quickgui::CheckboxGroupState::new(["red", "green", "blue"]);
+    let colors = quickgui::CheckboxGroup::new("colors", &colors_state);
+    let sizes_state = quickgui::CheckboxGroupState::new(["small", "large"]);
+    let sizes = quickgui::CheckboxGroup::new("sizes", &sizes_state);
+
+    cx.click(window, colors.checkbox_id("red")).unwrap();
+    // Checked values keep the declared order regardless of click order.
+    assert_eq!(
+        component_change(&events, colors_id),
+        serde_json::json!({ "checkedValues": ["red", "green"] })
+    );
+
+    // The parent has no retained value of its own: a mixed parent completes the group.
+    cx.click(window, colors.parent_id()).unwrap();
+    assert_eq!(
+        component_change(&events, colors_id),
+        serde_json::json!({ "checkedValues": ["red", "green", "blue"] })
+    );
+
+    // The second declared instance is untouched by either click.
+    assert_eq!(component_change(&events, sizes_id), serde_json::Value::Null);
+    cx.click(window, sizes.checkbox_id("small")).unwrap();
+    assert_eq!(
+        component_change(&events, sizes_id),
+        serde_json::json!({ "checkedValues": ["small"] })
+    );
+    assert_eq!(
+        component_change(&events, colors_id),
+        serde_json::Value::Null
+    );
+}
+
+#[test]
+fn a_declared_preview_card_opens_from_hover_and_holds_a_declared_delay_back() {
+    let root_id = 770;
+    let trigger_id = 771;
+    let positioner_id = 772;
+    let popup_id = 773;
+    let slow_root_id = 774;
+    let slow_trigger_id = 775;
+    let slow_positioner_id = 776;
+    let mut tree = NativeTree::default();
+    for (root, trigger, positioner, scope, delay) in [
+        (root_id, trigger_id, positioner_id, "profile", 0.0),
+        (
+            slow_root_id,
+            slow_trigger_id,
+            slow_positioner_id,
+            "slow",
+            600.0,
+        ),
+    ] {
+        let mut node = component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "preview-card",
+            &[(property::SCOPE, scope)],
+            &[(property::COMPONENT_CHANGE_LISTENER, true)],
+        );
+        node.set_property(property::DELAY, Some(PropertyValue::Number(delay)));
+        node.set_property(property::CLOSE_DELAY, Some(PropertyValue::Number(0.0)));
+        insert_component_node(&mut tree, root, ROOT_NODE, node);
+        insert_component_node(
+            &mut tree,
+            trigger,
+            root,
+            component_part_node(
+                NodeTag::Button,
+                root,
+                "preview-card-trigger",
+                &[(property::SCOPE, scope)],
+                &[],
+            ),
+        );
+        insert_component_node(
+            &mut tree,
+            positioner,
+            root,
+            component_part_node(
+                NodeTag::View,
+                root,
+                "preview-card-positioner",
+                &[(property::SCOPE, scope)],
+                &[],
+            ),
+        );
+    }
+    insert_component_node(
+        &mut tree,
+        popup_id,
+        positioner_id,
+        component_part_node(
+            NodeTag::View,
+            positioner_id,
+            "preview-card-popup",
+            &[(property::SCOPE, "profile")],
+            &[],
+        ),
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let card = native_preview_card(ElementId::named("profile"), false);
+    let slow = native_preview_card(ElementId::named("slow"), false);
+
+    // A closed card mounts no positioner, popup, or arrow at all.
+    assert!(!cx.contains_element(window, card.popup_id()).unwrap());
+    let bounds = cx.element_bounds(window, card.trigger_id()).unwrap();
+    let center = quickgui::Point::new(
+        bounds.x + bounds.width / 2.0,
+        bounds.y + bounds.height / 2.0,
+    );
+    cx.visual(window).unwrap().move_pointer(center).unwrap();
+
+    assert!(cx.contains_element(window, card.popup_id()).unwrap());
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "open": true })
+    );
+
+    // The declared 600 ms delay reaches the core as an armed deadline rather than an open card,
+    // so resting on the second trigger changes nothing yet.
+    let slow_bounds = cx.element_bounds(window, slow.trigger_id()).unwrap();
+    cx.visual(window)
+        .unwrap()
+        .move_pointer(quickgui::Point::new(
+            slow_bounds.x + slow_bounds.width / 2.0,
+            slow_bounds.y + slow_bounds.height / 2.0,
+        ))
+        .unwrap();
+    assert!(!cx.contains_element(window, slow.popup_id()).unwrap());
+    assert_eq!(
+        component_change(&events, slow_root_id),
+        serde_json::Value::Null
+    );
+
+    // Leaving both the trigger and the popup closes the first card on its zero close delay.
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "open": false })
+    );
+    assert!(!cx.contains_element(window, card.popup_id()).unwrap());
+}
+
+#[test]
+fn a_declared_scroll_area_owns_its_offsets_overflow_flags_and_scrollbar_mount_policy() {
+    let root_id = 780;
+    let viewport_id = 781;
+    let content_id = 782;
+    let vertical_id = 783;
+    let thumb_id = 784;
+    let horizontal_id = 785;
+    let mut tree = NativeTree::default();
+    insert_component_node(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "scroll-area",
+            &[
+                (property::SCOPE, "log"),
+                (property::VIEWPORT_SIZE, "[260,160]"),
+                (property::CONTENT_SIZE, "[260,900]"),
+            ],
+            &[(property::COMPONENT_CHANGE_LISTENER, true)],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        viewport_id,
+        root_id,
+        component_part_node(
+            NodeTag::View,
+            root_id,
+            "scroll-area-viewport",
+            &[(property::SCOPE, "log")],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        content_id,
+        viewport_id,
+        component_part_node(
+            NodeTag::View,
+            viewport_id,
+            "scroll-area-content",
+            &[(property::SCOPE, "log")],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        vertical_id,
+        root_id,
+        component_part_node(
+            NodeTag::View,
+            root_id,
+            "scroll-area-scrollbar",
+            &[
+                (property::SCOPE, "log"),
+                (property::ORIENTATION, "vertical"),
+            ],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        thumb_id,
+        vertical_id,
+        component_part_node(
+            NodeTag::View,
+            vertical_id,
+            "scroll-area-thumb",
+            &[
+                (property::SCOPE, "log"),
+                (property::ORIENTATION, "vertical"),
+            ],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        horizontal_id,
+        root_id,
+        component_part_node(
+            NodeTag::View,
+            root_id,
+            "scroll-area-scrollbar",
+            &[
+                (property::SCOPE, "log"),
+                (property::ORIENTATION, "horizontal"),
+            ],
+            &[],
+        ),
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let area = quickgui::ScrollArea::new("log");
+    let vertical = quickgui::ScrollAreaOrientation::Vertical;
+    let horizontal = quickgui::ScrollAreaOrientation::Horizontal;
+
+    assert!(cx.contains_element(window, area.viewport_id()).unwrap());
+    assert!(
+        cx.contains_element(window, area.scrollbar_id(vertical))
+            .unwrap()
+    );
+    assert!(
+        cx.contains_element(window, area.thumb_id(vertical))
+            .unwrap()
+    );
+    // The horizontal axis cannot scroll and `keepMounted` was not declared, so its scrollbar
+    // contributes no element at all.
+    assert!(
+        !cx.contains_element(window, area.scrollbar_id(horizontal))
+            .unwrap()
+    );
+
+    let overflow = component_change(&events, root_id);
+    assert_eq!(overflow["hasOverflowY"], serde_json::json!(true));
+    assert_eq!(overflow["hasOverflowX"], serde_json::json!(false));
+    assert_eq!(overflow["overflowYStart"], serde_json::json!(false));
+    assert_eq!(overflow["overflowYEnd"], serde_json::json!(true));
+
+    cx.simulate_scroll_wheel(
+        window,
+        area.viewport_id(),
+        quickgui::ScrollWheelEvent {
+            position: quickgui::Point::new(10.0, 10.0),
+            delta: quickgui::ScrollDelta::Pixels(quickgui::Vector::new(0.0, -40.0)),
+            phase: quickgui::GesturePhase::Moved,
+            modifiers: quickgui::Modifiers::empty(),
+        },
+    )
+    .unwrap();
+    cx.run_until_idle().unwrap();
+
+    let scrolled = component_change(&events, root_id);
+    assert_eq!(scrolled["offset"]["y"], serde_json::json!(40.0));
+    assert_eq!(scrolled["scrolling"], serde_json::json!(true));
+    assert_eq!(scrolled["overflowYStart"], serde_json::json!(true));
+}
+
+#[test]
+fn a_declared_otp_field_fills_slots_advances_focus_and_reports_completion() {
+    let root_id = 790;
+    let mut tree = NativeTree::default();
+    let mut root = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "otp-field",
+        &[(property::SCOPE, "code")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    root.set_property(property::LENGTH, Some(PropertyValue::Number(4.0)));
+    insert_component_node(&mut tree, root_id, ROOT_NODE, root);
+    for index in 0..4u32 {
+        let mut slot = component_part_node(
+            NodeTag::Input,
+            root_id,
+            "otp-field-input",
+            &[(property::SCOPE, "code")],
+            &[],
+        );
+        slot.set_property(
+            property::ITEM_INDEX,
+            Some(PropertyValue::Number(index as f32)),
+        );
+        insert_component_node(&mut tree, 791 + index, root_id, slot);
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let field = quickgui::OtpField::new("code");
+
+    cx.focus(window, field.input_id(0)).unwrap();
+    cx.simulate_input(window, "1").unwrap();
+    // The core owns slot advancement, so the next accepted character lands in the next slot.
+    assert_eq!(cx.focused(window).unwrap(), Some(field.input_id(1)));
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "value": "1" })
+    );
+
+    for character in ["2", "3"] {
+        cx.simulate_input(window, character).unwrap();
+    }
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "value": "123" })
+    );
+
+    cx.simulate_input(window, "4").unwrap();
+    // Completion is an edge, so it travels with the value that completed the code.
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "value": "1234", "complete": "1234" })
+    );
+
+    // Backspace clears in place and then walks back, all inside the core.
+    cx.simulate_keystrokes(window, "backspace").unwrap();
+    assert_eq!(
+        component_change(&events, root_id),
+        serde_json::json!({ "value": "123" })
+    );
+}
+
+#[test]
+fn a_declared_drawer_mounts_only_while_open_and_reports_its_snap_point() {
+    let root_id = 800;
+    let portal_id = 801;
+    let backdrop_id = 802;
+    let viewport_id = 803;
+    let popup_id = 804;
+    let swipe_id = 805;
+    let title_id = 806;
+    let mut tree = NativeTree::default();
+    let mut root = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "drawer",
+        &[
+            (property::SCOPE, "filters"),
+            (property::SWIPE_DIRECTION, "down"),
+            (property::VALUES, "[0.45,1]"),
+        ],
+        &[
+            (property::OPEN, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    root.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, root_id, ROOT_NODE, root);
+    for (id, parent, part) in [
+        (portal_id, root_id, "drawer-portal"),
+        (backdrop_id, portal_id, "drawer-backdrop"),
+        (viewport_id, portal_id, "drawer-viewport"),
+        (popup_id, viewport_id, "drawer-popup"),
+        (swipe_id, popup_id, "drawer-swipe-area"),
+        (title_id, popup_id, "drawer-title"),
+    ] {
+        insert_component_node(
+            &mut tree,
+            id,
+            parent,
+            component_part_node(
+                NodeTag::View,
+                parent,
+                part,
+                &[(property::SCOPE, "filters")],
+                &[],
+            ),
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let drawer = quickgui::Drawer::new("filters", true);
+
+    assert!(cx.contains_element(window, drawer.popup_id()).unwrap());
+    assert!(cx.contains_element(window, drawer.swipe_area_id()).unwrap());
+    assert!(cx.contains_element(window, drawer.backdrop_id()).unwrap());
+    let opened = component_change(&events, root_id);
+    assert_eq!(opened["open"], serde_json::json!(true));
+    // The declared active snap point is the smaller of the two declared points.
+    assert_eq!(opened["snapPoint"], serde_json::json!(0));
+    assert_eq!(opened["swiping"], serde_json::json!(false));
+
+    cx.simulate_keystrokes(window, "escape").unwrap();
+    cx.run_until_idle().unwrap();
+    let closed = component_change(&events, root_id);
+    assert_eq!(closed["open"], serde_json::json!(false));
+    // A closed drawer contributes no overlay, focus trap, backdrop, or swipe surface.
+    assert!(!cx.contains_element(window, drawer.popup_id()).unwrap());
+    assert!(!cx.contains_element(window, drawer.swipe_area_id()).unwrap());
+}
+
+#[test]
+fn a_declared_navigation_menu_switches_panels_and_reports_the_activation_direction() {
+    let root_id = 810;
+    let list_id = 811;
+    let mut tree = NativeTree::default();
+    let items =
+        r#"[{"value":"products"},{"value":"solutions"},{"value":"support","disabled":true}]"#;
+    insert_component_node(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "navigation-menu",
+            &[(property::SCOPE, "main-nav"), (property::ITEMS, items)],
+            &[(property::COMPONENT_CHANGE_LISTENER, true)],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        list_id,
+        root_id,
+        component_part_node(
+            NodeTag::View,
+            root_id,
+            "navigation-menu-list",
+            &[(property::SCOPE, "main-nav")],
+            &[],
+        ),
+    );
+    for (index, value) in ["products", "solutions", "support"].iter().enumerate() {
+        let item_id = 820 + index as u32 * 3;
+        insert_component_node(
+            &mut tree,
+            item_id,
+            list_id,
+            component_part_node(
+                NodeTag::View,
+                list_id,
+                "navigation-menu-item",
+                &[(property::SCOPE, "main-nav"), (property::PART_VALUE, value)],
+                &[],
+            ),
+        );
+        insert_component_node(
+            &mut tree,
+            item_id + 1,
+            item_id,
+            component_part_node(
+                NodeTag::Button,
+                item_id,
+                "navigation-menu-trigger",
+                &[(property::SCOPE, "main-nav"), (property::PART_VALUE, value)],
+                &[],
+            ),
+        );
+        insert_component_node(
+            &mut tree,
+            item_id + 2,
+            item_id,
+            component_part_node(
+                NodeTag::View,
+                item_id,
+                "navigation-menu-popup",
+                &[(property::SCOPE, "main-nav"), (property::PART_VALUE, value)],
+                &[],
+            ),
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let state = quickgui::NavigationMenuState::new();
+    let declared = [
+        quickgui::NavigationMenuItem::new("products"),
+        quickgui::NavigationMenuItem::new("solutions"),
+        quickgui::NavigationMenuItem::new("support").disabled(true),
+    ];
+    let menu = quickgui::NavigationMenu::new("main-nav", &state, &declared);
+    let solutions = menu.entry("solutions").expect("declared item");
+    let products = menu.entry("products").expect("declared item");
+
+    assert!(!cx.contains_element(window, solutions.popup_id()).unwrap());
+    cx.click(window, solutions.trigger_id()).unwrap();
+    cx.run_until_idle().unwrap();
+    assert!(cx.contains_element(window, solutions.popup_id()).unwrap());
+    let opened = component_change(&events, root_id);
+    assert_eq!(opened["value"], serde_json::json!("solutions"));
+    assert_eq!(opened["focused"], serde_json::json!("solutions"));
+
+    cx.click(window, products.trigger_id()).unwrap();
+    cx.run_until_idle().unwrap();
+    let switched = component_change(&events, root_id);
+    assert_eq!(switched["value"], serde_json::json!("products"));
+    // Attention travelled from the second item to the first, so the panel slides left.
+    assert_eq!(switched["activationDirection"], serde_json::json!("left"));
+    assert!(cx.contains_element(window, products.popup_id()).unwrap());
+    assert!(!cx.contains_element(window, solutions.popup_id()).unwrap());
+
+    // Clicking the open trigger again closes its panel through the core's own toggle.
+    cx.click(window, products.trigger_id()).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, root_id)["value"],
+        serde_json::Value::Null
+    );
+    assert!(!cx.contains_element(window, products.popup_id()).unwrap());
+}
+
+#[test]
+fn malformed_base_ui_declarations_decline_instead_of_panicking() {
+    let group_id = 840;
+    let drawer_id = 841;
+    let menu_id = 842;
+    let area_id = 843;
+    let otp_id = 844;
+    let mut tree = NativeTree::default();
+    insert_component_node(
+        &mut tree,
+        group_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "checkbox-group",
+            &[
+                (property::SCOPE, "broken"),
+                (property::ITEMS, "not json"),
+                (property::VALUES, "{}"),
+            ],
+            &[],
+        ),
+    );
+    // Duplicate and out-of-range snap points would panic inside the core's own constructor.
+    insert_component_node(
+        &mut tree,
+        drawer_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "drawer",
+            &[
+                (property::SCOPE, "broken-drawer"),
+                (property::VALUES, "[0,-4,\"nope\"]"),
+                (property::SWIPE_DIRECTION, "sideways"),
+            ],
+            &[],
+        ),
+    );
+    // Duplicate item values would panic inside `NavigationMenu::new`.
+    insert_component_node(
+        &mut tree,
+        menu_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "navigation-menu",
+            &[
+                (property::SCOPE, "broken-nav"),
+                (
+                    property::ITEMS,
+                    r#"[{"value":"one"},{"value":"one"},{"value":""}]"#,
+                ),
+            ],
+            &[],
+        ),
+    );
+    insert_component_node(
+        &mut tree,
+        area_id,
+        ROOT_NODE,
+        component_part_node(
+            NodeTag::View,
+            ROOT_NODE,
+            "scroll-area",
+            &[
+                (property::SCOPE, "broken-area"),
+                (property::VIEWPORT_SIZE, "[\"wide\"]"),
+                (property::CONTENT_SIZE, "not json"),
+            ],
+            &[],
+        ),
+    );
+    // A zero length and an oversized one both clamp into the core's own bound.
+    let mut otp = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "otp-field",
+        &[(property::SCOPE, "broken-code")],
+        &[],
+    );
+    otp.set_property(property::LENGTH, Some(PropertyValue::Number(9_000.0)));
+    insert_component_node(&mut tree, otp_id, ROOT_NODE, otp);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    // Every malformed declaration mounts a plain element and declares nothing.
+    for scope in [
+        "broken",
+        "broken-drawer",
+        "broken-nav",
+        "broken-area",
+        "broken-code",
+    ] {
+        assert!(
+            cx.contains_element(window, ElementId::named(scope))
+                .unwrap(),
+            "{scope} mounted"
+        );
+    }
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .all(|event| event.kind != "componentchange")
+    );
+}

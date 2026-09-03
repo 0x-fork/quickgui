@@ -53,11 +53,11 @@ const DEFAULT_SPLITTER_SIZE: f32 = 100.0;
 /// One declared toolbar or toggle-group entry.
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeclaredItem {
+pub(super) struct DeclaredItem {
     #[serde(default)]
-    value: String,
+    pub(super) value: String,
     #[serde(default)]
-    disabled: bool,
+    pub(super) disabled: bool,
 }
 
 /// One declared splitter pane constraint.
@@ -91,7 +91,7 @@ pub(super) fn declared_numbers(node: &NativeNode, key: u16) -> Vec<f64> {
 }
 
 /// Decode a bounded string declaration. A malformed declaration yields no values, never a panic.
-fn declared_strings(node: &NativeNode, key: u16) -> Vec<String> {
+pub(super) fn declared_strings(node: &NativeNode, key: u16) -> Vec<String> {
     let Some(source) = bounded_json(node, key) else {
         return Vec::new();
     };
@@ -110,7 +110,7 @@ fn declared_strings(node: &NativeNode, key: u16) -> Vec<String> {
 /// `Toolbar::new` and `ToggleGroup::new` reject duplicate values and overflow with a panic, so
 /// the binding enforces both here: the first occurrence of a value wins and everything past
 /// `limit` is dropped. A malformed declaration yields no items, never a panic.
-fn declared_items(node: &NativeNode, limit: usize) -> Vec<DeclaredItem> {
+pub(super) fn declared_items(node: &NativeNode, limit: usize) -> Vec<DeclaredItem> {
     let Some(source) = bounded_json(node, property::ITEMS) else {
         return Vec::new();
     };
@@ -161,7 +161,7 @@ pub(super) fn component_key(id: u32, node: &NativeNode) -> u64 {
 ///
 /// `ElementId::named` is a hash, so the retained instance keeps the ordered declaration and maps
 /// back through it. The list is bounded by [`MAX_COMPONENT_ITEMS`], so this stays a bounded scan.
-fn name_of(names: &[String], id: ElementId) -> Option<String> {
+pub(super) fn name_of(names: &[String], id: ElementId) -> Option<String> {
     names
         .iter()
         .find(|name| ElementId::named(name.as_str()) == id)
@@ -244,6 +244,8 @@ pub(super) struct NativeComponentStates {
     pub(super) autocompletes: HashMap<u64, NativeAutocompleteState>,
     pub(super) tables: HashMap<u64, NativeTableState>,
     pub(super) trees: HashMap<u64, NativeTreeState>,
+    /// Retained Base UI parity instances declared in this window.
+    pub(super) base_ui: NativeBaseUiStates,
 }
 
 impl NativeComponentStates {
@@ -352,6 +354,7 @@ impl NativeComponentStates {
         self.report(window, events);
         self.report_fields(window, events);
         self.report_pickers(window, events);
+        self.sync_base_ui(tree, window, events);
     }
 
     fn sync_slider(&mut self, key: u64, id: u32, node: &NativeNode) {

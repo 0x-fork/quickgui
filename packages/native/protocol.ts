@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 23;
+export const PROTOCOL_VERSION = 24;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -316,6 +316,17 @@ export const enum PropertyCode {
   ScrollSnapType = 289,
   ScrollSnapAlign = 290,
   ScrollSnapStop = 291,
+  Delay = 292,
+  CloseDelay = 293,
+  Length = 294,
+  Mask = 295,
+  ReadOnly = 296,
+  AutoSubmit = 297,
+  SwipeDirection = 298,
+  ViewportSize = 299,
+  ContentSize = 300,
+  OverflowEdgeThreshold = 301,
+  DisablePointerDismissal = 302,
 }
 
 /**
@@ -412,6 +423,54 @@ export const NativePart = {
   ToastDescription: "toast-description",
   ToastAction: "toast-action",
   ToastClose: "toast-close",
+  Separator: "separator",
+  Avatar: "avatar",
+  AvatarImage: "avatar-image",
+  AvatarFallback: "avatar-fallback",
+  CheckboxGroup: "checkbox-group",
+  CheckboxGroupItem: "checkbox-group-item",
+  CheckboxGroupIndicator: "checkbox-group-indicator",
+  CheckboxGroupParent: "checkbox-group-parent",
+  PreviewCard: "preview-card",
+  PreviewCardTrigger: "preview-card-trigger",
+  PreviewCardPortal: "preview-card-portal",
+  PreviewCardPositioner: "preview-card-positioner",
+  PreviewCardPopup: "preview-card-popup",
+  PreviewCardArrow: "preview-card-arrow",
+  PreviewCardBackdrop: "preview-card-backdrop",
+  ScrollArea: "scroll-area",
+  ScrollAreaViewport: "scroll-area-viewport",
+  ScrollAreaContent: "scroll-area-content",
+  ScrollAreaScrollbar: "scroll-area-scrollbar",
+  ScrollAreaThumb: "scroll-area-thumb",
+  ScrollAreaCorner: "scroll-area-corner",
+  OtpField: "otp-field",
+  OtpFieldInput: "otp-field-input",
+  OtpFieldSeparator: "otp-field-separator",
+  Drawer: "drawer",
+  DrawerTrigger: "drawer-trigger",
+  DrawerPortal: "drawer-portal",
+  DrawerBackdrop: "drawer-backdrop",
+  DrawerViewport: "drawer-viewport",
+  DrawerPopup: "drawer-popup",
+  DrawerContent: "drawer-content",
+  DrawerTitle: "drawer-title",
+  DrawerDescription: "drawer-description",
+  DrawerClose: "drawer-close",
+  DrawerSwipeArea: "drawer-swipe-area",
+  NavigationMenu: "navigation-menu",
+  NavigationMenuList: "navigation-menu-list",
+  NavigationMenuItem: "navigation-menu-item",
+  NavigationMenuTrigger: "navigation-menu-trigger",
+  NavigationMenuIcon: "navigation-menu-icon",
+  NavigationMenuPortal: "navigation-menu-portal",
+  NavigationMenuPositioner: "navigation-menu-positioner",
+  NavigationMenuPopup: "navigation-menu-popup",
+  NavigationMenuViewport: "navigation-menu-viewport",
+  NavigationMenuContent: "navigation-menu-content",
+  NavigationMenuArrow: "navigation-menu-arrow",
+  NavigationMenuBackdrop: "navigation-menu-backdrop",
+  NavigationMenuLink: "navigation-menu-link",
 } as const;
 
 export type NativePartName = (typeof NativePart)[keyof typeof NativePart];
@@ -477,6 +536,30 @@ export const MAX_GRADIENT_STOPS = 8;
 
 /** Most filters the Rust core retains in one element's chain. */
 export const MAX_FILTERS_PER_ELEMENT = 8;
+
+/** Longest avatar fallback deadline, in milliseconds. */
+export const MAX_AVATAR_FALLBACK_DELAY_MS = 10_000;
+
+/** Declared and checked values retained by one checkbox group. */
+export const MAX_CHECKBOX_GROUP_VALUES = 256;
+
+/** Longest preview-card open or close deadline, in milliseconds. */
+export const MAX_PREVIEW_CARD_DELAY_MS = 10_000;
+
+/** Largest scroll-area overflow edge threshold, in logical pixels. */
+export const MAX_SCROLL_AREA_OVERFLOW_THRESHOLD = 256;
+
+/** Most slots one OTP field retains. */
+export const MAX_OTP_LENGTH = 12;
+
+/** Most snap points one drawer retains. */
+export const MAX_DRAWER_SNAP_POINTS = 8;
+
+/** Most top-level items in one navigation menu. */
+export const MAX_NAVIGATION_MENU_ITEMS = 64;
+
+/** Longest navigation-menu open or close deadline, in milliseconds. */
+export const MAX_NAVIGATION_MENU_DELAY_MS = 10_000;
 
 export type NativePropertyValue = boolean | number | string | null;
 

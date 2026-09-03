@@ -755,6 +755,10 @@ pub(super) fn build_element(
             None => true,
         };
     let element_id = part_element_id.unwrap_or_else(|| ElementId::new(id as u64));
+    // A Base UI part whose activation, editing, gesture, or dismissal the core owns registers
+    // exactly one listener for that identity. The declared listener is dropped rather than
+    // registered twice; the result still reaches JavaScript through `componentchange`.
+    let declared_part = node.string(property::PART).unwrap_or("");
     let mut element = match node.tag {
         NodeTag::Root => return None,
         NodeTag::View => div(),
@@ -765,6 +769,18 @@ pub(super) fn build_element(
             let multiline = node.boolean(property::MULTILINE).unwrap_or(false);
             // A number field's editing text belongs to the core: it parses, clamps, and reformats
             // it, so the declared `value` seeds the state instead of overwriting it every frame.
+            // An OTP slot's character belongs to the core in exactly the same way: the retained
+            // state owns every slot, so the declared `value` on the root seeds it and the slot
+            // itself renders whatever the core decided.
+            let otp_slot_text = match node.string(property::PART) {
+                Some(OTP_FIELD_INPUT_PART) => states
+                    .components
+                    .base_ui
+                    .otp_fields
+                    .get(&component_key(id, node))
+                    .map(|field| field.state.slot_text(declared_index(node))),
+                _ => None,
+            };
             let declared_value = match node.string(property::PART) {
                 Some(NUMBER_FIELD_INPUT_PART) => states
                     .components
@@ -774,6 +790,7 @@ pub(super) fn build_element(
                         || node.string(property::VALUE).unwrap_or_default(),
                         |field| field.state.text().as_ref(),
                     ),
+                Some(OTP_FIELD_INPUT_PART) => otp_slot_text.as_deref().unwrap_or_default(),
                 _ => node.string(property::VALUE).unwrap_or_default(),
             };
             let mut input = if multiline {
@@ -790,7 +807,10 @@ pub(super) fn build_element(
             if !multiline && node.boolean(property::PASSWORD).unwrap_or(false) {
                 input = input.password(true);
             }
-            if listeners_enabled && node.boolean(property::INPUT_LISTENER).unwrap_or(false) {
+            if listeners_enabled
+                && !base_ui_owns_input(declared_part)
+                && node.boolean(property::INPUT_LISTENER).unwrap_or(false)
+            {
                 let events = Rc::clone(events);
                 // The retained input state already schedules its paint. Rebuilding here would read
                 // the previous JavaScript-controlled value before Bun drains this queued event,
@@ -1016,6 +1036,17 @@ pub(super) fn build_element(
             cx,
             listeners_enabled,
         )?;
+        if owns_base_ui_part(part) {
+            element = apply_base_ui_part(
+                element,
+                part,
+                id,
+                node,
+                states.components,
+                cx,
+                listeners_enabled,
+            )?;
+        }
     }
     element = apply_controls(element, node, tree);
 
@@ -1083,6 +1114,7 @@ pub(super) fn build_element(
         element = attach_dismiss_listener(
             element,
             listeners_enabled
+                && !base_ui_owns_dismiss(declared_part)
                 && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
@@ -1105,6 +1137,7 @@ pub(super) fn build_element(
         element = attach_dismiss_listener(
             element,
             listeners_enabled
+                && !base_ui_owns_dismiss(declared_part)
                 && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
@@ -1115,7 +1148,10 @@ pub(super) fn build_element(
         );
     }
 
-    if listeners_enabled && node.boolean(property::CLICK_LISTENER).unwrap_or(false) {
+    if listeners_enabled
+        && !base_ui_owns_click(declared_part)
+        && node.boolean(property::CLICK_LISTENER).unwrap_or(false)
+    {
         let events = Rc::clone(events);
         let listener = cx.listener(element_id, move |_view, cx| {
             enqueue_event(
@@ -1147,7 +1183,10 @@ pub(super) fn build_element(
         });
         element = element.on_hover(listener);
     }
-    if listeners_enabled && node.boolean(property::POINTER_LISTENER).unwrap_or(false) {
+    if listeners_enabled
+        && !base_ui_owns_pointer(declared_part)
+        && node.boolean(property::POINTER_LISTENER).unwrap_or(false)
+    {
         let events = Rc::clone(events);
         let listener = cx.pointer_listener(element_id, move |_view, event, cx| {
             enqueue_event(
@@ -1167,7 +1206,16 @@ pub(super) fn build_element(
     }
 
     if listeners_enabled {
-        element = attach_input_listeners(element, element_id, id, window, events, node, cx);
+        element = attach_input_listeners(
+            element,
+            element_id,
+            id,
+            window,
+            events,
+            node,
+            cx,
+            base_ui_owns_scroll_wheel(declared_part),
+        );
     }
 
     // A declared collection owns its subtree: the binding builds the declared header, row, and
@@ -1357,7 +1405,7 @@ pub(super) fn native_part_scope(id: u32, node: &NativeNode) -> ElementId {
     }
 }
 
-fn native_part_value(node: &NativeNode, key: u16) -> Option<ElementId> {
+pub(super) fn native_part_value(node: &NativeNode, key: u16) -> Option<ElementId> {
     node.string(key)
         .filter(|value| !value.is_empty() && value.len() <= MAX_COMPONENT_VALUE_BYTES)
         .map(ElementId::named)
@@ -1471,6 +1519,9 @@ pub(super) fn native_part_element_id_with(
 ) -> Option<ElementId> {
     let part = node.string(property::PART)?;
     if let Some(derived) = field_part_element_id(part, id, node, components) {
+        return Some(derived);
+    }
+    if let Some(derived) = base_ui_part_element_id(part, id, node, components) {
         return Some(derived);
     }
     native_part_element_id(id, node)

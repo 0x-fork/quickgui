@@ -725,6 +725,10 @@ impl NativeRuntime {
         application = application.bind_keys(quickgui::time_field_key_bindings());
         application = application.bind_keys(quickgui::calendar_key_bindings());
         application = application.bind_keys(quickgui::menubar_key_bindings());
+        // Base UI OTP fields and navigation menus adopt the core's own contextual editing and
+        // roving-focus bindings rather than a JavaScript keyboard implementation.
+        application = application.bind_keys(quickgui::otp_field_key_bindings());
+        application = application.bind_keys(quickgui::navigation_menu_key_bindings());
         let mut runner = application
             .on_open_urls(move |urls, _cx| {
                 let value = serde_json::to_string(&urls.iter().collect::<Vec<_>>())

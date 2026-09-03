@@ -852,7 +852,9 @@ impl NativeImageState {
     }
 }
 
-fn native_image_source(source: &str) -> std::result::Result<quickgui::ImageSource, Arc<str>> {
+pub(super) fn native_image_source(
+    source: &str,
+) -> std::result::Result<quickgui::ImageSource, Arc<str>> {
     if source.is_empty() {
         return Err(Arc::from("an image source cannot be empty"));
     }

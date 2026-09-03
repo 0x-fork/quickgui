@@ -1,16 +1,25 @@
 import { app, Window } from "@quickgui/native";
 import {
   Autocomplete,
+  Avatar,
   Button,
   Calendar,
+  Checkbox,
+  CheckboxGroup,
   Combobox,
   ContextMenu,
   DateField,
   Dialog,
+  Drawer,
   Menubar,
+  NavigationMenu,
   NumberField,
+  OtpField,
   PopoverMenu,
+  PreviewCard,
+  ScrollArea,
   Select,
+  Separator,
   Slider,
   Splitter,
   Table,
@@ -22,6 +31,7 @@ import {
   Toolbar,
   Tree,
   View,
+  type ScrollAreaState,
   type ToastDeclaration,
   type TreeNodeDeclaration,
   type VisibleRange,
@@ -815,8 +825,297 @@ function ComponentsExample() {
         <DateAndTime />
         <Menus />
         <SurfacesAndFeedback />
+        <IdentityAndGrouping />
+        <CodesSheetsAndNavigation />
       </View>
     </View>
+  );
+}
+
+/** Separators, avatars, checkbox groups, and preview cards: identity, grouping, and hover. */
+function IdentityAndGrouping() {
+  const allColors = ["red", "green", "blue"] as const;
+  const [colors, setColors] = createSignal<readonly string[]>(["green"]);
+  const [status, setStatus] = createSignal("idle");
+  const [cardOpen, setCardOpen] = createSignal(false);
+
+  return (
+    <Panel title="Separator, avatar, checkbox group, preview card">
+      <Row>
+        <Avatar.Root
+          ariaLabel="Ada Lovelace"
+          onLoadingStatusChange={setStatus}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: "#1b2434",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
+          {/* The core mounts exactly one of these, so the name is announced once. */}
+          <Avatar.Image src="./avatar.png" style={{ width: 40, height: 40 }} />
+          <Avatar.Fallback delay={120}>
+            <Text style={{ fontSize: 13, fontWeight: 700, color: ink }}>AL</Text>
+          </Avatar.Fallback>
+        </Avatar.Root>
+        <Text style={{ fontSize: 12, color: muted }}>status: {status()}</Text>
+        <Separator.Root
+          orientation="vertical"
+          style={{ width: 1, height: 28, backgroundColor: border }}
+        />
+        <PreviewCard.Root
+          open={cardOpen()}
+          onOpenChange={setCardOpen}
+          placement="bottom-start"
+          gap={8}
+        >
+          <PreviewCard.Trigger delay={400} closeDelay={200} style={controlStyle}>
+            <Text style={{ fontSize: 12, color: accent }}>@ada</Text>
+          </PreviewCard.Trigger>
+          <PreviewCard.Positioner>
+            <PreviewCard.Popup
+              style={{
+                width: 220,
+                gap: 6,
+                padding: 12,
+                borderRadius: 12,
+                backgroundColor: surface,
+                borderColor: border,
+                borderWidth: 1,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: 700, color: ink }}>
+                Ada Lovelace
+              </Text>
+              <Text style={{ fontSize: 12, color: muted }}>
+                Opens on the core's exact hover deadline, never a JavaScript timer.
+              </Text>
+            </PreviewCard.Popup>
+          </PreviewCard.Positioner>
+        </PreviewCard.Root>
+      </Row>
+
+      <Separator.Root style={{ height: 1, backgroundColor: border }} />
+
+      <CheckboxGroup.Root
+        allValues={[...allColors]}
+        value={colors()}
+        onValueChange={setColors}
+        style={{ display: "flex", flexDirection: "column", gap: 6 }}
+      >
+        <Row>
+          {/* The parent has no retained value: its mixed state is derived from the children. */}
+          <Checkbox.Root parent style={controlStyle}>
+            <Text style={{ fontSize: 12, color: ink }}>All colours</Text>
+          </Checkbox.Root>
+        </Row>
+        <Row>
+          <For each={allColors}>
+            {(value) => (
+              <Checkbox.Root value={value} style={controlStyle}>
+                <Text style={{ fontSize: 12, color: ink }}>{value}</Text>
+                <Checkbox.Indicator
+                  style={{ marginLeft: 6, width: 8, height: 8, borderRadius: 4 }}
+                />
+              </Checkbox.Root>
+            )}
+          </For>
+        </Row>
+        <Text style={{ fontSize: 12, color: muted }}>
+          checked: {colors().join(", ") || "none"}
+        </Text>
+      </CheckboxGroup.Root>
+    </Panel>
+  );
+}
+
+/** Scroll areas, OTP fields, drawers, and navigation menus. */
+function CodesSheetsAndNavigation() {
+  const rows = Array.from({ length: 24 }, (_, index) => `Log line ${index + 1}`);
+  const rowHeight = 22;
+  const [scroll, setScroll] = createSignal<ScrollAreaState | undefined>();
+  const [code, setCode] = createSignal("");
+  const [completed, setCompleted] = createSignal("");
+  const [sheetOpen, setSheetOpen] = createSignal(false);
+  const [swipe, setSwipe] = createSignal({ swiping: false, swipeOffset: 0 });
+  const [navValue, setNavValue] = createSignal("none");
+  const offset = () => scroll()?.offset.y ?? 0;
+
+  return (
+    <Panel title="Scroll area, OTP field, drawer, navigation menu">
+      <ScrollArea.Root
+        viewportSize={{ width: 260, height: 120 }}
+        contentSize={{ width: 260, height: rows.length * rowHeight }}
+        onScrollStateChange={setScroll}
+        style={{ display: "flex", flexDirection: "row", gap: 4, height: 120 }}
+      >
+        <ScrollArea.Viewport
+          style={{ width: 260, height: 120, backgroundColor: "#101725", borderRadius: 8 }}
+        >
+          {/* Scrolling is a paint-only transform the application applies. */}
+          <ScrollArea.Content
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              paddingLeft: 8,
+              transform: `translateY(${-offset()}px)`,
+            }}
+          >
+            <For each={rows}>
+              {(row) => (
+                <Text style={{ fontSize: 12, color: muted, height: rowHeight }}>
+                  {row}
+                </Text>
+              )}
+            </For>
+          </ScrollArea.Content>
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar
+          orientation="vertical"
+          style={{ width: 6, height: 120, backgroundColor: "#0f172a", borderRadius: 3 }}
+        >
+          <ScrollArea.Thumb
+            style={{
+              width: 6,
+              height: 40,
+              borderRadius: 3,
+              backgroundColor: scroll()?.scrolling ? accent : border,
+            }}
+          />
+        </ScrollArea.Scrollbar>
+      </ScrollArea.Root>
+
+      <OtpField.Root
+        length={6}
+        value={code()}
+        onValueChange={setCode}
+        onComplete={setCompleted}
+        style={{ display: "flex", flexDirection: "row", gap: 6 }}
+      >
+        <For each={[0, 1, 2, 3, 4, 5]}>
+          {(index) => (
+            <>
+              <OtpField.Input
+                index={index}
+                style={{ ...controlStyle, width: 34, paddingLeft: 0, paddingRight: 0 }}
+              />
+              {index === 2 ? (
+                <OtpField.Separator index={index}>
+                  <Text style={{ fontSize: 13, color: muted }}>–</Text>
+                </OtpField.Separator>
+              ) : null}
+            </>
+          )}
+        </For>
+      </OtpField.Root>
+      <Text style={{ fontSize: 12, color: muted }}>
+        completed: {completed() || "not yet"}
+      </Text>
+
+      <Row>
+        <Drawer.Root
+          open={sheetOpen()}
+          onOpenChange={setSheetOpen}
+          swipeDirection="down"
+          snapPoints={[0.45, 1]}
+          onSwipeChange={setSwipe}
+        >
+          <Drawer.Trigger style={controlStyle}>
+            <Text style={{ fontSize: 12, color: ink }}>Open drawer</Text>
+          </Drawer.Trigger>
+          <Drawer.Portal>
+            <Drawer.Backdrop
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+                backgroundColor: "#0f172acc",
+              }}
+            />
+            <Drawer.Viewport
+              style={{ display: "flex", flexDirection: "column", justifyContent: "end" }}
+            >
+              <Drawer.Popup
+                style={{
+                  gap: 10,
+                  padding: 20,
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
+                  backgroundColor: surface,
+                  borderColor: border,
+                  borderWidth: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  transform: `translateY(${swipe().swipeOffset}px)`,
+                }}
+              >
+                <Drawer.SwipeArea
+                  style={{
+                    width: 40,
+                    height: 4,
+                    borderRadius: 2,
+                    alignSelf: "center",
+                    backgroundColor: border,
+                  }}
+                />
+                <Drawer.Title>
+                  <Text style={{ fontSize: 14, fontWeight: 700, color: ink }}>Filters</Text>
+                </Drawer.Title>
+                <Drawer.Description>
+                  <Text style={{ fontSize: 12, color: muted }}>Narrow the results.</Text>
+                </Drawer.Description>
+                <Drawer.Content style={{ height: 60 }} />
+                <Drawer.Close style={controlStyle}>
+                  <Text style={{ fontSize: 12, color: ink }}>Close</Text>
+                </Drawer.Close>
+              </Drawer.Popup>
+            </Drawer.Viewport>
+          </Drawer.Portal>
+        </Drawer.Root>
+      </Row>
+
+      <NavigationMenu.Root
+        onValueChange={(next) => setNavValue(next ?? "none")}
+      >
+        <NavigationMenu.List style={{ display: "flex", flexDirection: "row", gap: 6 }}>
+          <For each={["products", "solutions"]}>
+            {(item) => (
+              <NavigationMenu.Item value={item}>
+                <NavigationMenu.Trigger style={controlStyle}>
+                  <Text style={{ fontSize: 12, color: ink }}>{item}</Text>
+                </NavigationMenu.Trigger>
+                <NavigationMenu.Positioner>
+                  <NavigationMenu.Popup
+                    style={{
+                      width: 200,
+                      padding: 12,
+                      borderRadius: 12,
+                      backgroundColor: surface,
+                      borderColor: border,
+                      borderWidth: 1,
+                    }}
+                  >
+                    <NavigationMenu.Content>
+                      <NavigationMenu.Link value={`${item}-home`} active>
+                        <Text style={{ fontSize: 12, color: accent }}>{item} home</Text>
+                      </NavigationMenu.Link>
+                    </NavigationMenu.Content>
+                  </NavigationMenu.Popup>
+                </NavigationMenu.Positioner>
+              </NavigationMenu.Item>
+            )}
+          </For>
+        </NavigationMenu.List>
+      </NavigationMenu.Root>
+      <Text style={{ fontSize: 12, color: muted }}>open panel: {navValue()}</Text>
+    </Panel>
   );
 }
 

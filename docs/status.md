@@ -35,6 +35,18 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
+- JavaScript bindings for the Base UI parity components, at protocol v24: Solid `Separator`,
+  `Avatar` (`Root`/`Image`/`Fallback`), `CheckboxGroup` with `Checkbox.Root value`/`parent`
+  members, `PreviewCard`, `ScrollArea`, `OtpField`, `Drawer`, and `NavigationMenu`, each using Base
+  UI's own compound and prop names. Every root allocates one bounded scope internally, so the parts
+  of an instance resolve to the core's derived identities with no registry; the core keeps the
+  avatar load status, the checked value set, the hover and close deadlines, the clamped scroll
+  offsets and derived overflow flags, every OTP slot and its completion edge, the drawer's snap
+  points and captured swipe, and the navigation menu's open item, roving Tab stop, and activation
+  direction, and reports each of them as one asynchronous `componentchange` event. A part whose
+  activation, editing, gesture, or dismissal the core owns ignores a declared listener for that same
+  edge rather than registering it twice, and a malformed declaration declares nothing instead of
+  reaching a core constructor that would panic on it;
 - JavaScript bindings for the extended styling surface, at protocol v23: extended text styling
   (`letterSpacing`, `wordSpacing`, `textTransform`, `textShadow`, the `textDecoration` family,
   `wordBreak`, `overflowWrap`, `hyphens`, `textDirection`, and logical `textAlign: "start"|"end"`),

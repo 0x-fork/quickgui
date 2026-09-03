@@ -12,8 +12,16 @@ import {
   MAX_GRADIENT_STOPS,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
+  MAX_AVATAR_FALLBACK_DELAY_MS,
+  MAX_CHECKBOX_GROUP_VALUES,
+  MAX_DRAWER_SNAP_POINTS,
   MAX_MENUBAR_MENUS,
+  MAX_NAVIGATION_MENU_DELAY_MS,
+  MAX_NAVIGATION_MENU_ITEMS,
   MAX_OPTIONS_JSON_BYTES,
+  MAX_OTP_LENGTH,
+  MAX_PREVIEW_CARD_DELAY_MS,
+  MAX_SCROLL_AREA_OVERFLOW_THRESHOLD,
   MAX_STYLE_DECLARATION_BYTES,
   MAX_TABLE_COLUMNS,
   MAX_TABLE_ROWS,
@@ -50,8 +58,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v23", () => {
-    expect(PROTOCOL_VERSION).toBe(23);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v24", () => {
+    expect(PROTOCOL_VERSION).toBe(24);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -546,5 +554,124 @@ describe("binary mutation protocol", () => {
     expect(MAX_STYLE_DECLARATION_BYTES).toBe(4096);
     expect(MAX_GRADIENT_STOPS).toBe(8);
     expect(MAX_FILTERS_PER_ELEMENT).toBe(8);
+  });
+
+  test("encodes every Base UI parity part under protocol v24", () => {
+    const batch = new MutationBatch();
+    batch.createElement(1, NativeNodeTag.View);
+    batch.setProperty(1, PropertyCode.Part, NativePart.Separator);
+    batch.setProperty(1, PropertyCode.Orientation, "vertical");
+
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Part, NativePart.Avatar);
+    batch.setProperty(2, PropertyCode.Scope, "member");
+    batch.setProperty(2, PropertyCode.AccessibilityLabel, "Ada Lovelace");
+    batch.createElement(3, NativeNodeTag.Image);
+    batch.setProperty(3, PropertyCode.Part, NativePart.AvatarImage);
+    batch.setProperty(3, PropertyCode.Scope, "member");
+    batch.setProperty(3, PropertyCode.Value, "/tmp/ada.png");
+    batch.createElement(4, NativeNodeTag.View);
+    batch.setProperty(4, PropertyCode.Part, NativePart.AvatarFallback);
+    batch.setProperty(4, PropertyCode.Scope, "member");
+    batch.setProperty(4, PropertyCode.Delay, 200);
+
+    batch.createElement(5, NativeNodeTag.View);
+    batch.setProperty(5, PropertyCode.Part, NativePart.CheckboxGroup);
+    batch.setProperty(5, PropertyCode.Scope, "colors");
+    batch.setProperty(5, PropertyCode.Items, '["red","green","blue"]');
+    batch.setProperty(5, PropertyCode.Values, '["green"]');
+    batch.createElement(6, NativeNodeTag.Button);
+    batch.setProperty(6, PropertyCode.Part, NativePart.CheckboxGroupItem);
+    batch.setProperty(6, PropertyCode.Scope, "colors");
+    batch.setProperty(6, PropertyCode.PartValue, "red");
+    batch.createElement(7, NativeNodeTag.Button);
+    batch.setProperty(7, PropertyCode.Part, NativePart.CheckboxGroupParent);
+    batch.setProperty(7, PropertyCode.Scope, "colors");
+
+    batch.createElement(8, NativeNodeTag.View);
+    batch.setProperty(8, PropertyCode.Part, NativePart.PreviewCard);
+    batch.setProperty(8, PropertyCode.Scope, "profile");
+    batch.setProperty(8, PropertyCode.Open, false);
+    batch.createElement(9, NativeNodeTag.Button);
+    batch.setProperty(9, PropertyCode.Part, NativePart.PreviewCardTrigger);
+    batch.setProperty(9, PropertyCode.Scope, "profile");
+    batch.setProperty(9, PropertyCode.Delay, 600);
+    batch.setProperty(9, PropertyCode.CloseDelay, 300);
+
+    batch.createElement(10, NativeNodeTag.View);
+    batch.setProperty(10, PropertyCode.Part, NativePart.ScrollArea);
+    batch.setProperty(10, PropertyCode.Scope, "log");
+    batch.setProperty(10, PropertyCode.ViewportSize, "[260,160]");
+    batch.setProperty(10, PropertyCode.ContentSize, "[260,900]");
+    batch.setProperty(10, PropertyCode.OverflowEdgeThreshold, 2);
+    batch.createElement(11, NativeNodeTag.View);
+    batch.setProperty(11, PropertyCode.Part, NativePart.ScrollAreaScrollbar);
+    batch.setProperty(11, PropertyCode.Scope, "log");
+    batch.setProperty(11, PropertyCode.Orientation, "vertical");
+    batch.setProperty(11, PropertyCode.KeepMounted, true);
+
+    batch.createElement(12, NativeNodeTag.View);
+    batch.setProperty(12, PropertyCode.Part, NativePart.OtpField);
+    batch.setProperty(12, PropertyCode.Scope, "code");
+    batch.setProperty(12, PropertyCode.Length, 6);
+    batch.setProperty(12, PropertyCode.Variant, "numeric");
+    batch.setProperty(12, PropertyCode.Mask, true);
+    batch.setProperty(12, PropertyCode.ReadOnly, false);
+    batch.setProperty(12, PropertyCode.AutoSubmit, "verify");
+    batch.createElement(13, NativeNodeTag.Input);
+    batch.setProperty(13, PropertyCode.Part, NativePart.OtpFieldInput);
+    batch.setProperty(13, PropertyCode.Scope, "code");
+    batch.setProperty(13, PropertyCode.ItemIndex, 0);
+
+    batch.createElement(14, NativeNodeTag.View);
+    batch.setProperty(14, PropertyCode.Part, NativePart.Drawer);
+    batch.setProperty(14, PropertyCode.Scope, "filters");
+    batch.setProperty(14, PropertyCode.Variant, "modal");
+    batch.setProperty(14, PropertyCode.SwipeDirection, "down");
+    batch.setProperty(14, PropertyCode.Values, "[0.45,1]");
+    batch.setProperty(14, PropertyCode.ItemIndex, 0);
+    batch.setProperty(14, PropertyCode.DisablePointerDismissal, true);
+    batch.createElement(15, NativeNodeTag.View);
+    batch.setProperty(15, PropertyCode.Part, NativePart.DrawerSwipeArea);
+    batch.setProperty(15, PropertyCode.Scope, "filters");
+
+    batch.createElement(16, NativeNodeTag.View);
+    batch.setProperty(16, PropertyCode.Part, NativePart.NavigationMenu);
+    batch.setProperty(16, PropertyCode.Scope, "main-nav");
+    batch.setProperty(16, PropertyCode.ActiveValue, "products");
+    batch.setProperty(16, PropertyCode.Delay, 50);
+    batch.setProperty(16, PropertyCode.CloseDelay, 50);
+    batch.createElement(17, NativeNodeTag.Button);
+    batch.setProperty(17, PropertyCode.Part, NativePart.NavigationMenuTrigger);
+    batch.setProperty(17, PropertyCode.Scope, "main-nav");
+    batch.setProperty(17, PropertyCode.PartValue, "products");
+
+    expect(batch.mutationCount).toBe(80);
+    const encoded = batch.finish();
+    expect(encoded.readUInt16LE(4)).toBe(PROTOCOL_VERSION);
+  });
+
+  test("keeps every Base UI property code and bound inside the declared space", () => {
+    // The Rust binding rejects any property code past its own `property::LAST`, so the two must
+    // stay in step whenever a declaration is added.
+    expect(PropertyCode.DisablePointerDismissal).toBe(302);
+    expect(MAX_AVATAR_FALLBACK_DELAY_MS).toBe(10_000);
+    expect(MAX_CHECKBOX_GROUP_VALUES).toBe(256);
+    expect(MAX_PREVIEW_CARD_DELAY_MS).toBe(10_000);
+    expect(MAX_SCROLL_AREA_OVERFLOW_THRESHOLD).toBe(256);
+    expect(MAX_OTP_LENGTH).toBe(12);
+    expect(MAX_DRAWER_SNAP_POINTS).toBe(8);
+    expect(MAX_NAVIGATION_MENU_ITEMS).toBe(64);
+    expect(MAX_NAVIGATION_MENU_DELAY_MS).toBe(10_000);
+
+    // Every Base UI part name is the exact string the Rust binding matches on.
+    expect(NativePart.Separator).toBe("separator");
+    expect(NativePart.AvatarFallback).toBe("avatar-fallback");
+    expect(NativePart.CheckboxGroupParent).toBe("checkbox-group-parent");
+    expect(NativePart.PreviewCardPopup).toBe("preview-card-popup");
+    expect(NativePart.ScrollAreaThumb).toBe("scroll-area-thumb");
+    expect(NativePart.OtpFieldSeparator).toBe("otp-field-separator");
+    expect(NativePart.DrawerSwipeArea).toBe("drawer-swipe-area");
+    expect(NativePart.NavigationMenuLink).toBe("navigation-menu-link");
   });
 });

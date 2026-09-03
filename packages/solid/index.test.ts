@@ -20,14 +20,17 @@ import {
   Accordion,
   AlertDialog,
   Autocomplete,
+  Avatar,
   Button,
   Calendar,
   Checkbox,
+  CheckboxGroup,
   Collapsible,
   Combobox,
   ContextMenu,
   DateField,
   Dialog,
+  Drawer,
   Image,
   Meter,
   Field,
@@ -35,13 +38,18 @@ import {
   Input,
   Markdown,
   Menubar,
+  NavigationMenu,
   NumberField,
+  OtpField,
   Popover,
   PopoverMenu,
+  PreviewCard,
   Progress,
   Radio,
   RadioGroup,
+  ScrollArea,
   Select,
+  Separator,
   Switch,
   Shader,
   Slider,
@@ -2607,5 +2615,608 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     setProp(node, "outline", null);
     expect(node.properties.has(PropertyCode.OutlineWidth)).toBe(false);
     expect(node.properties.has(PropertyCode.OutlineColor)).toBe(false);
+  });
+  test("declares separators, avatars, and checkbox groups through one shared scope", async () => {
+    await app.whenReady();
+    let status: string | undefined;
+    let checked: readonly string[] | undefined;
+    const window = new Window({
+      title: "Base UI identity",
+      renderer: createRenderer(() => [
+        createComponent(Separator.Root, { orientation: "vertical" }),
+        createComponent(Avatar.Root, {
+          ariaLabel: "Ada Lovelace",
+          onLoadingStatusChange: (next: string) => {
+            status = next;
+          },
+          get children() {
+            return [
+              createComponent(Avatar.Image, { src: "/tmp/ada.png" }),
+              createComponent(Avatar.Fallback, { delay: 200, children: "AL" }),
+            ];
+          },
+        }),
+        createComponent(CheckboxGroup.Root, {
+          allValues: ["red", "green", "blue"],
+          defaultValue: ["green"],
+          onValueChange: (next: readonly string[]) => {
+            checked = next;
+          },
+          get children() {
+            return [
+              createComponent(Checkbox.Root, {
+                value: "red",
+                get children() {
+                  return createComponent(Checkbox.Indicator, { children: "x" });
+                },
+              }),
+              createComponent(Checkbox.Root, { parent: true }),
+            ];
+          },
+        }),
+      ]),
+    });
+
+    const [separator, avatar, group] = window.root.children;
+    expect(separator!.properties.get(PropertyCode.Part)).toBe("separator");
+    expect(separator!.properties.get(PropertyCode.Orientation)).toBe("vertical");
+    // A separator retains nothing, so it declares no scope at all.
+    expect(separator!.properties.has(PropertyCode.Scope)).toBe(false);
+
+    const avatarScope = String(avatar!.properties.get(PropertyCode.Scope));
+    expect(avatar!.properties.get(PropertyCode.Part)).toBe("avatar");
+    expect(avatarScope.startsWith("qg-avatar-")).toBe(true);
+    expect(avatar!.properties.get(PropertyCode.AccessibilityLabel)).toBe(
+      "Ada Lovelace",
+    );
+    const [image, fallback] = avatar!.children;
+    expect(image!.tag).toBe(NativeNodeTag.Image);
+    expect(image!.properties.get(PropertyCode.Part)).toBe("avatar-image");
+    expect(image!.properties.get(PropertyCode.Scope)).toBe(avatarScope);
+    expect(image!.properties.get(PropertyCode.Value)).toBe("/tmp/ada.png");
+    // Base UI declares the hold-back on the fallback, and the core owns the deadline.
+    expect(fallback!.properties.get(PropertyCode.Part)).toBe("avatar-fallback");
+    expect(fallback!.properties.get(PropertyCode.Delay)).toBe(200);
+
+    window._dispatchEvent(
+      "componentchange",
+      avatar!.id,
+      JSON.stringify({ loadingStatus: "loaded" }),
+    );
+    expect(status).toBe("loaded");
+
+    const groupScope = String(group!.properties.get(PropertyCode.Scope));
+    expect(group!.properties.get(PropertyCode.Part)).toBe("checkbox-group");
+    expect(group!.properties.get(PropertyCode.Items)).toBe(
+      '["red","green","blue"]',
+    );
+    expect(group!.properties.get(PropertyCode.Values)).toBe('["green"]');
+    const [item, parent] = group!.children;
+    // A checkbox inside a group becomes a member of it, with the core owning the click.
+    expect(item!.properties.get(PropertyCode.Part)).toBe("checkbox-group-item");
+    expect(item!.properties.get(PropertyCode.Scope)).toBe(groupScope);
+    expect(item!.properties.get(PropertyCode.PartValue)).toBe("red");
+    expect(item!.properties.has(PropertyCode.ClickListener)).toBe(false);
+    expect(item!.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "checkbox-group-indicator",
+    );
+    expect(parent!.properties.get(PropertyCode.Part)).toBe(
+      "checkbox-group-parent",
+    );
+    expect(parent!.properties.has(PropertyCode.PartValue)).toBe(false);
+
+    window._dispatchEvent(
+      "componentchange",
+      group!.id,
+      JSON.stringify({ checkedValues: ["red", "green"] }),
+    );
+    expect(checked).toEqual(["red", "green"]);
+    expect(group!.properties.get(PropertyCode.Values)).toBe('["red","green"]');
+    window.close();
+  });
+
+  test("declares preview-card deadlines on the trigger and adopts the core's open value", async () => {
+    await app.whenReady();
+    let open: boolean | undefined;
+    const window = new Window({
+      title: "Preview card",
+      renderer: createRenderer(() =>
+        createComponent(PreviewCard.Root, {
+          placement: "top",
+          gap: 6,
+          viewportMargin: 8,
+          onOpenChange: (next: boolean) => {
+            open = next;
+          },
+          get children() {
+            return [
+              createComponent(PreviewCard.Trigger, {
+                delay: 600,
+                closeDelay: 300,
+                children: "@ada",
+              }),
+              createComponent(PreviewCard.Positioner, {
+                get children() {
+                  return createComponent(PreviewCard.Popup, {
+                    get children() {
+                      return createComponent(PreviewCard.Arrow, {});
+                    },
+                  });
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    const scope = String(root.properties.get(PropertyCode.Scope));
+    expect(root.properties.get(PropertyCode.Part)).toBe("preview-card");
+    expect(root.properties.get(PropertyCode.Open)).toBe(false);
+    expect(root.properties.get(PropertyCode.AnchorPlacement)).toBe("top");
+    expect(root.properties.get(PropertyCode.AnchorGap)).toBe(6);
+    expect(root.properties.get(PropertyCode.ViewportMargin)).toBe(8);
+
+    const [trigger, positioner] = root.children;
+    expect(trigger!.properties.get(PropertyCode.Part)).toBe(
+      "preview-card-trigger",
+    );
+    expect(trigger!.properties.get(PropertyCode.Scope)).toBe(scope);
+    expect(trigger!.properties.get(PropertyCode.Delay)).toBe(600);
+    expect(trigger!.properties.get(PropertyCode.CloseDelay)).toBe(300);
+    expect(positioner!.properties.get(PropertyCode.Part)).toBe(
+      "preview-card-positioner",
+    );
+    const popup = positioner!.children[0]!;
+    expect(popup.properties.get(PropertyCode.Part)).toBe("preview-card-popup");
+    expect(popup.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "preview-card-arrow",
+    );
+
+    // The core decides when the hover deadline elapses; JavaScript only commits the result.
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({ open: true }),
+    );
+    expect(open).toBe(true);
+    expect(root.properties.get(PropertyCode.Open)).toBe(true);
+    window.close();
+  });
+
+  test("declares scroll-area geometry and reports the core's derived style state", async () => {
+    await app.whenReady();
+    let reported: solid.ScrollAreaState | undefined;
+    let live: (() => solid.ScrollAreaState) | undefined;
+    const window = new Window({
+      title: "Scroll area",
+      renderer: createRenderer(() =>
+        createComponent(ScrollArea.Root, {
+          viewportSize: { width: 260, height: 160 },
+          contentSize: { width: 260, height: 900 },
+          overflowEdgeThreshold: 2,
+          onScrollStateChange: (next: solid.ScrollAreaState) => {
+            reported = next;
+          },
+          get children() {
+            live = solid.useScrollAreaState();
+            return [
+              createComponent(ScrollArea.Viewport, {
+                get children() {
+                  return createComponent(ScrollArea.Content, {});
+                },
+              }),
+              createComponent(ScrollArea.Scrollbar, {
+                orientation: "vertical",
+                keepMounted: true,
+                get children() {
+                  return createComponent(ScrollArea.Thumb, {});
+                },
+              }),
+              createComponent(ScrollArea.Corner, {}),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    const scope = String(root.properties.get(PropertyCode.Scope));
+    expect(root.properties.get(PropertyCode.Part)).toBe("scroll-area");
+    expect(root.properties.get(PropertyCode.ViewportSize)).toBe("[260,160]");
+    expect(root.properties.get(PropertyCode.ContentSize)).toBe("[260,900]");
+    expect(root.properties.get(PropertyCode.OverflowEdgeThreshold)).toBe(2);
+
+    const [viewport, scrollbar, corner] = root.children;
+    expect(viewport!.properties.get(PropertyCode.Part)).toBe(
+      "scroll-area-viewport",
+    );
+    expect(viewport!.properties.get(PropertyCode.Scope)).toBe(scope);
+    expect(viewport!.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "scroll-area-content",
+    );
+    expect(scrollbar!.properties.get(PropertyCode.Part)).toBe(
+      "scroll-area-scrollbar",
+    );
+    expect(scrollbar!.properties.get(PropertyCode.KeepMounted)).toBe(true);
+    // A thumb inherits its axis from the scrollbar it is drawn inside.
+    expect(scrollbar!.children[0]!.properties.get(PropertyCode.Orientation)).toBe(
+      "vertical",
+    );
+    expect(corner!.properties.get(PropertyCode.Part)).toBe("scroll-area-corner");
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        offset: { x: 0, y: 40 },
+        scrolling: true,
+        hovering: true,
+        hasOverflowX: false,
+        hasOverflowY: true,
+        overflowXStart: false,
+        overflowXEnd: false,
+        overflowYStart: true,
+        overflowYEnd: true,
+      }),
+    );
+    expect(reported?.offset).toEqual({ x: 0, y: 40 });
+    expect(reported?.hasOverflowY).toBe(true);
+    expect(live?.().overflowYStart).toBe(true);
+    window.close();
+  });
+
+  test("declares OTP slots and reports the core's value and completion edge", async () => {
+    await app.whenReady();
+    let value: string | undefined;
+    let completed: string | undefined;
+    const window = new Window({
+      title: "OTP field",
+      renderer: createRenderer(() =>
+        createComponent(OtpField.Root, {
+          length: 4,
+          validationType: "alphanumeric",
+          mask: true,
+          required: true,
+          autoSubmit: "verify",
+          defaultValue: "12",
+          onValueChange: (next: string) => {
+            value = next;
+          },
+          onComplete: (next: string) => {
+            completed = next;
+          },
+          get children() {
+            return [
+              createComponent(OtpField.Input, { index: 0 }),
+              createComponent(OtpField.Separator, { index: 0 }),
+              createComponent(OtpField.Input, { index: 1 }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    const scope = String(root.properties.get(PropertyCode.Scope));
+    expect(root.properties.get(PropertyCode.Part)).toBe("otp-field");
+    expect(root.properties.get(PropertyCode.Length)).toBe(4);
+    expect(root.properties.get(PropertyCode.Variant)).toBe("alphanumeric");
+    expect(root.properties.get(PropertyCode.Mask)).toBe(true);
+    expect(root.properties.get(PropertyCode.Required)).toBe(true);
+    expect(root.properties.get(PropertyCode.AutoSubmit)).toBe("verify");
+    expect(root.properties.get(PropertyCode.Value)).toBe("12");
+
+    const [first, separator] = root.children;
+    expect(first!.tag).toBe(NativeNodeTag.Input);
+    expect(first!.properties.get(PropertyCode.Part)).toBe("otp-field-input");
+    expect(first!.properties.get(PropertyCode.Scope)).toBe(scope);
+    expect(first!.properties.get(PropertyCode.ItemIndex)).toBe(0);
+    // The core owns every slot's editing, so no slot declares an input listener.
+    expect(first!.properties.has(PropertyCode.InputListener)).toBe(false);
+    expect(separator!.properties.get(PropertyCode.Part)).toBe(
+      "otp-field-separator",
+    );
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({ value: "1234", complete: "1234" }),
+    );
+    expect(value).toBe("1234");
+    expect(completed).toBe("1234");
+    expect(root.properties.get(PropertyCode.Value)).toBe("1234");
+    window.close();
+  });
+
+  test("declares drawer modality, snap points, and the swipe the core reported", async () => {
+    await app.whenReady();
+    let open: boolean | undefined;
+    let snap: number | undefined;
+    let swipe: solid.DrawerSwipeState | undefined;
+    const window = new Window({
+      title: "Drawer",
+      renderer: createRenderer(() =>
+        createComponent(Drawer.Root, {
+          modal: "trap-focus",
+          swipeDirection: "down",
+          snapPoints: [0.45, 1],
+          snapPoint: 0,
+          disablePointerDismissal: true,
+          onOpenChange: (next: boolean) => {
+            open = next;
+          },
+          onSnapPointChange: (next: number) => {
+            snap = next;
+          },
+          onSwipeChange: (next: solid.DrawerSwipeState) => {
+            swipe = next;
+          },
+          get children() {
+            return [
+              createComponent(Drawer.Trigger, { children: "Filters" }),
+              createComponent(Drawer.Portal, {
+                get children() {
+                  return [
+                    createComponent(Drawer.Backdrop, {}),
+                    createComponent(Drawer.Viewport, {
+                      get children() {
+                        return createComponent(Drawer.Popup, {
+                          get children() {
+                            return [
+                              createComponent(Drawer.SwipeArea, {}),
+                              createComponent(Drawer.Title, {
+                                children: "Filters",
+                              }),
+                              createComponent(Drawer.Description, {
+                                children: "Narrow the results",
+                              }),
+                              createComponent(Drawer.Content, {}),
+                              createComponent(Drawer.Close, {
+                                children: "Close",
+                              }),
+                            ];
+                          },
+                        });
+                      },
+                    }),
+                  ];
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    const scope = String(root.properties.get(PropertyCode.Scope));
+    expect(root.properties.get(PropertyCode.Part)).toBe("drawer");
+    expect(root.properties.get(PropertyCode.Variant)).toBe("trap-focus");
+    expect(root.properties.get(PropertyCode.SwipeDirection)).toBe("down");
+    expect(root.properties.get(PropertyCode.Values)).toBe("[0.45,1]");
+    expect(root.properties.get(PropertyCode.ItemIndex)).toBe(0);
+    expect(root.properties.get(PropertyCode.DisablePointerDismissal)).toBe(true);
+    expect(root.properties.get(PropertyCode.Open)).toBe(false);
+
+    const [trigger, portal] = root.children;
+    expect(trigger!.properties.get(PropertyCode.Part)).toBe("drawer-trigger");
+    expect(portal!.properties.get(PropertyCode.Part)).toBe("drawer-portal");
+    expect(portal!.properties.get(PropertyCode.Scope)).toBe(scope);
+    const popup = portal!.children[1]!.children[0]!;
+    expect(popup.properties.get(PropertyCode.Part)).toBe("drawer-popup");
+    expect(popup.children.map((child) => child.properties.get(PropertyCode.Part))).toEqual([
+      "drawer-swipe-area",
+      "drawer-title",
+      "drawer-description",
+      "drawer-content",
+      "drawer-close",
+    ]);
+    // The swipe area's gesture belongs to the core, so it declares no pointer listener.
+    expect(popup.children[0]!.properties.has(PropertyCode.PointerListener)).toBe(
+      false,
+    );
+
+    window._dispatchEvent("click", trigger!.id);
+    expect(open).toBe(true);
+    expect(root.properties.get(PropertyCode.Open)).toBe(true);
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        open: true,
+        snapPoint: 1,
+        swiping: true,
+        swipeOffset: 24,
+      }),
+    );
+    expect(snap).toBe(1);
+    expect(swipe).toEqual({ swiping: true, swipeOffset: 24 });
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        open: false,
+        snapPoint: 1,
+        swiping: false,
+        swipeOffset: 0,
+      }),
+    );
+    expect(open).toBe(false);
+    expect(root.properties.get(PropertyCode.Open)).toBe(false);
+    window.close();
+  });
+
+  test("shares one navigation-menu scope and reports the core's activation direction", async () => {
+    await app.whenReady();
+    let value: string | undefined;
+    let direction: string | null | undefined;
+    const window = new Window({
+      title: "Navigation menu",
+      renderer: createRenderer(() =>
+        createComponent(NavigationMenu.Root, {
+          orientation: "horizontal",
+          delay: 50,
+          closeDelay: 80,
+          onValueChange: (next: string | undefined) => {
+            value = next;
+          },
+          onActivationDirectionChange: (next: string | null) => {
+            direction = next;
+          },
+          get children() {
+            return [
+              createComponent(NavigationMenu.List, {
+                get children() {
+                  return ["products", "solutions"].map((item) =>
+                    createComponent(NavigationMenu.Item, {
+                      value: item,
+                      get children() {
+                        return [
+                          createComponent(NavigationMenu.Trigger, {
+                            children: item,
+                          }),
+                          createComponent(NavigationMenu.Icon, {}),
+                          createComponent(NavigationMenu.Positioner, {
+                            get children() {
+                              return createComponent(NavigationMenu.Popup, {
+                                get children() {
+                                  return createComponent(
+                                    NavigationMenu.Content,
+                                    {
+                                      get children() {
+                                        return createComponent(
+                                          NavigationMenu.Link,
+                                          { value: `${item}-home`, active: true },
+                                        );
+                                      },
+                                    },
+                                  );
+                                },
+                              });
+                            },
+                          }),
+                        ];
+                      },
+                    }),
+                  );
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    const scope = String(root.properties.get(PropertyCode.Scope));
+    expect(root.properties.get(PropertyCode.Part)).toBe("navigation-menu");
+    expect(root.properties.get(PropertyCode.Delay)).toBe(50);
+    expect(root.properties.get(PropertyCode.CloseDelay)).toBe(80);
+
+    const list = root.children[0]!;
+    expect(list.properties.get(PropertyCode.Part)).toBe("navigation-menu-list");
+    const item = list.children[1]!;
+    expect(item.properties.get(PropertyCode.Part)).toBe("navigation-menu-item");
+    expect(item.properties.get(PropertyCode.PartValue)).toBe("solutions");
+    const [trigger, icon, positioner] = item.children;
+    // Every part inherits the item's value, so no composition repeats it.
+    expect(trigger!.properties.get(PropertyCode.PartValue)).toBe("solutions");
+    expect(trigger!.properties.get(PropertyCode.Scope)).toBe(scope);
+    expect(trigger!.properties.has(PropertyCode.ClickListener)).toBe(false);
+    expect(icon!.properties.get(PropertyCode.Part)).toBe("navigation-menu-icon");
+    expect(positioner!.properties.get(PropertyCode.PartValue)).toBe("solutions");
+    const link = positioner!.children[0]!.children[0]!.children[0]!;
+    expect(link.properties.get(PropertyCode.Part)).toBe("navigation-menu-link");
+    expect(link.properties.get(PropertyCode.PartValue)).toBe("solutions-home");
+    expect(link.properties.get(PropertyCode.Checked)).toBe(true);
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        value: "solutions",
+        focused: "solutions",
+        activationDirection: "right",
+      }),
+    );
+    expect(value).toBe("solutions");
+    expect(direction).toBe("right");
+    expect(root.properties.get(PropertyCode.ActiveValue)).toBe("solutions");
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({ value: null, focused: "solutions", activationDirection: null }),
+    );
+    expect(value).toBeUndefined();
+    expect(root.properties.has(PropertyCode.ActiveValue)).toBe(false);
+    window.close();
+  });
+
+  test("names every Base UI compound part and bounds its declarations", () => {
+    expect(Object.keys(Separator)).toEqual(["Root"]);
+    expect(Object.keys(Avatar)).toEqual(["Root", "Image", "Fallback"]);
+    expect(Object.keys(CheckboxGroup)).toEqual(["Root"]);
+    expect(Object.keys(PreviewCard)).toEqual([
+      "Root",
+      "Trigger",
+      "Portal",
+      "Backdrop",
+      "Positioner",
+      "Popup",
+      "Arrow",
+    ]);
+    expect(Object.keys(ScrollArea)).toEqual([
+      "Root",
+      "Viewport",
+      "Content",
+      "Scrollbar",
+      "Thumb",
+      "Corner",
+    ]);
+    expect(Object.keys(OtpField)).toEqual(["Root", "Input", "Separator"]);
+    expect(Object.keys(Drawer)).toEqual([
+      "Root",
+      "Trigger",
+      "Portal",
+      "Backdrop",
+      "Viewport",
+      "Popup",
+      "Content",
+      "Title",
+      "Description",
+      "Close",
+      "SwipeArea",
+    ]);
+    expect(Object.keys(NavigationMenu)).toEqual([
+      "Root",
+      "List",
+      "Item",
+      "Trigger",
+      "Icon",
+      "Content",
+      "Link",
+      "Portal",
+      "Positioner",
+      "Popup",
+      "Viewport",
+      "Arrow",
+      "Backdrop",
+    ]);
+
+    // Malformed and oversized declarations are refused before they can cross N-API.
+    const node = createElement("view");
+    expect(() => setProp(node, "viewportSize", { width: Number.NaN, height: 1 })).toThrow(
+      "extents must be finite",
+    );
+    setProp(node, "contentSize", [4, 8]);
+    expect(node.properties.get(PropertyCode.ContentSize)).toBe("[4,8]");
+    expect(() =>
+      setProp(node, "autoSubmit", "f".repeat(MAX_COMPONENT_VALUE_BYTES + 1)),
+    ).toThrow("scopes and values are limited");
   });
 });

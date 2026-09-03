@@ -299,6 +299,24 @@ const properties: Record<string, PropertyEntry> = {
   disclosure: { code: PropertyCode.Disclosure },
   loadingLabel: { code: PropertyCode.LoadingLabel },
   objectFit: { code: PropertyCode.ObjectFit },
+
+  // Base UI separators, avatars, checkbox groups, preview cards, scroll areas, OTP fields,
+  // drawers, and navigation menus.
+  src: { code: PropertyCode.Value },
+  delay: { code: PropertyCode.Delay, normalize: normalizeMilliseconds },
+  closeDelay: { code: PropertyCode.CloseDelay, normalize: normalizeMilliseconds },
+  length: { code: PropertyCode.Length },
+  mask: { code: PropertyCode.Mask },
+  readOnly: { code: PropertyCode.ReadOnly },
+  autoSubmit: {
+    code: PropertyCode.AutoSubmit,
+    normalize: normalizeComponentValue,
+  },
+  swipeDirection: { code: PropertyCode.SwipeDirection },
+  viewportSize: { code: PropertyCode.ViewportSize, normalize: normalizeExtent },
+  contentSize: { code: PropertyCode.ContentSize, normalize: normalizeExtent },
+  overflowEdgeThreshold: { code: PropertyCode.OverflowEdgeThreshold },
+  disablePointerDismissal: { code: PropertyCode.DisablePointerDismissal },
   fit: { code: PropertyCode.ObjectFit },
   shaderParameters: {
     code: PropertyCode.ShaderParameters,
@@ -1234,6 +1252,32 @@ function normalizeComponentValue(value: PropertyInput): string | null {
  * toggle-group items all travel as one declaration so the core can answer a keypress without ever
  * asking JavaScript a synchronous question.
  */
+/**
+ * Serialize one declared `{ width, height }` extent as the bounded `[width, height]` pair the
+ * Rust binding decodes.
+ *
+ * QuickGUI has no layout observer at the hosted boundary, so a scroll area's viewport and content
+ * extents are declared ahead of the core's decision exactly like every other bounded property.
+ */
+function normalizeExtent(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const pair = Array.isArray(value)
+    ? value
+    : typeof value === "object"
+      ? [
+          (value as { width?: number }).width ?? 0,
+          (value as { height?: number }).height ?? 0,
+        ]
+      : null;
+  if (!pair || pair.length < 2) return null;
+  for (const component of pair) {
+    if (typeof component !== "number" || !Number.isFinite(component)) {
+      throw new TypeError("QuickGUI extents must be finite numbers");
+    }
+  }
+  return JSON.stringify([pair[0], pair[1]]);
+}
+
 function normalizeComponentJson(value: PropertyInput): string | null {
   if (value === null || value === undefined || value === false) return null;
   const encoded = Array.isArray(value) ? JSON.stringify(value) : String(value);
@@ -2056,6 +2100,19 @@ function createComponentScope(prefix: string): string {
   return `${prefix}-${nextComponentScope++}`;
 }
 
+/**
+ * Read one compound context without requiring a reactive owner.
+ *
+ * A part rendered outside a component tree — a direct call in a test, or a fragment built ahead of
+ * its parent — has no owner at all, and a missing compound context is an ordinary answer rather
+ * than a failure: the part simply mounts standalone.
+ */
+function optionalContext<T>(
+  context: ReturnType<typeof createContext<T | null>>,
+): T | null {
+  return getOwner() ? useContext(context) : null;
+}
+
 function createHostNode(
   element: NativeElementName,
   props: unknown,
@@ -2090,15 +2147,45 @@ function forwardClick(
 
 export type CheckedState = boolean | "indeterminate";
 
-/** Controlled, unstyled checkbox root carrying the core's exact on/off/mixed toggle state. */
+/**
+ * Controlled, unstyled checkbox root carrying the core's exact on/off/mixed toggle state.
+ *
+ * Inside a `CheckboxGroup.Root` the checkbox becomes a member of that group: `value` names the
+ * declared value it toggles, `parent` makes it the group's derived parent checkbox, and the core
+ * owns the checked state, the mixed parent state, and the click behavior for both.
+ */
 export function CheckboxRoot(props: JSX.CheckboxProps): NativeNode {
+  const group = optionalContext(CheckboxGroupContext);
+  if (group && (props.value !== undefined || props.parent === true)) {
+    return createPartNode(
+      "button",
+      omit(
+        props,
+        "checked",
+        "defaultChecked",
+        "onCheckedChange",
+        "value",
+        "parent",
+        "onClick",
+      ),
+      {
+        part: props.parent
+          ? NativePart.CheckboxGroupParent
+          : NativePart.CheckboxGroupItem,
+        scope: group.scope,
+        get partValue() {
+          return props.parent ? undefined : props.value;
+        },
+      },
+    );
+  }
   const [uncontrolled, setUncontrolled] = createSignal<CheckedState>(
     props.defaultChecked ?? false,
   );
   const checked = () => props.checked ?? uncontrolled();
   return createPartNode(
     "button",
-    omit(props, "checked", "defaultChecked", "onCheckedChange"),
+    omit(props, "checked", "defaultChecked", "onCheckedChange", "value", "parent"),
     {
       part: NativePart.Checkbox,
       get checked() {
@@ -2118,6 +2205,13 @@ export function CheckboxRoot(props: JSX.CheckboxProps): NativeNode {
 
 /** Application-owned checkbox mark, hidden from the control's accessible name by the core. */
 export function CheckboxIndicator(props: JSX.NativeProps): NativeNode {
+  const group = optionalContext(CheckboxGroupContext);
+  if (group) {
+    return createPartNode("view", props, {
+      part: NativePart.CheckboxGroupIndicator,
+      scope: group.scope,
+    });
+  }
   return createPartNode("view", props, { part: NativePart.CheckboxIndicator });
 }
 
@@ -3265,6 +3359,32 @@ export interface ComponentChangeDetails {
   focused?: string | number;
   /** The month a calendar is displaying, as `YYYY-MM`. */
   month?: string;
+  /** Checked values of a checkbox group, in the declared order. */
+  checkedValues?: readonly string[];
+  /** The avatar load status the core retained, matching Base UI's own values. */
+  loadingStatus?: AvatarLoadingStatus;
+  /** The OTP code that just became complete. */
+  complete?: string;
+  /** A scroll area's clamped offset. */
+  offset?: { x: number; y: number };
+  /** Whether a pointer or wheel gesture is currently moving a scroll area's viewport. */
+  scrolling?: boolean;
+  /** Whether the pointer is inside a scroll area's root. */
+  hovering?: boolean;
+  hasOverflowX?: boolean;
+  hasOverflowY?: boolean;
+  overflowXStart?: boolean;
+  overflowXEnd?: boolean;
+  overflowYStart?: boolean;
+  overflowYEnd?: boolean;
+  /** The drawer snap point the core moved to. */
+  snapPoint?: number;
+  /** Whether a drawer swipe is in flight. */
+  swiping?: boolean;
+  /** The drawer's live dismissing displacement, in logical pixels. */
+  swipeOffset?: number;
+  /** The direction the user's attention travelled between navigation panels. */
+  activationDirection?: NavigationMenuActivationDirection;
 }
 
 /** Decode the payload of a native `componentchange` event. */
@@ -4979,6 +5099,1146 @@ export const Menubar = Object.assign(MenubarRoot, {
   Item: MenubarItem,
 });
 
+// ---------------------------------------------------------------------------
+// Base UI parity components
+//
+// Separators, avatars, checkbox groups, preview cards, scroll areas, OTP fields, drawers, and
+// navigation menus. Every one of these declares the Rust core's own compound parts and reads the
+// result back from the asynchronous `componentchange` event; none of them reimplements a delay, a
+// deadline, a focus rule, a mount policy, or a keyboard contract in JavaScript.
+// ---------------------------------------------------------------------------
+
+/** Unstyled semantic separator. The caller still declares the rule's extent and colour. */
+export function SeparatorRoot(props: JSX.SeparatorProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.Separator });
+}
+
+/** Base-UI-shaped compound parts for a separator. */
+export const Separator = Object.assign(SeparatorRoot, { Root: SeparatorRoot });
+
+/** The load state the Rust core retains for one avatar, matching Base UI's own values. */
+export type AvatarLoadingStatus = "idle" | "loading" | "loaded" | "error";
+
+interface AvatarContextValue {
+  scope: string;
+}
+
+const AvatarContext = createContext<AvatarContextValue | null>(null);
+
+function requireAvatar(component: string): AvatarContextValue {
+  const context = optionalContext(AvatarContext);
+  if (!context) {
+    throw new Error(`<${component}> must be rendered inside <Avatar.Root>`);
+  }
+  return context;
+}
+
+/**
+ * Avatar root carrying the whole avatar's Image role and accessible name.
+ *
+ * The core decides which of the image and the fallback is mounted, so swapping between them never
+ * changes what assistive technology announces. The binding drives the retained status from the
+ * declared image source's own load outcome and reports every transition through
+ * `onLoadingStatusChange`.
+ */
+export function AvatarRoot(props: JSX.AvatarRootProps): NativeNode {
+  const scope = createComponentScope("qg-avatar");
+  const context: AvatarContextValue = { scope };
+  return createPartNode(
+    "view",
+    omit(props, "onLoadingStatusChange", "children"),
+    {
+      part: NativePart.Avatar,
+      scope,
+      onComponentChange: componentChangeListener(
+        (details) => details.loadingStatus,
+        (next, event) => props.onLoadingStatusChange?.(next, event),
+      ),
+      get children() {
+        return AvatarContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** Avatar image, mounted by the core only once its declared source has loaded. */
+export function AvatarImage(props: JSX.AvatarImageProps): NativeNode {
+  const context = requireAvatar("Avatar.Image");
+  return createPartNode("image", omit(props, "src"), {
+    part: NativePart.AvatarImage,
+    scope: context.scope,
+    get source() {
+      return props.src;
+    },
+  });
+}
+
+/** Avatar fallback, held back for `delay` so a fast decode never flashes initials. */
+export function AvatarFallback(props: JSX.AvatarFallbackProps): NativeNode {
+  const context = requireAvatar("Avatar.Fallback");
+  return createPartNode("view", props, {
+    part: NativePart.AvatarFallback,
+    scope: context.scope,
+  });
+}
+
+/** Base-UI-shaped compound parts for an avatar. */
+export const Avatar = Object.assign(AvatarRoot, {
+  Root: AvatarRoot,
+  Image: AvatarImage,
+  Fallback: AvatarFallback,
+});
+
+interface CheckboxGroupContextValue {
+  scope: string;
+}
+
+const CheckboxGroupContext = createContext<CheckboxGroupContextValue | null>(
+  null,
+);
+
+/**
+ * Controlled checkbox group.
+ *
+ * `allValues` declares the complete, ordered universe the parent checkbox derives its on/mixed/off
+ * state from; the core keeps checked values in that declared order regardless of click order and
+ * refuses every mutation while the group is disabled.
+ */
+export function CheckboxGroupRoot(props: JSX.CheckboxGroupProps): NativeNode {
+  const scope = createComponentScope("qg-checkbox-group");
+  const [uncontrolled, setUncontrolled] = createSignal<readonly string[]>(
+    props.defaultValue ?? [],
+  );
+  const values = () => props.value ?? uncontrolled();
+  const context: CheckboxGroupContextValue = { scope };
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "onValueChange", "allValues", "children"),
+    {
+      part: NativePart.CheckboxGroup,
+      scope,
+      get values() {
+        return values().slice();
+      },
+      get items() {
+        return props.allValues ? props.allValues.slice() : undefined;
+      },
+      onComponentChange: componentChangeListener(
+        (details) => details.checkedValues,
+        (next, event) => {
+          if (props.value === undefined) setUncontrolled(next);
+          props.onValueChange?.(next, event);
+        },
+      ),
+      get children() {
+        return CheckboxGroupContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** Base-UI-shaped compound parts for a checkbox group. */
+export const CheckboxGroup = Object.assign(CheckboxGroupRoot, {
+  Root: CheckboxGroupRoot,
+});
+
+interface PreviewCardContextValue {
+  scope: string;
+  open: () => boolean;
+  setOpen: (next: boolean, event: QuickGuiEvent) => void;
+}
+
+const PreviewCardContext = createContext<PreviewCardContextValue | null>(null);
+
+function requirePreviewCard(component: string): PreviewCardContextValue {
+  const context = optionalContext(PreviewCardContext);
+  if (!context) {
+    throw new Error(`<${component}> must be rendered inside <PreviewCard.Root>`);
+  }
+  return context;
+}
+
+/**
+ * Preview-card root owning the two exact deadlines a hover card needs.
+ *
+ * The core opens after `delay` once the pointer rests on the trigger, closes after `closeDelay`
+ * once it has left both the trigger and the popup, and opens immediately on focus.
+ */
+export function PreviewCardRoot(props: JSX.PreviewCardRootProps): NativeNode {
+  const scope = createComponentScope("qg-preview-card");
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultOpen ?? false,
+  );
+  const open = () => props.open ?? uncontrolled();
+  const context: PreviewCardContextValue = {
+    scope,
+    open,
+    setOpen(next, event) {
+      if (props.open === undefined) setUncontrolled(next);
+      props.onOpenChange?.(next, event);
+    },
+  };
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "open",
+      "defaultOpen",
+      "onOpenChange",
+      "placement",
+      "gap",
+      "viewportMargin",
+      "children",
+    ),
+    {
+      part: NativePart.PreviewCard,
+      scope,
+      get open() {
+        return open();
+      },
+      get anchorPlacement() {
+        return props.placement;
+      },
+      get anchorGap() {
+        return props.gap;
+      },
+      get viewportMargin() {
+        return props.viewportMargin;
+      },
+      onComponentChange: componentChangeListener(
+        (details) => details.open,
+        (next, event) => {
+          if (typeof next !== "boolean") return;
+          context.setOpen(next, event);
+        },
+      ),
+      get children() {
+        return PreviewCardContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** Link-like trigger. The core owns the hover deadlines declared here. */
+export function PreviewCardTrigger(props: JSX.PreviewCardTriggerProps): NativeNode {
+  const context = requirePreviewCard("PreviewCard.Trigger");
+  return createPartNode("button", props, {
+    part: NativePart.PreviewCardTrigger,
+    scope: context.scope,
+  });
+}
+
+/** Portal boundary. QuickGUI's retained overlay node is itself the portal. */
+export function PreviewCardPortal(props: JSX.NativeProps): NativeNode {
+  const context = requirePreviewCard("PreviewCard.Portal");
+  return createPartNode("view", props, {
+    part: NativePart.PreviewCardPortal,
+    scope: context.scope,
+  });
+}
+
+/** Positioner. Mount either this or the portal, never both. */
+export function PreviewCardPositioner(props: JSX.NativeProps): NativeNode {
+  const context = requirePreviewCard("PreviewCard.Positioner");
+  return createPartNode("view", props, {
+    part: NativePart.PreviewCardPositioner,
+    scope: context.scope,
+  });
+}
+
+/** Popup surface. Escape and outside presses dismiss it through the core. */
+export function PreviewCardPopup(props: JSX.NativeProps): NativeNode {
+  const context = requirePreviewCard("PreviewCard.Popup");
+  return createPartNode("view", props, {
+    part: NativePart.PreviewCardPopup,
+    scope: context.scope,
+  });
+}
+
+/** Decorative arrow, hidden from assistive technology by the core. */
+export function PreviewCardArrow(props: JSX.NativeProps): NativeNode {
+  const context = requirePreviewCard("PreviewCard.Arrow");
+  return createPartNode("view", props, {
+    part: NativePart.PreviewCardArrow,
+    scope: context.scope,
+  });
+}
+
+/** Optional caller-painted viewport backdrop. */
+export function PreviewCardBackdrop(props: JSX.NativeProps): NativeNode {
+  const context = requirePreviewCard("PreviewCard.Backdrop");
+  return createPartNode("view", props, {
+    part: NativePart.PreviewCardBackdrop,
+    scope: context.scope,
+  });
+}
+
+/** Base-UI-shaped compound parts for a preview card. */
+export const PreviewCard = Object.assign(PreviewCardRoot, {
+  Root: PreviewCardRoot,
+  Trigger: PreviewCardTrigger,
+  Portal: PreviewCardPortal,
+  Backdrop: PreviewCardBackdrop,
+  Positioner: PreviewCardPositioner,
+  Popup: PreviewCardPopup,
+  Arrow: PreviewCardArrow,
+});
+
+/** The `data-`-like render state one scroll area reports for the application to style from. */
+export interface ScrollAreaState {
+  /** Offset the core clamped into the scrollable range. */
+  offset: { x: number; y: number };
+  scrolling: boolean;
+  hovering: boolean;
+  hasOverflowX: boolean;
+  hasOverflowY: boolean;
+  overflowXStart: boolean;
+  overflowXEnd: boolean;
+  overflowYStart: boolean;
+  overflowYEnd: boolean;
+}
+
+interface ScrollAreaContextValue {
+  scope: string;
+  state: () => ScrollAreaState;
+}
+
+const ScrollAreaContext = createContext<ScrollAreaContextValue | null>(null);
+
+function requireScrollArea(component: string): ScrollAreaContextValue {
+  const context = optionalContext(ScrollAreaContext);
+  if (!context) {
+    throw new Error(`<${component}> must be rendered inside <ScrollArea.Root>`);
+  }
+  return context;
+}
+
+const idleScrollAreaState: ScrollAreaState = {
+  offset: { x: 0, y: 0 },
+  scrolling: false,
+  hovering: false,
+  hasOverflowX: false,
+  hasOverflowY: false,
+  overflowXStart: false,
+  overflowXEnd: false,
+  overflowYStart: false,
+  overflowYEnd: false,
+};
+
+/**
+ * Scroll-area root with caller-drawn scrollbars.
+ *
+ * The core owns the clamped offsets, the derived overflow flags, the thumb arithmetic, and the
+ * captured pointer contract. QuickGUI has no layout observer at the hosted boundary, so the
+ * application declares the extents it laid out through `viewportSize` and `contentSize`; every
+ * result comes back through `onScrollStateChange` and `useScrollAreaState`.
+ */
+export function ScrollAreaRoot(props: JSX.ScrollAreaRootProps): NativeNode {
+  const scope = createComponentScope("qg-scroll-area");
+  const [state, setState] = createSignal<ScrollAreaState>(idleScrollAreaState);
+  const context: ScrollAreaContextValue = { scope, state };
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "viewportSize",
+      "contentSize",
+      "overflowEdgeThreshold",
+      "onScrollStateChange",
+      "children",
+    ),
+    {
+      part: NativePart.ScrollArea,
+      scope,
+      get viewportSize() {
+        return props.viewportSize;
+      },
+      get contentSize() {
+        return props.contentSize;
+      },
+      get overflowEdgeThreshold() {
+        return props.overflowEdgeThreshold;
+      },
+      onComponentChange: componentChangeListener(
+        (details) => scrollAreaStateFromDetails(details),
+        (next, event) => {
+          setState(next);
+          props.onScrollStateChange?.(next, event);
+        },
+      ),
+      get children() {
+        return ScrollAreaContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+function scrollAreaStateFromDetails(
+  details: ComponentChangeDetails,
+): ScrollAreaState | undefined {
+  if (!details.offset || typeof details.hasOverflowY !== "boolean") {
+    return undefined;
+  }
+  return {
+    offset: { x: details.offset.x ?? 0, y: details.offset.y ?? 0 },
+    scrolling: details.scrolling === true,
+    hovering: details.hovering === true,
+    hasOverflowX: details.hasOverflowX === true,
+    hasOverflowY: details.hasOverflowY === true,
+    overflowXStart: details.overflowXStart === true,
+    overflowXEnd: details.overflowXEnd === true,
+    overflowYStart: details.overflowYStart === true,
+    overflowYEnd: details.overflowYEnd === true,
+  };
+}
+
+/**
+ * Read the live scroll state inside a `ScrollArea.Root` subtree.
+ *
+ * Every flag is the core's own derived render state, so styling a fade, shadow, or scrollbar
+ * visibility from it never needs an observer, a timer, or a measurement in JavaScript.
+ */
+export function useScrollAreaState(): () => ScrollAreaState {
+  return requireScrollArea("useScrollAreaState").state;
+}
+
+/** Clipped viewport. The core answers the wheel and clamps the resulting offset. */
+export function ScrollAreaViewport(props: JSX.NativeProps): NativeNode {
+  const context = requireScrollArea("ScrollArea.Viewport");
+  return createPartNode("view", omit(props, "onWheel"), {
+    part: NativePart.ScrollAreaViewport,
+    scope: context.scope,
+  });
+}
+
+/** Scrolled content. Translate it by the negated reported offset. */
+export function ScrollAreaContent(props: JSX.NativeProps): NativeNode {
+  const context = requireScrollArea("ScrollArea.Content");
+  return createPartNode("view", props, {
+    part: NativePart.ScrollAreaContent,
+    scope: context.scope,
+  });
+}
+
+interface ScrollbarContextValue {
+  orientation: () => "horizontal" | "vertical";
+}
+
+const ScrollbarContext = createContext<ScrollbarContextValue | null>(null);
+
+/** One caller-drawn scrollbar track, mounted only while its axis can scroll. */
+export function ScrollAreaScrollbar(
+  props: JSX.ScrollAreaScrollbarProps,
+): NativeNode {
+  const context = requireScrollArea("ScrollArea.Scrollbar");
+  const orientation = () => props.orientation ?? "vertical";
+  return createPartNode("view", omit(props, "onPointer", "children"), {
+    part: NativePart.ScrollAreaScrollbar,
+    scope: context.scope,
+    get orientation() {
+      return orientation();
+    },
+    get keepMounted() {
+      return props.keepMounted;
+    },
+    get children() {
+      return ScrollbarContext({
+        value: { orientation },
+        get children() {
+          return props.children as SolidElement;
+        },
+      });
+    },
+  });
+}
+
+/** One caller-drawn thumb carrying the core's captured drag. */
+export function ScrollAreaThumb(props: JSX.ScrollAreaThumbProps): NativeNode {
+  const context = requireScrollArea("ScrollArea.Thumb");
+  const inherited = optionalContext(ScrollbarContext);
+  return createPartNode("view", omit(props, "orientation", "onPointer"), {
+    part: NativePart.ScrollAreaThumb,
+    scope: context.scope,
+    get orientation() {
+      return props.orientation ?? inherited?.orientation() ?? "vertical";
+    },
+  });
+}
+
+/** The corner between a horizontal and a vertical scrollbar. */
+export function ScrollAreaCorner(props: JSX.NativeProps): NativeNode {
+  const context = requireScrollArea("ScrollArea.Corner");
+  return createPartNode("view", props, {
+    part: NativePart.ScrollAreaCorner,
+    scope: context.scope,
+  });
+}
+
+/** Base-UI-shaped compound parts for a scroll area. */
+export const ScrollArea = Object.assign(ScrollAreaRoot, {
+  Root: ScrollAreaRoot,
+  Viewport: ScrollAreaViewport,
+  Content: ScrollAreaContent,
+  Scrollbar: ScrollAreaScrollbar,
+  Thumb: ScrollAreaThumb,
+  Corner: ScrollAreaCorner,
+});
+
+interface OtpFieldContextValue {
+  scope: string;
+}
+
+const OtpFieldContext = createContext<OtpFieldContextValue | null>(null);
+
+function requireOtpField(component: string): OtpFieldContextValue {
+  const context = optionalContext(OtpFieldContext);
+  if (!context) {
+    throw new Error(`<${component}> must be rendered inside <OtpField.Root>`);
+  }
+  return context;
+}
+
+/**
+ * Controlled OTP field.
+ *
+ * Each slot composes the core's own text input. Accepted characters fill and advance, a paste
+ * distributes across consecutive slots, Backspace clears in place and then walks back, and the
+ * arrows plus Home and End move between slots — all inside the core.
+ */
+export function OtpFieldRoot(props: JSX.OtpFieldRootProps): NativeNode {
+  const scope = createComponentScope("qg-otp-field");
+  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue ?? "");
+  const value = () => props.value ?? uncontrolled();
+  const context: OtpFieldContextValue = { scope };
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "onComplete",
+      "validationType",
+      "children",
+    ),
+    {
+      part: NativePart.OtpField,
+      scope,
+      get value() {
+        return value();
+      },
+      get variant() {
+        return props.validationType;
+      },
+      onComponentChange: (event: QuickGuiEvent) => {
+        const details = componentChangeFromEvent(event);
+        if (!details || typeof details.value !== "string") return;
+        const next = details.value;
+        if (props.value === undefined) setUncontrolled(next);
+        props.onValueChange?.(next, event);
+        if (typeof details.complete === "string") {
+          props.onComplete?.(details.complete, event);
+        }
+      },
+      get children() {
+        return OtpFieldContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** One slot input. The core owns its character, its mask, and every editing key. */
+export function OtpFieldInput(props: JSX.OtpFieldInputProps): NativeNode {
+  const context = requireOtpField("OtpField.Input");
+  return createPartNode("input", omit(props, "index"), {
+    part: NativePart.OtpFieldInput,
+    scope: context.scope,
+    get itemIndex() {
+      return props.index;
+    },
+  });
+}
+
+/** Decorative separator between two slots, hidden from the announced code. */
+export function OtpFieldSeparator(
+  props: JSX.OtpFieldSeparatorProps,
+): NativeNode {
+  const context = requireOtpField("OtpField.Separator");
+  return createPartNode("view", omit(props, "index"), {
+    part: NativePart.OtpFieldSeparator,
+    scope: context.scope,
+    get itemIndex() {
+      return props.index;
+    },
+  });
+}
+
+/** Base-UI-shaped compound parts for an OTP field. */
+export const OtpField = Object.assign(OtpFieldRoot, {
+  Root: OtpFieldRoot,
+  Input: OtpFieldInput,
+  Separator: OtpFieldSeparator,
+});
+
+/** The live swipe a drawer reports while a gesture is in flight. */
+export interface DrawerSwipeState {
+  swiping: boolean;
+  /** The dismissing displacement in logical pixels. It is never negative. */
+  swipeOffset: number;
+}
+
+interface DrawerContextValue {
+  scope: string;
+  open: () => boolean;
+  setOpen: (next: boolean, event: QuickGuiEvent) => void;
+  swipe: () => DrawerSwipeState;
+}
+
+const DrawerContext = createContext<DrawerContextValue | null>(null);
+
+function requireDrawer(component: string): DrawerContextValue {
+  const context = optionalContext(DrawerContext);
+  if (!context) {
+    throw new Error(`<${component}> must be rendered inside <Drawer.Root>`);
+  }
+  return context;
+}
+
+const settledDrawerSwipe: DrawerSwipeState = { swiping: false, swipeOffset: 0 };
+
+/**
+ * Controlled drawer.
+ *
+ * Focus containment, Escape, backdrop dismissal, and focus restoration reuse the core's dialog
+ * machinery; snap points, the flick velocity that decides between snapping and dismissing, and
+ * the live swipe offset are the core's own. The offset is a paint-only transform the application
+ * applies, so a drag never relayouts.
+ */
+export function DrawerRoot(props: JSX.DrawerRootProps): NativeNode {
+  const scope = createComponentScope("qg-drawer");
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal(
+    props.defaultOpen ?? false,
+  );
+  const [swipe, setSwipe] = createSignal<DrawerSwipeState>(settledDrawerSwipe);
+  const open = () => props.open ?? uncontrolledOpen();
+  const context: DrawerContextValue = {
+    scope,
+    open,
+    setOpen(next, event) {
+      if (props.open === undefined) setUncontrolledOpen(next);
+      props.onOpenChange?.(next, event);
+    },
+    swipe,
+  };
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "open",
+      "defaultOpen",
+      "onOpenChange",
+      "modal",
+      "swipeDirection",
+      "snapPoints",
+      "snapPoint",
+      "onSnapPointChange",
+      "onSwipeChange",
+      "disablePointerDismissal",
+      "children",
+    ),
+    {
+      part: NativePart.Drawer,
+      scope,
+      get open() {
+        return open();
+      },
+      get variant() {
+        return drawerModality(props.modal);
+      },
+      get swipeDirection() {
+        return props.swipeDirection;
+      },
+      get values() {
+        return props.snapPoints ? props.snapPoints.slice() : undefined;
+      },
+      get itemIndex() {
+        return props.snapPoint;
+      },
+      get disablePointerDismissal() {
+        return props.disablePointerDismissal;
+      },
+      onComponentChange: (event: QuickGuiEvent) => {
+        const details = componentChangeFromEvent(event);
+        if (!details) return;
+        if (typeof details.swiping === "boolean") {
+          const next: DrawerSwipeState = {
+            swiping: details.swiping,
+            swipeOffset: details.swipeOffset ?? 0,
+          };
+          setSwipe(next);
+          props.onSwipeChange?.(next, event);
+        }
+        if (typeof details.snapPoint === "number") {
+          props.onSnapPointChange?.(details.snapPoint, event);
+        }
+        if (typeof details.open === "boolean" && details.open !== open()) {
+          context.setOpen(details.open, event);
+        }
+      },
+      get children() {
+        return DrawerContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+function drawerModality(
+  modal: boolean | "trap-focus" | undefined,
+): string | undefined {
+  if (modal === undefined) return undefined;
+  if (modal === "trap-focus") return "trap-focus";
+  return modal ? "modal" : "non-modal";
+}
+
+/**
+ * Read the live swipe inside a `Drawer.Root` subtree.
+ *
+ * Apply `swipeOffset` as a paint-only transform on the popup; the core never animates the sheet.
+ */
+export function useDrawerSwipe(): () => DrawerSwipeState {
+  return requireDrawer("useDrawerSwipe").swipe;
+}
+
+/** Trigger that opens the drawer. */
+export function DrawerTrigger(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Trigger");
+  return createPartNode("button", props, {
+    part: NativePart.DrawerTrigger,
+    scope: context.scope,
+    onClick: forwardClick(props.onClick, (event) =>
+      context.setOpen(true, event),
+    ),
+  });
+}
+
+/** Full-window portal and, for a containing modality, the focus boundary. */
+export function DrawerPortal(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Portal");
+  return createPartNode("view", props, {
+    part: NativePart.DrawerPortal,
+    scope: context.scope,
+  });
+}
+
+/** Caller-painted backdrop. It dismisses unless `disablePointerDismissal` is declared. */
+export function DrawerBackdrop(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Backdrop");
+  return createPartNode("view", props, {
+    part: NativePart.DrawerBackdrop,
+    scope: context.scope,
+  });
+}
+
+/** Container that aligns the sheet against its edge. The application declares the alignment. */
+export function DrawerViewport(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Viewport");
+  return createPartNode("view", props, {
+    part: NativePart.DrawerViewport,
+    scope: context.scope,
+  });
+}
+
+/** The sheet itself. Escape and the backdrop dismiss it through the core. */
+export function DrawerPopup(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Popup");
+  return createPartNode("view", props, {
+    part: NativePart.DrawerPopup,
+    scope: context.scope,
+  });
+}
+
+/** The scrollable body of the sheet. */
+export function DrawerContent(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Content");
+  return createPartNode("view", props, {
+    part: NativePart.DrawerContent,
+    scope: context.scope,
+  });
+}
+
+/** The sheet's visible label target. */
+export function DrawerTitle(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Title");
+  return createPartNode("view", props, {
+    part: NativePart.DrawerTitle,
+    scope: context.scope,
+  });
+}
+
+/** The sheet's visible description target. */
+export function DrawerDescription(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Description");
+  return createPartNode("view", props, {
+    part: NativePart.DrawerDescription,
+    scope: context.scope,
+  });
+}
+
+/** Close control. Focus returns to the declared control on every dismissal path. */
+export function DrawerClose(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.Close");
+  return createPartNode("button", props, {
+    part: NativePart.DrawerClose,
+    scope: context.scope,
+    onClick: forwardClick(props.onClick, (event) =>
+      context.setOpen(false, event),
+    ),
+  });
+}
+
+/** Grab handle carrying the core's captured swipe gesture. */
+export function DrawerSwipeArea(props: JSX.NativeProps): NativeNode {
+  const context = requireDrawer("Drawer.SwipeArea");
+  return createPartNode("view", omit(props, "onPointer"), {
+    part: NativePart.DrawerSwipeArea,
+    scope: context.scope,
+  });
+}
+
+/** Base-UI-shaped compound parts for a drawer. */
+export const Drawer = Object.assign(DrawerRoot, {
+  Root: DrawerRoot,
+  Trigger: DrawerTrigger,
+  Portal: DrawerPortal,
+  Backdrop: DrawerBackdrop,
+  Viewport: DrawerViewport,
+  Popup: DrawerPopup,
+  Content: DrawerContent,
+  Title: DrawerTitle,
+  Description: DrawerDescription,
+  Close: DrawerClose,
+  SwipeArea: DrawerSwipeArea,
+});
+
+/** The direction the user's attention travelled when a navigation panel changed. */
+export type NavigationMenuActivationDirection =
+  | "left"
+  | "right"
+  | "up"
+  | "down"
+  | null;
+
+interface NavigationMenuContextValue {
+  scope: string;
+}
+
+const NavigationMenuContext =
+  createContext<NavigationMenuContextValue | null>(null);
+const NavigationMenuItemContext = createContext<(() => string) | null>(null);
+
+function requireNavigationMenu(component: string): NavigationMenuContextValue {
+  const context = optionalContext(NavigationMenuContext);
+  if (!context) {
+    throw new Error(
+      `<${component}> must be rendered inside <NavigationMenu.Root>`,
+    );
+  }
+  return context;
+}
+
+function navigationMenuItemValue(component: string, declared?: string): string {
+  const inherited = optionalContext(NavigationMenuItemContext);
+  const value = declared ?? inherited?.();
+  if (value === undefined) {
+    throw new Error(
+      `<${component}> needs a \`value\`, or a <NavigationMenu.Item value> ancestor`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Controlled navigation menu.
+ *
+ * The core owns the Navigation landmark, the bar's single Tab stop, arrow/Home/End movement with
+ * disabled-item skipping, the exact hover open and close deadlines, Escape, and each panel's
+ * anchored placement and dismissal.
+ */
+export function NavigationMenuRoot(
+  props: JSX.NavigationMenuRootProps,
+): NativeNode {
+  const scope = createComponentScope("qg-navigation-menu");
+  const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
+    props.defaultValue,
+  );
+  const value = () => props.value ?? uncontrolled();
+  const context: NavigationMenuContextValue = { scope };
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "onActivationDirectionChange",
+      "placement",
+      "children",
+    ),
+    {
+      part: NativePart.NavigationMenu,
+      scope,
+      get activeValue() {
+        return value();
+      },
+      get anchorPlacement() {
+        return props.placement;
+      },
+      onComponentChange: (event: QuickGuiEvent) => {
+        const details = componentChangeFromEvent(event);
+        if (!details || !("value" in details)) return;
+        const next = (details.value ?? undefined) as string | undefined;
+        if (next !== value()) {
+          if (props.value === undefined) setUncontrolled(next);
+          props.onValueChange?.(next, event);
+        }
+        props.onActivationDirectionChange?.(
+          (details.activationDirection ??
+            null) as NavigationMenuActivationDirection,
+          event,
+        );
+      },
+      get children() {
+        return NavigationMenuContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** The list of items, carrying the List role and the menu's orientation. */
+export function NavigationMenuList(props: JSX.NativeProps): NativeNode {
+  const context = requireNavigationMenu("NavigationMenu.List");
+  return createPartNode("view", props, {
+    part: NativePart.NavigationMenuList,
+    scope: context.scope,
+  });
+}
+
+/** One item. Its `value` flows to every part inside it. */
+export function NavigationMenuItem(
+  props: JSX.NavigationMenuItemProps,
+): NativeNode {
+  const context = requireNavigationMenu("NavigationMenu.Item");
+  const value = () => props.value;
+  return createPartNode("view", omit(props, "value", "children"), {
+    part: NativePart.NavigationMenuItem,
+    scope: context.scope,
+    get partValue() {
+      return props.value;
+    },
+    get children() {
+      return NavigationMenuItemContext({
+        value,
+        get children() {
+          return props.children as SolidElement;
+        },
+      });
+    },
+  });
+}
+
+function navigationMenuPart(
+  component: string,
+  part: NativePartName,
+  element: NativeElementName,
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  const context = requireNavigationMenu(component);
+  const value = navigationMenuItemValue(component, props.value);
+  return createPartNode(element, omit(props, "value"), {
+    part,
+    scope: context.scope,
+    partValue: value,
+  });
+}
+
+/** One trigger. Exactly one enabled trigger stays in the window's Tab sequence. */
+export function NavigationMenuTrigger(
+  props: JSX.NavigationMenuTriggerProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Trigger",
+    NativePart.NavigationMenuTrigger,
+    "button",
+    props,
+  );
+}
+
+/** Decorative trigger icon, hidden from the accessible name. */
+export function NavigationMenuIcon(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Icon",
+    NativePart.NavigationMenuIcon,
+    "view",
+    props,
+  );
+}
+
+/** Portal boundary for one item's panel. */
+export function NavigationMenuPortal(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Portal",
+    NativePart.NavigationMenuPortal,
+    "view",
+    props,
+  );
+}
+
+/** Positioner for one item's panel. Mount either this or the portal. */
+export function NavigationMenuPositioner(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Positioner",
+    NativePart.NavigationMenuPositioner,
+    "view",
+    props,
+  );
+}
+
+/** One item's popup surface. */
+export function NavigationMenuPopup(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Popup",
+    NativePart.NavigationMenuPopup,
+    "view",
+    props,
+  );
+}
+
+/** The clipping viewport an application animates a resizing panel inside. */
+export function NavigationMenuViewport(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Viewport",
+    NativePart.NavigationMenuViewport,
+    "view",
+    props,
+  );
+}
+
+/** One item's panel content, labelled by its trigger. */
+export function NavigationMenuContent(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Content",
+    NativePart.NavigationMenuContent,
+    "view",
+    props,
+  );
+}
+
+/** One item's decorative arrow. */
+export function NavigationMenuArrow(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Arrow",
+    NativePart.NavigationMenuArrow,
+    "view",
+    props,
+  );
+}
+
+/** One item's optional viewport backdrop. */
+export function NavigationMenuBackdrop(
+  props: JSX.NavigationMenuPartProps,
+): NativeNode {
+  return navigationMenuPart(
+    "NavigationMenu.Backdrop",
+    NativePart.NavigationMenuBackdrop,
+    "view",
+    props,
+  );
+}
+
+/** A navigation link. `active` projects as the native selected state, not a visual class. */
+export function NavigationMenuLink(
+  props: JSX.NavigationMenuLinkProps,
+): NativeNode {
+  const context = requireNavigationMenu("NavigationMenu.Link");
+  return createPartNode("button", omit(props, "value", "active"), {
+    part: NativePart.NavigationMenuLink,
+    scope: context.scope,
+    get partValue() {
+      return props.value;
+    },
+    get checked() {
+      return props.active === true;
+    },
+  });
+}
+
+/** Base-UI-shaped compound parts for a navigation menu. */
+export const NavigationMenu = Object.assign(NavigationMenuRoot, {
+  Root: NavigationMenuRoot,
+  List: NavigationMenuList,
+  Item: NavigationMenuItem,
+  Trigger: NavigationMenuTrigger,
+  Icon: NavigationMenuIcon,
+  Content: NavigationMenuContent,
+  Link: NavigationMenuLink,
+  Portal: NavigationMenuPortal,
+  Positioner: NavigationMenuPositioner,
+  Popup: NavigationMenuPopup,
+  Viewport: NavigationMenuViewport,
+  Arrow: NavigationMenuArrow,
+  Backdrop: NavigationMenuBackdrop,
+});
+
+
 export namespace JSX {
   export type Element = SolidElement;
   export type Child = SolidElement;
@@ -5388,6 +6648,10 @@ export namespace JSX {
   }
 
   export interface CheckboxProps extends NativeProps {
+    /** Inside a `CheckboxGroup.Root`, the declared value this checkbox toggles. */
+    value?: string;
+    /** Inside a `CheckboxGroup.Root`, make this the group's derived parent checkbox. */
+    parent?: boolean;
     /** Controlled `true`, `false`, or `"indeterminate"` toggle state. */
     checked?: CheckedState;
     defaultChecked?: CheckedState;
@@ -5897,6 +7161,192 @@ export namespace JSX {
   export interface MenubarItemProps extends NativeScopedProps {
     /** Position of this menu on the bar. */
     itemIndex?: number;
+  }
+
+  export interface SeparatorProps extends NativeProps {
+    /** A horizontal rule divides stacked content; a vertical one divides a row. */
+    orientation?: "horizontal" | "vertical";
+  }
+
+  export interface AvatarRootProps extends NativeProps {
+    /** Accessible name for the whole avatar, announced exactly once however it renders. */
+    ariaLabel?: string;
+    /** Every load-status transition the core decided. */
+    onLoadingStatusChange?: (
+      status: AvatarLoadingStatus,
+      event: QuickGuiEvent,
+    ) => void;
+  }
+
+  export interface AvatarImageProps extends NativeProps {
+    /** Filesystem path, `file://` URL, or a base64 `data:` URL. */
+    src: string;
+    fit?: "fill" | "contain" | "cover" | "scale-down" | "none";
+    objectFit?: NonNullable<AvatarImageProps["fit"]>;
+  }
+
+  export interface AvatarFallbackProps extends NativeProps {
+    /** Hold the fallback back for this many milliseconds after loading starts. */
+    delay?: number;
+  }
+
+  export interface CheckboxGroupProps extends NativeProps {
+    /** The complete, ordered universe the parent checkbox derives its state from. */
+    allValues?: readonly string[];
+    /** Controlled checked values. The core keeps them in the declared order. */
+    value?: readonly string[];
+    defaultValue?: readonly string[];
+    disabled?: boolean;
+    onValueChange?: (values: readonly string[], event: QuickGuiEvent) => void;
+  }
+
+  export interface PreviewCardRootProps extends NativeProps {
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, event: QuickGuiEvent) => void;
+    placement?: PopoverPlacement;
+    gap?: number;
+    viewportMargin?: number;
+  }
+
+  export interface PreviewCardTriggerProps extends NativeProps {
+    /** Milliseconds the pointer must rest on the trigger before the card opens. */
+    delay?: number;
+    /** Milliseconds after the pointer leaves both the trigger and the popup. */
+    closeDelay?: number;
+  }
+
+  export interface ScrollAreaRootProps extends NativeProps {
+    /**
+     * The viewport extent the application laid out.
+     *
+     * QuickGUI has no layout observer at the hosted boundary, so the extents the core's
+     * arithmetic needs are declared ahead of its decision like every other bounded property.
+     */
+    viewportSize?: { width: number; height: number };
+    /** The content extent the application laid out. */
+    contentSize?: { width: number; height: number };
+    /** Distance from an edge that still counts as being at that edge. Defaults to 1 pixel. */
+    overflowEdgeThreshold?: number;
+    /** Everything the core decided: the clamped offset and every derived overflow flag. */
+    onScrollStateChange?: (
+      state: ScrollAreaState,
+      event: QuickGuiEvent,
+    ) => void;
+  }
+
+  export interface ScrollAreaScrollbarProps extends NativeProps {
+    orientation?: "horizontal" | "vertical";
+    /**
+     * Keep the scrollbar mounted while its axis cannot scroll.
+     *
+     * The core keeps this per scroll area, so one kept scrollbar keeps the whole area's
+     * scrollbars and corner mounted. A mounted-but-useless scrollbar is hidden from assistive
+     * technology, so it is never announced.
+     */
+    keepMounted?: boolean;
+  }
+
+  export interface ScrollAreaThumbProps extends NativeProps {
+    /** Defaults to the enclosing `ScrollArea.Scrollbar`'s orientation. */
+    orientation?: "horizontal" | "vertical";
+  }
+
+  export interface OtpFieldRootProps extends NativeProps {
+    /** Controlled code. Characters outside the accepted class are dropped by the core. */
+    value?: string;
+    defaultValue?: string;
+    /** Slots retained by the field, bounded by the core's own maximum of twelve. */
+    length?: number;
+    /** Accepted character class. Defaults to `"numeric"`. */
+    validationType?: "numeric" | "alpha" | "alphanumeric" | "none";
+    /** Present the code the way a password input is presented. */
+    mask?: boolean;
+    disabled?: boolean;
+    readOnly?: boolean;
+    required?: boolean;
+    /** Submit this form through the core as soon as the final slot is filled. */
+    autoSubmit?: string;
+    onValueChange?: (value: string, event: QuickGuiEvent) => void;
+    /** The transition into a full code, which is an edge rather than a value. */
+    onComplete?: (value: string, event: QuickGuiEvent) => void;
+  }
+
+  export interface OtpFieldInputProps
+    extends Omit<NativeProps, "onInput" | "value"> {
+    /** The slot this input paints. */
+    index: number;
+  }
+
+  export interface OtpFieldSeparatorProps extends NativeProps {
+    /** Position between two slots, used only to keep the separator's identity stable. */
+    index?: number;
+  }
+
+  export interface DrawerRootProps extends NativeProps {
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, event: QuickGuiEvent) => void;
+    /** `true` contains focus and projects modal semantics; `"trap-focus"` only contains focus. */
+    modal?: boolean | "trap-focus";
+    /** The edge a swipe dismisses toward. Defaults to `"down"`. */
+    swipeDirection?: "up" | "down" | "left" | "right";
+    /** A point at or below `1` is a fraction of the viewport extent; a larger one is pixels. */
+    snapPoints?: readonly number[];
+    /** Which declared snap point an opening drawer lands on. */
+    snapPoint?: number;
+    onSnapPointChange?: (index: number, event: QuickGuiEvent) => void;
+    /** Refuse a backdrop or swipe dismissal, leaving Escape and the close control. */
+    disablePointerDismissal?: boolean;
+    /** The live swipe the core decided, for the paint-only transform the application applies. */
+    onSwipeChange?: (swipe: DrawerSwipeState, event: QuickGuiEvent) => void;
+  }
+
+  export interface NavigationMenuRootProps extends NativeProps {
+    /** The open item, or `undefined` while every panel is closed. */
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+    orientation?: "horizontal" | "vertical";
+    /** Milliseconds a pointer rests on a trigger before its panel opens. Defaults to 50. */
+    delay?: number;
+    /** Milliseconds after the pointer leaves both a trigger and its popup. Defaults to 50. */
+    closeDelay?: number;
+    loopFocus?: boolean;
+    placement?: PopoverPlacement;
+    /**
+     * The ordered navigation model.
+     *
+     * Omit it and the core reads the mounted `NavigationMenu.Item` children in declaration order;
+     * declare it to name disabled items or to keep a model the children do not spell out.
+     */
+    items?: readonly ComponentItemDeclaration[];
+    /** The direction the user's attention travelled, so the application can slide its panel. */
+    onActivationDirectionChange?: (
+      direction: NavigationMenuActivationDirection,
+      event: QuickGuiEvent,
+    ) => void;
+  }
+
+  export interface NavigationMenuItemProps extends NativeProps {
+    /** The item's stable value, inherited by every part inside it. */
+    value: string;
+  }
+
+  export interface NavigationMenuPartProps extends NativeProps {
+    /** Defaults to the enclosing `NavigationMenu.Item`'s value. */
+    value?: string;
+  }
+
+  /** A trigger's activation belongs to the core, so it declares no click listener of its own. */
+  export interface NavigationMenuTriggerProps
+    extends Omit<NavigationMenuPartProps, "onClick"> {}
+
+  export interface NavigationMenuLinkProps extends NativeProps {
+    /** Stable identity for the link. */
+    value: string;
+    /** Marks the link for the current destination as the native selected state. */
+    active?: boolean;
   }
 
   export interface IntrinsicElements {
