@@ -92,6 +92,84 @@ a child opens and closes in one event turn; there is no polling or stale `is_ope
 stable ID across reorder, and closes an obsolete open snapshot. A failed replacement changes
 nothing. `set_disabled(disabled, cx)` likewise closes an open popover when disabling the control.
 
+
+### Select parts
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `SelectState::root_part(element)` | the structural wrapper, kept out of the window drag region |
+| Label | `label_part(id, element)` | Label role and the identity the trigger points at |
+| Trigger | `trigger_part(id, label, element)` | combo-box role, `has-popup`, `expanded`, required/read-only/invalid state |
+| Value | `value_part(id, element)` | stable identity, hidden from assistive technology so the value is announced once |
+| Icon | `icon_part(id, element)` | stable identity, accessibility-hidden decoration |
+| Backdrop | `backdrop_part(id, element)` | full-viewport, accessibility-hidden owner-window layer |
+| Portal / Positioner / Popup | `portal_part(...)`, `positioner_part(...)`, `popup_part(id, label, option_count, multiple, element)` | list-box role, accessible name, set size, multi-select state |
+| Arrow | `arrow_part(id, element)` | absolutely positioned, accessibility-hidden decoration |
+| List | `list_part(id, option_count, element)` | the scrolling container's stable identity |
+| Item | `item_part(row_id, label, state, element)` | option role, selected and disabled state, accessible name |
+| ItemText / ItemIndicator | `item_text_part(element)`, `item_indicator_part(element)` | accessibility-hidden decoration |
+| Group / GroupLabel | `group_part(element)`, `group_label_part(label_id, element)` | group and label roles |
+| ScrollUpArrow / ScrollDownArrow | `SelectPopupParts::scroll_up_arrow_part(element)`, `scroll_down_arrow_part(element)` | hovered scrolling on exact deadlines, accessibility-hidden |
+| Separator | `separator_part(element)` | non-interactive divider role |
+
+The option surface is a separate native child window, so Portal, Positioner, and Popup are one
+element: all three names decorate it identically and QuickGUI resolves placement against the
+display work area. `popup_part` and `item_part` are the same decorators the native surface applies
+internally, so an application composing its own in-window list gets exactly the same semantics.
+
+The two scroll-arrow decorators carry behavior, not just semantics, so they arrive through
+`element_with_parts` rather than from `SelectState` directly:
+
+```rust,ignore
+self.theme.element_with_parts(
+    cx,
+    "theme-select",
+    "Editor theme",
+    Self::theme,
+    trigger,
+    |list, parts| {
+        let mut root = quickgui::div().relative();
+        if list.can_scroll_up {
+            root = root.child(parts.scroll_up_arrow_part(quickgui::div().h(12.0)));
+        }
+        if list.can_scroll_down {
+            root = root.child(parts.scroll_down_arrow_part(quickgui::div().h(12.0)));
+        }
+        root
+    },
+    render_option,
+    change,
+)
+```
+
+While the pointer rests on an arrow the option window advances one row every
+`SELECT_SCROLL_ARROW_INTERVAL`, each step an exact one-shot deadline armed by the previous one.
+Leaving the arrow, or reaching the end of the list, cancels it, so a settled select owns no timer.
+
+### Select props and render state
+
+`multiple(true)` accepts more than one value: `select_source` adds, `toggle_source` removes,
+`selected_source_indices` and `selected_values` report the whole set bounded by
+`MAX_SELECT_VALUES`, and `value_text()` joins the selected labels with
+`DEFAULT_SELECT_VALUE_SEPARATOR` (replaceable with `value_separator`). Turning `multiple` off keeps
+exactly one value, so the retained set can never disagree with the declared arity.
+
+`required(true)` and `read_only(true)` project the same states the other form controls do; a
+read-only select stays focusable and refuses `select_source`, `toggle_source`, and
+`clear_selection` on its own state, not only in the accessibility tree. `modal(true)` declares the
+intent a mounted `backdrop_part` paints. `align_item_with_trigger(true)` offsets the surface by the
+selected row's distance from the top of the popup plus `SelectPopoverLayout::trigger_height`, so
+the row the user is already looking at does not move under the pointer; presentation stays
+application-owned, which is why the trigger's own height is declared rather than measured.
+
+`SelectState::from_labels([(value, label), ...])` is Base UI's `items` map form.
+
+`state()` returns a copyable `SelectPartState` carrying `popup_open`, `popup_side`, `pressed`,
+`placeholder`, `valid`, `invalid`, `dirty`, `touched`, `filled`, `focused`, `read_only`, and
+`required`. `set_pressed`, `set_focused` (which marks the control touched when focus leaves), and
+`reset_dirty` are the controlled writers. `popup_side` reports the side QuickGUI asked for: the
+native surface resolves the final side against the display work area itself.
+
 ## Standalone unstyled free-form autocomplete
 
 Retain `AutocompleteState<T>` beside the caller-owned callbacks. The input, popover root, and every
@@ -227,6 +305,53 @@ Source validation is atomic, and an explicit `PickerItem::id` preserves committe
 option accessibility IDs across reordering. A stable committed selection remains available even
 when an externally filtered source temporarily omits it, then rebinds when that ID returns. A
 failed replacement changes neither source nor selection.
+
+
+### Combobox parts, props, and render state
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `ComboboxState::root_part(element)` | the structural wrapper |
+| Label | `label_part(id, element)` | Label role and the identity the input and chips point at |
+| Value | `value_part(id, element)` | stable identity, accessibility-hidden decoration |
+| Icon | `icon_part(id, element)` | stable identity, accessibility-hidden decoration |
+| InputGroup | `input_group_part(id, element)` | group role and the mounted label relationship |
+| Input | `input_part(id, element)` | required, read-only, invalid, and label relationships beside `element`'s interaction |
+| Clear | `clear_part(id, label, element)` | button semantics and an accessible name |
+| Trigger | `trigger_part(id, label, element)` | button semantics, `has-popup`, `expanded`, `controls` |
+| Chips / Chip / ChipRemove | `chips_part(id, element)`, `chip_part(id, index, label, element)`, `chip_remove_part(id, index, label, element)` | list and list-item roles, position in set, a real focusable remove button |
+| Backdrop | `backdrop_part(id, element)` | full-viewport, accessibility-hidden owner-window layer |
+| Portal / Positioner / Popup | `portal_part(id, element)`, `positioner_part(id, element)`, `popup_part(id, element)` | list-box role, result-set size, multi-select state |
+| Arrow | `arrow_part(id, element)` | absolutely positioned, accessibility-hidden decoration |
+| Status | `status_part(id, element)` | Status role and a polite live region |
+| Empty | `empty_part(id, element)` | stable identity for the no-results pass |
+| List / Collection / Row | `list_part(id, element)`, `collection_part(id, element)`, `row_part(element)` | stable identities and the grid-row group role |
+| Item / ItemIndicator | `item_part(id, source_index, state, element)`, `item_indicator_part(element)` | option role, selected/disabled state, accessibility-hidden indicator |
+| Group / GroupLabel | `group_part(element)`, `group_label_part(label_id, element)` | group and label roles |
+| Separator | `separator_part(element)` | non-interactive divider role |
+
+The suggestion surface is a separate native child window, so Portal, Positioner, and Popup are one
+element and all three names decorate it identically.
+
+`multiple(true)` keeps committed values as bounded chips instead of writing one label back into the
+input, so the input stays an editing query after every commit. `add_chip_source`, `remove_chip`,
+`clear_chips`, `chip_labels`, `chip_values`, and `chip_count` are the controlled writers and
+readers, bounded by `MAX_COMBOBOX_VALUES`. `read_only(true)` refuses all of them.
+
+`auto_highlight`, `open_on_input_click` (on by default), `highlight_item_on_hover` (on by default),
+`loop_focus`, `read_only`, and `required` are the remaining Base UI Root props.
+
+The filter policy is Base UI's `filter`. `PickerFilterMode::Contains` is the combobox default;
+`StartsWith` and `None` are the other built-ins, and `with_filter(PickerFilter::new(...))` /
+`set_filter(Some(filter), cx)` install an application-supplied predicate that replaces the mode
+entirely. `PickerFilterMode::Fuzzy` remains the ranked palette matcher and is the only mode that
+reports label highlight ranges.
+
+`status_text()` is the `Status` region's copy — a plain result count QuickGUI counts and announces
+exactly once — and `is_empty_result()` is the `Empty` part's mounting rule. `state()` returns a
+copyable `ComboboxPartState` with the same flags as `SelectPartState` minus `popup_side`, and
+`ComboboxOptionState::part_state()` returns a `ComboboxItemPartState` carrying `highlighted`,
+`selected`, and `disabled` per row.
 
 ## Accessibility and forms
 

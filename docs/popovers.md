@@ -335,6 +335,67 @@ uses one cancellable exact timer per menu level only while hover intent or a dia
 is pending, then returns to sleep. The styled `system_popover` and `tooltips_context_menu` examples
 are executable composition references.
 
+
+### Menu parts
+
+`MenuState` is the surface around the [`PopoverMenu`] row model: the controlled open flag, Base
+UI's `Menu.Root` props, the anchored in-window placement its popup uses, and the exact hover
+deadlines an `openOnHover` trigger or a submenu trigger needs. It composes the in-window
+[`Popover`], so flip-aware placement, dismissal, focus restoration, and modal containment are the
+ones documented above.
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `MenuState::new(trigger_id, popup_id)`, `root_part(element)` | controlled open flag, Root props, derived part identities |
+| Trigger | `trigger_part(cx, access, on_open_change, element)` | button semantics, `expanded`, `has-popup`, click toggling, `open_on_hover` deadlines |
+| Portal / Positioner | `portal_part(element)`, `positioner_part(element)` | anchoring, flip/shift, side and align offsets, placement reporting |
+| Backdrop | `backdrop_part(element)` | full-viewport, accessibility-hidden pointer layer |
+| Popup | `popup_part(cx, access, on_open_change, element)` | menu role, Escape/outside dismissal, focus restoration, `close_parent_on_esc` |
+| Arrow | `arrow_part(element)` | absolute placement on the resolved edge |
+| SubmenuRoot | `submenu_root_part(element)` | the nested level's structural wrapper |
+| SubmenuTrigger | `submenu_trigger_part(cx, access, on_open_change, element)` / `PopoverMenu::submenu_trigger_part(menu_id, index, open, element)` | `menuitem` semantics, `has-popup`, `expanded` |
+| Item | `PopoverMenu::item_part(menu_id, index, element)` | `menuitem` role, disabled state, accessible name, derived identity |
+| LinkItem | `PopoverMenu::link_item_part(menu_id, index, element)` | `menuitem` role over an item whose activation dispatches `OpenMenuLink` |
+| CheckboxItem / RadioItem | `checkbox_item_part(...)`, `radio_item_part(...)` | kind-checked checkable-item roles and checked state |
+| CheckboxItemIndicator / RadioItemIndicator | `PopoverMenu::checkbox_item_indicator_part(element)`, `radio_item_indicator_part(element)` | accessibility-hidden decoration |
+| Group / GroupLabel | `group_part(element)`, `labeled_group_part(menu_id, label_index, element)`, `group_label_part(...)` | group role and the mounted `labelled-by` relationship |
+| RadioGroup | `PopoverMenu::radio_group_part(element)`, `labeled_radio_group_part(menu_id, label_index, element)` | radio-group role and its mounted label relationship |
+| Separator | `PopoverMenu::separator_part(menu_id, index, element)` | non-interactive divider role |
+
+The kind-checked aliases (`checkbox_item_part`, `radio_item_part`, `link_item_part`,
+`submenu_trigger_part`, `separator_part`, `group_label_part`) return `None` when the index is not
+that kind, so a composition that mounts parts by name cannot silently attach the wrong semantics.
+`item_part` remains the single unchecked entry point.
+
+Root props map one-to-one: `with_open`, `modal(true)` (Tab containment plus a mounted backdrop),
+`orientation(MenuOrientation::Horizontal)` for a menubar row, `loop_focus`, `close_parent_on_esc`,
+and `disabled`. A horizontal `PopoverMenu` installs `POPOVER_MENU_HORIZONTAL_KEY_CONTEXT` instead
+of `POPOVER_MENU_KEY_CONTEXT`, so Left and Right move the highlight and Down opens the highlighted
+submenu; bind `popover_menu_horizontal_key_bindings()` alongside the vertical set.
+
+`open_on_hover(true)` adds Base UI's Trigger `openOnHover` with `delay` (100 ms by default) and
+`close_delay` (immediate by default) as exact one-shot deadlines bounded by
+`MAX_POPOVER_HOVER_DELAY`: a pointer that returns before the deadline cancels it rather than
+reopening, and a zero delay applies the change in the same controlled update with no task at all.
+A closed menu owns no task, timer, observer, or idle scheduler source.
+
+Escape reaches exactly one dismiss region — the topmost one. `close_parent_on_esc(true)` therefore
+makes the dismissed level dispatch the `MenuCloseParent` typed action, which travels the ordinary
+focus path to the level above and stops at the first level that is already closed.
+
+`MenuState::state()` returns a copyable `MenuPartState` carrying `open`, `side`, `align`, and
+`anchor_hidden` from the resolved placement, and `PopoverMenu::item_part_state(index, submenu_open)`
+returns a copyable `MenuItemPartState` carrying `highlighted`, `disabled`, `checked`, and `open`.
+
+`PopoverMenuItem::link(id, label, url)` is Base UI's `Menu.LinkItem`. QuickGUI has no document to
+navigate, so activation dispatches the `OpenMenuLink` typed action through the same owner path as
+every other menu command and the application decides what opening the destination means — usually
+`EventContext::open_url`. One destination is bounded by `MAX_POPOVER_MENU_LINK_BYTES`.
+
+`PopoverMenu::radio_value(group)` and `set_radio_value(group, item_id)` are Base UI's
+`Menu.RadioGroup` `value` and `onValueChange`: setting a value unchecks every other item in the
+group in the same update, so a group can never retain two checked values.
+
 ## JavaScript bindings
 
 The Solid renderer exposes this model as `PopoverMenu.Root` / `Trigger` / `Popup`. Rows are declared

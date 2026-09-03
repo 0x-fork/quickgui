@@ -160,8 +160,8 @@ pub use combobox::{
     ComboboxPrevious, combobox_key_bindings, select_key_bindings,
 };
 pub use constrained_combobox::{
-    ComboboxListState, ComboboxOptionState, ComboboxPopoverLayout, ComboboxState,
-    MAX_COMBOBOX_VISIBLE_ROWS,
+    ComboboxItemPartState, ComboboxListState, ComboboxOptionState, ComboboxPartState,
+    ComboboxPopoverLayout, ComboboxState, MAX_COMBOBOX_VALUES, MAX_COMBOBOX_VISIBLE_ROWS,
 };
 pub use context_menu::{
     CONTEXT_MENU_SUBMENU_AIM_DELAY, CONTEXT_MENU_SUBMENU_HOVER_DELAY, ContextMenuLayout,
@@ -338,8 +338,9 @@ pub use path_renderer::{MAX_GPU_PATH_VERTICES, MAX_GPU_PATHS_PER_FRAME};
 pub use picker::{
     MAX_PICKER_ITEM_TEXT_BYTES, MAX_PICKER_ITEMS, MAX_PICKER_QUERY_BYTES,
     MAX_PICKER_QUERY_GRAPHEMES, MAX_PICKER_RESULTS, MAX_PICKER_TEXT_BYTES, PickerConfirm,
-    PickerError, PickerFilterMode, PickerFirst, PickerItem, PickerLast, PickerLayout, PickerMatch,
-    PickerNext, PickerPageDown, PickerPageUp, PickerPrevious, PickerState, picker_key_bindings,
+    PickerError, PickerFilter, PickerFilterMode, PickerFirst, PickerItem, PickerLast, PickerLayout,
+    PickerMatch, PickerNext, PickerPageDown, PickerPageUp, PickerPrevious, PickerState,
+    picker_key_bindings,
 };
 // Application-shell services: activation policy, Dock attention, and process packaging.
 pub use platform::{
@@ -379,12 +380,15 @@ pub use popover_component::{
     PopoverHoverState, PopoverKind, PopoverPartState, SystemPopover,
 };
 pub use popover_menu::{
-    MAX_POPOVER_MENU_DEPTH, MAX_POPOVER_MENU_ITEM_TEXT_BYTES, MAX_POPOVER_MENU_ITEMS,
-    MAX_POPOVER_MENU_TEXT_BYTES, MAX_POPOVER_MENU_TYPEAHEAD_BYTES, POPOVER_MENU_KEY_CONTEXT,
-    POPOVER_MENU_TYPEAHEAD_TIMEOUT, PopoverMenu, PopoverMenuActivate, PopoverMenuActivation,
-    PopoverMenuClose, PopoverMenuError, PopoverMenuFirst, PopoverMenuItem, PopoverMenuItemKind,
-    PopoverMenuItemState, PopoverMenuLast, PopoverMenuNext, PopoverMenuOpenSubmenu,
-    PopoverMenuPrevious, popover_menu_key_bindings,
+    DEFAULT_MENU_HOVER_DELAY, MAX_POPOVER_MENU_DEPTH, MAX_POPOVER_MENU_ITEM_TEXT_BYTES,
+    MAX_POPOVER_MENU_ITEMS, MAX_POPOVER_MENU_LINK_BYTES, MAX_POPOVER_MENU_TEXT_BYTES,
+    MAX_POPOVER_MENU_TYPEAHEAD_BYTES, MenuCloseParent, MenuItemPartState, MenuOrientation,
+    MenuPartState, MenuState, OpenMenuLink, POPOVER_MENU_HORIZONTAL_KEY_CONTEXT,
+    POPOVER_MENU_KEY_CONTEXT, POPOVER_MENU_TYPEAHEAD_TIMEOUT, PopoverMenu, PopoverMenuActivate,
+    PopoverMenuActivation, PopoverMenuClose, PopoverMenuError, PopoverMenuFirst, PopoverMenuItem,
+    PopoverMenuItemKind, PopoverMenuItemState, PopoverMenuLast, PopoverMenuNext,
+    PopoverMenuOpenSubmenu, PopoverMenuPrevious, popover_menu_horizontal_key_bindings,
+    popover_menu_key_bindings,
 };
 pub use preview_card::{
     DEFAULT_PREVIEW_CARD_CLOSE_DELAY, DEFAULT_PREVIEW_CARD_DELAY, MAX_PREVIEW_CARD_DELAY,
@@ -493,8 +497,10 @@ pub use scroll_area::{
     ScrollAreaOrientation, ScrollAreaState, ScrollAreaStyleState, scroll_area_viewport,
 };
 pub use select::{
-    MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VISIBLE_ROWS, SELECT_TYPEAHEAD_TIMEOUT, SelectListState,
-    SelectOptionState, SelectPopoverLayout, SelectState,
+    DEFAULT_SELECT_VALUE_SEPARATOR, MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VALUES,
+    MAX_SELECT_VISIBLE_ROWS, SELECT_SCROLL_ARROW_INTERVAL, SELECT_TYPEAHEAD_TIMEOUT,
+    SelectListState, SelectOptionState, SelectPartState, SelectPopoverLayout, SelectPopupParts,
+    SelectState,
 };
 pub use selection_control::{
     Checkbox, Radio, RadioGroup, Switch, checkbox, radio, radio_group, switch,

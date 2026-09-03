@@ -16,6 +16,25 @@ Implemented now:
   `NavigationMenu` with a Navigation landmark, one roving trigger stop, exact 50 ms hover
   deadlines, and per-item popover panels. All eight are unstyled decorators with bounded state and
   no idle source;
+- Base UI-shaped menu, select, and combobox parts and props: `MenuState` wraps the in-window
+  `Popover` with Base UI's `Menu.Root` props — controlled `open`/`on_open_change`, `modal`,
+  `orientation` (a horizontal menubar row installs `POPOVER_MENU_HORIZONTAL_KEY_CONTEXT` so Left
+  and Right move the highlight and Down opens a submenu), `loop_focus`, `close_parent_on_esc`
+  carried by the `MenuCloseParent` typed action, `disabled`, and Trigger `open_on_hover` with
+  `delay`/`close_delay` on exact one-shot deadlines — and publishes `MenuPartState` from the
+  resolved anchor placement. `PopoverMenu` gained link items dispatching `OpenMenuLink`,
+  `radio_value`/`set_radio_value` keeping exactly one checked value per group, kind-checked
+  CheckboxItem/RadioItem/LinkItem/SubmenuTrigger/Separator/GroupLabel decorators,
+  accessibility-hidden indicator parts, RadioGroup parts, and `MenuItemPartState`. `SelectState`
+  gained the full Base UI part set, `multiple` with a `MAX_SELECT_VALUES`-bounded value set and
+  joined value text, `required`/`read_only`/`modal`/`align_item_with_trigger`, the `from_labels`
+  items map form, `SelectPartState`, and scroll arrows that advance the option window one row every
+  `SELECT_SCROLL_ARROW_INTERVAL` while hovered. `ComboboxState` gained the full Base UI part set,
+  `multiple` with `MAX_COMBOBOX_VALUES`-bounded chips and chip removal, `auto_highlight`,
+  `open_on_input_click`, `highlight_item_on_hover`, `loop_focus`, `read_only`, `required`, a
+  `Contains`-by-default filter policy with `StartsWith`, `None`, and custom `PickerFilter`
+  predicates shared with `AutocompleteState`, a polite `Status` live region, an `Empty` mounting
+  rule, and `ComboboxPartState`/`ComboboxItemPartState`;
 - Base UI-shaped tabs, toolbar, selection-control, dialog, and field props: tab activation direction
   with an anchored indicator and a published active-tab geometry snapshot; toolbar Button/Link/Input/
   Group/Separator parts with keyboard-reachable disabled items; `read_only` checkboxes, radios,

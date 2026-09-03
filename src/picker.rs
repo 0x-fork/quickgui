@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fmt, ops::Range, sync::Arc};
+use std::{cmp::Ordering, fmt, ops::Range, rc::Rc, sync::Arc};
 
 use thiserror::Error;
 use unicode_segmentation::UnicodeSegmentation;
@@ -175,10 +175,61 @@ pub enum PickerFilterMode {
     /// Rank locally retained items with QuickGUI's bounded fuzzy matcher.
     #[default]
     Fuzzy,
+    /// Keep items whose label contains the query, in source order.
+    ///
+    /// This is Base UI's default combobox filter. Matching is case-insensitive and produces no
+    /// highlight ranges; only [`Self::Fuzzy`] reports which characters matched.
+    Contains,
+    /// Keep items whose label starts with the query, in source order.
+    StartsWith,
     /// Preserve source order and expose every supplied item, regardless of the query.
     ///
     /// Use this when an application or asynchronous service already filtered the source.
     None,
+}
+
+/// An application-supplied predicate replacing [`PickerFilterMode`].
+///
+/// The closure receives one item's label and the normalized query and answers whether the item
+/// belongs in the result set. It runs only while the query is being rebuilt — never on a paint,
+/// layout, or idle pass — and the result set stays bounded by [`MAX_PICKER_RESULTS`].
+///
+/// ```
+/// use quickgui::PickerFilter;
+///
+/// let ends_with = PickerFilter::new(|label: &str, query: &str| label.ends_with(query));
+/// assert!(ends_with.matches("Bravo", "vo"));
+/// assert!(!ends_with.matches("Bravo", "br"));
+/// ```
+/// The predicate shape one [`PickerFilter`] retains.
+type PickerFilterFn = dyn Fn(&str, &str) -> bool;
+
+#[derive(Clone)]
+pub struct PickerFilter(Rc<PickerFilterFn>);
+
+impl PickerFilter {
+    pub fn new(filter: impl Fn(&str, &str) -> bool + 'static) -> Self {
+        Self(Rc::new(filter))
+    }
+
+    /// Whether one label belongs in the result set for `query`.
+    pub fn matches(&self, label: &str, query: &str) -> bool {
+        (self.0)(label, query)
+    }
+}
+
+impl fmt::Debug for PickerFilter {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PickerFilter")
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for PickerFilter {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// Structural geometry retained by one virtualized picker.
@@ -279,6 +330,7 @@ pub struct PickerState<T> {
     items: Arc<[PickerItem<T>]>,
     query: Arc<str>,
     filter_mode: PickerFilterMode,
+    filter: Option<PickerFilter>,
     matches: Vec<MatchEntry>,
     total_match_count: usize,
     selected_result: Option<usize>,
@@ -294,6 +346,7 @@ impl<T> fmt::Debug for PickerState<T> {
             .field("items", &self.items.len())
             .field("query", &self.query)
             .field("filter_mode", &self.filter_mode)
+            .field("filter", &self.filter)
             .field("matches", &self.matches.len())
             .field("total_match_count", &self.total_match_count)
             .field("selected_result", &self.selected_result)
@@ -311,6 +364,7 @@ impl<T> PickerState<T> {
             items: Arc::from(items),
             query: Arc::from(""),
             filter_mode: PickerFilterMode::Fuzzy,
+            filter: None,
             matches: Vec::with_capacity(MAX_PICKER_RESULTS.min(256)),
             total_match_count: 0,
             selected_result: None,
@@ -376,6 +430,23 @@ impl<T> PickerState<T> {
             return false;
         }
         self.filter_mode = filter_mode;
+        self.rebuild_matches();
+        true
+    }
+
+    /// The custom predicate replacing [`Self::filter_mode`], when one is installed.
+    pub fn filter(&self) -> Option<&PickerFilter> {
+        self.filter.as_ref()
+    }
+
+    /// Replace the built-in filter mode with an application-supplied predicate.
+    ///
+    /// Passing `None` restores [`Self::filter_mode`]. The result set is rebuilt exactly once.
+    pub fn set_filter(&mut self, filter: Option<PickerFilter>) -> bool {
+        if self.filter == filter {
+            return false;
+        }
+        self.filter = filter;
         self.rebuild_matches();
         true
     }
@@ -761,7 +832,24 @@ impl<T> PickerState<T> {
     fn rebuild_matches(&mut self) {
         let normalized_query = normalized_query(&self.query);
         self.score_scratch.clear();
-        if normalized_query.is_empty() || self.filter_mode == PickerFilterMode::None {
+        let predicate_query: String = normalized_query.iter().collect();
+        if !normalized_query.is_empty()
+            && let Some(matching) = self.predicate_matches(&predicate_query)
+        {
+            self.total_match_count = matching.len();
+            self.matches.clear();
+            self.matches
+                .extend(
+                    matching
+                        .into_iter()
+                        .take(MAX_PICKER_RESULTS)
+                        .map(|source_index| MatchEntry {
+                            source_index,
+                            score: 0,
+                            label_ranges: Arc::from([]),
+                        }),
+                );
+        } else if normalized_query.is_empty() || self.filter_mode == PickerFilterMode::None {
             self.total_match_count = self.items.len();
             self.matches.clear();
             self.matches
@@ -817,6 +905,31 @@ impl<T> PickerState<T> {
         self.list.scroll_to(0.0);
         self.selected_result =
             (0..self.matches.len()).find(|index| self.result_is_selectable(*index));
+    }
+
+    /// Source indices kept by a substring, prefix, or custom predicate, or `None` for ranked modes.
+    fn predicate_matches(&self, query: &str) -> Option<Vec<usize>> {
+        let keep: Box<dyn Fn(&str) -> bool> = match (&self.filter, self.filter_mode) {
+            (Some(filter), _) => {
+                let filter = filter.clone();
+                Box::new(move |label: &str| filter.matches(label, query))
+            }
+            (None, PickerFilterMode::Contains) => {
+                Box::new(move |label: &str| label.to_lowercase().contains(query))
+            }
+            (None, PickerFilterMode::StartsWith) => {
+                Box::new(move |label: &str| label.to_lowercase().starts_with(query))
+            }
+            (None, PickerFilterMode::Fuzzy | PickerFilterMode::None) => return None,
+        };
+        Some(
+            self.items
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| keep(item.label()))
+                .map(|(source_index, _)| source_index)
+                .collect(),
+        )
     }
 
     fn result_is_selectable(&self, result_index: usize) -> bool {

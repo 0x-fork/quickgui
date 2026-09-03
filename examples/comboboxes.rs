@@ -131,7 +131,7 @@ impl View for ComboboxGallery {
             .map(|item| item.label().clone())
             .unwrap_or_else(|| Arc::from("Choose a theme…"));
         let theme_open = self.theme.is_open();
-        let theme = self.theme.element(
+        let theme = self.theme.element_with_parts(
             cx,
             "theme-select",
             "Editor theme",
@@ -152,24 +152,60 @@ impl View for ComboboxGallery {
                         .text_xs()
                         .text_color(muted),
                 ),
-            move |state| {
-                let root = div()
+            move |state, parts| {
+                let mut root = div()
+                    .relative()
                     .rounded_lg()
                     .border(1.0, border)
                     .bg(surface)
                     .text_color(foreground);
                 if state.option_count == 0 {
-                    root.child(
+                    return root.child(
                         div()
                             .size_full()
                             .px_3()
                             .flex_row()
                             .items_center()
                             .child(text("No options").text_sm().text_color(muted)),
-                    )
-                } else {
-                    root
+                    );
                 }
+                // Base UI's ScrollUpArrow/ScrollDownArrow: QuickGUI owns the hovered scrolling and
+                // its exact deadlines, the application owns every pixel of the affordance.
+                if state.can_scroll_up {
+                    root = root.child(
+                        parts.scroll_up_arrow_part(
+                            div()
+                                .overlay()
+                                .top(0.0)
+                                .left(0.0)
+                                .w(320.0)
+                                .h(14.0)
+                                .flex_row()
+                                .items_center()
+                                .justify_center()
+                                .bg(surface)
+                                .child(text("⌃").text_xs().text_color(muted)),
+                        ),
+                    );
+                }
+                if state.can_scroll_down {
+                    root = root.child(
+                        parts.scroll_down_arrow_part(
+                            div()
+                                .overlay()
+                                .bottom(0.0)
+                                .left(0.0)
+                                .w(320.0)
+                                .h(14.0)
+                                .flex_row()
+                                .items_center()
+                                .justify_center()
+                                .bg(surface)
+                                .child(text("⌄").text_xs().text_color(muted)),
+                        ),
+                    );
+                }
+                root
             },
             move |item, state| {
                 div()

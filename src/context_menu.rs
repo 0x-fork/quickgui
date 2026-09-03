@@ -3,9 +3,9 @@ use std::{rc::Rc, time::Duration};
 use crate::{
     AccessibilityPopover, AnchorPlacement, AsyncViewContext, Color, ContextMenuEvent, Element,
     ElementId, EventContext, MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION,
-    MouseExitEvent, MouseMoveEvent, Point, PopoverConstraintAdjustment, PopoverMenu,
-    PopoverMenuItem, PopoverMenuItemKind, PopoverMenuItemState, PopoverOptions, Rect, Size,
-    StateAccessor, SystemPopover, Task, View, ViewContext, WindowBackgroundAppearance,
+    MenuItemPartState, MouseExitEvent, MouseMoveEvent, Point, PopoverConstraintAdjustment,
+    PopoverMenu, PopoverMenuItem, PopoverMenuItemKind, PopoverMenuItemState, PopoverOptions, Rect,
+    Size, StateAccessor, SystemPopover, Task, View, ViewContext, WindowBackgroundAppearance,
     WindowHandle, WindowOptions,
 };
 
@@ -161,6 +161,7 @@ impl ContextMenuLayout {
             PopoverMenuItemKind::Action
             | PopoverMenuItemKind::Checkbox
             | PopoverMenuItemKind::Radio
+            | PopoverMenuItemKind::Link
             | PopoverMenuItemKind::Submenu => self.item_height,
         }
     }
@@ -215,6 +216,42 @@ impl ContextMenuState {
             .id(id)
             .accessibility_has_popover(AccessibilityPopover::Menu)
             .accessibility_expanded(self.is_open())
+    }
+
+    /// Decorate a caller-owned target, Base UI's `ContextMenu.Trigger`.
+    ///
+    /// This is the Base UI-named alias of [`Self::target_part`]; both names decorate the same
+    /// element identically.
+    pub fn trigger_part(self, id: impl Into<ElementId>, trigger: Element) -> Element {
+        self.target_part(id, trigger)
+    }
+
+    /// Decorate an optional caller-painted backdrop, Base UI's `ContextMenu.Backdrop`.
+    ///
+    /// The native popover surface already takes the pointer grab, so this layer exists only for a
+    /// caller-painted dimming pass inside the owner window. It is hidden from assistive technology
+    /// and carries no appearance of its own. Mount it only while [`Self::is_open`] is true.
+    pub fn backdrop_part(self, id: impl Into<ElementId>, backdrop: Element) -> Element {
+        backdrop
+            .id(id)
+            .overlay()
+            .inset_0()
+            .size_full()
+            .app_region_no_drag()
+            .cursor_default()
+            .accessibility_hidden(true)
+    }
+
+    /// The Base UI-named render snapshot for one row of an open context menu.
+    ///
+    /// The native popover surface resolves its own placement against the display work area, so a
+    /// context menu publishes row state rather than the popup's side and alignment.
+    pub fn item_part_state(
+        menu: &PopoverMenu,
+        index: usize,
+        submenu_open: bool,
+    ) -> Option<MenuItemPartState> {
+        menu.item_part_state(index, submenu_open)
     }
 
     /// Attach a complete cursor-point popover-menu interaction to a caller-owned target.

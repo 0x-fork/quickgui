@@ -1,14 +1,32 @@
 use std::{fmt, ops::Range, sync::Arc};
 
 use crate::{
-    AutocompleteListState, AutocompleteOptionState, AutocompletePopoverLayout,
-    AutocompleteSelectionBehavior, AutocompleteState, Element, ElementId, EventContext,
-    PickerError, PickerFilterMode, PickerItem, StateAccessor, ViewContext, WindowHandle,
-    autocomplete::AutocompleteAccess,
+    AccessibilityLive, AccessibilityRole, AutocompleteListState, AutocompleteOptionState,
+    AutocompletePopoverLayout, AutocompleteSelectionBehavior, AutocompleteState, Element,
+    ElementId, EventContext, PickerError, PickerFilter, PickerFilterMode, PickerItem,
+    StateAccessor, ViewContext, WindowHandle, autocomplete::AutocompleteAccess,
 };
 
 /// Maximum option rows mounted by one constrained combobox popover.
 pub const MAX_COMBOBOX_VISIBLE_ROWS: usize = crate::MAX_AUTOCOMPLETE_VISIBLE_ROWS;
+/// Maximum values one multiple combobox retains as chips.
+pub const MAX_COMBOBOX_VALUES: usize = 64;
+
+const COMBOBOX_LABEL_ID_TAG: u64 = 0x2a67_bd91_04ec_53f8;
+const COMBOBOX_VALUE_ID_TAG: u64 = 0xb385_1c0f_7de2_a946;
+const COMBOBOX_ICON_ID_TAG: u64 = 0x7c04_e5a3_182b_df60;
+const COMBOBOX_INPUT_GROUP_ID_TAG: u64 = 0x419d_60b8_2f7a_c3e5;
+const COMBOBOX_CLEAR_ID_TAG: u64 = 0xe8f2_49d7_5c30_ab16;
+const COMBOBOX_TRIGGER_ID_TAG: u64 = 0x53b7_a2ce_9016_4f8d;
+const COMBOBOX_CHIPS_ID_TAG: u64 = 0x9d18_f473_6ba5_20ce;
+const COMBOBOX_CHIP_ID_TAG: u64 = 0x0c6a_35e9_d871_4b2f;
+const COMBOBOX_CHIP_REMOVE_ID_TAG: u64 = 0xa74e_1859_c2f0_36bd;
+const COMBOBOX_BACKDROP_ID_TAG: u64 = 0x6f30_c98a_41d5_7e2b;
+const COMBOBOX_ARROW_ID_TAG: u64 = 0x1b52_de06_98c4_a37f;
+const COMBOBOX_STATUS_ID_TAG: u64 = 0xf209_7ac3_5eb1_460d;
+const COMBOBOX_EMPTY_ID_TAG: u64 = 0x38c6_b105_e792_df4a;
+const COMBOBOX_LIST_ID_TAG: u64 = 0x4e7b_20fd_a163_895c;
+const COMBOBOX_COLLECTION_ID_TAG: u64 = 0xcb41_86e2_073f_d519;
 
 /// Structural geometry for the constrained combobox's separate native suggestion surface.
 ///
@@ -25,6 +43,51 @@ pub struct ComboboxListState {
     pub results_truncated: bool,
 }
 
+/// A copyable render-state snapshot for one unstyled combobox.
+///
+/// These are the same facts Base UI publishes on a combobox input as `data-popup-open`,
+/// `data-pressed`, `data-placeholder`, `data-valid`, `data-invalid`, `data-dirty`,
+/// `data-touched`, `data-filled`, `data-focused`, `data-readonly`, and `data-required`. Build one
+/// with [`ComboboxState::state`].
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ComboboxPartState {
+    /// Whether the suggestion surface is open.
+    pub popup_open: bool,
+    /// Whether the trigger is currently held down.
+    pub pressed: bool,
+    /// Whether no value is committed, so the input shows its placeholder.
+    pub placeholder: bool,
+    /// Whether the control currently satisfies its declared constraints.
+    pub valid: bool,
+    /// Whether the application marked the control invalid.
+    pub invalid: bool,
+    /// Whether the value changed at least once since the last [`ComboboxState::reset_dirty`].
+    pub dirty: bool,
+    /// Whether the control has been focused and left at least once.
+    pub touched: bool,
+    /// Whether the control holds at least one committed value.
+    pub filled: bool,
+    /// Whether the input currently owns keyboard focus.
+    pub focused: bool,
+    /// Whether the control refuses value changes while staying focusable.
+    pub read_only: bool,
+    /// Whether the control requires a value before submission.
+    pub required: bool,
+}
+
+/// A copyable render-state snapshot for one unstyled combobox row.
+///
+/// Base UI publishes this as `data-highlighted`, `data-selected`, and `data-disabled`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ComboboxItemPartState {
+    /// Whether the roving highlight is on this row.
+    pub highlighted: bool,
+    /// Whether this row is the committed value.
+    pub selected: bool,
+    /// Whether the row refuses activation.
+    pub disabled: bool,
+}
+
 /// State supplied to one caller-owned constrained option renderer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComboboxOptionState {
@@ -34,6 +97,17 @@ pub struct ComboboxOptionState {
     pub selected: bool,
     pub disabled: bool,
     pub label_ranges: Arc<[Range<usize>]>,
+}
+
+impl ComboboxOptionState {
+    /// The Base UI-named snapshot for this row.
+    pub const fn part_state(&self) -> ComboboxItemPartState {
+        ComboboxItemPartState {
+            highlighted: self.active,
+            selected: self.selected,
+            disabled: self.disabled,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -70,7 +144,19 @@ impl SelectionMarker {
 pub struct ComboboxState<T> {
     autocomplete: AutocompleteState<T>,
     selection: Option<CommittedSelection<T>>,
+    chips: Vec<CommittedSelection<T>>,
     query: Arc<str>,
+    multiple: bool,
+    auto_highlight: bool,
+    open_on_input_click: bool,
+    highlight_item_on_hover: bool,
+    loop_focus: bool,
+    read_only: bool,
+    required: bool,
+    pressed: bool,
+    focused: bool,
+    dirty: bool,
+    touched: bool,
 }
 
 impl<T> fmt::Debug for ComboboxState<T> {
@@ -97,6 +183,8 @@ impl<T> fmt::Debug for ComboboxState<T> {
                 "selected_label",
                 &self.selection.as_ref().map(|selection| &selection.label),
             )
+            .field("chips", &self.chips.len())
+            .field("multiple", &self.multiple)
             .finish_non_exhaustive()
     }
 }
@@ -108,10 +196,24 @@ where
     pub fn new(items: impl IntoIterator<Item = PickerItem<T>>) -> Result<Self, PickerError> {
         let mut autocomplete = AutocompleteState::new(items)?;
         autocomplete.set_selection_behavior(AutocompleteSelectionBehavior::DismissOnly);
+        // Base UI's combobox filters by substring; the fuzzy ranker stays one call away.
+        let autocomplete = autocomplete.with_filter_mode(PickerFilterMode::Contains);
         Ok(Self {
             autocomplete,
             selection: None,
+            chips: Vec::new(),
             query: Arc::from(""),
+            multiple: false,
+            auto_highlight: false,
+            open_on_input_click: true,
+            highlight_item_on_hover: true,
+            loop_focus: true,
+            read_only: false,
+            required: false,
+            pressed: false,
+            focused: false,
+            dirty: false,
+            touched: false,
         })
     }
 
@@ -253,6 +355,251 @@ where
         true
     }
 
+    /// Accept more than one committed value, Base UI's `multiple`.
+    ///
+    /// A multiple combobox keeps its committed values as bounded chips instead of writing one
+    /// label back into the input, so the input stays an editing query after every commit.
+    pub fn multiple(mut self, multiple: bool) -> Self {
+        self.set_multiple(multiple);
+        self
+    }
+
+    /// Replace the multiple flag in place, reporting whether anything changed.
+    pub fn set_multiple(&mut self, multiple: bool) -> bool {
+        if self.multiple == multiple {
+            return false;
+        }
+        self.multiple = multiple;
+        if !multiple {
+            self.chips.truncate(1);
+        }
+        true
+    }
+
+    pub const fn is_multiple(&self) -> bool {
+        self.multiple
+    }
+
+    /// Highlight the first result as soon as one exists, Base UI's `autoHighlight`.
+    pub const fn auto_highlight(mut self, auto_highlight: bool) -> Self {
+        self.auto_highlight = auto_highlight;
+        self
+    }
+
+    pub const fn auto_highlights(&self) -> bool {
+        self.auto_highlight
+    }
+
+    /// Open the suggestion surface when the input itself is clicked, Base UI's `openOnInputClick`.
+    pub const fn open_on_input_click(mut self, open_on_input_click: bool) -> Self {
+        self.open_on_input_click = open_on_input_click;
+        self
+    }
+
+    pub const fn opens_on_input_click(&self) -> bool {
+        self.open_on_input_click
+    }
+
+    /// Move the highlight with the pointer, Base UI's `highlightItemOnHover`.
+    pub const fn highlight_item_on_hover(mut self, highlight: bool) -> Self {
+        self.highlight_item_on_hover = highlight;
+        self
+    }
+
+    pub const fn highlights_item_on_hover(&self) -> bool {
+        self.highlight_item_on_hover
+    }
+
+    /// Wrap the highlight at the ends of the result set, Base UI's `loop`.
+    pub const fn loop_focus(mut self, loop_focus: bool) -> Self {
+        self.loop_focus = loop_focus;
+        self
+    }
+
+    pub const fn loops_focus(&self) -> bool {
+        self.loop_focus
+    }
+
+    /// Refuse value changes while staying focusable, Base UI's `readOnly`.
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
+    pub const fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    /// Require a value before submission, Base UI's `required`.
+    pub const fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
+    pub const fn is_required(&self) -> bool {
+        self.required
+    }
+
+    /// Replace the built-in filter policy with an application-supplied predicate, Base UI's
+    /// `filter`.
+    ///
+    /// Passing `None` restores [`Self::filter_mode`], whose combobox default is
+    /// [`PickerFilterMode::Contains`].
+    pub fn set_filter(&mut self, filter: Option<PickerFilter>, cx: &mut EventContext) -> bool {
+        self.autocomplete.set_filter(filter, cx)
+    }
+
+    /// Declare an application-supplied filter predicate at construction time.
+    pub fn with_filter(mut self, filter: PickerFilter) -> Self {
+        self.autocomplete = self.autocomplete.with_filter(filter);
+        self
+    }
+
+    /// The custom filter predicate, when one is installed.
+    pub fn filter(&self) -> Option<&PickerFilter> {
+        self.autocomplete.filter()
+    }
+
+    /// Every committed chip label, in commit order, Base UI's `Combobox.Chips` contents.
+    pub fn chip_labels(&self) -> impl Iterator<Item = &Arc<str>> {
+        self.chips.iter().map(|chip| &chip.label)
+    }
+
+    /// Every committed chip value, in commit order.
+    pub fn chip_values(&self) -> impl Iterator<Item = &T> {
+        self.chips.iter().map(|chip| &chip.value)
+    }
+
+    pub fn chip_count(&self) -> usize {
+        self.chips.len()
+    }
+
+    /// Commit one more source row as a chip, up to [`MAX_COMBOBOX_VALUES`].
+    ///
+    /// Returns `false` for a disabled row, an already-committed row, a read-only combobox, or a
+    /// chip set that is already full.
+    pub fn add_chip_source(&mut self, source_index: usize) -> bool {
+        if self.read_only || self.chips.len() >= MAX_COMBOBOX_VALUES {
+            return false;
+        }
+        let Some(chip) = self.selection_from_source(source_index) else {
+            return false;
+        };
+        if self
+            .chips
+            .iter()
+            .any(|existing| existing.source_index == chip.source_index)
+        {
+            return false;
+        }
+        self.chips.push(chip);
+        self.dirty = true;
+        self.touched = true;
+        true
+    }
+
+    /// Remove one chip, Base UI's `Combobox.ChipRemove`.
+    pub fn remove_chip(&mut self, chip_index: usize) -> bool {
+        if self.read_only || chip_index >= self.chips.len() {
+            return false;
+        }
+        self.chips.remove(chip_index);
+        self.dirty = true;
+        self.touched = true;
+        true
+    }
+
+    /// Drop every chip.
+    pub fn clear_chips(&mut self) -> bool {
+        if self.read_only || self.chips.is_empty() {
+            return false;
+        }
+        self.chips.clear();
+        self.dirty = true;
+        true
+    }
+
+    /// Record that the trigger is held down, Base UI's `data-pressed`.
+    pub const fn set_pressed(&mut self, pressed: bool) -> bool {
+        if self.pressed == pressed {
+            return false;
+        }
+        self.pressed = pressed;
+        true
+    }
+
+    /// Record input focus, and mark the control touched when focus leaves it.
+    pub const fn set_focused(&mut self, focused: bool) -> bool {
+        if self.focused == focused {
+            return false;
+        }
+        self.focused = focused;
+        if !focused {
+            self.touched = true;
+        }
+        true
+    }
+
+    /// Forget that the value changed, for a form that has just been submitted or reset.
+    pub const fn reset_dirty(&mut self) -> bool {
+        if !self.dirty {
+            return false;
+        }
+        self.dirty = false;
+        true
+    }
+
+    pub const fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub const fn is_touched(&self) -> bool {
+        self.touched
+    }
+
+    pub const fn is_focused(&self) -> bool {
+        self.focused
+    }
+
+    /// A copyable render-state snapshot the application styles from.
+    pub fn state(&self) -> ComboboxPartState {
+        let filled = if self.multiple {
+            !self.chips.is_empty()
+        } else {
+            self.selection.is_some()
+        };
+        ComboboxPartState {
+            popup_open: self.is_open(),
+            pressed: self.pressed,
+            placeholder: !filled,
+            valid: !self.is_invalid(),
+            invalid: self.is_invalid(),
+            dirty: self.dirty,
+            touched: self.touched,
+            filled,
+            focused: self.focused,
+            read_only: self.read_only,
+            required: self.required,
+        }
+    }
+
+    /// The live-region text a mounted `Status` part announces, Base UI's `Combobox.Status`.
+    ///
+    /// The wording is intentionally minimal and English-free of punctuation so an application can
+    /// replace it; QuickGUI owns only the counting and the exactly-once announcement.
+    pub fn status_text(&self) -> Arc<str> {
+        match self.result_count() {
+            0 => Arc::from("No results"),
+            1 => Arc::from("1 result"),
+            count => Arc::from(format!("{count} results")),
+        }
+    }
+
+    /// Whether the `Empty` part should be mounted, Base UI's `Combobox.Empty`.
+    pub fn is_empty_result(&self) -> bool {
+        self.result_count() == 0
+    }
+
     pub const fn popover_window(&self) -> Option<WindowHandle> {
         self.autocomplete.popover_window()
     }
@@ -319,6 +666,369 @@ where
 
     pub fn surface_id(id: impl Into<ElementId>) -> ElementId {
         AutocompleteState::<T>::surface_id(id)
+    }
+
+    /// Stable identity of the mounted label part.
+    pub fn label_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_LABEL_ID_TAG, 0)
+    }
+
+    /// Stable identity of the mounted value part.
+    pub fn value_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_VALUE_ID_TAG, 0)
+    }
+
+    /// Stable identity of the mounted icon part.
+    pub fn icon_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_ICON_ID_TAG, 0)
+    }
+
+    /// Stable identity of the input group wrapping the input and its affordances.
+    pub fn input_group_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_INPUT_GROUP_ID_TAG, 0)
+    }
+
+    /// Stable identity of the clear control.
+    pub fn clear_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_CLEAR_ID_TAG, 0)
+    }
+
+    /// Stable identity of the surface trigger.
+    pub fn trigger_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_TRIGGER_ID_TAG, 0)
+    }
+
+    /// Stable identity of the chip container.
+    pub fn chips_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_CHIPS_ID_TAG, 0)
+    }
+
+    /// Stable identity of one chip.
+    pub fn chip_id(id: impl Into<ElementId>, chip_index: usize) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_CHIP_ID_TAG, chip_index as u64 + 1)
+    }
+
+    /// Stable identity of one chip's remove control.
+    pub fn chip_remove_id(id: impl Into<ElementId>, chip_index: usize) -> ElementId {
+        derived_combobox_id(
+            id.into(),
+            COMBOBOX_CHIP_REMOVE_ID_TAG,
+            chip_index as u64 + 1,
+        )
+    }
+
+    /// Stable identity of the optional owner-window backdrop.
+    pub fn backdrop_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_BACKDROP_ID_TAG, 0)
+    }
+
+    /// Stable identity of the decorative popup arrow.
+    pub fn arrow_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_ARROW_ID_TAG, 0)
+    }
+
+    /// Stable identity of the result-count live region.
+    pub fn status_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_STATUS_ID_TAG, 0)
+    }
+
+    /// Stable identity of the no-results part.
+    pub fn empty_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_EMPTY_ID_TAG, 0)
+    }
+
+    /// Stable identity of the scrolling result list inside the popup.
+    pub fn list_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_LIST_ID_TAG, 0)
+    }
+
+    /// Stable identity of the collection wrapper inside the list.
+    pub fn collection_id(id: impl Into<ElementId>) -> ElementId {
+        derived_combobox_id(id.into(), COMBOBOX_COLLECTION_ID_TAG, 0)
+    }
+
+    /// Decorate the optional application-owned structural wrapper, Base UI's `Combobox.Root`.
+    pub fn root_part(root: Element) -> Element {
+        root.app_region_no_drag()
+    }
+
+    /// Decorate the caller-owned visible label, Base UI's `Combobox.Label`.
+    pub fn label_part(id: impl Into<ElementId>, label: Element) -> Element {
+        label
+            .id(Self::label_id(id))
+            .accessibility_role(AccessibilityRole::Label)
+            .app_region_no_drag()
+            .user_select_none()
+    }
+
+    /// Decorate the caller-owned committed-value text, Base UI's `Combobox.Value`.
+    ///
+    /// The input already exposes the value, so this part is decoration.
+    pub fn value_part(id: impl Into<ElementId>, value: Element) -> Element {
+        value
+            .id(Self::value_id(id))
+            .accessibility_hidden(true)
+            .app_region_no_drag()
+    }
+
+    /// Decorate the caller-owned affordance glyph, Base UI's `Combobox.Icon`.
+    pub fn icon_part(id: impl Into<ElementId>, icon: Element) -> Element {
+        icon.id(Self::icon_id(id))
+            .accessibility_hidden(true)
+            .app_region_no_drag()
+    }
+
+    /// Decorate the wrapper holding the input, chips, and affordances, Base UI's
+    /// `Combobox.InputGroup`.
+    pub fn input_group_part(id: impl Into<ElementId>, group: Element) -> Element {
+        let id = id.into();
+        group
+            .id(Self::input_group_id(id))
+            .accessibility_role(AccessibilityRole::Group)
+            .accessibility_labelled_by(Self::label_id(id))
+            .app_region_no_drag()
+    }
+
+    /// Decorate the caller-owned editable input, Base UI's `Combobox.Input`.
+    ///
+    /// The full interaction — filtering, navigation, the suggestion surface, and committing — is
+    /// attached by [`Self::element`]; this part adds the form-state projection Base UI publishes
+    /// alongside it, so a composition that already owns the interaction still reports the same
+    /// required, read-only, and label relationships.
+    pub fn input_part(&self, id: impl Into<ElementId>, input: Element) -> Element {
+        let id = id.into();
+        input
+            .accessibility_labelled_by(Self::label_id(id))
+            .accessibility_read_only(self.read_only)
+            .required(self.required)
+            .invalid(self.is_invalid())
+            .app_region_no_drag()
+    }
+
+    /// Decorate the caller-owned chip container, Base UI's `Combobox.Chips`.
+    pub fn chips_part(id: impl Into<ElementId>, chips: Element) -> Element {
+        let id = id.into();
+        chips
+            .id(Self::chips_id(id))
+            .accessibility_role(AccessibilityRole::List)
+            .accessibility_labelled_by(Self::label_id(id))
+            .app_region_no_drag()
+    }
+
+    /// Decorate one caller-owned chip, Base UI's `Combobox.Chip`.
+    pub fn chip_part(
+        id: impl Into<ElementId>,
+        chip_index: usize,
+        label: impl Into<Arc<str>>,
+        chip: Element,
+    ) -> Element {
+        let id = id.into();
+        chip.id(Self::chip_id(id, chip_index))
+            .accessibility_role(AccessibilityRole::ListItem)
+            .accessibility_label(label)
+            .accessibility_position_in_set(chip_index)
+            .app_region_no_drag()
+            .user_select_none()
+    }
+
+    /// Decorate one chip's remove control, Base UI's `Combobox.ChipRemove`.
+    ///
+    /// The control is a real button with an accessible name, so a keyboard user can reach and
+    /// remove a chip without the pointer.
+    pub fn chip_remove_part(
+        id: impl Into<ElementId>,
+        chip_index: usize,
+        label: impl Into<Arc<str>>,
+        remove: Element,
+    ) -> Element {
+        let id = id.into();
+        remove
+            .id(Self::chip_remove_id(id, chip_index))
+            .clickable()
+            .focusable()
+            .accessibility_role(AccessibilityRole::Button)
+            .accessibility_label(label)
+            .app_region_no_drag()
+            .user_select_none()
+            .cursor_default()
+    }
+
+    /// Decorate the caller-owned clear control, Base UI's `Combobox.Clear`.
+    ///
+    /// Mount it only while the control holds a value; Base UI hides it otherwise.
+    pub fn clear_part(
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        clear: Element,
+    ) -> Element {
+        clear
+            .id(Self::clear_id(id))
+            .clickable()
+            .focusable()
+            .accessibility_role(AccessibilityRole::Button)
+            .accessibility_label(label)
+            .app_region_no_drag()
+            .user_select_none()
+            .cursor_default()
+    }
+
+    /// Decorate the caller-owned surface trigger, Base UI's `Combobox.Trigger`.
+    pub fn trigger_part(
+        &self,
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        trigger: Element,
+    ) -> Element {
+        let id = id.into();
+        trigger
+            .id(Self::trigger_id(id))
+            .clickable()
+            .accessibility_role(AccessibilityRole::Button)
+            .accessibility_label(label)
+            .accessibility_has_popover(crate::AccessibilityPopover::ListBox)
+            .accessibility_expanded(self.is_open())
+            .accessibility_controls(Self::surface_id(id))
+            .disabled(self.is_disabled())
+            .app_region_no_drag()
+            .user_select_none()
+            .cursor_default()
+    }
+
+    /// Decorate an optional caller-painted owner-window backdrop, Base UI's `Combobox.Backdrop`.
+    pub fn backdrop_part(id: impl Into<ElementId>, backdrop: Element) -> Element {
+        backdrop
+            .id(Self::backdrop_id(id))
+            .overlay()
+            .inset_0()
+            .size_full()
+            .app_region_no_drag()
+            .cursor_default()
+            .accessibility_hidden(true)
+    }
+
+    /// Decorate the suggestion-surface boundary, Base UI's `Combobox.Portal`.
+    ///
+    /// The suggestion surface is its own native window, so the portal, the positioner, and the
+    /// popup are one element and all three names decorate it identically.
+    pub fn portal_part(&self, id: impl Into<ElementId>, portal: Element) -> Element {
+        self.popup_part(id, portal)
+    }
+
+    /// Decorate the suggestion-surface boundary, Base UI's `Combobox.Positioner`.
+    pub fn positioner_part(&self, id: impl Into<ElementId>, positioner: Element) -> Element {
+        self.popup_part(id, positioner)
+    }
+
+    /// Decorate the caller-owned suggestion surface, Base UI's `Combobox.Popup`.
+    pub fn popup_part(&self, id: impl Into<ElementId>, popup: Element) -> Element {
+        popup
+            .id(Self::surface_id(id))
+            .accessibility_role(AccessibilityRole::ListBox)
+            .accessibility_size_of_set(self.result_count())
+            .accessibility_multiselectable(self.multiple)
+            .app_region_no_drag()
+            .cursor_default()
+    }
+
+    /// Position a caller-owned decorative arrow, Base UI's `Combobox.Arrow`.
+    pub fn arrow_part(id: impl Into<ElementId>, arrow: Element) -> Element {
+        arrow
+            .id(Self::arrow_id(id))
+            .absolute()
+            .accessibility_hidden(true)
+            .app_region_no_drag()
+    }
+
+    /// Decorate the caller-owned live region, Base UI's `Combobox.Status`.
+    ///
+    /// Render [`Self::status_text`] inside it. The region is polite and is rebuilt only when the
+    /// application rebuilds the tree, so an unchanged count announces exactly once.
+    pub fn status_part(id: impl Into<ElementId>, status: Element) -> Element {
+        status
+            .id(Self::status_id(id))
+            .accessibility_role(AccessibilityRole::Status)
+            .accessibility_live(AccessibilityLive::Polite)
+            .app_region_no_drag()
+    }
+
+    /// Decorate the caller-owned no-results part, Base UI's `Combobox.Empty`.
+    ///
+    /// Mount it only while [`Self::is_empty_result`] is true. The `Status` region already
+    /// announces the count, so this part is visual.
+    pub fn empty_part(id: impl Into<ElementId>, empty: Element) -> Element {
+        empty
+            .id(Self::empty_id(id))
+            .accessibility_hidden(true)
+            .app_region_no_drag()
+    }
+
+    /// Decorate the caller-owned scrolling result list, Base UI's `Combobox.List`.
+    pub fn list_part(&self, id: impl Into<ElementId>, list: Element) -> Element {
+        list.id(Self::list_id(id))
+            .accessibility_hidden(self.result_count() == 0)
+            .app_region_no_drag()
+    }
+
+    /// Decorate a caller-owned wrapper around the mounted rows, Base UI's `Combobox.Collection`.
+    pub fn collection_part(id: impl Into<ElementId>, collection: Element) -> Element {
+        collection.id(Self::collection_id(id)).app_region_no_drag()
+    }
+
+    /// Decorate a caller-owned row wrapper for a grid-shaped result, Base UI's `Combobox.Row`.
+    pub fn row_part(row: Element) -> Element {
+        row.accessibility_role(AccessibilityRole::Group)
+            .app_region_no_drag()
+    }
+
+    /// Decorate one caller-owned result row, Base UI's `Combobox.Item`.
+    pub fn item_part(
+        &self,
+        id: impl Into<ElementId>,
+        source_index: usize,
+        state: ComboboxItemPartState,
+        item: Element,
+    ) -> Option<Element> {
+        let row_id = self.option_id_for_source(id, source_index)?;
+        Some(
+            item.id(row_id)
+                .clickable()
+                .tab_index(-1)
+                .disabled(state.disabled)
+                .selected(state.selected)
+                .accessibility_role(AccessibilityRole::ListBoxOption)
+                .accessibility_position_in_set(source_index)
+                .app_region_no_drag()
+                .user_select_none()
+                .cursor_default(),
+        )
+    }
+
+    /// Decorate one row's selected mark, Base UI's `Combobox.ItemIndicator`.
+    pub fn item_indicator_part(indicator: Element) -> Element {
+        indicator.accessibility_hidden(true).app_region_no_drag()
+    }
+
+    /// Decorate a caller-composed result group, Base UI's `Combobox.Group`.
+    pub fn group_part(group: Element) -> Element {
+        group
+            .accessibility_role(AccessibilityRole::Group)
+            .app_region_no_drag()
+    }
+
+    /// Decorate a group's visible label, Base UI's `Combobox.GroupLabel`.
+    pub fn group_label_part(label_id: impl Into<ElementId>, label: Element) -> Element {
+        label
+            .id(label_id)
+            .accessibility_role(AccessibilityRole::Label)
+            .app_region_no_drag()
+            .user_select_none()
+    }
+
+    /// Decorate a caller-owned divider between groups, Base UI's `Combobox.Separator`.
+    pub fn separator_part(separator: Element) -> Element {
+        separator
+            .accessibility_role(AccessibilityRole::Separator)
+            .app_region_no_drag()
     }
 
     pub fn option_id_for_source(
@@ -450,6 +1160,14 @@ where
                         label: item.label().clone(),
                         value: value.clone(),
                     });
+                    state.dirty = true;
+                    state.touched = true;
+                    if state.multiple {
+                        state.add_chip_source(source_index);
+                        // A multiple combobox keeps typing where it was, so the input becomes an
+                        // empty query rather than the committed label.
+                        state.selection = None;
+                    }
                     state.restore_committed(cx).1
                 };
                 if query_changed {
@@ -567,6 +1285,19 @@ fn combobox_autocomplete<T>(state: &mut ComboboxState<T>) -> &mut AutocompleteSt
     &mut state.autocomplete
 }
 
+fn derived_combobox_id(parent: ElementId, tag: u64, value: u64) -> ElementId {
+    let mut hash = parent.as_u64() ^ tag ^ value.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    hash ^= hash >> 30;
+    hash = hash.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    hash ^= hash >> 27;
+    hash = hash.wrapping_mul(0x94d0_49bb_1331_11eb);
+    hash ^= hash >> 31;
+    if hash == 0 || hash == parent.as_u64() || hash == u64::MAX {
+        hash ^= tag.rotate_left(19);
+    }
+    ElementId::new(hash)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -597,6 +1328,264 @@ mod tests {
         div()
             .opacity(if state.active { 1.0 } else { 0.8 })
             .child(text(item.label().clone()))
+    }
+
+    #[test]
+    fn filter_policy_defaults_to_contains_and_accepts_a_custom_predicate() {
+        let mut state = ComboboxState::new(options()).unwrap();
+        let mut cx = EventContext::default();
+        assert_eq!(state.filter_mode(), PickerFilterMode::Contains);
+        assert!(state.filter().is_none());
+
+        state.autocomplete.set_value("ric", &mut cx);
+        assert_eq!(state.result_count(), 1, "contains keeps only Apricot");
+
+        assert!(state.set_filter_mode(PickerFilterMode::StartsWith, &mut cx));
+        state.autocomplete.set_value("ap", &mut cx);
+        assert_eq!(state.result_count(), 2, "Apple and Apricot start with ap");
+        state.autocomplete.set_value("ric", &mut cx);
+        assert_eq!(state.result_count(), 0, "no label starts with ric");
+
+        let ends_with =
+            PickerFilter::new(|label: &str, query: &str| label.to_lowercase().ends_with(query));
+        assert!(state.set_filter(Some(ends_with.clone()), &mut cx));
+        state.autocomplete.set_value("cot", &mut cx);
+        assert_eq!(state.result_count(), 1);
+        assert_eq!(state.filter(), Some(&ends_with));
+        assert!(!state.set_filter(Some(ends_with), &mut cx));
+
+        assert!(state.set_filter(None, &mut cx));
+        state.autocomplete.set_value("ric", &mut cx);
+        assert_eq!(state.result_count(), 0, "the declared mode is restored");
+
+        assert!(state.set_filter_mode(PickerFilterMode::None, &mut cx));
+        assert_eq!(state.result_count(), 4);
+    }
+
+    #[test]
+    fn multiple_comboboxes_retain_bounded_chips_that_can_be_removed() {
+        let mut state = ComboboxState::new(options()).unwrap().multiple(true);
+        assert!(state.is_multiple());
+        assert_eq!(state.chip_count(), 0);
+        assert!(state.add_chip_source(0));
+        assert!(state.add_chip_source(3));
+        assert!(!state.add_chip_source(0), "a chip is never duplicated");
+        assert!(
+            !state.add_chip_source(1),
+            "a disabled row cannot become a chip"
+        );
+        assert_eq!(
+            state.chip_labels().map(Arc::as_ref).collect::<Vec<_>>(),
+            vec!["Apple", "Banana"]
+        );
+        assert_eq!(
+            state.chip_values().copied().collect::<Vec<_>>(),
+            vec!["apple", "banana"]
+        );
+        assert!(state.is_dirty() && state.is_touched());
+
+        assert!(state.remove_chip(0));
+        assert_eq!(
+            state.chip_labels().map(Arc::as_ref).collect::<Vec<_>>(),
+            vec!["Banana"]
+        );
+        assert!(!state.remove_chip(9));
+        assert!(state.clear_chips());
+        assert!(!state.clear_chips());
+
+        let mut bounded = ComboboxState::new(
+            (0..MAX_COMBOBOX_VALUES + 4)
+                .map(|index| PickerItem::new(format!("Option {index}"), index)),
+        )
+        .unwrap()
+        .multiple(true);
+        for index in 0..MAX_COMBOBOX_VALUES + 4 {
+            bounded.add_chip_source(index);
+        }
+        assert_eq!(bounded.chip_count(), MAX_COMBOBOX_VALUES);
+
+        let mut locked = ComboboxState::new(options())
+            .unwrap()
+            .multiple(true)
+            .read_only(true);
+        assert!(!locked.add_chip_source(0));
+        assert!(!locked.remove_chip(0));
+    }
+
+    #[test]
+    fn part_state_status_and_empty_mirror_base_ui_attributes() {
+        let mut state = ComboboxState::new(options()).unwrap();
+        let mut cx = EventContext::default();
+        assert_eq!(
+            state.state(),
+            ComboboxPartState {
+                popup_open: false,
+                pressed: false,
+                placeholder: true,
+                valid: true,
+                invalid: false,
+                dirty: false,
+                touched: false,
+                filled: false,
+                focused: false,
+                read_only: false,
+                required: false,
+            }
+        );
+        assert_eq!(state.status_text().as_ref(), "4 results");
+        assert!(!state.is_empty_result());
+
+        state.autocomplete.set_value("zzz", &mut cx);
+        assert!(state.is_empty_result());
+        assert_eq!(state.status_text().as_ref(), "No results");
+        state.autocomplete.set_value("banana", &mut cx);
+        assert_eq!(state.status_text().as_ref(), "1 result");
+
+        assert!(state.set_selected_source(0, &mut cx));
+        assert!(state.set_pressed(true));
+        assert!(state.set_focused(true));
+        let filled = state.state();
+        assert!(filled.filled && !filled.placeholder && filled.pressed && filled.focused);
+        assert!(state.set_focused(false));
+        assert!(state.is_touched());
+        assert!(state.set_invalid(true));
+        let invalid = state.state();
+        assert!(invalid.invalid && !invalid.valid);
+
+        let flagged = ComboboxState::new(options())
+            .unwrap()
+            .required(true)
+            .read_only(true)
+            .auto_highlight(true)
+            .open_on_input_click(false)
+            .highlight_item_on_hover(false)
+            .loop_focus(false);
+        assert!(flagged.is_required());
+        assert!(flagged.is_read_only());
+        assert!(flagged.auto_highlights());
+        assert!(!flagged.opens_on_input_click());
+        assert!(!flagged.highlights_item_on_hover());
+        assert!(!flagged.loops_focus());
+        let flags = flagged.state();
+        assert!(flags.required && flags.read_only);
+    }
+
+    #[test]
+    fn unstyled_combobox_parts_add_semantics_without_appearance() {
+        let state = ComboboxState::new(options()).unwrap().multiple(true);
+        type Combo = ComboboxState<&'static str>;
+
+        assert_eq!(
+            Combo::root_part(div().bg(Color::BLACK)).visual.background,
+            Some(Color::BLACK)
+        );
+        let label = Combo::label_part("combo", div());
+        assert_eq!(label.explicit_id, Some(Combo::label_id("combo")));
+        assert_eq!(label.accessibility.role, AccessibilityRole::Label);
+
+        assert!(Combo::value_part("combo", div()).accessibility.hidden);
+        assert!(Combo::icon_part("combo", div()).accessibility.hidden);
+        assert!(Combo::arrow_part("combo", div()).accessibility.hidden);
+        assert!(Combo::backdrop_part("combo", div()).accessibility.hidden);
+        assert!(Combo::item_indicator_part(div()).accessibility.hidden);
+
+        let group = Combo::input_group_part("combo", div());
+        assert_eq!(group.accessibility.role, AccessibilityRole::Group);
+        assert_eq!(
+            group.accessibility.relations.labelled_by(),
+            Some(Combo::label_id("combo"))
+        );
+
+        let input = state.input_part("combo", text_input(""));
+        assert!(!input.accessibility.read_only);
+        assert_eq!(
+            input.accessibility.relations.labelled_by(),
+            Some(Combo::label_id("combo"))
+        );
+        let locked = ComboboxState::new(options())
+            .unwrap()
+            .read_only(true)
+            .required(true)
+            .input_part("combo", text_input(""));
+        assert!(locked.accessibility.read_only);
+        assert!(locked.accessibility.required);
+
+        let chips = Combo::chips_part("combo", div());
+        assert_eq!(chips.accessibility.role, AccessibilityRole::List);
+        let chip = Combo::chip_part("combo", 0, "Apple", div());
+        assert_eq!(chip.accessibility.role, AccessibilityRole::ListItem);
+        assert_eq!(chip.accessibility.label.as_deref(), Some("Apple"));
+        let remove = Combo::chip_remove_part("combo", 0, "Remove Apple", div());
+        assert_eq!(remove.accessibility.role, AccessibilityRole::Button);
+        assert!(remove.clickable);
+        assert_eq!(remove.visual.background, None);
+
+        let clear = Combo::clear_part("combo", "Clear", div());
+        assert_eq!(clear.accessibility.role, AccessibilityRole::Button);
+        let trigger = state.trigger_part("combo", "Fruit", div());
+        assert_eq!(trigger.accessibility.expanded, Some(false));
+        assert_eq!(
+            trigger.accessibility.has_popover,
+            Some(crate::AccessibilityPopover::ListBox)
+        );
+
+        let popup = state.popup_part("combo", div());
+        assert_eq!(popup.accessibility.role, AccessibilityRole::ListBox);
+        assert!(popup.accessibility.multiselectable);
+        assert_eq!(
+            state.portal_part("combo", div()).explicit_id,
+            popup.explicit_id
+        );
+        assert_eq!(
+            state.positioner_part("combo", div()).explicit_id,
+            popup.explicit_id
+        );
+
+        let status = Combo::status_part("combo", div());
+        assert_eq!(status.accessibility.role, AccessibilityRole::Status);
+        assert_eq!(status.accessibility.live, Some(AccessibilityLive::Polite));
+        assert!(Combo::empty_part("combo", div()).accessibility.hidden);
+        assert_eq!(
+            Combo::collection_part("combo", div()).explicit_id,
+            Some(Combo::collection_id("combo"))
+        );
+        assert_eq!(
+            Combo::row_part(div()).accessibility.role,
+            AccessibilityRole::Group
+        );
+        assert_eq!(
+            Combo::group_part(div()).accessibility.role,
+            AccessibilityRole::Group
+        );
+        assert_eq!(
+            Combo::group_label_part("group", div()).accessibility.role,
+            AccessibilityRole::Label
+        );
+        assert_eq!(
+            Combo::separator_part(div()).accessibility.role,
+            AccessibilityRole::Separator
+        );
+
+        let item = state
+            .item_part(
+                "combo",
+                0,
+                ComboboxItemPartState {
+                    highlighted: true,
+                    selected: true,
+                    disabled: false,
+                },
+                div(),
+            )
+            .unwrap();
+        assert_eq!(item.accessibility.role, AccessibilityRole::ListBoxOption);
+        assert!(item.accessibility.selected);
+        assert_eq!(item.visual.background, None);
+        assert!(
+            state
+                .item_part("combo", 99, ComboboxItemPartState::default(), div())
+                .is_none()
+        );
     }
 
     struct Owner {
@@ -912,6 +1901,133 @@ mod tests {
             self.0.set(self.0.get() + 1);
             Self(Rc::clone(&self.0))
         }
+    }
+
+    struct ChipOwner {
+        combobox: ComboboxState<&'static str>,
+    }
+
+    impl ChipOwner {
+        fn new() -> Self {
+            Self {
+                combobox: ComboboxState::new(options())
+                    .unwrap()
+                    .with_layout(ComboboxPopoverLayout::new(220.0, 32.0).max_visible_rows(2))
+                    .multiple(true),
+            }
+        }
+
+        fn combobox(view: &mut Self) -> &mut ComboboxState<&'static str> {
+            &mut view.combobox
+        }
+    }
+
+    impl View for ChipOwner {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl crate::IntoElement {
+            type Combo = ComboboxState<&'static str>;
+            let input = text_input(self.combobox.input_value().clone())
+                .w(220.0)
+                .h(36.0);
+            let input = self.combobox.input_part("fruit", input);
+            let combobox = self.combobox.element(
+                cx,
+                "fruit",
+                "Fruit",
+                Self::combobox,
+                input,
+                popover_root,
+                option_row,
+                |_view, _query, _cx| {},
+                |_view, _value, _cx| {},
+            );
+            let chips = self
+                .combobox
+                .chip_labels()
+                .cloned()
+                .enumerate()
+                .map(|(index, label)| {
+                    let remove = cx.listener(
+                        Combo::chip_remove_id("fruit", index),
+                        move |view: &mut Self, cx| {
+                            if view.combobox.remove_chip(index) {
+                                cx.invalidate();
+                            }
+                        },
+                    );
+                    Combo::chip_part("fruit", index, label.clone(), div()).child(
+                        Combo::chip_remove_part("fruit", index, "Remove", div().h(12.0).w(12.0))
+                            .on_click(remove),
+                    )
+                })
+                .collect::<Vec<_>>();
+            Combo::root_part(div()).children([
+                Combo::label_part("fruit", div().child(text("Fruit"))),
+                Combo::input_group_part("fruit", div()).child(combobox),
+                Combo::chips_part("fruit", div()).children(chips),
+                Combo::status_part("fruit", div().child(text(self.combobox.status_text()))),
+            ])
+        }
+    }
+
+    #[test]
+    fn multiple_combobox_commits_into_chips_and_projects_list_semantics() {
+        let (mut cx, owner) = Application::new()
+            .bind_keys(combobox_key_bindings())
+            .into_test_context(WindowOptions::default(), ChipOwner::new())
+            .unwrap();
+        let window = owner.window_handle();
+        cx.focus(window, "fruit").unwrap();
+        cx.simulate_input(window, "ban").unwrap();
+        cx.simulate_keystrokes(window, "enter").unwrap();
+
+        assert_eq!(
+            cx.read(owner, |view| view.combobox.chip_count()).unwrap(),
+            1
+        );
+        assert_eq!(
+            cx.read(owner, |view| view
+                .combobox
+                .chip_labels()
+                .map(Arc::as_ref)
+                .map(str::to_owned)
+                .collect::<Vec<_>>())
+                .unwrap(),
+            vec!["Banana".to_owned()]
+        );
+        // A multiple combobox keeps the input an editing query rather than writing the label back.
+        assert_eq!(
+            cx.read(owner, |view| view.combobox.input_value().clone())
+                .unwrap(),
+            Arc::from("")
+        );
+
+        let update = cx.accessibility_update(window).unwrap();
+        let node = |id: ElementId| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (node_id.0 == id.as_u64()).then_some(node))
+                .expect("combobox chip accessibility node")
+        };
+        type Combo = ComboboxState<&'static str>;
+        assert_eq!(node(Combo::chips_id("fruit")).role(), accesskit::Role::List);
+        let chip = node(Combo::chip_id("fruit", 0));
+        assert_eq!(chip.role(), accesskit::Role::ListItem);
+        assert_eq!(chip.label(), Some("Banana"));
+        assert_eq!(
+            node(Combo::chip_remove_id("fruit", 0)).role(),
+            accesskit::Role::Button
+        );
+        assert_eq!(
+            node(Combo::status_id("fruit")).role(),
+            accesskit::Role::Status
+        );
+
+        cx.click(window, Combo::chip_remove_id("fruit", 0)).unwrap();
+        assert_eq!(
+            cx.read(owner, |view| view.combobox.chip_count()).unwrap(),
+            0
+        );
     }
 
     struct LargeOwner {

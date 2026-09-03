@@ -69,6 +69,23 @@ Large searchable datasets belong in a virtualized select, autocomplete, or comma
 than a thousands-of-rows context menu. `ContextMenuLayout` clamps native dimensions to the window
 limits, while ordinary menu rows remain finite under the popover-menu model bounds.
 
+## Base UI parts
+
+`ContextMenuState` shares the [`PopoverMenu`](popovers.md#unstyled-popover-menus) row model, so its
+Item, LinkItem, CheckboxItem, RadioItem, indicator, Group, GroupLabel, RadioGroup, and Separator
+parts are exactly the ones documented there. Two names are its own:
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Trigger | `trigger_part(id, element)` (alias of `target_part`) | `has-popup`, `expanded`, secondary-click opening |
+| Backdrop | `backdrop_part(id, element)` | full-viewport, accessibility-hidden pointer layer in the owner window |
+
+`ContextMenuState::item_part_state(menu, index, submenu_open)` returns the same `MenuItemPartState`
+snapshot the in-window menu publishes. Portal, Positioner, Popup, and Arrow have no separate
+decorator here: the menu surface is its own native child window, so QuickGUI resolves its placement
+against the display work area rather than a parent stacking context, and the popover view already
+applies the popup semantics to the caller's `render_root` result.
+
 ## JavaScript bindings
 
 The Solid renderer exposes this adapter as `ContextMenu.Root` / `Trigger` with a bounded JSON item

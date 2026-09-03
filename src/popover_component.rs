@@ -144,6 +144,15 @@ impl Popover {
         }
     }
 
+    /// Replace the controlled open flag, Base UI's Root `open` prop.
+    ///
+    /// The descriptor is copied per frame, so a component that retains the open flag itself can
+    /// build one descriptor at construction time and stamp the current value onto it here.
+    pub const fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+
     pub const fn kind(mut self, kind: PopoverKind) -> Self {
         self.kind = kind;
         self

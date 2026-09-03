@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use quickgui::{
     AnchorPlacement, AnchorSide, Animation, AnimationExt as _, AnimationPhase, Application, Color,
-    ContextMenuLayout, ContextMenuState, Element, PopoverMenu, PopoverMenuItem,
+    ContextMenuLayout, ContextMenuState, Element, OpenMenuLink, PopoverMenu, PopoverMenuItem,
     PopoverMenuItemKind, PopoverMenuItemState, TitleBarStyle, Tooltip, TooltipProvider,
     TooltipState, View, ViewContext, button, div, ease_out_quint, popover_menu_key_bindings, text,
 };
@@ -59,6 +59,7 @@ enum ContextCommand {
     Reveal,
     CopyPath,
     Inspect,
+    Theme(&'static str),
 }
 
 impl TooltipContextDemo {
@@ -73,6 +74,7 @@ impl TooltipContextDemo {
             ContextCommand::Reveal => "Reveal in Finder",
             ContextCommand::CopyPath => "Copy Path",
             ContextCommand::Inspect => "Inspect",
+            ContextCommand::Theme(theme) => theme,
         };
         self.status = Some(Arc::from(format!("Context action: {action}")));
     }
@@ -90,6 +92,25 @@ impl TooltipContextDemo {
                 .shortcut("⌘D"),
             PopoverMenuItem::separator(),
             PopoverMenuItem::action("reveal", "Reveal in Finder", ContextCommand::Reveal),
+            // Base UI's LinkItem: activation dispatches OpenMenuLink through the ordinary owner
+            // action path, and the application decides what opening a destination means.
+            PopoverMenuItem::link("docs", "QuickGUI documentation", "https://example.com/docs"),
+            PopoverMenuItem::separator(),
+            PopoverMenuItem::group_label("Theme"),
+            PopoverMenuItem::radio(
+                "theme-light",
+                "Light",
+                "theme",
+                true,
+                ContextCommand::Theme("Light theme"),
+            ),
+            PopoverMenuItem::radio(
+                "theme-dark",
+                "Dark",
+                "theme",
+                false,
+                ContextCommand::Theme("Dark theme"),
+            ),
             PopoverMenuItem::submenu("more", "More", more),
         ])
         .expect("the static context menu is valid")
@@ -105,31 +126,47 @@ impl TooltipContextDemo {
                     .text_xs()
                     .text_color(Color::rgb8(145, 154, 172)),
             ),
-            _ => div()
-                .w_full()
-                .px_3()
-                .rounded_md()
-                .opacity(if state.disabled { 0.45 } else { 1.0 })
-                .bg(if state.highlighted {
-                    Color::rgb8(53, 95, 145)
+            _ => {
+                // Base UI mounts the indicator only while the row is checked, and keeps it hidden
+                // from assistive technology because the row already reports its state.
+                let indicator = if state.checked == Some(true) {
+                    PopoverMenu::radio_item_indicator_part(text("●").text_xs())
                 } else {
-                    Color::TRANSPARENT
-                })
-                .child(
-                    div()
-                        .size_full()
-                        .flex_row()
-                        .items_center()
-                        .justify_between()
-                        .child(text(item.label().clone()).text_sm())
-                        .child(if state.has_submenu {
-                            text("›").text_sm()
-                        } else {
-                            text(item.shortcut_text().cloned().unwrap_or_else(|| "".into()))
-                                .text_xs()
-                                .text_color(Color::rgb8(145, 154, 172))
-                        }),
-                ),
+                    div().w(8.0)
+                };
+                div()
+                    .w_full()
+                    .px_3()
+                    .rounded_md()
+                    .opacity(if state.disabled { 0.45 } else { 1.0 })
+                    .bg(if state.highlighted {
+                        Color::rgb8(53, 95, 145)
+                    } else {
+                        Color::TRANSPARENT
+                    })
+                    .child(
+                        div()
+                            .size_full()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(indicator)
+                                    .child(text(item.label().clone()).text_sm()),
+                            )
+                            .child(if state.has_submenu {
+                                text("›").text_sm()
+                            } else {
+                                text(item.shortcut_text().cloned().unwrap_or_else(|| "".into()))
+                                    .text_xs()
+                                    .text_color(Color::rgb8(145, 154, 172))
+                            }),
+                    )
+            }
         }
     }
 }
@@ -142,6 +179,13 @@ impl View for TooltipContextDemo {
                 this.choose(*command);
                 cx.invalidate();
             });
+        // Base UI's LinkItem navigates; QuickGUI dispatches the destination as an ordinary typed
+        // action so the application decides what opening it means.
+        let open_link = cx.action_listener("context-actions", |this, link: &OpenMenuLink, cx| {
+            this.status = Some(Arc::from(format!("Open link: {}", link.url)));
+            let _ = cx.open_url(link.url.clone());
+            cx.invalidate();
+        });
         let context_surface = self.context_menu.element(
             cx,
             "context-surface",
@@ -247,6 +291,7 @@ impl View for TooltipContextDemo {
         div()
             .focus_scope(cx.focus_handle("context-actions"))
             .on_action(context_action)
+            .on_action(open_link)
             .relative()
             .size_full()
             .flex_col()

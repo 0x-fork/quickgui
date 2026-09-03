@@ -4,8 +4,8 @@ use crate::{
     AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AnchorPlacement,
     ComboboxConfirm, ComboboxNext, ComboboxPageDown, ComboboxPageUp, ComboboxPrevious, Element,
     ElementId, Entity, EventContext, FocusHandle, Key, MAX_VALIDATION_MESSAGE_BYTES, PickerError,
-    PickerFilterMode, PickerItem, PickerState, StateAccessor, View, ViewContext, VirtualList,
-    WindowHandle, div, element::ElementKind,
+    PickerFilter, PickerFilterMode, PickerItem, PickerState, StateAccessor, View, ViewContext,
+    VirtualList, WindowHandle, div, element::ElementKind,
 };
 
 /// Maximum option rows mounted by one autocomplete popover before virtual scrolling takes over.
@@ -256,6 +256,15 @@ impl<T> AutocompleteState<T> {
         self
     }
 
+    /// Install an application-supplied filter predicate before a runtime context exists.
+    ///
+    /// This is Base UI's `filter` prop. The predicate replaces [`Self::filter_mode`] entirely;
+    /// [`Self::set_filter`] passing `None` restores it.
+    pub fn with_filter(mut self, filter: PickerFilter) -> Self {
+        self.picker.set_filter(Some(filter));
+        self
+    }
+
     /// Set the initial free-form value before a runtime context exists.
     ///
     /// This is the constructor-time equivalent of [`Self::set_value`]: a state that has never been
@@ -357,6 +366,23 @@ impl<T> AutocompleteState<T> {
         cx: &mut EventContext,
     ) -> bool {
         if !self.picker.set_filter_mode(filter_mode) {
+            return false;
+        }
+        self.sync_popover(cx);
+        true
+    }
+
+    /// The application-supplied filter predicate, when one is installed.
+    pub fn filter(&self) -> Option<&PickerFilter> {
+        self.picker.filter()
+    }
+
+    /// Replace the built-in filter policy with an application-supplied predicate.
+    ///
+    /// Passing `None` restores [`Self::filter_mode`]. The open suggestion surface, if any, is
+    /// resynchronized exactly once.
+    pub fn set_filter(&mut self, filter: Option<PickerFilter>, cx: &mut EventContext) -> bool {
+        if !self.picker.set_filter(filter) {
             return false;
         }
         self.sync_popover(cx);

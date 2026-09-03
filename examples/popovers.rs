@@ -4,17 +4,24 @@ use std::time::Duration;
 
 use quickgui::{
     AccessibilityRole, AnchorAlign, AnchorPlacement, AnchorPlacementHandle, AnchorSide,
-    Application, BoxShadow, Color, Element, EventContext, IntoElement, Popover, PopoverHoverState,
-    PopoverKind, View, ViewContext, WindowAppearance, button, div, text,
+    Application, BoxShadow, Color, Element, EventContext, IntoElement, MenuState, Popover,
+    PopoverHoverState, PopoverKind, PopoverMenu, PopoverMenuItem, View, ViewContext,
+    WindowAppearance, button, div, popover_menu_key_bindings, text,
 };
 
+/// One command dispatched by the unstyled hover menu.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MenuCommand(&'static str);
+
 fn main() -> Result<(), quickgui::AppError> {
-    Application::new().run(|cx| {
-        cx.open_window(
-            quickgui::WindowOptions::new("QuickGUI — Controlled popovers").size(900.0, 620.0),
-            PopoverGallery::default(),
-        );
-    })
+    Application::new()
+        .bind_keys(popover_menu_key_bindings())
+        .run(|cx| {
+            cx.open_window(
+                quickgui::WindowOptions::new("QuickGUI — Controlled popovers").size(900.0, 620.0),
+                PopoverGallery::default(),
+            );
+        })
 }
 
 struct PopoverGallery {
@@ -25,6 +32,10 @@ struct PopoverGallery {
     preview: PopoverHoverState,
     /// The placement QuickGUI resolved for the preview surface on the previous painted frame.
     preview_placement: AnchorPlacementHandle,
+    /// Base UI's `Menu.Root`: the controlled open flag plus hover opening on exact deadlines.
+    menu: MenuState,
+    /// The row model the menu surface wraps.
+    menu_model: PopoverMenu,
     status: Option<Arc<str>>,
 }
 
@@ -38,8 +49,32 @@ impl Default for PopoverGallery {
                 .delay(Duration::from_millis(250))
                 .close_delay(Duration::from_millis(120)),
             preview_placement: AnchorPlacementHandle::new(),
+            menu: MenuState::new("menu-trigger", "menu-popup")
+                .open_on_hover(true)
+                .delay(Duration::from_millis(120))
+                .close_delay(Duration::from_millis(80))
+                .side(AnchorSide::Bottom)
+                .align(AnchorAlign::Start)
+                .side_offset(6.0),
+            menu_model: PopoverMenu::new([
+                PopoverMenuItem::group_label("Share"),
+                PopoverMenuItem::action("copy", "Copy link", MenuCommand("Copied link")),
+                PopoverMenuItem::separator(),
+                PopoverMenuItem::action("email", "Email", MenuCommand("Emailed")),
+            ])
+            .expect("the static hover menu is valid"),
             status: None,
         }
+    }
+}
+
+impl PopoverGallery {
+    fn menu(view: &mut Self) -> &mut MenuState {
+        &mut view.menu
+    }
+
+    fn menu_model(view: &mut Self) -> &mut PopoverMenu {
+        &mut view.menu_model
     }
 }
 
@@ -391,6 +426,56 @@ impl View for PopoverGallery {
                         .accessibility_role(AccessibilityRole::MenuItem),
                 );
             root = root.child(actions.positioner_part(div().child(popover)));
+        }
+
+        // Base UI's Menu.Root/Trigger/Positioner/Popup over the same in-window popover, opened on
+        // hover after an exact 120 ms deadline.
+        let menu_command =
+            cx.action_listener("menu-commands", |this, command: &MenuCommand, cx| {
+                this.status = Some(Arc::from(command.0));
+                cx.invalidate();
+            });
+        let menu_trigger = self.menu.trigger_part(
+            cx,
+            Self::menu,
+            |_view: &mut Self, _open, _cx| {},
+            gallery_trigger(div(), "Share"),
+        );
+        root = root.child(menu_trigger).on_action(menu_command);
+        if self.menu.is_open() {
+            let rows = self.menu_model.element(
+                cx,
+                "share-menu",
+                Self::menu_model,
+                div().flex_col().gap_1(),
+                |item, state| {
+                    div()
+                        .min_h(30.0)
+                        .px_2()
+                        .rounded_md()
+                        .flex_row()
+                        .items_center()
+                        .opacity(if state.disabled { 0.45 } else { 1.0 })
+                        .bg(if state.highlighted {
+                            Color::rgba8(10, 132, 255, 34)
+                        } else {
+                            Color::TRANSPARENT
+                        })
+                        .child(text(item.label().clone()))
+                },
+                |view: &mut Self, cx| {
+                    view.menu.close_now();
+                    cx.invalidate();
+                },
+            );
+            let popup = gallery_popover(
+                self.menu
+                    .popup_part(cx, Self::menu, |_view: &mut Self, _open, _cx| {}, div()),
+                200.0,
+                palette,
+            )
+            .child(rows);
+            root = root.child(self.menu.positioner_part(div().child(popup)));
         }
 
         root

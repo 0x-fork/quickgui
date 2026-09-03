@@ -5,6 +5,61 @@ All notable user-facing changes to QuickGUI are recorded here.
 ## Unreleased
 
 ### Framework
+- Aligned the menu family with Base UI's parts and props. `MenuState` is the surface around the
+  `PopoverMenu` row model, composing the in-window `Popover` for anchoring, dismissal, focus
+  restoration, and modal containment: `with_open`, `modal`, `orientation`, `loop_focus`,
+  `close_parent_on_esc`, and `disabled` are Base UI's `Menu.Root` props, `open_on_hover` with
+  `delay` (100 ms by default) and `close_delay` is Trigger `openOnHover` on exact one-shot
+  deadlines, and root/trigger/portal/positioner/backdrop/popup/arrow/submenu-root/submenu-trigger
+  parts decorate caller-owned elements. Escape reaches exactly one dismiss region, so
+  `close_parent_on_esc` dispatches the new `MenuCloseParent` typed action up the focus path and
+  stops at the first level already closed. `MenuPartState` carries `open`, `side`, `align`, and
+  `anchor_hidden` from the resolved anchor placement, and `MenuItemPartState` carries
+  `highlighted`, `disabled`, `checked`, and submenu `open`.
+- Added Base UI-named menu item parts over the existing `PopoverMenu` model:
+  `PopoverMenuItem::link` creates a `Menu.LinkItem` whose activation dispatches the new
+  `OpenMenuLink` typed action through the ordinary owner path (bounded by
+  `MAX_POPOVER_MENU_LINK_BYTES`); `radio_value` and `set_radio_value` are `Menu.RadioGroup`'s
+  `value` and `onValueChange`, keeping exactly one checked value per group; `radio_group_part` and
+  `labeled_radio_group_part` project the radio-group role; `checkbox_item_indicator_part` and
+  `radio_item_indicator_part` are accessibility-hidden decoration; and `checkbox_item_part`,
+  `radio_item_part`, `link_item_part`, `submenu_trigger_part`, `separator_part`, and
+  `group_label_part` are kind-checked aliases of `item_part` that refuse the wrong row. A menu can
+  now declare `MenuOrientation::Horizontal`, which installs
+  `POPOVER_MENU_HORIZONTAL_KEY_CONTEXT` and `popover_menu_horizontal_key_bindings()` so Left and
+  Right move the highlight and Down opens the highlighted submenu.
+- `ContextMenuState` gained the Base UI-named `trigger_part` alias of `target_part`, an
+  accessibility-hidden owner-window `backdrop_part`, and `item_part_state`.
+- Aligned `Select` with Base UI's parts and props. `SelectState` gained
+  root/label/trigger/value/icon/backdrop/portal/positioner/popup/arrow/list/item/item-text/
+  item-indicator/group/group-label/separator decorators — the popup and item decorators being the
+  ones the native option surface applies internally — plus `multiple` with a `MAX_SELECT_VALUES`
+  (256) bounded value set, `toggle_source`, joined `value_text`, `required`, `read_only` (refused on
+  the state, not only projected), `modal`, `align_item_with_trigger` over the declared
+  `SelectPopoverLayout::trigger_height`, the `from_labels` items map form, and a copyable
+  `SelectPartState` carrying `popup_open`, `popup_side`, `pressed`, `placeholder`, `valid`,
+  `invalid`, `dirty`, `touched`, `filled`, `focused`, `read_only`, and `required`.
+  `element_with_parts` hands the surface renderer a `SelectPopupParts` whose
+  `scroll_up_arrow_part` and `scroll_down_arrow_part` advance the option window one row every
+  `SELECT_SCROLL_ARROW_INTERVAL` while hovered, each step an exact one-shot deadline armed by the
+  previous one. Revealing the active row now runs only when the mounted window changes size, so a
+  pointer scroll is no longer undone by the next frame.
+- Aligned `Combobox` with Base UI's parts and props. `ComboboxState` gained
+  root/label/value/icon/input/input-group/clear/trigger/chips/chip/chip-remove/portal/backdrop/
+  positioner/popup/arrow/status/empty/list/row/item/item-indicator/group/group-label/collection/
+  separator decorators, `multiple` with `MAX_COMBOBOX_VALUES` (64) bounded chips plus
+  `add_chip_source`/`remove_chip`/`clear_chips`, `auto_highlight`, `open_on_input_click`,
+  `highlight_item_on_hover`, `loop_focus`, `read_only`, `required`, `status_text` for the polite
+  live region, `is_empty_result` for the Empty part, and the copyable `ComboboxPartState` and
+  `ComboboxItemPartState` snapshots.
+- Added Base UI's combobox `filter` policy. `PickerFilterMode` gained `Contains` (the combobox
+  default) and `StartsWith`, and the new `PickerFilter` wraps an application-supplied
+  `Fn(&str, &str) -> bool` predicate installed with `PickerState::set_filter`,
+  `AutocompleteState::with_filter`/`set_filter`, or `ComboboxState::with_filter`/`set_filter`. The
+  predicate replaces the mode entirely; `Fuzzy` stays the ranked palette matcher and the only mode
+  that reports label highlight ranges.
+- Added `Popover::open`, Base UI's Root `open` prop, so a component that retains the open flag
+  itself can stamp the current value onto a descriptor built once.
 - Added the remaining Base UI-derived unstyled components, each a caller-owned `*_part` decorator
   set with bounded state, module tests, a `TestAppContext` interaction/accessibility test, and no
   idle source: `Separator` / `separator()` (Separator role with a horizontal-by-default
