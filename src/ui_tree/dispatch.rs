@@ -169,7 +169,7 @@ pub(super) fn collect_focus_candidates(
     let inside_active_focus_trap = inside_active_focus_trap
         || collection.active_trap.is_none()
         || collection.active_trap == Some(element.runtime_id);
-    if inside_active_focus_trap && element.focusable && !element.accessibility.disabled {
+    if inside_active_focus_trap && element.is_keyboard_focusable() {
         collection.focusable_ids.insert(element.runtime_id);
         let radio_is_tab_stop = element.accessibility.role != AccessibilityRole::RadioButton
             || !inside_radio_group
@@ -596,7 +596,7 @@ pub(super) fn find_auto_focus(element: &Element) -> Option<ElementId> {
     if element.is_display_none() || element.is_visibility_hidden() {
         return None;
     }
-    if element.auto_focus && element.focusable && !element.accessibility.disabled {
+    if element.auto_focus && element.is_keyboard_focusable() {
         return Some(element.runtime_id);
     }
     element.children.iter().find_map(find_auto_focus)

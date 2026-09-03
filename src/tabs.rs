@@ -23,25 +23,53 @@ pub enum TabsOrientation {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct TabsState {
     active: Option<ElementId>,
+    active_index: Option<usize>,
+    movement: TabsActivationMovement,
 }
 
 impl TabsState {
     pub fn new(active: impl Into<ElementId>) -> Self {
         Self {
             active: Some(active.into()),
+            active_index: None,
+            movement: TabsActivationMovement::None,
         }
     }
 
     pub const fn empty() -> Self {
-        Self { active: None }
+        Self {
+            active: None,
+            active_index: None,
+            movement: TabsActivationMovement::None,
+        }
     }
 
     pub const fn active(&self) -> Option<ElementId> {
         self.active
     }
 
+    /// The position the active tab was last selected at, when the application supplied one.
+    pub const fn active_index(&self) -> Option<usize> {
+        self.active_index
+    }
+
+    /// Which way the selection last moved along the tab list.
+    ///
+    /// This is the raw half of Base UI's `data-activation-direction`; [`Tabs::activation_direction`]
+    /// turns it into a side using the declared orientation. It stays
+    /// [`TabsActivationMovement::None`] until the application selects through
+    /// [`Self::select_at`], because a bare value carries no ordering.
+    pub const fn activation_movement(&self) -> TabsActivationMovement {
+        self.movement
+    }
+
     /// Replace the controlled value, returning whether it changed.
+    ///
+    /// The activation movement is cleared: a value on its own says nothing about which way the
+    /// selection travelled. Use [`Self::select_at`] to record it.
     pub fn set_active(&mut self, active: Option<ElementId>) -> bool {
+        self.movement = TabsActivationMovement::None;
+        self.active_index = None;
         if self.active == active {
             false
         } else {
@@ -54,9 +82,71 @@ impl TabsState {
         self.set_active(Some(value.into()))
     }
 
+    /// Select one tab by value and position, recording which way the selection moved.
+    ///
+    /// The application already knows the order it declares its tabs in, so it passes the index it
+    /// is rendering; QuickGUI keeps no item registry to discover it from. Returns whether the value
+    /// changed.
+    pub fn select_at(&mut self, value: impl Into<ElementId>, index: usize) -> bool {
+        let value = value.into();
+        self.movement = match self.active_index {
+            Some(previous) if index > previous => TabsActivationMovement::Forward,
+            Some(previous) if index < previous => TabsActivationMovement::Backward,
+            _ => TabsActivationMovement::None,
+        };
+        self.active_index = Some(index);
+        if self.active == Some(value) {
+            false
+        } else {
+            self.active = Some(value);
+            true
+        }
+    }
+
     pub fn clear(&mut self) -> bool {
         self.set_active(None)
     }
+}
+
+/// Which way the selection last travelled along a tab list.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TabsActivationMovement {
+    /// Nothing has moved, or the selection was set without an ordering.
+    #[default]
+    None,
+    /// The selection moved toward the end of the list.
+    Forward,
+    /// The selection moved toward the start of the list.
+    Backward,
+}
+
+/// The side the selection last travelled toward, Base UI's `data-activation-direction`.
+///
+/// An application animates a sliding indicator or a panel transition from this instead of
+/// re-deriving it from its own previous render.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TabsActivationDirection {
+    #[default]
+    None,
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+/// The geometry of the active tab, for an application-animated indicator.
+///
+/// Base UI computes `--active-tab-left` and friends by measuring the DOM. QuickGUI reports the
+/// rectangle the retained tree actually laid the active tab out at, in window logical coordinates,
+/// through the same [`crate::AnchorPlacementHandle`] a popover uses. Width and height are directly
+/// usable; positions are most useful as a frame-to-frame delta, and an indicator that is simply
+/// anchored to the active tab needs no arithmetic at all.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TabsIndicatorGeometry {
+    pub left: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 /// A controlled, unstyled in-window tab-set descriptor.
@@ -77,6 +167,7 @@ pub struct Tabs {
     activate_on_focus: bool,
     loop_focus: bool,
     keep_mounted: bool,
+    movement: TabsActivationMovement,
 }
 
 impl Tabs {
@@ -88,6 +179,7 @@ impl Tabs {
             activate_on_focus: false,
             loop_focus: true,
             keep_mounted: false,
+            movement: TabsActivationMovement::None,
         }
     }
 
@@ -99,12 +191,14 @@ impl Tabs {
             activate_on_focus: false,
             loop_focus: true,
             keep_mounted: false,
+            movement: TabsActivationMovement::None,
         }
     }
 
     pub fn from_state(root_id: impl Into<ElementId>, state: &TabsState) -> Self {
         let mut tabs = Self::without_selection(root_id);
         tabs.active = state.active();
+        tabs.movement = state.activation_movement();
         tabs
     }
 
@@ -161,6 +255,52 @@ impl Tabs {
         self.keep_mounted
     }
 
+    /// Declare which way the selection travelled, for a descriptor built without a [`TabsState`].
+    pub const fn activation_movement(mut self, movement: TabsActivationMovement) -> Self {
+        self.movement = movement;
+        self
+    }
+
+    /// The side the selection last travelled toward, Base UI's `data-activation-direction`.
+    ///
+    /// A horizontal tab list reports `Left` or `Right`, a vertical one `Up` or `Down`, and both
+    /// report `None` until the application selects through [`TabsState::select_at`].
+    pub const fn activation_direction(self) -> TabsActivationDirection {
+        match (self.movement, self.orientation) {
+            (TabsActivationMovement::None, _) => TabsActivationDirection::None,
+            (TabsActivationMovement::Forward, TabsOrientation::Horizontal) => {
+                TabsActivationDirection::Right
+            }
+            (TabsActivationMovement::Backward, TabsOrientation::Horizontal) => {
+                TabsActivationDirection::Left
+            }
+            (TabsActivationMovement::Forward, TabsOrientation::Vertical) => {
+                TabsActivationDirection::Down
+            }
+            (TabsActivationMovement::Backward, TabsOrientation::Vertical) => {
+                TabsActivationDirection::Up
+            }
+        }
+    }
+
+    /// Read back the active tab's laid-out geometry from a bound indicator handle.
+    ///
+    /// Mount the indicator with [`Tab::tracked_indicator_part`] and pass the same handle here on
+    /// the next frame. The rectangle is the active tab's own, in window logical coordinates, and is
+    /// `None` until the indicator has been painted once.
+    pub fn indicator_geometry(
+        self,
+        handle: &crate::AnchorPlacementHandle,
+    ) -> Option<TabsIndicatorGeometry> {
+        let resolved = handle.resolved()?;
+        Some(TabsIndicatorGeometry {
+            left: resolved.anchor.x,
+            top: resolved.anchor.y,
+            width: resolved.anchor.width,
+            height: resolved.anchor.height,
+        })
+    }
+
     /// Decorate an application-owned structural root without adding role or appearance.
     pub fn root_part(self, root: Element) -> Element {
         root.id(self.root_id)
@@ -196,6 +336,7 @@ impl Tabs {
                 orientation: self.orientation,
             },
             keep_mounted: self.keep_mounted,
+            direction: self.activation_direction(),
         }
     }
 }
@@ -216,6 +357,7 @@ pub struct Tab {
     value: ElementId,
     state: TabState,
     keep_mounted: bool,
+    direction: TabsActivationDirection,
 }
 
 impl Tab {
@@ -284,6 +426,50 @@ impl Tab {
         self.state
             .active
             .then(|| indicator.id(self.indicator_id()).accessibility_hidden(true))
+    }
+
+    /// The side the selection travelled toward when this tab became active.
+    pub const fn activation_direction(self) -> TabsActivationDirection {
+        self.direction
+    }
+
+    /// Mount an indicator the framework keeps positioned on the active tab.
+    ///
+    /// The indicator is anchored to the tab, so QuickGUI's existing placement keeps it aligned
+    /// without the application re-deriving the tab's box every frame. `placement` chooses the edge:
+    /// `AnchorPlacement::Bottom` draws the familiar underline. Size, colour, radius, and motion stay
+    /// application-owned, and the part is still mounted only for the active tab.
+    pub fn anchored_indicator_part(
+        self,
+        indicator: Element,
+        placement: crate::AnchorPlacement,
+    ) -> Option<Element> {
+        self.indicator_part(indicator).map(|indicator| {
+            indicator
+                .anchor_to(self.tab_id(), placement)
+                .anchor_gap(0.0)
+                // An indicator belongs to its tab, not to the window: it must never be nudged off
+                // the tab by a collision margin, and it travels off screen with a scrolled list.
+                .viewport_margin(0.0)
+                .anchor_sticky(false)
+        })
+    }
+
+    /// Mount an anchored indicator that also publishes the active tab's laid-out geometry.
+    ///
+    /// Read it back with [`Tabs::indicator_geometry`] on the next frame. QuickGUI writes the handle
+    /// during the paint it was already performing and requests exactly one correcting frame when
+    /// the geometry changes, so a settled tab list adds no redraw source.
+    pub fn tracked_indicator_part(
+        self,
+        indicator: Element,
+        placement: crate::AnchorPlacement,
+        geometry: &crate::AnchorPlacementHandle,
+    ) -> Option<Element> {
+        self.anchored_indicator_part(
+            indicator.report_anchor_placement(geometry.clone()),
+            placement,
+        )
     }
 
     /// Decorate and mount this tab's application-owned panel.
@@ -746,6 +932,180 @@ mod tests {
         cx.simulate_keystrokes(window, "home").unwrap();
         assert_eq!(cx.focused(window).unwrap(), Some(first.tab_id()));
         assert!(cx.contains_element(window, first.panel_id()).unwrap());
+
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    #[test]
+    fn activation_direction_follows_the_declared_order_and_orientation() {
+        let mut state = TabsState::new("first");
+        assert_eq!(state.activation_movement(), TabsActivationMovement::None);
+        assert_eq!(state.active_index(), None);
+        assert_eq!(
+            Tabs::from_state("tabs", &state).activation_direction(),
+            TabsActivationDirection::None
+        );
+
+        // The first indexed selection has no previous position to compare against.
+        assert!(state.select_at("second", 1));
+        assert_eq!(state.activation_movement(), TabsActivationMovement::None);
+        assert_eq!(state.active_index(), Some(1));
+
+        assert!(state.select_at("third", 2));
+        assert_eq!(state.activation_movement(), TabsActivationMovement::Forward);
+        assert_eq!(
+            Tabs::from_state("tabs", &state).activation_direction(),
+            TabsActivationDirection::Right
+        );
+        assert_eq!(
+            Tabs::from_state("tabs", &state)
+                .vertical()
+                .activation_direction(),
+            TabsActivationDirection::Down
+        );
+
+        assert!(state.select_at("first", 0));
+        assert_eq!(
+            state.activation_movement(),
+            TabsActivationMovement::Backward
+        );
+        assert_eq!(
+            Tabs::from_state("tabs", &state).activation_direction(),
+            TabsActivationDirection::Left
+        );
+        assert_eq!(
+            Tabs::from_state("tabs", &state)
+                .vertical()
+                .activation_direction(),
+            TabsActivationDirection::Up
+        );
+
+        // Reselecting the same position reports no movement and no change.
+        assert!(!state.select_at("first", 0));
+        assert_eq!(state.activation_movement(), TabsActivationMovement::None);
+
+        // A bare value carries no ordering, so it clears the recorded movement.
+        assert!(state.select("third"));
+        assert_eq!(state.activation_movement(), TabsActivationMovement::None);
+        assert_eq!(state.active_index(), None);
+        assert!(state.clear());
+        assert_eq!(state.active(), None);
+
+        // Each tab carries the direction its own tab set resolved.
+        let mut moved = TabsState::new("a");
+        moved.select_at("a", 0);
+        moved.select_at("b", 1);
+        let tabs = Tabs::from_state("tabs", &moved);
+        assert_eq!(
+            tabs.tab("b").activation_direction(),
+            TabsActivationDirection::Right
+        );
+        assert_eq!(
+            Tabs::new("tabs", "b")
+                .activation_movement(TabsActivationMovement::Backward)
+                .tab("b")
+                .activation_direction(),
+            TabsActivationDirection::Left
+        );
+    }
+
+    struct IndicatorView {
+        tabs: TabsState,
+        geometry: crate::AnchorPlacementHandle,
+    }
+
+    impl Default for IndicatorView {
+        fn default() -> Self {
+            let mut tabs = TabsState::new("overview");
+            tabs.select_at("overview", 0);
+            Self {
+                tabs,
+                geometry: crate::AnchorPlacementHandle::new(),
+            }
+        }
+    }
+
+    impl View for IndicatorView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let tabs = Tabs::from_state("tabs", &self.tabs);
+            let mut list = tabs.list_part(div().relative().flex_row());
+            for (index, value) in ["overview", "activity"].into_iter().enumerate() {
+                let tab = tabs.tab(value);
+                let select = cx.listener(tab.tab_id(), move |view: &mut Self, cx| {
+                    if view.tabs.select_at(value, index) {
+                        cx.invalidate();
+                    }
+                });
+                let mut element = tab.tab_part(div().w(120.0).h(32.0).on_click(select));
+                if let Some(indicator) = tab.tracked_indicator_part(
+                    div().h(3.0).w(120.0),
+                    crate::AnchorPlacement::Bottom,
+                    &self.geometry,
+                ) {
+                    element = element.child(indicator);
+                }
+                list = list.child(element);
+            }
+            div().size_full().child(tabs.root_part(div()).child(list))
+        }
+    }
+
+    #[test]
+    fn a_tracked_indicator_is_anchored_to_the_active_tab_and_reports_its_geometry() {
+        let (mut cx, view) = TestAppContext::new(IndicatorView::default()).unwrap();
+        let window = view.window_handle();
+        let tabs = Tabs::new("tabs", "overview");
+        let first = tabs.tab("overview");
+        let second = tabs.tab("activity");
+
+        assert!(cx.contains_element(window, first.indicator_id()).unwrap());
+        assert!(!cx.contains_element(window, second.indicator_id()).unwrap());
+
+        let tab_bounds = cx.element_bounds(window, first.tab_id()).unwrap();
+        let indicator_bounds = cx.element_bounds(window, first.indicator_id()).unwrap();
+        cx.run_until_idle().unwrap();
+        // The framework places the indicator on the tab's bottom edge; the application only
+        // declared its size.
+        assert_eq!(indicator_bounds.y, tab_bounds.bottom());
+        assert_eq!(indicator_bounds.x, tab_bounds.x);
+
+        let geometry = cx
+            .read(view, |view| {
+                Tabs::from_state("tabs", &view.tabs).indicator_geometry(&view.geometry)
+            })
+            .unwrap()
+            .expect("a painted indicator publishes the active tab's geometry");
+        assert_eq!(geometry.left, tab_bounds.x);
+        assert_eq!(geometry.top, tab_bounds.y);
+        assert_eq!(geometry.width, tab_bounds.width);
+        assert_eq!(geometry.height, tab_bounds.height);
+
+        // Selecting the next tab moves both the mounted indicator and the reported geometry.
+        cx.click(window, second.tab_id()).unwrap();
+        assert_eq!(
+            cx.read(view, |view| view.tabs.active()).unwrap(),
+            Some("activity".into())
+        );
+        assert_eq!(
+            cx.read(view, |view| Tabs::from_state("tabs", &view.tabs)
+                .activation_direction())
+                .unwrap(),
+            TabsActivationDirection::Right
+        );
+        assert!(cx.contains_element(window, second.indicator_id()).unwrap());
+        assert!(!cx.contains_element(window, first.indicator_id()).unwrap());
+        let second_bounds = cx.element_bounds(window, second.tab_id()).unwrap();
+        cx.run_until_idle().unwrap();
+        let geometry = cx
+            .read(view, |view| {
+                Tabs::from_state("tabs", &view.tabs).indicator_geometry(&view.geometry)
+            })
+            .unwrap()
+            .expect("the moved indicator republishes its geometry");
+        assert_eq!(geometry.left, second_bounds.x);
+        assert!(geometry.left > tab_bounds.x);
 
         let renders = cx.render_count(window).unwrap();
         cx.run_until_idle().unwrap();

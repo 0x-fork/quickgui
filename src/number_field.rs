@@ -3,7 +3,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{AccessibilityRole, AccessibilityValueRange, Element, ElementId, div, text_input};
+use crate::{
+    AccessibilityRole, AccessibilityValueRange, Element, ElementId, Modifiers, Point, PointerEvent,
+    PointerPhase, div, text_input,
+};
+
+/// Maximum logical pixels one scrub gesture may travel per step.
+pub const MAX_NUMBER_FIELD_SCRUB_SENSITIVITY: f32 = 256.0;
+
+/// Default logical pixels one scrub gesture travels per step.
+pub const DEFAULT_NUMBER_FIELD_SCRUB_SENSITIVITY: f32 = 2.0;
 
 /// Maximum UTF-8 bytes retained by one number field's editing text.
 ///
@@ -23,6 +32,9 @@ pub const NUMBER_FIELD_REPEAT_INTERVAL: Duration = Duration::from_millis(60);
 const NUMBER_FIELD_INPUT_ID_TAG: u64 = 0x6a2f_c391_bd47_50e8;
 const NUMBER_FIELD_INCREMENT_ID_TAG: u64 = 0xb185_7e2c_04af_39d6;
 const NUMBER_FIELD_DECREMENT_ID_TAG: u64 = 0x27ce_4a80_f6d1_9b53;
+const NUMBER_FIELD_GROUP_ID_TAG: u64 = 0x9d61_38b7_2e0c_a4f5;
+const NUMBER_FIELD_SCRUB_AREA_ID_TAG: u64 = 0x4f0a_c68d_71b3_2e97;
+const NUMBER_FIELD_SCRUB_CURSOR_ID_TAG: u64 = 0xe258_9134_bd06_7cfa;
 
 /// Locale-shaped parsing and formatting rules for one number field.
 ///
@@ -223,6 +235,65 @@ impl NumberFieldFormat {
     }
 }
 
+/// The axis a number field's scrub area follows, Base UI's ScrubArea `direction`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum NumberFieldScrubDirection {
+    /// Dragging right increases the value.
+    #[default]
+    Horizontal,
+    /// Dragging up increases the value.
+    Vertical,
+    /// Either axis contributes, which suits a small square scrub handle.
+    Both,
+}
+
+/// Which step size one keyboard, wheel, or scrub gesture applies.
+///
+/// This is Base UI's modifier contract: Shift selects the large step and Alt the small one.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum NumberFieldStepSize {
+    /// The ordinary declared step.
+    #[default]
+    Normal,
+    /// The Shift-modified step, ten ordinary steps by default.
+    Large,
+    /// The Alt-modified step, one tenth of an ordinary step by default.
+    Small,
+}
+
+impl NumberFieldStepSize {
+    /// Choose the step size the way Base UI reads keyboard modifiers.
+    ///
+    /// Shift wins over Alt when both are held, matching the platform spin-button convention that
+    /// the coarser gesture takes precedence.
+    pub const fn from_modifiers(modifiers: Modifiers) -> Self {
+        if modifiers.contains(Modifiers::SHIFT) {
+            Self::Large
+        } else if modifiers.contains(Modifiers::ALT) {
+            Self::Small
+        } else {
+            Self::Normal
+        }
+    }
+}
+
+/// A copyable render-state snapshot for one unstyled number field.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct NumberFieldPartState {
+    /// Whether a captured scrub gesture is currently changing the value.
+    pub scrubbing: bool,
+    /// Whether a stepper is held and repeating.
+    pub stepping: bool,
+    /// Whether the field refuses every change.
+    pub disabled: bool,
+    /// Whether the field shows a value that may be read but not changed.
+    pub read_only: bool,
+    /// Whether the field requires a value before submission.
+    pub required: bool,
+    /// Whether the current text parses inside the declared range.
+    pub valid: bool,
+}
+
 /// Which stepper is currently held.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RepeatDirection {
@@ -244,9 +315,27 @@ pub struct NumberFieldState {
     minimum: f64,
     maximum: f64,
     step: f64,
+    small_step: f64,
+    large_step: f64,
+    snap_on_step: bool,
+    allow_wheel_scrub: bool,
+    scrub_direction: NumberFieldScrubDirection,
+    scrub_sensitivity: f32,
     format: NumberFieldFormat,
     disabled: bool,
+    read_only: bool,
+    required: bool,
+    scrub: Option<ScrubSession>,
     repeat: Option<(RepeatDirection, Instant)>,
+}
+
+/// The retained remainder of one captured scrub gesture.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ScrubSession {
+    /// Pixels travelled that have not yet become a whole step.
+    remainder: f32,
+    /// The pointer position, so a caller-owned scrub cursor can follow it.
+    position: Point,
 }
 
 impl NumberFieldState {
@@ -261,8 +350,17 @@ impl NumberFieldState {
             minimum: f64::NEG_INFINITY,
             maximum: f64::INFINITY,
             step: 1.0,
+            small_step: 0.0,
+            large_step: 0.0,
+            snap_on_step: false,
+            allow_wheel_scrub: true,
+            scrub_direction: NumberFieldScrubDirection::Horizontal,
+            scrub_sensitivity: DEFAULT_NUMBER_FIELD_SCRUB_SENSITIVITY,
             format,
             disabled: false,
+            read_only: false,
+            required: false,
+            scrub: None,
             repeat: None,
         }
     }
@@ -318,6 +416,89 @@ impl NumberFieldState {
         self.format(format)
     }
 
+    /// Replace the amount an Alt-modified gesture moves, Base UI's `smallStep`.
+    ///
+    /// The default is one tenth of an ordinary step. A non-finite or non-positive value restores
+    /// that default.
+    #[must_use]
+    pub fn small_step(mut self, small_step: f64) -> Self {
+        self.small_step = if small_step.is_finite() && small_step > 0.0 {
+            small_step
+        } else {
+            0.0
+        };
+        self
+    }
+
+    /// Replace the amount a Shift-modified gesture moves, Base UI's `largeStep`.
+    ///
+    /// The default is ten ordinary steps.
+    #[must_use]
+    pub fn large_step(mut self, large_step: f64) -> Self {
+        self.large_step = if large_step.is_finite() && large_step > 0.0 {
+            large_step
+        } else {
+            0.0
+        };
+        self
+    }
+
+    /// Snap a stepped value onto the step grid, Base UI's `snapOnStep`.
+    ///
+    /// Without this a step adds to whatever the user typed, so `3` steps to `4` with a step of
+    /// `5`. With it the value lands on the nearest multiple of the step measured from the minimum,
+    /// or from zero when the field is unbounded below.
+    #[must_use]
+    pub const fn snap_on_step(mut self, snap: bool) -> Self {
+        self.snap_on_step = snap;
+        self
+    }
+
+    /// Choose whether a focused field steps on scroll-wheel input, Base UI's `allowWheelScrub`.
+    ///
+    /// QuickGUI has always applied focused wheel input, so this defaults to `true` rather than to
+    /// Base UI's `false`; pass `false` to opt out.
+    #[must_use]
+    pub const fn allow_wheel_scrub(mut self, allow: bool) -> Self {
+        self.allow_wheel_scrub = allow;
+        self
+    }
+
+    /// Choose the axis a mounted scrub area follows.
+    #[must_use]
+    pub const fn scrub_direction(mut self, direction: NumberFieldScrubDirection) -> Self {
+        self.scrub_direction = direction;
+        self
+    }
+
+    /// Set how far a scrub gesture travels per step, in logical pixels.
+    #[must_use]
+    pub fn scrub_sensitivity(mut self, pixels_per_step: f32) -> Self {
+        self.scrub_sensitivity = if pixels_per_step.is_finite() && pixels_per_step > 0.0 {
+            pixels_per_step.min(MAX_NUMBER_FIELD_SCRUB_SENSITIVITY)
+        } else {
+            DEFAULT_NUMBER_FIELD_SCRUB_SENSITIVITY
+        };
+        self
+    }
+
+    /// Show a value the user may read and copy but not change, Base UI's `readOnly`.
+    ///
+    /// Unlike [`Self::disabled`], a read-only field stays focusable and stays in the Tab sequence;
+    /// it simply refuses every commit, step, wheel notch, and scrub.
+    #[must_use]
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
+    /// Require a value before submission, Base UI's `required`.
+    #[must_use]
+    pub const fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
     #[must_use]
     pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
@@ -361,6 +542,91 @@ impl NumberFieldState {
         self.disabled
     }
 
+    pub const fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    pub const fn is_required(&self) -> bool {
+        self.required
+    }
+
+    /// Whether a captured scrub gesture is currently changing the value.
+    pub const fn is_scrubbing(&self) -> bool {
+        self.scrub.is_some()
+    }
+
+    /// The pointer position of the active scrub gesture, for a caller-owned scrub cursor.
+    pub const fn scrub_position(&self) -> Option<Point> {
+        match self.scrub {
+            Some(session) => Some(session.position),
+            None => None,
+        }
+    }
+
+    /// The axis a mounted scrub area follows.
+    pub const fn scrub_direction_value(&self) -> NumberFieldScrubDirection {
+        self.scrub_direction
+    }
+
+    /// The logical pixels a scrub gesture travels per step.
+    pub const fn scrub_sensitivity_value(&self) -> f32 {
+        self.scrub_sensitivity
+    }
+
+    /// Whether a stepped value lands on the step grid.
+    pub const fn snaps_on_step(&self) -> bool {
+        self.snap_on_step
+    }
+
+    /// Whether focused wheel input steps the value.
+    pub const fn allows_wheel_scrub(&self) -> bool {
+        self.allow_wheel_scrub
+    }
+
+    /// The amount one small (Alt) gesture moves, one tenth of a step by default.
+    pub const fn small_step_value(&self) -> f64 {
+        if self.small_step > 0.0 {
+            self.small_step
+        } else {
+            self.step * 0.1
+        }
+    }
+
+    /// The amount one large (Shift) gesture moves, ten steps by default.
+    pub const fn large_step_value(&self) -> f64 {
+        if self.large_step > 0.0 {
+            self.large_step
+        } else {
+            self.step * 10.0
+        }
+    }
+
+    /// The amount one gesture of the given size moves.
+    pub const fn step_amount(&self, size: NumberFieldStepSize) -> f64 {
+        match size {
+            NumberFieldStepSize::Normal => self.step,
+            NumberFieldStepSize::Large => self.large_step_value(),
+            NumberFieldStepSize::Small => self.small_step_value(),
+        }
+    }
+
+    /// A copyable snapshot of what Base UI exposes as `data-*` attributes.
+    pub fn state(&self) -> NumberFieldPartState {
+        NumberFieldPartState {
+            scrubbing: self.is_scrubbing(),
+            stepping: self.is_stepping(),
+            disabled: self.disabled,
+            read_only: self.read_only,
+            required: self.required,
+            valid: self.is_valid(),
+        }
+    }
+
+    /// Whether this field refuses every value change.
+    const fn is_locked(&self) -> bool {
+        self.disabled || self.read_only
+    }
+
     /// Whether the current text parses to a value inside the field's range.
     ///
     /// An empty field is valid; use [`crate::Field`] for a required-value contract.
@@ -379,7 +645,7 @@ impl NumberFieldState {
     /// that. Input longer than [`MAX_NUMBER_FIELD_TEXT_BYTES`] is truncated on a character
     /// boundary rather than retained.
     pub fn set_text(&mut self, text: impl Into<Arc<str>>) -> bool {
-        if self.disabled {
+        if self.is_locked() {
             return false;
         }
         let text = bounded_text(text.into());
@@ -396,7 +662,7 @@ impl NumberFieldState {
     /// Call this on Return and on blur. Unparseable text restores the last committed value; an
     /// empty field stays empty.
     pub fn commit(&mut self) -> bool {
-        if self.disabled {
+        if self.is_locked() {
             return false;
         }
         if self.text.trim().is_empty() {
@@ -426,7 +692,25 @@ impl NumberFieldState {
     ///
     /// An empty field starts from zero clamped into range, matching desktop spin buttons.
     pub fn step_by(&mut self, steps: f64) -> bool {
-        if self.disabled || !steps.is_finite() {
+        self.step_by_amount(steps, self.step)
+    }
+
+    /// Move the value by `steps` gestures of the given size.
+    ///
+    /// This is the Base UI modifier contract: `Large` applies [`Self::large_step_value`] and
+    /// `Small` applies [`Self::small_step_value`], so one keyboard, wheel, or scrub path covers
+    /// Shift and Alt without the application re-deriving the amounts.
+    pub fn step_by_size(&mut self, steps: f64, size: NumberFieldStepSize) -> bool {
+        self.step_by_amount(steps, self.step_amount(size))
+    }
+
+    /// Move the value by `steps` gestures whose size comes from held keyboard modifiers.
+    pub fn step_with_modifiers(&mut self, steps: f64, modifiers: Modifiers) -> bool {
+        self.step_by_size(steps, NumberFieldStepSize::from_modifiers(modifiers))
+    }
+
+    fn step_by_amount(&mut self, steps: f64, amount: f64) -> bool {
+        if self.is_locked() || !steps.is_finite() || !amount.is_finite() {
             return false;
         }
         let current = self
@@ -434,13 +718,29 @@ impl NumberFieldState {
             .parse(&self.text)
             .or(self.committed)
             .unwrap_or_else(|| 0.0_f64.clamp(self.minimum, self.maximum));
-        let value = (current + self.step * steps).clamp(self.minimum, self.maximum);
+        let moved = current + amount * steps;
+        let value = self
+            .snapped(moved, amount)
+            .clamp(self.minimum, self.maximum);
         let text = self.format.format(value);
         let changed = self.value != Some(value) || self.text != text;
         self.value = Some(value);
         self.committed = Some(value);
         self.text = text;
         changed
+    }
+
+    /// Round a stepped value onto the step grid when `snap_on_step` is declared.
+    fn snapped(&self, value: f64, amount: f64) -> f64 {
+        if !self.snap_on_step || amount <= 0.0 || !value.is_finite() {
+            return value;
+        }
+        let origin = if self.minimum.is_finite() {
+            self.minimum
+        } else {
+            0.0
+        };
+        origin + ((value - origin) / amount).round() * amount
     }
 
     /// Step once toward the maximum.
@@ -458,15 +758,28 @@ impl NumberFieldState {
     /// `delta` is logical pixels or lines; only its sign is used, so trackpad inertia cannot run
     /// the value away.
     pub fn wheel(&mut self, delta: f32, focused: bool) -> bool {
-        if !focused || !delta.is_finite() || delta == 0.0 {
+        self.wheel_with_modifiers(delta, focused, Modifiers::empty())
+    }
+
+    /// Step from a scroll wheel, applying the Shift and Alt step sizes.
+    ///
+    /// Declaring `allow_wheel_scrub(false)` — Base UI's `allowWheelScrub` — makes both wheel entry
+    /// points inert.
+    pub fn wheel_with_modifiers(
+        &mut self,
+        delta: f32,
+        focused: bool,
+        modifiers: Modifiers,
+    ) -> bool {
+        if !self.allow_wheel_scrub || !focused || !delta.is_finite() || delta == 0.0 {
             return false;
         }
-        self.step_by(if delta > 0.0 { 1.0 } else { -1.0 })
+        self.step_with_modifiers(if delta > 0.0 { 1.0 } else { -1.0 }, modifiers)
     }
 
     /// Press and hold one stepper: steps once and arms the first repeat deadline.
     pub fn press_step(&mut self, forward: bool, now: Instant) -> bool {
-        if self.disabled {
+        if self.is_locked() {
             return false;
         }
         self.repeat = Some((
@@ -527,6 +840,62 @@ impl NumberFieldState {
     pub const fn is_stepping(&self) -> bool {
         self.repeat.is_some()
     }
+
+    /// Apply one captured pointer event from a mounted scrub area.
+    ///
+    /// This is Base UI's ScrubArea: dragging over the area changes the value without touching the
+    /// text caret. Motion is accumulated in logical pixels and converted to whole steps at
+    /// [`Self::scrub_sensitivity`], so a slow drag still moves exactly one step at a time and a
+    /// fast one never loses a fraction. Dragging right increases a horizontal scrub area and
+    /// dragging up increases a vertical one; the held modifiers select the small or large step.
+    ///
+    /// The gesture is pure pointer capture: it schedules no task, timer, or repeat, and a released
+    /// scrub leaves the field with no retained session at all. Returns whether anything the
+    /// application renders changed, including the scrubbing flag itself.
+    pub fn apply_scrub(&mut self, event: &PointerEvent) -> bool {
+        if self.is_locked() {
+            return false;
+        }
+        match event.phase {
+            PointerPhase::Down => {
+                let started = self.scrub.is_none();
+                self.scrub = Some(ScrubSession {
+                    remainder: 0.0,
+                    position: event.position,
+                });
+                started
+            }
+            PointerPhase::Move => {
+                let Some(mut session) = self.scrub else {
+                    return false;
+                };
+                let travel = match self.scrub_direction {
+                    NumberFieldScrubDirection::Horizontal => event.delta.x,
+                    NumberFieldScrubDirection::Vertical => -event.delta.y,
+                    NumberFieldScrubDirection::Both => event.delta.x - event.delta.y,
+                };
+                let moved = session.position != event.position;
+                session.position = event.position;
+                if !travel.is_finite() {
+                    self.scrub = Some(session);
+                    return moved;
+                }
+                session.remainder += travel;
+                let steps = (session.remainder / self.scrub_sensitivity).trunc();
+                session.remainder -= steps * self.scrub_sensitivity;
+                self.scrub = Some(session);
+                let stepped =
+                    steps != 0.0 && self.step_with_modifiers(f64::from(steps), event.modifiers);
+                stepped || moved
+            }
+            PointerPhase::Up | PointerPhase::Cancel => self.scrub.take().is_some(),
+        }
+    }
+
+    /// End a scrub gesture the application cancelled itself.
+    pub fn end_scrub(&mut self) -> bool {
+        self.scrub.take().is_some()
+    }
 }
 
 fn bounded_text(text: Arc<str>) -> Arc<str> {
@@ -574,6 +943,21 @@ impl NumberField {
         derived_number_field_id(self.root_id, NUMBER_FIELD_DECREMENT_ID_TAG)
     }
 
+    /// Stable identity of the group that wraps the steppers and the input.
+    pub fn group_id(self) -> ElementId {
+        derived_number_field_id(self.root_id, NUMBER_FIELD_GROUP_ID_TAG)
+    }
+
+    /// Stable identity of the scrub area.
+    pub fn scrub_area_id(self) -> ElementId {
+        derived_number_field_id(self.root_id, NUMBER_FIELD_SCRUB_AREA_ID_TAG)
+    }
+
+    /// Stable identity of the caller-owned cursor shown while scrubbing.
+    pub fn scrub_area_cursor_id(self) -> ElementId {
+        derived_number_field_id(self.root_id, NUMBER_FIELD_SCRUB_CURSOR_ID_TAG)
+    }
+
     /// Decorate an application-owned root without adding layout or appearance.
     pub fn root_part(self, root: Element) -> Element {
         root.id(self.root_id)
@@ -599,6 +983,8 @@ impl NumberField {
             .accessibility_value_range(range)
             .invalid(!state.is_valid())
             .disabled(state.disabled)
+            .accessibility_read_only(state.read_only)
+            .required(state.required)
             .app_region_no_drag()
     }
 
@@ -613,6 +999,54 @@ impl NumberField {
     /// Decorate the application-owned decrement button.
     pub fn decrement_part(self, state: &NumberFieldState, decrement: Element) -> Element {
         stepper(decrement, self.decrement_id(), state.disabled)
+    }
+
+    /// Decorate the caller-owned group that wraps the decrement, input, and increment parts.
+    ///
+    /// Base UI's Group keeps the three controls one addressable unit; QuickGUI supplies the stable
+    /// identity and the Group role and adds no layout, so the application still chooses the row,
+    /// the order, and the spacing.
+    pub fn group_part(self, group: Element) -> Element {
+        group
+            .id(self.group_id())
+            .accessibility_role(AccessibilityRole::Group)
+    }
+
+    /// Decorate the caller-owned area a pointer drag scrubs the value over.
+    ///
+    /// Attach a [`crate::ViewContext::pointer_listener`] registered for [`Self::scrub_area_id`] and
+    /// forward the event to [`NumberFieldState::apply_scrub`]. QuickGUI supplies the identity, the
+    /// axis-appropriate resize cursor, drag exclusion, and text-selection suppression; the area is
+    /// hidden from assistive technology because the input already carries the spin-button
+    /// semantics.
+    pub fn scrub_area_part(self, state: &NumberFieldState, scrub_area: Element) -> Element {
+        let scrub_area = scrub_area
+            .id(self.scrub_area_id())
+            .accessibility_hidden(true)
+            .app_region_no_drag()
+            .user_select_none();
+        if state.disabled || state.read_only {
+            return scrub_area.cursor_default();
+        }
+        match state.scrub_direction {
+            NumberFieldScrubDirection::Vertical => scrub_area.cursor_ns_resize(),
+            NumberFieldScrubDirection::Horizontal | NumberFieldScrubDirection::Both => {
+                scrub_area.cursor_ew_resize()
+            }
+        }
+    }
+
+    /// Decorate the caller-owned cursor a scrub area shows while it is being dragged.
+    ///
+    /// Mount it only while [`NumberFieldState::is_scrubbing`] is true and place it from
+    /// [`NumberFieldState::scrub_position`]; QuickGUI supplies the identity and keeps the
+    /// decoration out of the accessible name and out of hit testing.
+    pub fn scrub_area_cursor_part(self, cursor: Element) -> Element {
+        cursor
+            .id(self.scrub_area_cursor_id())
+            .accessibility_hidden(true)
+            .app_region_no_drag()
+            .user_select_none()
     }
 }
 
@@ -1036,5 +1470,445 @@ mod tests {
         let root = number_field_root("count");
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
         assert!(root.children.is_empty());
+    }
+
+    fn scrub_event(phase: PointerPhase, dx: f32, dy: f32, modifiers: Modifiers) -> PointerEvent {
+        PointerEvent {
+            phase,
+            position: crate::Point::new(100.0 + dx, 100.0 + dy),
+            origin: crate::Point::new(100.0, 100.0),
+            local_position: crate::Point::new(dx, dy),
+            local_origin: crate::Point::ZERO,
+            delta: crate::Vector::new(dx, dy),
+            button: crate::MouseButton::Left,
+            modifiers,
+            size: crate::Size::new(40.0, 20.0),
+        }
+    }
+
+    #[test]
+    fn modifier_step_sizes_default_to_ten_and_a_tenth_of_the_step() {
+        let state = NumberFieldState::new(0.0).step(2.0);
+        assert_eq!(state.step_amount(NumberFieldStepSize::Normal), 2.0);
+        assert_eq!(state.step_amount(NumberFieldStepSize::Large), 20.0);
+        assert_eq!(state.step_amount(NumberFieldStepSize::Small), 0.2);
+
+        let declared = state.small_step(0.5).large_step(50.0);
+        assert_eq!(declared.small_step_value(), 0.5);
+        assert_eq!(declared.large_step_value(), 50.0);
+        // Non-finite or non-positive overrides fall back to the derived defaults.
+        let restored = declared.small_step(f64::NAN).large_step(-1.0);
+        assert_eq!(restored.small_step_value(), 0.2);
+        assert_eq!(restored.large_step_value(), 20.0);
+
+        assert_eq!(
+            NumberFieldStepSize::from_modifiers(Modifiers::empty()),
+            NumberFieldStepSize::Normal
+        );
+        assert_eq!(
+            NumberFieldStepSize::from_modifiers(Modifiers::ALT),
+            NumberFieldStepSize::Small
+        );
+        assert_eq!(
+            NumberFieldStepSize::from_modifiers(Modifiers::SHIFT),
+            NumberFieldStepSize::Large
+        );
+        // A coarse gesture wins when both modifiers are held.
+        assert_eq!(
+            NumberFieldStepSize::from_modifiers(Modifiers::SHIFT | Modifiers::ALT),
+            NumberFieldStepSize::Large
+        );
+
+        let mut field = NumberFieldState::new(10.0).step(2.0).precision(1);
+        assert!(field.step_with_modifiers(1.0, Modifiers::SHIFT));
+        assert_eq!(field.value(), Some(30.0));
+        assert!(field.step_with_modifiers(-1.0, Modifiers::ALT));
+        assert_eq!(field.value(), Some(29.8));
+        assert!(field.step_with_modifiers(1.0, Modifiers::empty()));
+        assert_eq!(field.value(), Some(31.8));
+    }
+
+    #[test]
+    fn snap_on_step_lands_on_the_grid_and_wheel_scrubbing_can_be_refused() {
+        let mut loose = NumberFieldState::new(3.0).step(5.0);
+        assert!(loose.increment());
+        assert_eq!(loose.value(), Some(8.0));
+
+        let mut snapped = NumberFieldState::new(3.0).step(5.0).snap_on_step(true);
+        assert!(snapped.snaps_on_step());
+        assert!(snapped.increment());
+        assert_eq!(snapped.value(), Some(10.0));
+        assert!(snapped.decrement());
+        assert_eq!(snapped.value(), Some(5.0));
+
+        // The grid is measured from the minimum when the field declares one.
+        let mut offset = NumberFieldState::new(3.0)
+            .range(1.0, 100.0)
+            .step(5.0)
+            .snap_on_step(true);
+        assert!(offset.increment());
+        assert_eq!(offset.value(), Some(6.0));
+
+        let mut wheeled = NumberFieldState::new(0.0).step(1.0);
+        assert!(wheeled.allows_wheel_scrub());
+        assert!(wheeled.wheel(1.0, true));
+        assert_eq!(wheeled.value(), Some(1.0));
+        assert!(wheeled.wheel_with_modifiers(1.0, true, Modifiers::SHIFT));
+        assert_eq!(wheeled.value(), Some(11.0));
+        assert!(!wheeled.wheel(1.0, false));
+
+        let mut refused = NumberFieldState::new(0.0).allow_wheel_scrub(false);
+        assert!(!refused.allows_wheel_scrub());
+        assert!(!refused.wheel(1.0, true));
+        assert!(!refused.wheel_with_modifiers(-1.0, true, Modifiers::SHIFT));
+        assert_eq!(refused.value(), Some(0.0));
+    }
+
+    #[test]
+    fn a_read_only_field_refuses_every_change_without_leaving_the_tab_sequence() {
+        let mut field = NumberFieldState::new(4.0)
+            .step(1.0)
+            .read_only(true)
+            .required(true);
+        assert!(field.is_read_only());
+        assert!(field.is_required());
+        assert!(!field.is_disabled());
+        assert!(!field.increment());
+        assert!(!field.set_text("9"));
+        assert!(!field.commit());
+        assert!(!field.wheel(1.0, true));
+        assert!(!field.press_step(true, Instant::now()));
+        assert!(!field.apply_scrub(&scrub_event(
+            PointerPhase::Down,
+            0.0,
+            0.0,
+            Modifiers::empty()
+        )));
+        assert_eq!(field.value(), Some(4.0));
+
+        let number_field = NumberField::new("quantity");
+        let input = number_field.input_part(&field, text_input(field.text().clone()));
+        assert!(input.accessibility.read_only);
+        assert!(input.accessibility.required);
+        assert!(!input.accessibility.disabled);
+        // A read-only scrub area shows no drag affordance.
+        assert_eq!(
+            number_field.scrub_area_part(&field, div()).cursor_style,
+            Some(crate::CursorStyle::Arrow)
+        );
+
+        let state = field.state();
+        assert!(state.read_only);
+        assert!(state.required);
+        assert!(!state.scrubbing);
+        assert!(!state.stepping);
+        assert!(state.valid);
+    }
+
+    #[test]
+    fn a_captured_scrub_accumulates_pixels_into_whole_steps_and_retains_nothing_after_release() {
+        let mut field = NumberFieldState::new(0.0)
+            .step(1.0)
+            .scrub_sensitivity(10.0)
+            .range(-100.0, 100.0);
+        assert_eq!(field.scrub_sensitivity_value(), 10.0);
+        assert_eq!(
+            field.scrub_direction_value(),
+            NumberFieldScrubDirection::Horizontal
+        );
+
+        assert!(field.apply_scrub(&scrub_event(
+            PointerPhase::Down,
+            0.0,
+            0.0,
+            Modifiers::empty()
+        )));
+        assert!(field.is_scrubbing());
+        assert_eq!(
+            field.scrub_position(),
+            Some(crate::Point::new(100.0, 100.0))
+        );
+        assert_eq!(field.value(), Some(0.0));
+
+        // Less than one sensitivity of travel accumulates instead of stepping.
+        field.apply_scrub(&scrub_event(
+            PointerPhase::Move,
+            6.0,
+            0.0,
+            Modifiers::empty(),
+        ));
+        assert_eq!(field.value(), Some(0.0));
+        // The retained remainder makes the next short move cross the threshold exactly once.
+        field.apply_scrub(&scrub_event(
+            PointerPhase::Move,
+            6.0,
+            0.0,
+            Modifiers::empty(),
+        ));
+        assert_eq!(field.value(), Some(1.0));
+        // A long drag converts every whole step it travelled.
+        field.apply_scrub(&scrub_event(
+            PointerPhase::Move,
+            35.0,
+            0.0,
+            Modifiers::empty(),
+        ));
+        assert_eq!(field.value(), Some(4.0));
+        // Dragging back the other way reverses it, carrying the retained remainder with it.
+        field.apply_scrub(&scrub_event(
+            PointerPhase::Move,
+            -40.0,
+            0.0,
+            Modifiers::empty(),
+        ));
+        assert_eq!(field.value(), Some(1.0));
+        // The held modifier selects the large step.
+        field.apply_scrub(&scrub_event(
+            PointerPhase::Move,
+            30.0,
+            0.0,
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(field.value(), Some(21.0));
+
+        assert!(field.apply_scrub(&scrub_event(PointerPhase::Up, 0.0, 0.0, Modifiers::empty())));
+        assert!(!field.is_scrubbing());
+        assert_eq!(field.scrub_position(), None);
+        assert!(!field.end_scrub());
+        // A move without a session is inert rather than resuming the gesture.
+        assert!(!field.apply_scrub(&scrub_event(
+            PointerPhase::Move,
+            100.0,
+            0.0,
+            Modifiers::empty()
+        )));
+        assert_eq!(field.value(), Some(21.0));
+
+        // A vertical area increases upward.
+        let mut vertical = NumberFieldState::new(0.0)
+            .step(1.0)
+            .scrub_sensitivity(5.0)
+            .scrub_direction(NumberFieldScrubDirection::Vertical);
+        vertical.apply_scrub(&scrub_event(
+            PointerPhase::Down,
+            0.0,
+            0.0,
+            Modifiers::empty(),
+        ));
+        vertical.apply_scrub(&scrub_event(
+            PointerPhase::Move,
+            0.0,
+            -10.0,
+            Modifiers::empty(),
+        ));
+        assert_eq!(vertical.value(), Some(2.0));
+        vertical.apply_scrub(&scrub_event(
+            PointerPhase::Cancel,
+            0.0,
+            0.0,
+            Modifiers::empty(),
+        ));
+        assert!(!vertical.is_scrubbing());
+
+        // Sensitivity is bounded and a non-finite value restores the default.
+        assert_eq!(
+            NumberFieldState::new(0.0)
+                .scrub_sensitivity(1.0e9)
+                .scrub_sensitivity_value(),
+            MAX_NUMBER_FIELD_SCRUB_SENSITIVITY
+        );
+        assert_eq!(
+            NumberFieldState::new(0.0)
+                .scrub_sensitivity(f32::NAN)
+                .scrub_sensitivity_value(),
+            DEFAULT_NUMBER_FIELD_SCRUB_SENSITIVITY
+        );
+    }
+
+    #[test]
+    fn base_ui_number_field_parts_have_distinct_identities_and_no_appearance() {
+        let field = NumberFieldState::new(4.0).scrub_direction(NumberFieldScrubDirection::Vertical);
+        let number_field = NumberField::new("quantity");
+        let ids = [
+            number_field.input_id(),
+            number_field.increment_id(),
+            number_field.decrement_id(),
+            number_field.group_id(),
+            number_field.scrub_area_id(),
+            number_field.scrub_area_cursor_id(),
+        ];
+        for (index, id) in ids.iter().enumerate() {
+            assert_ne!(*id, number_field.root_id());
+            assert!(!ids[..index].contains(id));
+        }
+
+        let group = number_field.group_part(div().bg(crate::Color::rgb8(1, 2, 3)));
+        assert_eq!(group.explicit_id, Some(number_field.group_id()));
+        assert_eq!(group.accessibility.role, AccessibilityRole::Group);
+        assert_eq!(group.visual.background, Some(crate::Color::rgb8(1, 2, 3)));
+
+        let scrub = number_field.scrub_area_part(&field, div());
+        assert_eq!(scrub.explicit_id, Some(number_field.scrub_area_id()));
+        assert!(scrub.accessibility.hidden);
+        assert_eq!(scrub.cursor_style, Some(crate::CursorStyle::ResizeUpDown));
+        assert_eq!(scrub.visual.background, None);
+        assert_eq!(
+            number_field
+                .scrub_area_part(
+                    &field.scrub_direction(NumberFieldScrubDirection::Horizontal),
+                    div()
+                )
+                .cursor_style,
+            Some(crate::CursorStyle::ResizeLeftRight)
+        );
+
+        let cursor = number_field.scrub_area_cursor_part(div());
+        assert_eq!(
+            cursor.explicit_id,
+            Some(number_field.scrub_area_cursor_id())
+        );
+        assert!(cursor.accessibility.hidden);
+        assert_eq!(cursor.visual.background, None);
+    }
+
+    struct ScrubFieldView {
+        amount: NumberFieldState,
+        locked: NumberFieldState,
+    }
+
+    impl Default for ScrubFieldView {
+        fn default() -> Self {
+            Self {
+                amount: NumberFieldState::new(20.0)
+                    .range(0.0, 100.0)
+                    .step(1.0)
+                    .scrub_sensitivity(4.0),
+                locked: NumberFieldState::new(7.0).read_only(true).required(true),
+            }
+        }
+    }
+
+    impl View for ScrubFieldView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let amount = NumberField::new("amount");
+            let locked = NumberField::new("locked");
+            let scrub =
+                cx.pointer_listener(amount.scrub_area_id(), |view: &mut Self, event, cx| {
+                    if view.amount.apply_scrub(event) {
+                        cx.invalidate();
+                    }
+                });
+            let mut scrub_area =
+                amount.scrub_area_part(&self.amount, div().w(40.0).h(20.0).on_pointer(scrub));
+            if self.amount.is_scrubbing() {
+                scrub_area = scrub_area.child(amount.scrub_area_cursor_part(div().size(8.0, 8.0)));
+            }
+            div()
+                .child(
+                    amount.root_part(div()).child(
+                        amount
+                            .group_part(div().flex_row())
+                            .child(amount.decrement_part(&self.amount, button().child(text("-"))))
+                            .child(amount.input_part(
+                                &self.amount,
+                                text_input(self.amount.text().clone()).w(80.0),
+                            ))
+                            .child(amount.increment_part(&self.amount, button().child(text("+"))))
+                            .child(scrub_area),
+                    ),
+                )
+                .child(
+                    locked.root_part(div()).child(
+                        locked.input_part(
+                            &self.locked,
+                            text_input(self.locked.text().clone())
+                                .w(80.0)
+                                .accessibility_label("Locked amount"),
+                        ),
+                    ),
+                )
+        }
+    }
+
+    #[test]
+    fn scrub_and_read_only_parts_mount_and_project_without_idle_work() {
+        let (mut cx, view) = TestAppContext::new(ScrubFieldView::default()).unwrap();
+        let window = view.window_handle();
+        let amount = NumberField::new("amount");
+        let locked = NumberField::new("locked");
+
+        assert!(cx.contains_element(window, amount.group_id()).unwrap());
+        assert!(cx.contains_element(window, amount.scrub_area_id()).unwrap());
+        // The scrub cursor is mounted only while a gesture is active.
+        assert!(
+            !cx.contains_element(window, amount.scrub_area_cursor_id())
+                .unwrap()
+        );
+
+        let update = cx.accessibility_update(window).unwrap();
+        let node = |id: ElementId| {
+            update
+                .nodes
+                .iter()
+                .find_map(|(node_id, node)| (node_id.0 == id.as_u64()).then_some(node))
+                .expect("number field accessibility node")
+        };
+        let group = node(amount.group_id());
+        assert_eq!(group.role(), accesskit::Role::Group);
+
+        let editable = node(amount.input_id());
+        assert!(!editable.is_read_only());
+        assert!(!editable.is_required());
+
+        let read_only = node(locked.input_id());
+        assert_eq!(read_only.role(), accesskit::Role::SpinButton);
+        assert!(read_only.is_read_only());
+        assert!(read_only.is_required());
+        assert!(!read_only.is_disabled());
+        assert_eq!(read_only.label(), Some("Locked amount"));
+
+        // A read-only field stays focusable, unlike a disabled one.
+        cx.focus(window, locked.input_id()).unwrap();
+        assert_eq!(cx.focused(window).unwrap(), Some(locked.input_id()));
+
+        cx.update(view, |view, cx| {
+            let started = view.amount.apply_scrub(&scrub_event(
+                PointerPhase::Down,
+                0.0,
+                0.0,
+                Modifiers::empty(),
+            ));
+            let moved = view.amount.apply_scrub(&scrub_event(
+                PointerPhase::Move,
+                12.0,
+                0.0,
+                Modifiers::empty(),
+            ));
+            assert!(started && moved);
+            cx.invalidate();
+        })
+        .unwrap();
+        assert_eq!(
+            cx.read(view, |view| view.amount.value()).unwrap(),
+            Some(23.0)
+        );
+        assert!(
+            cx.contains_element(window, amount.scrub_area_cursor_id())
+                .unwrap()
+        );
+
+        cx.update(view, |view, cx| {
+            view.amount.end_scrub();
+            cx.invalidate();
+        })
+        .unwrap();
+        assert!(
+            !cx.contains_element(window, amount.scrub_area_cursor_id())
+                .unwrap()
+        );
+
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
     }
 }

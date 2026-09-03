@@ -1,6 +1,7 @@
 use std::{
     any::{Any, TypeId},
     borrow::Cow,
+    cell::RefCell,
     fmt,
     rc::Rc,
     sync::Arc,
@@ -406,7 +407,233 @@ pub(crate) struct AnchorStyle {
     pub target: AnchorTarget,
     pub placement: AnchorPlacement,
     pub gap: f32,
+    pub align_offset: f32,
     pub viewport_margin: f32,
+    pub sticky: bool,
+}
+
+/// Where an anchored element actually landed on the most recently painted frame.
+///
+/// A declared [`AnchorPlacement`] is only a preference: QuickGUI flips to the opposite side and
+/// re-aligns on the cross axis whenever the preferred side does not fit inside the collision
+/// viewport. Presentation that has to follow the real placement — a popover arrow, a
+/// side-dependent transform origin, a popup sized to the space it was actually given — must read
+/// the resolved value instead of guessing from the preference.
+///
+/// Every rectangle is in window logical coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResolvedAnchorPlacement {
+    /// The side and cross-axis alignment the element was actually placed with.
+    pub placement: AnchorPlacement,
+    /// The anchor rectangle the element was placed against.
+    pub anchor: crate::Rect,
+    /// The placed rectangle of the anchored element itself.
+    pub bounds: crate::Rect,
+    /// Space left for the element between the anchor and the collision viewport.
+    ///
+    /// The primary axis measures the gap-adjusted room on [`Self::placement`]'s resolved side; the
+    /// cross axis measures the full margin-inset viewport extent. An application sizes a scrolling
+    /// popup from this instead of measuring the window itself.
+    pub available: crate::Size,
+    /// Whether the anchor rectangle left the collision viewport entirely.
+    ///
+    /// This is the moment Base UI hides a popup whose anchor scrolled out of view; QuickGUI reports
+    /// it and leaves the decision to the application.
+    pub anchor_hidden: bool,
+}
+
+impl ResolvedAnchorPlacement {
+    /// The resolved side, discarding the cross-axis alignment.
+    pub const fn side(self) -> AnchorSide {
+        AnchorSide::of(self.placement)
+    }
+
+    /// The resolved cross-axis alignment, discarding the side.
+    pub const fn align(self) -> AnchorAlign {
+        AnchorAlign::of(self.placement)
+    }
+}
+
+impl Default for ResolvedAnchorPlacement {
+    fn default() -> Self {
+        Self {
+            placement: AnchorPlacement::BottomStart,
+            anchor: crate::Rect::ZERO,
+            bounds: crate::Rect::ZERO,
+            available: crate::Size::ZERO,
+            anchor_hidden: false,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct AnchorPlacementInner {
+    resolved: Option<ResolvedAnchorPlacement>,
+    revision: u64,
+}
+
+/// An application-owned receiver for the placement QuickGUI resolved for one anchored element.
+///
+/// Store the handle on the view next to the state that opens the surface, bind it with
+/// [`Element::report_anchor_placement`], and read [`Self::resolved`] while declaring the next
+/// frame. The handle retains one small allocation and no task, timer, observer, or idle scheduler
+/// source: QuickGUI writes it during the paint it was already performing, and requests exactly one
+/// correcting frame when the resolved placement changed, so a settled window stays settled.
+///
+/// ```
+/// use quickgui::{AnchorPlacement, AnchorPlacementHandle, div};
+///
+/// let placement = AnchorPlacementHandle::new();
+/// assert_eq!(placement.resolved(), None);
+/// let positioner = div()
+///     .anchor_to("trigger", AnchorPlacement::BottomStart)
+///     .report_anchor_placement(placement.clone());
+/// assert!(positioner.reports_anchor_placement());
+/// ```
+#[derive(Clone, Default)]
+pub struct AnchorPlacementHandle(Rc<RefCell<AnchorPlacementInner>>);
+
+impl AnchorPlacementHandle {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The placement resolved on the most recent painted frame, or `None` before the first one.
+    pub fn resolved(&self) -> Option<ResolvedAnchorPlacement> {
+        self.0.borrow().resolved
+    }
+
+    /// The resolved placement, falling back to `preferred` before the first painted frame.
+    pub fn placement_or(&self, preferred: AnchorPlacement) -> AnchorPlacement {
+        self.resolved()
+            .map_or(preferred, |resolved| resolved.placement)
+    }
+
+    /// Forget the last resolved placement so a reopened surface cannot read a stale side.
+    pub fn clear(&self) {
+        let mut inner = self.0.borrow_mut();
+        if inner.resolved.is_some() {
+            inner.resolved = None;
+            inner.revision = inner.revision.wrapping_add(1);
+        }
+    }
+
+    pub(crate) fn revision(&self) -> u64 {
+        self.0.borrow().revision
+    }
+
+    pub(crate) fn report(&self, resolved: ResolvedAnchorPlacement) {
+        let mut inner = self.0.borrow_mut();
+        if inner.resolved == Some(resolved) {
+            return;
+        }
+        inner.resolved = Some(resolved);
+        inner.revision = inner.revision.wrapping_add(1);
+    }
+}
+
+impl fmt::Debug for AnchorPlacementHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AnchorPlacementHandle")
+            .field("resolved", &self.resolved())
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for AnchorPlacementHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+/// The side of its anchor an element was placed on.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum AnchorSide {
+    Top,
+    #[default]
+    Bottom,
+    Left,
+    Right,
+}
+
+impl AnchorSide {
+    /// The side half of a full placement.
+    pub const fn of(placement: AnchorPlacement) -> Self {
+        match placement {
+            AnchorPlacement::TopStart | AnchorPlacement::Top | AnchorPlacement::TopEnd => Self::Top,
+            AnchorPlacement::BottomStart | AnchorPlacement::Bottom | AnchorPlacement::BottomEnd => {
+                Self::Bottom
+            }
+            AnchorPlacement::LeftStart | AnchorPlacement::Left | AnchorPlacement::LeftEnd => {
+                Self::Left
+            }
+            AnchorPlacement::RightStart | AnchorPlacement::Right | AnchorPlacement::RightEnd => {
+                Self::Right
+            }
+        }
+    }
+
+    /// The side a flip would move to.
+    pub const fn opposite(self) -> Self {
+        match self {
+            Self::Top => Self::Bottom,
+            Self::Bottom => Self::Top,
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+
+    /// Whether the side runs along the vertical axis, so the cross axis is horizontal.
+    pub const fn is_vertical(self) -> bool {
+        matches!(self, Self::Top | Self::Bottom)
+    }
+}
+
+/// The cross-axis alignment an element was placed with.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum AnchorAlign {
+    #[default]
+    Start,
+    Center,
+    End,
+}
+
+impl AnchorAlign {
+    /// The alignment half of a full placement.
+    pub const fn of(placement: AnchorPlacement) -> Self {
+        match placement {
+            AnchorPlacement::TopStart
+            | AnchorPlacement::BottomStart
+            | AnchorPlacement::LeftStart
+            | AnchorPlacement::RightStart => Self::Start,
+            AnchorPlacement::Top
+            | AnchorPlacement::Bottom
+            | AnchorPlacement::Left
+            | AnchorPlacement::Right => Self::Center,
+            AnchorPlacement::TopEnd
+            | AnchorPlacement::BottomEnd
+            | AnchorPlacement::LeftEnd
+            | AnchorPlacement::RightEnd => Self::End,
+        }
+    }
+}
+
+/// Compose a side and a cross-axis alignment into one [`AnchorPlacement`].
+pub const fn anchor_placement(side: AnchorSide, align: AnchorAlign) -> AnchorPlacement {
+    match (side, align) {
+        (AnchorSide::Top, AnchorAlign::Start) => AnchorPlacement::TopStart,
+        (AnchorSide::Top, AnchorAlign::Center) => AnchorPlacement::Top,
+        (AnchorSide::Top, AnchorAlign::End) => AnchorPlacement::TopEnd,
+        (AnchorSide::Bottom, AnchorAlign::Start) => AnchorPlacement::BottomStart,
+        (AnchorSide::Bottom, AnchorAlign::Center) => AnchorPlacement::Bottom,
+        (AnchorSide::Bottom, AnchorAlign::End) => AnchorPlacement::BottomEnd,
+        (AnchorSide::Left, AnchorAlign::Start) => AnchorPlacement::LeftStart,
+        (AnchorSide::Left, AnchorAlign::Center) => AnchorPlacement::Left,
+        (AnchorSide::Left, AnchorAlign::End) => AnchorPlacement::LeftEnd,
+        (AnchorSide::Right, AnchorAlign::Start) => AnchorPlacement::RightStart,
+        (AnchorSide::Right, AnchorAlign::Center) => AnchorPlacement::Right,
+        (AnchorSide::Right, AnchorAlign::End) => AnchorPlacement::RightEnd,
+    }
 }
 
 /// Platform-neutral semantics used to build the native accessibility tree.
@@ -1350,6 +1577,7 @@ pub(crate) struct AccessibilityStyle {
     pub collection: AccessibilityCollectionStyle,
     pub modal: bool,
     pub required: bool,
+    pub read_only: bool,
     pub invalid: bool,
     pub validation_message: Option<Arc<str>>,
     pub validation_message_truncated: bool,
@@ -1683,6 +1911,7 @@ pub struct Element {
     pub(crate) user_select: UserSelect,
     pub(crate) resolved_user_select: bool,
     pub(crate) focusable: bool,
+    pub(crate) focusable_when_disabled: bool,
     pub(crate) focus_on_pointer: bool,
     pub(crate) hit_slop: Insets,
     pub(crate) focus_trap: bool,
@@ -1699,6 +1928,7 @@ pub struct Element {
     pub(crate) z_index: Option<i16>,
     pub(crate) portal: bool,
     pub(crate) anchor: Option<AnchorStyle>,
+    pub(crate) anchor_placement: Option<AnchorPlacementHandle>,
     pub(crate) tooltip: Option<Tooltip>,
     pub(crate) app_region: Option<AppRegion>,
     pub(crate) virtual_scroll: Option<VirtualScrollStyle>,
@@ -1726,6 +1956,17 @@ pub struct Element {
     pub(crate) snap_align: Option<SnapAlign>,
     /// Whether a scroll gesture may never skip past this snap child.
     pub(crate) snap_stop_always: bool,
+}
+
+impl Element {
+    /// Whether keyboard focus may land on this element.
+    ///
+    /// A disabled control leaves the Tab sequence, which is the web default. Toolbars are the
+    /// documented exception: an item that opts into [`Element::focusable_when_disabled`] stays
+    /// reachable so a keyboard user can discover why it is unavailable.
+    pub(crate) const fn is_keyboard_focusable(&self) -> bool {
+        self.focusable && (!self.accessibility.disabled || self.focusable_when_disabled)
+    }
 }
 
 /// Create a container element.

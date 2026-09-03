@@ -1094,7 +1094,9 @@ impl Element {
             target: AnchorTarget::Element(target.into()),
             placement,
             gap: DEFAULT_ANCHOR_GAP,
+            align_offset: 0.0,
             viewport_margin: DEFAULT_VIEWPORT_MARGIN,
+            sticky: true,
         });
         self
     }
@@ -1113,7 +1115,9 @@ impl Element {
             target: AnchorTarget::Point(point),
             placement,
             gap: 0.0,
+            align_offset: 0.0,
             viewport_margin: DEFAULT_VIEWPORT_MARGIN,
+            sticky: true,
         });
         self
     }
@@ -1126,12 +1130,60 @@ impl Element {
         self
     }
 
+    /// Shift an anchored surface along its cross axis before collision handling runs.
+    ///
+    /// [`Self::anchor_gap`] moves the surface away from its anchor on the placement side; this
+    /// moves it along the perpendicular axis, so a start-aligned popup can hang slightly past the
+    /// trigger without changing which side it opens on. Positive values move right for a top or
+    /// bottom placement and down for a left or right placement. The offset is applied before the
+    /// surface is clamped into the viewport, so it can never push a surface off screen.
+    pub fn anchor_align_offset(mut self, offset: f32) -> Self {
+        if let Some(anchor) = &mut self.anchor {
+            anchor.align_offset = if offset.is_finite() { offset } else { 0.0 };
+        }
+        self
+    }
+
+    /// Choose whether an anchored surface is kept inside the collision viewport.
+    ///
+    /// QuickGUI clamps anchored surfaces into the margin-inset viewport by default, so a popup
+    /// stays fully visible while its trigger approaches an edge. Passing `false` lets the surface
+    /// stay locked to its anchor and travel off screen with it, which is what a popup pinned to a
+    /// scrolling row wants when the row leaves the viewport.
+    pub fn anchor_sticky(mut self, sticky: bool) -> Self {
+        if let Some(anchor) = &mut self.anchor {
+            anchor.sticky = sticky;
+        }
+        self
+    }
+
     /// Set the minimum distance between an anchored surface and the content viewport edge.
     pub fn viewport_margin(mut self, margin: f32) -> Self {
         if let Some(anchor) = &mut self.anchor {
             anchor.viewport_margin = margin.max(0.0);
         }
         self
+    }
+
+    /// Publish the placement this anchored element actually resolved to into an owned handle.
+    ///
+    /// A declared [`AnchorPlacement`] is a preference. QuickGUI flips the side and re-aligns the
+    /// cross axis whenever the preference does not fit, so presentation that must follow the real
+    /// placement — a popover arrow, a directional transform origin, a popup sized to the room it
+    /// was given — reads [`AnchorPlacementHandle::resolved`] instead of the declared preference.
+    ///
+    /// The handle is written during the paint QuickGUI was already performing. When the resolved
+    /// value changes, exactly one correcting frame is requested; an unchanged placement adds no
+    /// redraw source, so a settled window stays settled. Binding it on an element with no anchor
+    /// does nothing.
+    pub fn report_anchor_placement(mut self, handle: AnchorPlacementHandle) -> Self {
+        self.anchor_placement = Some(handle);
+        self
+    }
+
+    /// Whether this element publishes its resolved anchor placement.
+    pub fn reports_anchor_placement(&self) -> bool {
+        self.anchor_placement.is_some()
     }
 
     /// Show a delayed, pointer-passive GPU tooltip while this element is hovered.

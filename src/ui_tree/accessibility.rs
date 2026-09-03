@@ -239,6 +239,9 @@ pub(super) fn build_accessibility_nodes(
     if element.accessibility.required {
         node.set_required();
     }
+    if element.accessibility.read_only {
+        node.set_read_only();
+    }
     if element.accessibility.invalid {
         node.set_invalid(AccessibilityInvalid::True);
         if let Some(message) = &element.accessibility.validation_message {
@@ -365,7 +368,7 @@ pub(super) fn build_accessibility_nodes(
             AccessibilitySortDirection::Other => NativeAccessibilitySortDirection::Other,
         });
     }
-    if element.focusable && !element.accessibility.disabled {
+    if element.is_keyboard_focusable() {
         node.add_action(Action::Focus);
         node.add_action(Action::Blur);
     }

@@ -1,14 +1,30 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::{
-    AccessibilityPopover, AccessibilityRole, AnchorPlacement, Color, Element, ElementId,
-    EventContext, FocusHandle, MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION, Point,
-    PopoverAnchor, PopoverConstraintAdjustment, PopoverGravity, PopoverOptions, Rect, Size, View,
-    WindowBackgroundAppearance, WindowCommandError, WindowHandle, WindowOptions, button, div,
+    AccessibilityPopover, AccessibilityRole, AnchorAlign, AnchorPlacement, AnchorPlacementHandle,
+    AnchorSide, AsyncViewContext, Color, Element, ElementId, EventContext, FocusHandle,
+    MAX_WINDOW_LOGICAL_COORDINATE, MAX_WINDOW_LOGICAL_DIMENSION, Point, PopoverAnchor,
+    PopoverConstraintAdjustment, PopoverGravity, PopoverOptions, Rect, ResolvedAnchorPlacement,
+    Size, StateAccessor, Task, View, ViewContext, WindowBackgroundAppearance, WindowCommandError,
+    WindowHandle, WindowOptions, anchor_placement, button, div,
 };
 
-const MAX_POPOVER_ANCHOR_GAP: f32 = 256.0;
-const MAX_POPOVER_VIEWPORT_MARGIN: f32 = 512.0;
+/// Maximum hover open or close delay a popover trigger may declare.
+pub const MAX_POPOVER_HOVER_DELAY: Duration = Duration::from_secs(10);
+/// Default delay before a hovered popover trigger opens, matching Base UI's 300 ms.
+pub const DEFAULT_POPOVER_HOVER_DELAY: Duration = Duration::from_millis(300);
+
+/// Maximum structural distance between a popover trigger and its positioner.
+pub const MAX_POPOVER_SIDE_OFFSET: f32 = 256.0;
+/// Maximum cross-axis shift applied to a popover before collision handling runs.
+pub const MAX_POPOVER_ALIGN_OFFSET: f32 = 4_096.0;
+/// Maximum collision padding kept between a popover and the window viewport edge.
+pub const MAX_POPOVER_COLLISION_PADDING: f32 = 512.0;
+/// Maximum declared edge length of a framework-positioned popover arrow.
+pub const MAX_POPOVER_ARROW_SIZE: f32 = 256.0;
+
+const MAX_POPOVER_ANCHOR_GAP: f32 = MAX_POPOVER_SIDE_OFFSET;
+const MAX_POPOVER_VIEWPORT_MARGIN: f32 = MAX_POPOVER_COLLISION_PADDING;
 const DEFAULT_POPOVER_ANCHOR_GAP: f32 = 6.0;
 const DEFAULT_POPOVER_VIEWPORT_MARGIN: f32 = 8.0;
 const POPOVER_POSITIONER_ID_TAG: u64 = 0x847d_5a0f_0f9b_31e7;
@@ -16,6 +32,8 @@ const POPOVER_BACKDROP_ID_TAG: u64 = 0x663e_a690_8d7f_c442;
 const POPOVER_TITLE_ID_TAG: u64 = 0x23ce_95af_9dc3_481b;
 const POPOVER_DESCRIPTION_ID_TAG: u64 = 0xa935_070d_46db_78c1;
 const POPOVER_CLOSE_ID_TAG: u64 = 0xd55f_271c_bbd9_e6a4;
+const POPOVER_ARROW_ID_TAG: u64 = 0x1f2c_6ad8_5e07_9b3d;
+const POPOVER_VIEWPORT_ID_TAG: u64 = 0x74b0_e319_c68a_20f5;
 
 /// Semantic content exposed by a controlled [`Popover`].
 ///
@@ -71,11 +89,32 @@ pub struct Popover {
     open: bool,
     kind: PopoverKind,
     placement: AnchorPlacement,
+    anchor: PopoverAnchorSource,
     anchor_gap: f32,
+    align_offset: f32,
     viewport_margin: f32,
+    sticky: bool,
+    modal: bool,
+    arrow_size: f32,
+    arrow_padding: f32,
+    resolved: Option<ResolvedAnchorPlacement>,
     initial_focus: Option<FocusHandle>,
     dismiss_on_escape: bool,
     dismiss_on_pointer_outside: bool,
+}
+
+/// What a popover positions itself against.
+///
+/// Base UI's `anchor` prop lets a popup track something other than the element that opened it — a
+/// selected row, a caret rectangle, a pointer position. QuickGUI keeps the trigger as the default
+/// and makes the override explicit, so the trigger's own expanded and controls relationships are
+/// never affected by where the surface is placed.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+enum PopoverAnchorSource {
+    #[default]
+    Trigger,
+    Element(ElementId),
+    Point(Point),
 }
 
 impl Popover {
@@ -90,8 +129,15 @@ impl Popover {
             open,
             kind: PopoverKind::Dialog,
             placement: AnchorPlacement::BottomStart,
+            anchor: PopoverAnchorSource::Trigger,
             anchor_gap: DEFAULT_POPOVER_ANCHOR_GAP,
+            align_offset: 0.0,
             viewport_margin: DEFAULT_POPOVER_VIEWPORT_MARGIN,
+            sticky: true,
+            modal: false,
+            arrow_size: 0.0,
+            arrow_padding: 0.0,
+            resolved: None,
             initial_focus: None,
             dismiss_on_escape: true,
             dismiss_on_pointer_outside: true,
@@ -106,6 +152,200 @@ impl Popover {
     pub const fn placement(mut self, placement: AnchorPlacement) -> Self {
         self.placement = placement;
         self
+    }
+
+    /// Prefer one side of the anchor, keeping the current cross-axis alignment.
+    ///
+    /// This is the side half of [`Self::placement`], matching Base UI's `side` prop. A side is a
+    /// preference: QuickGUI flips to the opposite side when the preferred one does not fit, and
+    /// [`Self::resolved_side`] reports what actually happened.
+    pub const fn side(self, side: AnchorSide) -> Self {
+        self.placement(anchor_placement(side, AnchorAlign::of(self.placement)))
+    }
+
+    /// Prefer a cross-axis alignment, keeping the current side.
+    ///
+    /// This is the alignment half of [`Self::placement`], matching Base UI's `align` prop.
+    pub const fn align(self, align: AnchorAlign) -> Self {
+        self.placement(anchor_placement(AnchorSide::of(self.placement), align))
+    }
+
+    /// Set the distance between the anchor and the positioner, Base UI's `sideOffset`.
+    ///
+    /// This is the Base UI-named alias of [`Self::anchor_gap`]. Both names stay supported and write
+    /// the same bounded value.
+    pub fn side_offset(self, offset: f32) -> Self {
+        self.anchor_gap(offset)
+    }
+
+    /// Shift the popover along its cross axis before collision handling, Base UI's `alignOffset`.
+    ///
+    /// Positive values move right on a top or bottom placement and down on a left or right
+    /// placement. The shift runs before the surface is clamped into the viewport, so it can slide a
+    /// popup along its trigger but never push it off screen.
+    pub fn align_offset(mut self, offset: f32) -> Self {
+        self.align_offset = finite_clamped(
+            offset,
+            -MAX_POPOVER_ALIGN_OFFSET,
+            MAX_POPOVER_ALIGN_OFFSET,
+            0.0,
+        );
+        self
+    }
+
+    /// Set the collision padding kept inside the window viewport, Base UI's `collisionPadding`.
+    ///
+    /// This is the Base UI-named alias of [`Self::viewport_margin`]. Both names stay supported.
+    pub fn collision_padding(self, padding: f32) -> Self {
+        self.viewport_margin(padding)
+    }
+
+    /// Choose whether the popover is kept inside the collision viewport, Base UI's `sticky`.
+    ///
+    /// QuickGUI keeps anchored surfaces on screen by default, which is Base UI's sticky behavior.
+    /// Passing `false` locks the popover to its anchor so it travels off screen with a scrolling
+    /// row instead of detaching from it.
+    pub const fn sticky(mut self, sticky: bool) -> Self {
+        self.sticky = sticky;
+        self
+    }
+
+    /// Position against a different mounted element instead of the trigger, Base UI's `anchor`.
+    pub fn anchor_element(mut self, anchor: impl Into<ElementId>) -> Self {
+        self.anchor = PopoverAnchorSource::Element(anchor.into());
+        self
+    }
+
+    /// Position against a logical window point instead of the trigger, Base UI's virtual `anchor`.
+    pub fn anchor_point(mut self, anchor: Point) -> Self {
+        self.anchor = PopoverAnchorSource::Point(Point::new(
+            finite_clamped(
+                anchor.x,
+                -MAX_WINDOW_LOGICAL_COORDINATE,
+                MAX_WINDOW_LOGICAL_COORDINATE,
+                0.0,
+            ),
+            finite_clamped(
+                anchor.y,
+                -MAX_WINDOW_LOGICAL_COORDINATE,
+                MAX_WINDOW_LOGICAL_COORDINATE,
+                0.0,
+            ),
+        ));
+        self
+    }
+
+    /// Position against the trigger again, undoing an anchor override.
+    pub const fn anchor_trigger(mut self) -> Self {
+        self.anchor = PopoverAnchorSource::Trigger;
+        self
+    }
+
+    /// Make the open popover modal, Base UI's `modal` prop.
+    ///
+    /// A modal popover contains Tab focus inside the popup and expects a mounted
+    /// [`Self::backdrop_part`] to absorb outside pointer input. QuickGUI adds no dimming: the
+    /// backdrop stays an invisible caller-owned element until the application paints it.
+    pub const fn modal(mut self, modal: bool) -> Self {
+        self.modal = modal;
+        self
+    }
+
+    /// Whether this popover contains focus while open.
+    pub const fn is_modal(self) -> bool {
+        self.modal
+    }
+
+    /// Declare the edge length of a framework-positioned arrow.
+    ///
+    /// [`Self::arrow_part`] centers an arrow of this size on the anchor. Leaving it at zero pins
+    /// the arrow to the resolved edge without a cross-axis offset, which is what an application
+    /// that centers the arrow with its own layout wants.
+    pub fn arrow_size(mut self, size: f32) -> Self {
+        self.arrow_size = finite_clamped(size, 0.0, MAX_POPOVER_ARROW_SIZE, 0.0);
+        self
+    }
+
+    /// Keep a framework-positioned arrow this far from the popup's corners, Base UI's
+    /// `arrowPadding`.
+    pub fn arrow_padding(mut self, padding: f32) -> Self {
+        self.arrow_padding = finite_clamped(padding, 0.0, MAX_POPOVER_ARROW_SIZE, 0.0);
+        self
+    }
+
+    /// Adopt the placement QuickGUI resolved for this popover on the previous painted frame.
+    ///
+    /// Store an [`AnchorPlacementHandle`] on the view next to `open`, mount the positioner with
+    /// [`Self::tracked_positioner_part`] or [`Self::tracked_surface_part`], and pass the handle
+    /// here while declaring the next frame. [`Self::arrow_part`], [`Self::resolved_side`],
+    /// [`Self::resolved_align`], and [`Self::state`] then follow the placement the popover really
+    /// used instead of the declared preference.
+    ///
+    /// QuickGUI requests exactly one correcting frame when the resolved placement changes, so a
+    /// flipped popover settles immediately and an unflipped one adds no redraw source.
+    pub fn track_placement(mut self, placement: &AnchorPlacementHandle) -> Self {
+        self.resolved = placement.resolved();
+        self
+    }
+
+    /// Adopt an already-read placement report.
+    ///
+    /// Use this when the application keeps the snapshot itself rather than the handle.
+    pub const fn resolved_placement(mut self, resolved: Option<ResolvedAnchorPlacement>) -> Self {
+        self.resolved = resolved;
+        self
+    }
+
+    /// The side the popover actually opened on, or the declared preference before the first frame.
+    pub fn resolved_side(self) -> AnchorSide {
+        AnchorSide::of(self.resolved_anchor_placement())
+    }
+
+    /// The cross-axis alignment the popover actually used, or the declared preference.
+    pub fn resolved_align(self) -> AnchorAlign {
+        AnchorAlign::of(self.resolved_anchor_placement())
+    }
+
+    /// The full placement the popover actually used, or the declared preference.
+    pub fn resolved_anchor_placement(self) -> AnchorPlacement {
+        self.resolved
+            .map_or(self.placement, |resolved| resolved.placement)
+    }
+
+    /// A copyable snapshot of what Base UI exposes as `data-*` attributes and CSS variables.
+    ///
+    /// The application styles from this: it picks a transform origin from
+    /// [`PopoverPartState::side`], hides a popup whose anchor scrolled away using
+    /// [`PopoverPartState::anchor_hidden`], matches the trigger width with
+    /// [`PopoverPartState::anchor_width`], and caps a scrolling viewport with
+    /// [`PopoverPartState::available_height`]. Every measured field stays zero until the popover
+    /// has been painted once with a bound placement handle.
+    pub fn state(self) -> PopoverPartState {
+        let measured = self.resolved.unwrap_or_default();
+        let reported = self.resolved.is_some();
+        PopoverPartState {
+            open: self.open,
+            modal: self.modal,
+            side: self.resolved_side(),
+            align: self.resolved_align(),
+            anchor_hidden: reported && measured.anchor_hidden,
+            anchor_width: if reported { measured.anchor.width } else { 0.0 },
+            anchor_height: if reported {
+                measured.anchor.height
+            } else {
+                0.0
+            },
+            available_width: if reported {
+                measured.available.width
+            } else {
+                0.0
+            },
+            available_height: if reported {
+                measured.available.height
+            } else {
+                0.0
+            },
+        }
     }
 
     /// Set the structural distance between the trigger and positioner.
@@ -179,6 +419,16 @@ impl Popover {
         derived_popover_id(self.surface_id, self.trigger_id, POPOVER_CLOSE_ID_TAG)
     }
 
+    /// Stable identity of the framework-positioned arrow part.
+    pub fn arrow_id(self) -> ElementId {
+        derived_popover_id(self.surface_id, self.trigger_id, POPOVER_ARROW_ID_TAG)
+    }
+
+    /// Stable identity of the scrolling viewport mounted inside the popup.
+    pub fn viewport_id(self) -> ElementId {
+        derived_popover_id(self.surface_id, self.trigger_id, POPOVER_VIEWPORT_ID_TAG)
+    }
+
     pub fn trigger_focus(self) -> FocusHandle {
         FocusHandle::new(self.trigger_id)
     }
@@ -225,13 +475,45 @@ impl Popover {
     /// UI-style Portal and Positioner boundary without introducing a full-window wrapper that
     /// would block unrelated pointer input.
     pub fn positioner_part(self, positioner: Element) -> Element {
-        positioner
-            .id(self.positioner_id())
-            .anchor_to(self.trigger_id, self.placement)
-            .anchor_gap(self.anchor_gap)
-            .viewport_margin(self.viewport_margin)
+        self.anchored(positioner.id(self.positioner_id()))
             .app_region_no_drag()
             .cursor_default()
+    }
+
+    /// Decorate the positioner and publish the placement it resolves to.
+    ///
+    /// This is [`Self::positioner_part`] plus
+    /// [`crate::Element::report_anchor_placement`]: the handle receives the side, alignment, anchor
+    /// rectangle, and remaining room the popover actually used, and [`Self::track_placement`] feeds
+    /// it back into the descriptor on the next frame.
+    pub fn tracked_positioner_part(
+        self,
+        positioner: Element,
+        placement: &AnchorPlacementHandle,
+    ) -> Element {
+        self.positioner_part(positioner.report_anchor_placement(placement.clone()))
+    }
+
+    /// Base UI's Portal name for the combined portal/positioner part.
+    ///
+    /// QuickGUI's retained overlay node is itself the portal, so Portal and Positioner are one
+    /// element; both names decorate it identically.
+    pub fn portal_part(self, portal: Element) -> Element {
+        self.positioner_part(portal)
+    }
+
+    /// Apply the anchored geometry this popover declares to a caller-owned element.
+    fn anchored(self, element: Element) -> Element {
+        let element = match self.anchor {
+            PopoverAnchorSource::Trigger => element.anchor_to(self.trigger_id, self.placement),
+            PopoverAnchorSource::Element(anchor) => element.anchor_to(anchor, self.placement),
+            PopoverAnchorSource::Point(anchor) => element.anchor_at(anchor, self.placement),
+        };
+        element
+            .anchor_gap(self.anchor_gap)
+            .anchor_align_offset(self.align_offset)
+            .viewport_margin(self.viewport_margin)
+            .anchor_sticky(self.sticky)
     }
 
     /// Decorate an application-owned popover without adding layout or appearance.
@@ -255,6 +537,9 @@ impl Popover {
         if self.dismiss_on_pointer_outside {
             popover = popover.dismiss_on_pointer_outside();
         }
+        if self.modal {
+            popover = popover.focus_trap();
+        }
         popover
     }
 
@@ -264,15 +549,93 @@ impl Popover {
     /// around [`Self::popover_part`]. Use separate parts when the application needs to animate or
     /// size the positioner independently from popover presentation.
     pub fn surface_part(self, surface: Element) -> Element {
-        self.popover_part(surface)
-            .anchor_to(self.trigger_id, self.placement)
-            .anchor_gap(self.anchor_gap)
-            .viewport_margin(self.viewport_margin)
+        self.anchored(self.popover_part(surface))
+    }
+
+    /// Decorate the merged surface and publish the placement it resolves to.
+    pub fn tracked_surface_part(
+        self,
+        surface: Element,
+        placement: &AnchorPlacementHandle,
+    ) -> Element {
+        self.surface_part(surface.report_anchor_placement(placement.clone()))
     }
 
     /// Create an unstyled merged positioner/popover root.
     pub fn surface(self) -> Element {
         self.surface_part(div())
+    }
+
+    /// Position a caller-owned arrow on the edge the popover actually opened against.
+    ///
+    /// The arrow is absolutely positioned inside the popup, pinned to the edge that faces the
+    /// anchor and centered on the anchor along the cross axis. When [`Self::track_placement`] has
+    /// supplied a placement report the offsets follow the real placement, including a flip — never
+    /// the declared preference. Before the first painted frame, or without a bound handle, the arrow
+    /// follows the declared side and stays centered on the popup, and QuickGUI's one correcting
+    /// frame moves it as soon as the real placement is known.
+    ///
+    /// The application owns the arrow's size, shape, rotation, and color. Declare
+    /// [`Self::arrow_size`] when QuickGUI should center an arrow of a known edge length, and
+    /// [`Self::arrow_padding`] to keep it clear of the popup's corners. The arrow is hidden from
+    /// assistive technology: it is decoration attached to a surface that already carries the
+    /// relationship.
+    pub fn arrow_part(self, arrow: Element) -> Element {
+        let arrow = arrow
+            .id(self.arrow_id())
+            .absolute()
+            .accessibility_hidden(true)
+            .app_region_no_drag();
+        let side = self.resolved_side();
+        let offset = self.arrow_cross_offset(side);
+        match (side, offset) {
+            // The popup opened below its anchor, so the arrow belongs on the popup's top edge.
+            (AnchorSide::Bottom, Some(offset)) => arrow.top(0.0).left(offset),
+            (AnchorSide::Bottom, None) => arrow.top(0.0),
+            (AnchorSide::Top, Some(offset)) => arrow.bottom(0.0).left(offset),
+            (AnchorSide::Top, None) => arrow.bottom(0.0),
+            (AnchorSide::Right, Some(offset)) => arrow.left(0.0).top(offset),
+            (AnchorSide::Right, None) => arrow.left(0.0),
+            (AnchorSide::Left, Some(offset)) => arrow.right(0.0).top(offset),
+            (AnchorSide::Left, None) => arrow.right(0.0),
+        }
+    }
+
+    /// The popup-local cross-axis offset of a centered arrow, once a placement has been reported.
+    fn arrow_cross_offset(self, side: AnchorSide) -> Option<f32> {
+        let resolved = self.resolved?;
+        let (anchor_center, popup_origin, popup_extent) = if side.is_vertical() {
+            (
+                resolved.anchor.x + resolved.anchor.width * 0.5,
+                resolved.bounds.x,
+                resolved.bounds.width,
+            )
+        } else {
+            (
+                resolved.anchor.y + resolved.anchor.height * 0.5,
+                resolved.bounds.y,
+                resolved.bounds.height,
+            )
+        };
+        let leading = anchor_center - popup_origin - self.arrow_size * 0.5;
+        let last = popup_extent - self.arrow_size - self.arrow_padding;
+        if !leading.is_finite() || !last.is_finite() {
+            return None;
+        }
+        Some(leading.clamp(self.arrow_padding, last.max(self.arrow_padding)))
+    }
+
+    /// Decorate a caller-owned scrolling viewport mounted inside the popup.
+    ///
+    /// Base UI's Viewport clips content that changes size between triggers so the popup can animate
+    /// between them. QuickGUI supplies the stable identity and the scroll container; height,
+    /// padding, and motion stay application-owned — cap it with
+    /// [`PopoverPartState::available_height`] to keep a long popup inside the window.
+    pub fn viewport_part(self, viewport: Element) -> Element {
+        viewport
+            .id(self.viewport_id())
+            .overflow_y_scroll()
+            .app_region_no_drag()
     }
 
     /// Decorate an optional caller-painted viewport backdrop.
@@ -307,6 +670,332 @@ impl Popover {
             .accessibility_label(label)
             .app_region_no_drag()
             .user_select_none()
+    }
+}
+
+/// Which hoverable part of a popover the pointer entered or left.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PopoverHoverPart {
+    Trigger,
+    Popup,
+}
+
+/// The transition a pending hover deadline will apply when it expires.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PopoverHoverPhase {
+    Open,
+    Close,
+}
+
+/// Bounded hover-open state for one controlled popover, Base UI's Trigger `openOnHover`.
+///
+/// The application still owns whether the popover is open: this state decides *when* that changes
+/// and calls back through the accessor the decorators were given. A hovered trigger opens after
+/// [`Self::delay`], and the popover closes after [`Self::close_delay`] once neither the trigger nor
+/// a hoverable popup is hovered, so the pointer can cross the gap between them.
+///
+/// Every delay is an exact one-shot deadline: entering and leaving cancels the outstanding task
+/// rather than polling, and a settled popover owns no timer, animation, or idle scheduler source.
+/// A zero delay applies the change in the same controlled update with no task at all.
+#[derive(Debug)]
+pub struct PopoverHoverState {
+    open: bool,
+    delay: Duration,
+    close_delay: Duration,
+    trigger_hovered: bool,
+    popup_hovered: bool,
+    hoverable_popup: bool,
+    pending: Option<PopoverHoverPhase>,
+    generation: u64,
+    task: Option<Task<()>>,
+}
+
+impl Default for PopoverHoverState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PopoverHoverState {
+    /// Create a closed hover state with Base UI's default open delay and immediate close.
+    pub fn new() -> Self {
+        Self {
+            open: false,
+            delay: DEFAULT_POPOVER_HOVER_DELAY,
+            close_delay: Duration::ZERO,
+            trigger_hovered: false,
+            popup_hovered: false,
+            hoverable_popup: true,
+            pending: None,
+            generation: 0,
+            task: None,
+        }
+    }
+
+    /// Set how long a hovered trigger waits before opening, Base UI's `delay`.
+    pub fn delay(mut self, delay: Duration) -> Self {
+        self.delay = delay.min(MAX_POPOVER_HOVER_DELAY);
+        self
+    }
+
+    /// Set how long the popover waits before closing after the pointer leaves, Base UI's
+    /// `closeDelay`.
+    pub fn close_delay(mut self, delay: Duration) -> Self {
+        self.close_delay = delay.min(MAX_POPOVER_HOVER_DELAY);
+        self
+    }
+
+    /// Choose whether hovering the popup itself keeps the popover open.
+    ///
+    /// This is Base UI's `hoverable` popup prop. A non-hoverable popup closes as soon as the
+    /// pointer leaves the trigger, which is what a passive preview surface wants.
+    pub const fn hoverable_popup(mut self, hoverable: bool) -> Self {
+        self.hoverable_popup = hoverable;
+        self
+    }
+
+    pub const fn is_open(&self) -> bool {
+        self.open
+    }
+
+    /// Whether a hover deadline is outstanding.
+    pub const fn is_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// Whether the trigger or a hoverable popup currently has the pointer.
+    pub const fn is_hovered(&self) -> bool {
+        self.trigger_hovered || (self.hoverable_popup && self.popup_hovered)
+    }
+
+    /// Open immediately, cancelling any outstanding deadline.
+    ///
+    /// Returns whether the open state changed, so a click listener can invalidate exactly once.
+    pub fn open_now(&mut self) -> bool {
+        self.cancel_pending();
+        !std::mem::replace(&mut self.open, true)
+    }
+
+    /// Close immediately, cancelling any outstanding deadline.
+    pub fn close_now(&mut self) -> bool {
+        self.cancel_pending();
+        std::mem::replace(&mut self.open, false)
+    }
+
+    /// Toggle the popover immediately, cancelling any outstanding deadline.
+    pub fn toggle(&mut self) -> bool {
+        if self.open {
+            self.close_now()
+        } else {
+            self.open_now()
+        }
+    }
+
+    /// Drop any outstanding hover deadline without changing the open state.
+    pub fn cancel_pending(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        self.pending = None;
+        if let Some(task) = self.task.take() {
+            task.cancel();
+        }
+    }
+
+    /// Decorate a caller-owned trigger with hover opening.
+    ///
+    /// This is the `fn`-pointer entry point for a view that owns one popover per field. A host that
+    /// renders many declared popovers through one view uses [`Self::trigger_part_with`].
+    pub fn trigger_part<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        popover: Popover,
+        access: fn(&mut V) -> &mut Self,
+        trigger: Element,
+    ) -> Element {
+        self.trigger_part_with(cx, popover, StateAccessor::from(access), trigger)
+    }
+
+    /// Decorate a caller-owned trigger with hover opening through a per-instance accessor.
+    pub fn trigger_part_with<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        popover: Popover,
+        access: StateAccessor<V, Self>,
+        trigger: Element,
+    ) -> Element {
+        let hovered =
+            self.hover_listener(cx, popover.trigger_id(), PopoverHoverPart::Trigger, access);
+        popover.trigger_part(trigger).on_hover(hovered)
+    }
+
+    /// Decorate the caller-owned popup so the pointer may cross into it without closing.
+    pub fn popup_part<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        popover: Popover,
+        access: fn(&mut V) -> &mut Self,
+        popup: Element,
+    ) -> Element {
+        self.popup_part_with(cx, popover, StateAccessor::from(access), popup)
+    }
+
+    /// Decorate the caller-owned popup through a per-instance accessor.
+    pub fn popup_part_with<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        popover: Popover,
+        access: StateAccessor<V, Self>,
+        popup: Element,
+    ) -> Element {
+        let hovered =
+            self.hover_listener(cx, popover.popover_id(), PopoverHoverPart::Popup, access);
+        popover.popover_part(popup).on_hover(hovered)
+    }
+
+    fn hover_listener<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        id: ElementId,
+        part: PopoverHoverPart,
+        access: StateAccessor<V, Self>,
+    ) -> crate::HoverListener<V> {
+        cx.hover_listener(id, move |view, hovered, cx| {
+            let access = access.clone();
+            let hovered = *hovered;
+            access
+                .clone()
+                .get(view)
+                .record_hover(part, hovered, access, cx);
+        })
+    }
+
+    fn record_hover<V: 'static>(
+        &mut self,
+        part: PopoverHoverPart,
+        hovered: bool,
+        access: StateAccessor<V, Self>,
+        cx: &mut EventContext,
+    ) {
+        match part {
+            PopoverHoverPart::Trigger => self.trigger_hovered = hovered,
+            PopoverHoverPart::Popup => self.popup_hovered = hovered,
+        }
+        let wanted = if self.is_hovered() {
+            PopoverHoverPhase::Open
+        } else {
+            PopoverHoverPhase::Close
+        };
+        let already = match wanted {
+            PopoverHoverPhase::Open => self.open,
+            PopoverHoverPhase::Close => !self.open,
+        };
+        if already {
+            // The pointer returned before the deadline expired: drop it rather than reopening.
+            if self.pending.is_some() {
+                self.cancel_pending();
+            }
+            return;
+        }
+        if self.pending == Some(wanted) {
+            return;
+        }
+        let delay = match wanted {
+            PopoverHoverPhase::Open => self.delay,
+            PopoverHoverPhase::Close => self.close_delay,
+        };
+        self.schedule(wanted, delay, access, cx);
+    }
+
+    fn schedule<V: 'static>(
+        &mut self,
+        phase: PopoverHoverPhase,
+        delay: Duration,
+        access: StateAccessor<V, Self>,
+        cx: &mut EventContext,
+    ) {
+        self.cancel_pending();
+        if delay.is_zero() {
+            if self.apply(phase) {
+                cx.invalidate();
+            }
+            return;
+        }
+        self.pending = Some(phase);
+        let generation = self.generation;
+        let spawned = cx.spawn::<V, _, _, _>(move |task_cx: AsyncViewContext<V>| async move {
+            if task_cx.sleep(delay).await.is_err() {
+                return;
+            }
+            let _ = task_cx
+                .update(move |view, cx| {
+                    let state = access.get(view);
+                    if state.generation != generation || state.pending != Some(phase) {
+                        return;
+                    }
+                    state.pending = None;
+                    state.task = None;
+                    if state.apply(phase) {
+                        cx.invalidate();
+                    }
+                })
+                .await;
+        });
+        match spawned {
+            Ok(task) => self.task = Some(task),
+            Err(_) => {
+                // A window that cannot own another foreground task still gets correct behavior;
+                // only the delay is lost.
+                self.pending = None;
+                if self.apply(phase) {
+                    cx.invalidate();
+                }
+            }
+        }
+    }
+
+    fn apply(&mut self, phase: PopoverHoverPhase) -> bool {
+        let open = phase == PopoverHoverPhase::Open;
+        std::mem::replace(&mut self.open, open) != open
+    }
+}
+
+/// A copyable render-state snapshot for one controlled popover.
+///
+/// Base UI exposes this information as `data-open`, `data-side`, `data-align`,
+/// `data-anchor-hidden`, and the `--anchor-width` / `--available-height` CSS variables. QuickGUI
+/// has no style sheet, so the same facts arrive as fields the application reads while declaring
+/// its own presentation. Build one with [`Popover::state`].
+///
+/// The measured fields are zero until the popover has been painted once with a bound
+/// [`AnchorPlacementHandle`]; [`Self::is_measured`] says whether they can be trusted.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PopoverPartState {
+    /// Whether the application currently declares the popover open.
+    pub open: bool,
+    /// Whether the popover contains focus and expects a backdrop.
+    pub modal: bool,
+    /// The side of the anchor the popup was actually placed on.
+    pub side: AnchorSide,
+    /// The cross-axis alignment the popup actually used.
+    pub align: AnchorAlign,
+    /// Whether the anchor left the collision viewport entirely.
+    pub anchor_hidden: bool,
+    /// Width of the anchor rectangle, for a popup that matches its trigger.
+    pub anchor_width: f32,
+    /// Height of the anchor rectangle.
+    pub anchor_height: f32,
+    /// Room left for the popup on the cross axis inside the collision viewport.
+    pub available_width: f32,
+    /// Room left for the popup between the anchor and the viewport edge on the resolved side.
+    pub available_height: f32,
+}
+
+impl PopoverPartState {
+    /// Whether the measured fields come from a real painted frame rather than defaults.
+    pub fn is_measured(self) -> bool {
+        self.anchor_width > 0.0
+            || self.anchor_height > 0.0
+            || self.available_width > 0.0
+            || self.available_height > 0.0
     }
 }
 
@@ -544,10 +1233,13 @@ mod tests {
         AppRegion, Application, Event, IntoElement, TestAppContext, View, ViewContext,
         WindowBounds, WindowKind, WindowOptions,
     };
+    use taffy::style_helpers::length;
 
     #[test]
     fn descriptor_builds_paired_controlled_elements_without_retained_component_state() {
-        assert!(std::mem::size_of::<Popover>() <= 64);
+        // The descriptor stays a plain copyable value: identities, bounded geometry, and one
+        // optional placement report, with no allocation, handle, or component store inside it.
+        assert!(std::mem::size_of::<Popover>() <= 128);
         let closed = Popover::new("trigger", "surface", false).kind(PopoverKind::Menu);
         let closed_trigger = closed.trigger();
         assert_eq!(closed_trigger.explicit_id, Some("trigger".into()));
@@ -941,5 +1633,426 @@ mod tests {
         let renders = cx.render_count(window).unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    #[test]
+    fn base_ui_positioner_props_map_to_bounded_anchored_geometry() {
+        let popover = Popover::new("trigger", "popup", true)
+            .side(AnchorSide::Left)
+            .align(AnchorAlign::End)
+            .side_offset(14.0)
+            .align_offset(-9.0)
+            .collision_padding(24.0)
+            .sticky(false)
+            .modal(true);
+        assert_eq!(
+            popover.resolved_anchor_placement(),
+            AnchorPlacement::LeftEnd
+        );
+        assert!(popover.is_modal());
+
+        let positioner = popover.positioner_part(div());
+        let anchor = positioner.anchor.expect("positioner anchor");
+        assert_eq!(anchor.target, AnchorTarget::Element("trigger".into()));
+        assert_eq!(anchor.placement, AnchorPlacement::LeftEnd);
+        assert_eq!(anchor.gap, 14.0);
+        assert_eq!(anchor.align_offset, -9.0);
+        assert_eq!(anchor.viewport_margin, 24.0);
+        assert!(!anchor.sticky);
+        assert_eq!(positioner.visual.background, None);
+        assert_eq!(positioner.visual.border_color, None);
+        assert!(!positioner.reports_anchor_placement());
+
+        // Portal and Positioner are the same retained overlay node in QuickGUI.
+        assert_eq!(
+            popover.portal_part(div()).explicit_id,
+            Some(popover.positioner_id())
+        );
+
+        let modal_popup = popover.popover_part(div());
+        assert!(modal_popup.focus_trap);
+        assert!(
+            !Popover::new("trigger", "popup", true)
+                .popover_part(div())
+                .focus_trap
+        );
+
+        // Base UI names and the original QuickGUI names write the same bounded value.
+        assert_eq!(
+            Popover::new("t", "p", true).side_offset(3.0),
+            Popover::new("t", "p", true).anchor_gap(3.0)
+        );
+        assert_eq!(
+            Popover::new("t", "p", true).collision_padding(3.0),
+            Popover::new("t", "p", true).viewport_margin(3.0)
+        );
+
+        // Every declared distance is clamped, and a non-finite value falls back.
+        let clamped = Popover::new("trigger", "popup", true)
+            .side_offset(1.0e9)
+            .align_offset(f32::NAN)
+            .collision_padding(-5.0)
+            .arrow_size(1.0e9)
+            .arrow_padding(f32::NAN);
+        let anchor = clamped.positioner_part(div()).anchor.expect("anchor");
+        assert_eq!(anchor.gap, MAX_POPOVER_SIDE_OFFSET);
+        assert_eq!(anchor.align_offset, 0.0);
+        assert_eq!(anchor.viewport_margin, 0.0);
+        // A non-finite distance falls back to the declared default rather than to a bound.
+        let broken = Popover::new("trigger", "popup", true)
+            .side_offset(f32::INFINITY)
+            .collision_padding(f32::NAN);
+        let anchor = broken.positioner_part(div()).anchor.expect("anchor");
+        assert_eq!(anchor.gap, DEFAULT_POPOVER_ANCHOR_GAP);
+        assert_eq!(anchor.viewport_margin, DEFAULT_POPOVER_VIEWPORT_MARGIN);
+        assert_eq!(clamped.arrow_size, MAX_POPOVER_ARROW_SIZE);
+        assert_eq!(clamped.arrow_padding, 0.0);
+
+        // The anchor override moves placement only; the trigger keeps its own relationships.
+        let against_row = popover.anchor_element("row-3");
+        let anchor = against_row.positioner_part(div()).anchor.expect("anchor");
+        assert_eq!(anchor.target, AnchorTarget::Element("row-3".into()));
+        assert_eq!(
+            against_row.trigger().accessibility.relations.controls(),
+            Some("popup".into())
+        );
+        let at_point = popover.anchor_point(Point::new(40.0, 50.0));
+        let anchor = at_point.positioner_part(div()).anchor.expect("anchor");
+        assert_eq!(anchor.target, AnchorTarget::Point(Point::new(40.0, 50.0)));
+        assert_eq!(anchor.gap, 14.0);
+        assert_eq!(
+            at_point
+                .anchor_trigger()
+                .positioner_part(div())
+                .anchor
+                .expect("anchor")
+                .target,
+            AnchorTarget::Element("trigger".into())
+        );
+
+        // The viewport part is a scroll container with a stable identity and no appearance.
+        let viewport = popover.viewport_part(div());
+        assert_eq!(viewport.explicit_id, Some(popover.viewport_id()));
+        assert_eq!(viewport.visual.background, None);
+        assert_ne!(popover.viewport_id(), popover.arrow_id());
+        assert_ne!(popover.viewport_id(), popover.positioner_id());
+        assert_ne!(popover.arrow_id(), popover.positioner_id());
+
+        let handle = AnchorPlacementHandle::new();
+        assert!(
+            popover
+                .tracked_positioner_part(div(), &handle)
+                .reports_anchor_placement()
+        );
+        assert!(
+            popover
+                .tracked_surface_part(div(), &handle)
+                .reports_anchor_placement()
+        );
+    }
+
+    #[test]
+    fn the_arrow_and_state_snapshot_follow_the_resolved_placement_not_the_preference() {
+        let preferred = Popover::new("trigger", "popup", true)
+            .side(AnchorSide::Bottom)
+            .arrow_size(10.0)
+            .arrow_padding(4.0);
+        assert_eq!(preferred.resolved_side(), AnchorSide::Bottom);
+        assert_eq!(
+            preferred.state(),
+            PopoverPartState {
+                open: true,
+                modal: false,
+                side: AnchorSide::Bottom,
+                align: AnchorAlign::Start,
+                anchor_hidden: false,
+                anchor_width: 0.0,
+                anchor_height: 0.0,
+                available_width: 0.0,
+                available_height: 0.0,
+            }
+        );
+        assert!(!preferred.state().is_measured());
+        // Without a report the arrow pins to the declared edge and adds no guessed offset.
+        let unmeasured = preferred.arrow_part(div());
+        assert_eq!(unmeasured.layout.inset.top, length(0.0));
+        assert!(unmeasured.accessibility.hidden);
+
+        // The popover really opened above its trigger, so the arrow belongs on the popup's bottom.
+        let flipped = preferred.resolved_placement(Some(ResolvedAnchorPlacement {
+            placement: AnchorPlacement::TopStart,
+            anchor: Rect::new(100.0, 560.0, 40.0, 30.0),
+            bounds: Rect::new(100.0, 354.0, 200.0, 200.0),
+            available: Size::new(944.0, 546.0),
+            anchor_hidden: false,
+        }));
+        assert_eq!(flipped.resolved_side(), AnchorSide::Top);
+        assert_eq!(flipped.resolved_align(), AnchorAlign::Start);
+        let arrow = flipped.arrow_part(div());
+        assert_eq!(arrow.explicit_id, Some(flipped.arrow_id()));
+        assert_eq!(arrow.layout.inset.bottom, length(0.0));
+        // 100 + 40/2 - 100 - 10/2 = 15 logical points from the popup's leading edge.
+        assert_eq!(arrow.layout.inset.left, length(15.0));
+
+        let state = flipped.state();
+        assert_eq!(state.side, AnchorSide::Top);
+        assert_eq!(state.anchor_width, 40.0);
+        assert_eq!(state.anchor_height, 30.0);
+        assert_eq!(state.available_width, 944.0);
+        assert_eq!(state.available_height, 546.0);
+        assert!(state.is_measured());
+        assert!(!state.anchor_hidden);
+
+        // Arrow padding keeps the arrow off the corners even when the anchor sits past them.
+        let corner = flipped.resolved_placement(Some(ResolvedAnchorPlacement {
+            placement: AnchorPlacement::TopStart,
+            anchor: Rect::new(0.0, 560.0, 4.0, 30.0),
+            bounds: Rect::new(100.0, 354.0, 200.0, 200.0),
+            available: Size::new(944.0, 546.0),
+            anchor_hidden: true,
+        }));
+        assert_eq!(corner.arrow_part(div()).layout.inset.left, length(4.0));
+        assert!(corner.state().anchor_hidden);
+
+        // A left placement pins the arrow to the popup's trailing edge and offsets vertically.
+        let leftward = preferred.resolved_placement(Some(ResolvedAnchorPlacement {
+            placement: AnchorPlacement::Left,
+            anchor: Rect::new(400.0, 100.0, 40.0, 60.0),
+            bounds: Rect::new(180.0, 90.0, 200.0, 80.0),
+            available: Size::new(392.0, 624.0),
+            anchor_hidden: false,
+        }));
+        let arrow = leftward.arrow_part(div());
+        assert_eq!(arrow.layout.inset.right, length(0.0));
+        // 100 + 60/2 - 90 - 10/2 = 35 from the popup's top edge.
+        assert_eq!(arrow.layout.inset.top, length(35.0));
+    }
+
+    #[derive(Default)]
+    struct FlipView {
+        open: bool,
+        placement: AnchorPlacementHandle,
+    }
+
+    impl View for FlipView {
+        fn event(&mut self, event: &Event, cx: &mut EventContext) {
+            if *event == Event::Dismiss("popup".into()) {
+                self.open = false;
+                cx.invalidate();
+            }
+        }
+
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let popover = Popover::new("trigger", "popup", self.open)
+                .side(AnchorSide::Bottom)
+                .align(AnchorAlign::Start)
+                .side_offset(6.0)
+                .arrow_size(10.0)
+                .arrow_padding(4.0)
+                .track_placement(&self.placement);
+            let toggle = cx.listener("trigger", |view: &mut Self, cx: &mut EventContext| {
+                view.open = !view.open;
+                cx.invalidate();
+            });
+            let mut root = div().size_full().relative().child(
+                popover
+                    .trigger()
+                    .absolute()
+                    .left(100.0)
+                    .top(560.0)
+                    .w(40.0)
+                    .h(30.0)
+                    .on_click(toggle),
+            );
+            if popover.is_open() {
+                root = root.child(
+                    popover.tracked_positioner_part(
+                        div().child(
+                            popover
+                                .popover_part(div())
+                                .relative()
+                                .w(200.0)
+                                .h(200.0)
+                                .accessibility_label("Actions")
+                                .child(popover.arrow_part(div().w(10.0).h(6.0))),
+                        ),
+                        &self.placement,
+                    ),
+                );
+            }
+            root
+        }
+    }
+
+    #[test]
+    fn a_flipped_popover_reports_its_real_placement_and_repositions_the_arrow() {
+        let (mut cx, view) = TestAppContext::new(FlipView::default()).unwrap();
+        let window = view.window_handle();
+        assert_eq!(
+            cx.read(view, |view| view.placement.resolved()).unwrap(),
+            None
+        );
+
+        cx.click(window, "trigger").unwrap();
+        let popup_bounds = cx.element_bounds(window, "popup").unwrap();
+        cx.run_until_idle().unwrap();
+
+        let resolved = cx
+            .read(view, |view| view.placement.resolved())
+            .unwrap()
+            .expect("a painted anchored surface publishes its resolved placement");
+        // Declared bottom, but only 36 points remain below the trigger for a 200 point popup.
+        assert_eq!(resolved.placement, AnchorPlacement::TopStart);
+        assert_eq!(resolved.side(), AnchorSide::Top);
+        assert_eq!(resolved.align(), AnchorAlign::Start);
+        assert_eq!(resolved.anchor, Rect::new(100.0, 560.0, 40.0, 30.0));
+        assert_eq!(resolved.bounds, popup_bounds);
+        assert_eq!(resolved.available.height, 560.0 - 8.0 - 6.0);
+        assert!(!resolved.anchor_hidden);
+        assert!(popup_bounds.bottom() <= 560.0);
+
+        let arrow_bounds = cx
+            .element_bounds(window, Popover::new("trigger", "popup", true).arrow_id())
+            .unwrap();
+        assert_eq!(arrow_bounds.bottom(), popup_bounds.bottom());
+        assert_eq!(arrow_bounds.x, popup_bounds.x + 15.0);
+
+        // The correcting frame is one-shot: a settled popover schedules no further work.
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
+
+        cx.simulate_keystrokes(window, "escape").unwrap();
+        assert!(!cx.read(view, |view| view.open).unwrap());
+        cx.update(view, |view, _cx| view.placement.clear()).unwrap();
+        assert_eq!(
+            cx.read(view, |view| view.placement.resolved()).unwrap(),
+            None
+        );
+    }
+
+    struct HoverPopoverView {
+        hover: PopoverHoverState,
+    }
+
+    impl Default for HoverPopoverView {
+        fn default() -> Self {
+            Self {
+                hover: PopoverHoverState::new()
+                    .delay(Duration::from_millis(200))
+                    .close_delay(Duration::from_millis(100)),
+            }
+        }
+    }
+
+    impl View for HoverPopoverView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let popover = Popover::new("trigger", "popup", self.hover.is_open());
+            let trigger = self.hover.trigger_part(
+                cx,
+                popover,
+                |view| &mut view.hover,
+                div().absolute().left(0.0).top(0.0).w(60.0).h(20.0),
+            );
+            let mut root = div().size_full().relative().child(trigger);
+            if popover.is_open() {
+                let popup = self.hover.popup_part(
+                    cx,
+                    popover,
+                    |view| &mut view.hover,
+                    div().w(100.0).h(60.0),
+                );
+                root = root.child(popover.positioner_part(div().child(popup)));
+            }
+            root
+        }
+    }
+
+    #[test]
+    fn hover_opening_uses_exact_one_shot_deadlines_and_survives_the_gap_to_the_popup() {
+        let (mut cx, view) = TestAppContext::new(HoverPopoverView::default()).unwrap();
+        let window = view.window_handle();
+        assert!(!cx.contains_element(window, "popup").unwrap());
+
+        cx.visual(window)
+            .unwrap()
+            .move_pointer(Point::new(10.0, 10.0))
+            .unwrap();
+        assert!(cx.read(view, |view| view.hover.is_pending()).unwrap());
+        assert!(!cx.read(view, |view| view.hover.is_open()).unwrap());
+
+        cx.advance_time(Duration::from_millis(199)).unwrap();
+        assert!(!cx.read(view, |view| view.hover.is_open()).unwrap());
+        cx.advance_time(Duration::from_millis(1)).unwrap();
+        assert!(cx.read(view, |view| view.hover.is_open()).unwrap());
+        assert!(!cx.read(view, |view| view.hover.is_pending()).unwrap());
+        assert!(cx.contains_element(window, "popup").unwrap());
+
+        // An opened popover owns no timer: nothing is scheduled once the deadline fired.
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
+
+        // Leaving the trigger starts the close deadline; entering the popup cancels it.
+        cx.visual(window)
+            .unwrap()
+            .move_pointer(Point::new(600.0, 400.0))
+            .unwrap();
+        assert!(cx.read(view, |view| view.hover.is_pending()).unwrap());
+        cx.visual(window)
+            .unwrap()
+            .move_pointer(Point::new(40.0, 50.0))
+            .unwrap();
+        assert!(!cx.read(view, |view| view.hover.is_pending()).unwrap());
+        cx.advance_time(Duration::from_millis(500)).unwrap();
+        assert!(cx.read(view, |view| view.hover.is_open()).unwrap());
+
+        // Leaving everything closes after exactly the declared close delay.
+        cx.visual(window)
+            .unwrap()
+            .move_pointer(Point::new(600.0, 400.0))
+            .unwrap();
+        cx.advance_time(Duration::from_millis(99)).unwrap();
+        assert!(cx.read(view, |view| view.hover.is_open()).unwrap());
+        cx.advance_time(Duration::from_millis(1)).unwrap();
+        assert!(!cx.read(view, |view| view.hover.is_open()).unwrap());
+        assert!(!cx.contains_element(window, "popup").unwrap());
+
+        let renders = cx.render_count(window).unwrap();
+        cx.run_until_idle().unwrap();
+        assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    #[test]
+    fn hover_state_defaults_are_bounded_and_immediate_changes_cancel_deadlines() {
+        let state = PopoverHoverState::new();
+        assert!(!state.is_open());
+        assert!(!state.is_pending());
+        assert_eq!(state.delay, DEFAULT_POPOVER_HOVER_DELAY);
+        assert_eq!(state.close_delay, Duration::ZERO);
+        assert_eq!(
+            PopoverHoverState::new()
+                .delay(Duration::from_secs(3_600))
+                .delay,
+            MAX_POPOVER_HOVER_DELAY
+        );
+        assert_eq!(
+            PopoverHoverState::new()
+                .close_delay(Duration::from_secs(3_600))
+                .close_delay,
+            MAX_POPOVER_HOVER_DELAY
+        );
+
+        let mut state = PopoverHoverState::new().hoverable_popup(false);
+        assert!(state.open_now());
+        assert!(!state.open_now());
+        assert!(state.is_open());
+        assert!(state.toggle());
+        assert!(!state.is_open());
+        assert!(state.toggle());
+        assert!(state.close_now());
+        assert!(!state.close_now());
+        state.popup_hovered = true;
+        assert!(!state.is_hovered());
     }
 }

@@ -183,7 +183,7 @@ pub use date_field::{
     TimeFieldSegment, TimeFieldState, TimeSegment, TimeSegments, date_field,
     date_field_key_bindings, time_field, time_field_key_bindings,
 };
-pub use dialog::{Dialog, DialogKind};
+pub use dialog::{Dialog, DialogKind, DialogState, MAX_DIALOG_TRANSITION};
 pub use disclosure::{
     Accordion, AccordionItem, AccordionItemState, AccordionState, AccordionStateError, Collapsible,
     CollapsibleState, MAX_ACCORDION_OPEN_ITEMS,
@@ -201,15 +201,16 @@ pub use drawer::{
 pub use element::native_view;
 pub use element::{
     AccessibilityAutoComplete, AccessibilityLive, AccessibilityOrientation, AccessibilityPopover,
-    AccessibilityRole, AccessibilitySortDirection, AccessibilityValueRange, AnchorPlacement,
-    AppRegion, BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundSize, Element,
-    ElementId, ElementStateStyle, FocusHandle, GridTrack, IntoElement, MAX_BACKGROUND_IMAGE_TILES,
-    MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
-    MAX_CORNER_RADIUS, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
-    MAX_MOUSE_LISTENERS_PER_ELEMENT, MAX_OUTLINE_OFFSET, MAX_OUTLINE_WIDTH, Outline, ToggleState,
-    UserSelect, Visibility, button, canvas, container_query, custom_shader, div, form, img,
-    overlay, path, styled_text_area, styled_text_input, submit_button, svg, text, text_area,
-    text_input,
+    AccessibilityRole, AccessibilitySortDirection, AccessibilityValueRange, AnchorAlign,
+    AnchorPlacement, AnchorPlacementHandle, AnchorSide, AppRegion, BackgroundImage,
+    BackgroundPosition, BackgroundRepeat, BackgroundSize, Element, ElementId, ElementStateStyle,
+    FocusHandle, GridTrack, IntoElement, MAX_BACKGROUND_IMAGE_TILES, MAX_BOX_SHADOWS_PER_ELEMENT,
+    MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH, MAX_CORNER_RADIUS,
+    MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT, MAX_MOUSE_LISTENERS_PER_ELEMENT,
+    MAX_OUTLINE_OFFSET, MAX_OUTLINE_WIDTH, Outline, ResolvedAnchorPlacement, ToggleState,
+    UserSelect, Visibility, anchor_placement, button, canvas, container_query, custom_shader, div,
+    form, img, overlay, path, styled_text_area, styled_text_input, submit_button, svg, text,
+    text_area, text_input,
 };
 pub use entity::{
     Entity, EntityId, EventEmitter, MAX_ENTITY_EVENT_DELIVERIES_PER_TURN,
@@ -233,7 +234,10 @@ pub use event::{
     PressureStage, RotationEvent, ScrollDelta, ScrollWheelEvent, SmartMagnifyEvent, TouchEvent,
     TouchId, TouchPhase, ValidationIssue, ValidationReport,
 };
-pub use field::{Field, FieldState, Fieldset};
+pub use field::{
+    Field, FieldState, FieldValidationMode, FieldValidationTrigger, Fieldset,
+    MAX_FIELD_VALIDATION_DEBOUNCE,
+};
 pub use find::{
     FIND_BAR_KEY_CONTEXT, FindBar, FindClose, FindNext, FindOptions, FindPrevious, FindReplace,
     FindReplaceAll, FindState, MAX_FIND_MATCHES, MAX_FIND_QUERY_BYTES, MAX_FIND_REPLACEMENT_BYTES,
@@ -309,8 +313,10 @@ pub use navigation_menu::{
     NavigationMenuState, navigation_menu, navigation_menu_key_bindings,
 };
 pub use number_field::{
-    MAX_NUMBER_FIELD_PRECISION, MAX_NUMBER_FIELD_TEXT_BYTES, NUMBER_FIELD_REPEAT_DELAY,
-    NUMBER_FIELD_REPEAT_INTERVAL, NumberField, NumberFieldFormat, NumberFieldState, number_field,
+    DEFAULT_NUMBER_FIELD_SCRUB_SENSITIVITY, MAX_NUMBER_FIELD_PRECISION,
+    MAX_NUMBER_FIELD_SCRUB_SENSITIVITY, MAX_NUMBER_FIELD_TEXT_BYTES, NUMBER_FIELD_REPEAT_DELAY,
+    NUMBER_FIELD_REPEAT_INTERVAL, NumberField, NumberFieldFormat, NumberFieldPartState,
+    NumberFieldScrubDirection, NumberFieldState, NumberFieldStepSize, number_field,
     number_field_root,
 };
 pub use otp_field::{
@@ -367,7 +373,11 @@ pub use popover::{
     MAX_GRABBING_POPOVERS, PopoverAnchor, PopoverConstraintAdjustment, PopoverGravity,
     PopoverOptions,
 };
-pub use popover_component::{Popover, PopoverKind, SystemPopover};
+pub use popover_component::{
+    DEFAULT_POPOVER_HOVER_DELAY, MAX_POPOVER_ALIGN_OFFSET, MAX_POPOVER_ARROW_SIZE,
+    MAX_POPOVER_COLLISION_PADDING, MAX_POPOVER_HOVER_DELAY, MAX_POPOVER_SIDE_OFFSET, Popover,
+    PopoverHoverState, PopoverKind, PopoverPartState, SystemPopover,
+};
 pub use popover_menu::{
     MAX_POPOVER_MENU_DEPTH, MAX_POPOVER_MENU_ITEM_TEXT_BYTES, MAX_POPOVER_MENU_ITEMS,
     MAX_POPOVER_MENU_TEXT_BYTES, MAX_POPOVER_MENU_TYPEAHEAD_BYTES, POPOVER_MENU_KEY_CONTEXT,
@@ -380,7 +390,9 @@ pub use preview_card::{
     DEFAULT_PREVIEW_CARD_CLOSE_DELAY, DEFAULT_PREVIEW_CARD_DELAY, MAX_PREVIEW_CARD_DELAY,
     PreviewCard, PreviewCardState, preview_card_trigger,
 };
-pub use progress::{Meter, Progress, meter, progress};
+pub use progress::{
+    Meter, Progress, ProgressPartState, ProgressStatus, ValueFormat, meter, progress,
+};
 pub use quickgui_system::{
     AppInfo, AppPaths, AutoStart, AutoStartMode, AutoStartOptions, BatteryState, BatteryStatus,
     ColorScheme, IdleState, MAX_APP_IDENTIFIER_BYTES, MAX_APP_NAME_BYTES, MAX_APP_VERSION_BYTES,
@@ -490,8 +502,8 @@ pub use selection_control::{
 pub use separator::{Separator, SeparatorOrientation, separator};
 pub use slider::{
     MAX_SLIDER_THUMBS, Slider, SliderDecrement, SliderIncrement, SliderLargeDecrement,
-    SliderLargeIncrement, SliderMaximum, SliderMinimum, SliderOrientation, SliderState,
-    SliderThumb, slider, slider_key_bindings,
+    SliderLargeIncrement, SliderMaximum, SliderMinimum, SliderOrientation, SliderPointerChange,
+    SliderState, SliderThumb, SliderThumbAlignment, SliderThumbState, slider, slider_key_bindings,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use spell::TestSpellCheckProvider;
@@ -540,7 +552,10 @@ pub use table::{
     TableSelection, TableSelectionChanged, TableSelectionMode, TableSort, TableSortDirection,
     TableState, TableToggleSelection, table_key_bindings,
 };
-pub use tabs::{Tab, TabState, Tabs, TabsOrientation, TabsState};
+pub use tabs::{
+    Tab, TabState, Tabs, TabsActivationDirection, TabsActivationMovement, TabsIndicatorGeometry,
+    TabsOrientation, TabsState,
+};
 #[cfg(feature = "terminal")]
 pub use terminal::{
     MAX_TERMINAL_ARGUMENTS, MAX_TERMINAL_ENVIRONMENT, MAX_TERMINAL_SCROLLBACK,
@@ -550,8 +565,10 @@ pub use terminal::{
     TerminalTheme,
 };
 pub use toast::{
-    MAX_TOAST_DURATION, MAX_TOAST_TEXT_BYTES, MAX_TOASTS, Toast, ToastEntry, ToastId, ToastKind,
-    ToastManager, ToastParts, ToastViewport, toast_viewport,
+    DEFAULT_TOAST_LIMIT, DEFAULT_TOAST_SWIPE_THRESHOLD, DEFAULT_TOAST_TIMEOUT, MAX_TOAST_DURATION,
+    MAX_TOAST_SWIPE_THRESHOLD, MAX_TOAST_TEXT_BYTES, MAX_TOASTS, Toast, ToastEntry, ToastId,
+    ToastKind, ToastManager, ToastParts, ToastSwipeChange, ToastSwipeDirection, ToastViewport,
+    toast_viewport,
 };
 pub use toggle::{
     MAX_TOGGLE_GROUP_ITEMS, Toggle, ToggleGroup, ToggleGroupEntry, ToggleGroupFirst,
@@ -563,8 +580,10 @@ pub use toolbar::{
     ToolbarOrientation, ToolbarPrevious, ToolbarState, toolbar, toolbar_key_bindings,
 };
 pub use tooltip::{
-    DEFAULT_TOOLTIP_DELAY, MAX_TOOLTIP_CONTENT_NODES, MAX_TOOLTIP_DELAY, MAX_TOOLTIPS_PER_WINDOW,
-    Tooltip,
+    DEFAULT_TOOLTIP_DELAY, DEFAULT_TOOLTIP_GROUP_TIMEOUT, DEFAULT_TOOLTIP_HOVER_DELAY,
+    MAX_TOOLTIP_COLLISION_PADDING, MAX_TOOLTIP_CONTENT_NODES, MAX_TOOLTIP_DELAY,
+    MAX_TOOLTIP_GROUP_TIMEOUT, MAX_TOOLTIP_SIDE_OFFSET, MAX_TOOLTIPS_PER_WINDOW, Tooltip,
+    TooltipCursorAxis, TooltipPartState, TooltipProvider, TooltipState,
 };
 pub use transition::{MAX_STYLE_TRANSITIONS_PER_WINDOW, Transition, TransitionProperties};
 pub use tree::{

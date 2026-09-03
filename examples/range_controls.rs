@@ -2,13 +2,13 @@
 //!
 //! Run with `cargo run --release --example range_controls`.
 
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use quickgui::{
     Application, AsyncViewContext, Color, Element, IntoElement, Key, Meter, MouseButton,
-    NumberField, NumberFieldState, Progress, Size, Slider, SliderState, Splitter,
-    SplitterOrientation, SplitterState, Task, View, ViewContext, WindowOptions, div,
-    slider_key_bindings, splitter_key_bindings, text, text_input,
+    NumberField, NumberFieldState, Progress, ProgressStatus, Size, Slider, SliderState,
+    SliderThumbAlignment, Splitter, SplitterOrientation, SplitterState, Task, ValueFormat, View,
+    ViewContext, WindowOptions, div, slider_key_bindings, splitter_key_bindings, text, text_input,
 };
 
 const TRACK: Size = Size {
@@ -62,6 +62,8 @@ struct RangeControlsDemo {
     quantity: NumberFieldState,
     panes: SplitterState,
     downloaded: f64,
+    /// The last value a completed drag committed, Base UI's `onValueCommitted`.
+    committed_volume: Option<f64>,
     repeat: Option<Task<()>>,
 }
 
@@ -69,14 +71,22 @@ impl Default for RangeControlsDemo {
     fn default() -> Self {
         Self {
             volume: SliderState::new(0.0, 100.0, 40.0).step(5.0),
-            price: SliderState::range(0.0, 100.0, &[20.0, 80.0]).step(10.0),
+            price: SliderState::range(0.0, 100.0, &[20.0, 80.0])
+                .step(10.0)
+                .min_steps_between_values(1)
+                .thumb_alignment(SliderThumbAlignment::Edge),
             zoom: SliderState::new(50.0, 400.0, 100.0).step(25.0).vertical(),
-            quantity: NumberFieldState::new(4.0).range(0.0, 99.0).step(1.0),
+            quantity: NumberFieldState::new(4.0)
+                .range(0.0, 99.0)
+                .step(1.0)
+                .snap_on_step(true)
+                .scrub_sensitivity(4.0),
             panes: SplitterState::new(SplitterOrientation::Horizontal, &[220.0, 380.0])
                 .min_size(0, 140.0)
                 .min_size(1, 200.0)
                 .collapsible(0, true),
             downloaded: 42.0,
+            committed_volume: None,
             repeat: None,
         }
     }
@@ -114,19 +124,26 @@ impl RangeControlsDemo {
 
     fn horizontal_slider(&self, cx: &mut ViewContext<'_, Self>, colors: Palette) -> Element {
         let slider = Slider::new("volume", &self.volume);
+        // `apply_pointer_change` reports the Base UI `onValueCommitted` boundary: `committed` is
+        // true exactly once, on the event that releases the capture.
         let drag = cx.pointer_listener(slider.track_id(), |view, event, cx| {
-            if view.volume.apply_pointer(event, TRACK) {
+            let change = view.volume.apply_pointer_change(event, TRACK);
+            if change.committed {
+                view.committed_volume = Some(view.volume.value());
+            }
+            if change.changed {
                 cx.invalidate();
             }
         });
         let thumb = slider.thumb(0).expect("single thumb");
         let fill = self.volume.fraction(0) * TRACK.width;
+        let format = ValueFormat::new(|value, _maximum| Arc::from(format!("{value:.0}")));
 
         slider.key_part(
             cx,
             slider
                 .root_part(div().flex_row().items_center().gap_3())
-                .accessibility_label("Volume")
+                .child(slider.label_part(text("Volume").text_sm().text_color(colors.muted)))
                 .focus(|state| state.border(2.0, colors.accent))
                 .child(
                     slider
@@ -149,7 +166,7 @@ impl RangeControlsDemo {
                                 .bg(colors.track),
                         )
                         .child(
-                            slider.range_part(
+                            slider.indicator_part(
                                 div()
                                     .absolute()
                                     .top(8.0)
@@ -161,21 +178,39 @@ impl RangeControlsDemo {
                             ),
                         )
                         .child(
-                            thumb.thumb_part(
-                                div()
-                                    .absolute()
-                                    .top(3.0)
-                                    .left(fill - 7.0)
-                                    .size(14.0, 14.0)
-                                    .rounded(7.0)
-                                    .bg(colors.foreground),
-                            ),
+                            thumb
+                                .thumb_part(
+                                    div()
+                                        .absolute()
+                                        .top(3.0)
+                                        // `offset` honours the declared thumb alignment instead of
+                                        // the example doing the arithmetic itself.
+                                        .left(thumb.offset(TRACK.width, 14.0))
+                                        .size(14.0, 14.0)
+                                        .rounded(7.0)
+                                        .bg(if thumb.is_dragging() {
+                                            colors.accent
+                                        } else {
+                                            colors.foreground
+                                        }),
+                                )
+                                .accessibility_value(thumb.value_text(&format)),
                         ),
                 )
                 .child(
-                    text(format!("{:.0}", self.volume.value()))
-                        .text_sm()
-                        .text_color(colors.muted),
+                    slider.value_part(
+                        text(slider.display_value(&format))
+                            .text_sm()
+                            .text_color(colors.muted),
+                    ),
+                )
+                .child(
+                    text(match self.committed_volume {
+                        Some(value) => format!("committed {value:.0}"),
+                        None => "drag to commit".to_owned(),
+                    })
+                    .text_xs()
+                    .text_color(colors.muted),
                 ),
             Self::volume,
         )
@@ -367,6 +402,13 @@ impl RangeControlsDemo {
                 cx.invalidate();
             }
         });
+        // Base UI's ScrubArea: a captured drag over the handle changes the value without touching
+        // the caret. Shift scrubs by the large step and Alt by the small one.
+        let scrub = cx.pointer_listener(field.scrub_area_id(), |view: &mut Self, event, cx| {
+            if view.quantity.apply_scrub(event) {
+                cx.invalidate();
+            }
+        });
 
         let stepper = |glyph: &'static str| {
             div()
@@ -380,42 +422,78 @@ impl RangeControlsDemo {
                 .child(text(glyph).text_sm())
         };
 
-        field.root_part(
-            div()
-                .flex_row()
-                .items_center()
-                .gap_2()
-                .on_mouse_up(MouseButton::Left, release)
-                .child(
-                    field.input_part(
+        field
+            .root_part(
+                div()
+                    .flex_row()
+                    .items_center()
+                    .gap_2()
+                    .on_mouse_up(MouseButton::Left, release)
+                    .child(
+                        field.input_part(
+                            &self.quantity,
+                            text_input(self.quantity.text().clone())
+                                .w(96.0)
+                                .px_2()
+                                .py_1()
+                                .rounded_md()
+                                .border(1.0, colors.border)
+                                .bg(colors.track)
+                                .text_color(colors.foreground)
+                                .invalid_style(|state| state.border(1.0, colors.warning))
+                                .on_input(edit)
+                                .on_key_down(commit),
+                        ),
+                    )
+                    .child(field.decrement_part(
                         &self.quantity,
-                        text_input(self.quantity.text().clone())
-                            .w(96.0)
-                            .px_2()
-                            .py_1()
-                            .rounded_md()
+                        stepper("−").on_mouse_down(MouseButton::Left, press_down),
+                    ))
+                    .child(field.increment_part(
+                        &self.quantity,
+                        stepper("+").on_mouse_down(MouseButton::Left, press_up),
+                    )),
+            )
+            .child(
+                field
+                    .scrub_area_part(
+                        &self.quantity,
+                        div()
+                            .relative()
+                            .size(28.0, 20.0)
+                            .flex_row()
+                            .items_center()
+                            .justify_center()
+                            .rounded(6.0)
                             .border(1.0, colors.border)
-                            .bg(colors.track)
-                            .text_color(colors.foreground)
-                            .invalid_style(|state| state.border(1.0, colors.warning))
-                            .on_input(edit)
-                            .on_key_down(commit),
-                    ),
-                )
-                .child(field.decrement_part(
-                    &self.quantity,
-                    stepper("−").on_mouse_down(MouseButton::Left, press_down),
-                ))
-                .child(field.increment_part(
-                    &self.quantity,
-                    stepper("+").on_mouse_down(MouseButton::Left, press_up),
-                )),
-        )
+                            .bg(if self.quantity.is_scrubbing() {
+                                colors.accent
+                            } else {
+                                colors.track
+                            })
+                            .on_pointer(scrub),
+                    )
+                    .child(text("↔").text_sm())
+                    .children(self.quantity.is_scrubbing().then(|| {
+                        field.scrub_area_cursor_part(
+                            div()
+                                .absolute()
+                                .top(-14.0)
+                                .left(6.0)
+                                .size(6.0, 6.0)
+                                .rounded(3.0)
+                                .bg(colors.foreground),
+                        )
+                    })),
+            )
     }
 
     fn feedback(&self, colors: Palette) -> Element {
+        // The identified indicator takes its accessible name and description from its own mounted
+        // label and value parts; the formatter is the only place the percentage text is built.
         let download = Progress::new(self.downloaded, 100.0)
-            .value_text(format!("{:.0} percent", self.downloaded));
+            .id("download-progress")
+            .format(ValueFormat::percent());
         let scanning = Progress::indeterminate();
         let disk = Meter::new(72.0, 0.0, 100.0).low(20.0).high(80.0);
         let completion = download.completion().unwrap_or(0.0);
@@ -426,23 +504,37 @@ impl RangeControlsDemo {
             .child(
                 download
                     .root_part(div().flex_col().gap_1())
-                    .accessibility_label("Download")
-                    .child(text("Downloading").text_sm())
                     .child(
                         div()
-                            .w(TRACK.width)
-                            .h(6.0)
-                            .rounded(3.0)
-                            .bg(colors.track)
+                            .flex_row()
+                            .justify_between()
+                            .gap_2()
+                            .child(download.label_part(text("Downloading").text_sm()))
                             .child(
-                                download.indicator_part(
-                                    div()
-                                        .w(TRACK.width * completion)
-                                        .h(6.0)
-                                        .rounded(3.0)
-                                        .bg(colors.accent),
+                                download.value_part(
+                                    text(download.display_value().unwrap_or_default())
+                                        .text_sm()
+                                        .text_color(colors.muted),
                                 ),
                             ),
+                    )
+                    .child(
+                        download.track_part(
+                            div()
+                                .w(TRACK.width)
+                                .h(6.0)
+                                .rounded(3.0)
+                                .bg(colors.track)
+                                .child(download.indicator_part(
+                                    div().w(TRACK.width * completion).h(6.0).rounded(3.0).bg(
+                                        if download.status() == ProgressStatus::Complete {
+                                            colors.warning
+                                        } else {
+                                            colors.accent
+                                        },
+                                    ),
+                                )),
+                        ),
                     ),
             )
             .child(

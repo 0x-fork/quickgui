@@ -119,6 +119,97 @@ composition, `surface_part(element)` and `surface()` merge positioner and popove
 unstyled root. Separate parts are preferable when the application sizes or animates the
 positioner independently.
 
+### Parts
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `Popover::new(trigger_id, popup_id, open)` | copied descriptor, derived part identities, controlled open state |
+| Trigger | `trigger_part(element)` / `trigger()` | button semantics, focus, `expanded`, `has-popup`, `controls` while open |
+| Portal | `portal_part(element)` | the same retained overlay node as the positioner |
+| Positioner | `positioner_part(element)`, `tracked_positioner_part(element, &handle)` | anchoring, flip/shift, side and align offsets, collision padding, sticky policy, placement reporting |
+| Popup | `popover_part(element)` | role, dismissal, pointer blocking, focus restoration, modal focus containment, title/description relationships |
+| Arrow | `arrow_part(element)` | absolute placement on the resolved edge and cross-axis centering on the anchor |
+| Backdrop | `backdrop_part(element)` | full-viewport, accessibility-hidden pointer layer |
+| Viewport | `viewport_part(element)` | stable identity and a scroll container inside the popup |
+| Title | `title_part(element)` | the label target the popup points at |
+| Description | `description_part(element)` | the description target the popup points at |
+| Close | `close_part(label, element)` | button semantics and an accessible name |
+
+`surface_part(element)` and `surface()` merge positioner and popover behavior onto one unstyled
+root, and `tracked_surface_part(element, &handle)` does the same while publishing placement.
+Separate parts are preferable when the application sizes or animates the positioner independently.
+
+### Positioner props
+
+`side(AnchorSide)` and `align(AnchorAlign)` are the two halves of `placement(...)`; all three keep
+working. `side_offset(...)` and `collision_padding(...)` are the Base UI-named aliases of
+`anchor_gap(...)` and `viewport_margin(...)` — both names write the same bounded value.
+`align_offset(...)` shifts the surface along its cross axis before collision handling, so it can
+slide a popup along its trigger but never push it off screen. `sticky(false)` opts out of
+QuickGUI's default clamping so a popup pinned to a scrolling row leaves the viewport with it.
+`anchor_element(id)` and `anchor_point(point)` position against something other than the trigger
+without changing the trigger's own relationships; `anchor_trigger()` restores the default.
+`modal(true)` contains Tab focus inside the popup and expects a mounted backdrop; QuickGUI adds no
+dimming.
+
+Every distance is clamped by `MAX_POPOVER_SIDE_OFFSET`, `MAX_POPOVER_ALIGN_OFFSET`,
+`MAX_POPOVER_COLLISION_PADDING`, and `MAX_POPOVER_ARROW_SIZE`. A non-finite value falls back to the
+declared default rather than to a bound.
+
+### Resolved placement and the flip-aware arrow
+
+A declared placement is a preference. QuickGUI flips the side and re-aligns the cross axis whenever
+the preference does not fit, so an arrow drawn from the preference would point at nothing near a
+window edge. Store an `AnchorPlacementHandle` next to the open flag, mount the positioner with
+`tracked_positioner_part`, and read it back with `track_placement`:
+
+```rust,ignore
+let popover = Popover::new("trigger", "popup", self.open)
+    .side(AnchorSide::Top)
+    .align(AnchorAlign::Center)
+    .side_offset(12.0)
+    .arrow_size(12.0)
+    .arrow_padding(10.0)
+    .track_placement(&self.placement);
+let state = popover.state();
+```
+
+The handle receives the resolved placement, the anchor rectangle, the placed popup rectangle, the
+room left on the resolved side, and whether the anchor scrolled out of view. It is written during
+the paint QuickGUI was already performing; when the resolved value changes, exactly one correcting
+frame is requested, and an unchanged placement requests none, so a settled popover stays settled.
+`Element::report_anchor_placement(handle)` binds the same reporting to any anchored element.
+
+`arrow_part(element)` then pins the caller-owned arrow to the popup edge that faces the anchor and
+centers it on the anchor along the cross axis, clamped by `arrow_padding`. Size, shape, rotation,
+and color stay application-owned, and the arrow is hidden from assistive technology.
+
+`Popover::state()` returns a copyable `PopoverPartState` carrying what Base UI exposes as `data-*`
+attributes and CSS variables: `open`, `modal`, `side`, `align`, `anchor_hidden`, `anchor_width`,
+`anchor_height`, `available_width`, and `available_height`. The measured fields stay zero — and
+`is_measured()` returns `false` — until the popover has been painted once with a bound handle.
+
+### Hover opening
+
+`PopoverHoverState` is Base UI's Trigger `openOnHover`. The application still owns whether the
+popover is open; the state decides when that changes:
+
+```rust,ignore
+let popover = Popover::new("trigger", "popup", self.hover.is_open());
+let trigger = self.hover.trigger_part(cx, popover, |view| &mut view.hover, div());
+let popup = self.hover.popup_part(cx, popover, |view| &mut view.hover, div());
+```
+
+`delay(...)` (Base UI's `delay`, 300 ms by default) and `close_delay(...)` (`closeDelay`, immediate
+by default) are exact one-shot deadlines bounded by `MAX_POPOVER_HOVER_DELAY`; entering or leaving
+cancels the outstanding task rather than polling, and a zero delay applies the change in the same
+controlled update with no task at all. Because the popup is hoverable by default, the pointer can
+cross the `side_offset` gap without closing the surface; `hoverable_popup(false)` closes as soon as
+the pointer leaves the trigger. `open_now`, `close_now`, and `toggle` apply an immediate change and
+cancel any outstanding deadline, so a click listener and a hover deadline cannot fight. Each method
+has a `_with` counterpart taking a `StateAccessor` for a host that renders many declared popovers
+through one view.
+
 ## SystemPopover
 
 `SystemPopover` takes an explicit child-surface size and resolves the trigger's latest retained
@@ -260,8 +351,9 @@ applications. See [Solid 2 renderer](solid.md#declared-popover-and-context-menus
 silently install a second menu-item registry. Existing typed actions, keymaps, picker state, or
 custom controls can be composed inside the surface.
 
-Use `.placement(...)` to choose a preferred side/alignment. `.anchor_gap(...)` and
-`.viewport_margin(...)` configure finite, bounded positioner geometry. Minimum width, padding,
+Use `.placement(...)`, or `.side(...)` and `.align(...)`, to choose a preferred side and
+alignment. `.anchor_gap(...)`/`.side_offset(...)` and `.viewport_margin(...)`/
+`.collision_padding(...)` configure finite, bounded positioner geometry. Minimum width, padding,
 border, radius, shadow, typography, and all other presentation belong on the caller's popover
 element.
 
@@ -273,12 +365,17 @@ complete chain with `close_popover_chain`. No second component-owned popover reg
 ## Resource behavior
 
 A `Popover` descriptor is `Copy` and contains two declared IDs, controlled state, semantic kind,
-bounded structural placement, dismissal policy, and optional initial focus. Derived part IDs are
+bounded structural placement, dismissal policy, optional initial focus, and one optional copied
+placement report. Derived part IDs are
 computed without allocation. It owns no `Rc`, appearance token, component store, observer, task,
 timer, animation loop, or native window. Closed content is unmounted; an open, settled popover adds
 no deadline or idle frame. A mounted popover uses the existing one fixed relation table for its
 optional title/description targets; native relationships are projected only when an accessibility
 update is requested.
+
+`AnchorPlacementHandle` retains one small allocation and no task, timer, or observer. A
+`PopoverHoverState` owns at most one pending foreground task, and only while a hover deadline is
+outstanding; it is cancelled on the next hover change or immediate open/close.
 
 `SystemPopover` is also a copied descriptor and adds no observer, task, timer, or idle deadline.
 While open, its child owns one native window and one WGPU surface but shares the application's GPU

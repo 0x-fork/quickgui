@@ -121,6 +121,7 @@ impl ToolbarState {
 pub struct ToolbarItem {
     value: ElementId,
     disabled: bool,
+    focusable_when_disabled: bool,
 }
 
 impl ToolbarItem {
@@ -128,6 +129,7 @@ impl ToolbarItem {
         Self {
             value: value.into(),
             disabled: false,
+            focusable_when_disabled: true,
         }
     }
 
@@ -141,8 +143,23 @@ impl ToolbarItem {
         self.value
     }
 
+    /// Choose whether this item stays reachable by keyboard while it is disabled.
+    ///
+    /// This is Base UI's `focusableWhenDisabled`, and a toolbar defaults it to `true`: skipping an
+    /// unavailable item entirely hides it from keyboard users, who then cannot discover that the
+    /// command exists at all. The item still reports as disabled and still refuses pointer focus.
+    pub const fn focusable_when_disabled(mut self, focusable: bool) -> Self {
+        self.focusable_when_disabled = focusable;
+        self
+    }
+
     pub const fn is_disabled(self) -> bool {
         self.disabled
+    }
+
+    /// Whether a disabled item keeps its place in the keyboard sequence.
+    pub const fn is_focusable_when_disabled(self) -> bool {
+        self.focusable_when_disabled
     }
 }
 
@@ -240,6 +257,32 @@ impl<'a> Toolbar<'a> {
             .app_region_no_drag()
     }
 
+    /// Decorate a caller-owned group of related toolbar items, Base UI's Toolbar.Group.
+    ///
+    /// The group is a labelling and structural unit only: every item inside it keeps taking part
+    /// in the toolbar's single roving Tab stop, so grouping never creates a second focus scope.
+    pub fn group_part(self, group: Element) -> Element {
+        group
+            .accessibility_role(AccessibilityRole::Group)
+            .accessibility_orientation(self.orientation.accessibility())
+            .app_region_no_drag()
+    }
+
+    /// Decorate a caller-owned divider between toolbar groups, Base UI's Toolbar.Separator.
+    ///
+    /// A separator carries the Separator role across the toolbar's cross axis and never takes
+    /// focus, so arrow navigation steps straight past it.
+    pub fn separator_part(self, separator: Element) -> Element {
+        separator
+            .accessibility_role(AccessibilityRole::Separator)
+            .accessibility_orientation(match self.orientation {
+                ToolbarOrientation::Horizontal => AccessibilityOrientation::Vertical,
+                ToolbarOrientation::Vertical => AccessibilityOrientation::Horizontal,
+            })
+            .app_region_no_drag()
+            .user_select_none()
+    }
+
     /// Describe one declared item.
     pub fn item(self, value: impl Into<ElementId>) -> Option<ToolbarEntry<'a>> {
         let value = value.into();
@@ -289,14 +332,40 @@ impl<'a> ToolbarEntry<'a> {
     /// with the toolbar's arrow keys.
     pub fn item_part(self, item: Element) -> Element {
         let disabled = self.item.disabled || item.accessibility.disabled;
-        item.id(self.item_id())
+        let item = item
+            .id(self.item_id())
             .focusable()
             .tab_index(if self.roving { 0 } else { -1 })
             .key_context(self.toolbar.orientation.key_context())
             .cursor_default()
             .app_region_no_drag()
             .user_select_none()
-            .disabled(disabled)
+            .disabled(disabled);
+        if disabled && self.item.focusable_when_disabled {
+            item.focusable_when_disabled()
+        } else {
+            item
+        }
+    }
+
+    /// Decorate an application-owned toolbar button, Base UI's Toolbar.Button.
+    ///
+    /// This is [`Self::item_part`] plus the Button role and click activation.
+    pub fn button_part(self, button: Element) -> Element {
+        self.item_part(button.accessibility_role(AccessibilityRole::Button))
+    }
+
+    /// Decorate an application-owned toolbar link, Base UI's Toolbar.Link.
+    pub fn link_part(self, link: Element) -> Element {
+        self.item_part(link.accessibility_role(AccessibilityRole::Link))
+    }
+
+    /// Decorate an application-owned toolbar input, Base UI's Toolbar.Input.
+    ///
+    /// The element keeps whatever role it already declares — a [`crate::text_input`] is already a
+    /// text field — and gains the toolbar's roving Tab stop and arrow key context.
+    pub fn input_part(self, input: Element) -> Element {
+        self.item_part(input)
     }
 
     /// Attach QuickGUI's typed toolbar navigation to this item.
@@ -707,5 +776,86 @@ mod tests {
         assert_eq!(element.accessibility.role, AccessibilityRole::Toolbar);
         assert!(element.children.is_empty());
         assert_eq!(element.visual.background, None);
+    }
+
+    #[test]
+    fn base_ui_toolbar_parts_add_roles_without_a_second_focus_scope() {
+        let state = ToolbarState::new("bold");
+        let items = [
+            ToolbarItem::new("bold"),
+            ToolbarItem::new("italic").disabled(true),
+            ToolbarItem::new("link"),
+            ToolbarItem::new("search"),
+        ];
+        let toolbar = Toolbar::new("format", &state, &items);
+
+        let button = toolbar
+            .item("bold")
+            .expect("declared item")
+            .button_part(div());
+        assert_eq!(button.accessibility.role, AccessibilityRole::Button);
+        assert_eq!(button.tab_index, 0);
+        assert_eq!(button.visual.background, None);
+
+        let link = toolbar
+            .item("link")
+            .expect("declared item")
+            .link_part(div());
+        assert_eq!(link.accessibility.role, AccessibilityRole::Link);
+        assert_eq!(link.tab_index, -1);
+
+        // An input keeps whatever role it already declares and only joins the roving Tab stop.
+        let input = toolbar
+            .item("search")
+            .expect("declared item")
+            .input_part(crate::text_input("query"));
+        assert_eq!(input.accessibility.role, AccessibilityRole::TextInput);
+        assert_eq!(input.tab_index, -1);
+        assert_eq!(input.key_context, button.key_context);
+
+        // A disabled toolbar item stays reachable by keyboard so it can still be discovered.
+        let unavailable = toolbar
+            .item("italic")
+            .expect("declared item")
+            .button_part(div());
+        assert!(unavailable.accessibility.disabled);
+        assert!(unavailable.is_keyboard_focusable());
+        assert!(ToolbarItem::new("x").is_focusable_when_disabled());
+
+        let skipped_items = [ToolbarItem::new("bold")
+            .disabled(true)
+            .focusable_when_disabled(false)];
+        let skipped = Toolbar::new("format", &state, &skipped_items)
+            .item("bold")
+            .expect("declared item")
+            .item_part(div());
+        assert!(!skipped.is_keyboard_focusable());
+
+        let group = toolbar.group_part(div().bg(Color::rgb8(1, 2, 3)));
+        assert_eq!(group.accessibility.role, AccessibilityRole::Group);
+        assert_eq!(
+            group.accessibility.orientation,
+            Some(AccessibilityOrientation::Horizontal)
+        );
+        assert_eq!(group.visual.background, Some(Color::rgb8(1, 2, 3)));
+        assert!(!group.focusable);
+
+        // A separator crosses the toolbar's axis and never takes focus.
+        let separator = toolbar.separator_part(div());
+        assert_eq!(separator.accessibility.role, AccessibilityRole::Separator);
+        assert_eq!(
+            separator.accessibility.orientation,
+            Some(AccessibilityOrientation::Vertical)
+        );
+        assert!(!separator.focusable);
+        assert_eq!(separator.visual.background, None);
+        assert_eq!(
+            toolbar
+                .vertical()
+                .separator_part(div())
+                .accessibility
+                .orientation,
+            Some(AccessibilityOrientation::Horizontal)
+        );
     }
 }

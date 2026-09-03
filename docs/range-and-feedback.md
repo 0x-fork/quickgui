@@ -61,13 +61,50 @@ slider.key_part(
 identity, roles, and interaction contracts and never add layout or paint. `key_part` attaches the
 typed keyboard actions to whichever part owns focus.
 
+### Parts
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `root_part(element)` | the Slider or Group role, orientation, numeric value and bounds, and the label/value relationships |
+| Label | `label_part(element)` | the accessible-name target the root points at |
+| Value | `value_part(element)` | the accessible-description target the root points at |
+| Control | `control_part(element)` | a second, outer identity to attach the pointer capture to |
+| Track | `track_part(element)` | the pointer-capture identity, kept out of the accessible name |
+| Indicator | `indicator_part(element)` | the filled part of the track; the same decorator as `range_part` |
+| Thumb | `SliderThumb::thumb_part(element)` | per-thumb Slider role, neighbour-derived bounds, focus, and key context |
+
+`control_part` is Base UI's separation of the region a press acts on from the track it paints. A
+caller that already attached the pointer listener to `track_part` keeps working unchanged.
+
+### Commits, dragging, and formatting
+
+`SliderState::apply_pointer_change` is `apply_pointer` with Base UI's `onValueCommitted` boundary
+exposed. It returns `SliderPointerChange { changed, values_changed, committed }`: `values_changed`
+is what `apply_pointer` returns, `changed` also covers the dragging flag so a thumb can restyle
+mid-drag, and `committed` is true exactly on the event that releases or cancels the capture — the
+moment a previewed value becomes final. `SliderState::is_dragging` is Base UI's `data-dragging`, and
+`end_drag()` clears it when the application cancels a drag itself.
+
+`SliderThumb::state()` returns a copyable `SliderThumbState` carrying `index` (Base UI's
+`data-index`), the value, the fraction, and the active, dragging, and disabled flags.
+
+`Slider::display_value(&format)` and `SliderThumb::value_text(&format)` apply the shared
+[`ValueFormat`](#status-and-formatting) — Base UI's Root `format` and Thumb `getAriaValueText`. A
+range slider joins its thumbs with an en dash. QuickGUI never renders the result: put it inside
+`value_part`, or pass it to `Element::accessibility_value` on the thumb. The Thumb `getAriaLabel`
+equivalent is the ordinary `Element::accessibility_label` on the caller-owned thumb.
+
 ### Geometry
 
 The application owns the track's layout, so it passes the size it declared to
 `SliderState::apply_pointer`. A press picks the nearest thumb, makes it active, and jumps it to the
 pointer; captured motion continues to drag that thumb outside the track and outside the window.
 `SliderState::fraction` returns each thumb's `0.0..=1.0` position for caller-owned placement, and
-`value_at` converts a pointer offset into a snapped value. A vertical track measures from its top,
+`value_at` converts a pointer offset into a snapped value. `SliderThumb::offset(track_length,
+thumb_length)` turns that fraction into the leading-edge offset the application lays the thumb out
+at, honoring Base UI's `thumbAlignment`: `SliderThumbAlignment::Center` lets the thumb overhang both
+ends, `Edge` keeps its box inside the track. Alignment changes nothing about the numeric
+contract. A vertical track measures from its top,
 where the maximum lives, so vertical sliders behave like their desktop counterparts without the
 application inverting anything.
 
@@ -82,7 +119,10 @@ slider; `SliderState::large_step` replaces it.
 
 `SliderState::range(min, max, &[..])` creates up to `MAX_SLIDER_THUMBS` thumbs. Values stay ordered:
 each thumb is clamped between its neighbors, so a drag can push a thumb to its neighbor's value but
-never past it. A single-thumb slider projects the Slider role on its root; a multi-thumb slider
+never past it. `min_steps_between_values(n)` is Base UI's `minStepsBetweenValues`: it holds a gap of
+`n` whole steps open between adjacent thumbs, re-orders the declared values outward from the first
+thumb, and clamps every later movement so the gap can never close. A continuous slider has no step
+to count, so the gap is inert there. A single-thumb slider projects the Slider role on its root; a multi-thumb slider
 projects a group root and one Slider role per thumb, each carrying its own value and its
 neighbor-derived bounds. Give each thumb an `.accessibility_label(...)`.
 
@@ -132,6 +172,48 @@ The input projects the SpinButton role with the committed numeric value, the fin
 range, the step, and invalid state whenever the current text does not parse into range. QuickGUI
 blocks Return submission for an invalid control, so commit from an ordinary key listener rather than
 `on_submit` when a field can hold out-of-range text.
+
+### Parts
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `root_part(element)` | the Group role and the identity every other part derives from |
+| Group | `group_part(element)` | one addressable unit around the steppers and the input |
+| Input | `input_part(state, element)` | the SpinButton role, numeric value and bounds, invalid, read-only, and required state |
+| Increment / Decrement | `increment_part(state, element)` / `decrement_part(state, element)` | button semantics outside the Tab sequence |
+| ScrubArea | `scrub_area_part(state, element)` | the pointer-capture identity, the axis cursor, drag exclusion, and selection suppression |
+| ScrubAreaCursor | `scrub_area_cursor_part(element)` | a stable identity for the caller-owned cursor shown while scrubbing |
+
+### Modifiers, snapping, and read-only
+
+`small_step` (Alt) and `large_step` (Shift) default to one tenth and ten times the declared step.
+`NumberFieldStepSize::from_modifiers` reads the held modifiers the way Base UI does — Shift wins
+when both are held — and `step_by_size` / `step_with_modifiers` apply the result, so one path covers
+the keyboard, the wheel, and the scrub area. `step_by` keeps its original meaning of one ordinary
+step.
+
+`snap_on_step(true)` is Base UI's `snapOnStep`: a stepped value lands on the nearest multiple of the
+step measured from the minimum instead of adding to whatever the user typed.
+`allow_wheel_scrub(false)` is Base UI's `allowWheelScrub`; QuickGUI has always applied focused wheel
+input, so it defaults to `true` rather than Base UI's `false`.
+
+`read_only(true)` refuses every commit, step, wheel notch, and scrub while the field stays focusable
+and in the Tab sequence, which is what separates it from `disabled(true)`. `required(true)` projects
+the native required state. `NumberFieldState::state()` returns a copyable `NumberFieldPartState`
+carrying the scrubbing, stepping, disabled, read-only, required, and valid flags.
+
+### Scrub area
+
+`apply_scrub` takes a captured pointer event from a mounted scrub area and converts pointer travel
+into whole steps at `scrub_sensitivity` logical pixels per step, bounded by
+`MAX_NUMBER_FIELD_SCRUB_SENSITIVITY`. The unconverted remainder is retained for the length of the
+gesture, so a slow drag still moves exactly one step at a time and a fast one loses no fraction.
+`scrub_direction` chooses the axis: dragging right increases a horizontal area, dragging up
+increases a vertical one, and `Both` accepts either. Held modifiers select the small or large step.
+
+The gesture is pure pointer capture. It schedules no task, timer, or repeat, `is_scrubbing` and
+`scrub_position` let the application mount and place its own cursor, and a released or cancelled
+scrub leaves the field with no retained session at all.
 
 ### Press and hold
 
@@ -215,7 +297,8 @@ A splitter needs at least two panes. Deeper layouts nest splitters instead of gr
 ## Progress and meter
 
 `Progress` reports the completion of a task; `Meter` reports a static level inside a known range.
-Both are plain descriptors with a root part and an accessibility-hidden indicator part.
+Both are plain descriptors with root, track, indicator, label, and value parts; the track and
+indicator are accessibility-hidden decoration.
 
 ```rust
 let download = Progress::new(3.0, 12.0).value_text("3 of 12 files");
@@ -237,6 +320,37 @@ into the meter's range, so an application can color a gauge without QuickGUI inv
 
 Non-finite inputs are dropped: a non-positive progress maximum falls back to `1.0`, an inverted
 meter range is swapped, and values are clamped into range before they are retained.
+
+### Parts
+
+| Base UI part | QuickGUI decorator | What QuickGUI owns |
+| --- | --- | --- |
+| Root | `root_part(element)` | the progress or meter role, exact numeric value and bounds, the accessible value, and the label/value relationships |
+| Track | `track_part(element)` | a stable identity, and keeping the fill out of the accessible name |
+| Indicator | `indicator_part(element)` | a stable identity, and keeping the fill out of the accessible name |
+| Label | `label_part(element)` | the accessible-name target the root points at |
+| Value | `value_part(element)` | the accessible-description target the root points at |
+
+Declaring `.id(...)` gives the descriptor a stable identity, from which the label, value, track, and
+indicator identities are derived without allocation, and points the root's accessible name and
+description at the mounted label and value parts. A descriptor without an identity keeps decorating
+every part exactly as before and leaves the accessible name to the application's own
+`accessibility_label`, so existing code is unchanged.
+
+### Status and formatting
+
+`Progress::status()` returns `ProgressStatus::{Progressing, Complete, Indeterminate}` — Base UI's
+`data-progressing`, `data-complete`, and `data-indeterminate` — and `Progress::state()` returns a
+copyable `ProgressPartState` carrying the status, value, maximum, and completion fraction so the
+application can style a fill from one snapshot.
+
+`ValueFormat` is Base UI's `format` prop: a bounded formatter of `(value, maximum)`.
+`ValueFormat::percent()` and `ValueFormat::fraction()` cover the common shapes and
+`ValueFormat::new(...)` takes any closure. QuickGUI never renders the result: `display_value()`
+returns the text for a caller-owned `value_part`, and `accessible_value()` returns what assistive
+technology reads. An explicit `value_text(...)` — Base UI's `getAriaValueText` — wins over the
+formatter for assistive technology while the visible value part keeps the formatted string. `Meter`
+takes the same `format` and `value_text`.
 
 ## JavaScript bindings
 

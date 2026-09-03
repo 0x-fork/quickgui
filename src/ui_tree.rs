@@ -24,20 +24,22 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     AccessibilityAutoComplete, AccessibilityPopover, AccessibilityRole, AccessibilitySortDirection,
-    AnchorPlacement, AnimatedImage, AppRegion, BackgroundImage, BoxShadow, Canvas, Color,
-    ColorMatrix, Corners, CursorStyle, CustomShaderPrimitive, DispatchPhase, Element, ElementId,
-    ImagePrimitive, Insets, Interpolate, KeyContext, MAX_BACKGROUND_IMAGE_TILES,
-    MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
+    AnchorAlign, AnchorPlacement, AnchorPlacementHandle, AnchorSide, AnimatedImage, AppRegion,
+    BackgroundImage, BoxShadow, Canvas, Color, ColorMatrix, Corners, CursorStyle,
+    CustomShaderPrimitive, DispatchPhase, Element, ElementId, ImagePrimitive, Insets, Interpolate,
+    KeyContext, MAX_BACKGROUND_IMAGE_TILES, MAX_BOX_SHADOWS_PER_ELEMENT,
+    MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
     MAX_DECLARATIVE_ANIMATIONS_PER_WINDOW, MAX_STYLE_TRANSITIONS_PER_WINDOW,
-    MAX_TOOLTIPS_PER_WINDOW, MouseButton, ObjectFit, Path, PathPrimitive, Point, Quad, Rect, Scene,
-    Shadow, Size, SvgPrimitive, TextHighlight, TextId, TextRun, TextStyle, TextWrap, ToggleState,
-    Tooltip, Transition, TransitionProperties, UserSelect, Vector,
+    MAX_TOOLTIPS_PER_WINDOW, MouseButton, ObjectFit, Path, PathPrimitive, Point, Quad, Rect,
+    ResolvedAnchorPlacement, Scene, Shadow, Size, SvgPrimitive, TextHighlight, TextId, TextRun,
+    TextStyle, TextWrap, ToggleState, Tooltip, Transition, TransitionProperties, UserSelect,
+    Vector,
     action::ActionListenerBinding,
     animated_image::AnimatedImageId,
     animation::{Animation, ElementAnimation},
     element::{
-        AccessibilityOrientation, AnchorTarget, DismissPolicy, DropPredicateCallback, ElementKind,
-        ElementStateStyle, ImageResolution, KeyListenerBinding, KeyListenerKind,
+        AccessibilityOrientation, AnchorStyle, AnchorTarget, DismissPolicy, DropPredicateCallback,
+        ElementKind, ElementStateStyle, ImageResolution, KeyListenerBinding, KeyListenerKind,
         MouseListenerBinding, MouseListenerKey, MouseListenerKind,
     },
     event::{
@@ -579,6 +581,16 @@ pub(crate) struct ScrollResult {
     pub view_dirty: bool,
 }
 
+/// One mounted binding between an anchored element and the handle it publishes into.
+///
+/// The retained revision is compared after paint so a resolved placement that actually changed
+/// requests exactly one correcting frame, and an unchanged one requests none.
+#[derive(Clone, Debug)]
+struct RetainedAnchorPlacement {
+    handle: AnchorPlacementHandle,
+    revision: u64,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ScrollEndState {
     revision: u64,
@@ -598,6 +610,7 @@ pub(crate) struct UiTree {
     scroll_offsets: HashMap<ElementId, Vector>,
     scroll_end_states: HashMap<ElementId, ScrollEndState>,
     virtual_scroll_handles: HashMap<ElementId, RetainedVirtualScroll>,
+    anchor_placement_handles: Vec<RetainedAnchorPlacement>,
     natural_bounds: HashMap<ElementId, Rect>,
     element_bounds: HashMap<ElementId, Rect>,
     hit_regions: Vec<HitRegion>,

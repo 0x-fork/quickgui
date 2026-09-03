@@ -230,7 +230,17 @@ impl View for DialogGallery {
                 dialog
                     .root_part(div().p_6().flex_row().items_center().justify_center())
                     .child(dialog.backdrop_part(div().bg(colors.backdrop)))
-                    .child(popover),
+                    // Base UI's Viewport: the scroll lives outside the popup, so a dialog taller
+                    // than the window scrolls as one surface instead of clipping its own content.
+                    .child(
+                        dialog
+                            .viewport_part(div())
+                            .h_full()
+                            .flex_col()
+                            .items_center()
+                            .justify_center()
+                            .child(popover),
+                    ),
             );
         }
 

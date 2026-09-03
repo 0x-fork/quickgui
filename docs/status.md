@@ -16,6 +16,48 @@ Implemented now:
   `NavigationMenu` with a Navigation landmark, one roving trigger stop, exact 50 ms hover
   deadlines, and per-item popover panels. All eight are unstyled decorators with bounded state and
   no idle source;
+- Base UI-shaped tabs, toolbar, selection-control, dialog, and field props: tab activation direction
+  with an anchored indicator and a published active-tab geometry snapshot; toolbar Button/Link/Input/
+  Group/Separator parts with keyboard-reachable disabled items; `read_only` checkboxes, radios,
+  radio groups, and switches that refuse their transition instead of only styling it, plus a
+  registry-free parent-checkbox derivation; a dialog viewport part and a `DialogState` that holds a
+  dialog mounted for its own exit transition on an exact deadline; and field item and validity parts
+  with a `validation_mode` and bounded revalidation debounce;
+- Base UI-shaped toast provider, parts, and manager: an inherited `timeout`, a visible `limit` that
+  only flags presentation, an expanded stack with per-toast index and offset, `add`/`update`/
+  `close`/`close_all` and `promise`/`resolve` helpers, captured swipe-to-dismiss with the movement
+  exposed, and portal, positioner, and content parts beside the existing viewport, root, title,
+  description, action, and close decorators;
+- Base UI-shaped number-field parts and props: a captured scrub area that converts pointer travel
+  into whole steps with a retained remainder and a caller-owned cursor, Shift and Alt large and
+  small steps shared by the keyboard, wheel, and scrub paths, `snap_on_step`, opt-out
+  `allow_wheel_scrub`, and `read_only`/`required` state projected through the new
+  `Element::accessibility_read_only`;
+- Base UI-shaped slider parts and props: caller-owned label, value, control, and indicator parts join
+  the root, track, and thumb decorators; `min_steps_between_values`, `thumb_alignment` with
+  `SliderThumb::offset`, an `onValueCommitted` commit boundary and dragging flag on
+  `apply_pointer_change`, a `ValueFormat` hook for the value and per-thumb value text, and a
+  copyable `SliderThumbState` carrying the thumb index and dragging state;
+- Base UI-shaped progress and meter parts: `track_part`, `label_part`, and `value_part` join the
+  root and indicator decorators, a declared identity relates the root to its mounted label and value,
+  `ProgressStatus` and `ProgressPartState` expose the three Base UI states, and the bounded
+  `ValueFormat` hook supplies the visible value text while `value_text` keeps precedence for
+  assistive technology;
+- Base UI-shaped compound tooltips: `TooltipProvider` and `TooltipState` decorate caller-owned
+  trigger, portal/positioner, popup, and arrow parts with exact `delay`/`close_delay` deadlines,
+  shared group `timeout` warmth so an adjacent trigger opens instantly, `hoverable`,
+  `close_on_click`, `disabled`, and `track_cursor_axis` pointer following, over the same resolved
+  anchor-placement report the popover arrow uses. The existing `Element::tooltip(...)` overlay keeps
+  working unchanged;
+- Base UI-shaped popover parts and props: `Popover` adds `side`, `align`, `side_offset`,
+  `align_offset`, `collision_padding`, `sticky`, `anchor_element`/`anchor_point`, and `modal`
+  alongside the existing names, the `portal_part`, `arrow_part`, and `viewport_part` decorators, and
+  a copyable `PopoverPartState` snapshot. The arrow follows the placement QuickGUI actually
+  resolved: `Element::report_anchor_placement` publishes it into an application-owned
+  `AnchorPlacementHandle` during the paint already being performed and requests exactly one
+  correcting frame when it changes, so a flipped popover is exact rather than guessed and an
+  unflipped one adds no redraw source. `PopoverHoverState` supplies Base UI's `openOnHover` with
+  `delay` and `close_delay` as exact one-shot deadlines and a hoverable popup;
 - Compositing layers: `Element::transform` / `rotate_degrees` / `scale` / `skew_degrees` with
   `transform_origin` and state-style overrides, `Filter::Blur` and `Filter::DropShadow` over a whole
   subtree, `backdrop_blur` / `backdrop_filter`, and `blend_mode` with eleven exact separable CSS

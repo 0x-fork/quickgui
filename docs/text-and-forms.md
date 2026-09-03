@@ -599,3 +599,36 @@ direction; `TextAlign::Start` is the default, and it resolves to `Left` in LTR a
 `text_direction(TextDirection::Ltr | Rtl | Auto)` forces the base paragraph direction used when
 shaping bidirectional content without mirroring layout. `Element::rtl()` already sets it for its
 subtree. See "Layout direction" in `docs/view-api.md`.
+
+## Field items, validity parts, and validation mode
+
+`Field::item_part(element)` is Base UI's Field.Item: the wrapper around one label/control/description
+row inside a larger fieldset. QuickGUI supplies the stable identity and propagates the field's
+disabled state; layout and appearance stay application-owned.
+
+`Field::validity_part(visible, element)` is Base UI's Field.Validity. The predicate is the
+application's own — "invalid and touched", "valid and dirty", whatever the product means — and
+QuickGUI removes the part from layout, paint, input, and the accessibility tree when it is false,
+exactly as `error_part` does, so an unmatched validity costs nothing.
+
+`Field::validation_mode(...)` declares when validity is expected to be recomputed:
+`FieldValidationMode::{OnSubmit, OnBlur, OnChange}`. QuickGUI never runs the application's validation
+rule itself — the rule is application logic and may reach a database — so the field publishes the
+policy and answers against the event that just happened:
+
+```rust,ignore
+let field = Field::new("email")
+    .validation_mode(FieldValidationMode::OnChange)
+    .validation_debounce(Duration::from_millis(250));
+
+match field.validation_delay(FieldValidationTrigger::Change) {
+    None => {}                       // this mode ignores changes
+    Some(delay) if delay.is_zero() => validate_now(),
+    Some(delay) => /* sleep exactly once, then validate */ (),
+}
+```
+
+`validation_debounce` is Base UI's `validationDebounceTime`, bounded by
+`MAX_FIELD_VALIDATION_DEBOUNCE` and applied to changes only — a blur or a submit is a deliberate
+boundary and validates immediately. The interval is an exact one-shot deadline the application
+sleeps on; QuickGUI never polls, and a field that is not being typed into owns nothing.

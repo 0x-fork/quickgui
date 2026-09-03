@@ -377,6 +377,11 @@ impl AccordionItem {
         self.value
     }
 
+    /// This item's declared position in the accordion, Base UI's `data-index`.
+    pub const fn index(self) -> usize {
+        self.state.index
+    }
+
     pub fn root_id(self) -> ElementId {
         derived_disclosure_id(self.accordion_id, self.value, ACCORDION_ITEM_ID_TAG)
     }
@@ -606,6 +611,9 @@ mod tests {
                 disabled: false,
             }
         );
+        // The declared position is Base UI's `data-index`, reachable without the whole snapshot.
+        assert_eq!(item.index(), 0);
+        assert_eq!(accordion.item("how", 3, false).index(), 3);
         let ids = [
             item.root_id(),
             item.header_id(),

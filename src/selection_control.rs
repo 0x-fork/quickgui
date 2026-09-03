@@ -11,22 +11,95 @@ use crate::{AccessibilityRole, Element, ToggleState, div};
 #[must_use = "a Checkbox descriptor has no effect until one of its parts is mounted"]
 pub struct Checkbox {
     state: ToggleState,
+    read_only: bool,
 }
 
 impl Checkbox {
     pub fn new(state: impl Into<ToggleState>) -> Self {
         Self {
             state: state.into(),
+            read_only: false,
         }
+    }
+
+    /// Derive a parent checkbox from the checked values of the boxes it governs.
+    ///
+    /// This is Base UI's `parent` checkbox: every child checked reports on, none reports off, and
+    /// a mix reports mixed. QuickGUI keeps no child registry — the application passes the values it
+    /// is already rendering — so the derivation stays a pure function of the caller's own data.
+    ///
+    /// ```
+    /// use quickgui::{Checkbox, ToggleState};
+    ///
+    /// assert_eq!(Checkbox::parent([true, true]).state(), ToggleState::On);
+    /// assert_eq!(Checkbox::parent([false, false]).state(), ToggleState::Off);
+    /// assert_eq!(Checkbox::parent([true, false]).state(), ToggleState::Mixed);
+    /// // An empty group is unchecked rather than mixed.
+    /// assert_eq!(Checkbox::parent([]).state(), ToggleState::Off);
+    /// ```
+    pub fn parent(children: impl IntoIterator<Item = bool>) -> Self {
+        let mut any = false;
+        let mut all = true;
+        for checked in children {
+            any |= checked;
+            all &= checked;
+        }
+        Self::new(match (any, all) {
+            (false, _) => ToggleState::Off,
+            (true, true) => ToggleState::On,
+            (true, false) => ToggleState::Mixed,
+        })
+    }
+
+    /// Show a value the user may read but not change, Base UI's `readOnly`.
+    ///
+    /// Unlike a disabled checkbox, a read-only one stays focusable and stays in the Tab sequence.
+    /// QuickGUI projects the state and refuses the transition through [`Self::next_state`]; the
+    /// application's own listener asks for that transition rather than toggling blindly.
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
     }
 
     pub const fn state(self) -> ToggleState {
         self.state
     }
 
+    pub const fn is_read_only(self) -> bool {
+        self.read_only
+    }
+
+    /// The state an activation moves this checkbox to, or `None` when it refuses.
+    ///
+    /// Mixed and off both move to on, and on moves to off, which is the web's tri-state contract.
+    /// A read-only checkbox returns `None`, so a click listener that asks before writing cannot
+    /// change a value the control is refusing.
+    pub const fn next_state(self) -> Option<ToggleState> {
+        if self.read_only {
+            return None;
+        }
+        Some(match self.state {
+            ToggleState::On => ToggleState::Off,
+            ToggleState::Off | ToggleState::Mixed => ToggleState::On,
+        })
+    }
+
+    /// The checked value activating a parent checkbox moves its whole group to.
+    ///
+    /// A partially or fully unchecked parent checks everything; a fully checked one clears it.
+    /// Returns `None` when the parent is read-only.
+    pub const fn parent_next_checked(self) -> Option<bool> {
+        match self.next_state() {
+            Some(ToggleState::On) => Some(true),
+            Some(_) => Some(false),
+            None => None,
+        }
+    }
+
     /// Decorate an application-owned root without adding layout or appearance.
     pub fn root_part(self, root: Element) -> Element {
         selection_root(root, AccessibilityRole::CheckBox, self.state)
+            .accessibility_read_only(self.read_only)
     }
 
     /// Hide an application-owned visual indicator from the accessible name.
@@ -44,15 +117,37 @@ impl Checkbox {
 #[must_use = "a Radio descriptor has no effect until one of its parts is mounted"]
 pub struct Radio {
     selected: bool,
+    read_only: bool,
 }
 
 impl Radio {
     pub const fn new(selected: bool) -> Self {
-        Self { selected }
+        Self {
+            selected,
+            read_only: false,
+        }
+    }
+
+    /// Show a value the user may read but not change, Base UI's `readOnly`.
+    ///
+    /// A read-only radio stays focusable and keeps taking part in arrow navigation; only the
+    /// selection it would make is refused.
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
     }
 
     pub const fn is_selected(self) -> bool {
         self.selected
+    }
+
+    pub const fn is_read_only(self) -> bool {
+        self.read_only
+    }
+
+    /// Whether activating this radio may select it.
+    pub const fn accepts_selection(self) -> bool {
+        !self.read_only && !self.selected
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
@@ -62,6 +157,7 @@ impl Radio {
             AccessibilityRole::RadioButton,
             ToggleState::from(self.selected),
         )
+        .accessibility_read_only(self.read_only)
     }
 
     /// Hide an application-owned visual indicator from the accessible name.
@@ -76,16 +172,44 @@ impl Radio {
 /// retains no item registry, allocation, task, timer, observer, or idle scheduler source.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[must_use = "a RadioGroup descriptor has no effect until its root part is mounted"]
-pub struct RadioGroup;
+pub struct RadioGroup {
+    read_only: bool,
+    required: bool,
+}
 
 impl RadioGroup {
     pub const fn new() -> Self {
-        Self
+        Self {
+            read_only: false,
+            required: false,
+        }
+    }
+
+    /// Show values the user may read but not change, Base UI's `readOnly`.
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
+    /// Require a selection before submission, Base UI's `required`.
+    pub const fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
+    pub const fn is_read_only(self) -> bool {
+        self.read_only
+    }
+
+    pub const fn is_required(self) -> bool {
+        self.required
     }
 
     /// Decorate an application-owned group root without adding layout or appearance.
     pub fn root_part(self, root: Element) -> Element {
         root.accessibility_role(AccessibilityRole::RadioGroup)
+            .accessibility_read_only(self.read_only)
+            .required(self.required)
     }
 }
 
@@ -98,15 +222,41 @@ impl RadioGroup {
 #[must_use = "a Switch descriptor has no effect until one of its parts is mounted"]
 pub struct Switch {
     checked: bool,
+    read_only: bool,
 }
 
 impl Switch {
     pub const fn new(checked: bool) -> Self {
-        Self { checked }
+        Self {
+            checked,
+            read_only: false,
+        }
+    }
+
+    /// Show a value the user may read but not change, Base UI's `readOnly`.
+    ///
+    /// A read-only switch stays focusable and stays in the Tab sequence; only the toggle it would
+    /// perform is refused, through [`Self::next_checked`].
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
     }
 
     pub const fn is_checked(self) -> bool {
         self.checked
+    }
+
+    pub const fn is_read_only(self) -> bool {
+        self.read_only
+    }
+
+    /// The value an activation moves this switch to, or `None` when it refuses.
+    pub const fn next_checked(self) -> Option<bool> {
+        if self.read_only {
+            None
+        } else {
+            Some(!self.checked)
+        }
     }
 
     /// Decorate an application-owned root/track without adding layout or appearance.
@@ -116,6 +266,7 @@ impl Switch {
             AccessibilityRole::Switch,
             ToggleState::from(self.checked),
         )
+        .accessibility_read_only(self.read_only)
     }
 
     /// Hide an application-owned visual thumb from the accessible name.
@@ -370,5 +521,104 @@ mod tests {
         let renders = cx.render_count(window).unwrap();
         cx.run_until_idle().unwrap();
         assert_eq!(cx.render_count(window).unwrap(), renders);
+    }
+
+    #[test]
+    fn read_only_selection_controls_refuse_transitions_without_leaving_the_tab_sequence() {
+        let checkbox = Checkbox::new(true).read_only(true);
+        assert!(checkbox.is_read_only());
+        assert_eq!(checkbox.next_state(), None);
+        assert_eq!(checkbox.parent_next_checked(), None);
+        let root = checkbox.root_part(div());
+        assert!(root.accessibility.read_only);
+        assert!(!root.accessibility.disabled);
+        assert!(root.focusable);
+        assert!(root.is_keyboard_focusable());
+
+        // An ordinary checkbox still reports the transition a click should make.
+        assert_eq!(Checkbox::new(false).next_state(), Some(ToggleState::On));
+        assert_eq!(
+            Checkbox::new(ToggleState::Mixed).next_state(),
+            Some(ToggleState::On)
+        );
+        assert_eq!(Checkbox::new(true).next_state(), Some(ToggleState::Off));
+        assert!(
+            !Checkbox::new(false)
+                .root_part(div())
+                .accessibility
+                .read_only
+        );
+
+        // A disabled control leaves the sequence; a read-only one does not.
+        let disabled = Checkbox::new(true).root_part(div()).disabled(true);
+        assert!(!disabled.is_keyboard_focusable());
+
+        let radio = Radio::new(false).read_only(true);
+        assert!(radio.is_read_only());
+        assert!(!radio.accepts_selection());
+        assert!(Radio::new(false).accepts_selection());
+        // A radio that is already selected has nothing to select.
+        assert!(!Radio::new(true).accepts_selection());
+        assert!(radio.root_part(div()).accessibility.read_only);
+
+        let group = RadioGroup::new().read_only(true).required(true);
+        assert!(group.is_read_only());
+        assert!(group.is_required());
+        let group_root = group.root_part(div());
+        assert!(group_root.accessibility.read_only);
+        assert!(group_root.accessibility.required);
+        assert_eq!(group_root.accessibility.role, AccessibilityRole::RadioGroup);
+
+        let switch = Switch::new(true).read_only(true);
+        assert_eq!(switch.next_checked(), None);
+        assert_eq!(Switch::new(true).next_checked(), Some(false));
+        assert_eq!(Switch::new(false).next_checked(), Some(true));
+        assert!(switch.root_part(div()).accessibility.read_only);
+        assert!(switch.thumb_part(div()).accessibility.hidden);
+    }
+
+    #[test]
+    fn a_parent_checkbox_derives_its_state_and_the_move_it_makes() {
+        assert_eq!(
+            Checkbox::parent([true, true, true]).state(),
+            ToggleState::On
+        );
+        assert_eq!(
+            Checkbox::parent([false, false, false]).state(),
+            ToggleState::Off
+        );
+        assert_eq!(
+            Checkbox::parent([true, false, true]).state(),
+            ToggleState::Mixed
+        );
+        assert_eq!(
+            Checkbox::parent(std::iter::empty()).state(),
+            ToggleState::Off
+        );
+
+        // A partly or fully unchecked parent checks everything; a full one clears it.
+        assert_eq!(
+            Checkbox::parent([true, false]).parent_next_checked(),
+            Some(true)
+        );
+        assert_eq!(
+            Checkbox::parent([false, false]).parent_next_checked(),
+            Some(true)
+        );
+        assert_eq!(
+            Checkbox::parent([true, true]).parent_next_checked(),
+            Some(false)
+        );
+        assert_eq!(
+            Checkbox::parent([true, false])
+                .read_only(true)
+                .parent_next_checked(),
+            None
+        );
+
+        // The derived state reaches the mounted root as the mixed checkbox contract.
+        let mixed = Checkbox::parent([true, false]).root_part(div());
+        assert_eq!(mixed.accessibility.toggled, Some(ToggleState::Mixed));
+        assert_eq!(mixed.accessibility.role, AccessibilityRole::CheckBox);
     }
 }

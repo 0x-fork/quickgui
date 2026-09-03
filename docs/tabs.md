@@ -97,6 +97,29 @@ panel projects the TabPanel role and is labelled by its tab. Disabled tabs expos
 action and cannot receive pointer or keyboard activation. Give each visible list an application
 label with `.accessibility_label(...)` or `.accessibility_labelled_by(...)`.
 
+## Activation direction and the indicator
+
+`TabsState::select_at(value, index)` records which way the selection travelled — the application
+already knows the order it declares its tabs in, and QuickGUI keeps no item registry to discover it
+from. `Tabs::activation_direction()` turns that into Base UI's `data-activation-direction`:
+`Left`/`Right` for a horizontal list, `Up`/`Down` for a vertical one, and `None` until an indexed
+selection has happened. `select` and `set_active` keep working and clear the recorded movement,
+because a bare value carries no ordering.
+
+`Tab::anchored_indicator_part(indicator, placement)` mounts a caller-owned indicator that QuickGUI
+keeps positioned on the tab that is really active, using the same anchoring a popover uses.
+`AnchorPlacement::Bottom` draws the familiar underline. The indicator never collides its way off its
+tab and travels with a scrolled list rather than detaching from it.
+
+`Tab::tracked_indicator_part(indicator, placement, &handle)` does the same and publishes the active
+tab's laid-out rectangle into an application-owned `AnchorPlacementHandle`; read it back with
+`Tabs::indicator_geometry(&handle)`, which returns `TabsIndicatorGeometry { left, top, width,
+height }` in window logical coordinates. Base UI measures the DOM for the same numbers. QuickGUI
+writes the handle during the paint it was already performing and requests exactly one correcting
+frame when the geometry changes, so a settled tab list adds no redraw source. Width and height are
+directly usable; positions are most useful as a frame-to-frame delta, and an anchored indicator
+needs no arithmetic at all.
+
 ## Resource contract
 
 `Tabs`, `Tab`, and `TabsState` contain only IDs, booleans, and one optional active ID. They retain no

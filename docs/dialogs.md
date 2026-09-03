@@ -160,3 +160,33 @@ accessibility semantics, and part identities all stay in this Rust layer.
 `initial_focus(...)` and `restore_focus_to(...)` are not bridged yet, so a Solid dialog uses the
 trap's first enabled Tab stop and the core's `restore_previous_focus` default. This is separate
 from the native alert and file panels in the `Dialog` namespace of `@quickgui/native`.
+
+## Viewport and transition completion
+
+`Dialog::viewport_part(element)` is Base UI's Viewport: the scrolling region between the backdrop
+and the popup. A dialog taller than the window must scroll as one surface rather than clipping its
+own content, and the scroll has to live outside the popup so the popup keeps its padding and shadow.
+QuickGUI supplies the stable identity and the scroll container; size, alignment, and padding stay
+application-owned.
+
+`DialogState` is Base UI's `onOpenChangeComplete`. QuickGUI owns no dialog animation — motion is
+application presentation — so the state owns the one thing the framework can own exactly: the
+deadline.
+
+```rust,ignore
+let state = DialogState::new()
+    .enter_duration(Duration::from_millis(80))
+    .exit_duration(Duration::from_millis(120));
+
+// In a listener:
+view.dialog.set_open(false, |view| &mut view.dialog, cx);
+// Mount against is_mounted(), not is_open(), so the exit transition can play:
+if self.dialog.is_mounted() { /* declare Dialog::root_part(..) */ }
+```
+
+`is_open` is the controlled value, `is_mounted` stays true through a closing transition, and
+`open_change_complete()` reports `Some(true)` after an open finished and `Some(false)` after a close
+finished. Every deadline is an exact one-shot task bounded by `MAX_DIALOG_TRANSITION`; a zero
+duration completes in the same controlled update with no task at all, and a settled dialog owns no
+timer, observer, or idle scheduler source. Both a `fn`-pointer and a `StateAccessor` entry point are
+supplied.
