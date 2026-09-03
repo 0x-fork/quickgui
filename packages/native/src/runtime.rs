@@ -312,6 +312,8 @@ pub(super) struct NativeWindowRuntime {
     pub(super) lists: Rc<RefCell<HashMap<u32, NativeListState>>>,
     pub(super) terminals: Rc<RefCell<HashMap<u32, NativeTerminalState>>>,
     pub(super) images: Rc<RefCell<HashMap<u32, NativeImageState>>>,
+    /// Retained decoded raster backgrounds, decoded once per declared source.
+    pub(super) background_images: Rc<RefCell<HashMap<u32, NativeBackgroundImageState>>>,
     pub(super) shaders: Rc<RefCell<HashMap<u32, NativeShaderState>>>,
     pub(super) menus: NativeMenuStates,
     #[cfg(target_os = "macos")]
@@ -338,6 +340,7 @@ impl NativeWindowRuntime {
             lists: Rc::clone(&self.lists),
             terminals: Rc::clone(&self.terminals),
             images: Rc::clone(&self.images),
+            background_images: Rc::clone(&self.background_images),
             shaders: Rc::clone(&self.shaders),
             menus: Rc::clone(&self.menus),
             context_menu: ContextMenuState::new(),
@@ -461,6 +464,7 @@ impl NativeRuntime {
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
             images: Rc::new(RefCell::new(HashMap::new())),
+            background_images: Rc::new(RefCell::new(HashMap::new())),
             shaders: Rc::new(RefCell::new(HashMap::new())),
             menus: Rc::new(RefCell::new(HashMap::new())),
             #[cfg(target_os = "macos")]
@@ -528,6 +532,7 @@ impl NativeRuntime {
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
             images: Rc::new(RefCell::new(HashMap::new())),
+            background_images: Rc::new(RefCell::new(HashMap::new())),
             shaders: Rc::new(RefCell::new(HashMap::new())),
             menus: Rc::new(RefCell::new(HashMap::new())),
             #[cfg(target_os = "macos")]
@@ -602,6 +607,7 @@ impl NativeRuntime {
             lists: Rc::new(RefCell::new(HashMap::new())),
             terminals: Rc::new(RefCell::new(HashMap::new())),
             images: Rc::new(RefCell::new(HashMap::new())),
+            background_images: Rc::new(RefCell::new(HashMap::new())),
             shaders: Rc::new(RefCell::new(HashMap::new())),
             menus: Rc::new(RefCell::new(HashMap::new())),
             swift_ui_hosts: Rc::new(RefCell::new(HashMap::new())),

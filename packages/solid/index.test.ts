@@ -7,6 +7,7 @@ import {
   MAX_OPTIONS_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
+  MAX_STYLE_DECLARATION_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativeNodeTag,
   PropertyCode,
@@ -2302,5 +2303,309 @@ describe("declared option sources, virtual collections, and stateful fields", ()
       ]),
     ).toThrow(/collection/);
     window.close();
+  });
+
+  test("projects extended text styling onto the core's own typography declarations", () => {
+    const label = createComponent(Text, {
+      style: {
+        textAlign: "center",
+        letterSpacing: "0.4px",
+        wordSpacing: 2,
+        textTransform: "uppercase",
+        textShadow: "0 2px 4px #00000080",
+        textDecoration: "underline line-through",
+        textDecorationColor: "#2266dd",
+        textDecorationStyle: "wavy",
+        textDecorationThickness: "2px",
+        wordBreak: "break-all",
+        overflowWrap: "anywhere",
+        hyphens: "manual",
+        textDirection: "rtl",
+      },
+      children: "Extended text",
+    });
+
+    expect(label.properties.get(PropertyCode.TextAlign)).toBe("center");
+    expect(label.properties.get(PropertyCode.LetterSpacing)).toBe(0.4);
+    expect(label.properties.get(PropertyCode.WordSpacing)).toBe(2);
+    expect(label.properties.get(PropertyCode.TextTransform)).toBe("uppercase");
+    expect(label.properties.get(PropertyCode.TextShadow)).toBe(
+      "0 2px 4px #00000080",
+    );
+    expect(label.properties.get(PropertyCode.TextDecorationLine)).toBe(
+      "underline line-through",
+    );
+    expect(label.properties.get(PropertyCode.TextDecorationColor)).toBe(
+      parseColor("#2266dd"),
+    );
+    expect(label.properties.get(PropertyCode.TextDecorationStyle)).toBe("wavy");
+    expect(label.properties.get(PropertyCode.TextDecorationThickness)).toBe(2);
+    expect(label.properties.get(PropertyCode.WordBreak)).toBe("break-all");
+    expect(label.properties.get(PropertyCode.OverflowWrap)).toBe("anywhere");
+    expect(label.properties.get(PropertyCode.Hyphens)).toBe("manual");
+    expect(label.properties.get(PropertyCode.TextDirection)).toBe("rtl");
+
+    // `start` and `end` stay logical so an RTL subtree can resolve them in the core.
+    const logical = createComponent(Text, {
+      style: { textAlign: "end" },
+      children: "logical",
+    });
+    expect(logical.properties.get(PropertyCode.TextAlign)).toBe("end");
+
+    // A text shadow may also be declared as the object form the Rust binding deserializes.
+    const declared = createComponent(Text, {
+      style: { textShadow: { offsetX: 0, offsetY: 1, blur: 3 } },
+      children: "object",
+    });
+    expect(
+      JSON.parse(String(declared.properties.get(PropertyCode.TextShadow))),
+    ).toEqual({ offsetX: 0, offsetY: 1, blur: 3 });
+  });
+
+  test("projects direction-relative layout and logical spacing", () => {
+    const panel = createComponent(View, {
+      style: {
+        direction: "rtl",
+        paddingStart: 12,
+        paddingEnd: "4px",
+        marginStart: 6,
+        marginEnd: 2,
+        borderStartWidth: "3px",
+        borderEndWidth: 1,
+      },
+    });
+
+    expect(panel.properties.get(PropertyCode.Direction)).toBe("rtl");
+    expect(panel.properties.get(PropertyCode.PaddingStart)).toBe(12);
+    expect(panel.properties.get(PropertyCode.PaddingEnd)).toBe(4);
+    expect(panel.properties.get(PropertyCode.MarginStart)).toBe(6);
+    expect(panel.properties.get(PropertyCode.MarginEnd)).toBe(2);
+    expect(panel.properties.get(PropertyCode.BorderStartWidth)).toBe(3);
+    expect(panel.properties.get(PropertyCode.BorderEndWidth)).toBe(1);
+  });
+
+  test("routes one background declaration to either a color or a bounded gradient", () => {
+    const solid = createComponent(View, { style: { background: "#101828" } });
+    expect(solid.properties.get(PropertyCode.BackgroundColor)).toBe(
+      parseColor("#101828"),
+    );
+    expect(solid.properties.has(PropertyCode.BackgroundGradient)).toBe(false);
+
+    const gradient = createComponent(View, {
+      style: { background: "linear-gradient(135deg, #0f172a, #38bdf8)" },
+    });
+    expect(gradient.properties.get(PropertyCode.BackgroundGradient)).toBe(
+      "linear-gradient(135deg, #0f172a, #38bdf8)",
+    );
+    expect(gradient.properties.has(PropertyCode.BackgroundColor)).toBe(false);
+
+    const declared = createComponent(View, {
+      style: {
+        background: {
+          type: "radial",
+          shape: "circle",
+          center: { x: 0.3, y: 0.2 },
+          stops: [{ color: "#1d4ed8", position: 0 }, "#0f172a"],
+        },
+      },
+    });
+    expect(
+      JSON.parse(
+        String(declared.properties.get(PropertyCode.BackgroundGradient)),
+      ),
+    ).toEqual({
+      type: "radial",
+      shape: "circle",
+      center: { x: 0.3, y: 0.2 },
+      stops: [{ color: "#1d4ed8", position: 0 }, "#0f172a"],
+    });
+
+    // Every state that the core's `ElementStateStyle` can swap a gradient in follows the same rule.
+    const stateful = createComponent(Button, {
+      style: {
+        hoverBackground: "linear-gradient(90deg, #111827, #334155)",
+        activeBackground: "#0b1220",
+        focusBackground: "conic-gradient(from 90deg, #1d4ed8, #0f172a)",
+      },
+      children: "Run",
+    });
+    expect(stateful.properties.get(PropertyCode.HoverBackgroundGradient)).toBe(
+      "linear-gradient(90deg, #111827, #334155)",
+    );
+    expect(stateful.properties.get(PropertyCode.ActiveBackgroundColor)).toBe(
+      parseColor("#0b1220"),
+    );
+    expect(stateful.properties.get(PropertyCode.FocusBackgroundGradient)).toBe(
+      "conic-gradient(from 90deg, #1d4ed8, #0f172a)",
+    );
+  });
+
+  test("projects per-corner radii, border and outline rings, filters, transforms, and blending", () => {
+    const card = createComponent(View, {
+      style: {
+        borderRadius: "16px 4px 16px 4px",
+        borderTopLeftRadius: 20,
+        borderStyle: "dashed",
+        outline: "2px dotted #38bdf8",
+        outlineOffset: 3,
+        backgroundImage: "/assets/paper.png",
+        backgroundSize: "cover",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "center",
+        filter: ["saturate(1.4)", "blur(2px)"],
+        backdropFilter: "blur(18px) brightness(1.1)",
+        transform: "rotate(3deg) scale(1.02)",
+        transformOrigin: "left top",
+        mixBlendMode: "multiply",
+      },
+    });
+
+    expect(card.properties.get(PropertyCode.BorderRadius)).toBe(
+      "16px 4px 16px 4px",
+    );
+    expect(card.properties.get(PropertyCode.BorderTopLeftRadius)).toBe(20);
+    expect(card.properties.get(PropertyCode.BorderStyle)).toBe("dashed");
+    expect(card.properties.get(PropertyCode.OutlineWidth)).toBe(2);
+    expect(card.properties.get(PropertyCode.OutlineStyle)).toBe("dotted");
+    expect(card.properties.get(PropertyCode.OutlineColor)).toBe(
+      parseColor("#38bdf8"),
+    );
+    expect(card.properties.get(PropertyCode.OutlineOffset)).toBe(3);
+    expect(card.properties.get(PropertyCode.BackgroundImage)).toBe(
+      "/assets/paper.png",
+    );
+    expect(card.properties.get(PropertyCode.BackgroundSize)).toBe("cover");
+    expect(card.properties.get(PropertyCode.BackgroundRepeat)).toBe(
+      "no-repeat",
+    );
+    expect(card.properties.get(PropertyCode.BackgroundPosition)).toBe("center");
+    expect(card.properties.get(PropertyCode.Filter)).toBe(
+      "saturate(1.4) blur(2px)",
+    );
+    expect(card.properties.get(PropertyCode.BackdropFilter)).toBe(
+      "blur(18px) brightness(1.1)",
+    );
+    expect(card.properties.get(PropertyCode.Transform)).toBe(
+      "rotate(3deg) scale(1.02)",
+    );
+    expect(card.properties.get(PropertyCode.TransformOrigin)).toBe("left top");
+    expect(card.properties.get(PropertyCode.MixBlendMode)).toBe("multiply");
+
+    const uniform = createComponent(View, { style: { borderRadius: "12px" } });
+    expect(uniform.properties.get(PropertyCode.BorderRadius)).toBe(12);
+
+    const cleared = createComponent(View, { style: { outline: "none" } });
+    expect(cleared.properties.get(PropertyCode.OutlineStyle)).toBe("none");
+  });
+
+  test("projects hover, active, and focus state styling the core supports", () => {
+    const tile = createComponent(Button, {
+      style: {
+        hoverTransform: "translate(0, -2px)",
+        hoverOutline: "2px solid #f8fafc",
+        activeTransform: { a: 0.98, b: 0, c: 0, d: 0.98, tx: 0, ty: 0 },
+        activeOutline: "1px solid #94a3b8",
+        focusBackgroundColor: "#1f2937",
+        focusColor: "#f8fafc",
+        focusOutline: "2px solid #60a5fa",
+        focusTransform: "scale(1.01)",
+      },
+      children: "Apply",
+    });
+
+    expect(tile.properties.get(PropertyCode.HoverTransform)).toBe(
+      "translate(0, -2px)",
+    );
+    expect(tile.properties.get(PropertyCode.HoverOutline)).toBe(
+      "2px solid #f8fafc",
+    );
+    expect(
+      JSON.parse(String(tile.properties.get(PropertyCode.ActiveTransform))),
+    ).toEqual({ a: 0.98, b: 0, c: 0, d: 0.98, tx: 0, ty: 0 });
+    expect(tile.properties.get(PropertyCode.ActiveOutline)).toBe(
+      "1px solid #94a3b8",
+    );
+    expect(tile.properties.get(PropertyCode.FocusBackgroundColor)).toBe(
+      parseColor("#1f2937"),
+    );
+    expect(tile.properties.get(PropertyCode.FocusColor)).toBe(
+      parseColor("#f8fafc"),
+    );
+    expect(tile.properties.get(PropertyCode.FocusOutline)).toBe(
+      "2px solid #60a5fa",
+    );
+    expect(tile.properties.get(PropertyCode.FocusTransform)).toBe("scale(1.01)");
+  });
+
+  test("projects sticky positioning, horizontal scrolling, and scroll snapping", () => {
+    const header = createComponent(View, {
+      style: { position: "sticky", top: 0 },
+    });
+    expect(header.properties.get(PropertyCode.Position)).toBe("sticky");
+    expect(header.properties.get(PropertyCode.Top)).toBe(0);
+
+    const rail = createComponent(View, {
+      style: {
+        overflowX: "scroll",
+        scrollSnapType: "x mandatory",
+      },
+    });
+    expect(rail.properties.get(PropertyCode.OverflowX)).toBe("scroll");
+    expect(rail.properties.get(PropertyCode.ScrollSnapType)).toBe(
+      "x mandatory",
+    );
+
+    const page = createComponent(View, {
+      style: { scrollSnapAlign: "start", scrollSnapStop: "always" },
+    });
+    expect(page.properties.get(PropertyCode.ScrollSnapAlign)).toBe("start");
+    expect(page.properties.get(PropertyCode.ScrollSnapStop)).toBe("always");
+  });
+
+  test("bounds every declared styling string at the JavaScript boundary", () => {
+    const overlong = createElement("view");
+    for (const name of [
+      "filter",
+      "backdropFilter",
+      "transform",
+      "textShadow",
+      "hoverOutline",
+      "focusTransform",
+    ]) {
+      expect(() =>
+        setProp(overlong, name, `a${"b".repeat(MAX_STYLE_DECLARATION_BYTES)}`),
+      ).toThrow("style declarations");
+    }
+    expect(() =>
+      setProp(
+        overlong,
+        "background",
+        `linear-gradient(90deg, ${"#000000, ".repeat(MAX_STYLE_DECLARATION_BYTES)}#ffffff)`,
+      ),
+    ).toThrow("style declarations");
+    expect(() => setProp(overlong, "borderRadius", "1 2 3 4 5")).toThrow(
+      "one to four corner radii",
+    );
+    expect(() => setProp(overlong, "outline", "2px solid chartreuse")).toThrow(
+      "unsupported QuickGUI color",
+    );
+  });
+
+  test("clears extended styling when a declaration is withdrawn", () => {
+    const node = createElement("view");
+    setProp(node, "background", "linear-gradient(90deg, #000000, #ffffff)");
+    expect(node.properties.get(PropertyCode.BackgroundGradient)).toBeTypeOf(
+      "string",
+    );
+    setProp(node, "background", "#101828");
+    expect(node.properties.has(PropertyCode.BackgroundGradient)).toBe(false);
+    setProp(node, "background", null);
+    expect(node.properties.has(PropertyCode.BackgroundColor)).toBe(false);
+
+    setProp(node, "outline", "2px solid #38bdf8");
+    expect(node.properties.get(PropertyCode.OutlineWidth)).toBe(2);
+    setProp(node, "outline", null);
+    expect(node.properties.has(PropertyCode.OutlineWidth)).toBe(false);
+    expect(node.properties.has(PropertyCode.OutlineColor)).toBe(false);
   });
 });

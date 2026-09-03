@@ -34,6 +34,17 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/components-solid": {
+      "name": "quickgui-solid-components-example",
+      "dependencies": {
+        "@quickgui/native": "workspace:*",
+        "@quickgui/solid": "workspace:*",
+        "solid-js": "2.0.0-rc.3",
+      },
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/file-dialog-solid": {
       "name": "quickgui-solid-file-dialog-example",
       "dependencies": {
@@ -89,6 +100,17 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/styling-solid": {
+      "name": "quickgui-solid-styling-example",
+      "dependencies": {
+        "@quickgui/native": "workspace:*",
+        "@quickgui/solid": "workspace:*",
+        "solid-js": "2.0.0-rc.3",
+      },
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/swift-ui-solid": {
       "name": "quickgui-swift-ui-solid-example",
       "dependencies": {
@@ -115,7 +137,7 @@
       "name": "@quickgui/cli",
       "version": "0.0.1",
       "bin": {
-        "quickgui": "./src/cli.ts",
+        "quickgui": "src/cli.ts",
       },
       "dependencies": {
         "@quickgui/native": "workspace:*",
@@ -1190,6 +1212,8 @@
 
     "quickgui-solid-alert-dialog-example": ["quickgui-solid-alert-dialog-example@workspace:examples/alert-dialog-solid"],
 
+    "quickgui-solid-components-example": ["quickgui-solid-components-example@workspace:examples/components-solid"],
+
     "quickgui-solid-example": ["quickgui-solid-example@workspace:examples/solid"],
 
     "quickgui-solid-file-dialog-example": ["quickgui-solid-file-dialog-example@workspace:examples/file-dialog-solid"],
@@ -1197,6 +1221,8 @@
     "quickgui-solid-popover-example": ["quickgui-solid-popover-example@workspace:examples/popover-solid"],
 
     "quickgui-solid-sidebar-vibrancy-example": ["quickgui-solid-sidebar-vibrancy-example@workspace:examples/sidebar-vibrancy-solid"],
+
+    "quickgui-solid-styling-example": ["quickgui-solid-styling-example@workspace:examples/styling-solid"],
 
     "quickgui-solid-system-api-example": ["quickgui-solid-system-api-example@workspace:examples/system-api-solid"],
 

@@ -359,6 +359,46 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 
 ### JavaScript tooling
+- Added the extended styling surface to `@quickgui/native` and `@quickgui/solid`, bumping the
+  mutation protocol to v23. Text-bearing nodes gained `letterSpacing`, `wordSpacing`,
+  `textTransform`, `textShadow`, `textDecoration`/`textDecorationColor`/`textDecorationStyle`/
+  `textDecorationThickness`, `wordBreak`, `overflowWrap`, `hyphens`, and `textDirection`, and
+  `textAlign: "start"` and `"end"` now reach the core's own direction-relative `TextAlign::Start`
+  and `TextAlign::End` instead of collapsing into the physical edges. Layout gained the inherited
+  `direction` with the logical `paddingStart`/`paddingEnd`, `marginStart`/`marginEnd`, and
+  `borderStartWidth`/`borderEndWidth` edges, `position: "sticky"` whose `top`/`right`/`bottom`/
+  `left` become the core's sticky offsets, `overflowX: "scroll"`, and `scrollSnapType`/
+  `scrollSnapAlign`/`scrollSnapStop`. Boxes gained gradient backgrounds, per-corner
+  `borderRadius`, `borderStyle`, the `outline` ring with its width, color, offset, and style,
+  raster `backgroundImage` with `backgroundSize`/`backgroundRepeat`/`backgroundPosition`, CSS
+  `filter` and `backdropFilter` chains, `transform` with `transformOrigin`, `mixBlendMode`, and
+  hover, active, and focus variants for exactly the gradient, outline, and transform the core's
+  `ElementStateStyle` can swap.
+- Parsed every one of those declarations in Rust rather than JavaScript: a new
+  `packages/native/src/styles.rs` turns the CSS `linear-gradient()`, `radial-gradient()`, and
+  `conic-gradient()` grammars — angles, `to <side>` directions, radial shape, extent and center,
+  conic `from` angle, positioned stops, and an `in srgb`/`in oklab` interpolation space — plus CSS
+  filter-function lists, transform-function lists, the `matrix()` object form, text shadows,
+  one-to-four value corner radii, outline shorthands, background size, repeat, and position, and
+  blend-mode keywords into the core's own `Gradient`, `Filter`, `Transform2D`, `TextShadow`,
+  `Corners`, `Outline`, `BackgroundSize`, `BackgroundRepeat`, `BackgroundPosition`, and `BlendMode`
+  values. Colors inside those strings use the same bounded CSS grammar the renderer packs
+  everywhere else. A background image is decoded exactly once per declaration and retained until
+  the source changes.
+- Bounded the new surface at both ends: a gradient, filter, transform, outline, or text-shadow
+  declaration past `MAX_STYLE_DECLARATION_BYTES` (4 096) throws a `TypeError` in JavaScript before
+  it can cross N-API, `borderRadius` refuses more than four radii, and anything the Rust grammar
+  does not cover — an unknown filter function, an unsupported color, an unparsable angle, a
+  malformed object form — declares nothing at all rather than reaching a core constructor. Stops
+  past `MAX_GRADIENT_STOPS` (8) and filters past `MAX_FILTERS_PER_ELEMENT` (8) are dropped in
+  source order by the core's own bounded types.
+- Added the `styling-solid` and `components-solid` examples. The first declares text alignment, the
+  new text styles, gradients, per-corner radii, dashed and dotted borders, outlines, filters, a
+  backdrop material, transforms with a hover variant, blend modes, right-to-left layout, sticky
+  headers, and mandatory scroll snapping; the second puts `Select`, `Combobox`, `Autocomplete`,
+  `Table`, `Tree`, `Slider`, `NumberField`, `Splitter`, `Toolbar`, `ToggleGroup`, `Toast`,
+  `DateField`, `TimeField`, `Calendar`, `Menubar`, `PopoverMenu`, `ContextMenu`, `Dialog`, and
+  `Tabs` in one window.
 - Added declared `Select`, `Combobox`, and `Autocomplete` compound components to `@quickgui/solid`,
   bumping the mutation protocol to v22 with the new `options`, `inputValue`, `filterMode`,
   `appearance`, and `commit`-listener properties. The option source is one bounded `items` array or

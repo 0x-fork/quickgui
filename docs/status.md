@@ -23,6 +23,17 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
+- JavaScript bindings for the extended styling surface, at protocol v23: extended text styling
+  (`letterSpacing`, `wordSpacing`, `textTransform`, `textShadow`, the `textDecoration` family,
+  `wordBreak`, `overflowWrap`, `hyphens`, `textDirection`, and logical `textAlign: "start"|"end"`),
+  direction-relative layout (`direction` plus `paddingStart`/`End`, `marginStart`/`End`, and
+  `borderStartWidth`/`EndWidth`), `position: "sticky"` insets, `overflowX: "scroll"`, scroll
+  snapping (`scrollSnapType`, `scrollSnapAlign`, `scrollSnapStop`), CSS and object-form gradients,
+  per-corner `borderRadius`, `borderStyle`, the `outline` ring, raster `backgroundImage` with its
+  size, repeat, and position, CSS `filter` and `backdropFilter` chains, `transform` with
+  `transformOrigin`, `mixBlendMode`, and hover/active/focus gradient, outline, and transform
+  variants. Every declaration is parsed once in Rust into the core's own bounded value type, and a
+  declaration the grammar does not cover declares nothing rather than reaching the core;
 - JavaScript bindings for the declared option sources: Solid `Select`, `Combobox`, and
   `Autocomplete` compound parts declaring a bounded option source — one `items` array or child
   `Option` nodes — the controlled value, the controlled input text, the filter mode, and one

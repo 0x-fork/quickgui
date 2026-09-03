@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 22;
+export const PROTOCOL_VERSION = 23;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -264,6 +264,58 @@ export const enum PropertyCode {
   Disclosure = 237,
   LoadingLabel = 238,
   CommitListener = 239,
+  LetterSpacing = 240,
+  WordSpacing = 241,
+  TextTransform = 242,
+  TextShadow = 243,
+  TextDecorationLine = 244,
+  TextDecorationColor = 245,
+  TextDecorationStyle = 246,
+  TextDecorationThickness = 247,
+  WordBreak = 248,
+  OverflowWrap = 249,
+  Hyphens = 250,
+  TextDirection = 251,
+  Direction = 252,
+  PaddingStart = 253,
+  PaddingEnd = 254,
+  MarginStart = 255,
+  MarginEnd = 256,
+  BorderStartWidth = 257,
+  BorderEndWidth = 258,
+  BackgroundGradient = 259,
+  BorderTopLeftRadius = 260,
+  BorderTopRightRadius = 261,
+  BorderBottomRightRadius = 262,
+  BorderBottomLeftRadius = 263,
+  BorderStyle = 264,
+  OutlineWidth = 265,
+  OutlineColor = 266,
+  OutlineOffset = 267,
+  OutlineStyle = 268,
+  BackgroundImage = 269,
+  BackgroundSize = 270,
+  BackgroundRepeat = 271,
+  BackgroundPosition = 272,
+  Filter = 273,
+  BackdropFilter = 274,
+  Transform = 275,
+  TransformOrigin = 276,
+  MixBlendMode = 277,
+  HoverBackgroundGradient = 278,
+  HoverOutline = 279,
+  HoverTransform = 280,
+  ActiveBackgroundGradient = 281,
+  ActiveOutline = 282,
+  ActiveTransform = 283,
+  FocusBackgroundColor = 284,
+  FocusColor = 285,
+  FocusBackgroundGradient = 286,
+  FocusOutline = 287,
+  FocusTransform = 288,
+  ScrollSnapType = 289,
+  ScrollSnapAlign = 290,
+  ScrollSnapStop = 291,
 }
 
 /**
@@ -411,6 +463,20 @@ export const MAX_TOASTS = 8;
 
 /** Most menus one declared in-window menubar retains. */
 export const MAX_MENUBAR_MENUS = 64;
+
+/**
+ * Longest gradient, filter, transform, outline, or text-shadow declaration the Rust binding parses.
+ *
+ * Each of these is a fixed-size core value, so a longer declaration can only be malformed; the
+ * renderer rejects it before it reaches the boundary.
+ */
+export const MAX_STYLE_DECLARATION_BYTES = 4096;
+
+/** Most color stops the Rust core retains for one gradient. */
+export const MAX_GRADIENT_STOPS = 8;
+
+/** Most filters the Rust core retains in one element's chain. */
+export const MAX_FILTERS_PER_ELEMENT = 8;
 
 export type NativePropertyValue = boolean | number | string | null;
 

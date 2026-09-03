@@ -372,6 +372,7 @@ fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -480,6 +481,7 @@ fn flex_without_direction_uses_css_row_default() {
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -557,6 +559,7 @@ fn retained_popover_uses_core_placement_dismissal_and_focus_restoration() {
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -633,6 +636,7 @@ fn unanchored_overlay_traps_autofocus_dismisses_and_restores_previous_focus() {
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -748,6 +752,7 @@ fn native_svg_is_parsed_once_until_its_source_changes() {
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -826,6 +831,7 @@ fn native_virtual_list_mounts_only_the_initial_window_and_overscan() {
         lists: Rc::clone(&lists),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -906,6 +912,7 @@ fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::clone(&terminals),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -1101,6 +1108,7 @@ fn a_declared_close_interception_holds_the_window_and_reports_it_to_javascript()
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -1173,6 +1181,7 @@ fn component_part_view(window: u32, tree: NativeTree, events: EventQueue) -> Nat
         lists: Rc::new(RefCell::new(HashMap::new())),
         terminals: Rc::new(RefCell::new(HashMap::new())),
         images: Rc::new(RefCell::new(HashMap::new())),
+        background_images: Rc::new(RefCell::new(HashMap::new())),
         shaders: Rc::new(RefCell::new(HashMap::new())),
         menus: Rc::new(RefCell::new(HashMap::new())),
         context_menu: ContextMenuState::new(),
@@ -3977,4 +3986,416 @@ fn declared_calendar_and_menubar_move_focus_through_the_core() {
         merged_component_change(&events, menubar_id).get("open"),
         Some(&serde_json::json!(1))
     );
+}
+
+// -------------------------------------------------------------------------------------------
+// Extended text, box, and layout styling
+//
+// Every declaration below is parsed into the Rust core's own bounded value types. A malformed
+// declaration must produce `None` and leave the element untouched rather than panicking.
+// -------------------------------------------------------------------------------------------
+
+#[test]
+fn declared_css_colors_parse_the_same_grammar_the_renderer_packs() {
+    assert_eq!(parse_css_color("#abc"), Some(Color::rgb8(0xaa, 0xbb, 0xcc)));
+    assert_eq!(
+        parse_css_color("#11223380"),
+        Some(Color::rgba8(0x11, 0x22, 0x33, 0x80))
+    );
+    assert_eq!(
+        parse_css_color("rgb(12, 34, 56)"),
+        Some(Color::rgb8(12, 34, 56))
+    );
+    assert_eq!(
+        parse_css_color("rgba(255, 0, 0, 0.5)"),
+        Some(Color::rgba8(255, 0, 0, 128))
+    );
+    assert_eq!(parse_css_color("transparent"), Some(Color::TRANSPARENT));
+    assert_eq!(parse_css_color("black"), Some(Color::rgb8(0, 0, 0)));
+
+    assert_eq!(parse_css_color("chartreuse"), None);
+    assert_eq!(parse_css_color("#12345"), None);
+    assert_eq!(parse_css_color("rgb(1, 2)"), None);
+    assert_eq!(parse_css_color(""), None);
+    assert_eq!(parse_css_color(&"#".repeat(4096)), None);
+}
+
+#[test]
+fn declared_linear_gradients_adopt_css_angles_directions_and_stop_positions() {
+    let gradient =
+        parse_gradient("linear-gradient(to bottom right, #ff0000, #00ff00 40%, #0000ff)")
+            .expect("a CSS linear gradient");
+    match gradient.kind() {
+        quickgui::GradientKind::Linear { angle } => assert_eq!(angle.degrees(), 135.0),
+        other => panic!("expected a linear gradient, got {other:?}"),
+    }
+    let stops = gradient.stops().as_slice();
+    assert_eq!(stops.len(), 3);
+    assert_eq!(stops[0].color, Color::rgb8(255, 0, 0));
+    assert_eq!(stops[1].position, 0.4);
+    assert_eq!(stops[2].color, Color::rgb8(0, 0, 255));
+
+    let angled = parse_gradient("linear-gradient(45deg, black, white)").expect("an angle");
+    match angled.kind() {
+        quickgui::GradientKind::Linear { angle } => assert_eq!(angle.degrees(), 45.0),
+        other => panic!("expected a linear gradient, got {other:?}"),
+    }
+    // Without an explicit angle CSS falls to `to bottom`, and unpositioned stops space evenly.
+    let defaulted = parse_gradient("linear-gradient(black, white)").expect("a default angle");
+    match defaulted.kind() {
+        quickgui::GradientKind::Linear { angle } => assert_eq!(angle.degrees(), 180.0),
+        other => panic!("expected a linear gradient, got {other:?}"),
+    }
+    assert_eq!(defaulted.stops().as_slice()[1].position, 1.0);
+
+    let interpolated =
+        parse_gradient("linear-gradient(in oklab, black, white)").expect("an interpolation space");
+    assert_eq!(
+        interpolated.interpolation(),
+        quickgui::GradientColorSpace::Oklab
+    );
+}
+
+#[test]
+fn declared_radial_and_conic_gradients_reach_the_core_shape_extent_and_center() {
+    let radial =
+        parse_gradient("radial-gradient(circle closest-side at 30% 70%, #ffffff, rgba(0,0,0,0))")
+            .expect("a CSS radial gradient");
+    match radial.kind() {
+        quickgui::GradientKind::Radial {
+            shape,
+            extent,
+            center,
+        } => {
+            assert_eq!(shape, quickgui::RadialGradientShape::Circle);
+            assert_eq!(extent, quickgui::RadialGradientExtent::ClosestSide);
+            assert_eq!((center.x, center.y), (0.3, 0.7));
+        }
+        other => panic!("expected a radial gradient, got {other:?}"),
+    }
+
+    let conic = parse_gradient("conic-gradient(from 90deg at left top, #ff0000, #0000ff)")
+        .expect("a CSS conic gradient");
+    match conic.kind() {
+        quickgui::GradientKind::Conic { from_angle, center } => {
+            assert_eq!(from_angle.degrees(), 90.0);
+            assert_eq!((center.x, center.y), (0.0, 0.0));
+        }
+        other => panic!("expected a conic gradient, got {other:?}"),
+    }
+    // `red` and `blue` are outside the bounded color grammar, so the whole declaration is refused.
+    assert!(parse_gradient("conic-gradient(from 90deg, red, blue)").is_none());
+}
+
+#[test]
+fn declared_gradient_objects_and_malformed_declarations_stay_bounded() {
+    let gradient = parse_gradient(
+        r##"{"type":"radial","shape":"circle","extent":"farthest-side","center":{"x":0.25,"y":0.5},"interpolation":"srgb","stops":[{"color":"#000000","position":0},{"color":"#ffffff","position":1}]}"##,
+    )
+    .expect("the declared object form");
+    assert_eq!(gradient.interpolation(), quickgui::GradientColorSpace::Srgb);
+    assert_eq!(gradient.stops().len(), 2);
+
+    // The core retains at most eight stops; a longer declaration keeps the first eight.
+    let many = (0..12).map(|_| "\"#102030\"").collect::<Vec<_>>().join(",");
+    let bounded = parse_gradient(&format!(r#"{{"type":"linear","stops":[{many}]}}"#))
+        .expect("a bounded declaration");
+    assert_eq!(bounded.stops().len(), quickgui::MAX_GRADIENT_STOPS);
+
+    assert!(parse_gradient("linear-gradient(").is_none());
+    assert!(parse_gradient("linear-gradient()").is_none());
+    assert!(parse_gradient("repeating-linear-gradient(#000000, #ffffff)").is_none());
+    assert!(parse_gradient(r##"{"type":"spiral","stops":["#000000"]}"##).is_none());
+    assert!(parse_gradient(&"linear-gradient(#000000, #ffffff) ".repeat(400)).is_none());
+}
+
+#[test]
+fn declared_filter_chains_map_onto_the_core_filter_variants() {
+    let filters = parse_filters(
+        "brightness(1.2) contrast(80%) saturate(2) grayscale(0.5) invert(1) sepia(.25) hue-rotate(90deg) opacity(0.5)",
+    )
+    .expect("a CSS filter list");
+    assert_eq!(
+        filters,
+        vec![
+            quickgui::Filter::Brightness(1.2),
+            quickgui::Filter::Contrast(0.8),
+            quickgui::Filter::Saturate(2.0),
+            quickgui::Filter::Grayscale(0.5),
+            quickgui::Filter::Invert(1.0),
+            quickgui::Filter::Sepia(0.25),
+            quickgui::Filter::HueRotate(90.0),
+            quickgui::Filter::Opacity(0.5),
+        ]
+    );
+
+    let blurred = parse_filters("blur(4px) drop-shadow(0 2px 6px #00000080)")
+        .expect("subtree filters promote a compositing group");
+    assert_eq!(blurred[0], quickgui::Filter::Blur(4.0));
+    match blurred[1] {
+        quickgui::Filter::DropShadow(shadow) => {
+            assert_eq!(shadow.offset, quickgui::Vector::new(0.0, 2.0));
+            assert_eq!(shadow.color, Color::rgba8(0, 0, 0, 0x80));
+        }
+        other => panic!("expected a drop shadow, got {other:?}"),
+    }
+
+    // A chain longer than the core retains stops at the bound rather than reaching the core.
+    let long = parse_filters(&"invert(1) ".repeat(20)).expect("a bounded chain");
+    assert_eq!(long.len(), quickgui::MAX_FILTERS_PER_ELEMENT);
+
+    assert!(parse_filters("none").is_none());
+    assert!(parse_filters("wobble(2)").is_none());
+    assert!(parse_filters("blur(4px) wobble(2)").is_none());
+}
+
+#[test]
+fn declared_transforms_compose_in_css_order_and_accept_the_matrix_form() {
+    // CSS applies the rightmost function to the point first: scale, then translate.
+    let transform = parse_transform("translate(10px, 0) scale(2)").expect("a CSS transform list");
+    assert_eq!(
+        transform.apply(quickgui::Point::new(1.0, 0.0)),
+        quickgui::Point::new(12.0, 0.0)
+    );
+
+    let rotated = parse_transform("rotate(0.5turn)").expect("a turn angle");
+    assert!((rotated.a + 1.0).abs() < 1.0e-5);
+
+    let matrix = parse_transform(r#"{"a":1,"b":0,"c":0,"d":1,"tx":4,"ty":8}"#)
+        .expect("the declared matrix form");
+    assert_eq!(matrix, quickgui::Transform2D::translate(4.0, 8.0));
+
+    assert!(parse_transform("none").is_none());
+    assert!(parse_transform("perspective(200px)").is_none());
+    assert!(parse_transform("translate()").is_none());
+    assert_eq!(parse_transform_origin("left top"), Some((0.0, 0.0)));
+    assert_eq!(parse_transform_origin("25% 75%"), Some((0.25, 0.75)));
+    assert_eq!(parse_transform_origin("center"), Some((0.5, 0.5)));
+    assert_eq!(parse_transform_origin("top left center"), None);
+}
+
+#[test]
+fn declared_text_shadows_fall_back_to_the_elements_own_text_color() {
+    let current = Color::rgb8(0x11, 0x22, 0x33);
+    let shadow = parse_text_shadow("0 2px 4px #00000080", current).expect("a CSS text shadow");
+    assert_eq!(
+        (shadow.offset_x, shadow.offset_y, shadow.blur),
+        (0.0, 2.0, 4.0)
+    );
+    assert_eq!(shadow.color, Color::rgba8(0, 0, 0, 0x80));
+
+    let inherited = parse_text_shadow("1px 1px", current).expect("an offset-only shadow");
+    assert_eq!(inherited.color, current);
+    assert_eq!(inherited.blur, 0.0);
+
+    let declared = parse_text_shadow(
+        r##"{"offsetX":2,"offsetY":3,"blur":5,"color":"#ffffff"}"##,
+        current,
+    )
+    .expect("the declared object form");
+    assert_eq!(declared.color, Color::rgb8(255, 255, 255));
+
+    assert!(parse_text_shadow("none", current).is_none());
+    assert!(parse_text_shadow("4px", current).is_none());
+    assert!(parse_text_shadow("1 2 3 4 #000000", current).is_none());
+}
+
+#[test]
+fn declared_corner_radii_outlines_and_backgrounds_adopt_the_css_shorthands() {
+    assert_eq!(
+        parse_corner_radii("8px 12px 0 4px"),
+        Some(quickgui::Corners::new(8.0, 12.0, 0.0, 4.0))
+    );
+    assert_eq!(
+        parse_corner_radii("8px 12px"),
+        Some(quickgui::Corners::new(8.0, 12.0, 8.0, 12.0))
+    );
+    assert_eq!(
+        parse_corner_radii("8 12 4"),
+        Some(quickgui::Corners::new(8.0, 12.0, 4.0, 12.0))
+    );
+    assert_eq!(parse_corner_radii("1 2 3 4 5"), None);
+
+    let outline = parse_outline("2px dashed #11223344", 3.0).expect("an outline shorthand");
+    assert_eq!(outline.width, 2.0);
+    assert_eq!(outline.offset, 3.0);
+    assert_eq!(outline.style, quickgui::BorderStyle::Dashed);
+    assert_eq!(outline.color, Color::rgba8(0x11, 0x22, 0x33, 0x44));
+    assert!(parse_outline("none", 0.0).is_none());
+    assert!(parse_outline("solid #000000", 0.0).is_none());
+
+    assert_eq!(
+        parse_background_size("cover"),
+        Some(quickgui::BackgroundSize::Cover)
+    );
+    assert_eq!(
+        parse_background_size("64px 32px"),
+        Some(quickgui::BackgroundSize::Fixed(64.0, 32.0))
+    );
+    assert_eq!(parse_background_size("stretch"), None);
+    assert_eq!(
+        parse_background_repeat("repeat-x"),
+        Some(quickgui::BackgroundRepeat::RepeatX)
+    );
+    assert_eq!(parse_background_repeat("space"), None);
+    let position = parse_background_position("right bottom").expect("a background position");
+    assert_eq!((position.x, position.y), (1.0, 1.0));
+    assert_eq!(parse_background_position("nowhere"), None);
+    assert_eq!(
+        parse_blend_mode("hard-light"),
+        Some(quickgui::BlendMode::HardLight)
+    );
+    assert_eq!(parse_blend_mode("luminosity"), None);
+    assert_eq!(
+        parse_border_style("dotted"),
+        Some(quickgui::BorderStyle::Dotted)
+    );
+    assert_eq!(parse_border_style("groove"), None);
+}
+
+#[test]
+fn declared_state_styles_collect_the_gradient_outline_and_transform_the_core_supports() {
+    let mut node = NativeNode::new(NodeTag::View);
+    node.set_property(
+        property::HOVER_BACKGROUND_COLOR,
+        Some(PropertyValue::Color(0xff332211)),
+    );
+    node.set_property(property::OUTLINE_OFFSET, Some(PropertyValue::Number(2.0)));
+    node.set_property(
+        property::HOVER_OUTLINE,
+        Some(PropertyValue::String(Arc::from("3px solid #ffffff"))),
+    );
+    node.set_property(
+        property::HOVER_TRANSFORM,
+        Some(PropertyValue::String(Arc::from("scale(1.05)"))),
+    );
+    node.set_property(
+        property::HOVER_BACKGROUND_GRADIENT,
+        Some(PropertyValue::String(Arc::from(
+            "linear-gradient(90deg, #000000, #ffffff)",
+        ))),
+    );
+
+    let style = native_state_style(
+        &node,
+        property::HOVER_BACKGROUND_COLOR,
+        property::HOVER_COLOR,
+        property::HOVER_BACKGROUND_GRADIENT,
+        property::HOVER_OUTLINE,
+        property::HOVER_TRANSFORM,
+    );
+    assert!(style.declared());
+    assert_eq!(style.background, Some(unpack_color(0xff332211)));
+    assert!(style.color.is_none());
+    assert_eq!(
+        style.gradient.map(|gradient| gradient.stops().len()),
+        Some(2)
+    );
+    let outline = style.outline.expect("a declared hover outline");
+    assert_eq!((outline.width, outline.offset), (3.0, 2.0));
+    assert_eq!(
+        style.transform,
+        Some(quickgui::Transform2D::scale(1.05, 1.05))
+    );
+
+    // A state that declares nothing must not register a core state style at all.
+    let empty = native_state_style(
+        &NativeNode::new(NodeTag::View),
+        property::FOCUS_BACKGROUND_COLOR,
+        property::FOCUS_COLOR,
+        property::FOCUS_BACKGROUND_GRADIENT,
+        property::FOCUS_OUTLINE,
+        property::FOCUS_TRANSFORM,
+    );
+    assert!(!empty.declared());
+}
+
+#[test]
+fn malformed_style_declarations_leave_the_element_untouched_instead_of_panicking() {
+    let mut node = NativeNode::new(NodeTag::View);
+    for code in [
+        property::TEXT_SHADOW,
+        property::TEXT_TRANSFORM,
+        property::WORD_BREAK,
+        property::OVERFLOW_WRAP,
+        property::HYPHENS,
+        property::TEXT_DIRECTION,
+        property::TEXT_DECORATION_LINE,
+        property::TEXT_DECORATION_STYLE,
+        property::DIRECTION,
+        property::BACKGROUND_GRADIENT,
+        property::BORDER_STYLE,
+        property::BORDER_RADIUS,
+        property::OUTLINE_STYLE,
+        property::FILTER,
+        property::BACKDROP_FILTER,
+        property::TRANSFORM,
+        property::TRANSFORM_ORIGIN,
+        property::MIX_BLEND_MODE,
+        property::SCROLL_SNAP_TYPE,
+        property::SCROLL_SNAP_ALIGN,
+        property::SCROLL_SNAP_STOP,
+        property::BACKGROUND_SIZE,
+        property::BACKGROUND_REPEAT,
+        property::BACKGROUND_POSITION,
+    ] {
+        node.set_property(
+            code,
+            Some(PropertyValue::String(Arc::from("\u{1f600} not a value"))),
+        );
+    }
+    node.set_property(
+        property::LETTER_SPACING,
+        Some(PropertyValue::Number(f32::MAX)),
+    );
+    node.set_property(
+        property::TEXT_DECORATION_THICKNESS,
+        Some(PropertyValue::Number(-40.0)),
+    );
+
+    // Building the element must not panic; every unusable declaration is simply not applied.
+    drop(apply_properties(div(), &node));
+}
+
+#[test]
+fn declared_scroll_snapping_sticky_insets_and_logical_spacing_reach_the_core_builders() {
+    let mut node = NativeNode::new(NodeTag::View);
+    node.set_property(
+        property::SCROLL_SNAP_TYPE,
+        Some(PropertyValue::String(Arc::from("x mandatory"))),
+    );
+    node.set_property(
+        property::SCROLL_SNAP_ALIGN,
+        Some(PropertyValue::String(Arc::from("center"))),
+    );
+    node.set_property(
+        property::SCROLL_SNAP_STOP,
+        Some(PropertyValue::String(Arc::from("always"))),
+    );
+    node.set_property(
+        property::DIRECTION,
+        Some(PropertyValue::String(Arc::from("rtl"))),
+    );
+    node.set_property(property::PADDING_START, Some(PropertyValue::Number(12.0)));
+    node.set_property(property::MARGIN_END, Some(PropertyValue::Number(8.0)));
+    node.set_property(
+        property::BORDER_START_WIDTH,
+        Some(PropertyValue::Number(3.0)),
+    );
+
+    // The core owns snapping, mirroring, and logical edge resolution; the binding only declares
+    // them, so the assertion here is that a complete declaration builds exactly one element.
+    drop(apply_layout_styles(div(), &node));
+
+    let mut sticky = NativeNode::new(NodeTag::View);
+    sticky.set_property(
+        property::POSITION,
+        Some(PropertyValue::String(Arc::from("sticky"))),
+    );
+    sticky.set_property(property::TOP, Some(PropertyValue::Number(0.0)));
+    sticky.set_property(
+        property::OVERFLOW_X,
+        Some(PropertyValue::String(Arc::from("scroll"))),
+    );
+    drop(apply_properties(div(), &sticky));
 }
