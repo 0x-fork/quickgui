@@ -23,6 +23,9 @@ html[data-docs-theme='dark'] {
   --docs-border: #e4e4e7;
   --docs-accent: #c2410c;
   --docs-code-accent: #9a3412;
+  --docs-table-border: #e2e2e3;
+  --docs-table-code: #5030e9;
+  --docs-table-heading: #67676c;
   --docs-accent-soft: #fff1e8;
   min-height: 100vh;
   background: var(--docs-bg);
@@ -40,6 +43,9 @@ html[data-docs-theme='dark'] {
   --docs-border: #343438;
   --docs-accent: #fb923c;
   --docs-code-accent: #fdba74;
+  --docs-table-border: #3c3f44;
+  --docs-table-code: #a78bfa;
+  --docs-table-heading: #a0a0a8;
   --docs-accent-soft: #3a251b;
   color-scheme: dark;
 }
@@ -566,54 +572,45 @@ html[data-docs-theme='dark'] {
 .docs-table-wrap {
   max-width: 100%;
   overflow-x: auto;
-  margin: 20px 0 28px;
+  margin: 20px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--docs-border) transparent;
 }
 
 .docs-table-wrap table {
   width: 100%;
-  min-width: 520px;
-  border: 0;
-  border-collapse: separate;
-  border-spacing: 0 3px;
-  font-size: 16px;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.4;
   text-align: left;
 }
 
 .docs-table-wrap th,
 .docs-table-wrap td {
-  border: 0;
-  vertical-align: top;
+  border: 1px solid var(--docs-table-border);
+  padding: 8px 16px;
+  vertical-align: middle;
 }
 
 .docs-table-wrap th {
-  padding: 0 16px 10px;
-  color: var(--docs-text);
-  font-weight: 650;
-  line-height: 24px;
-  text-align: center;
+  background: var(--docs-surface);
+  color: var(--docs-table-heading);
+  font-weight: 600;
+  text-align: left;
 }
 
-.docs-table-wrap td {
-  padding: 1px 16px;
-  color: var(--docs-text);
-  line-height: 26px;
+.docs-table-wrap tbody tr:nth-child(even) {
+  background: var(--docs-surface);
 }
 
-.docs-table-wrap th:first-child,
 .docs-table-wrap td:first-child {
-  width: 31%;
-  padding-left: 0;
   white-space: nowrap;
 }
 
-.docs-table-wrap th:last-child,
-.docs-table-wrap td:last-child {
-  padding-right: 0;
-}
-
 .docs-table-wrap code {
+  background: rgba(142, 150, 170, 0.14);
+  color: var(--docs-table-code);
+  font-size: 0.875em;
   white-space: nowrap;
 }
 
