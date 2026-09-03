@@ -222,6 +222,60 @@ wheel movement cycles through occluded nodes without adding an idle redraw sourc
 cargo run --features inspector --example inspector
 ```
 
+The effects gallery paints multi-stop linear, radial, and conic gradients, per-corner radii,
+dashed and dotted borders, outlines, raster backgrounds, color filters, transforms with hover and
+click on a rotated card, subtree blur and drop shadows, backdrop blur over scrolling content, and
+every blend mode. A settled frame keeps its compositing textures and schedules nothing:
+
+```console
+cargo run --release --example effects
+```
+
+The direction gallery mirrors one layout between left-to-right and right-to-left, pins sticky
+section headers inside their parents while a list scrolls, and snaps a horizontal carousel and a
+vertical page stack at gesture end:
+
+```console
+cargo run --release --example rtl_sticky_snap
+```
+
+The text-styling gallery shows text alignment including `text_center`, `text_start`, and
+`text_end`, text shadows, letter and word spacing, case mapping, overlines, and the word-break,
+overflow-wrap, and soft-hyphen policies:
+
+```console
+cargo run --release --example text_styling
+```
+
+The text-services gallery wires the system spell checker, autocorrect, smart substitutions,
+dictionary lookup, the unstyled find bar, and the application undo manager into one editor:
+
+```console
+cargo run --release --example text_services
+```
+
+The range and feedback gallery styles sliders, range sliders, progress bars, meters, number fields,
+and splitters over the unstyled descriptors; the toolbar gallery adds roving-focus toolbars, toggle
+groups, and the bounded toast queue; the date gallery shows segmented date and time fields with an
+optional calendar; the menubar gallery composes an in-window menubar from popover menus:
+
+```console
+cargo run --release --example range_controls
+cargo run --release --example toolbar_toast
+cargo run --release --example date_fields
+cargo run --release --example menubar
+```
+
+The platform-services and window-controls examples exercise the application shell: activation
+policy, Dock attention, secure keyboard entry, message boxes with checkboxes, Quick Look, the color
+and font panels, the share sheet, biometric authentication, window levels, click-through with hover
+forwarding, aspect ratios, and restore state:
+
+```console
+cargo run --release --example platform_services
+cargo run --release --example window_controls
+```
+
 ## Run the stress test
 
 ```console

@@ -196,6 +196,16 @@ cargo run --release --example dialogs
 cargo run --release --example data_collections
 cargo run --release --example displays
 cargo run --release --example animations
+cargo run --release --example effects
+cargo run --release --example rtl_sticky_snap
+cargo run --release --example text_styling
+cargo run --release --example text_services
+cargo run --release --example range_controls
+cargo run --release --example toolbar_toast
+cargo run --release --example date_fields
+cargo run --release --example menubar
+cargo run --release --example platform_services
+cargo run --release --example window_controls
 cargo run --features inspector --example inspector
 cargo run --release --example stress_scroll
 cargo run --example hacker_news
