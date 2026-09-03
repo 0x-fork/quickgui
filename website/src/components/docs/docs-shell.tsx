@@ -21,6 +21,10 @@ import {
   type DocsSlug,
 } from '../../lib/docs'
 import {
+  localizedComponentDescription,
+  localizedDocsPage,
+} from '../../lib/docs-locales'
+import {
   localePath,
   type Locale,
 } from '../../i18n'
@@ -90,6 +94,10 @@ const ui = {
     theme: 'Switch to {{theme}} theme',
     light: 'light',
     dark: 'dark',
+    home: 'QuickGUI home',
+    documentation: 'Documentation',
+    documentationPages: 'Documentation pages',
+    github: 'QuickGUI on GitHub',
   },
   zh: {
     guide: '指南',
@@ -120,6 +128,10 @@ const ui = {
     theme: '切换到{{theme}}主题',
     light: '浅色',
     dark: '深色',
+    home: 'QuickGUI 首页',
+    documentation: '文档',
+    documentationPages: '文档页面',
+    github: 'QuickGUI 的 GitHub 仓库',
   },
   ja: {
     guide: 'ガイド',
@@ -150,6 +162,10 @@ const ui = {
     theme: '{{theme}}テーマに切り替え',
     light: 'ライト',
     dark: 'ダーク',
+    home: 'QuickGUI ホーム',
+    documentation: 'ドキュメント',
+    documentationPages: 'ドキュメントページ',
+    github: 'QuickGUI の GitHub リポジトリ',
   },
 } as const
 
@@ -157,9 +173,10 @@ function localize(locale: Locale, path: string): string {
   return locale === 'en' ? path : `/${locale}${path}`
 }
 
-function guideItem(slug: DocsSlug): NavItem {
-  const page = DOCS_PAGES.find((candidate) => candidate.slug === slug)
-  if (!page) throw new Error(`Unknown docs page: ${slug}`)
+function guideItem(slug: DocsSlug, locale: Locale): NavItem {
+  const source = DOCS_PAGES.find((candidate) => candidate.slug === slug)
+  if (!source) throw new Error(`Unknown docs page: ${slug}`)
+  const page = localizedDocsPage(source, locale)
   return {
     title: page.title,
     description: page.description,
@@ -168,10 +185,10 @@ function guideItem(slug: DocsSlug): NavItem {
   }
 }
 
-function componentItem(component: ComponentDoc): NavItem {
+function componentItem(component: ComponentDoc, locale: Locale): NavItem {
   return {
     title: component.name,
-    description: component.description,
+    description: localizedComponentDescription(component, locale),
     path: componentDocsPath(component),
     terms: `${component.section} ${component.parts.join(' ')} ${component.keyProps.join(' ')}`,
   }
@@ -190,31 +207,39 @@ function navGroups(locale: Locale): readonly NavGroup[] {
   return [
     {
       title: labels.introduction,
-      items: [guideItem('getting-started'), guideItem('project-structure')],
+      items: [
+        guideItem('getting-started', locale),
+        guideItem('project-structure', locale),
+      ],
     },
     {
       title: labels.solid,
-      items: [guideItem('solid'), guideItem('styling')],
+      items: [guideItem('solid', locale), guideItem('styling', locale)],
     },
     {
       title: labels.components,
       items: [
-        guideItem('components'),
-        guideItem('forms-and-input'),
-        guideItem('overlays-and-dialogs'),
+        guideItem('components', locale),
+        guideItem('forms-and-input', locale),
+        guideItem('overlays-and-dialogs', locale),
       ],
     },
     ...COMPONENT_NAV_GROUPS.map((group) => ({
       title: componentGroupTitles[group.title] ?? group.title,
-      items: group.items.map(componentItem),
+      items: group.items.map((component) => componentItem(component, locale)),
     })),
     {
       title: labels.swiftUi,
-      items: [guideItem('swift-ui'), guideItem('swift-ui-hosting')],
+      items: [
+        guideItem('swift-ui', locale),
+        guideItem('swift-ui-hosting', locale),
+      ],
     },
     {
       title: labels.swiftComponents,
-      items: SWIFT_UI_NAV_GROUP.items.map(componentItem),
+      items: SWIFT_UI_NAV_GROUP.items.map((component) =>
+        componentItem(component, locale),
+      ),
     },
   ]
 }
@@ -623,12 +648,16 @@ function DocsHeader({
   return (
     <header className="docs-header">
       <div className="docs-frame docs-header-inner">
-        <a href={localePath(locale)} className="docs-brand" aria-label="QuickGUI home">
+        <a
+          href={localePath(locale)}
+          className="docs-brand"
+          aria-label={labels.home}
+        >
           <Logo />
           <span>{site.name}</span>
         </a>
 
-        <nav className="docs-header-nav" aria-label="Documentation">
+        <nav className="docs-header-nav" aria-label={labels.documentation}>
           {headerLinks.map((link) => (
             <a
               key={link.area}
@@ -679,7 +708,7 @@ function DocsHeader({
             href={site.links.github}
             target="_blank"
             rel="noreferrer"
-            aria-label="QuickGUI on GitHub"
+            aria-label={labels.github}
           >
             <span className="i-simple-icons-github" aria-hidden />
           </a>
@@ -705,7 +734,7 @@ function DocsPager({ page, locale }: { page: DocsShellPage; locale: Locale }) {
   const next = index >= 0 && index < pages.length - 1 ? pages[index + 1] : undefined
 
   return (
-    <nav className="docs-pager" aria-label="Documentation pages">
+    <nav className="docs-pager" aria-label={ui[locale].documentationPages}>
       {previous ? (
         <a href={localize(locale, previous.path)} className="docs-pager-previous">
           <small>{ui[locale].previous}</small>

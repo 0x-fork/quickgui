@@ -1,0 +1,50 @@
+SwiftUI ブリッジは、macOS 上で Solid が描画する QuickGUI ウィンドウの中に、本物のネイティブ SwiftUI コントロールをマウントします。
+
+## Host
+
+`Host` は `NSHostingView` を基盤とする、保持型 QuickGUI レイアウトの 1 つのリーフです。その下に SwiftUI ブリッジコンポーネントを置きます。
+
+```tsx
+import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
+
+<Host matchContents>
+  <Button label="Continue" onPress={continueFlow} />
+</Host>
+```
+
+## ネイティブコントロール
+
+ブリッジは `Button`、`Slider`、`Toggle`、`ProgressView`、`Stepper`、`TextField`、`SecureField`、`Picker`、`SegmentedControl`、`DatePicker`、`ColorPicker`、`Gauge` を公開します。サイドバーから、それぞれのリファレンスページを開けます。
+
+## 制御値
+
+値は引き続き Solid が制御します。ネイティブ側の変更は対応するコールバックから届きます。
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 340 }}>
+  <Slider
+    value={volume()}
+    min={0}
+    max={1}
+    step={0.05}
+    label="Volume"
+    onValueChange={setVolume}
+  />
+</Host>
+```
+
+## サイズ
+
+既定では、QuickGUI はほかの保持ノードと同じように `Host` をレイアウトします。両軸で SwiftUI 固有のサイズを使うには `matchContents` を指定します。`{ horizontal: true }` または `{ vertical: true }` で片方だけを選ぶこともできます。
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 360 }}>
+  <Picker selection={theme()} options={themes} onSelectionChange={setTheme} />
+</Host>
+```
+
+## 対応プラットフォーム
+
+<Note title="macOS のみ">
+  SwiftUI ホスティングは macOS 向けのブリッジです。クロスプラットフォーム UI には、通常の `@quickgui/solid` コンポーネントを使ってください。
+</Note>

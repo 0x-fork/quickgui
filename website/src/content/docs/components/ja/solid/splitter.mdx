@@ -1,0 +1,43 @@
+ポインターとキーボードで操作できるハンドルを備えた、サイズ変更可能なペインを作ります。
+
+## インポート
+
+`@quickgui/solid` から `Splitter` をインポートします。
+
+```tsx
+import { Splitter } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Splitter.Root value={sizes()} panes={[{ min: 180 }, { min: 280 }]} onSizesChange={setSizes}>
+  <Splitter.Pane itemIndex={0}><Sidebar /></Splitter.Pane>
+  <Splitter.Handle itemIndex={0} />
+  <Splitter.Pane itemIndex={1}><Editor /></Splitter.Pane>
+</Splitter.Root>
+```
+
+## 構成
+
+- `Splitter.Root`
+- `Splitter.Pane`
+- `Splitter.Handle`
+
+```tsx
+<Splitter.Root>
+  <Splitter.Pane />
+  <Splitter.Handle />
+</Splitter.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `panes` | ペインごとの最小サイズと折りたたみ宣言です。 |
+| `orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
+| `onSizesChange` | コアによるサイズ変更後、完全なペインサイズ集合を通知します。 |
+

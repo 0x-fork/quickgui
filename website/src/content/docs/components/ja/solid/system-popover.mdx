@@ -1,0 +1,45 @@
+QuickGUI の内容を独立したネイティブ子ウィンドウに表示し、親ウィンドウの外側にも広げられます。
+
+## インポート
+
+`@quickgui/solid` から `SystemPopover` をインポートします。
+
+```tsx
+import { SystemPopover } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<SystemPopover.Root open={open()} onOpenChange={setOpen}>
+  <SystemPopover.Trigger><Text>Open native popover</Text></SystemPopover.Trigger>
+  <SystemPopover.Content width={320} height={180} placement="bottom">
+    <SettingsPanel />
+  </SystemPopover.Content>
+</SystemPopover.Root>
+```
+
+## 構成
+
+- `SystemPopover.Root`
+- `SystemPopover.Trigger`
+- `SystemPopover.Content`
+
+```tsx
+<SystemPopover.Root>
+  <SystemPopover.Trigger />
+  <SystemPopover.Content />
+</SystemPopover.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `open` | 制御された開閉状態です。 |
+| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `onOpenChange` | コアが決定した開閉を通知します。 |
+| `width` | 宣言された論理幅です。 |
+| `height` | 宣言された論理高さです。 |
+| `placement` | ネイティブ子ウィンドウの配置要求です。 |
+

@@ -1,0 +1,30 @@
+可访问的按压目标，可自行设置样式并组合文本或其他内容。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Button`。
+
+```tsx
+import { Button } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Button
+  onClick={save}
+  style={{ height: 40, paddingLeft: 16, paddingRight: 16 }}
+>
+  Save changes
+</Button>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `children` | 挂载在组件内部的内容。 |
+| `onClick` | 在核心完成激活判定后运行。 |
+| `disabled` | 禁止交互，并暴露禁用状态。 |
+

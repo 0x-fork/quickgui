@@ -1,0 +1,69 @@
+方向付きアニメーション、ビューポート、ポップアップの各パーツを備えた開閉式ナビゲーションです。
+
+## インポート
+
+`@quickgui/solid` から `NavigationMenu` をインポートします。
+
+```tsx
+import { NavigationMenu } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<NavigationMenu.Root value={section()} onValueChange={setSection}>
+  <NavigationMenu.List>
+    <NavigationMenu.Item value="products">
+      <NavigationMenu.Trigger><Text>Products</Text></NavigationMenu.Trigger>
+      <NavigationMenu.Content><ProductLinks /></NavigationMenu.Content>
+    </NavigationMenu.Item>
+  </NavigationMenu.List>
+  <NavigationMenu.Portal>
+    <NavigationMenu.Positioner><NavigationMenu.Popup><NavigationMenu.Viewport /></NavigationMenu.Popup></NavigationMenu.Positioner>
+  </NavigationMenu.Portal>
+</NavigationMenu.Root>
+```
+
+## 構成
+
+- `NavigationMenu.Root`
+- `NavigationMenu.List`
+- `NavigationMenu.Item`
+- `NavigationMenu.Trigger`
+- `NavigationMenu.Icon`
+- `NavigationMenu.Content`
+- `NavigationMenu.Link`
+- `NavigationMenu.Portal`
+- `NavigationMenu.Positioner`
+- `NavigationMenu.Popup`
+- `NavigationMenu.Viewport`
+- `NavigationMenu.Arrow`
+- `NavigationMenu.Backdrop`
+
+```tsx
+<NavigationMenu.Root>
+  <NavigationMenu.List />
+  <NavigationMenu.Item />
+  <NavigationMenu.Trigger />
+  <NavigationMenu.Icon />
+  <NavigationMenu.Content />
+  <NavigationMenu.Link />
+  <NavigationMenu.Portal />
+  <NavigationMenu.Positioner />
+  <NavigationMenu.Popup />
+  <NavigationMenu.Viewport />
+  <NavigationMenu.Arrow />
+  <NavigationMenu.Backdrop />
+</NavigationMenu.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+| `orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
+| `delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |
+

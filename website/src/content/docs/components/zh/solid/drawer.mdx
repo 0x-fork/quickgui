@@ -1,0 +1,63 @@
+带吸附点的模态或焦点约束式抽屉，滑动关闭由核心管理。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Drawer`。
+
+```tsx
+import { Drawer } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Drawer.Root open={open()} snapPoints={[0.4, 0.9]} onOpenChange={setOpen}>
+  <Drawer.Trigger><Text>Open drawer</Text></Drawer.Trigger>
+  <Drawer.Portal>
+    <Drawer.Backdrop />
+    <Drawer.Viewport>
+      <Drawer.Popup><Drawer.SwipeArea /><Drawer.Content><Settings /></Drawer.Content></Drawer.Popup>
+    </Drawer.Viewport>
+  </Drawer.Portal>
+</Drawer.Root>
+```
+
+## 结构
+
+- `Drawer.Root`
+- `Drawer.Trigger`
+- `Drawer.Portal`
+- `Drawer.Backdrop`
+- `Drawer.Viewport`
+- `Drawer.Popup`
+- `Drawer.Content`
+- `Drawer.Title`
+- `Drawer.Description`
+- `Drawer.Close`
+- `Drawer.SwipeArea`
+
+```tsx
+<Drawer.Root>
+  <Drawer.Trigger />
+  <Drawer.Portal />
+  <Drawer.Backdrop />
+  <Drawer.Viewport />
+  <Drawer.Popup />
+  <Drawer.Content />
+  <Drawer.Title />
+  <Drawer.Description />
+  <Drawer.Close />
+  <Drawer.SwipeArea />
+</Drawer.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `open` | 受控的打开状态。 |
+| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `snapPoints` | 抽屉可用的展开位置，以视口比例或像素表示。 |
+| `swipeDirection` | 滑动关闭或移动界面时朝向的边缘。 |
+

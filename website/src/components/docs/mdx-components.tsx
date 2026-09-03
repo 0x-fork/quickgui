@@ -3,11 +3,33 @@ import {
   isValidElement,
   useRef,
   useState,
+  type ComponentProps,
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from 'react'
 import type { Locale } from '../../i18n'
 import { Note } from './docs-content'
+
+const ui = {
+  en: {
+    copied: 'Copied',
+    copyCode: 'Copy code',
+    headingLink: (title: string) => `Link to ${title}`,
+    note: 'NOTE',
+  },
+  zh: {
+    copied: '已复制',
+    copyCode: '复制代码',
+    headingLink: (title: string) => `链接到“${title}”`,
+    note: '注意',
+  },
+  ja: {
+    copied: 'コピーしました',
+    copyCode: 'コードをコピー',
+    headingLink: (title: string) => `${title} へのリンク`,
+    note: '注意',
+  },
+} as const
 
 function localizedHref(locale: Locale, href: string | undefined): string | undefined {
   if (!href?.startsWith('/docs') || locale === 'en') return href
@@ -31,8 +53,12 @@ function languageFrom(children: ReactNode): string | undefined {
 
 function MdxPre({
   children,
+  locale,
   ...props
-}: ComponentPropsWithoutRef<'pre'> & { 'data-language'?: string }) {
+}: ComponentPropsWithoutRef<'pre'> & {
+  'data-language'?: string
+  locale: Locale
+}) {
   const [copied, setCopied] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const language = props['data-language'] ?? languageFrom(children)
@@ -55,7 +81,7 @@ function MdxPre({
         type="button"
         onClick={copy}
         className="docs-code-copy"
-        aria-label={copied ? 'Copied' : 'Copy code'}
+        aria-label={copied ? ui[locale].copied : ui[locale].copyCode}
       >
         <span className={copied ? 'i-lucide-check' : 'i-lucide-copy'} aria-hidden />
       </button>
@@ -70,9 +96,11 @@ function MdxHeading({
   level,
   id,
   children,
+  locale,
   ...props
 }: (ComponentPropsWithoutRef<'h2'> | ComponentPropsWithoutRef<'h3'>) & {
   level: 2 | 3
+  locale: Locale
 }) {
   const content = (
     <>
@@ -80,7 +108,7 @@ function MdxHeading({
         <a
           className="docs-heading-anchor"
           href={`#${id}`}
-          aria-label={`Link to ${textContent(children)}`}
+          aria-label={ui[locale].headingLink(textContent(children))}
         >
           #
         </a>
@@ -109,13 +137,21 @@ function MdxTable({
 
 export function getDocsMdxComponents(locale: Locale) {
   return {
-    pre: MdxPre,
+    pre: (props: ComponentPropsWithoutRef<'pre'>) => (
+      <MdxPre locale={locale} {...props} />
+    ),
     table: MdxTable,
-    h2: (props: ComponentPropsWithoutRef<'h2'>) => <MdxHeading level={2} {...props} />,
-    h3: (props: ComponentPropsWithoutRef<'h3'>) => <MdxHeading level={3} {...props} />,
+    h2: (props: ComponentPropsWithoutRef<'h2'>) => (
+      <MdxHeading level={2} locale={locale} {...props} />
+    ),
+    h3: (props: ComponentPropsWithoutRef<'h3'>) => (
+      <MdxHeading level={3} locale={locale} {...props} />
+    ),
     a: ({ href, ...props }: ComponentPropsWithoutRef<'a'>) => (
       <a href={localizedHref(locale, href)} {...props} />
     ),
-    Note,
+    Note: ({ title, ...props }: ComponentProps<typeof Note>) => (
+      <Note title={title ?? ui[locale].note} {...props} />
+    ),
   }
 }

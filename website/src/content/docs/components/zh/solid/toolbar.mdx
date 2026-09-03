@@ -1,0 +1,55 @@
+在一套移动焦点的键盘模型下组织操作和输入。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Toolbar`。
+
+```tsx
+import { Toolbar } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Toolbar.Root
+  items={[{ value: "back" }, { value: "forward" }, { value: "search" }]}
+  active={active()}
+  onActiveChange={setActive}
+>
+  <Toolbar.Button partValue="back"><Text>Back</Text></Toolbar.Button>
+  <Toolbar.Button partValue="forward"><Text>Forward</Text></Toolbar.Button>
+  <Toolbar.Input partValue="search" placeholder="Search" />
+</Toolbar.Root>
+```
+
+## 结构
+
+- `Toolbar.Root`
+- `Toolbar.Item`
+- `Toolbar.Button`
+- `Toolbar.Link`
+- `Toolbar.Input`
+- `Toolbar.Group`
+- `Toolbar.Separator`
+
+```tsx
+<Toolbar.Root>
+  <Toolbar.Item />
+  <Toolbar.Button />
+  <Toolbar.Link />
+  <Toolbar.Input />
+  <Toolbar.Group />
+  <Toolbar.Separator />
+</Toolbar.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `items` | 用于选项或键盘导航的有限声明模型。 |
+| `active` | 持有当前活动状态或移动焦点状态的受控项目。 |
+| `defaultActive` | 非受控组件的初始活动项目。 |
+| `orientation` | 水平或垂直布局，以及对应的键盘方向。 |
+| `onActiveChange` | 报告当前持有移动焦点状态的项目。 |
+

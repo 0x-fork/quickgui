@@ -1,0 +1,49 @@
+从组合式 SwiftUI 触发器显示原生 SwiftUI 浮窗。
+
+## 导入
+
+从 `@quickgui/solid/swift-ui` 导入 `Popover`。
+
+```tsx
+import { Host, Popover } from "@quickgui/solid/swift-ui";
+```
+
+## 用法
+
+```tsx
+<Popover
+  isPresented={open()}
+  onIsPresentedChange={setOpen}
+  attachmentAnchor="bottom"
+  arrowEdge="top"
+>
+  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Content>
+    <QuickGUIHostView width={280} height={120}>
+      <SettingsPanel />
+    </QuickGUIHostView>
+  </Popover.Content>
+</Popover>
+```
+
+## 结构
+
+- `Popover.Trigger`
+- `Popover.Content`
+
+```tsx
+<Popover isPresented={open()} onIsPresentedChange={setOpen}>
+  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Content>{/* SwiftUI-hosted content */}</Popover.Content>
+</Popover>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `isPresented` | 受控的原生 SwiftUI Popover 显示状态。 |
+| `onIsPresentedChange` | 报告原生 SwiftUI Popover 的显示状态变化。 |
+| `attachmentAnchor` | 组合式 SwiftUI 触发器上的锚点。 |
+| `arrowEdge` | 原生 SwiftUI Popover 箭头的首选边缘。 |
+

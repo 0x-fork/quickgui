@@ -1,0 +1,55 @@
+生成されるプロジェクトは、意図的に小さく保たれています。TSX は Bun Worker 内で動作し、QuickGUI はプラットフォームのイベントループをネイティブのメインスレッド上に保ちます。
+
+## 生成されるファイル
+
+```text
+my-app/
+├── src/
+│   └── app.tsx
+├── package.json
+├── quickgui.config.ts
+└── tsconfig.json
+```
+
+アプリの UI は `src/` に置きます。ほかのファイルやディレクトリを本番バンドルへ含めるには、`resources` オプションを使います。
+
+## アプリケーションのエントリ
+
+エントリモジュールはネイティブアプリの準備を待ち、ウィンドウを作成して、Solid ルートを `createRenderer` に渡します。
+
+```tsx
+await app.whenReady();
+
+new Window({
+  title: "Notes",
+  renderer: createRenderer(() => <NotesApp />),
+});
+```
+
+ソースモジュールでは通常の Bun API を利用できます。ホスト境界におけるネイティブアプリケーションとウィンドウの操作は、常に非同期に保ってください。
+
+## 設定
+
+`quickgui.config.ts` は、コンパイルとパッケージ化の対象を CLI に伝えます。
+
+```tsx
+import { defineConfig } from "@quickgui/cli";
+
+export default defineConfig({
+  entry: "src/app.tsx",
+  productName: "Notes",
+  identifier: "dev.example.notes",
+  resources: ["assets"],
+});
+```
+
+リリース専用のオプションには、アイコン、署名、公証、Mac App Store、アップデーターマニフェストがあります。
+
+## パッケージ
+
+| パッケージ | 用途 |
+| --- | --- |
+| `@quickgui/native` | アプリケーション、ウィンドウ、メニュー、ダイアログ、通知、ネイティブサービス |
+| `@quickgui/solid` | Solid レンダラー、プリミティブ、コンポーネント、ルーティング |
+| `@quickgui/solid/swift-ui` | macOS 上で Solid からホストするネイティブ SwiftUI コントロール |
+| `@quickgui/cli` | プロジェクト作成、開発、本番パッケージ化 |

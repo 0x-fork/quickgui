@@ -1,0 +1,32 @@
+テキスト、SF Symbol、セマンティックロール、押下処理に対応したネイティブ SwiftUI Button です。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `Button` をインポートします。
+
+```tsx
+import { Host, Button } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents>
+  <Button
+    label="Continue"
+    systemImage="arrow.right"
+    onPress={continueFlow}
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `systemImage` | SwiftUI Button のラベルとともに表示する SF Symbols 名です。 |
+| `role` | SwiftUI のセマンティックロールです：`default`、`cancel`、`destructive`。 |
+| `onPress` | ネイティブ SwiftUI Button がアクティブになったときに実行します。 |
+| `modifiers` | ホストしたコントロールへ順番に適用する SwiftUI View モディファイアです。 |
+

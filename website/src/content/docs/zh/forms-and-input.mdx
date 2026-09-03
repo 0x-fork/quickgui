@@ -1,0 +1,63 @@
+QuickGUI 表单控件把文本服务与交互留在原生核心中，同时向 Solid 暴露熟悉的受控值。
+
+## 文本输入
+
+`Input` 默认为单行输入。`TextArea` 是便捷的多行输入组件。
+
+```tsx
+<Input
+  value={name()}
+  placeholder="Project name"
+  onInput={(event) => setName(event.value ?? "")}
+/>
+
+<TextArea
+  value={notes()}
+  placeholder="Notes"
+  onInput={(event) => setNotes(event.value ?? "")}
+/>
+```
+
+## 字段
+
+`Field` 将控件与标签、说明、有效性和错误内容关联起来。
+
+```tsx
+<Field.Root required invalid={!email()} validationMessage="Enter an email address">
+  <Field.Label><Text>Email</Text></Field.Label>
+  <Field.Control value={email()} onInput={(event) => setEmail(event.value ?? "")} />
+  <Field.Description><Text>Used for account recovery.</Text></Field.Description>
+  <Field.Error><Text>Enter an email address.</Text></Field.Error>
+</Field.Root>
+```
+
+## 选项
+
+独立的布尔状态使用 `Checkbox` 或 `Switch`，单选值使用 `RadioGroup`，工具栏式按下状态使用 `ToggleGroup`。
+
+```tsx
+<RadioGroup.Root value={theme()} onValueChange={setTheme}>
+  <Radio.Root value="light"><Radio.Indicator /><Text>Light</Text></Radio.Root>
+  <Radio.Root value="dark"><Radio.Indicator /><Text>Dark</Text></Radio.Root>
+</RadioGroup.Root>
+```
+
+## 选择器
+
+`Select`、`Combobox` 和 `Autocomplete` 声明一组数量有限的项目。QuickGUI 负责筛选并绘制原生选项界面。
+
+```tsx
+<Select.Root
+  ariaLabel="Theme"
+  items={[
+    { value: "system", label: "System" },
+    { value: "dark", label: "Dark" },
+  ]}
+  value={theme()}
+  onValueChange={setTheme}
+/>
+```
+
+## 事件
+
+底层输入控件报告 `QuickGuiEvent`；复合组件的值回调首先接收规范化后的值，其次接收事件。核心处理完交互后，会异步传递原生决定。

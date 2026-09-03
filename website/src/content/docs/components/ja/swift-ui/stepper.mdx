@@ -1,0 +1,35 @@
+値の範囲を制限できる、制御されたネイティブ数値 Stepper です。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `Stepper` をインポートします。
+
+```tsx
+import { Host, Stepper } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents>
+  <Stepper
+    value={copies()}
+    min={1}
+    max={20}
+    label={"Copies: " + copies()}
+    onValueChange={setCopies}
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `min` | 受け入れる最小値です。 |
+| `max` | 受け入れる最大値です。 |
+| `step` | キーボード、ポインター、またはネイティブコントロール入力で使う増分です。 |
+| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+

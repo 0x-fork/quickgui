@@ -1,0 +1,49 @@
+組み合わせた SwiftUI トリガーから、ネイティブ SwiftUI Popover を表示します。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `Popover` をインポートします。
+
+```tsx
+import { Host, Popover } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Popover
+  isPresented={open()}
+  onIsPresentedChange={setOpen}
+  attachmentAnchor="bottom"
+  arrowEdge="top"
+>
+  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Content>
+    <QuickGUIHostView width={280} height={120}>
+      <SettingsPanel />
+    </QuickGUIHostView>
+  </Popover.Content>
+</Popover>
+```
+
+## 構成
+
+- `Popover.Trigger`
+- `Popover.Content`
+
+```tsx
+<Popover isPresented={open()} onIsPresentedChange={setOpen}>
+  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Content>{/* SwiftUI-hosted content */}</Popover.Content>
+</Popover>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `isPresented` | 制御されたネイティブ SwiftUI Popover の表示状態です。 |
+| `onIsPresentedChange` | ネイティブ SwiftUI Popover の表示状態変更を通知します。 |
+| `attachmentAnchor` | 組み合わせた SwiftUI トリガー上のアンカーポイントです。 |
+| `arrowEdge` | ネイティブ SwiftUI Popover の矢印を置く優先辺です。 |
+

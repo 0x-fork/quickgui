@@ -1,0 +1,78 @@
+QuickGUI 通过带类型的 `style` 对象设置保留式原生节点的样式。属性名看起来很熟悉，但它们由 QuickGUI 而不是浏览器解析。
+
+## `style` 属性
+
+```tsx
+<View
+  style={{
+    width: 360,
+    padding: 20,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e4e4e7",
+  }}
+>
+  <Text style={{ color: "#18181b", fontSize: 15 }}>Settings</Text>
+</View>
+```
+
+数字表示逻辑像素。百分比字符串相对于父节点的可用尺寸进行计算。
+
+## Flexbox
+
+Flexbox 是行、列、对齐、间距、换行和弹性尺寸的默认布局工具。
+
+```tsx
+<View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10 }}>
+  <Avatar.Root>{/* … */}</Avatar.Root>
+  <View style={{ flex: 1 }}><Text>Ada Lovelace</Text></View>
+  <Button><Text>Follow</Text></Button>
+</View>
+```
+
+## 网格布局
+
+使用类似 CSS Grid 的轨道定义二维布局。
+
+```tsx
+<View
+  style={{
+    display: "grid",
+    gridTemplateColumns: "220px 1fr",
+    gridTemplateRows: "auto 1fr",
+    gap: 12,
+  }}
+>
+  <Sidebar />
+  <Editor />
+</View>
+```
+
+## 文本与颜色
+
+文本会沿保留式树继承排版和颜色。颜色使用 CSS 字符串，字体可使用系统字体族。
+
+```tsx
+<Text style={{ color: "#6b7280", fontSize: 13, lineHeight: 18, fontWeight: 500 }}>
+  Last saved just now
+</Text>
+```
+
+## 交互状态
+
+直接在节点上声明悬停、按下、聚焦、禁用和选中状态的绘制样式。核心会应用这些状态，无需往返 JavaScript。
+
+```tsx
+<Button
+  style={{
+    backgroundColor: "#ffffff",
+    hoverBackgroundColor: "#f4f4f5",
+    activeBackgroundColor: "#e4e4e7",
+    focusOutline: "2px solid #f97316",
+    outlineOffset: 2,
+  }}
+>
+  <Text>Continue</Text>
+</Button>
+```

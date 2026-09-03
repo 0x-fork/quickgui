@@ -1,0 +1,60 @@
+QuickGUI には、低レベルのプリミティブとアクセシブルな複合コンポーネントがあります。どちらもスタイルは付いていません。コアが動作とセマンティクスを提供し、見える部分はすべてアプリ側で定義します。
+
+## プリミティブ
+
+[View](/docs/components/view)、[Text](/docs/components/text)、[Button](/docs/components/button)、[Input](/docs/components/input)、[TextArea](/docs/components/text-area)、[Markdown](/docs/components/markdown)、[Image](/docs/components/image)、[Svg](/docs/components/svg)、[Shader](/docs/components/shader)、[VirtualList](/docs/components/virtual-list)、[Terminal](/docs/components/terminal) を、保持型 UI の構成要素として使います。
+
+## 複合コンポーネント
+
+複合コンポーネントは名前付きのパーツを公開します。ルートが状態をまとめ、Rust コアがキーボード操作、フォーカス、アクセシビリティ関係、マウント方針、正確な操作期限を管理します。
+
+```tsx
+<Tabs.Root value={tab()} onValueChange={setTab}>
+  <Tabs.List>
+    <Tabs.Tab value="general"><Text>General</Text></Tabs.Tab>
+    <Tabs.Tab value="advanced"><Text>Advanced</Text></Tabs.Tab>
+    <Tabs.Indicator />
+  </Tabs.List>
+  <Tabs.Panel value="general"><GeneralSettings /></Tabs.Panel>
+  <Tabs.Panel value="advanced"><AdvancedSettings /></Tabs.Panel>
+</Tabs.Root>
+```
+
+## 制御された状態
+
+ほとんどのルートは、制御値と対応するコールバックに加え、非制御で使うための `default*` 値を受け取ります。
+
+```tsx
+const [open, setOpen] = createSignal(false);
+
+<Dialog.Root open={open()} onOpenChange={setOpen}>
+  {/* parts */}
+</Dialog.Root>
+```
+
+コールバックは、コアが受け入れた結果を通知します。制御宣言と同期させるには Signal を更新します。
+
+## コンポーネントの種類
+
+| 種類 | コンポーネント |
+| --- | --- |
+| フォーム | Checkbox、Radio、Switch、Select、Combobox、NumberField、DateField、OtpField |
+| レイアウトとデータ | Tabs、Accordion、Splitter、ScrollArea、Table、Tree |
+| フィードバックとオーバーレイ | Progress、Meter、Toast、Tooltip、Popover、Dialog、Drawer |
+| メニューとナビゲーション | Menu、PopoverMenu、ContextMenu、Menubar、NavigationMenu、Router |
+
+すべての公開コンポーネントには、サイドバーから開ける専用ページがあります。各ページでパーツ、主なプロパティ、動作する構成例を確認できます。
+
+## 各パーツのスタイル
+
+表示される各パーツは `style` でスタイルします。コンポーネントの状態は保持ノードに投影されるため、ホバー、フォーカス、選択、アクセシビリティの動作は Web ランタイムに依存しません。
+
+```tsx
+<Switch.Root
+  checked={enabled()}
+  onCheckedChange={setEnabled}
+  style={{ width: 38, height: 22, borderRadius: 11 }}
+>
+  <Switch.Thumb style={{ width: 18, height: 18, borderRadius: 9 }} />
+</Switch.Root>
+```

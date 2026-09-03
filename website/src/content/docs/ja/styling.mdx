@@ -1,0 +1,78 @@
+QuickGUI は型付きの `style` オブジェクトで、保持型ネイティブノードをスタイルします。見慣れた名前ですが、値を解決するのはブラウザーではなく QuickGUI です。
+
+## `style` プロパティ
+
+```tsx
+<View
+  style={{
+    width: 360,
+    padding: 20,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e4e4e7",
+  }}
+>
+  <Text style={{ color: "#18181b", fontSize: 15 }}>Settings</Text>
+</View>
+```
+
+数値は論理ピクセルです。パーセント文字列は、親で利用可能なサイズを基準に解決されます。
+
+## Flexbox
+
+Flexbox は、行、列、配置、間隔、折り返し、可変サイズに使う既定のレイアウト手段です。
+
+```tsx
+<View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10 }}>
+  <Avatar.Root>{/* … */}</Avatar.Root>
+  <View style={{ flex: 1 }}><Text>Ada Lovelace</Text></View>
+  <Button><Text>Follow</Text></Button>
+</View>
+```
+
+## グリッド
+
+CSS Grid 形式のトラックを使って、2 次元レイアウトを作れます。
+
+```tsx
+<View
+  style={{
+    display: "grid",
+    gridTemplateColumns: "220px 1fr",
+    gridTemplateRows: "auto 1fr",
+    gap: 12,
+  }}
+>
+  <Sidebar />
+  <Editor />
+</View>
+```
+
+## テキストと色
+
+テキストは保持型ツリーを通してタイポグラフィと色を継承します。色には CSS 形式の文字列、フォントにはシステムフォントファミリーを使います。
+
+```tsx
+<Text style={{ color: "#6b7280", fontSize: 13, lineHeight: 18, fontWeight: 500 }}>
+  Last saved just now
+</Text>
+```
+
+## インタラクション状態
+
+ホバー、アクティブ、フォーカス、無効、選択済みの描画をノード上に直接宣言します。コアが状態を適用するため、JavaScript との往復は発生しません。
+
+```tsx
+<Button
+  style={{
+    backgroundColor: "#ffffff",
+    hoverBackgroundColor: "#f4f4f5",
+    activeBackgroundColor: "#e4e4e7",
+    focusOutline: "2px solid #f97316",
+    outlineOffset: 2,
+  }}
+>
+  <Text>Continue</Text>
+</Button>
+```

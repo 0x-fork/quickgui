@@ -1,0 +1,63 @@
+QuickGUI には、ウィンドウ内オーバーレイ、ネイティブ子ウィンドウのポップオーバー、OS ダイアログがあります。内容が現在のウィンドウ外へ出る必要があるか、どちらが動作を管理するかに応じて使い分けます。
+
+## Popover
+
+`Popover` は現在の保持型ウィンドウ内に留まります。トリガー、Portal、Positioner、Popup に、必要なら Arrow や Backdrop を組み合わせます。
+
+```tsx
+<Popover.Root open={open()} onOpenChange={setOpen}>
+  <Popover.Trigger><Text>Open</Text></Popover.Trigger>
+  <Popover.Portal>
+    <Popover.Positioner side="bottom" sideOffset={8}>
+      <Popover.Popup><Popover.Arrow /><Settings /></Popover.Popup>
+    </Popover.Positioner>
+  </Popover.Portal>
+</Popover.Root>
+```
+
+優先位置がビューポートと衝突する場合、コアが位置を反転して揃え直します。
+
+## Dialog
+
+`Dialog` はフォーカスを内部に閉じ込め、閉じた後は以前のフォーカスを復元し、正確な `exitDuration` の間だけ閉じる内容をマウントしたままにします。
+
+```tsx
+<Dialog.Root open={open()} onOpenChange={setOpen} exitDuration={160}>
+  <Dialog.Trigger><Text>Edit profile</Text></Dialog.Trigger>
+  <Dialog.Portal>
+    <Dialog.Backdrop />
+    <Dialog.Viewport>
+      <Dialog.Popup>
+        <Dialog.Title><Text>Edit profile</Text></Dialog.Title>
+        <Dialog.Close><Text>Done</Text></Dialog.Close>
+      </Dialog.Popup>
+    </Dialog.Viewport>
+  </Dialog.Portal>
+</Dialog.Root>
+```
+
+取り消しにくい操作の確認には `AlertDialog` を使います。既定では、背景をクリックしても閉じません。
+
+## システムポップオーバー
+
+`SystemPopover` はネイティブの子ウィンドウを作るため、内容を親ウィンドウの外側まで広げられます。
+
+```tsx
+<SystemPopover.Root>
+  <SystemPopover.Trigger><Text>Show details</Text></SystemPopover.Trigger>
+  <SystemPopover.Content width={320} height={180} placement="bottom">
+    <Details />
+  </SystemPopover.Content>
+</SystemPopover.Root>
+```
+
+## ネイティブダイアログ
+
+ファイルピッカー、メッセージボックスなどの OS ダイアログは `@quickgui/native` から利用します。結果は Promise で返ります。
+
+```tsx
+const result = await dialog.open({
+  title: "Choose a project",
+  properties: ["openDirectory"],
+});
+```

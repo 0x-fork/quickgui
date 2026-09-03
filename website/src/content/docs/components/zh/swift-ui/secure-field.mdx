@@ -1,0 +1,31 @@
+隐藏输入内容的原生编辑器，受控约定与 TextField 相同。
+
+## 导入
+
+从 `@quickgui/solid/swift-ui` 导入 `SecureField`。
+
+```tsx
+import { Host, SecureField } from "@quickgui/solid/swift-ui";
+```
+
+## 用法
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 280 }}>
+  <SecureField
+    value={password()}
+    placeholder="Password"
+    onValueChange={setPassword}
+  />
+</Host>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `value` | 受控值，具体类型取决于该组件的约定。 |
+| `placeholder` | 可编辑值为空时显示的文本。 |
+| `onValueChange` | 报告核心接受的值。 |
+| `onSubmit` | 原生字段提交当前值时运行。 |
+

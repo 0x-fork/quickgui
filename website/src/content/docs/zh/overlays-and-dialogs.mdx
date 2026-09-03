@@ -1,0 +1,63 @@
+QuickGUI 提供窗口内浮层、原生子窗口浮窗和操作系统对话框。请根据内容是否需要超出当前窗口，以及由谁管理行为来选择合适的界面。
+
+## Popover
+
+`Popover` 留在当前保留式窗口内。你可以组合它的触发器、Portal、定位器、弹出内容，以及可选的箭头或背景层。
+
+```tsx
+<Popover.Root open={open()} onOpenChange={setOpen}>
+  <Popover.Trigger><Text>Open</Text></Popover.Trigger>
+  <Popover.Portal>
+    <Popover.Positioner side="bottom" sideOffset={8}>
+      <Popover.Popup><Popover.Arrow /><Settings /></Popover.Popup>
+    </Popover.Positioner>
+  </Popover.Portal>
+</Popover.Root>
+```
+
+当首选位置会与视口冲突时，核心会翻转位置并重新对齐。
+
+## Dialog
+
+`Dialog` 会约束焦点，在关闭后恢复之前的焦点，并在精确的 `exitDuration` 内保持正在关闭的内容已挂载。
+
+```tsx
+<Dialog.Root open={open()} onOpenChange={setOpen} exitDuration={160}>
+  <Dialog.Trigger><Text>Edit profile</Text></Dialog.Trigger>
+  <Dialog.Portal>
+    <Dialog.Backdrop />
+    <Dialog.Viewport>
+      <Dialog.Popup>
+        <Dialog.Title><Text>Edit profile</Text></Dialog.Title>
+        <Dialog.Close><Text>Done</Text></Dialog.Close>
+      </Dialog.Popup>
+    </Dialog.Viewport>
+  </Dialog.Portal>
+</Dialog.Root>
+```
+
+需要确认后果较大的操作时，请使用 `AlertDialog`。默认情况下，它不会因点击背景层而关闭。
+
+## 系统浮窗
+
+`SystemPopover` 会创建原生子窗口，因此其中的内容可以超出所属窗口。
+
+```tsx
+<SystemPopover.Root>
+  <SystemPopover.Trigger><Text>Show details</Text></SystemPopover.Trigger>
+  <SystemPopover.Content width={320} height={180} placement="bottom">
+    <Details />
+  </SystemPopover.Content>
+</SystemPopover.Root>
+```
+
+## 原生对话框
+
+文件选择器、消息框等操作系统对话框来自 `@quickgui/native`，结果通过 Promise 返回。
+
+```tsx
+const result = await dialog.open({
+  title: "Choose a project",
+  properties: ["openDirectory"],
+});
+```

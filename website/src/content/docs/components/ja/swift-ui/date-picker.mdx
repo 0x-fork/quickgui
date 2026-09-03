@@ -1,0 +1,35 @@
+制御されたネイティブの日付または日時ピッカーです。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `DatePicker` をインポートします。
+
+```tsx
+import { Host, DatePicker } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents>
+  <DatePicker
+    label="Schedule"
+    value={scheduledAt()}
+    displayedComponents="dateAndTime"
+    style="field"
+    onValueChange={setScheduledAt}
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `min` | 受け入れる最小値です。 |
+| `max` | 受け入れる最大値です。 |
+| `displayedComponents` | 日付、時刻、または日付と時刻の両方のフィールドを選びます。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+

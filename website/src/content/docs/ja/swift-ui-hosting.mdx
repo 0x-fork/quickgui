@@ -1,0 +1,62 @@
+SwiftUI モディファイアを使うと、Solid からネイティブの外観を宣言できます。リバースホスティングを使うと、SwiftUI の内容に通常の QuickGUI サブツリーを含められます。
+
+## モディファイア
+
+`@quickgui/solid/swift-ui/modifiers` からモディファイアファクトリーを読み込み、順番に適用します。
+
+```tsx
+import { Button, Host } from "@quickgui/solid/swift-ui";
+import { buttonStyle, controlSize, tint } from "@quickgui/solid/swift-ui/modifiers";
+
+<Host matchContents>
+  <Button
+    label="Create project"
+    modifiers={[
+      buttonStyle("borderedProminent"),
+      controlSize("large"),
+      tint("#f97316"),
+    ]}
+  />
+</Host>
+```
+
+利用できるファクトリーには、`buttonStyle`、`buttonBorderShape`、`controlSize`、`labelStyle`、`tint`、`disabled` があります。
+
+## Liquid Glass
+
+対応システムでは、SwiftUI Button ブリッジからネイティブのガラスボタンスタイルを要求できます。最終的な描画は引き続き OS が担います。
+
+```tsx
+<Button label="Continue" modifiers={[buttonStyle("glass")]} />
+```
+
+## リバースホスティング
+
+`QuickGUIHostView` は、通常の QuickGUI サブツリーを SwiftUI 階層の中へ戻してマウントします。
+
+```tsx
+<Host matchContents>
+  <QuickGUIHostView width={320} height={180}>
+    <View style={{ width: 320, height: 180, padding: 16 }}>
+      <Text>QuickGUI content inside SwiftUI</Text>
+    </View>
+  </QuickGUIHostView>
+</Host>
+```
+
+## SwiftUI ポップオーバー
+
+SwiftUI の `Popover` は、ネイティブ SwiftUI トリガーを組み合わせます。ポップオーバーの本体を通常の QuickGUI コンポーネントで作る場合は、その中で `QuickGUIHostView` を使えます。
+
+```tsx
+<Host matchContents>
+  <Popover isPresented={open()} onIsPresentedChange={setOpen}>
+    <Popover.Trigger render={<Button label="Open" />} />
+    <Popover.Content>
+      <QuickGUIHostView width={280} height={140}>
+        <SettingsPanel />
+      </QuickGUIHostView>
+    </Popover.Content>
+  </Popover>
+</Host>
+```

@@ -1,0 +1,55 @@
+コアが正確に管理する遅延後に補助情報を表示し、Provider 単位のウォームアップにも対応します。
+
+## インポート
+
+`@quickgui/solid` から `Tooltip` をインポートします。
+
+```tsx
+import { Tooltip } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Tooltip.Provider delay={600} closeDelay={100}>
+  <Tooltip.Root>
+    <Tooltip.Trigger><Text>?</Text></Tooltip.Trigger>
+    <Tooltip.Portal>
+      <Tooltip.Positioner side="top"><Tooltip.Popup><Text>Keyboard shortcuts</Text></Tooltip.Popup></Tooltip.Positioner>
+    </Tooltip.Portal>
+  </Tooltip.Root>
+</Tooltip.Provider>
+```
+
+## 構成
+
+- `Tooltip.Provider`
+- `Tooltip.Root`
+- `Tooltip.Trigger`
+- `Tooltip.Portal`
+- `Tooltip.Positioner`
+- `Tooltip.Popup`
+- `Tooltip.Arrow`
+
+```tsx
+<Tooltip.Root>
+  <Tooltip.Provider />
+  <Tooltip.Trigger />
+  <Tooltip.Portal />
+  <Tooltip.Positioner />
+  <Tooltip.Popup />
+  <Tooltip.Arrow />
+</Tooltip.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `open` | 制御された開閉状態です。 |
+| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |
+| `closeDelay` | 閉じるまでの、コアが管理する遅延時間（ミリ秒）です。 |
+| `side` | 衝突処理前に優先する配置方向です。 |
+| `hoverable` | 閉じずにポインターを Tooltip 内へ移動できるようにします。 |
+

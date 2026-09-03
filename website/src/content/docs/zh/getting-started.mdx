@@ -1,0 +1,79 @@
+QuickGUI 让你使用 Solid 构建原生桌面应用。它不使用 DOM 或 WebView：Solid 更新一棵保留式树，QuickGUI 负责布局并通过 GPU 渲染。
+
+## 系统要求
+
+- macOS 13 或更高版本
+- [Bun](https://bun.sh/) 1.3 或更高版本
+- Xcode Command Line Tools
+
+<Note>
+  Solid 托管层目前面向 macOS。Rust 框架也能在 Windows 和 Linux 上编译，但这两个平台尚不是 Solid 应用的受支持路径。
+</Note>
+
+## 创建项目
+
+创建一个项目并启动原生开发应用：
+
+```bash
+bunx @quickgui/cli init my-app
+cd my-app
+bun run dev
+```
+
+开发命令会监听源代码。下一次构建打开首个原生窗口后，它才会替换当前运行的应用。
+
+## 第一个窗口
+
+应用和窗口 API 来自 `@quickgui/native`，Solid 组件与渲染器来自 `@quickgui/solid`。
+
+```tsx
+import { app, Window } from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
+import { createSignal } from "solid-js";
+
+function Counter() {
+  const [count, setCount] = createSignal(0);
+
+  return (
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+      <Text>Count: {count()}</Text>
+      <Button onClick={() => setCount((value) => value + 1)}>
+        <Text>Increment</Text>
+      </Button>
+    </View>
+  );
+}
+
+function openMainWindow() {
+  new Window({
+    title: "My App",
+    width: 720,
+    height: 480,
+    renderer: createRenderer(() => <Counter />),
+  });
+}
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
+});
+
+await app.whenReady();
+openMainWindow();
+```
+
+创建第一个窗口前，务必等待 `app.whenReady()` 完成。每个 `Window` 都拥有自己的渲染器根节点，并在窗口关闭时将其释放。
+
+## 运行与构建
+
+```bash
+bun run dev
+bun run build
+```
+
+在 macOS 上，生产构建会写入 `dist/darwin-*`。准备发布时，你可以再配置签名和公证。
+
+## 后续步骤
+
+- 了解 [Solid 的渲染与状态](/docs/solid) 如何工作。
+- 组合使用[无样式组件](/docs/components)。
+- 在 macOS 上加入[真正的 SwiftUI 控件](/docs/swift-ui)。

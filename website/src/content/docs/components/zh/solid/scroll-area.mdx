@@ -1,0 +1,51 @@
+组合可滚动视口，以及可由调用方设置样式的滚动条、滑块和角落。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `ScrollArea`。
+
+```tsx
+import { ScrollArea } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<ScrollArea.Root
+  viewportSize={{ width: 320, height: 240 }}
+  contentSize={{ width: 320, height: 1200 }}
+  onScrollStateChange={setScrollState}
+>
+  <ScrollArea.Viewport><ScrollArea.Content><LongList /></ScrollArea.Content></ScrollArea.Viewport>
+  <ScrollArea.Scrollbar orientation="vertical"><ScrollArea.Thumb /></ScrollArea.Scrollbar>
+</ScrollArea.Root>
+```
+
+## 结构
+
+- `ScrollArea.Root`
+- `ScrollArea.Viewport`
+- `ScrollArea.Content`
+- `ScrollArea.Scrollbar`
+- `ScrollArea.Thumb`
+- `ScrollArea.Corner`
+
+```tsx
+<ScrollArea.Root>
+  <ScrollArea.Viewport />
+  <ScrollArea.Content />
+  <ScrollArea.Scrollbar />
+  <ScrollArea.Thumb />
+  <ScrollArea.Corner />
+</ScrollArea.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `viewportSize` | 声明的滚动视口范围。 |
+| `contentSize` | 声明的滚动内容范围。 |
+| `overflowEdgeThreshold` | 仍视为位于边缘的最大距离。 |
+| `onScrollStateChange` | 报告限制后的偏移量和派生的溢出状态。 |
+

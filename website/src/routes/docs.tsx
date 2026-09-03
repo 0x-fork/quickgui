@@ -9,6 +9,7 @@ import {
   type Locale,
 } from '../i18n'
 import { findDocsPage, docsPath, type DocsSlug } from '../lib/docs'
+import { localizedDocsPage } from '../lib/docs-locales'
 import { guideMdx } from '../lib/docs-mdx'
 import { siteMeta } from '../lib/meta'
 
@@ -41,10 +42,11 @@ export const links: Route.LinksFunction = () => [
 ]
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
-  const page = findDocsPage(loaderData?.slug)
-  if (!page || !loaderData) return []
+  const source = findDocsPage(loaderData?.slug)
+  if (!source || !loaderData) return []
 
   const { locale, origin } = loaderData
+  const page = localizedDocsPage(source, locale)
   const path = docsPath(page.slug)
   const title = `${page.title} | QuickGUI`
 
@@ -75,10 +77,11 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 }
 
 export default function DocsRoute({ loaderData }: Route.ComponentProps) {
-  const page = findDocsPage(loaderData.slug)
-  if (!page) return null
+  const source = findDocsPage(loaderData.slug)
+  if (!source) return null
+  const page = localizedDocsPage(source, loaderData.locale)
 
-  const Content = guideMdx(page.slug, loaderData.locale)
+  const Content = guideMdx(source.slug, loaderData.locale)
   return (
     <DocsShell
       locale={loaderData.locale}

@@ -10,10 +10,13 @@ import {
 } from '../i18n'
 import {
   componentDocsPath,
-  componentOutline,
   findComponentDoc,
   type ComponentDocKind,
 } from '../lib/component-docs'
+import {
+  localizedComponentDescription,
+  localizedComponentOutline,
+} from '../lib/docs-locales'
 import { componentMdx } from '../lib/docs-mdx'
 import { siteMeta } from '../lib/meta'
 
@@ -55,12 +58,13 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const { locale, origin } = loaderData
   const path = componentDocsPath(component)
   const title = `${component.name} | QuickGUI`
+  const description = localizedComponentDescription(component, locale)
 
   return [
     ...siteMeta(origin, title),
-    { name: 'description', content: component.description },
+    { name: 'description', content: description },
     { property: 'og:title', content: title },
-    { property: 'og:description', content: component.description },
+    { property: 'og:description', content: description },
     { property: 'og:locale', content: OG_LOCALES[locale] },
     {
       tagName: 'link',
@@ -96,8 +100,11 @@ export default function DocsComponentRoute({ loaderData }: Route.ComponentProps)
       locale={loaderData.locale}
       page={{
         title: component.name,
-        description: component.description,
-        outline: componentOutline(component),
+        description: localizedComponentDescription(
+          component,
+          loaderData.locale,
+        ),
+        outline: localizedComponentOutline(component, loaderData.locale),
         path: componentDocsPath(component),
         area: component.kind === 'swift-ui' ? 'swift-ui' : 'components',
       }}

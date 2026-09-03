@@ -13,6 +13,10 @@ import {
 } from '../src/lib/component-docs'
 import { DOCS_PAGES, docsPath, type DocsPageMeta } from '../src/lib/docs'
 import {
+  localizedComponentDescription,
+  localizedDocsPage,
+} from '../src/lib/docs-locales'
+import {
   DOCS_SEARCH_SCHEMA,
   type DocsSearchArea,
   type DocsSearchDocument,
@@ -86,25 +90,28 @@ async function readableSource(preferred: string, fallback: string): Promise<stri
 }
 
 function pageDefinitions(locale: Locale): SearchPage[] {
-  const guides: SearchPage[] = DOCS_PAGES.map((page) => ({
-    title: page.title,
-    description: page.description,
-    keywords: page.searchTerms,
-    area:
-      page.slug === 'swift-ui' || page.slug === 'swift-ui-hosting'
-        ? 'swift-ui'
-        : page.slug === 'components' ||
-            page.slug === 'forms-and-input' ||
-            page.slug === 'overlays-and-dialogs'
-          ? 'solid'
-          : 'guide',
-    path: docsPath(page.slug),
-    sourcePath: guideSource(page, locale),
-  }))
+  const guides: SearchPage[] = DOCS_PAGES.map((source) => {
+    const page = localizedDocsPage(source, locale)
+    return {
+      title: page.title,
+      description: page.description,
+      keywords: page.searchTerms,
+      area:
+        page.slug === 'swift-ui' || page.slug === 'swift-ui-hosting'
+          ? 'swift-ui'
+          : page.slug === 'components' ||
+              page.slug === 'forms-and-input' ||
+              page.slug === 'overlays-and-dialogs'
+            ? 'solid'
+            : 'guide',
+      path: docsPath(page.slug),
+      sourcePath: guideSource(page, locale),
+    }
+  })
 
   const components: SearchPage[] = ALL_COMPONENT_DOCS.map((component) => ({
     title: component.name,
-    description: component.description,
+    description: localizedComponentDescription(component, locale),
     keywords: [component.section, ...component.parts, ...component.keyProps],
     area: component.kind,
     path: componentDocsPath(component),

@@ -1,0 +1,48 @@
+QuickGUI コアのルーティングを Solid に投影し、ネストされたレイアウトと上限付きメモリ履歴を提供します。
+
+## インポート
+
+`@quickgui/solid` から `Router` をインポートします。
+
+```tsx
+import { Router } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Router initialPath="/">
+  <Route path="/" component={Shell}>
+    <Route path="/" component={Home} />
+    <Route path="/projects/:id" component={Project} />
+  </Route>
+</Router>
+```
+
+## 構成
+
+- `Router`
+- `Route`
+- `Link`
+- `Outlet`
+
+```tsx
+<Router>
+  <Route path="/" component={AppShell}>
+    <Route path="/projects/:id" component={Project} />
+  </Route>
+  <Link href="/projects/quickgui">Open project</Link>
+  <Outlet />
+</Router>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `initialPath` | 上限付きメモリ履歴の初期移動先です。 |
+| `fallback` | どのルートにも一致しないときに描画する内容です。 |
+| `path` | 絶対または親からの相対ルートパターンです。 |
+| `component` | ルートが一致したときに描画するコンポーネントです。 |
+| `href` | QuickGUI Router が解決する移動先です。 |
+
