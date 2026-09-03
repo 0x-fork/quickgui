@@ -4834,8 +4834,14 @@ function menuSelectListener(
 export function PopoverMenuRoot(props: JSX.PopoverMenuRootProps): NativeNode {
   const [uncontrolledOpen, setUncontrolledOpen] = createSignal(untrack(() => props.defaultOpen ?? false,
   ));
-  const [trigger, setTrigger] = createSignal<NativeNode>();
-  const [popup, setPopup] = createSignal<NativeNode>();
+  // Triggers and popups register themselves while their own part renders, which Solid 2 treats as
+  // an owned-scope write; the registration is intentional.
+  const [trigger, setTrigger] = createSignal<NativeNode | undefined>(undefined, {
+    ownedWrite: true,
+  });
+  const [popup, setPopup] = createSignal<NativeNode | undefined>(undefined, {
+    ownedWrite: true,
+  });
   const open = () => props.open ?? uncontrolledOpen();
   const context: PopoverMenuContextValue = {
     open,
