@@ -270,9 +270,11 @@ behavior would not exist. Every other layout and paint declaration is caller-own
 handle's thickness and hit area. `handle_part` applies the platform column or row resize cursor
 unless the caller sets `.cursor(...)` explicitly.
 
-Captured pointer motion uses the event's own delta, so a splitter needs no container geometry and
-stays correct while the pointer is outside the window. `set_total` rescales the panes proportionally
-and then honors minimums; call it from a `container_query` when the surrounding layout changes.
+Captured pointer motion stays anchored to the handle position and window coordinate recorded on
+pointer-down, so a splitter needs no container geometry, remains correct outside the window, and
+does not accumulate drift if layout normalizes the panes between events. `set_total` rescales the
+panes proportionally and then honors minimums; call it from a `container_query` when the surrounding
+layout changes.
 `reset` restores the sizes the splitter was created with — bind it to a handle double-click if the
 product wants that gesture; QuickGUI does not assume it. `is_dragging` is true from the press
 that starts a captured drag to the release or cancel that ends it; an owner that applies sizes
