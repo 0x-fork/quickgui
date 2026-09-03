@@ -18,6 +18,13 @@ and every deadline, and reports what it decided back as an asynchronous payload.
   `ContextMenu` opening at the exact secondary-click point.
 - **Tabs, dialogs, and toasts** — `Tabs` with automatic activation, an in-window `Dialog` with the
   core's own focus trap, and a `Toast` queue whose timed dismissals report through `onDismiss`.
+- **Popover and tooltip parts** — the Base UI compound `Popover` and `Tooltip`, printing the side
+  and alignment the retained tree really resolved to rather than the one that was declared.
+- **Range parts and reported state** — `Slider.Label`/`Value`/`Control`/`Indicator` with the core's
+  own commit boundary and `data-dragging` flag, a `NumberField.ScrubArea` whose cursor styles from
+  `useNumberFieldState().scrubbing`, and `Progress` parts reporting the core's derived status.
+- **Toast provider and manager** — `useToastManager()` over the declared queue, with each toast's
+  stack index, limited flag, and core-computed offset.
 
 ```console
 cd examples/components-solid

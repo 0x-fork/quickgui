@@ -419,6 +419,47 @@ const properties: Record<string, PropertyEntry> = {
   scrollSnapType: { code: PropertyCode.ScrollSnapType },
   scrollSnapAlign: { code: PropertyCode.ScrollSnapAlign },
   scrollSnapStop: { code: PropertyCode.ScrollSnapStop },
+
+  // Base UI-aligned popovers, tooltips, range parts, toasts, tabs, toolbars, fields, selection
+  // controls, and dialogs. Each of these is declared ahead of the core's decision; nothing here
+  // is a value JavaScript computes for itself.
+  side: { code: PropertyCode.Side },
+  align: { code: PropertyCode.Align },
+  sideOffset: { code: PropertyCode.SideOffset },
+  alignOffset: { code: PropertyCode.AlignOffset },
+  collisionPadding: { code: PropertyCode.CollisionPadding },
+  sticky: { code: PropertyCode.Sticky },
+  modal: { code: PropertyCode.Modal },
+  openOnHover: { code: PropertyCode.OpenOnHover },
+  provider: { code: PropertyCode.Provider, normalize: normalizeComponentValue },
+  timeout: { code: PropertyCode.Timeout, normalize: normalizeMilliseconds },
+  hoverable: { code: PropertyCode.Hoverable },
+  trackCursorAxis: { code: PropertyCode.TrackCursorAxis },
+  closeOnClick: { code: PropertyCode.CloseOnClick },
+  minStepsBetweenValues: { code: PropertyCode.MinStepsBetweenValues },
+  thumbAlignment: { code: PropertyCode.ThumbAlignment },
+  format: { code: PropertyCode.Format },
+  smallStep: { code: PropertyCode.SmallStep },
+  allowWheelScrub: { code: PropertyCode.AllowWheelScrub },
+  snapOnStep: { code: PropertyCode.SnapOnStep },
+  limit: { code: PropertyCode.Limit },
+  stackExpanded: { code: PropertyCode.StackExpanded },
+  pitch: { code: PropertyCode.Pitch },
+  focusableWhenDisabled: { code: PropertyCode.FocusableWhenDisabled },
+  validationMode: { code: PropertyCode.ValidationMode },
+  validationDebounceTime: {
+    code: PropertyCode.ValidationDebounceTime,
+    normalize: normalizeMilliseconds,
+  },
+  parent: { code: PropertyCode.Parent },
+  enterDuration: {
+    code: PropertyCode.EnterDuration,
+    normalize: normalizeMilliseconds,
+  },
+  exitDuration: {
+    code: PropertyCode.ExitDuration,
+    normalize: normalizeMilliseconds,
+  },
 };
 
 /** Background properties that accept either one color or one declared gradient. */
@@ -471,6 +512,17 @@ const explicitFalseProperties = new Set<PropertyCode>([
   PropertyCode.Touched,
   PropertyCode.Dirty,
   PropertyCode.Filled,
+  PropertyCode.Sticky,
+  PropertyCode.Modal,
+  PropertyCode.OpenOnHover,
+  PropertyCode.Hoverable,
+  PropertyCode.CloseOnClick,
+  PropertyCode.AllowWheelScrub,
+  PropertyCode.SnapOnStep,
+  PropertyCode.ReadOnly,
+  PropertyCode.FocusableWhenDisabled,
+  PropertyCode.Parent,
+  PropertyCode.StackExpanded,
 ]);
 
 const colorProperties = new Set([
@@ -507,10 +559,28 @@ function setProperty(
   if (name === "anchor") {
     if (value === null || value === undefined || value === false) {
       setNativeProperty(node, PropertyCode.AnchorTarget, null);
+      setNativeProperty(node, PropertyCode.AnchorPoint, null);
     } else if (value instanceof NativeNode) {
+      setNativeProperty(node, PropertyCode.AnchorPoint, null);
       setNativeProperty(node, PropertyCode.AnchorTarget, String(value.id));
+    } else if (
+      isRecord(value) &&
+      typeof value.x === "number" &&
+      typeof value.y === "number" &&
+      Number.isFinite(value.x) &&
+      Number.isFinite(value.y)
+    ) {
+      // Base UI's virtual element: a logical point the core anchors to directly.
+      setNativeProperty(node, PropertyCode.AnchorTarget, null);
+      setNativeProperty(
+        node,
+        PropertyCode.AnchorPoint,
+        `${value.x},${value.y}`,
+      );
     } else {
-      throw new TypeError("QuickGUI popover anchor must be a NativeNode");
+      throw new TypeError(
+        "QuickGUI popover anchor must be a NativeNode or an { x, y } point",
+      );
     }
     return;
   }
@@ -1810,7 +1880,46 @@ export function capturedPointerFromEvent(
   return JSON.parse(event.value) as CapturedPointerEvent;
 }
 
-export type PopoverOpenChangeReason = "trigger-press" | "dismiss";
+export type PopoverOpenChangeReason = "trigger-press" | "dismiss" | "hover";
+
+/** The placement a closed popover reports until the core has placed it once. */
+const unresolvedPlacement: AnchorPlacementDetails = {
+  side: "bottom",
+  align: "start",
+  anchorHidden: false,
+  anchorWidth: 0,
+  anchorHeight: 0,
+  availableWidth: 0,
+  availableHeight: 0,
+};
+
+/** Decode one resolved placement payload. */
+function placementFromDetails(
+  details: ComponentChangeDetails,
+): AnchorPlacementDetails | undefined {
+  const placement = details.placement;
+  if (!placement || typeof placement.side !== "string") return undefined;
+  return {
+    side: placement.side,
+    align: placement.align ?? "start",
+    anchorHidden: placement.anchorHidden === true,
+    anchorWidth: placement.anchorWidth ?? 0,
+    anchorHeight: placement.anchorHeight ?? 0,
+    availableWidth: placement.availableWidth ?? 0,
+    availableHeight: placement.availableHeight ?? 0,
+  };
+}
+
+/** Positioning Base UI declares on `Popover.Positioner` and QuickGUI also accepts on the root. */
+interface AnchorPositioning {
+  side?: "top" | "bottom" | "left" | "right" | undefined;
+  align?: "start" | "center" | "end" | undefined;
+  sideOffset?: number | undefined;
+  alignOffset?: number | undefined;
+  collisionPadding?: number | undefined;
+  sticky?: boolean | undefined;
+  anchor?: NativeNode | { x: number; y: number } | undefined;
+}
 
 export interface PopoverOpenChangeDetails {
   reason: PopoverOpenChangeReason;
@@ -1821,6 +1930,7 @@ type PopoverSurface = "popover" | "system-popover";
 
 interface PopoverContextValue {
   surface: PopoverSurface;
+  scope: string;
   open: () => boolean;
   anchor: () => NativeNode | undefined;
   dismissOnEscape: () => boolean;
@@ -1829,6 +1939,17 @@ interface PopoverContextValue {
   unregisterTrigger: (node: NativeNode) => void;
   toggleFromTrigger: (node: NativeNode, event: QuickGuiEvent) => void;
   dismiss: (event: QuickGuiEvent) => void;
+  /** The core's resolved placement, republished every time it changes. */
+  placement: () => AnchorPlacementDetails;
+  reportPlacement: (next: AnchorPlacementDetails, event: QuickGuiEvent) => void;
+  adoptOpen: (open: boolean, event: QuickGuiEvent) => void;
+  /** Positioning declared on the root, overridden by whatever the positioner declares. */
+  positioning: () => AnchorPositioning;
+  declarePositioning: (positioning: AnchorPositioning) => void;
+  modal: () => boolean | undefined;
+  openOnHover: () => boolean | undefined;
+  delay: () => number | undefined;
+  closeDelay: () => number | undefined;
 }
 
 const PopoverContext = createContext<PopoverContextValue>();
@@ -1841,6 +1962,9 @@ function createPopoverRoot(
     props.defaultOpen ?? false,
   );
   const [anchor, setAnchor] = createSignal<NativeNode>();
+  const [placement, setPlacement] =
+    createSignal<AnchorPlacementDetails>(unresolvedPlacement);
+  const [declared, setDeclared] = createSignal<AnchorPositioning>({});
   const triggers = new Set<NativeNode>();
   const open = () => props.open ?? uncontrolledOpen();
 
@@ -1855,8 +1979,36 @@ function createPopoverRoot(
 
   const context: PopoverContextValue = {
     surface,
+    scope: createComponentScope("qg-popover"),
     open,
     anchor,
+    placement,
+    reportPlacement(next, event) {
+      setPlacement(next);
+      props.onPlacementChange?.(next, event);
+    },
+    adoptOpen(nextOpen, event) {
+      if (nextOpen === open()) return;
+      changeOpen(nextOpen, "hover", event);
+    },
+    // The positioner's own declaration wins wherever it has one; the root supplies the rest.
+    positioning: () => {
+      const override = declared();
+      return {
+        side: override.side ?? props.side,
+        align: override.align ?? props.align,
+        sideOffset: override.sideOffset ?? props.sideOffset,
+        alignOffset: override.alignOffset ?? props.alignOffset,
+        collisionPadding: override.collisionPadding ?? props.collisionPadding,
+        sticky: override.sticky ?? props.sticky,
+        anchor: override.anchor ?? props.anchor,
+      };
+    },
+    declarePositioning: setDeclared,
+    modal: () => props.modal,
+    openOnHover: () => props.openOnHover,
+    delay: () => props.delay,
+    closeDelay: () => props.closeDelay,
     dismissOnEscape: () => props.dismissOnEscape ?? true,
     dismissOnPointerOutside: () => props.dismissOnPointerOutside ?? true,
     registerTrigger(node) {
@@ -1894,33 +2046,233 @@ export function SystemPopoverRoot(props: JSX.PopoverRootProps): NativeNode {
   return createPopoverRoot("system-popover", props);
 }
 
-/** Trigger button shared by in-window and system popover roots. */
+/**
+ * Trigger button shared by in-window and system popover roots.
+ *
+ * For the in-window surface this is the one part the core keeps mounted whether the popover is
+ * open or closed, so it carries the whole declaration — the controlled open value, the preferred
+ * side and alignment, the bounded offsets, `modal`, and the hover deadlines — and the core reports
+ * the placement it really resolved to back through it.
+ */
 export function PopoverTrigger(props: JSX.PopoverTriggerProps): NativeNode {
   const context = useContext(PopoverContext);
   let trigger: NativeNode | undefined;
-  const forwarded = universal.mergeProps(props, {
-    ref: [
-      (node: NativeNode) => {
-        trigger = node;
-        context.registerTrigger(node);
+  const inWindow = context.surface === "popover";
+  const positioning = () => context.positioning();
+  const part = inWindow
+    ? {
+        part: NativePart.PopoverTrigger,
+        scope: context.scope,
+        get open() {
+          return context.open();
+        },
+        get modal() {
+          return context.modal();
+        },
+        get openOnHover() {
+          return props.openOnHover ?? context.openOnHover();
+        },
+        get delay() {
+          return props.delay ?? context.delay();
+        },
+        get closeDelay() {
+          return props.closeDelay ?? context.closeDelay();
+        },
+        get side() {
+          return positioning().side;
+        },
+        get align() {
+          return positioning().align;
+        },
+        get sideOffset() {
+          return positioning().sideOffset;
+        },
+        get alignOffset() {
+          return positioning().alignOffset;
+        },
+        get collisionPadding() {
+          return positioning().collisionPadding;
+        },
+        get sticky() {
+          return positioning().sticky;
+        },
+        get anchor() {
+          return positioning().anchor;
+        },
+        onComponentChange: componentChangeReader((details, event) => {
+          const placement = placementFromDetails(details);
+          if (placement) context.reportPlacement(placement, event);
+          if (typeof details.open === "boolean")
+            context.adoptOpen(details.open, event);
+        }),
+      }
+    : {};
+  const forwarded = universal.mergeProps(
+    omit(props, "openOnHover", "delay", "closeDelay"),
+    part,
+    {
+      ref: [
+        (node: NativeNode) => {
+          trigger = node;
+          context.registerTrigger(node);
+        },
+        props.ref,
+      ].filter(
+        (value): value is (node: NativeNode) => void =>
+          typeof value === "function",
+      ),
+      onClick(event: QuickGuiEvent) {
+        props.onClick?.(event);
+        if (!event.defaultPrevented && trigger)
+          context.toggleFromTrigger(trigger, event);
       },
-      props.ref,
-    ].filter(
-      (value): value is (node: NativeNode) => void =>
-        typeof value === "function",
-    ),
-    onClick(event: QuickGuiEvent) {
-      props.onClick?.(event);
-      if (!event.defaultPrevented && trigger)
-        context.toggleFromTrigger(trigger, event);
     },
-  }) as JSX.PopoverTriggerProps;
+  ) as JSX.PopoverTriggerProps;
   const node = universal.createElement("button");
   universal.spread(node, forwarded);
   onCleanup(() => {
     if (trigger) context.unregisterTrigger(trigger);
   });
   return node;
+}
+
+/**
+ * Read the placement the retained tree really resolved to inside a `Popover.Root` subtree.
+ *
+ * A declared `side`/`align` is only a preference: the core flips the side and re-aligns the cross
+ * axis whenever the popup does not fit, and publishes the answer during the paint it was already
+ * performing. Style from this the way Base UI styles from `data-side` and `data-align`.
+ */
+export function usePopoverPlacement(): () => AnchorPlacementDetails {
+  return requirePopoverSurface("popover", "usePopoverPlacement").placement;
+}
+
+/** Application-owned popover positioner. Base UI declares the placement props here. */
+export function PopoverPositioner(props: JSX.PopoverPositionerProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Positioner");
+  // The positioner is unmounted while the popover is closed, so its declaration is routed to the
+  // trigger, which the core keeps mounted either way.
+  context.declarePositioning({
+    get side() {
+      return props.side;
+    },
+    get align() {
+      return props.align;
+    },
+    get sideOffset() {
+      return props.sideOffset;
+    },
+    get alignOffset() {
+      return props.alignOffset;
+    },
+    get collisionPadding() {
+      return props.collisionPadding;
+    },
+    get sticky() {
+      return props.sticky;
+    },
+    get anchor() {
+      return props.anchor;
+    },
+  } as AnchorPositioning);
+  onCleanup(() => context.declarePositioning({}));
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "side",
+      "align",
+      "sideOffset",
+      "alignOffset",
+      "collisionPadding",
+      "sticky",
+      "anchor",
+    ),
+    { part: NativePart.PopoverPositioner, scope: context.scope },
+  );
+}
+
+/** Portal boundary. QuickGUI's retained overlay node is the portal, so it is the positioner. */
+export function PopoverPortal(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Portal");
+  return createPartNode("view", props, {
+    part: NativePart.PopoverPortal,
+    scope: context.scope,
+  });
+}
+
+/** The popup itself, carrying the core's focus containment, restoration, and dismissal. */
+export function PopoverPopup(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Popup");
+  return createPartNode("view", omit(props, "onDismiss"), {
+    part: NativePart.PopoverPopup,
+    scope: context.scope,
+    get dismissOnEscape() {
+      return context.dismissOnEscape();
+    },
+    get dismissOnPointerOutside() {
+      return context.dismissOnPointerOutside();
+    },
+    onDismiss(event: QuickGuiEvent) {
+      (props as JSX.NativeProps).onDismiss?.(event);
+      context.dismiss(event);
+    },
+  });
+}
+
+/** Arrow pinned to the popup edge that really faces the anchor. */
+export function PopoverArrow(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Arrow");
+  return createPartNode("view", props, {
+    part: NativePart.PopoverArrow,
+    scope: context.scope,
+  });
+}
+
+/** Scrollable popup body. */
+export function PopoverViewport(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Viewport");
+  return createPartNode("view", props, {
+    part: NativePart.PopoverViewport,
+    scope: context.scope,
+  });
+}
+
+/** Pointer-blocking backdrop behind a modal popup. */
+export function PopoverBackdrop(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Backdrop");
+  return createPartNode("view", props, {
+    part: NativePart.PopoverBackdrop,
+    scope: context.scope,
+  });
+}
+
+/** Popup title, which names the popup for assistive technology. */
+export function PopoverTitle(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Title");
+  return createPartNode("view", props, {
+    part: NativePart.PopoverTitle,
+    scope: context.scope,
+  });
+}
+
+/** Popup description, which describes the popup for assistive technology. */
+export function PopoverDescription(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Description");
+  return createPartNode("view", props, {
+    part: NativePart.PopoverDescription,
+    scope: context.scope,
+  });
+}
+
+/** Close control. The core owns its role and accessible name. */
+export function PopoverClose(props: JSX.NativeProps): NativeNode {
+  const context = requirePopoverSurface("popover", "Popover.Close");
+  return createPartNode("button", omit(props, "onClick"), {
+    part: NativePart.PopoverClose,
+    scope: context.scope,
+    onClick: forwardClick(props.onClick, (event) => context.dismiss(event)),
+  });
 }
 
 function requirePopoverSurface(
@@ -2069,6 +2421,15 @@ export const Popover = Object.assign(PopoverRoot, {
   Root: PopoverRoot,
   Trigger: PopoverTrigger,
   Content: PopoverContent,
+  Portal: PopoverPortal,
+  Backdrop: PopoverBackdrop,
+  Positioner: PopoverPositioner,
+  Popup: PopoverPopup,
+  Arrow: PopoverArrow,
+  Viewport: PopoverViewport,
+  Title: PopoverTitle,
+  Description: PopoverDescription,
+  Close: PopoverClose,
 });
 
 /** Compound popover parts whose content uses a native child window. */
@@ -2185,9 +2546,27 @@ export function CheckboxRoot(props: JSX.CheckboxProps): NativeNode {
   const checked = () => props.checked ?? uncontrolled();
   return createPartNode(
     "button",
-    omit(props, "checked", "defaultChecked", "onCheckedChange", "value", "parent"),
+    omit(
+      props,
+      "checked",
+      "defaultChecked",
+      "onCheckedChange",
+      "value",
+      "parent",
+      "childrenChecked",
+    ),
     {
       part: NativePart.Checkbox,
+      // A standalone parent checkbox declares its children's checked booleans and the core folds
+      // them into on, mixed, or off; nothing derives the mixed state in JavaScript.
+      get parent() {
+        return props.parent === true ? true : undefined;
+      },
+      get values() {
+        return props.parent === true && props.childrenChecked
+          ? props.childrenChecked.slice()
+          : undefined;
+      },
       get checked() {
         return checked() === true;
       },
@@ -2339,6 +2718,7 @@ export const Switch = Object.assign(SwitchRoot, {
 
 interface TabsContextValue {
   scope: string;
+  state: () => TabsState;
   value: () => string | undefined;
   orientation: () => "horizontal" | "vertical";
   activation: () => "manual" | "automatic";
@@ -2386,9 +2766,11 @@ function tabsPartProps(context: TabsContextValue): object {
 export function TabsRoot(props: JSX.TabsRootProps): NativeNode {
   const scope = createComponentScope("qg-tabs");
   const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue);
+  const [tabsState, setTabsState] = createSignal<TabsState>(settledTabs);
   const value = () => props.value ?? uncontrolled();
   const context: TabsContextValue = {
     scope,
+    state: tabsState,
     value,
     orientation: () => props.orientation ?? "horizontal",
     activation: () => props.activation ?? "manual",
@@ -2406,6 +2788,7 @@ export function TabsRoot(props: JSX.TabsRootProps): NativeNode {
       "value",
       "defaultValue",
       "onValueChange",
+      "onTabsStateChange",
       "orientation",
       "activation",
       "loop",
@@ -2414,6 +2797,16 @@ export function TabsRoot(props: JSX.TabsRootProps): NativeNode {
     ),
     universal.mergeProps(tabsPartProps(context), {
       part: NativePart.Tabs,
+      onComponentChange: componentChangeReader((details, event) => {
+        if (!details.activationDirection) return;
+        const next: TabsState = {
+          activationDirection:
+            details.activationDirection as TabsActivationDirection,
+          indicator: details.indicator ?? null,
+        };
+        setTabsState(next);
+        props.onTabsStateChange?.(next, event);
+      }),
       get children() {
         return TabsContext({
           value: context,
@@ -2424,6 +2817,27 @@ export function TabsRoot(props: JSX.TabsRootProps): NativeNode {
       },
     }),
   );
+}
+
+/** Everything the core decided about one tab set. */
+export interface TabsState {
+  /**
+   * The side the selection travelled toward, matching Base UI's `data-activation-direction`.
+   *
+   * The core records it from the tab positions the declaration gave it, so a transition can run
+   * the right way without JavaScript comparing indices itself.
+   */
+  activationDirection: TabsActivationDirection;
+  /** The active tab's laid-out box, published by the core during paint. */
+  indicator: TabsIndicatorGeometry | null;
+}
+
+const settledTabs: TabsState = { activationDirection: "none", indicator: null };
+
+/** Read the live tab-set state inside a `Tabs.Root` subtree. */
+export function useTabsState(): () => TabsState {
+  const context = optionalContext(TabsContext);
+  return context ? context.state : () => settledTabs;
 }
 
 /** Tab-list root. The core attaches its exact arrow/Home/End navigation behavior here. */
@@ -2442,11 +2856,14 @@ export function TabsTab(props: JSX.TabsTabProps): NativeNode {
   const value = () => props.value;
   return createPartNode(
     "button",
-    omit(props, "value", "children"),
+    omit(props, "value", "index", "children"),
     universal.mergeProps(tabsPartProps(context), {
       part: NativePart.Tab,
       get partValue() {
         return props.value;
+      },
+      get itemIndex() {
+        return props.index;
       },
       onClick: forwardClick(props.onClick, (event) =>
         context.select(props.value, event),
@@ -2469,11 +2886,16 @@ export function TabsIndicator(props: JSX.TabsIndicatorProps): NativeNode {
   const inherited = useContext(TabValueContext);
   return createPartNode(
     "view",
-    omit(props, "value"),
+    omit(props, "value", "placement"),
     universal.mergeProps(tabsPartProps(context), {
       part: NativePart.TabIndicator,
       get partValue() {
         return props.value ?? inherited?.() ?? context.value();
+      },
+      // A declared placement asks the core to keep the indicator anchored to the tab that is
+      // really active and to publish that tab's laid-out box back through `useTabsState`.
+      get anchorPlacement() {
+        return props.placement;
       },
     }),
   );
@@ -2934,6 +3356,43 @@ export function FieldDescription(props: JSX.NativeProps): NativeNode {
   );
 }
 
+/**
+ * One field item, Base UI's structural row inside a field.
+ *
+ * The core gives it an identity and propagates the field's disabled state; the layout stays
+ * entirely application-owned.
+ */
+export function FieldItem(props: JSX.NativeProps): NativeNode {
+  const context = requireField("Field.Item");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(fieldPartProps(context), {
+      part: NativePart.FieldItem,
+    }),
+  );
+}
+
+/**
+ * Live validity readout.
+ *
+ * The core owns which triggers the declared `validationMode` answers and how long it waits before
+ * each one; `useFieldValidation()` reports exactly those answers.
+ */
+export function FieldValidity(props: JSX.FieldValidityProps): NativeNode {
+  const context = requireField("Field.Validity");
+  return createPartNode(
+    "view",
+    omit(props, "visible"),
+    universal.mergeProps(fieldPartProps(context), {
+      part: NativePart.FieldValidity,
+      get open() {
+        return props.visible ?? true;
+      },
+    }),
+  );
+}
+
 /** Visible error. The core removes it from layout while the controlled field is valid. */
 export function FieldError(props: JSX.NativeProps): NativeNode {
   const context = requireField("Field.Error");
@@ -2949,8 +3408,10 @@ export function FieldError(props: JSX.NativeProps): NativeNode {
 /** Base-UI-shaped compound parts for one labelled, validated control. */
 export const Field = Object.assign(FieldRoot, {
   Root: FieldRoot,
+  Item: FieldItem,
   Label: FieldLabel,
   Control: FieldControl,
+  Validity: FieldValidity,
   Description: FieldDescription,
   Error: FieldError,
 });
@@ -3014,11 +3475,14 @@ interface DialogContextValue {
   open: () => boolean;
   dismissOnEscape: () => boolean;
   dismissOnBackdrop: () => boolean;
+  enterDuration: () => number | undefined;
+  exitDuration: () => number | undefined;
   change: (
     open: boolean,
     reason: DialogOpenChangeReason,
     event: QuickGuiEvent,
   ) => void;
+  complete: (open: boolean, event: QuickGuiEvent) => void;
 }
 
 const DialogContext = createContext<DialogContextValue | null>(null);
@@ -3065,9 +3529,16 @@ function createDialogRoot(
     dismissOnEscape: () => props.dismissOnEscape ?? true,
     dismissOnBackdrop: () =>
       props.dismissOnBackdrop ?? variant !== "alertdialog",
+    enterDuration: () => props.enterDuration,
+    exitDuration: () => props.exitDuration,
     change(next, reason, event) {
       if (props.open === undefined) setUncontrolled(next);
       props.onOpenChange?.(next, { reason, event });
+    },
+    complete(next, event) {
+      // Base UI's `onOpenChangeComplete`: the core held the surface mounted for exactly the
+      // declared exit transition and is telling JavaScript it has finished.
+      props.onOpenChangeComplete?.(next, event);
     },
   };
   return DialogContext({
@@ -3114,7 +3585,36 @@ export function DialogPortal(props: JSX.NativeProps): NativeNode {
   return createPartNode(
     "view",
     props,
-    universal.mergeProps(dialogPartProps(context), { part: NativePart.Dialog }),
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.Dialog,
+      get enterDuration() {
+        return context.enterDuration();
+      },
+      get exitDuration() {
+        return context.exitDuration();
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (typeof details.openChangeComplete === "boolean")
+          context.complete(details.openChangeComplete, event);
+      }),
+    }),
+  );
+}
+
+/**
+ * Scrollable dialog body.
+ *
+ * The core owns the overflow, so a long dialog scrolls inside the popup rather than growing past
+ * the window.
+ */
+export function DialogViewport(props: JSX.NativeProps): NativeNode {
+  const context = requireDialog("Dialog.Viewport");
+  return createPartNode(
+    "view",
+    props,
+    universal.mergeProps(dialogPartProps(context), {
+      part: NativePart.DialogViewport,
+    }),
   );
 }
 
@@ -3193,6 +3693,7 @@ export function DialogClose(props: JSX.NativeProps): NativeNode {
 
 /** Base-UI-shaped compound parts for a controlled in-window modal dialog. */
 export const Dialog = Object.assign(DialogRoot, {
+  Viewport: DialogViewport,
   Root: DialogRoot,
   Trigger: DialogTrigger,
   Portal: DialogPortal,
@@ -3205,6 +3706,7 @@ export const Dialog = Object.assign(DialogRoot, {
 
 /** Compound parts for a consequential alert dialog. */
 export const AlertDialog = Object.assign(AlertDialogRoot, {
+  Viewport: DialogViewport,
   Root: AlertDialogRoot,
   Trigger: DialogTrigger,
   Portal: DialogPortal,
@@ -3239,35 +3741,137 @@ export function Shader(props: JSX.ShaderProps): NativeNode {
 // ---------------------------------------------------------------------------
 
 /** Determinate or indeterminate progress root carrying the core's exact value range. */
+/** Everything the core decided about one progress bar or meter. */
+export interface GaugeState {
+  status: ProgressStatus;
+  /** The value formatted through the declared `format`, or `null` without one. */
+  displayValue: string | null;
+  /** How far the value has travelled, from 0 to 1, or `null` while indeterminate. */
+  completion: number | null;
+}
+
+const settledGauge: GaugeState = {
+  status: "indeterminate",
+  displayValue: null,
+  completion: null,
+};
+
+interface GaugeContextValue {
+  state: () => GaugeState;
+}
+
+const GaugeContext = createContext<GaugeContextValue | null>(null);
+
+/**
+ * Read the live status inside a `Progress.Root` or `Meter.Root` subtree.
+ *
+ * `status` is the core's own derived value — Base UI's `data-progressing`, `data-complete`, and
+ * `data-indeterminate` — and `displayValue` is what the declared `format` produced.
+ */
+export function useGaugeState(): () => GaugeState {
+  const context = optionalContext(GaugeContext);
+  return context ? context.state : () => settledGauge;
+}
+
+function createGaugeRoot(
+  part: NativePartName,
+  props: JSX.ProgressProps | JSX.MeterProps,
+  declaration: object,
+): NativeNode {
+  const [state, setState] = createSignal<GaugeState>(settledGauge);
+  const context: GaugeContextValue = { state };
+  return createPartNode(
+    "view",
+    omit(props as JSX.ProgressProps, "onStatusChange", "children"),
+    universal.mergeProps(declaration, {
+      part,
+      onComponentChange: componentChangeReader((details, event) => {
+        if (!details.status) return;
+        const next: GaugeState = {
+          status: details.status,
+          displayValue: details.displayValue ?? null,
+          completion: details.completion ?? null,
+        };
+        setState(next);
+        (props as JSX.ProgressProps).onStatusChange?.(next, event);
+      }),
+      get children() {
+        return GaugeContext({
+          value: context,
+          get children() {
+            return (props as JSX.ProgressProps).children as SolidElement;
+          },
+        });
+      },
+    }),
+  );
+}
+
+/** Progress track. The core derives its identity from the compound scope. */
+export function ProgressTrack(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.ProgressTrack });
+}
+
+/** Progress label. The core points the root's accessible name at it. */
+export function ProgressLabel(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.ProgressLabel });
+}
+
+/** Progress value readout, described by the core through the root. */
+export function ProgressValue(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.ProgressValue });
+}
+
+/** Meter track. */
+export function MeterTrack(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.MeterTrack });
+}
+
+/** Meter label. */
+export function MeterLabel(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.MeterLabel });
+}
+
+/** Meter value readout. */
+export function MeterValue(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.MeterValue });
+}
+
 export function ProgressRoot(props: JSX.ProgressProps): NativeNode {
-  return createPartNode("view", props, { part: NativePart.Progress });
+  return createGaugeRoot(NativePart.Progress, props, {});
 }
 
 /** Application-owned progress fill, hidden from the accessible name by the core. */
-export function ProgressIndicator(props: JSX.NativeProps): NativeNode {
+export function ProgressIndicator(props: JSX.NativeScopedProps): NativeNode {
   return createPartNode("view", props, { part: NativePart.ProgressIndicator });
 }
 
 /** Base-UI-shaped compound parts for a progress indicator. */
 export const Progress = Object.assign(ProgressRoot, {
   Root: ProgressRoot,
+  Track: ProgressTrack,
   Indicator: ProgressIndicator,
+  Label: ProgressLabel,
+  Value: ProgressValue,
 });
 
 /** Static measurement gauge with optional low, high, and optimum markers. */
 export function MeterRoot(props: JSX.MeterProps): NativeNode {
-  return createPartNode("view", props, { part: NativePart.Meter });
+  return createGaugeRoot(NativePart.Meter, props, {});
 }
 
 /** Application-owned meter fill, hidden from the accessible name by the core. */
-export function MeterIndicator(props: JSX.NativeProps): NativeNode {
+export function MeterIndicator(props: JSX.NativeScopedProps): NativeNode {
   return createPartNode("view", props, { part: NativePart.MeterIndicator });
 }
 
 /** Base-UI-shaped compound parts for a meter. */
 export const Meter = Object.assign(MeterRoot, {
   Root: MeterRoot,
+  Track: MeterTrack,
   Indicator: MeterIndicator,
+  Label: MeterLabel,
+  Value: MeterValue,
 });
 
 /** Controlled toggle button. A toggle is a button that stays pressed, not a checkbox. */
@@ -3384,7 +3988,94 @@ export interface ComponentChangeDetails {
   /** The drawer's live dismissing displacement, in logical pixels. */
   swipeOffset?: number;
   /** The direction the user's attention travelled between navigation panels. */
-  activationDirection?: NavigationMenuActivationDirection;
+  activationDirection?: NavigationMenuActivationDirection | TabsActivationDirection;
+  /** Where the retained tree really placed an anchored surface. */
+  placement?: AnchorPlacementDetails;
+  /** Whether a slider thumb is being dragged right now. */
+  dragging?: boolean;
+  /** Whether the core's own commit boundary fired on this frame. */
+  committed?: boolean;
+  /** The value formatted through the declared `format`. */
+  displayValue?: string | null;
+  /** Whether a number field's scrub gesture is in flight. */
+  scrubbing?: boolean;
+  /** Whether the control refuses changes while staying focusable. */
+  readOnly?: boolean;
+  /** Whether the control is required for form submission. */
+  required?: boolean;
+  /** The queue a toast viewport is showing, newest first. */
+  toasts?: readonly ToastStackEntry[];
+  /** The active tab's laid-out box, in logical window coordinates. */
+  indicator?: TabsIndicatorGeometry | null;
+  /** A progress bar's derived status. */
+  status?: ProgressStatus;
+  /** How far a progress bar or meter has travelled, from 0 to 1. */
+  completion?: number | null;
+  /** Which triggers the core's declared validation mode answers. */
+  validation?: FieldValidationTriggers;
+  /** How long the core waits before validating on each trigger, in milliseconds. */
+  validationDelay?: FieldValidationDelays;
+  /** Base UI's `onOpenChangeComplete`: the transition the core just finished. */
+  openChangeComplete?: boolean;
+}
+
+/** The side and alignment an anchored surface really resolved to. */
+export interface AnchorPlacementDetails {
+  side: "top" | "bottom" | "left" | "right";
+  align: "start" | "center" | "end";
+  /** Whether the anchor has been scrolled or clipped out of view. */
+  anchorHidden: boolean;
+  anchorWidth: number;
+  anchorHeight: number;
+  /** Room left between the anchor and the viewport edge on the resolved side. */
+  availableWidth: number;
+  availableHeight: number;
+}
+
+/** One toast's place in the core's own stack. */
+export interface ToastStackEntry {
+  id: string;
+  index: number;
+  type: ToastType;
+  /** Older than the provider's `limit`, and styled back rather than silenced. */
+  limited: boolean;
+  expanded: boolean;
+  swiping: boolean;
+  /** Live swipe displacement in logical pixels, for the application to translate by. */
+  swipeMovement: number;
+  /** `index * pitch`, computed by the core from the declared stack pitch. */
+  offset: number;
+}
+
+/** The side the tab selection travelled toward when the active tab changed. */
+export type TabsActivationDirection = "none" | "left" | "right" | "up" | "down";
+
+/** The active tab's laid-out box, published by the core during paint. */
+export interface TabsIndicatorGeometry {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** A progress bar's derived status, matching Base UI's own values. */
+export type ProgressStatus = "progressing" | "complete" | "indeterminate";
+
+/** Base UI's toast `type`. */
+export type ToastType = "info" | "success" | "warning" | "error" | "loading";
+
+/** Which triggers the core's declared validation mode answers. */
+export interface FieldValidationTriggers {
+  change: boolean;
+  blur: boolean;
+  submit: boolean;
+}
+
+/** How long the core waits before validating on each trigger, in milliseconds. */
+export interface FieldValidationDelays {
+  change: number | null;
+  blur: number | null;
+  submit: number | null;
 }
 
 /** Decode the payload of a native `componentchange` event. */
@@ -3424,24 +4115,74 @@ export function SliderRoot(props: JSX.SliderProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<readonly number[]>(
     props.defaultValue ?? [0],
   );
+  const [state, setState] = createSignal<SliderState>(settledSlider);
   const values = () => props.value ?? uncontrolled();
+  const context: SliderContextValue = { state };
   return createPartNode(
     "view",
-    omit(props, "value", "defaultValue", "onValueChange"),
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "onValueCommitted",
+      "children",
+    ),
     {
       part: NativePart.Slider,
       get values() {
         return values().slice();
       },
-      onComponentChange: componentChangeListener(
-        (details) => details.values,
-        (next, event) => {
-          if (props.value === undefined) setUncontrolled(next);
-          props.onValueChange?.(next, event);
-        },
-      ),
+      onComponentChange: componentChangeReader((details, event) => {
+        if (!details.values) return;
+        const next = details.values;
+        setState({
+          values: next,
+          dragging: details.dragging === true,
+          displayValue: details.displayValue ?? null,
+        });
+        if (props.value === undefined) setUncontrolled(next);
+        props.onValueChange?.(next, event);
+        // `onValueCommitted` is the core's own pointer boundary, not a debounce in JavaScript.
+        if (details.committed === true) props.onValueCommitted?.(next, event);
+      }),
+      get children() {
+        return SliderContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
     },
   );
+}
+
+/** Everything the core decided about one slider since the last frame. */
+export interface SliderState {
+  values: readonly number[];
+  /** Whether a captured drag is in flight, matching Base UI's `data-dragging`. */
+  dragging: boolean;
+  /** The value formatted through the declared `format`, or `null` without one. */
+  displayValue: string | null;
+}
+
+const settledSlider: SliderState = {
+  values: [],
+  dragging: false,
+  displayValue: null,
+};
+
+interface SliderContextValue {
+  state: () => SliderState;
+}
+
+const SliderContext = createContext<SliderContextValue | null>(null);
+
+/** Read the live slider state inside a `Slider.Root` subtree. */
+export function useSliderState(): () => SliderState {
+  const context = optionalContext(SliderContext);
+  return context ? context.state : () => settledSlider;
 }
 
 /** Application-owned slider track. The core attaches this slider's captured pointer arithmetic. */
@@ -3454,16 +4195,50 @@ export function SliderRange(props: JSX.NativeScopedProps): NativeNode {
   return createPartNode("view", props, { part: NativePart.SliderRange });
 }
 
+/** Base UI's name for the range fill. It decorates exactly the same core part. */
+export function SliderIndicator(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SliderIndicator });
+}
+
+/** Structural control box the track and thumbs are laid out inside. */
+export function SliderControl(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SliderControl });
+}
+
+/** Slider label. The core points the root's accessible name at it. */
+export function SliderLabel(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SliderLabel });
+}
+
+/**
+ * Slider value readout.
+ *
+ * The core applies the declared `format` and reports the result, so the text below is the value
+ * the core formatted rather than one JavaScript re-derived.
+ */
+export function SliderValue(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.SliderValue });
+}
+
 /** Application-owned slider thumb. A range slider gives each thumb its own keyboard focus. */
 export function SliderThumb(props: JSX.SliderThumbProps): NativeNode {
-  return createPartNode("view", props, { part: NativePart.SliderThumb });
+  return createPartNode("view", omit(props, "index"), {
+    part: NativePart.SliderThumb,
+    get itemIndex() {
+      return props.index ?? props.itemIndex;
+    },
+  });
 }
 
 /** Base-UI-shaped compound parts for a slider. */
 export const Slider = Object.assign(SliderRoot, {
   Root: SliderRoot,
+  Label: SliderLabel,
+  Value: SliderValue,
+  Control: SliderControl,
   Track: SliderTrack,
   Range: SliderRange,
+  Indicator: SliderIndicator,
   Thumb: SliderThumb,
 });
 
@@ -3552,10 +4327,42 @@ export function ToolbarItem(props: JSX.ComponentItemProps): NativeNode {
   return createPartNode("button", props, { part: NativePart.ToolbarItem });
 }
 
+/** One toolbar command, projected with the core's Button role. */
+export function ToolbarButton(props: JSX.ComponentItemProps): NativeNode {
+  return createPartNode("button", props, { part: NativePart.ToolbarButton });
+}
+
+/** One toolbar link, projected with the core's Link role. */
+export function ToolbarLink(props: JSX.ComponentItemProps): NativeNode {
+  return createPartNode("button", props, { part: NativePart.ToolbarLink });
+}
+
+/** One toolbar input. It keeps the roving contract and its own element role. */
+export function ToolbarInput(props: JSX.ToolbarInputProps): NativeNode {
+  return createPartNode(props.element ?? "input", omit(props, "element"), {
+    part: NativePart.ToolbarInput,
+  });
+}
+
+/** A related run of toolbar items, projected with the core's Group role. */
+export function ToolbarGroup(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.ToolbarGroup });
+}
+
+/** A toolbar separator, whose orientation the core takes from the toolbar's cross axis. */
+export function ToolbarSeparator(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.ToolbarSeparator });
+}
+
 /** Base-UI-shaped compound parts for a toolbar. */
 export const Toolbar = Object.assign(ToolbarRoot, {
   Root: ToolbarRoot,
   Item: ToolbarItem,
+  Button: ToolbarButton,
+  Link: ToolbarLink,
+  Input: ToolbarInput,
+  Group: ToolbarGroup,
+  Separator: ToolbarSeparator,
 });
 
 /**
@@ -4728,24 +5535,128 @@ export function NumberFieldRoot(props: JSX.NumberFieldProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<number | undefined>(
     props.defaultValue,
   );
+  const [scrub, setScrubState] = createSignal<NumberFieldState>(
+    settledNumberField,
+  );
   const value = () => props.value ?? uncontrolled();
+  const context: NumberFieldContextValue = { state: scrub };
   return createPartNode(
     "view",
-    omit(props, "value", "defaultValue", "onValueChange"),
+    omit(
+      props,
+      "value",
+      "defaultValue",
+      "onValueChange",
+      "onValueCommitted",
+      "scrubDirection",
+      "scrubSensitivity",
+      "children",
+    ),
     {
       part: NativePart.NumberField,
       get values() {
         const current = value();
         return current === undefined ? [] : [current];
       },
+      get smallStep() {
+        return props.smallStep;
+      },
+      get largeStep() {
+        return props.largeStep;
+      },
+      get snapOnStep() {
+        return props.snapOnStep;
+      },
+      get allowWheelScrub() {
+        return props.allowWheelScrub;
+      },
+      get readOnly() {
+        return props.readOnly;
+      },
+      get required() {
+        return props.required;
+      },
+      get orientation() {
+        return props.scrubDirection;
+      },
+      get pitch() {
+        return props.scrubSensitivity;
+      },
       onComponentChange: componentChangeReader((details, event) => {
         if (details.value === undefined) return;
         const next = typeof details.value === "number" ? details.value : undefined;
+        setScrubState({
+          scrubbing: details.scrubbing === true,
+          readOnly: details.readOnly === true,
+          required: details.required === true,
+        });
         if (props.value === undefined) setUncontrolled(next);
         props.onValueChange?.(next, details.valid !== false, event);
+        // The core's own commit boundary: the value it clamped and reformatted.
+        if (details.committed === true) props.onValueCommitted?.(next, event);
       }),
+      get children() {
+        return NumberFieldContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
     },
   );
+}
+
+/** Everything the core decided about one number field. */
+export interface NumberFieldState {
+  /** Whether a scrub gesture is in flight, matching Base UI's `data-scrubbing`. */
+  scrubbing: boolean;
+  readOnly: boolean;
+  required: boolean;
+}
+
+const settledNumberField: NumberFieldState = {
+  scrubbing: false,
+  readOnly: false,
+  required: false,
+};
+
+interface NumberFieldContextValue {
+  state: () => NumberFieldState;
+}
+
+const NumberFieldContext = createContext<NumberFieldContextValue | null>(null);
+
+/** Read the live number-field state inside a `NumberField.Root` subtree. */
+export function useNumberFieldState(): () => NumberFieldState {
+  const context = optionalContext(NumberFieldContext);
+  return context ? context.state : () => settledNumberField;
+}
+
+/** Structural group the input and steppers are laid out inside. */
+export function NumberFieldGroup(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, { part: NativePart.NumberFieldGroup });
+}
+
+/**
+ * Scrub area.
+ *
+ * The core turns the captured drag into whole steps at the declared sensitivity and keeps the
+ * unconverted remainder for the gesture, so a slow drag moves one step at a time.
+ */
+export function NumberFieldScrubArea(props: JSX.NativeScopedProps): NativeNode {
+  return createPartNode("view", props, {
+    part: NativePart.NumberFieldScrubArea,
+  });
+}
+
+/** Caller-drawn scrub cursor. Style it from `useNumberFieldState().scrubbing`. */
+export function NumberFieldScrubAreaCursor(
+  props: JSX.NativeScopedProps,
+): NativeNode {
+  return createPartNode("view", props, {
+    part: NativePart.NumberFieldScrubAreaCursor,
+  });
 }
 
 /** Controlled number-field input. The core owns its editing text, parsing, and commit. */
@@ -4773,9 +5684,12 @@ export function NumberFieldDecrement(props: JSX.NativeScopedProps): NativeNode {
 /** Base-UI-shaped compound parts for a number field. */
 export const NumberField = Object.assign(NumberFieldRoot, {
   Root: NumberFieldRoot,
+  Group: NumberFieldGroup,
   Input: NumberFieldInput,
   Increment: NumberFieldIncrement,
   Decrement: NumberFieldDecrement,
+  ScrubArea: NumberFieldScrubArea,
+  ScrubAreaCursor: NumberFieldScrubAreaCursor,
 });
 
 /** One queued toast. Pushing a toast is adding an entry to this declared list. */
@@ -4784,9 +5698,185 @@ export interface ToastDeclaration {
   title: string;
   description?: string;
   action?: string;
-  kind?: "info" | "success" | "warning" | "error";
+  /** Base UI's own name for the toast kind. */
+  type?: ToastType;
+  /** QuickGUI's original name for `type`. Either one reaches the same core kind. */
+  kind?: ToastType;
   /** Auto-dismiss duration in milliseconds. Omit for a toast that stays until dismissed. */
   duration?: number;
+}
+
+/** A Base UI-shaped manager over the declared toast list. */
+export interface ToastManager {
+  /** The declared queue, which is the source of truth for what is pushed. */
+  toasts: () => readonly ToastDeclaration[];
+  /** What the core decided about the queue: stack index, offset, limited and expanded flags. */
+  stack: () => readonly ToastStackEntry[];
+  /** Push one toast and return its identifier. */
+  add: (toast: Omit<ToastDeclaration, "id"> & { id?: string }) => string;
+  /** Replace one queued toast in place, keeping its identity and stack position. */
+  update: (id: string, toast: Partial<Omit<ToastDeclaration, "id">>) => void;
+  /** Drop one toast from the declaration, which dismisses it. */
+  close: (id: string) => void;
+  /** Drop every toast. */
+  closeAll: () => void;
+  /**
+   * Queue a persistent loading toast and turn it into its result.
+   *
+   * QuickGUI owns no future, so the application drives both halves from the task it already
+   * spawned; the toast keeps the same identity and stack position across the transition.
+   */
+  promise: <T>(
+    work: Promise<T>,
+    messages: {
+      loading: string;
+      success: string | ((value: T) => string);
+      error: string | ((reason: unknown) => string);
+    },
+  ) => Promise<T>;
+}
+
+interface ToastContextValue extends ToastManager {
+  scope: string;
+  timeout: () => number | undefined;
+  limit: () => number | undefined;
+  expanded: () => boolean | undefined;
+  swipeDirection: () => "left" | "right" | "up" | "down" | undefined;
+  pitch: () => number | undefined;
+  reportStack: (stack: readonly ToastStackEntry[]) => void;
+}
+
+const ToastContext = createContext<ToastContextValue | null>(null);
+
+let nextToastId = 1;
+
+/**
+ * Toast provider.
+ *
+ * It owns the declared queue and the provider-level props Base UI puts here — the inherited
+ * auto-dismiss `timeout`, the visible stack `limit`, the `expanded` stack, and the swipe
+ * contract — and creates no native element of its own.
+ */
+export function ToastProvider(props: JSX.ToastProviderProps): NativeNode {
+  const [queue, setQueue] = createSignal<readonly ToastDeclaration[]>([]);
+  const [stack, setStack] = createSignal<readonly ToastStackEntry[]>([]);
+  const context: ToastContextValue = {
+    scope: createComponentScope("qg-toast"),
+    toasts: queue,
+    stack,
+    reportStack: setStack,
+    timeout: () => props.timeout,
+    limit: () => props.limit,
+    expanded: () => props.expanded,
+    swipeDirection: () => props.swipeDirection,
+    pitch: () => props.pitch,
+    add(toast) {
+      const id = toast.id ?? `qg-toast-${nextToastId++}`;
+      setQueue((current) => [...current, { ...toast, id }]);
+      return id;
+    },
+    update(id, toast) {
+      setQueue((current) =>
+        current.map((entry) =>
+          entry.id === id ? { ...entry, ...toast, id } : entry,
+        ),
+      );
+    },
+    close(id) {
+      setQueue((current) => current.filter((entry) => entry.id !== id));
+    },
+    closeAll() {
+      setQueue([]);
+    },
+    async promise(work, messages) {
+      const id = context.add({
+        title: messages.loading,
+        type: "loading",
+      });
+      try {
+        const value = await work;
+        context.update(id, {
+          title:
+            typeof messages.success === "function"
+              ? messages.success(value)
+              : messages.success,
+          type: "success",
+        });
+        return value;
+      } catch (reason) {
+        context.update(id, {
+          title:
+            typeof messages.error === "function"
+              ? messages.error(reason)
+              : messages.error,
+          type: "error",
+        });
+        throw reason;
+      } finally {
+        flushSolid();
+      }
+    },
+  };
+  return ToastContext({
+    value: context,
+    get children() {
+      return props.children as SolidElement;
+    },
+  }) as unknown as NativeNode;
+}
+
+/**
+ * Read the toast manager inside a `Toast.Provider` subtree.
+ *
+ * `add`, `update`, `close`, `closeAll`, and `promise` all change the declared list; the core owns
+ * the queue bound, the live-region politeness, the exact auto-dismiss deadline, the stack index
+ * each toast is at, and the swipe arithmetic, and reports all of it back through `stack()`.
+ */
+export function useToastManager(): ToastManager {
+  const context = optionalContext(ToastContext);
+  if (!context) {
+    throw new TypeError("useToastManager must be called inside <Toast.Provider>");
+  }
+  return context;
+}
+
+/** Portal boundary above the window's own content. */
+export function ToastPortal(props: JSX.NativeScopedProps): NativeNode {
+  const context = optionalContext(ToastContext);
+  return createPartNode("view", props, {
+    part: NativePart.ToastPortal,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
+  });
+}
+
+/** One toast positioner, offset by the core's own `index * pitch`. */
+export function ToastPositioner(props: JSX.ToastProps): NativeNode {
+  const context = optionalContext(ToastContext);
+  return createPartNode("view", omit(props, "toastId"), {
+    part: NativePart.ToastPositioner,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
+    get partValue() {
+      return props.toastId;
+    },
+  });
+}
+
+/** One toast content box. */
+export function ToastContent(props: JSX.ToastProps): NativeNode {
+  const context = optionalContext(ToastContext);
+  return createPartNode("view", omit(props, "toastId"), {
+    part: NativePart.ToastContent,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
+    get partValue() {
+      return props.toastId;
+    },
+  });
 }
 
 /**
@@ -4797,21 +5887,56 @@ export interface ToastDeclaration {
  * `onDismiss`.
  */
 export function ToastViewport(props: JSX.ToastViewportProps): NativeNode {
-  return createPartNode("view", omit(props, "toasts", "onDismiss"), {
-    part: NativePart.ToastViewport,
-    get toasts() {
-      return props.toasts ? props.toasts.slice() : undefined;
+  const context = optionalContext(ToastContext);
+  return createPartNode(
+    "view",
+    omit(props, "toasts", "onDismiss", "onStackChange"),
+    {
+      part: NativePart.ToastViewport,
+      get scope() {
+        return props.scope ?? context?.scope;
+      },
+      get toasts() {
+        const declared = props.toasts ?? context?.toasts();
+        return declared ? declared.slice() : undefined;
+      },
+      get timeout() {
+        return props.timeout ?? context?.timeout();
+      },
+      get limit() {
+        return props.limit ?? context?.limit();
+      },
+      get stackExpanded() {
+        return props.expanded ?? context?.expanded();
+      },
+      get swipeDirection() {
+        return props.swipeDirection ?? context?.swipeDirection();
+      },
+      get pitch() {
+        return props.pitch ?? context?.pitch();
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (details.dismissed) {
+          for (const id of details.dismissed) context?.close(id);
+          props.onDismiss?.(details.dismissed, event);
+        }
+        if (details.toasts) {
+          context?.reportStack(details.toasts);
+          props.onStackChange?.(details.toasts, event);
+        }
+      }),
     },
-    onComponentChange: componentChangeReader((details, event) => {
-      if (details.dismissed) props.onDismiss?.(details.dismissed, event);
-    }),
-  });
+  );
 }
 
 /** One queued toast root, projecting the live-region politeness its kind selects. */
 export function ToastRoot(props: JSX.ToastProps): NativeNode {
+  const context = optionalContext(ToastContext);
   return createPartNode("view", omit(props, "toastId"), {
     part: NativePart.Toast,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
     get partValue() {
       return props.toastId;
     },
@@ -4820,8 +5945,12 @@ export function ToastRoot(props: JSX.ToastProps): NativeNode {
 
 /** One toast title, which names the toast for assistive technology. */
 export function ToastTitle(props: JSX.ToastProps): NativeNode {
+  const context = optionalContext(ToastContext);
   return createPartNode("view", omit(props, "toastId"), {
     part: NativePart.ToastTitle,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
     get partValue() {
       return props.toastId;
     },
@@ -4830,8 +5959,12 @@ export function ToastTitle(props: JSX.ToastProps): NativeNode {
 
 /** One toast description, which describes the toast for assistive technology. */
 export function ToastDescription(props: JSX.ToastProps): NativeNode {
+  const context = optionalContext(ToastContext);
   return createPartNode("view", omit(props, "toastId"), {
     part: NativePart.ToastDescription,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
     get partValue() {
       return props.toastId;
     },
@@ -4840,8 +5973,12 @@ export function ToastDescription(props: JSX.ToastProps): NativeNode {
 
 /** One toast action control. */
 export function ToastAction(props: JSX.ToastProps): NativeNode {
+  const context = optionalContext(ToastContext);
   return createPartNode("button", omit(props, "toastId"), {
     part: NativePart.ToastAction,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
     get partValue() {
       return props.toastId;
     },
@@ -4850,18 +5987,281 @@ export function ToastAction(props: JSX.ToastProps): NativeNode {
 
 /** One toast close control. Pressing it dismisses the toast through the core's own queue. */
 export function ToastClose(props: JSX.ToastProps): NativeNode {
+  const context = optionalContext(ToastContext);
   return createPartNode("button", omit(props, "toastId"), {
     part: NativePart.ToastClose,
+    get scope() {
+      return props.scope ?? context?.scope;
+    },
     get partValue() {
       return props.toastId;
     },
   });
 }
 
+// ---------------------------------------------------------------------------
+// Tooltip
+//
+// The compound tooltip sits on ordinary caller-owned elements. `Element.tooltip` — the `tooltip`
+// prop every native node already accepts — stays the shortest path to a native-style hint; this
+// is the composable one, with a shared warm provider, cursor tracking, and a resolved-placement
+// arrow. Every deadline belongs to the core.
+// ---------------------------------------------------------------------------
+
+export type TooltipCursorAxis = "none" | "x" | "y" | "both";
+
+interface TooltipProviderContextValue {
+  scope: string;
+}
+
+const TooltipProviderContext =
+  createContext<TooltipProviderContextValue | null>(null);
+
+interface TooltipContextValue {
+  scope: string;
+  provider: string | undefined;
+  open: () => boolean;
+  placement: () => AnchorPlacementDetails;
+  reportPlacement: (next: AnchorPlacementDetails, event: QuickGuiEvent) => void;
+  adoptOpen: (open: boolean, event: QuickGuiEvent) => void;
+  disabled: () => boolean | undefined;
+  hoverable: () => boolean | undefined;
+  trackCursorAxis: () => TooltipCursorAxis | undefined;
+  positioning: () => AnchorPositioning;
+  declarePositioning: (positioning: AnchorPositioning) => void;
+}
+
+const TooltipContext = createContext<TooltipContextValue | null>(null);
+
+function requireTooltip(component: string): TooltipContextValue {
+  const context = optionalContext(TooltipContext);
+  if (!context) {
+    throw new TypeError(`<${component}> must be rendered inside <Tooltip.Root>`);
+  }
+  return context;
+}
+
+/**
+ * Shared warm group.
+ *
+ * Once one tooltip in the group has opened, an adjacent trigger opens instantly while the group
+ * stays warm; that warm window is itself one exact core deadline, so a settled group owns no task
+ * or timer. Unlike Base UI's DOM-less provider this is one ordinary element, which is also where
+ * the group's deadlines are declared.
+ */
+export function TooltipProvider(props: JSX.TooltipProviderProps): NativeNode {
+  const scope = createComponentScope("qg-tooltip-provider");
+  const context: TooltipProviderContextValue = { scope };
+  return createPartNode("view", omit(props, "children"), {
+    part: NativePart.TooltipProvider,
+    scope,
+    get delay() {
+      return props.delay;
+    },
+    get closeDelay() {
+      return props.closeDelay;
+    },
+    get timeout() {
+      return props.timeout;
+    },
+    get children() {
+      return TooltipProviderContext({
+        value: context,
+        get children() {
+          return props.children as SolidElement;
+        },
+      });
+    },
+  });
+}
+
+/** Logical tooltip root. It creates no native element of its own. */
+export function TooltipRoot(props: JSX.TooltipRootProps): NativeNode {
+  const provider = optionalContext(TooltipProviderContext);
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultOpen ?? false,
+  );
+  const [placement, setPlacement] =
+    createSignal<AnchorPlacementDetails>(unresolvedPlacement);
+  const [declared, setDeclared] = createSignal<AnchorPositioning>({});
+  const open = () => props.open ?? uncontrolled();
+  const context: TooltipContextValue = {
+    scope: createComponentScope("qg-tooltip"),
+    provider: provider?.scope,
+    open,
+    placement,
+    reportPlacement(next, event) {
+      setPlacement(next);
+      props.onPlacementChange?.(next, event);
+    },
+    adoptOpen(next, event) {
+      if (next === open()) return;
+      if (props.open === undefined) setUncontrolled(next);
+      props.onOpenChange?.(next, event);
+    },
+    disabled: () => props.disabled,
+    hoverable: () => props.hoverable,
+    trackCursorAxis: () => props.trackCursorAxis,
+    positioning: () => {
+      const override = declared();
+      return {
+        side: override.side ?? props.side,
+        align: override.align ?? props.align,
+        sideOffset: override.sideOffset ?? props.sideOffset,
+        collisionPadding: override.collisionPadding ?? props.collisionPadding,
+      };
+    },
+    declarePositioning: setDeclared,
+  };
+  return TooltipContext({
+    value: context,
+    get children() {
+      return props.children as SolidElement;
+    },
+  }) as unknown as NativeNode;
+}
+
+/** Read the placement the core really resolved to inside a `Tooltip.Root` subtree. */
+export function useTooltipPlacement(): () => AnchorPlacementDetails {
+  return requireTooltip("useTooltipPlacement").placement;
+}
+
+/**
+ * Tooltip trigger.
+ *
+ * This is the one part the core keeps mounted whether the tooltip is open or closed, so it
+ * carries the whole declaration and reports back what the core decided.
+ */
+export function TooltipTrigger(props: JSX.TooltipTriggerProps): NativeNode {
+  const context = requireTooltip("Tooltip.Trigger");
+  const positioning = () => context.positioning();
+  return createPartNode(
+    props.element ?? "button",
+    omit(props, "element", "delay", "closeDelay", "closeOnClick"),
+    {
+      part: NativePart.TooltipTrigger,
+      scope: context.scope,
+      get provider() {
+        return context.provider;
+      },
+      get open() {
+        return context.open();
+      },
+      get disabled() {
+        return props.disabled ?? context.disabled();
+      },
+      get hoverable() {
+        return context.hoverable();
+      },
+      get trackCursorAxis() {
+        return context.trackCursorAxis();
+      },
+      get delay() {
+        return props.delay;
+      },
+      get closeDelay() {
+        return props.closeDelay;
+      },
+      get closeOnClick() {
+        return props.closeOnClick;
+      },
+      get side() {
+        return positioning().side;
+      },
+      get align() {
+        return positioning().align;
+      },
+      get sideOffset() {
+        return positioning().sideOffset;
+      },
+      get collisionPadding() {
+        return positioning().collisionPadding;
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        const placement = placementFromDetails(details);
+        if (placement) context.reportPlacement(placement, event);
+        if (typeof details.open === "boolean")
+          context.adoptOpen(details.open, event);
+      }),
+    },
+  );
+}
+
+/** Tooltip positioner. Base UI declares the placement props here. */
+export function TooltipPositioner(
+  props: JSX.TooltipPositionerProps,
+): NativeNode {
+  const context = requireTooltip("Tooltip.Positioner");
+  // The positioner is unmounted while the tooltip is closed, so its declaration is routed to the
+  // trigger, which the core keeps mounted either way.
+  context.declarePositioning({
+    get side() {
+      return props.side;
+    },
+    get align() {
+      return props.align;
+    },
+    get sideOffset() {
+      return props.sideOffset;
+    },
+    get collisionPadding() {
+      return props.collisionPadding;
+    },
+  } as AnchorPositioning);
+  onCleanup(() => context.declarePositioning({}));
+  return createPartNode(
+    "view",
+    omit(props, "side", "align", "sideOffset", "collisionPadding"),
+    { part: NativePart.TooltipPositioner, scope: context.scope },
+  );
+}
+
+/** Portal boundary. QuickGUI's retained overlay node is the portal, so it is the positioner. */
+export function TooltipPortal(props: JSX.NativeProps): NativeNode {
+  const context = requireTooltip("Tooltip.Portal");
+  return createPartNode("view", props, {
+    part: NativePart.TooltipPortal,
+    scope: context.scope,
+  });
+}
+
+/** The tooltip surface. Escape dismissal belongs to the core, so it declares no `onDismiss`. */
+export function TooltipPopup(props: JSX.NativeProps): NativeNode {
+  const context = requireTooltip("Tooltip.Popup");
+  return createPartNode("view", props, {
+    part: NativePart.TooltipPopup,
+    scope: context.scope,
+  });
+}
+
+/** Arrow pinned to the popup edge that really faces the trigger. */
+export function TooltipArrow(props: JSX.NativeProps): NativeNode {
+  const context = requireTooltip("Tooltip.Arrow");
+  return createPartNode("view", props, {
+    part: NativePart.TooltipArrow,
+    scope: context.scope,
+  });
+}
+
+/** Base-UI-shaped compound parts for a tooltip. */
+export const Tooltip = Object.assign(TooltipRoot, {
+  Provider: TooltipProvider,
+  Root: TooltipRoot,
+  Trigger: TooltipTrigger,
+  Portal: TooltipPortal,
+  Positioner: TooltipPositioner,
+  Popup: TooltipPopup,
+  Arrow: TooltipArrow,
+});
+
 /** Base-UI-shaped compound parts for a toast viewport. */
 export const Toast = Object.assign(ToastRoot, {
+  Provider: ToastProvider,
+  Portal: ToastPortal,
   Viewport: ToastViewport,
+  Positioner: ToastPositioner,
   Root: ToastRoot,
+  Content: ToastContent,
   Title: ToastTitle,
   Description: ToastDescription,
   Action: ToastAction,
@@ -6635,9 +8035,57 @@ export namespace JSX {
     onOpenChange?: (open: boolean, details: PopoverOpenChangeDetails) => void;
     dismissOnEscape?: boolean;
     dismissOnPointerOutside?: boolean;
+    /** Trap focus in the popup and block pointer input behind it. */
+    modal?: boolean;
+    /** Open the popup while the trigger is hovered, on the core's own exact deadline. */
+    openOnHover?: boolean;
+    /** Hover open deadline in milliseconds. Defaults to the core's 300 ms. */
+    delay?: number;
+    /** Hover close deadline in milliseconds, so the pointer can cross the side offset. */
+    closeDelay?: number;
+    /**
+     * Where the retained tree really placed the popup.
+     *
+     * The declared side and alignment are only a preference; style from this the way Base UI
+     * styles from `data-side` and `data-align`.
+     */
+    onPlacementChange?: (
+      placement: AnchorPlacementDetails,
+      event: QuickGuiEvent,
+    ) => void;
+    /** Default positioning, overridden by whatever `Popover.Positioner` declares. */
+    side?: "top" | "bottom" | "left" | "right";
+    align?: "start" | "center" | "end";
+    sideOffset?: number;
+    alignOffset?: number;
+    collisionPadding?: number;
+    sticky?: boolean;
+    anchor?: NativeNode | { x: number; y: number };
   }
 
-  export interface PopoverTriggerProps extends NativeProps {}
+  export interface PopoverTriggerProps extends NativeProps {
+    /** Open the popup on hover instead of on press. */
+    openOnHover?: boolean;
+    delay?: number;
+    closeDelay?: number;
+  }
+
+  export interface PopoverPositionerProps extends NativeProps {
+    /** Preferred side. The core flips it when the popup does not fit. */
+    side?: "top" | "bottom" | "left" | "right";
+    /** Preferred cross-axis alignment. The core re-aligns it when it does not fit. */
+    align?: "start" | "center" | "end";
+    /** Distance from the anchor on the placement side, in logical pixels. */
+    sideOffset?: number;
+    /** Shift along the cross axis, applied before collision handling. */
+    alignOffset?: number;
+    /** Minimum distance from the viewport edge, in logical pixels. */
+    collisionPadding?: number;
+    /** Keep the popup inside the viewport. `false` lets it travel with a scrolling anchor. */
+    sticky?: boolean;
+    /** Anchor to another node, or to one logical point. Defaults to the trigger. */
+    anchor?: NativeNode | { x: number; y: number };
+  }
 
   export interface PopoverContentProps extends NativeProps {
     width: number;
@@ -6652,6 +8100,15 @@ export namespace JSX {
     value?: string;
     /** Inside a `CheckboxGroup.Root`, make this the group's derived parent checkbox. */
     parent?: boolean;
+    /**
+     * A standalone parent checkbox's children, as checked booleans.
+     *
+     * The core folds them into on, mixed, or off with no registry, so the mixed state is derived
+     * rather than retained anywhere.
+     */
+    childrenChecked?: readonly boolean[];
+    /** Refuse changes while keeping the control focusable and its value announced. */
+    readOnly?: boolean;
     /** Controlled `true`, `false`, or `"indeterminate"` toggle state. */
     checked?: CheckedState;
     defaultChecked?: CheckedState;
@@ -6662,9 +8119,14 @@ export namespace JSX {
     value?: string;
     defaultValue?: string;
     onValueChange?: (value: string, event: QuickGuiEvent) => void;
+    /** Refuse changes while keeping the group focusable. */
+    readOnly?: boolean;
+    required?: boolean;
   }
 
   export interface RadioProps extends NativeProps {
+    /** Refuse changes while keeping the control focusable. */
+    readOnly?: boolean;
     /** Value this radio selects in its `RadioGroup`. */
     value?: string;
     /** Controlled selection for a radio used without a `RadioGroup`. */
@@ -6677,6 +8139,8 @@ export namespace JSX {
     checked?: boolean;
     defaultChecked?: boolean;
     onCheckedChange?: (checked: boolean, event: QuickGuiEvent) => void;
+    /** Refuse changes while keeping the control focusable. */
+    readOnly?: boolean;
   }
 
   export interface TabsRootProps extends NativeProps {
@@ -6690,15 +8154,31 @@ export namespace JSX {
     loop?: boolean;
     /** Retain inactive panels as `display: none` instead of omitting them. */
     keepMounted?: boolean;
+    /**
+     * Everything the core decided about the tab set.
+     *
+     * `activationDirection` is Base UI's `data-activation-direction`, and `indicator` is the
+     * active tab's laid-out box published during the paint QuickGUI was already performing.
+     */
+    onTabsStateChange?: (state: TabsState, event: QuickGuiEvent) => void;
   }
 
   export interface TabsTabProps extends NativeProps {
     value: string;
+    /** This tab's position, which is how the core knows which way the selection travelled. */
+    index?: number;
   }
 
   export interface TabsIndicatorProps extends NativeProps {
     /** Tab this indicator belongs to. Defaults to the enclosing tab, then the active tab. */
     value?: string;
+    /**
+     * Anchor the indicator to the active tab's edge, and publish that tab's box back.
+     *
+     * `"bottom"` draws the familiar underline. Without a placement the indicator is a plain part
+     * on the active tab and no geometry is reported.
+     */
+    placement?: PopoverPlacement;
   }
 
   export interface TabsPanelProps extends NativeProps {
@@ -6740,6 +8220,23 @@ export namespace JSX {
     filled?: boolean;
     /** Bounded message retained for form reports and native accessibility. */
     validationMessage?: string;
+    /** Which triggers validate. `"onSubmit"` by default, as in Base UI. */
+    validationMode?: "onSubmit" | "onBlur" | "onChange";
+    /** How long the core waits after a change before validating, in milliseconds. */
+    validationDebounceTime?: number;
+    /** The core's own answers for the declared validation mode. */
+    onValidationChange?: (
+      validation: {
+        triggers: FieldValidationTriggers;
+        delay: FieldValidationDelays;
+      },
+      event: QuickGuiEvent,
+    ) => void;
+  }
+
+  export interface FieldValidityProps extends NativeProps {
+    /** Whether the readout is shown. Defaults to `true`. */
+    visible?: boolean;
   }
 
   export interface FieldLabelProps extends NativeProps {
@@ -6769,7 +8266,14 @@ export namespace JSX {
     shaderParameters?: readonly number[] | readonly (readonly number[])[];
   }
 
-  export interface ProgressProps extends NativeProps {
+  export interface GaugeFormatProps {
+    /** Bounded value formatter the core applies: `"percent"` or `"fraction"`. */
+    format?: "percent" | "fraction";
+    /** Everything the core derived from the declared value. */
+    onStatusChange?: (state: GaugeState, event: QuickGuiEvent) => void;
+  }
+
+  export interface ProgressProps extends NativeScopedProps, GaugeFormatProps {
     /** Completed amount. Omit, or declare `indeterminate`, for unknown progress. */
     value?: number;
     /** Completion maximum. Defaults to `1`. */
@@ -6779,7 +8283,7 @@ export namespace JSX {
     valueText?: string;
   }
 
-  export interface MeterProps extends NativeProps {
+  export interface MeterProps extends NativeScopedProps, GaugeFormatProps {
     value?: number;
     min?: number;
     max?: number;
@@ -6808,6 +8312,17 @@ export namespace JSX {
   }
 
   export interface SliderProps extends NativeScopedProps {
+    /** The core's own pointer boundary, matching Base UI's `onValueCommitted`. */
+    onValueCommitted?: (
+      values: readonly number[],
+      event: QuickGuiEvent,
+    ) => void;
+    /** Whole steps the core holds open between adjacent thumbs. */
+    minStepsBetweenValues?: number;
+    /** `"center"` (default) or `"edge"`, matching Base UI's `thumbAlignment`. */
+    thumbAlignment?: "center" | "edge";
+    /** Bounded value formatter the core applies: `"percent"` or `"fraction"`. */
+    format?: "percent" | "fraction";
     /** Controlled thumb values, one entry per thumb. */
     value?: readonly number[];
     defaultValue?: readonly number[];
@@ -6820,6 +8335,8 @@ export namespace JSX {
   }
 
   export interface SliderThumbProps extends NativeScopedProps {
+    /** Base UI's `data-index`. An alias for `itemIndex`. */
+    index?: number;
     /** Which thumb this part paints, matching the index in `value`. */
     itemIndex?: number;
   }
@@ -6837,6 +8354,13 @@ export namespace JSX {
   export interface SplitterPaneProps extends NativeScopedProps {
     /** Which pane or handle this part paints. */
     itemIndex?: number;
+  }
+
+  export interface ToolbarInputProps extends NativeScopedProps {
+    /** Value this input owns in its toolbar's `items`. */
+    partValue?: string;
+    /** Native element this toolbar input renders. Defaults to `input`. */
+    element?: "input" | "button" | "view" | "text";
   }
 
   export interface ToolbarProps extends NativeScopedProps {
@@ -6907,6 +8431,70 @@ export namespace JSX {
     onSelect?: EventHandler;
   }
 
+  export interface TooltipProviderProps extends NativeProps {
+    /** Group open deadline in milliseconds. Defaults to the core's 600 ms. */
+    delay?: number;
+    /** Group close deadline in milliseconds. */
+    closeDelay?: number;
+    /** How long the group stays warm after the last tooltip closed, in milliseconds. */
+    timeout?: number;
+  }
+
+  export interface TooltipRootProps {
+    children?: unknown;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, event: QuickGuiEvent) => void;
+    /** Cancel any pending deadline and close. The trigger stays focusable. */
+    disabled?: boolean;
+    /** Let the pointer cross into the popup without closing. Defaults to `true`. */
+    hoverable?: boolean;
+    /** Follow the cursor on one axis, both, or neither. */
+    trackCursorAxis?: TooltipCursorAxis;
+    /** Where the core really placed the popup. */
+    onPlacementChange?: (
+      placement: AnchorPlacementDetails,
+      event: QuickGuiEvent,
+    ) => void;
+    /** Default positioning, overridden by whatever `Tooltip.Positioner` declares. */
+    side?: "top" | "bottom" | "left" | "right";
+    align?: "start" | "center" | "end";
+    sideOffset?: number;
+    collisionPadding?: number;
+  }
+
+  export interface TooltipTriggerProps extends NativeProps {
+    /** Native element this trigger renders. Defaults to `button`. */
+    element?: "button" | "view" | "text" | "input";
+    /** Open deadline in milliseconds, overriding the provider's. */
+    delay?: number;
+    /** Close deadline in milliseconds, overriding the provider's. */
+    closeDelay?: number;
+    /** Close on press. Defaults to `true`. */
+    closeOnClick?: boolean;
+  }
+
+  export interface TooltipPositionerProps extends NativeProps {
+    side?: "top" | "bottom" | "left" | "right";
+    align?: "start" | "center" | "end";
+    sideOffset?: number;
+    collisionPadding?: number;
+  }
+
+  export interface ToastProviderProps {
+    children?: unknown;
+    /** Inherited auto-dismiss duration in milliseconds. Defaults to the core's five seconds. */
+    timeout?: number;
+    /** How many toasts stay unlimited. Older ones are flagged, never silenced. Defaults to 3. */
+    limit?: number;
+    /** Whether the stack is expanded. */
+    expanded?: boolean;
+    /** Which way a swipe dismisses a toast. */
+    swipeDirection?: "left" | "right" | "up" | "down";
+    /** Stack pitch in logical pixels, which the core turns into each toast's own offset. */
+    pitch?: number;
+  }
+
   export interface DialogRootProps {
     children?: unknown;
     open?: boolean;
@@ -6916,6 +8504,17 @@ export namespace JSX {
     dismissOnEscape?: boolean;
     /** Dismiss on a backdrop press. Defaults to `true`, or `false` for an alert dialog. */
     dismissOnBackdrop?: boolean;
+    /** How long the opening transition runs, in milliseconds. */
+    enterDuration?: number;
+    /**
+     * How long the closing transition runs, in milliseconds.
+     *
+     * The core holds the dialog mounted for exactly this long so the application's own exit
+     * transition can finish, then reports the completion.
+     */
+    exitDuration?: number;
+    /** Base UI's `onOpenChangeComplete`: the transition the core just finished. */
+    onOpenChangeComplete?: (open: boolean, event: QuickGuiEvent) => void;
   }
 
 
@@ -7055,6 +8654,24 @@ export namespace JSX {
   }
 
   export interface NumberFieldProps extends NativeScopedProps {
+    /** Alt-modified step. Defaults to a tenth of `step`. */
+    smallStep?: number;
+    /** Shift-modified step. Defaults to ten times `step`. */
+    largeStep?: number;
+    /** Land a stepped value on the step grid. */
+    snapOnStep?: boolean;
+    /** Step on the wheel while focused. Defaults to `true`. */
+    allowWheelScrub?: boolean;
+    /** Refuse every change while staying focusable, unlike `disabled`. */
+    readOnly?: boolean;
+    /** Required for form submission. */
+    required?: boolean;
+    /** Which axis a scrub gesture reads. Defaults to `"horizontal"`. */
+    scrubDirection?: "horizontal" | "vertical" | "both";
+    /** Logical pixels per step during a scrub. Defaults to the core's own two. */
+    scrubSensitivity?: number;
+    /** The core's own commit boundary, matching Base UI's `onValueCommitted`. */
+    onValueCommitted?: (value: number | undefined, event: QuickGuiEvent) => void;
     /** Controlled numeric value. Omit for an empty field. */
     value?: number;
     defaultValue?: number;
@@ -7077,8 +8694,22 @@ export namespace JSX {
     onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
   }
 
+  export interface ToastProviderDeclarations {
+    timeout?: number;
+    limit?: number;
+    expanded?: boolean;
+    swipeDirection?: "left" | "right" | "up" | "down";
+    pitch?: number;
+    /** Everything the core decided about the queue: index, offset, limited and expanded flags. */
+    onStackChange?: (
+      stack: readonly ToastStackEntry[],
+      event: QuickGuiEvent,
+    ) => void;
+  }
+
   export interface ToastViewportProps
-    extends Omit<NativeScopedProps, "onDismiss"> {
+    extends Omit<NativeScopedProps, "onDismiss">,
+      ToastProviderDeclarations {
     /** The bounded queue. Adding an entry pushes a toast; dropping one dismisses it. */
     toasts?: readonly ToastDeclaration[];
     /** Every dismissal the core decided, including timed auto-dismissals. */

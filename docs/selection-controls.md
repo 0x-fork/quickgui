@@ -153,6 +153,23 @@ cargo run --release --example selection_controls
 
 ## Solid
 
+`readOnly` is bound on `Checkbox.Root`, `Radio.Root`, `RadioGroup.Root`, and `Switch.Root`, and
+`RadioGroup.Root` also accepts `required`. It is the web's `readonly` rather than `disabled`: the
+control keeps its place in the Tab sequence and its value in the accessible name while the core
+refuses every change.
+
+A `Checkbox.Root parent` inside a `CheckboxGroup.Root` is the group's derived parent checkbox and
+needs nothing else. Standalone, `childrenChecked` declares the children's booleans and the core
+folds them into on, mixed, or off — a registry-free derivation, so no JavaScript decides what
+"mixed" means:
+
+```tsx
+<Checkbox.Root parent childrenChecked={[true, false, true]}>
+  <Checkbox.Indicator />
+</Checkbox.Root>
+```
+
+
 `@quickgui/solid` exposes these descriptors as Base-UI-shaped compound parts: `Checkbox.Root` /
 `Checkbox.Indicator`, `Radio.Root` / `Radio.Indicator` inside `RadioGroup.Root`, and `Switch.Root` /
 `Switch.Thumb`. Each part is one native node that declares which core descriptor to rebuild, so the

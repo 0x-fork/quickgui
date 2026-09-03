@@ -388,3 +388,37 @@ Run the caller-styled edge placement, nesting, focus, menu-role, and parts galle
 cargo run --release --example popovers
 cargo run --release --example system_popover
 ```
+
+## Solid
+
+The Solid renderer binds the whole compound. `Popover.Root` is a logical coordinator, and the
+trigger is the one part the core keeps mounted whether the popover is open or closed, so the
+trigger node carries the declaration and every other part only repeats the compound scope:
+
+```tsx
+<Popover.Root open={open()} onOpenChange={setOpen} modal>
+  <Popover.Trigger openOnHover delay={300} closeDelay={100}>Account</Popover.Trigger>
+  <Popover.Positioner side="bottom" align="end" sideOffset={8} collisionPadding={12}>
+    <Popover.Popup>
+      <Popover.Arrow />
+      <Popover.Title>Account</Popover.Title>
+      <Popover.Viewport><AccountSettings /></Popover.Viewport>
+      <Popover.Close>Done</Popover.Close>
+    </Popover.Popup>
+  </Popover.Positioner>
+</Popover.Root>
+```
+
+`side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`, `sticky`, and `anchor` are
+declared on `Popover.Positioner` exactly as Base UI declares them, and `Popover.Root` accepts the
+same names as defaults. `anchor` takes another node or one `{ x, y }` logical point. A closed
+popover mounts no positioner, popup, arrow, viewport, or backdrop at all.
+
+The declared side is a preference, not an outcome. `usePopoverPlacement()` and `onPlacementChange`
+report the placement the retained tree really used — `side`, `align`, `anchorHidden`, the measured
+anchor size, and the room the popup was given — published during the paint QuickGUI was already
+performing, so an application sizes and styles from the core's own answer rather than measuring
+anything itself. `openOnHover` hands the open value to the core's exact hover deadlines and reports
+the result back with a `"hover"` reason. `Popover.Content` remains the one-element shorthand for a
+popover that needs no separate positioner. See
+[Solid 2 renderer](solid.md#base-ui-popover-parts).

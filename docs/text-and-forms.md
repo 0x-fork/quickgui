@@ -286,6 +286,27 @@ runs only after application value changes—never on idle frames.
 
 ## Solid: Field and Fieldset
 
+`Field.Item` and `Field.Validity` are bound alongside the existing label, control, description, and
+error parts. `validationMode` — `"onSubmit"` (the default), `"onBlur"`, or `"onChange"` — and a
+bounded `validationDebounceTime` are answered by the core, which reports which triggers validate
+and how long it waits before each one:
+
+```tsx
+<Field.Root validationMode="onChange" validationDebounceTime={250}
+  onValidationChange={({ triggers, delay }) => schedule(triggers, delay)}>
+  <Field.Item>
+    <Field.Label>Email</Field.Label>
+    <Field.Control />
+  </Field.Item>
+  <Field.Validity />
+  <Field.Error>Enter a work address</Field.Error>
+</Field.Root>
+```
+
+Nothing in the hosted runtime re-derives that contract: the mode is declared ahead of time and the
+answers travel back as one asynchronous payload.
+
+
 `@quickgui/solid` exposes the field layer as `Field.Root`, `Field.Label`, `Field.Control`,
 `Field.Description`, `Field.Error`, and `Fieldset.Root`, `Fieldset.Legend`,
 `Fieldset.Description`, `Fieldset.Control`.

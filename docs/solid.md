@@ -6,9 +6,9 @@ QuickGUI includes an experimental Bun host split into two unstyled packages:
   mutation batches, window-routed event queue, and renderer-owned `Window` lifecycle.
 - `@quickgui/solid` owns Solid 2 JSX compilation, fine-grained reactive updates, and the host
   components `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `VirtualList`,
-  `Popover`/`SystemPopover`, and the compound `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`,
-  `Collapsible`, `Accordion`, `Field`, `Fieldset`, `Dialog`, and `AlertDialog` parts, plus the
-  `createRenderer` adapter passed to a native `Window`.
+  `Popover`/`SystemPopover`, and the compound `Tooltip`, `Checkbox`, `Radio`, `RadioGroup`,
+  `Switch`, `Tabs`, `Collapsible`, `Accordion`, `Field`, `Fieldset`, `Dialog`, and `AlertDialog`
+  parts, plus the `createRenderer` adapter passed to a native `Window`.
 
 The renderer does not use a webview or virtual DOM. Solid updates the affected retained native
 nodes, and one binary batch crosses N-API before QuickGUI invalidates the WGPU window.
@@ -218,6 +218,93 @@ const [open, setOpen] = createSignal(false);
 The runnable [`popover-solid` example](../examples/popover-solid) places `SystemPopover` and
 `Popover` side by side so their renderer ownership and window-edge behavior are visible.
 
+### Base UI popover parts
+
+`Popover.Content` above is QuickGUI's one-element shorthand. The full Base UI compound is also
+available on the same root, and the core owns every part of it:
+
+| Part | Declared props | Core guide |
+| --- | --- | --- |
+| `Popover.Root` | `open`/`defaultOpen`, `onOpenChange`, `modal`, `openOnHover`, `delay`, `closeDelay`, `dismissOnEscape`, `dismissOnPointerOutside`, `onPlacementChange`, and the positioning defaults below | [popovers](popovers.md) |
+| `Popover.Trigger` | `openOnHover`, `delay`, `closeDelay` | [popovers](popovers.md) |
+| `Popover.Portal` / `Popover.Positioner` | `side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`, `sticky`, `anchor` | [popovers](popovers.md) |
+| `Popover.Backdrop`, `Popover.Popup`, `Popover.Arrow`, `Popover.Viewport`, `Popover.Title`, `Popover.Description`, `Popover.Close` | — | [popovers](popovers.md) |
+
+```tsx
+<Popover.Root open={open()} onOpenChange={setOpen} modal>
+  <Popover.Trigger openOnHover delay={300} closeDelay={100}>Account</Popover.Trigger>
+  <Popover.Positioner side="bottom" align="end" sideOffset={8} collisionPadding={12}>
+    <Popover.Popup>
+      <Popover.Arrow />
+      <Popover.Title>Account</Popover.Title>
+      <Popover.Viewport>
+        <AccountSettings />
+      </Popover.Viewport>
+      <Popover.Close>Done</Popover.Close>
+    </Popover.Popup>
+  </Popover.Positioner>
+</Popover.Root>
+```
+
+Every part except the trigger is mounted by the core only while the popover is open, so a closed
+popover contributes no overlay, layout, paint, input, or accessibility node. The trigger is the one
+part that stays mounted either way, which is why it carries the whole declaration: `Popover.Root`
+and `Popover.Positioner` route their props onto it, and the core reports back through it.
+
+A declared `side` and `align` are only a preference. The retained tree flips the side and re-aligns
+the cross axis whenever the popup does not fit, and publishes the real answer during the paint it
+was already performing. `usePopoverPlacement()` and `onPlacementChange` report it, which is how an
+application styles from the real placement the way Base UI styles from `data-side` and `data-align`:
+
+```tsx
+const placement = usePopoverPlacement();
+
+<Popover.Popup
+  style={{
+    maxHeight: placement().availableHeight,
+    opacity: placement().anchorHidden ? 0 : 1,
+  }}
+/>
+```
+
+`anchor` accepts another node or one `{ x, y }` logical point, which is Base UI's virtual element.
+`openOnHover` hands the open value to the core's own exact deadline — a hovered trigger opens after
+`delay` and closes after `closeDelay` once neither the trigger nor a hoverable popup is hovered —
+and the resulting open value comes back through `onOpenChange` with a `"hover"` reason.
+
+### Tooltips
+
+`Tooltip` is the composable counterpart of the framework-owned `tooltip` prop every native node
+already accepts. It carries the same contract as the popover compound: the trigger is the part that
+stays mounted, so it carries the declaration, and every deadline belongs to the core.
+
+| Part | Declared props | Core guide |
+| --- | --- | --- |
+| `Tooltip.Provider` | `delay`, `closeDelay`, `timeout` | [input](input.md) |
+| `Tooltip.Root` | `open`/`defaultOpen`, `onOpenChange`, `disabled`, `hoverable`, `trackCursorAxis`, `onPlacementChange`, positioning defaults | [input](input.md) |
+| `Tooltip.Trigger` | `delay`, `closeDelay`, `closeOnClick`, `element` | [input](input.md) |
+| `Tooltip.Portal` / `Tooltip.Positioner` | `side`, `align`, `sideOffset`, `collisionPadding` | [input](input.md) |
+| `Tooltip.Popup`, `Tooltip.Arrow` | — | [input](input.md) |
+
+```tsx
+<Tooltip.Provider delay={600} closeDelay={200} timeout={400}>
+  <Tooltip.Root trackCursorAxis="x">
+    <Tooltip.Trigger>Save</Tooltip.Trigger>
+    <Tooltip.Positioner side="top" sideOffset={7}>
+      <Tooltip.Popup>
+        <Text>Save the current draft</Text>
+        <Tooltip.Arrow />
+      </Tooltip.Popup>
+    </Tooltip.Positioner>
+  </Tooltip.Root>
+</Tooltip.Provider>
+```
+
+One shared provider makes an adjacent trigger open instantly while the group stays warm; that warm
+window is itself one exact deadline, so a settled group owns no task or timer. `useTooltipPlacement()`
+reports the side and alignment the core really used. Unlike Base UI's DOM-less provider, QuickGUI's
+`Tooltip.Provider` is one ordinary element, which is also where the group's deadlines are declared.
+
 ## Selection, tab, disclosure, and field parts
 
 The unstyled Rust part descriptors are exposed as Base-UI-shaped compound components. Each part is
@@ -228,16 +315,36 @@ so nothing about a component is decided by a synchronous callback across N-API.
 
 | Component | Parts | Controlled props | Core guide |
 | --- | --- | --- | --- |
-| `Checkbox` | `Root`, `Indicator` | `checked` (`true`/`false`/`"indeterminate"`), `defaultChecked`, `onCheckedChange` | [selection controls](selection-controls.md) |
-| `Radio` | `Root`, `Indicator` | `value`, or standalone `checked`/`onCheckedChange` | [selection controls](selection-controls.md) |
-| `RadioGroup` | `Root` | `value`, `defaultValue`, `onValueChange` | [selection controls](selection-controls.md) |
-| `Switch` | `Root`, `Thumb` | `checked`, `defaultChecked`, `onCheckedChange` | [selection controls](selection-controls.md) |
-| `Tabs` | `Root`, `List`, `Tab`, `Indicator`, `Panel` | `value`, `defaultValue`, `onValueChange`, `orientation`, `activation`, `loop`, `keepMounted` | [tabs](tabs.md) |
+| `Checkbox` | `Root`, `Indicator` | `checked` (`true`/`false`/`"indeterminate"`), `defaultChecked`, `onCheckedChange`, `readOnly`, `parent` with `childrenChecked` | [selection controls](selection-controls.md) |
+| `Radio` | `Root`, `Indicator` | `value`, or standalone `checked`/`onCheckedChange`, `readOnly` | [selection controls](selection-controls.md) |
+| `RadioGroup` | `Root` | `value`, `defaultValue`, `onValueChange`, `readOnly`, `required` | [selection controls](selection-controls.md) |
+| `Switch` | `Root`, `Thumb` | `checked`, `defaultChecked`, `onCheckedChange`, `readOnly` | [selection controls](selection-controls.md) |
+| `Tabs` | `Root`, `List`, `Tab`, `Indicator`, `Panel` | `value`, `defaultValue`, `onValueChange`, `orientation`, `activation`, `loop`, `keepMounted`, `onTabsStateChange`; `index` on a tab, `placement` on the indicator | [tabs](tabs.md) |
 | `Collapsible` | `Root`, `Trigger`, `Panel` | `open`, `defaultOpen`, `onOpenChange`, `disabled`, `keepMounted` | [disclosures](disclosures.md) |
-| `Accordion` | `Root`, `Item`, `Header`, `Trigger`, `Panel` | `value`, `defaultValue`, `onValueChange`, `multiple`, `headingLevel`, `keepMounted`, `disabled` | [disclosures](disclosures.md) |
-| `Field` | `Root`, `Label`, `Control`, `Description`, `Error` | `disabled`, `invalid`, `required`, `touched`, `dirty`, `filled`, `validationMessage` | [text and forms](text-and-forms.md) |
+| `Accordion` | `Root`, `Item`, `Header`, `Trigger`, `Panel` | `value`, `defaultValue`, `onValueChange`, `multiple`, `headingLevel`, `keepMounted`, `disabled`; `index` on an item | [disclosures](disclosures.md) |
+| `Field` | `Root`, `Item`, `Label`, `Control`, `Validity`, `Description`, `Error` | `disabled`, `invalid`, `required`, `touched`, `dirty`, `filled`, `validationMessage`, `validationMode`, `validationDebounceTime`, `onValidationChange` | [text and forms](text-and-forms.md) |
 | `Fieldset` | `Root`, `Legend`, `Description`, `Control` | `disabled` | [text and forms](text-and-forms.md) |
-| `Dialog`, `AlertDialog` | `Root`, `Trigger`, `Portal`, `Backdrop`, `Popup`, `Title`, `Description`, `Close` | `open`, `defaultOpen`, `onOpenChange`, `dismissOnEscape`, `dismissOnBackdrop` | [dialogs](dialogs.md) |
+| `Dialog`, `AlertDialog` | `Root`, `Trigger`, `Portal`, `Backdrop`, `Popup`, `Viewport`, `Title`, `Description`, `Close` | `open`, `defaultOpen`, `onOpenChange`, `dismissOnEscape`, `dismissOnBackdrop`, `enterDuration`, `exitDuration`, `onOpenChangeComplete` | [dialogs](dialogs.md) |
+
+A `Tabs.Tab index` is how the core knows which way the selection travelled, so
+`useTabsState().activationDirection` — Base UI's `data-activation-direction` — is the core's answer
+rather than an index comparison in JavaScript. Declaring a `placement` on `Tabs.Indicator` keeps it
+anchored to the tab that is really active and publishes that tab's laid-out box back as
+`useTabsState().indicator`, measured during the paint QuickGUI was already performing.
+
+A `Field.Root validationMode` — `"onSubmit"` (the default), `"onBlur"`, or `"onChange"` — and a
+bounded `validationDebounceTime` are answered by the core, which reports which triggers validate and
+how long it waits before each one through `onValidationChange`. `Field.Item` is the structural row
+and `Field.Validity` the live readout.
+
+A `Checkbox.Root parent` inside a `CheckboxGroup.Root` is the group's derived parent checkbox;
+standalone, `childrenChecked` declares the children's booleans and the core folds them into on,
+mixed, or off with no registry at all. `readOnly` is the web's `readonly` rather than `disabled`: the
+control keeps its place in the Tab sequence and its value in the accessible name while refusing
+changes.
+
+A dialog's `exitDuration` is the exact deadline the core holds the surface mounted for so the
+application's own exit transition can finish; `onOpenChangeComplete` reports when it did.
 
 ```tsx
 const [tab, setTab] = createSignal("overview");
@@ -502,11 +609,11 @@ renders nothing instead of panicking.
 
 ## Range and feedback parts
 
-| Component | Parts | Declared props | Core guide |
-| --- | --- | --- | --- |
-| `Progress` | `Root`, `Indicator` | `value`, `max`, `indeterminate`, `valueText` | [range and feedback](range-and-feedback.md) |
-| `Meter` | `Root`, `Indicator` | `value`, `min`, `max`, `low`, `high`, `optimum` | [range and feedback](range-and-feedback.md) |
-| `Toggle` | `Root`, `Indicator` | `pressed`, `defaultPressed`, `onPressedChange` | [toolbar and toast](toolbar-and-toast.md) |
+| Component | Parts | Declared props | Reported through | Core guide |
+| --- | --- | --- | --- | --- |
+| `Progress` | `Root`, `Track`, `Indicator`, `Label`, `Value` | `value`, `max`, `indeterminate`, `valueText`, `format` | `onStatusChange(state, event)` and `useGaugeState()` | [range and feedback](range-and-feedback.md) |
+| `Meter` | `Root`, `Track`, `Indicator`, `Label`, `Value` | `value`, `min`, `max`, `low`, `high`, `optimum`, `format` | the same | [range and feedback](range-and-feedback.md) |
+| `Toggle` | `Root`, `Indicator` | `pressed`, `defaultPressed`, `onPressedChange` | `onPressedChange` | [toolbar and toast](toolbar-and-toast.md) |
 
 ```tsx
 <Progress.Root value={done()} max={total()} valueText={`${done()} of ${total()} files`}>
@@ -524,6 +631,25 @@ reports a level inside a known range rather than task progress, and `low`/`high`
 application color the gauge without the framework inventing thresholds. A toggle is a button that
 stays pressed, not a checkbox, so the core exposes it as a toggle button.
 
+Declaring a `format` — `"percent"` or `"fraction"` — asks the core to produce the text a
+`Progress.Value` renders, and `useGaugeState()` reports it alongside the core's own derived
+`status`, which is Base UI's `data-progressing`, `data-complete`, and `data-indeterminate`:
+
+```tsx
+function Upload() {
+  const gauge = useGaugeState();
+  return (
+    <Progress.Root value={done()} max={total()} format="fraction">
+      <Progress.Label><Text>Uploading</Text></Progress.Label>
+      <Progress.Value><Text>{gauge().displayValue}</Text></Progress.Value>
+      <Progress.Track>
+        <Progress.Indicator style={{ width: `${(gauge().completion ?? 0) * 100}%` }} />
+      </Progress.Track>
+    </Progress.Root>
+  );
+}
+```
+
 ## Range, ordering, and roving-focus components
 
 Every part of one instance carries the same `scope`, which is how the Rust binding finds the one
@@ -534,9 +660,9 @@ asynchronous payload. Nothing in this table is re-implemented in TypeScript.
 
 | Component | Parts | Declared props | Reported through | Core guide |
 | --- | --- | --- | --- | --- |
-| `Slider` | `Root`, `Track`, `Range`, `Thumb` | `scope`, `value`/`defaultValue` (one entry per thumb), `min`, `max`, `step`, `largeStep`, `orientation`, `disabled` | `onValueChange(values, event)` | [range and feedback](range-and-feedback.md) |
+| `Slider` | `Root`, `Label`, `Value`, `Control`, `Track`, `Range`/`Indicator`, `Thumb` | `scope`, `value`/`defaultValue` (one entry per thumb), `min`, `max`, `step`, `largeStep`, `minStepsBetweenValues`, `thumbAlignment`, `format`, `orientation`, `disabled` | `onValueChange(values, event)`, `onValueCommitted(values, event)`, `useSliderState()` | [range and feedback](range-and-feedback.md) |
 | `Splitter` | `Root`, `Pane`, `Handle` | `scope`, `value`/`defaultValue` (one size per pane), `panes` (`min`, `collapsible`), `step`, `orientation` | `onSizesChange(sizes, event)` | [range and feedback](range-and-feedback.md) |
-| `Toolbar` | `Root`, `Item` | `scope`, `items` (`value`, `disabled`), `active`/`defaultActive`, `orientation`, `loopFocus` | `onActiveChange(active, event)` | [toolbar and toast](toolbar-and-toast.md) |
+| `Toolbar` | `Root`, `Item`, `Button`, `Link`, `Input`, `Group`, `Separator` | `scope`, `items` (`value`, `disabled`, `focusableWhenDisabled`), `active`/`defaultActive`, `orientation`, `loopFocus` | `onActiveChange(active, event)` | [toolbar and toast](toolbar-and-toast.md) |
 | `ToggleGroup` | `Root`, `Item` | `scope`, `items`, `value`/`defaultValue`, `variant` (`"single"`/`"multiple"`), `active`, `orientation`, `loopFocus` | `onValueChange(values, event)` | [toolbar and toast](toolbar-and-toast.md) |
 
 A `Slider.Thumb` and a `Splitter.Pane` or `Splitter.Handle` name their position with `itemIndex`; a
@@ -568,6 +694,17 @@ A single-thumb slider answers arrows, Page keys, Home, and End on its root; a ra
 them on the focused thumb, so the thumb the user sees is the one that moves. `Slider.Track` carries
 the core's captured pointer arithmetic, which uses the track's own laid-out size as the core
 measured it — the binding never re-derives geometry that layout already decided.
+
+`Slider.Value` renders whatever the declared `format` produced, and `useSliderState()` reports it
+together with the core's own `dragging` flag — Base UI's `data-dragging` — so a thumb can be styled
+while a captured drag is in flight. `onValueCommitted` is the core's own pointer boundary: it fires
+on the frame the gesture released, never on a debounce invented in JavaScript.
+
+A `Toolbar.Button`, `Toolbar.Link`, and `Toolbar.Input` are the same roving-focus item with the role
+the core projects for each; `Toolbar.Group` and `Toolbar.Separator` are structural and take the
+toolbar's own axis. An item declared `focusableWhenDisabled` keeps its place in the Tab sequence
+while disabled, so a keyboard user can still discover the command exists; arrow navigation still
+skips it, and it still refuses pointer focus.
 
 A change never overwrites a controlled declaration on its own: the core keeps the value it decided
 until the application commits the matching prop, and each declared instance reports independently,
@@ -706,12 +843,12 @@ all (`"none"`) inside the declared row.
 
 | Component | Parts | Declared props | Reported through | Core guide |
 | --- | --- | --- | --- | --- |
-| `NumberField` | `Root`, `Input`, `Increment`, `Decrement` | `scope`, `value`/`defaultValue`, `min`, `max`, `step`, `precision`, `disabled` | `onValueChange(value, valid, event)` on the root, `onCommit(details, event)` on the input | [range and feedback](range-and-feedback.md) |
+| `NumberField` | `Root`, `Group`, `Input`, `Increment`, `Decrement`, `ScrubArea`, `ScrubAreaCursor` | `scope`, `value`/`defaultValue`, `min`, `max`, `step`, `smallStep`, `largeStep`, `precision`, `snapOnStep`, `allowWheelScrub`, `readOnly`, `required`, `scrubDirection`, `scrubSensitivity`, `disabled` | `onValueChange(value, valid, event)`, `onValueCommitted(value, event)`, `useNumberFieldState()`, `onCommit(details, event)` on the input | [range and feedback](range-and-feedback.md) |
 | `DateField` | `Root`, `Segment` | `scope`, `value`/`defaultValue`, `min`, `max`, `format` (`"ymd"`/`"dmy"`/`"mdy"`), `disabled` | `onValueChange(value, event)` | [date and time](date-and-time.md) |
 | `TimeField` | `Root`, `Segment` | `scope`, `value`/`defaultValue`, `min`, `max`, `hour12`, `showSeconds`, `disabled` | `onValueChange(value, event)` | [date and time](date-and-time.md) |
 | `Calendar` | `Root`, `Week`, `Day` | `scope`, `value`/`defaultValue`, `min`, `max`, `firstWeekday`, `disabled` | `onValueChange`, `onFocusChange(day, event)`, `onMonthChange(month, event)` | [date and time](date-and-time.md) |
 | `Menubar` | `Root`, `Item` | `scope`, `count`, `open`/`defaultOpen`, `disabled` | `onOpenChange(index, event)`, `onActiveChange(index, event)` | [menubar](menubar.md) |
-| `Toast` | `Viewport`, `Root`, `Title`, `Description`, `Action`, `Close` | `scope`, `toasts` | `onDismiss(ids, event)` | [toolbar and toast](toolbar-and-toast.md) |
+| `Toast` | `Provider`, `Portal`, `Viewport`, `Positioner`, `Root`, `Content`, `Title`, `Description`, `Action`, `Close` | `timeout`, `limit`, `expanded`, `swipeDirection`, `pitch` on the provider; `toasts` on the viewport | `onDismiss(ids, event)`, `onStackChange(stack, event)`, `useToastManager()` | [toolbar and toast](toolbar-and-toast.md) |
 
 Civil values are ISO strings with no time zone: `YYYY-MM-DD` for a date or a calendar day,
 `HH:MM` or `HH:MM:SS` for a time. The core owns segment arithmetic, digit entry, leap years, month
@@ -734,7 +871,14 @@ and year movement, and each field's validity.
 Holding a `NumberField` stepper repeats on the core's own exact deadlines; the binding arms the
 repeat on press, releases it on lift, and owns no timer of its own. Return commits: the core clamps
 into range and reformats before reporting, and it refuses to submit a control whose text does not
-parse into range.
+parse into range. `readOnly` is the web's `readonly` rather than `disabled` — the control keeps its
+place in the Tab sequence and its value in the accessible name while refusing every change.
+
+A `NumberField.ScrubArea` turns a captured drag into whole steps at the declared
+`scrubSensitivity`, keeping the unconverted remainder for the gesture so a slow drag moves one step
+at a time. `useNumberFieldState().scrubbing` is the core's own `data-scrubbing`, which is what a
+caller-drawn `NumberField.ScrubAreaCursor` styles from. Alt takes `smallStep` and Shift takes
+`largeStep` on the keyboard, the wheel, and the scrub alike.
 
 Pushing a toast is adding an entry to the declared `toasts` list, and dropping one dismisses it.
 The core owns the queue bound, live-region politeness, focused-Escape dismissal, and the exact
@@ -753,6 +897,39 @@ auto-dismiss deadline, and it reports every dismissal — including the timed on
   </For>
 </Toast.Viewport>
 ```
+
+`Toast.Provider` owns the declared queue and Base UI's provider props: the inherited auto-dismiss
+`timeout`, the visible stack `limit` (three by default, which flags older toasts without silencing
+them), the `expanded` stack, the `swipeDirection`, and the stack `pitch` the core turns into each
+toast's own offset. `useToastManager()` is the Base UI-shaped API over that declaration:
+
+```tsx
+function Notices() {
+  const toasts = useToastManager();
+  return (
+    <Toast.Viewport>
+      <For each={toasts.stack()}>
+        {(entry) => (
+          <Toast.Positioner toastId={entry.id} style={{ top: entry.offset }}>
+            <Toast.Root toastId={entry.id} style={{ opacity: entry.limited ? 0.6 : 1 }}>
+              <Toast.Content toastId={entry.id}>
+                <Toast.Title toastId={entry.id}><Text>{entry.type}</Text></Toast.Title>
+                <Toast.Close toastId={entry.id}><Text>×</Text></Toast.Close>
+              </Toast.Content>
+            </Toast.Root>
+          </Toast.Positioner>
+        )}
+      </For>
+    </Toast.Viewport>
+  );
+}
+```
+
+`add`, `update`, `close`, and `closeAll` change the declared list; `promise` queues a persistent
+`"loading"` toast and turns it into its result while keeping the same identity and stack position,
+because QuickGUI owns no future and the application drives both halves from the task it already
+spawned. Everything the core decided — the stack index, the `limited` and `expanded` flags, each
+toast's `offset`, and the live swipe displacement — comes back through `stack()`.
 
 A `Menubar` owns which menu is open and which one holds the bar's single Tab stop; each menu's
 surface is an ordinary declared `PopoverMenu` anchored to the matching `Menubar.Item`.
@@ -1525,12 +1702,16 @@ sliders, range sliders, splitters,
 toolbars, and toggle groups, declared option sources with core-rendered popover rows, virtual
 tables and trees, number fields, date and time fields, month grids, in-window menubars, declared
 toast queues, separators, avatars, checkbox groups, preview cards, caller-styled scroll areas, OTP
-fields, drawers, and navigation menus, declared keyboard, mouse, gesture,
-accelerator, and drag-and-drop events, a stable real-`.app` development host, and self-contained
-production packaging on the current macOS target. It is not yet the full Rust rendering API surface:
-popover arrows and backdrops, animated-image playback control, native child views, accessibility
-actions, every native binary target, and dedicated JavaScript performance gates still need bindings
-and acceptance.
+fields, drawers, and navigation menus, the Base UI-aligned popover and tooltip compounds with
+resolved-placement reporting, slider label/value/control parts with the core's commit boundary,
+number-field scrub areas, progress and meter track/label/value parts, the toast provider and
+manager, tab activation direction and indicator geometry, toolbar button/link/input/group/separator
+parts, field item and validity parts, read-only selection controls, and a dialog viewport with its
+own exit transition, declared keyboard, mouse, gesture, accelerator, and drag-and-drop events, a
+stable real-`.app` development host, and self-contained production packaging on the current macOS
+target. It is not yet the full Rust rendering API surface: animated-image playback control, native
+child views, accessibility actions, every native binary target, and dedicated JavaScript
+performance gates still need bindings and acceptance.
 
 Two boundaries inside the newly bound components are worth naming. A picker's retained core state
 is rebuilt rather than mutated when its declaration changes, because every replacement mutator the
@@ -1538,6 +1719,17 @@ core offers closes a live native popover and a render pass owns no `EventContext
 committed while the surface is open therefore lands on the frame the close already schedules. And a
 declared table or tree header, row, and cell carries content only — the core assigns their identity
 and interaction — so an interactive control belongs inside a cell as an ordinary child node.
+
+A fourth belongs to the Base UI-aligned compounds. A popover's and a tooltip's trigger is the one
+part the core keeps mounted whether the surface is open or closed, so the trigger node carries the
+whole declaration and `Popover.Root`, `Popover.Positioner`, `Tooltip.Root`, and
+`Tooltip.Positioner` route their props onto it; a positioner that is not mounted cannot declare
+anything for a surface that has not opened yet. The resolved placement is published during paint
+and read on the correcting frame the core requests when it changes, so it is always one frame
+behind the declaration — which is exactly what makes it the core's answer rather than a
+measurement in JavaScript. And a slider's `onValueCommitted` is the core's captured-pointer
+boundary only: a keyboard change reports through `onValueChange` without a separate commit,
+because the core exposes no keyboard commit of its own.
 
 A third belongs to the Base UI parity set: a scroll area declares the viewport and content extents
 it laid out, because the hosted boundary has no layout observer and the core's offset, overflow,

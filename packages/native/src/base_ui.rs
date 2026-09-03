@@ -1884,6 +1884,9 @@ fn collect_navigation_menu_items(tree: &NativeTree, root: u32, key: u64) -> Vec<
             items.push(DeclaredItem {
                 value: value.to_owned(),
                 disabled: node.boolean(property::DISABLED).unwrap_or(false),
+                focusable_when_disabled: node
+                    .boolean(property::FOCUSABLE_WHEN_DISABLED)
+                    .unwrap_or(true),
             });
         }
         // The children are pushed in reverse so the stack yields them in declaration order.

@@ -128,6 +128,30 @@ macOS build.
 
 ## Solid
 
+`Dialog.Viewport` is bound as the scrollable dialog body, so a long dialog scrolls inside the popup
+rather than growing past the window. `enterDuration` and `exitDuration` declare the transitions the
+core times, and `onOpenChangeComplete` reports the one it just finished — Base UI's own name for it.
+The core holds a closing dialog mounted for exactly the declared exit transition, so an
+application's own fade or slide can finish before the surface leaves the tree:
+
+```tsx
+<Dialog.Root open={open()} onOpenChange={setOpen} exitDuration={160}
+  onOpenChangeComplete={(finished) => finished || restoreScroll()}>
+  <Dialog.Portal>
+    <Dialog.Backdrop />
+    <Dialog.Popup>
+      <Dialog.Title>Delete workspace</Dialog.Title>
+      <Dialog.Viewport><LongExplanation /></Dialog.Viewport>
+      <Dialog.Close>Cancel</Dialog.Close>
+    </Dialog.Popup>
+  </Dialog.Portal>
+</Dialog.Root>
+```
+
+A dialog whose open value changes outside its own trigger and close controls still reports the
+completion; with a zero exit transition — the default — the surface leaves on the frame it closed.
+
+
 `@quickgui/solid` exposes this descriptor as `Dialog.Root`, `Dialog.Trigger`, `Dialog.Portal`,
 `Dialog.Backdrop`, `Dialog.Popup`, `Dialog.Title`, `Dialog.Description`, and `Dialog.Close`, with
 `AlertDialog` providing the same parts for the consequential kind. `Dialog.Root` is a logical

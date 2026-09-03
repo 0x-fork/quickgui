@@ -77,6 +77,27 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
+- JavaScript bindings for the Base UI-aligned compound parts and props, at protocol v25: the
+  `Popover` compound (`Portal`/`Backdrop`/`Positioner`/`Popup`/`Arrow`/`Viewport`/`Title`/
+  `Description`/`Close`) with `side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`,
+  `sticky`, `anchor` (a node or one `{ x, y }` point), `modal`, and Trigger `openOnHover`/`delay`/
+  `closeDelay`; a compound `Tooltip` (`Provider`/`Root`/`Trigger`/`Portal`/`Positioner`/`Popup`/
+  `Arrow`) with `timeout`, `hoverable`, `trackCursorAxis`, and `closeOnClick`, beside the unchanged
+  framework-owned `tooltip` prop; `Slider.Label`/`Value`/`Control`/`Indicator` with
+  `minStepsBetweenValues`, `thumbAlignment`, `format`, `onValueCommitted`, and the core's own
+  `dragging` flag; `NumberField.Group`/`ScrubArea`/`ScrubAreaCursor` with `smallStep`, `largeStep`,
+  `snapOnStep`, `allowWheelScrub`, `readOnly`, `required`, and a `scrubbing` state;
+  `Progress`/`Meter` `Track`/`Label`/`Value` with `format` and a reported `status`; a `Toast`
+  provider, portal, positioner, and content with `timeout`, `limit`, `expanded`, `swipeDirection`,
+  per-toast `index`/`offset`/`type`, and a `useToastManager()` API over the declared list; tab
+  `activationDirection` and indicator geometry; `Toolbar.Button`/`Link`/`Input`/`Group`/`Separator`
+  with `focusableWhenDisabled`; `Field.Item`/`Validity` with `validationMode` and
+  `validationDebounceTime`; `readOnly` on every selection control and a registry-free parent
+  checkbox; and `Dialog.Viewport` with `onOpenChangeComplete`. A declared side or alignment is only
+  a preference, so the resolved placement the retained tree published during paint is reported back
+  and exposed as a signal-friendly accessor (`usePopoverPlacement`, `useTooltipPlacement`,
+  `useSliderState`, `useNumberFieldState`, `useGaugeState`, `useTabsState`), which is how an
+  application styles from the real placement the way Base UI styles from `data-side`;
 - JavaScript bindings for the Base UI parity components, at protocol v24: Solid `Separator`,
   `Avatar` (`Root`/`Image`/`Fallback`), `CheckboxGroup` with `Checkbox.Root value`/`parent`
   members, `PreviewCard`, `ScrollArea`, `OtpField`, `Drawer`, and `NavigationMenu`, each using Base

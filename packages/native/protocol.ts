@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 24;
+export const PROTOCOL_VERSION = 25;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -327,6 +327,38 @@ export const enum PropertyCode {
   ContentSize = 300,
   OverflowEdgeThreshold = 301,
   DisablePointerDismissal = 302,
+  // Base UI-aligned popover, tooltip, range, toast, tab, toolbar, field, and dialog props. Every
+  // one is declared ahead of the core's decision, because a hosted renderer is never asked a
+  // synchronous question.
+  Side = 303,
+  Align = 304,
+  SideOffset = 305,
+  AlignOffset = 306,
+  CollisionPadding = 307,
+  Sticky = 308,
+  AnchorPoint = 309,
+  Modal = 310,
+  OpenOnHover = 311,
+  Provider = 312,
+  Timeout = 313,
+  Hoverable = 314,
+  TrackCursorAxis = 315,
+  CloseOnClick = 316,
+  MinStepsBetweenValues = 317,
+  ThumbAlignment = 318,
+  Format = 319,
+  SmallStep = 320,
+  AllowWheelScrub = 321,
+  SnapOnStep = 322,
+  Limit = 323,
+  Pitch = 324,
+  FocusableWhenDisabled = 325,
+  ValidationMode = 326,
+  ValidationDebounceTime = 327,
+  Parent = 328,
+  EnterDuration = 329,
+  ExitDuration = 330,
+  StackExpanded = 331,
 }
 
 /**
@@ -471,6 +503,48 @@ export const NativePart = {
   NavigationMenuArrow: "navigation-menu-arrow",
   NavigationMenuBackdrop: "navigation-menu-backdrop",
   NavigationMenuLink: "navigation-menu-link",
+  Popover: "popover",
+  PopoverTrigger: "popover-trigger",
+  PopoverPortal: "popover-portal",
+  PopoverPositioner: "popover-positioner",
+  PopoverPopup: "popover-popup",
+  PopoverArrow: "popover-arrow",
+  PopoverViewport: "popover-viewport",
+  PopoverBackdrop: "popover-backdrop",
+  PopoverTitle: "popover-title",
+  PopoverDescription: "popover-description",
+  PopoverClose: "popover-close",
+  TooltipProvider: "tooltip-provider",
+  Tooltip: "tooltip",
+  TooltipTrigger: "tooltip-trigger",
+  TooltipPortal: "tooltip-portal",
+  TooltipPositioner: "tooltip-positioner",
+  TooltipPopup: "tooltip-popup",
+  TooltipArrow: "tooltip-arrow",
+  SliderLabel: "slider-label",
+  SliderValue: "slider-value",
+  SliderControl: "slider-control",
+  SliderIndicator: "slider-indicator",
+  NumberFieldGroup: "number-field-group",
+  NumberFieldScrubArea: "number-field-scrub-area",
+  NumberFieldScrubAreaCursor: "number-field-scrub-area-cursor",
+  ProgressTrack: "progress-track",
+  ProgressLabel: "progress-label",
+  ProgressValue: "progress-value",
+  MeterTrack: "meter-track",
+  MeterLabel: "meter-label",
+  MeterValue: "meter-value",
+  ToastPortal: "toast-portal",
+  ToastPositioner: "toast-positioner",
+  ToastContent: "toast-content",
+  ToolbarButton: "toolbar-button",
+  ToolbarLink: "toolbar-link",
+  ToolbarInput: "toolbar-input",
+  ToolbarGroup: "toolbar-group",
+  ToolbarSeparator: "toolbar-separator",
+  FieldItem: "field-item",
+  FieldValidity: "field-validity",
+  DialogViewport: "dialog-viewport",
 } as const;
 
 export type NativePartName = (typeof NativePart)[keyof typeof NativePart];
@@ -560,6 +634,39 @@ export const MAX_NAVIGATION_MENU_ITEMS = 64;
 
 /** Longest navigation-menu open or close deadline, in milliseconds. */
 export const MAX_NAVIGATION_MENU_DELAY_MS = 10_000;
+
+/** Largest popover or tooltip side offset, in logical pixels. */
+export const MAX_ANCHOR_SIDE_OFFSET = 256;
+
+/** Largest popover cross-axis align offset, in logical pixels. */
+export const MAX_ANCHOR_ALIGN_OFFSET = 4096;
+
+/** Largest popover or tooltip collision padding, in logical pixels. */
+export const MAX_ANCHOR_COLLISION_PADDING = 512;
+
+/** Longest popover hover open or close deadline, in milliseconds. */
+export const MAX_POPOVER_HOVER_DELAY_MS = 10_000;
+
+/** Longest tooltip open or close deadline, in milliseconds. */
+export const MAX_TOOLTIP_DELAY_MS = 10_000;
+
+/** Longest tooltip provider warm-group timeout, in milliseconds. */
+export const MAX_TOOLTIP_GROUP_TIMEOUT_MS = 10_000;
+
+/** Longest toast auto-dismiss duration, in milliseconds. */
+export const MAX_TOAST_DURATION_MS = 60_000;
+
+/** Largest toast swipe-dismissal threshold, in logical pixels. */
+export const MAX_TOAST_SWIPE_THRESHOLD = 512;
+
+/** Longest field validation debounce, in milliseconds. */
+export const MAX_FIELD_VALIDATION_DEBOUNCE_MS = 10_000;
+
+/** Longest dialog enter or exit transition, in milliseconds. */
+export const MAX_DIALOG_TRANSITION_MS = 10_000;
+
+/** Largest number-field scrub sensitivity, in logical pixels per step. */
+export const MAX_NUMBER_FIELD_SCRUB_SENSITIVITY = 256;
 
 export type NativePropertyValue = boolean | number | string | null;
 

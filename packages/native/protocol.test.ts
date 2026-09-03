@@ -15,7 +15,18 @@ import {
   MAX_AVATAR_FALLBACK_DELAY_MS,
   MAX_CHECKBOX_GROUP_VALUES,
   MAX_DRAWER_SNAP_POINTS,
+  MAX_ANCHOR_ALIGN_OFFSET,
+  MAX_ANCHOR_COLLISION_PADDING,
+  MAX_ANCHOR_SIDE_OFFSET,
+  MAX_DIALOG_TRANSITION_MS,
+  MAX_FIELD_VALIDATION_DEBOUNCE_MS,
   MAX_MENUBAR_MENUS,
+  MAX_NUMBER_FIELD_SCRUB_SENSITIVITY,
+  MAX_POPOVER_HOVER_DELAY_MS,
+  MAX_TOAST_DURATION_MS,
+  MAX_TOAST_SWIPE_THRESHOLD,
+  MAX_TOOLTIP_DELAY_MS,
+  MAX_TOOLTIP_GROUP_TIMEOUT_MS,
   MAX_NAVIGATION_MENU_DELAY_MS,
   MAX_NAVIGATION_MENU_ITEMS,
   MAX_OPTIONS_JSON_BYTES,
@@ -58,8 +69,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v24", () => {
-    expect(PROTOCOL_VERSION).toBe(24);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v25", () => {
+    expect(PROTOCOL_VERSION).toBe(25);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -556,7 +567,7 @@ describe("binary mutation protocol", () => {
     expect(MAX_FILTERS_PER_ELEMENT).toBe(8);
   });
 
-  test("encodes every Base UI parity part under protocol v24", () => {
+  test("encodes every Base UI parity part under protocol v25", () => {
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.View);
     batch.setProperty(1, PropertyCode.Part, NativePart.Separator);
@@ -673,5 +684,157 @@ describe("binary mutation protocol", () => {
     expect(NativePart.OtpFieldSeparator).toBe("otp-field-separator");
     expect(NativePart.DrawerSwipeArea).toBe("drawer-swipe-area");
     expect(NativePart.NavigationMenuLink).toBe("navigation-menu-link");
+  });
+
+  test("encodes every Base UI-aligned popover, tooltip, range, toast, and field part", () => {
+    const batch = new MutationBatch();
+
+    // A popover's trigger is mounted whether the surface is open or closed, so it carries the
+    // whole declaration; every other part only repeats the scope.
+    batch.createElement(1, NativeNodeTag.Button);
+    batch.setProperty(1, PropertyCode.Part, NativePart.PopoverTrigger);
+    batch.setProperty(1, PropertyCode.Scope, "account");
+    batch.setProperty(1, PropertyCode.Open, true);
+    batch.setProperty(1, PropertyCode.Modal, true);
+    batch.setProperty(1, PropertyCode.OpenOnHover, true);
+    batch.setProperty(1, PropertyCode.Delay, 300);
+    batch.setProperty(1, PropertyCode.CloseDelay, 100);
+    batch.setProperty(1, PropertyCode.Side, "top");
+    batch.setProperty(1, PropertyCode.Align, "end");
+    batch.setProperty(1, PropertyCode.SideOffset, 10);
+    batch.setProperty(1, PropertyCode.AlignOffset, 4);
+    batch.setProperty(1, PropertyCode.CollisionPadding, 12);
+    batch.setProperty(1, PropertyCode.Sticky, false);
+    batch.setProperty(1, PropertyCode.AnchorPoint, "120,48");
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Part, NativePart.PopoverPositioner);
+    batch.setProperty(2, PropertyCode.Scope, "account");
+    batch.createElement(3, NativeNodeTag.View);
+    batch.setProperty(3, PropertyCode.Part, NativePart.PopoverPopup);
+    batch.setProperty(3, PropertyCode.Scope, "account");
+    batch.createElement(4, NativeNodeTag.View);
+    batch.setProperty(4, PropertyCode.Part, NativePart.PopoverArrow);
+    batch.setProperty(4, PropertyCode.Scope, "account");
+    batch.createElement(5, NativeNodeTag.View);
+    batch.setProperty(5, PropertyCode.Part, NativePart.PopoverViewport);
+    batch.setProperty(5, PropertyCode.Scope, "account");
+
+    batch.createElement(6, NativeNodeTag.View);
+    batch.setProperty(6, PropertyCode.Part, NativePart.TooltipProvider);
+    batch.setProperty(6, PropertyCode.Scope, "hints");
+    batch.setProperty(6, PropertyCode.Delay, 600);
+    batch.setProperty(6, PropertyCode.Timeout, 400);
+    batch.createElement(7, NativeNodeTag.Button);
+    batch.setProperty(7, PropertyCode.Part, NativePart.TooltipTrigger);
+    batch.setProperty(7, PropertyCode.Scope, "save-hint");
+    batch.setProperty(7, PropertyCode.Provider, "hints");
+    batch.setProperty(7, PropertyCode.Hoverable, true);
+    batch.setProperty(7, PropertyCode.CloseOnClick, false);
+    batch.setProperty(7, PropertyCode.TrackCursorAxis, "x");
+
+    batch.createElement(8, NativeNodeTag.View);
+    batch.setProperty(8, PropertyCode.Part, NativePart.Slider);
+    batch.setProperty(8, PropertyCode.Scope, "volume");
+    batch.setProperty(8, PropertyCode.MinStepsBetweenValues, 1);
+    batch.setProperty(8, PropertyCode.ThumbAlignment, "edge");
+    batch.setProperty(8, PropertyCode.Format, "percent");
+    batch.createElement(9, NativeNodeTag.View);
+    batch.setProperty(9, PropertyCode.Part, NativePart.SliderValue);
+    batch.setProperty(9, PropertyCode.Scope, "volume");
+
+    batch.createElement(10, NativeNodeTag.View);
+    batch.setProperty(10, PropertyCode.Part, NativePart.NumberField);
+    batch.setProperty(10, PropertyCode.Scope, "quantity");
+    batch.setProperty(10, PropertyCode.SmallStep, 0.5);
+    batch.setProperty(10, PropertyCode.LargeStep, 5);
+    batch.setProperty(10, PropertyCode.SnapOnStep, true);
+    batch.setProperty(10, PropertyCode.AllowWheelScrub, false);
+    batch.setProperty(10, PropertyCode.Pitch, 2);
+    batch.createElement(11, NativeNodeTag.View);
+    batch.setProperty(11, PropertyCode.Part, NativePart.NumberFieldScrubArea);
+    batch.setProperty(11, PropertyCode.Scope, "quantity");
+
+    batch.createElement(12, NativeNodeTag.View);
+    batch.setProperty(12, PropertyCode.Part, NativePart.ToastViewport);
+    batch.setProperty(12, PropertyCode.Scope, "notices");
+    batch.setProperty(12, PropertyCode.Timeout, 5000);
+    batch.setProperty(12, PropertyCode.Limit, 3);
+    batch.setProperty(12, PropertyCode.StackExpanded, true);
+    batch.setProperty(12, PropertyCode.SwipeDirection, "left");
+    batch.setProperty(12, PropertyCode.Pitch, 12);
+    batch.createElement(13, NativeNodeTag.View);
+    batch.setProperty(13, PropertyCode.Part, NativePart.ToastContent);
+    batch.setProperty(13, PropertyCode.Scope, "notices");
+    batch.setProperty(13, PropertyCode.PartValue, "saved");
+
+    batch.createElement(14, NativeNodeTag.Button);
+    batch.setProperty(14, PropertyCode.Part, NativePart.ToolbarButton);
+    batch.setProperty(14, PropertyCode.Scope, "actions");
+    batch.setProperty(14, PropertyCode.PartValue, "cut");
+    batch.createElement(15, NativeNodeTag.View);
+    batch.setProperty(15, PropertyCode.Part, NativePart.ToolbarSeparator);
+    batch.setProperty(15, PropertyCode.Scope, "actions");
+
+    batch.createElement(16, NativeNodeTag.View);
+    batch.setProperty(16, PropertyCode.Part, NativePart.Field);
+    batch.setProperty(16, PropertyCode.Scope, "email");
+    batch.setProperty(16, PropertyCode.ValidationMode, "onChange");
+    batch.setProperty(16, PropertyCode.ValidationDebounceTime, 250);
+    batch.createElement(17, NativeNodeTag.View);
+    batch.setProperty(17, PropertyCode.Part, NativePart.FieldValidity);
+    batch.setProperty(17, PropertyCode.Scope, "email");
+
+    batch.createElement(18, NativeNodeTag.Button);
+    batch.setProperty(18, PropertyCode.Part, NativePart.Checkbox);
+    batch.setProperty(18, PropertyCode.Parent, true);
+    batch.setProperty(18, PropertyCode.Values, "[true,false]");
+    batch.setProperty(18, PropertyCode.ReadOnly, true);
+
+    batch.createElement(19, NativeNodeTag.View);
+    batch.setProperty(19, PropertyCode.Part, NativePart.Dialog);
+    batch.setProperty(19, PropertyCode.Scope, "confirm");
+    batch.setProperty(19, PropertyCode.EnterDuration, 0);
+    batch.setProperty(19, PropertyCode.ExitDuration, 160);
+    batch.createElement(20, NativeNodeTag.View);
+    batch.setProperty(20, PropertyCode.Part, NativePart.DialogViewport);
+    batch.setProperty(20, PropertyCode.Scope, "confirm");
+
+    expect(batch.mutationCount).toBe(99);
+    const encoded = batch.finish();
+    expect(encoded.readUInt16LE(4)).toBe(PROTOCOL_VERSION);
+  });
+
+  test("keeps every Base UI-aligned property code and bound inside the declared space", () => {
+    // The Rust binding rejects any property code past its own `property::LAST`, so the two must
+    // stay in step whenever a declaration is added.
+    expect(PropertyCode.Side).toBe(303);
+    expect(PropertyCode.StackExpanded).toBe(331);
+    expect(MAX_ANCHOR_SIDE_OFFSET).toBe(256);
+    expect(MAX_ANCHOR_ALIGN_OFFSET).toBe(4096);
+    expect(MAX_ANCHOR_COLLISION_PADDING).toBe(512);
+    expect(MAX_POPOVER_HOVER_DELAY_MS).toBe(10_000);
+    expect(MAX_TOOLTIP_DELAY_MS).toBe(10_000);
+    expect(MAX_TOOLTIP_GROUP_TIMEOUT_MS).toBe(10_000);
+    expect(MAX_TOAST_DURATION_MS).toBe(60_000);
+    expect(MAX_TOAST_SWIPE_THRESHOLD).toBe(512);
+    expect(MAX_FIELD_VALIDATION_DEBOUNCE_MS).toBe(10_000);
+    expect(MAX_DIALOG_TRANSITION_MS).toBe(10_000);
+    expect(MAX_NUMBER_FIELD_SCRUB_SENSITIVITY).toBe(256);
+
+    // Every part name below is the exact string the Rust binding matches on.
+    expect(NativePart.PopoverPositioner).toBe("popover-positioner");
+    expect(NativePart.PopoverViewport).toBe("popover-viewport");
+    expect(NativePart.TooltipProvider).toBe("tooltip-provider");
+    expect(NativePart.TooltipArrow).toBe("tooltip-arrow");
+    expect(NativePart.SliderIndicator).toBe("slider-indicator");
+    expect(NativePart.NumberFieldScrubAreaCursor).toBe(
+      "number-field-scrub-area-cursor",
+    );
+    expect(NativePart.ProgressValue).toBe("progress-value");
+    expect(NativePart.MeterTrack).toBe("meter-track");
+    expect(NativePart.ToastPositioner).toBe("toast-positioner");
+    expect(NativePart.ToolbarGroup).toBe("toolbar-group");
+    expect(NativePart.FieldItem).toBe("field-item");
+    expect(NativePart.DialogViewport).toBe("dialog-viewport");
   });
 });

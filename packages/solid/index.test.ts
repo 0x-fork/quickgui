@@ -14,7 +14,7 @@ import {
   QuickGuiEvent,
   Window,
 } from "@quickgui/native";
-import { createSignal, onCleanup } from "solid-js";
+import { createSignal, flush, onCleanup } from "solid-js";
 import * as solid from "./index.ts";
 import {
   Accordion,
@@ -99,10 +99,24 @@ describe("Solid universal host", () => {
     expect(solid.Dialog.Popup).toBe(solid.DialogPopup);
   });
 
-  test("exports only the Content compound part", () => {
+  test("exports the Base UI popover parts and only Content for the system host", () => {
     expect(Popover.Content).toBe(solid.PopoverContent);
     expect(SystemPopover.Content).toBe(solid.SystemPopoverContent);
-    expect(Object.keys(Popover)).toEqual(["Root", "Trigger", "Content"]);
+    expect(Object.keys(Popover)).toEqual([
+      "Root",
+      "Trigger",
+      "Content",
+      "Portal",
+      "Backdrop",
+      "Positioner",
+      "Popup",
+      "Arrow",
+      "Viewport",
+      "Title",
+      "Description",
+      "Close",
+    ]);
+    // A native child window is placed by the platform, so it has no positioner of its own.
     expect(Object.keys(SystemPopover)).toEqual(["Root", "Trigger", "Content"]);
   });
 
@@ -747,8 +761,10 @@ describe("Solid universal host", () => {
     ]);
     expect(Object.keys(Field)).toEqual([
       "Root",
+      "Item",
       "Label",
       "Control",
+      "Validity",
       "Description",
       "Error",
     ]);
@@ -759,6 +775,7 @@ describe("Solid universal host", () => {
       "Control",
     ]);
     expect(Object.keys(Dialog)).toEqual([
+      "Viewport",
       "Root",
       "Trigger",
       "Portal",
@@ -769,6 +786,69 @@ describe("Solid universal host", () => {
       "Close",
     ]);
     expect(Object.keys(AlertDialog)).toEqual(Object.keys(Dialog));
+    expect(Object.keys(Slider)).toEqual([
+      "Root",
+      "Label",
+      "Value",
+      "Control",
+      "Track",
+      "Range",
+      "Indicator",
+      "Thumb",
+    ]);
+    expect(Object.keys(NumberField)).toEqual([
+      "Root",
+      "Group",
+      "Input",
+      "Increment",
+      "Decrement",
+      "ScrubArea",
+      "ScrubAreaCursor",
+    ]);
+    expect(Object.keys(Progress)).toEqual([
+      "Root",
+      "Track",
+      "Indicator",
+      "Label",
+      "Value",
+    ]);
+    expect(Object.keys(Meter)).toEqual([
+      "Root",
+      "Track",
+      "Indicator",
+      "Label",
+      "Value",
+    ]);
+    expect(Object.keys(Toolbar)).toEqual([
+      "Root",
+      "Item",
+      "Button",
+      "Link",
+      "Input",
+      "Group",
+      "Separator",
+    ]);
+    expect(Object.keys(Toast)).toEqual([
+      "Provider",
+      "Portal",
+      "Viewport",
+      "Positioner",
+      "Root",
+      "Content",
+      "Title",
+      "Description",
+      "Action",
+      "Close",
+    ]);
+    expect(Object.keys(solid.Tooltip)).toEqual([
+      "Provider",
+      "Root",
+      "Trigger",
+      "Portal",
+      "Positioner",
+      "Popup",
+      "Arrow",
+    ]);
   });
 
   test("declares controlled checkbox and switch toggle state ahead of the core click", () => {
@@ -3218,5 +3298,772 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     expect(() =>
       setProp(node, "autoSubmit", "f".repeat(MAX_COMPONENT_VALUE_BYTES + 1)),
     ).toThrow("scopes and values are limited");
+  });
+});
+
+describe("Base UI-aligned popovers, tooltips, range parts, toasts, tabs, and fields", () => {
+  test("declares popover positioning on the trigger and adopts the placement the core resolved", async () => {
+    await app.whenReady();
+    const [open, setOpen] = createSignal(true);
+    let placement: solid.AnchorPlacementDetails | undefined;
+    let live: (() => solid.AnchorPlacementDetails) | undefined;
+    const window = new Window({
+      title: "Popover parts",
+      renderer: createRenderer(() =>
+        createComponent(Popover.Root, {
+          get open() {
+            return open();
+          },
+          modal: true,
+          onOpenChange: (next: boolean) => setOpen(next),
+          onPlacementChange: (next: solid.AnchorPlacementDetails) => {
+            placement = next;
+          },
+          get children() {
+            live = solid.usePopoverPlacement();
+            return [
+              createComponent(Popover.Trigger, {
+                openOnHover: true,
+                delay: 120,
+                closeDelay: 90,
+                children: "Account",
+              }),
+              createComponent(Popover.Positioner, {
+                side: "top",
+                align: "end",
+                sideOffset: 10,
+                alignOffset: 4,
+                collisionPadding: 12,
+                sticky: false,
+                get children() {
+                  return createComponent(Popover.Popup, {
+                    get children() {
+                      return [
+                        createComponent(Popover.Arrow, {}),
+                        createComponent(Popover.Title, { children: "Account" }),
+                        createComponent(Popover.Viewport, {}),
+                        createComponent(Popover.Close, { children: "×" }),
+                      ];
+                    },
+                  });
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const trigger = window.root.children[0]!;
+    const scope = String(trigger.properties.get(PropertyCode.Scope));
+    // The trigger is mounted whether the popup is open or closed, so it carries the declaration.
+    expect(trigger.properties.get(PropertyCode.Part)).toBe("popover-trigger");
+    expect(trigger.properties.get(PropertyCode.Open)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.Modal)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.OpenOnHover)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.Delay)).toBe(120);
+    expect(trigger.properties.get(PropertyCode.CloseDelay)).toBe(90);
+    expect(trigger.properties.get(PropertyCode.Side)).toBe("top");
+    expect(trigger.properties.get(PropertyCode.Align)).toBe("end");
+    expect(trigger.properties.get(PropertyCode.SideOffset)).toBe(10);
+    expect(trigger.properties.get(PropertyCode.AlignOffset)).toBe(4);
+    expect(trigger.properties.get(PropertyCode.CollisionPadding)).toBe(12);
+    expect(trigger.properties.get(PropertyCode.Sticky)).toBe(false);
+
+    const positioner = window.root.children[1]!;
+    expect(positioner.properties.get(PropertyCode.Part)).toBe(
+      "popover-positioner",
+    );
+    expect(positioner.properties.get(PropertyCode.Scope)).toBe(scope);
+    const popup = positioner.children[0]!;
+    expect(popup.properties.get(PropertyCode.Part)).toBe("popover-popup");
+    expect(popup.children.map((child) => child.properties.get(PropertyCode.Part)))
+      .toEqual([
+        "popover-arrow",
+        "popover-title",
+        "popover-viewport",
+        "popover-close",
+      ]);
+
+    // The declared side is only a preference; the core reports the one it really used.
+    window._dispatchEvent(
+      "componentchange",
+      trigger.id,
+      JSON.stringify({
+        open: true,
+        placement: {
+          side: "bottom",
+          align: "start",
+          anchorHidden: false,
+          anchorWidth: 120,
+          anchorHeight: 32,
+          availableWidth: 900,
+          availableHeight: 500,
+        },
+      }),
+    );
+    expect(placement?.side).toBe("bottom");
+    expect(placement?.anchorWidth).toBe(120);
+    expect(live?.().align).toBe("start");
+
+    // A hover the core decided reaches the controlled declaration.
+    window._dispatchEvent(
+      "componentchange",
+      trigger.id,
+      JSON.stringify({ open: false, placement: { side: "bottom" } }),
+    );
+    expect(open()).toBe(false);
+    window.close();
+  });
+
+  test("anchors a popover to a declared logical point", async () => {
+    await app.whenReady();
+    const window = new Window({
+      title: "Popover point anchor",
+      renderer: createRenderer(() =>
+        createComponent(Popover.Root, {
+          open: true,
+          anchor: { x: 120, y: 48 },
+          get children() {
+            return createComponent(Popover.Trigger, { children: "Anchor" });
+          },
+        }),
+      ),
+    });
+    const trigger = window.root.children[0]!;
+    expect(trigger.properties.get(PropertyCode.AnchorPoint)).toBe("120,48");
+    expect(trigger.properties.has(PropertyCode.AnchorTarget)).toBe(false);
+    expect(() => setProp(createElement("view"), "anchor", { x: 1 })).toThrow(
+      "must be a NativeNode or an { x, y } point",
+    );
+    window.close();
+  });
+
+  test("shares one warm tooltip provider and reports the resolved side", async () => {
+    await app.whenReady();
+    let open: boolean | undefined;
+    const window = new Window({
+      title: "Tooltip",
+      renderer: createRenderer(() =>
+        createComponent(solid.Tooltip.Provider, {
+          delay: 600,
+          closeDelay: 200,
+          timeout: 400,
+          get children() {
+            return createComponent(solid.Tooltip.Root, {
+              hoverable: true,
+              trackCursorAxis: "x",
+              side: "top",
+              sideOffset: 9,
+              collisionPadding: 8,
+              onOpenChange: (next: boolean) => {
+                open = next;
+              },
+              get children() {
+                return [
+                  createComponent(solid.Tooltip.Trigger, {
+                    delay: 120,
+                    closeOnClick: false,
+                    children: "Save",
+                  }),
+                  createComponent(solid.Tooltip.Positioner, {
+                    get children() {
+                      return createComponent(solid.Tooltip.Popup, {
+                        get children() {
+                          return createComponent(solid.Tooltip.Arrow, {});
+                        },
+                      });
+                    },
+                  }),
+                ];
+              },
+            });
+          },
+        }),
+      ),
+    });
+
+    const provider = window.root.children[0]!;
+    expect(provider.properties.get(PropertyCode.Part)).toBe("tooltip-provider");
+    expect(provider.properties.get(PropertyCode.Timeout)).toBe(400);
+    const providerScope = String(provider.properties.get(PropertyCode.Scope));
+
+    const trigger = provider.children[0]!;
+    expect(trigger.properties.get(PropertyCode.Part)).toBe("tooltip-trigger");
+    expect(trigger.properties.get(PropertyCode.Provider)).toBe(providerScope);
+    expect(trigger.properties.get(PropertyCode.Delay)).toBe(120);
+    expect(trigger.properties.get(PropertyCode.CloseOnClick)).toBe(false);
+    expect(trigger.properties.get(PropertyCode.Hoverable)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.TrackCursorAxis)).toBe("x");
+    expect(trigger.properties.get(PropertyCode.Side)).toBe("top");
+    expect(trigger.properties.get(PropertyCode.SideOffset)).toBe(9);
+
+    const positioner = provider.children[1]!;
+    expect(positioner.properties.get(PropertyCode.Part)).toBe(
+      "tooltip-positioner",
+    );
+    expect(positioner.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "tooltip-popup",
+    );
+    expect(
+      positioner.children[0]!.children[0]!.properties.get(PropertyCode.Part),
+    ).toBe("tooltip-arrow");
+
+    window._dispatchEvent(
+      "componentchange",
+      trigger.id,
+      JSON.stringify({ open: true, placement: { side: "bottom", align: "center" } }),
+    );
+    expect(open).toBe(true);
+    window.close();
+  });
+
+  test("declares slider format and reports the core's commit boundary", async () => {
+    await app.whenReady();
+    let committed: readonly number[] | undefined;
+    let live: (() => solid.SliderState) | undefined;
+    const window = new Window({
+      title: "Slider parts",
+      renderer: createRenderer(() =>
+        createComponent(Slider.Root, {
+          scope: "volume",
+          defaultValue: [20],
+          min: 0,
+          max: 100,
+          step: 10,
+          minStepsBetweenValues: 1,
+          thumbAlignment: "edge",
+          format: "percent",
+          onValueCommitted: (values: readonly number[]) => {
+            committed = values;
+          },
+          get children() {
+            live = solid.useSliderState();
+            return [
+              createComponent(Slider.Label, { scope: "volume" }),
+              createComponent(Slider.Value, { scope: "volume" }),
+              createComponent(Slider.Control, {
+                scope: "volume",
+                get children() {
+                  return createComponent(Slider.Track, {
+                    scope: "volume",
+                    get children() {
+                      return createComponent(Slider.Indicator, {
+                        scope: "volume",
+                      });
+                    },
+                  });
+                },
+              }),
+              createComponent(Slider.Thumb, { scope: "volume", index: 0 }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    expect(root.properties.get(PropertyCode.MinStepsBetweenValues)).toBe(1);
+    expect(root.properties.get(PropertyCode.ThumbAlignment)).toBe("edge");
+    expect(root.properties.get(PropertyCode.Format)).toBe("percent");
+    const [label, value, control, thumb] = root.children;
+    expect(label!.properties.get(PropertyCode.Part)).toBe("slider-label");
+    expect(value!.properties.get(PropertyCode.Part)).toBe("slider-value");
+    expect(control!.properties.get(PropertyCode.Part)).toBe("slider-control");
+    expect(
+      control!.children[0]!.children[0]!.properties.get(PropertyCode.Part),
+    ).toBe("slider-indicator");
+    expect(thumb!.properties.get(PropertyCode.ItemIndex)).toBe(0);
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        values: [80],
+        dragging: true,
+        committed: false,
+        displayValue: "80%",
+      }),
+    );
+    expect(live?.().dragging).toBe(true);
+    expect(live?.().displayValue).toBe("80%");
+    expect(committed).toBeUndefined();
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        values: [80],
+        dragging: false,
+        committed: true,
+        displayValue: "80%",
+      }),
+    );
+    expect(committed).toEqual([80]);
+    window.close();
+  });
+
+  test("declares number-field scrub props and reports the core's scrub state", async () => {
+    await app.whenReady();
+    let committed: number | undefined;
+    let live: (() => solid.NumberFieldState) | undefined;
+    const window = new Window({
+      title: "Number field parts",
+      renderer: createRenderer(() =>
+        createComponent(NumberField.Root, {
+          scope: "quantity",
+          defaultValue: 10,
+          step: 1,
+          smallStep: 0.5,
+          largeStep: 5,
+          snapOnStep: true,
+          allowWheelScrub: false,
+          readOnly: false,
+          required: true,
+          scrubDirection: "vertical",
+          scrubSensitivity: 2,
+          onValueCommitted: (value: number | undefined) => {
+            committed = value;
+          },
+          get children() {
+            live = solid.useNumberFieldState();
+            return createComponent(NumberField.Group, {
+              scope: "quantity",
+              get children() {
+                return createComponent(NumberField.ScrubArea, {
+                  scope: "quantity",
+                  get children() {
+                    return createComponent(NumberField.ScrubAreaCursor, {
+                      scope: "quantity",
+                    });
+                  },
+                });
+              },
+            });
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    expect(root.properties.get(PropertyCode.SmallStep)).toBe(0.5);
+    expect(root.properties.get(PropertyCode.LargeStep)).toBe(5);
+    expect(root.properties.get(PropertyCode.SnapOnStep)).toBe(true);
+    expect(root.properties.get(PropertyCode.AllowWheelScrub)).toBe(false);
+    expect(root.properties.get(PropertyCode.Required)).toBe(true);
+    expect(root.properties.get(PropertyCode.Orientation)).toBe("vertical");
+    expect(root.properties.get(PropertyCode.Pitch)).toBe(2);
+
+    const group = root.children[0]!;
+    expect(group.properties.get(PropertyCode.Part)).toBe("number-field-group");
+    const scrub = group.children[0]!;
+    expect(scrub.properties.get(PropertyCode.Part)).toBe(
+      "number-field-scrub-area",
+    );
+    expect(scrub.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "number-field-scrub-area-cursor",
+    );
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        value: 12,
+        valid: true,
+        scrubbing: true,
+        required: true,
+        committed: true,
+      }),
+    );
+    expect(live?.().scrubbing).toBe(true);
+    expect(committed).toBe(12);
+    window.close();
+  });
+
+  test("declares progress and meter parts and adopts the core's status", async () => {
+    await app.whenReady();
+    let live: (() => solid.GaugeState) | undefined;
+    const window = new Window({
+      title: "Progress parts",
+      renderer: createRenderer(() => [
+        createComponent(Progress.Root, {
+          scope: "upload",
+          value: 3,
+          max: 4,
+          format: "fraction",
+          get children() {
+            live = solid.useGaugeState();
+            return [
+              createComponent(Progress.Label, { scope: "upload" }),
+              createComponent(Progress.Value, { scope: "upload" }),
+              createComponent(Progress.Track, {
+                scope: "upload",
+                get children() {
+                  return createComponent(Progress.Indicator, {
+                    scope: "upload",
+                  });
+                },
+              }),
+            ];
+          },
+        }),
+        createComponent(Meter.Root, {
+          scope: "storage",
+          value: 50,
+          min: 0,
+          max: 100,
+          format: "percent",
+          get children() {
+            return createComponent(Meter.Track, {
+              scope: "storage",
+              get children() {
+                return createComponent(Meter.Indicator, { scope: "storage" });
+              },
+            });
+          },
+        }),
+      ]),
+    });
+
+    const progress = window.root.children[0]!;
+    expect(progress.properties.get(PropertyCode.Format)).toBe("fraction");
+    expect(
+      progress.children.map((child) => child.properties.get(PropertyCode.Part)),
+    ).toEqual(["progress-label", "progress-value", "progress-track"]);
+    const meter = window.root.children[1]!;
+    expect(meter.properties.get(PropertyCode.Format)).toBe("percent");
+    expect(meter.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "meter-track",
+    );
+
+    window._dispatchEvent(
+      "componentchange",
+      progress.id,
+      JSON.stringify({
+        status: "progressing",
+        displayValue: "3 of 4",
+        completion: 0.75,
+      }),
+    );
+    expect(live?.().status).toBe("progressing");
+    expect(live?.().displayValue).toBe("3 of 4");
+    window.close();
+  });
+
+  test("drives a toast queue through the manager and adopts the core's stack", async () => {
+    await app.whenReady();
+    let manager: solid.ToastManager | undefined;
+    const window = new Window({
+      title: "Toast provider",
+      renderer: createRenderer(() =>
+        createComponent(Toast.Provider, {
+          timeout: 4000,
+          limit: 2,
+          expanded: true,
+          swipeDirection: "left",
+          pitch: 12,
+          get children() {
+            manager = solid.useToastManager();
+            return createComponent(Toast.Viewport, {
+              get children() {
+                return manager!
+                  .toasts()
+                  .map((toast) =>
+                    createComponent(Toast.Root, {
+                      toastId: toast.id,
+                      get children() {
+                        return createComponent(Toast.Content, {
+                          toastId: toast.id,
+                          get children() {
+                            return createComponent(Toast.Title, {
+                              toastId: toast.id,
+                              children: toast.title,
+                            });
+                          },
+                        });
+                      },
+                    }),
+                  );
+              },
+            });
+          },
+        }),
+      ),
+    });
+
+    const viewport = window.root.children[0]!;
+    expect(viewport.properties.get(PropertyCode.Part)).toBe("toast-viewport");
+    expect(viewport.properties.get(PropertyCode.Timeout)).toBe(4000);
+    expect(viewport.properties.get(PropertyCode.Limit)).toBe(2);
+    expect(viewport.properties.get(PropertyCode.StackExpanded)).toBe(true);
+    expect(viewport.properties.get(PropertyCode.SwipeDirection)).toBe("left");
+    expect(viewport.properties.get(PropertyCode.Pitch)).toBe(12);
+    const scope = String(viewport.properties.get(PropertyCode.Scope));
+
+    const id = manager!.add({ title: "Saved", type: "success" });
+    flush();
+    expect(JSON.parse(String(viewport.properties.get(PropertyCode.Toasts)))).toEqual([
+      { title: "Saved", type: "success", id },
+    ]);
+    const toast = viewport.children[0]!;
+    expect(toast.properties.get(PropertyCode.Part)).toBe("toast");
+    expect(toast.properties.get(PropertyCode.Scope)).toBe(scope);
+    expect(toast.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "toast-content",
+    );
+
+    // The core owns the stack index, the limited flag, and each toast's own offset.
+    window._dispatchEvent(
+      "componentchange",
+      viewport.id,
+      JSON.stringify({
+        toasts: [
+          {
+            id,
+            index: 0,
+            type: "success",
+            limited: false,
+            expanded: true,
+            swiping: false,
+            swipeMovement: 0,
+            offset: 0,
+          },
+        ],
+      }),
+    );
+    expect(manager!.stack()[0]?.index).toBe(0);
+
+    // A dismissal the core decided drops the toast from the declaration.
+    window._dispatchEvent(
+      "componentchange",
+      viewport.id,
+      JSON.stringify({ dismissed: [id], toasts: [] }),
+    );
+    flush();
+    expect(manager!.toasts()).toEqual([]);
+    window.close();
+  });
+
+  test("declares tab positions and adopts the core's activation direction", async () => {
+    await app.whenReady();
+    let live: (() => solid.TabsState) | undefined;
+    const window = new Window({
+      title: "Tabs geometry",
+      renderer: createRenderer(() =>
+        createComponent(Tabs.Root, {
+          defaultValue: "list",
+          get children() {
+            live = solid.useTabsState();
+            return createComponent(Tabs.List, {
+              get children() {
+                return [
+                  createComponent(Tabs.Tab, {
+                    value: "list",
+                    index: 0,
+                    children: "List",
+                  }),
+                  createComponent(Tabs.Tab, {
+                    value: "grid",
+                    index: 1,
+                    children: "Grid",
+                  }),
+                  createComponent(Tabs.Indicator, {
+                    value: "list",
+                    placement: "bottom",
+                  }),
+                ];
+              },
+            });
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    const list = root.children[0]!;
+    expect(list.children[1]!.properties.get(PropertyCode.ItemIndex)).toBe(1);
+    expect(list.children[2]!.properties.get(PropertyCode.AnchorPlacement)).toBe(
+      "bottom",
+    );
+
+    window._dispatchEvent(
+      "componentchange",
+      root.id,
+      JSON.stringify({
+        activationDirection: "right",
+        indicator: { left: 60, top: 30, width: 48, height: 2 },
+      }),
+    );
+    expect(live?.().activationDirection).toBe("right");
+    expect(live?.().indicator?.width).toBe(48);
+    window.close();
+  });
+
+  test("declares toolbar roles and a disabled item that keeps its Tab stop", async () => {
+    await app.whenReady();
+    const window = new Window({
+      title: "Toolbar parts",
+      renderer: createRenderer(() =>
+        createComponent(Toolbar.Root, {
+          scope: "actions",
+          items: [
+            { value: "cut" },
+            { value: "docs" },
+            { value: "search" },
+            { value: "paste", disabled: true, focusableWhenDisabled: true },
+          ],
+          get children() {
+            return [
+              createComponent(Toolbar.Group, {
+                scope: "actions",
+                get children() {
+                  return [
+                    createComponent(Toolbar.Button, {
+                      scope: "actions",
+                      partValue: "cut",
+                      children: "Cut",
+                    }),
+                    createComponent(Toolbar.Link, {
+                      scope: "actions",
+                      partValue: "docs",
+                      children: "Docs",
+                    }),
+                    createComponent(Toolbar.Input, {
+                      scope: "actions",
+                      partValue: "search",
+                    }),
+                  ];
+                },
+              }),
+              createComponent(Toolbar.Separator, { scope: "actions" }),
+              createComponent(Toolbar.Item, {
+                scope: "actions",
+                partValue: "paste",
+                children: "Paste",
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    expect(JSON.parse(String(root.properties.get(PropertyCode.Items)))).toEqual([
+      { value: "cut" },
+      { value: "docs" },
+      { value: "search" },
+      { value: "paste", disabled: true, focusableWhenDisabled: true },
+    ]);
+    const group = root.children[0]!;
+    expect(group.properties.get(PropertyCode.Part)).toBe("toolbar-group");
+    expect(
+      group.children.map((child) => child.properties.get(PropertyCode.Part)),
+    ).toEqual(["toolbar-button", "toolbar-link", "toolbar-input"]);
+    expect(root.children[1]!.properties.get(PropertyCode.Part)).toBe(
+      "toolbar-separator",
+    );
+    window.close();
+  });
+
+  test("declares a field's validation mode and mounts its item and validity parts", async () => {
+    await app.whenReady();
+    const window = new Window({
+      title: "Field parts",
+      renderer: createRenderer(() =>
+        createComponent(Field.Root, {
+          validationMode: "onChange",
+          validationDebounceTime: 250,
+          get children() {
+            return [
+              createComponent(Field.Item, {
+                get children() {
+                  return createComponent(Field.Control, {});
+                },
+              }),
+              createComponent(Field.Validity, { visible: true }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const root = window.root.children[0]!;
+    expect(root.properties.get(PropertyCode.ValidationMode)).toBe("onChange");
+    expect(root.properties.get(PropertyCode.ValidationDebounceTime)).toBe(250);
+    expect(root.children[0]!.properties.get(PropertyCode.Part)).toBe("field-item");
+    expect(root.children[1]!.properties.get(PropertyCode.Part)).toBe(
+      "field-validity",
+    );
+    expect(root.children[1]!.properties.get(PropertyCode.Open)).toBe(true);
+    window.close();
+  });
+
+  test("declares read-only selection controls and a derived parent checkbox", async () => {
+    await app.whenReady();
+    const window = new Window({
+      title: "Read-only controls",
+      renderer: createRenderer(() => [
+        createComponent(Checkbox.Root, {
+          parent: true,
+          childrenChecked: [true, false, true],
+        }),
+        createComponent(Switch.Root, { checked: true, readOnly: true }),
+        createComponent(Radio.Root, { readOnly: true }),
+      ]),
+    });
+
+    const [parent, locked, radio] = window.root.children;
+    // The core folds the declared children into on, mixed, or off with no registry at all.
+    expect(parent!.properties.get(PropertyCode.Parent)).toBe(true);
+    expect(parent!.properties.get(PropertyCode.Values)).toBe("[true,false,true]");
+    // `readOnly` is not `disabled`: the control keeps its place in the Tab sequence.
+    expect(locked!.properties.get(PropertyCode.ReadOnly)).toBe(true);
+    expect(locked!.properties.has(PropertyCode.Disabled)).toBe(false);
+    expect(radio!.properties.get(PropertyCode.ReadOnly)).toBe(true);
+    window.close();
+  });
+
+  test("declares a dialog's exit transition and adopts its completion", async () => {
+    await app.whenReady();
+    let completed: boolean | undefined;
+    const window = new Window({
+      title: "Dialog viewport",
+      renderer: createRenderer(() =>
+        createComponent(Dialog.Root, {
+          open: true,
+          enterDuration: 0,
+          exitDuration: 160,
+          onOpenChangeComplete: (next: boolean) => {
+            completed = next;
+          },
+          get children() {
+            return createComponent(Dialog.Portal, {
+              get children() {
+                return createComponent(Dialog.Popup, {
+                  get children() {
+                    return createComponent(Dialog.Viewport, {});
+                  },
+                });
+              },
+            });
+          },
+        }),
+      ),
+    });
+
+    const portal = window.root.children[0]!;
+    expect(portal.properties.get(PropertyCode.EnterDuration)).toBe(0);
+    expect(portal.properties.get(PropertyCode.ExitDuration)).toBe(160);
+    expect(
+      portal.children[0]!.children[0]!.properties.get(PropertyCode.Part),
+    ).toBe("dialog-viewport");
+
+    window._dispatchEvent(
+      "componentchange",
+      portal.id,
+      JSON.stringify({ openChangeComplete: false }),
+    );
+    expect(completed).toBe(false);
+    window.close();
   });
 });

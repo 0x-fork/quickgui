@@ -39,6 +39,19 @@ use quickgui::{
     text_input,
 };
 use quickgui::{Event, EventContext};
+// Base UI-aligned compound descriptors. Every type below is a core model the binding only
+// translates a declaration into; nothing here re-implements a component.
+use quickgui::{
+    AnchorAlign, AnchorPlacementHandle, AnchorSide, DEFAULT_TOAST_LIMIT, DEFAULT_TOAST_TIMEOUT,
+    DialogState, FieldValidationMode, FieldValidationTrigger, MAX_DIALOG_TRANSITION,
+    MAX_FIELD_VALIDATION_DEBOUNCE, MAX_NUMBER_FIELD_SCRUB_SENSITIVITY, MAX_POPOVER_ALIGN_OFFSET,
+    MAX_POPOVER_COLLISION_PADDING, MAX_POPOVER_HOVER_DELAY, MAX_POPOVER_SIDE_OFFSET,
+    MAX_TOAST_DURATION, MAX_TOAST_SWIPE_THRESHOLD, MAX_TOOLTIP_COLLISION_PADDING,
+    MAX_TOOLTIP_DELAY, MAX_TOOLTIP_GROUP_TIMEOUT, MAX_TOOLTIP_SIDE_OFFSET,
+    NumberFieldScrubDirection, PopoverHoverState, ProgressStatus, SliderThumbAlignment,
+    TabsActivationDirection, TabsState, ToastParts, ToastSwipeDirection, TooltipCursorAxis,
+    TooltipProvider, TooltipState, ValueFormat, anchor_placement,
+};
 // Declared option sources, virtual collections, and the remaining stateful field components.
 // Every type below is a core model the binding only translates a declaration into.
 use quickgui::{
@@ -79,7 +92,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 24;
+const PROTOCOL_VERSION: u16 = 25;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -410,7 +423,39 @@ mod property {
     pub const CONTENT_SIZE: u16 = 300;
     pub const OVERFLOW_EDGE_THRESHOLD: u16 = 301;
     pub const DISABLE_POINTER_DISMISSAL: u16 = 302;
-    pub const LAST: u16 = DISABLE_POINTER_DISMISSAL;
+    // Base UI-aligned popover, tooltip, range, toast, tab, toolbar, field, and dialog props.
+    // Every one is declared ahead of the core's decision, because the hosted boundary is never
+    // asked a synchronous question.
+    pub const SIDE: u16 = 303;
+    pub const ALIGN: u16 = 304;
+    pub const SIDE_OFFSET: u16 = 305;
+    pub const ALIGN_OFFSET: u16 = 306;
+    pub const COLLISION_PADDING: u16 = 307;
+    pub const STICKY: u16 = 308;
+    pub const ANCHOR_POINT: u16 = 309;
+    pub const MODAL: u16 = 310;
+    pub const OPEN_ON_HOVER: u16 = 311;
+    pub const PROVIDER: u16 = 312;
+    pub const TIMEOUT: u16 = 313;
+    pub const HOVERABLE: u16 = 314;
+    pub const TRACK_CURSOR_AXIS: u16 = 315;
+    pub const CLOSE_ON_CLICK: u16 = 316;
+    pub const MIN_STEPS_BETWEEN_VALUES: u16 = 317;
+    pub const THUMB_ALIGNMENT: u16 = 318;
+    pub const FORMAT: u16 = 319;
+    pub const SMALL_STEP: u16 = 320;
+    pub const ALLOW_WHEEL_SCRUB: u16 = 321;
+    pub const SNAP_ON_STEP: u16 = 322;
+    pub const LIMIT: u16 = 323;
+    pub const PITCH: u16 = 324;
+    pub const FOCUSABLE_WHEN_DISABLED: u16 = 325;
+    pub const VALIDATION_MODE: u16 = 326;
+    pub const VALIDATION_DEBOUNCE_TIME: u16 = 327;
+    pub const PARENT: u16 = 328;
+    pub const ENTER_DURATION: u16 = 329;
+    pub const EXIT_DURATION: u16 = 330;
+    pub const STACK_EXPANDED: u16 = 331;
+    pub const LAST: u16 = STACK_EXPANDED;
 }
 
 #[derive(Default)]
@@ -902,6 +947,7 @@ mod components;
 mod events;
 mod pickers;
 mod popover_menu;
+mod popovers;
 mod runtime;
 mod styles;
 mod tree;
@@ -915,6 +961,7 @@ use components::*;
 use events::*;
 use pickers::*;
 use popover_menu::*;
+use popovers::*;
 use runtime::*;
 use styles::*;
 use tree::*;

@@ -491,6 +491,45 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 
 ### JavaScript tooling
+- Bound the Base UI-aligned compound parts and props to JavaScript at protocol version 25. The
+  `Popover` compound gained `Portal`, `Backdrop`, `Positioner`, `Popup`, `Arrow`, `Viewport`,
+  `Title`, `Description`, and `Close` parts beside the existing one-element `Content`, with
+  Base UI's `side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`, `sticky`, `anchor`
+  (another node or one `{ x, y }` logical point), `modal`, and Trigger `openOnHover`/`delay`/
+  `closeDelay`. A declared side is only a preference, so the placement the retained tree really
+  resolved to — side, alignment, anchor-hidden state, and the measured anchor and available sizes —
+  is published during the paint QuickGUI was already performing and reported back through
+  `onPlacementChange` and the signal-friendly `usePopoverPlacement()`, which is how an application
+  styles from the real placement the way Base UI styles from `data-side` and `data-align`. The
+  trigger is the one part the core keeps mounted whether the surface is open or closed, so it
+  carries the whole declaration and every other part only repeats the compound scope.
+- Added the compound `Tooltip` (`Provider`, `Root`, `Trigger`, `Portal`, `Positioner`, `Popup`,
+  `Arrow`) with `delay`, `closeDelay`, `timeout`, `disabled`, `hoverable`, `trackCursorAxis`,
+  `closeOnClick`, and `useTooltipPlacement()`. One shared provider makes an adjacent trigger open
+  instantly while the group stays warm. The framework-owned `tooltip` prop every native node
+  accepts is unchanged and remains the shortest path to a native-style hint.
+- Bound the aligned range and feedback parts. `Slider` gained `Label`, `Value`, `Control`, and
+  `Indicator` parts, `minStepsBetweenValues`, `thumbAlignment`, a bounded `format`, the core's own
+  `onValueCommitted` pointer boundary, and `useSliderState()` for the `dragging` flag and formatted
+  value. `NumberField` gained `Group`, `ScrubArea`, and `ScrubAreaCursor` parts, `smallStep`,
+  `largeStep`, `snapOnStep`, `allowWheelScrub`, `readOnly`, `required`, `scrubDirection`,
+  `scrubSensitivity`, `onValueCommitted`, and `useNumberFieldState()` for the `scrubbing` flag.
+  `Progress` and `Meter` gained `Track`, `Label`, and `Value` parts, the same bounded `format`, and
+  `useGaugeState()` reporting the core's derived status, formatted value, and completion.
+- Bound the aligned `Toast` provider, parts, and manager. `Toast.Provider` owns the declared queue
+  and Base UI's `timeout`, `limit`, `expanded`, `swipeDirection`, and stack `pitch`; `Portal`,
+  `Positioner`, and `Content` join the viewport, root, title, description, action, and close parts;
+  and `useToastManager()` supplies `add`, `update`, `close`, `closeAll`, and `promise` over that
+  declaration. Every toast's stack index, `limited` and `expanded` flags, `type`, `offset`, and live
+  swipe displacement come back from the core.
+- Bound the remaining aligned parts and props: tab `activationDirection` and indicator geometry
+  through `useTabsState()` (with `index` on a tab and `placement` on the indicator);
+  `Toolbar.Button`, `Link`, `Input`, `Group`, and `Separator` with `focusableWhenDisabled` items;
+  `Field.Item` and `Field.Validity` with `validationMode` and `validationDebounceTime` answered by
+  the core; `readOnly` on `Checkbox`, `Radio`, `RadioGroup`, and `Switch` plus a registry-free
+  parent checkbox from declared `childrenChecked`; and `Dialog.Viewport` with `enterDuration`,
+  `exitDuration`, and `onOpenChangeComplete`, where the core holds a closing dialog mounted for
+  exactly the declared exit transition.
 - Bound the eight Base UI parity components to `@quickgui/native` and `@quickgui/solid`, bumping
   the mutation protocol to v24. Solid gained `Separator`, `Avatar` (`Root`/`Image`/`Fallback`),
   `CheckboxGroup` whose members are ordinary `Checkbox.Root` nodes with `value` or `parent`,
