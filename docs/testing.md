@@ -78,7 +78,11 @@ Wheel propagation and default prevention can be exercised with `simulate_scroll_
 `simulate_retained_scroll` and `retained_scroll_offset` instead route through the production
 geometry/default-scroll path, so tests can prove paint-only overflow scrolling does not increment
 `render_count`; virtual containers still rebuild when their mounted slice follows the shared
-offset. Raw contacts use `simulate_touch`, whose element argument selects a target only for
+offset. `simulate_scrollbar_press`, `simulate_scrollbar_drag_to`, and
+`simulate_scrollbar_release` drive the built-in overlay scrollbar through the production press,
+drag, and release path, painting between events as a native window does, and
+`scrollbar_drag_active` reports whether the drag survived the frames it caused. Raw contacts use
+`simulate_touch`, whose element argument selects a target only for
 `Started` while
 later phases exercise the production `TouchId` capture. Pressure and gesture listeners use
 `simulate_mouse_pressure`, `simulate_pinch`, `simulate_rotation`, and

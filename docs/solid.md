@@ -822,7 +822,10 @@ skips it, and it still refuses pointer focus.
 
 A change never overwrites a controlled declaration on its own: the core keeps the value it decided
 until the application commits the matching prop, and each declared instance reports independently,
-so two sliders in one window never disturb each other. `componentChangeFromEvent(event)` decodes a
+so two sliders in one window never disturb each other. A `Splitter` drag owns its sizes until the
+pointer is released, and a `value` that echoes sizes the core already reported is recognized as
+that echo rather than a new value, so the handle stays under the pointer even though every
+`onSizesChange` reaches the declaration one or more frames late. `componentChangeFromEvent(event)` decodes a
 raw `componentchange` payload when an application wants to handle it directly. A malformed
 declaration is bounded rather than fatal: unparsable JSON declares no values, duplicate item values
 keep the first occurrence, and a list past `MAX_COMPONENT_VALUES` (64) or `MAX_COMPONENT_ITEMS`

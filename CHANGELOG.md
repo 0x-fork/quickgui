@@ -19,6 +19,20 @@ All notable user-facing changes to QuickGUI are recorded here.
   alternating. The runtime wakes exactly once per toggle while an input is focused and never
   otherwise; the caret was previously a fixed light grey that vanished on light backgrounds and
   never blinked.
+- Fixed a virtual table snapping back to its active cell after every scroll.
+  `TableState::element_with` revealed the active cell on each build, and a build follows every
+  wheel or scrollbar scroll that moves the mounted slice, so the overlay scrollbar thumb could
+  not be dragged and the list rewound to row 0 one frame after any scroll. Normalizing the
+  active cell on a build now only clamps it into the grid; keyboard and pointer moves still
+  reveal the cell they select.
+- Added `SplitterState::is_dragging` and `SplitterHandle::is_dragging`, maintained by
+  `apply_pointer` from the press that starts a captured drag to the release or cancel that ends
+  it, so an owner that applies sizes asynchronously can tell a size the pointer is still moving
+  from one the gesture settled on.
+- Added `TestAppContext::simulate_scrollbar_press`, `simulate_scrollbar_drag_to`,
+  `simulate_scrollbar_release`, and `scrollbar_drag_active`, which drive the built-in overlay
+  scrollbar through the exact production press, drag, and release path, painting between events
+  as a native window does.
 - Fixed the accessibility tree listing a child whose node the update did not carry: a descendant
   the last frame never painted, such as a virtual list's row column inside a body with no room
   yet, now leaves its parent's child list too, so an assistive client no longer aborts on an
@@ -597,6 +611,16 @@ All notable user-facing changes to QuickGUI are recorded here.
   `Menu.Item` child parts; the binding's always-present appearance declaration used to shadow the
   parts and open nothing.
 - Added `Menu.popup` to the components gallery's Context Menu tab, next to the two in-window shapes.
+- Fixed a controlled `Splitter` handle falling behind the pointer and rewinding after the
+  release. Every `onSizesChange` comes back as the next `value` declaration one or more frames
+  late, and the binding reseeded its retained sizes from each such echo, so the next incremental
+  pointer delta built on a stale value. A captured drag now owns the sizes until it ends, sizes
+  the core itself reported are recognized when they come back (up to 32 outstanding reports)
+  instead of reseeding, and a changed `panes` minimum, `collapsible` flag, or `step` is applied
+  to the retained state rather than rebuilding it, which also keeps the size a collapsed pane
+  restores to.
+- Dragging a hosted `Table` body's overlay scrollbar now scrolls the table as the wheel does,
+  and the reported `visibleRange` follows the drag.
 - Percentage `width` and `height` values now size against the parent: `width: "62%"` on a
   `Meter.Indicator`, `Progress.Indicator`, or `Slider.Indicator` fills that share of its track,
   where previously only the literal `"100%"` resolved.

@@ -274,7 +274,10 @@ Captured pointer motion uses the event's own delta, so a splitter needs no conta
 stays correct while the pointer is outside the window. `set_total` rescales the panes proportionally
 and then honors minimums; call it from a `container_query` when the surrounding layout changes.
 `reset` restores the sizes the splitter was created with — bind it to a handle double-click if the
-product wants that gesture; QuickGUI does not assume it.
+product wants that gesture; QuickGUI does not assume it. `is_dragging` is true from the press
+that starts a captured drag to the release or cancel that ends it; an owner that applies sizes
+asynchronously, as the hosted bindings do, lets the drag own them until then instead of reseeding
+them from a declaration that lags the pointer.
 
 Install `splitter_key_bindings()` once. Left and Up shrink the preceding pane, Right and Down grow
 it, Home and End move to its limits, and Enter collapses or restores a pane marked

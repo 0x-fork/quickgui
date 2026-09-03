@@ -575,6 +575,87 @@ impl TestAppContext {
             .ok_or(TestAppError::NotScrollable { window, element })
     }
 
+    /// Press the left mouse button at `point` through the production built-in scrollbar path.
+    ///
+    /// A native window resolves a press against painted geometry before any listener runs: a
+    /// press on an overlay scrollbar track begins a captured thumb drag and never reaches the
+    /// elements beneath it. This helper takes exactly that branch, so it reports whether a
+    /// built-in scrollbar took the press. A view the press rebuilt is laid out and painted again
+    /// before the call returns, as production paints between pointer events.
+    pub fn simulate_scrollbar_press(
+        &mut self,
+        window: WindowHandle,
+        point: Point,
+    ) -> Result<bool, TestAppError> {
+        self.prepare_retained_geometry(window)?;
+        let state = self.window_mut(window)?;
+        state.pointer = Some(point);
+        let Some(view_dirty) = state.ui.begin_scrollbar_drag(Some(point)) else {
+            return Ok(false);
+        };
+        self.settle_scrollbar_input(window, view_dirty)?;
+        Ok(true)
+    }
+
+    /// Move the pointer to `point` while a built-in scrollbar drag is active.
+    ///
+    /// Returns whether the retained scroll offset moved. The drag must have begun through
+    /// [`Self::simulate_scrollbar_press`]; without one the motion changes nothing, exactly as
+    /// production ignores thumb arithmetic once a drag has ended or been cancelled.
+    pub fn simulate_scrollbar_drag_to(
+        &mut self,
+        window: WindowHandle,
+        point: Point,
+    ) -> Result<bool, TestAppError> {
+        self.prepare_retained_geometry(window)?;
+        let state = self.window_mut(window)?;
+        state.pointer = Some(point);
+        let result = state.ui.drag_scrollbar(point);
+        self.settle_scrollbar_input(window, result.view_dirty)?;
+        Ok(result.changed)
+    }
+
+    /// Release the left mouse button, ending an active built-in scrollbar drag.
+    ///
+    /// Returns whether a drag was active. The scrollbar keeps its hover state from the pointer's
+    /// last position, as production re-evaluates hover on the release.
+    pub fn simulate_scrollbar_release(
+        &mut self,
+        window: WindowHandle,
+    ) -> Result<bool, TestAppError> {
+        let now = self.now();
+        let state = self.window_mut(window)?;
+        let result = state.ui.end_scrollbar_drag(now);
+        state.ui.update_scrollbar_hover(state.pointer, now);
+        self.settle_scrollbar_input(window, result.view_dirty)?;
+        Ok(result.changed)
+    }
+
+    /// Whether a built-in scrollbar drag begun through [`Self::simulate_scrollbar_press`] is
+    /// still active after the frames it caused.
+    pub fn scrollbar_drag_active(&self, window: WindowHandle) -> Result<bool, TestAppError> {
+        Ok(self.window(window)?.ui.scrollbar_drag_active())
+    }
+
+    /// Rebuild and repaint after one scrollbar input exactly as a native window would.
+    ///
+    /// Production paints every frame a scrollbar input rebuilt, and painting is what
+    /// re-registers scroll regions and cancels a drag whose region left the tree. Painting here
+    /// gives a headless test that same frame before the next pointer event.
+    fn settle_scrollbar_input(
+        &mut self,
+        window: WindowHandle,
+        view_dirty: bool,
+    ) -> Result<(), TestAppError> {
+        if view_dirty {
+            let state = self.window_mut(window)?;
+            state.dirty = true;
+            state.retained_geometry_ready = false;
+        }
+        self.run_until_idle()?;
+        self.prepare_retained_geometry(window)
+    }
+
     /// Deliver one deterministic raw touch sample through production capture semantics.
     ///
     /// `element` chooses the hit target only for [`TouchPhase::Started`]. Later samples with the

@@ -8031,6 +8031,54 @@ fn a_date_segment_declared_without_children_shows_the_core_text() {
     );
     insert_component_node(&mut tree, month_id, date_id, month);
         .push(button_id);
+fn a_declared_table_scrollbar_track_press_and_drag_scroll_the_body() {
+    let table_id = 660;
+    let header_id = 661;
+    let row_id = 662;
+    let cell_id = 663;
+    let mut tree = NativeTree::default();
+    // The gallery declares its table as an overflow-scroll view with a border around the core's
+    // own virtual body, so the wrapper is itself a scroll container enclosing the body's track.
+    let mut table = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "table",
+        &[
+            (property::SCOPE, "files"),
+            (
+                property::COLUMNS,
+                r#"[{"id":"name","label":"Name","width":160},{"id":"size","label":"Size","track":"1fr"}]"#,
+            ),
+            (property::OVERFLOW_Y, "scroll"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    table.set_property(property::ROW_COUNT, Some(PropertyValue::Number(200.0)));
+    table.set_property(property::ROW_HEIGHT, Some(PropertyValue::Number(24.0)));
+    table.set_property(property::HEADER_HEIGHT, Some(PropertyValue::Number(24.0)));
+    table.set_property(property::WIDTH, Some(PropertyValue::Number(400.0)));
+    table.set_property(property::HEIGHT, Some(PropertyValue::Number(240.0)));
+    table.set_property(property::BORDER_WIDTH, Some(PropertyValue::Number(1.0)));
+    insert_component_node(&mut tree, table_id, ROOT_NODE, table);
+    let header = component_part_node(
+        NodeTag::View,
+        table_id,
+        "table-header",
+        &[(property::PART_VALUE, "name")],
+        &[],
+    );
+    insert_component_node(&mut tree, header_id, table_id, header);
+    let mut row = component_part_node(NodeTag::View, table_id, "table-row", &[], &[]);
+    row.set_property(property::ROW_INDEX, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, row_id, table_id, row);
+    let cell = component_part_node(
+        NodeTag::View,
+        row_id,
+        "table-cell",
+        &[(property::PART_VALUE, "name")],
+        &[],
+    );
+    insert_component_node(&mut tree, cell_id, row_id, cell);
 
     let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
     let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
@@ -8088,4 +8136,210 @@ fn a_date_segment_declared_without_children_shows_the_core_text() {
     cx.simulate_keystrokes(window, "tab").unwrap();
     assert_eq!(cx.focused(window).unwrap(), Some(button));
     assert!(cx.focus_visible(window).unwrap());
+    let mounted = merged_component_change(&events, table_id);
+    assert_eq!(mounted["visibleRange"]["start"], serde_json::json!(0));
+
+    // The body fills the core root below the header, and its overlay track is the rightmost
+    // twelve points of the body. Pressing the track away from the thumb centers the thumb there.
+    let root = ElementId::named("files");
+    let bounds = cx.element_bounds(window, root).unwrap();
+    let track_x = bounds.right() - 6.0;
+    let body_top = bounds.y + 24.0;
+    let press = quickgui::Point::new(track_x, body_top + 60.0);
+    assert!(
+        cx.simulate_scrollbar_press(window, press).unwrap(),
+        "the press at {press:?} lands on the body's scrollbar track inside {bounds:?}"
+    );
+    assert!(
+        cx.scrollbar_drag_active(window).unwrap(),
+        "the table rebuilt for the new range keeps the thumb drag"
+    );
+    let pressed = merged_component_change(&events, table_id);
+    let start_after_press = pressed["visibleRange"]["start"]
+        .as_u64()
+        .expect("the track press scrolled the body and reported the new range");
+    assert!(start_after_press > 0, "reported {pressed:?}");
+
+    // Dragging the thumb further down scrolls further, through every rebuilt frame in between.
+    let dragged_to = quickgui::Point::new(track_x, press.y + 40.0);
+    assert!(cx.simulate_scrollbar_drag_to(window, dragged_to).unwrap());
+    assert!(cx.scrollbar_drag_active(window).unwrap());
+    let dragged = merged_component_change(&events, table_id);
+    let start_after_drag = dragged["visibleRange"]["start"]
+        .as_u64()
+        .expect("the drag scrolled the body and reported the new range");
+    assert!(
+        start_after_drag > start_after_press,
+        "the drag moved from {start_after_press} to {start_after_drag}"
+    );
+
+    assert!(cx.simulate_scrollbar_release(window).unwrap());
+    assert!(!cx.scrollbar_drag_active(window).unwrap());
+    // What JavaScript was told is exactly the range the core retained.
+    let visible = cx
+        .read(view, |view| {
+            let table = view.components.tables.values().next().unwrap();
+            table.state.visible_rows()
+        })
+        .unwrap();
+    assert_eq!(visible.start as u64, start_after_drag);
+}
+
+#[test]
+fn a_controlled_splitter_keeps_the_handle_under_the_pointer_while_declarations_lag() {
+    let root_id = 470;
+    let first_pane_id = 471;
+    let handle_id = 472;
+    let second_pane_id = 473;
+    let mut tree = NativeTree::default();
+    let mut root = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "splitter",
+        &[
+            (property::SCOPE, "lagging"),
+            (property::VALUES, "[180,180]"),
+            (property::ITEMS, r#"[{"min":20},{"min":20}]"#),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    root.set_property(property::WIDTH, Some(PropertyValue::Number(366.0)));
+    root.set_property(property::HEIGHT, Some(PropertyValue::Number(60.0)));
+    insert_component_node(&mut tree, root_id, ROOT_NODE, root);
+    for (id, index) in [(first_pane_id, 0.0), (second_pane_id, 1.0)] {
+        let mut pane = component_part_node(
+            NodeTag::View,
+            root_id,
+            "splitter-pane",
+            &[(property::SCOPE, "lagging")],
+            &[],
+        );
+        pane.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(index)));
+        insert_component_node(&mut tree, id, root_id, pane);
+    }
+    let mut handle = component_part_node(
+        NodeTag::View,
+        root_id,
+        "splitter-handle",
+        &[(property::SCOPE, "lagging")],
+        &[],
+    );
+    handle.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(0.0)));
+    handle.set_property(property::WIDTH, Some(PropertyValue::Number(6.0)));
+    insert_component_node(&mut tree, handle_id, root_id, handle);
+    let root_children = &mut tree.nodes.get_mut(&root_id).unwrap().children;
+    root_children.clear();
+    root_children.extend([first_pane_id, handle_id, second_pane_id]);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(14, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    let splitter = Splitter::new(
+        ElementId::named("lagging"),
+        &SplitterState::new(SplitterOrientation::Horizontal, &[180.0, 180.0]),
+    );
+    let handle = splitter.handle_id(0);
+    let handle_bounds = cx.element_bounds(window, handle).unwrap();
+    // The pointer presses three points into the handle and must stay there for the whole drag.
+    let grip = 3.0;
+    let origin = quickgui::Point::new(handle_bounds.x + grip, handle_bounds.y + 30.0);
+    let pointer =
+        |phase, position: quickgui::Point, previous: quickgui::Point| quickgui::PointerEvent {
+            size: quickgui::Size::ZERO,
+            phase,
+            position,
+            origin,
+            local_position: position,
+            local_origin: origin,
+            delta: position - previous,
+            button: quickgui::MouseButton::Left,
+            modifiers: quickgui::Modifiers::empty(),
+        };
+    let redeclare = |cx: &mut quickgui::TestAppContext, sizes: &serde_json::Value| {
+        cx.update(view, |view, cx| {
+            view.tree
+                .borrow_mut()
+                .nodes
+                .get_mut(&root_id)
+                .unwrap()
+                .set_property(
+                    property::VALUES,
+                    Some(PropertyValue::String(Arc::from(sizes.to_string().as_str()))),
+                );
+            cx.invalidate();
+        })
+        .unwrap();
+        cx.run_until_idle().unwrap();
+    };
+
+    cx.simulate_pointer(
+        window,
+        handle,
+        pointer(quickgui::PointerPhase::Down, origin, origin),
+    )
+    .unwrap();
+    // A controlled owner echoes every reported size back as its next `value` declaration, but
+    // the round trip through JavaScript is asynchronous: here each echo lands two moves late.
+    let mut echoes: VecDeque<serde_json::Value> = VecDeque::new();
+    let mut position = origin;
+    for _ in 0..4 {
+        let previous = position;
+        position.x += 12.0;
+        cx.simulate_pointer(
+            window,
+            handle,
+            pointer(quickgui::PointerPhase::Move, position, previous),
+        )
+        .unwrap();
+        let change = component_change(&events, root_id);
+        echoes.push_back(change["sizes"].clone());
+        if echoes.len() > 2 {
+            let lagging = echoes.pop_front().unwrap();
+            redeclare(&mut cx, &lagging);
+        }
+    }
+    cx.simulate_pointer(
+        window,
+        handle,
+        pointer(quickgui::PointerPhase::Up, position, position),
+    )
+    .unwrap();
+    let handle_bounds = cx.element_bounds(window, handle).unwrap();
+    assert!(
+        (handle_bounds.x + grip - position.x).abs() < 0.5,
+        "the handle at {handle_bounds:?} fell behind the pointer released at {position:?}"
+    );
+
+    // The remaining echoes land after the release, oldest first; none may rewind the handle.
+    while let Some(lagging) = echoes.pop_front() {
+        redeclare(&mut cx, &lagging);
+        let handle_bounds = cx.element_bounds(window, handle).unwrap();
+        assert!(
+            (handle_bounds.x + grip - position.x).abs() < 0.5,
+            "the stale echo {lagging} moved the handle to {handle_bounds:?}"
+        );
+    }
+    let sizes = cx
+        .read(view, |view| {
+            let splitter = view.components.splitters.values().next().unwrap();
+            splitter.state.sizes().to_vec()
+        })
+        .unwrap();
+    assert_eq!(sizes, vec![228.0, 132.0]);
+
+    // A genuinely new controlled value still reseeds the splitter once the drag has ended.
+    redeclare(&mut cx, &serde_json::json!([100, 260]));
+    let handle_bounds = cx.element_bounds(window, handle).unwrap();
+    assert!(
+        (handle_bounds.x - 100.0).abs() < 0.5,
+        "the new declaration moved the handle to {handle_bounds:?}"
+    );
 }

@@ -1495,6 +1495,12 @@ impl TableState {
         root
     }
 
+    /// Clamp the active cell into the current grid without moving the viewport.
+    ///
+    /// This runs on every build, and a build happens whenever a scroll moves the mounted slice,
+    /// so it must never scroll: revealing the active cell here snapped every wheel or scrollbar
+    /// scroll back to that cell on the frame that followed it. The keyboard and pointer paths
+    /// that move the active cell reveal it through [`Self::select_cell`] instead.
     fn normalize_selection(&mut self, column_count: usize) {
         if self.row_count == 0 || column_count == 0 {
             self.selected = None;
@@ -1505,9 +1511,6 @@ impl TableState {
             row: position.row.min(self.row_count - 1),
             column: position.column.min(column_count - 1),
         });
-        if let Some(selected) = self.selected {
-            self.list.scroll_to_reveal_item(selected.row);
-        }
     }
 
     fn move_row(&mut self, forward: bool, column_count: usize) -> bool {
@@ -1715,6 +1718,34 @@ mod tests {
         assert_eq!(state.layout.header_height, 20.0);
         assert_eq!(state.list.logical_scroll_top().item_ix, before.item_ix);
         assert!(state.visible_rows().len() < state.row_count());
+    }
+
+    #[test]
+    fn a_build_clamps_the_active_cell_without_moving_a_scrolled_viewport() {
+        let mut state = TableState::new(100);
+        state.list.set_viewport_size(400.0, 96.0);
+        // Scrolled far from row 0 by a wheel or a scrollbar drag, with no active cell yet.
+        assert!(state.list.scroll_to_pixels(1_600.0));
+        let scrolled = state.list.scroll_offset();
+        assert!(state.visible_rows().start > 0);
+
+        // The build that follows any scroll normalizes the active cell but must leave the
+        // viewport where the scroll put it; revealing row 0 here undid every scroll.
+        state.normalize_selection(2);
+        assert_eq!(
+            state.selected_cell(),
+            Some(TableCellPosition { row: 0, column: 0 })
+        );
+        assert_eq!(state.list.scroll_offset(), scrolled);
+
+        // Moving the active cell is what reveals it.
+        assert!(state.select_cell(TableCellPosition { row: 0, column: 1 }, 2));
+        assert_eq!(state.list.scroll_offset(), 0.0);
+        state.normalize_selection(1);
+        assert_eq!(
+            state.selected_cell(),
+            Some(TableCellPosition { row: 0, column: 0 })
+        );
     }
 
     #[test]
