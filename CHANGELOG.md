@@ -5,6 +5,14 @@ All notable user-facing changes to QuickGUI are recorded here.
 ## Unreleased
 
 ### Framework
+
+- Added `LayoutBoundsHandle` and `Element::report_bounds`: an application-owned receiver for the
+  window-relative bounds QuickGUI painted for one element, written during the paint already being
+  performed and corrected in exactly one frame when the bounds change, so behavior can match real
+  layout without an observer, timer, or idle source.
+- Added `ScrollArea::positioned_thumb_part`, which places a scrollbar thumb along its track from
+  the state's offset and thumb length, and fixed thumb drags to measure travel in window
+  coordinates from the capture origin; a thumb that re-lays out under the pointer previously stalled.
 - Aligned the menu family with Base UI's parts and props. `MenuState` is the surface around the
   `PopoverMenu` row model, composing the in-window `Popover` for anchoring, dismissal, focus
   restoration, and modal containment: `with_open`, `modal`, `orientation`, `loop_focus`,
@@ -546,6 +554,11 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 
 ### JavaScript tooling
+
+- Scroll areas now measure their viewport, content, and scrollbar extents from painted bounds, so
+  `viewportSize` and `contentSize` are optional overrides, the thumb is positioned by the core, and
+  thumb drags track the pointer. Splitters rescale their retained sizes to the extent flex layout
+  gave their panes, so a handle follows the pointer one logical pixel per pixel.
 - Bound the Base UI-aligned menu, select, and combobox parts and props to JavaScript at protocol
   version 26. `Menu` is the compound form of the core's `MenuState` plus `PopoverMenu` model, and
   its rows are ordinary application-styled child nodes rather than a JSON model the core paints:

@@ -1,6 +1,6 @@
 use crate::{
     AccessibilityOrientation, AccessibilityRole, AccessibilityValueRange, Element, ElementId,
-    GesturePhase, PointerEvent, PointerPhase, ScrollWheelEvent, Size, Vector, div,
+    GesturePhase, Point, PointerEvent, PointerPhase, ScrollWheelEvent, Size, Vector, div,
 };
 
 /// Default line height used to turn a discrete wheel notch into logical pixels.
@@ -78,7 +78,8 @@ pub struct ScrollAreaStyleState {
 struct ScrollAreaDrag {
     orientation: ScrollAreaOrientation,
     track_length: f32,
-    grab: f32,
+    /// The thumb's track origin when the drag started, in logical pixels along the axis.
+    start: f32,
 }
 
 /// Controlled, allocation-free geometry and interaction state for one scroll area.
@@ -359,15 +360,13 @@ impl ScrollAreaState {
         orientation: ScrollAreaOrientation,
         track_length: f32,
     ) -> bool {
-        let position = self.axis_position(event, orientation);
         match event.phase {
             PointerPhase::Down => {
                 let track_length = finite_or_zero(track_length).max(0.0);
-                let grab = position.clamp(0.0, self.thumb_length(orientation, track_length));
                 self.drag = Some(ScrollAreaDrag {
                     orientation,
                     track_length,
-                    grab,
+                    start: self.thumb_offset(orientation, track_length),
                 });
                 self.set_scrolling(true);
                 true
@@ -376,11 +375,12 @@ impl ScrollAreaState {
                 let Some(drag) = self.drag.filter(|drag| drag.orientation == orientation) else {
                     return false;
                 };
-                // The thumb's own local position is relative to the thumb, so the pointer's
-                // travel along the track is the thumb origin plus where it was grabbed.
-                let thumb_origin =
-                    self.thumb_offset(orientation, drag.track_length) + position - drag.grab;
-                self.set_thumb_origin(orientation, drag.track_length, thumb_origin)
+                // The thumb itself moves as the offset changes, so its element-local position is
+                // useless during a drag. Window coordinates are stable: the thumb origin is where
+                // it started plus the pointer's travel since the capture began.
+                let travel = self.axis_window(event.position, orientation)
+                    - self.axis_window(event.origin, orientation);
+                self.set_thumb_origin(orientation, drag.track_length, drag.start + travel)
             }
             PointerPhase::Up | PointerPhase::Cancel => {
                 let dragging = self.drag.take().is_some();
@@ -432,6 +432,14 @@ impl ScrollAreaState {
             event.local_position.x
         } else {
             event.local_position.y
+        }
+    }
+
+    fn axis_window(&self, point: Point, orientation: ScrollAreaOrientation) -> f32 {
+        if orientation.is_horizontal() {
+            point.x
+        } else {
+            point.y
         }
     }
 
@@ -593,6 +601,7 @@ impl ScrollArea {
         };
         scrollbar
             .id(self.scrollbar_id(orientation))
+            .relative()
             .accessibility_role(AccessibilityRole::ScrollBar)
             .accessibility_orientation(orientation.accessibility())
             .accessibility_value_range(AccessibilityValueRange::new(
@@ -619,6 +628,30 @@ impl ScrollArea {
             .app_region_no_drag()
             .cursor_default()
             .user_select_none()
+    }
+
+    /// Decorate and position one application-owned scrollbar thumb inside its scrollbar.
+    ///
+    /// This is [`Self::thumb_part`] plus the structural geometry a draggable thumb needs: the
+    /// thumb is absolutely positioned along the scrollbar's axis at
+    /// [`ScrollAreaState::thumb_offset`] with [`ScrollAreaState::thumb_length`], so it follows
+    /// the offset without the application re-deriving either value. Cross-axis size and every
+    /// visual property stay application-owned.
+    pub fn positioned_thumb_part(
+        self,
+        state: &ScrollAreaState,
+        orientation: ScrollAreaOrientation,
+        track_length: f32,
+        thumb: Element,
+    ) -> Element {
+        let offset = state.thumb_offset(orientation, track_length);
+        let length = state.thumb_length(orientation, track_length);
+        let thumb = self.thumb_part(orientation, thumb).absolute();
+        if orientation.is_horizontal() {
+            thumb.left(offset).top(0.0).w(length)
+        } else {
+            thumb.top(offset).left(0.0).h(length)
+        }
     }
 
     /// Decorate the application-owned corner between a horizontal and a vertical scrollbar.
@@ -675,6 +708,14 @@ mod tests {
             button: MouseButton::Left,
             modifiers: Modifiers::empty(),
         }
+    }
+
+    /// A captured event whose window `origin` stays at the press point while the pointer moves.
+    fn drag_event(phase: PointerPhase, origin_y: f32, y: f32) -> PointerEvent {
+        let mut event = pointer_event(phase, 6.0, y);
+        event.origin = Point::new(6.0, origin_y);
+        event.local_origin = Point::new(6.0, origin_y);
+        event
     }
 
     fn wheel(delta: Vector, phase: GesturePhase) -> ScrollWheelEvent {
@@ -778,7 +819,7 @@ mod tests {
         assert_eq!(state.offset().y, 0.0, "pressing the thumb moves nothing");
 
         assert!(state.apply_thumb_pointer(
-            &pointer_event(PointerPhase::Move, 6.0, 90.0),
+            &drag_event(PointerPhase::Move, 10.0, 90.0),
             ScrollAreaOrientation::Vertical,
             track,
         ));
@@ -786,13 +827,13 @@ mod tests {
 
         // Capture continues past the track and stays clamped.
         assert!(state.apply_thumb_pointer(
-            &pointer_event(PointerPhase::Move, 6.0, 4_000.0),
+            &drag_event(PointerPhase::Move, 10.0, 4_000.0),
             ScrollAreaOrientation::Vertical,
             track,
         ));
         assert_eq!(state.offset().y, 800.0);
         assert!(state.apply_thumb_pointer(
-            &pointer_event(PointerPhase::Up, 6.0, 4_000.0),
+            &drag_event(PointerPhase::Up, 10.0, 4_000.0),
             ScrollAreaOrientation::Vertical,
             track,
         ));

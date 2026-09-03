@@ -18,6 +18,7 @@ impl UiTree {
             scroll_end_states: HashMap::with_capacity(8),
             virtual_scroll_handles: HashMap::with_capacity(8),
             anchor_placement_handles: Vec::new(),
+            layout_bounds_handles: Vec::new(),
             natural_bounds: HashMap::with_capacity(256),
             element_bounds: HashMap::with_capacity(256),
             hit_regions: Vec::with_capacity(128),
@@ -301,6 +302,8 @@ impl UiTree {
             }
             self.anchor_placement_handles.clear();
             collect_anchor_placement_handles(root, &mut self.anchor_placement_handles);
+            self.layout_bounds_handles.clear();
+            collect_layout_bounds_handles(root, &mut self.layout_bounds_handles);
             self.virtual_scroll_handles.clear();
             sync_virtual_scrolls(
                 root,
@@ -724,9 +727,24 @@ impl UiTree {
     /// The runtime uses this edge-triggered revision comparison to request one correcting frame so
     /// an application that draws from [`crate::AnchorPlacementHandle`] converges immediately after
     /// a flip. An unchanged placement reports nothing and creates no redraw source.
+    /// Whether any mounted element reads back geometry that only painting resolves.
+    pub(crate) fn observes_painted_geometry(&self) -> bool {
+        !self.layout_bounds_handles.is_empty()
+    }
+
     pub(crate) fn take_anchor_placement_update(&mut self) -> bool {
         let mut changed = false;
         for binding in &mut self.anchor_placement_handles {
+            let revision = binding.handle.revision();
+            if revision == binding.revision {
+                continue;
+            }
+            binding.revision = revision;
+            changed = true;
+        }
+        // Painted bounds follow the same edge-triggered contract: a handle whose bounds moved
+        // earns one correcting frame, and an unchanged one earns nothing.
+        for binding in &mut self.layout_bounds_handles {
             let revision = binding.handle.revision();
             if revision == binding.revision {
                 continue;

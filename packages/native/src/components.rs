@@ -254,6 +254,39 @@ pub(super) struct NativeSplitterState {
     listens: bool,
     declared: Vec<f32>,
     reported: Vec<f32>,
+    /// The painted bounds of every pane, so the state's total tracks the real laid-out extent
+    /// instead of the declared sizes; a handle then follows the pointer one logical pixel per
+    /// pixel even when flex layout shrank or grew the panes.
+    pane_bounds: Vec<LayoutBoundsHandle>,
+    orientation: SplitterOrientation,
+}
+
+impl NativeSplitterState {
+    /// Keep one retained bounds handle per declared pane.
+    fn allocate_pane_bounds(&mut self, panes: usize) {
+        let panes = panes.min(MAX_SPLITTER_PANES);
+        while self.pane_bounds.len() < panes {
+            self.pane_bounds.push(LayoutBoundsHandle::new());
+        }
+        self.pane_bounds.truncate(panes);
+    }
+
+    /// Sum of the painted pane extents along the splitter's axis, when every pane has painted.
+    fn painted_total(&self) -> Option<f32> {
+        let panes = self.state.sizes().len();
+        if panes == 0 || self.pane_bounds.len() < panes {
+            return None;
+        }
+        let mut total = 0.0;
+        for handle in &self.pane_bounds[..panes] {
+            let bounds = handle.bounds()?;
+            total += match self.orientation {
+                SplitterOrientation::Horizontal => bounds.width,
+                SplitterOrientation::Vertical => bounds.height,
+            };
+        }
+        (total > 0.0).then_some(total)
+    }
 }
 
 /// One retained toolbar instance.
@@ -579,6 +612,8 @@ impl NativeComponentStates {
             Some(retained) => {
                 retained.owner = id;
                 retained.listens = listens;
+                retained.orientation = orientation;
+                retained.allocate_pane_bounds(normalized.len());
                 if retained.declared != normalized {
                     retained.declared = normalized.clone();
                     retained.reported = normalized;
@@ -597,8 +632,14 @@ impl NativeComponentStates {
                         listens,
                         declared: normalized.clone(),
                         reported: normalized,
+                        pane_bounds: Vec::new(),
+                        orientation,
                     },
                 );
+                if let Some(retained) = self.splitters.get_mut(&key) {
+                    let panes = retained.state.sizes().len();
+                    retained.allocate_pane_bounds(panes);
+                }
             }
         }
     }
@@ -757,6 +798,11 @@ impl NativeComponentStates {
             }
         }
         for retained in self.splitters.values_mut() {
+            // Layout is the authority on the total: when flex shrank or grew the panes, rescale
+            // the retained sizes so the next declaration matches what was painted.
+            if let Some(total) = retained.painted_total() {
+                retained.state.set_total(total);
+            }
             let sizes = retained.state.sizes().to_vec();
             if sizes == retained.reported {
                 continue;
@@ -1213,6 +1259,8 @@ impl Default for NativeSplitterState {
     fn default() -> Self {
         Self {
             state: SplitterState::new(SplitterOrientation::Horizontal, &[1.0, 1.0]),
+            pane_bounds: Vec::new(),
+            orientation: SplitterOrientation::Horizontal,
             owner: 0,
             listens: false,
             declared: Vec::new(),
@@ -1408,11 +1456,18 @@ pub(super) fn apply_component_part(
             None => element,
         },
         SPLITTER_PANE_PART => {
+            let index = declared_index(node);
             let Some(retained) = components.splitters.get(&key) else {
                 return element;
             };
-            match Splitter::new(root, &retained.state).pane(declared_index(node)) {
-                Some(pane) => pane.pane_part(element),
+            match Splitter::new(root, &retained.state).pane(index) {
+                Some(pane) => {
+                    let element = pane.pane_part(element);
+                    match retained.pane_bounds.get(index) {
+                        Some(bounds) => element.report_bounds(bounds.clone()),
+                        None => element,
+                    }
+                }
                 None => element,
             }
         }

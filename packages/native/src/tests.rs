@@ -7556,3 +7556,206 @@ fn declared_combobox_parts_mount_chips_status_and_the_cores_empty_edge() {
         serde_json::json!([])
     );
 }
+
+fn drag_captured_element(
+    cx: &mut quickgui::TestAppContext,
+    window: quickgui::WindowHandle,
+    element: ElementId,
+    from: quickgui::Point,
+    to: quickgui::Point,
+) {
+    cx.simulate_pointer_drag(window, element, from, to).unwrap();
+}
+
+#[test]
+fn a_declared_splitter_handle_follows_a_captured_pointer_drag() {
+    let root_id = 440;
+    let first_pane_id = 441;
+    let handle_id = 442;
+    let second_pane_id = 443;
+    let mut tree = NativeTree::default();
+    let mut root = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "splitter",
+        &[
+            (property::SCOPE, "shrunk"),
+            (property::VALUES, "[180,180]"),
+            (property::ITEMS, r#"[{"min":20},{"min":20}]"#),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    // Pane extents are framework-owned structural geometry (`flex_none`), so the root is laid
+    // out at exactly the declared total plus the handle.
+    root.set_property(property::WIDTH, Some(PropertyValue::Number(366.0)));
+    root.set_property(property::HEIGHT, Some(PropertyValue::Number(60.0)));
+    insert_component_node(&mut tree, root_id, ROOT_NODE, root);
+    for (id, index) in [(first_pane_id, 0.0), (second_pane_id, 1.0)] {
+        let mut pane = component_part_node(
+            NodeTag::View,
+            root_id,
+            "splitter-pane",
+            &[(property::SCOPE, "shrunk")],
+            &[],
+        );
+        pane.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(index)));
+        insert_component_node(&mut tree, id, root_id, pane);
+    }
+    let mut handle = component_part_node(
+        NodeTag::View,
+        root_id,
+        "splitter-handle",
+        &[(property::SCOPE, "shrunk")],
+        &[],
+    );
+    handle.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(0.0)));
+    handle.set_property(property::WIDTH, Some(PropertyValue::Number(6.0)));
+    insert_component_node(&mut tree, handle_id, root_id, handle);
+    // Declaration order is pane, handle, pane.
+    let root_children = &mut tree.nodes.get_mut(&root_id).unwrap().children;
+    root_children.clear();
+    root_children.extend([first_pane_id, handle_id, second_pane_id]);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(13, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+
+    let splitter = Splitter::new(
+        ElementId::named("shrunk"),
+        &SplitterState::new(SplitterOrientation::Horizontal, &[180.0, 180.0]),
+    );
+    let handle_bounds = cx.element_bounds(window, splitter.handle_id(0)).unwrap();
+    assert!(
+        (handle_bounds.x - 180.0).abs() < 0.5,
+        "handle sat at {handle_bounds:?}"
+    );
+
+    // Dragging the handle 20 pixels moves it exactly 20 pixels.
+    let from = quickgui::Point::new(handle_bounds.x + 3.0, handle_bounds.y + 30.0);
+    let to = quickgui::Point::new(from.x + 20.0, from.y);
+    drag_captured_element(&mut cx, window, splitter.handle_id(0), from, to);
+    let dragged = component_change(&events, root_id);
+    let sizes = dragged["sizes"].as_array().expect("sizes reported").clone();
+    assert!(
+        (sizes[0].as_f64().unwrap() - 200.0).abs() < 0.5,
+        "sizes were {sizes:?}"
+    );
+    assert!(
+        (sizes[1].as_f64().unwrap() - 160.0).abs() < 0.5,
+        "sizes were {sizes:?}"
+    );
+    let handle_bounds = cx.element_bounds(window, splitter.handle_id(0)).unwrap();
+    assert!(
+        (handle_bounds.x - 200.0).abs() < 0.5,
+        "handle moved to {handle_bounds:?}"
+    );
+}
+
+#[test]
+fn a_declared_scroll_area_measures_its_geometry_and_the_thumb_follows_a_drag() {
+    let root_id = 450;
+    let viewport_id = 451;
+    let content_id = 452;
+    let scrollbar_id = 453;
+    let thumb_id = 454;
+    let mut tree = NativeTree::default();
+    let mut root = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "scroll-area",
+        &[(property::SCOPE, "measured")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    root.set_property(property::WIDTH, Some(PropertyValue::Number(206.0)));
+    root.set_property(property::HEIGHT, Some(PropertyValue::Number(120.0)));
+    insert_component_node(&mut tree, root_id, ROOT_NODE, root);
+    let mut viewport = component_part_node(
+        NodeTag::View,
+        root_id,
+        "scroll-area-viewport",
+        &[(property::SCOPE, "measured")],
+        &[],
+    );
+    viewport.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+    viewport.set_property(property::HEIGHT, Some(PropertyValue::Number(120.0)));
+    insert_component_node(&mut tree, viewport_id, root_id, viewport);
+    let mut content = component_part_node(
+        NodeTag::View,
+        viewport_id,
+        "scroll-area-content",
+        &[(property::SCOPE, "measured")],
+        &[],
+    );
+    content.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+    content.set_property(property::HEIGHT, Some(PropertyValue::Number(600.0)));
+    insert_component_node(&mut tree, content_id, viewport_id, content);
+    let mut scrollbar = component_part_node(
+        NodeTag::View,
+        root_id,
+        "scroll-area-scrollbar",
+        &[
+            (property::SCOPE, "measured"),
+            (property::ORIENTATION, "vertical"),
+        ],
+        &[],
+    );
+    scrollbar.set_property(property::WIDTH, Some(PropertyValue::Number(6.0)));
+    scrollbar.set_property(property::HEIGHT, Some(PropertyValue::Number(120.0)));
+    insert_component_node(&mut tree, scrollbar_id, root_id, scrollbar);
+    let mut thumb = component_part_node(
+        NodeTag::View,
+        scrollbar_id,
+        "scroll-area-thumb",
+        &[
+            (property::SCOPE, "measured"),
+            (property::ORIENTATION, "vertical"),
+        ],
+        &[],
+    );
+    thumb.set_property(property::WIDTH, Some(PropertyValue::Number(6.0)));
+    insert_component_node(&mut tree, thumb_id, scrollbar_id, thumb);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_base_ui_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+    let area = quickgui::ScrollArea::new("measured");
+    let vertical = quickgui::ScrollAreaOrientation::Vertical;
+
+    // Nothing was declared: the viewport and content extents come from the painted bounds.
+    let measured = component_change(&events, root_id);
+    assert_eq!(measured["hasOverflowY"], serde_json::json!(true));
+    let scrollbar_bounds = cx
+        .element_bounds(window, area.scrollbar_id(vertical))
+        .unwrap();
+    let thumb_bounds = cx.element_bounds(window, area.thumb_id(vertical)).unwrap();
+    // 120 of 600 is visible, so the thumb spans a fifth of the 120-pixel track from its top.
+    assert!(
+        (thumb_bounds.height - 24.0).abs() < 0.5,
+        "thumb was {thumb_bounds:?}"
+    );
+    assert!(
+        (thumb_bounds.y - scrollbar_bounds.y).abs() < 0.5,
+        "thumb was {thumb_bounds:?}"
+    );
+
+    // Dragging the thumb 48 pixels moves it 48 pixels and scrolls half the overflow.
+    let from = quickgui::Point::new(thumb_bounds.x + 3.0, thumb_bounds.y + 12.0);
+    let to = quickgui::Point::new(from.x, from.y + 48.0);
+    drag_captured_element(&mut cx, window, area.thumb_id(vertical), from, to);
+    let scrolled = component_change(&events, root_id);
+    let offset = scrolled["offset"]["y"].as_f64().unwrap();
+    assert!((offset - 240.0).abs() < 1.0, "offset was {offset}");
+    let dragged = cx.element_bounds(window, area.thumb_id(vertical)).unwrap();
+    assert!(
+        (dragged.y - (thumb_bounds.y + 48.0)).abs() < 0.5,
+        "thumb moved to {dragged:?}"
+    );
+}

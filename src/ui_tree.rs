@@ -27,7 +27,7 @@ use crate::{
     AnchorAlign, AnchorPlacement, AnchorPlacementHandle, AnchorSide, AnimatedImage, AppRegion,
     BackgroundImage, BoxShadow, Canvas, Color, ColorMatrix, Corners, CursorStyle,
     CustomShaderPrimitive, DispatchPhase, Element, ElementId, ImagePrimitive, Insets, Interpolate,
-    KeyContext, MAX_BACKGROUND_IMAGE_TILES, MAX_BOX_SHADOWS_PER_ELEMENT,
+    KeyContext, LayoutBoundsHandle, MAX_BACKGROUND_IMAGE_TILES, MAX_BOX_SHADOWS_PER_ELEMENT,
     MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
     MAX_DECLARATIVE_ANIMATIONS_PER_WINDOW, MAX_STYLE_TRANSITIONS_PER_WINDOW,
     MAX_TOOLTIPS_PER_WINDOW, MouseButton, ObjectFit, Path, PathPrimitive, Point, Quad, Rect,
@@ -591,6 +591,11 @@ struct RetainedAnchorPlacement {
     revision: u64,
 }
 
+struct RetainedLayoutBounds {
+    handle: LayoutBoundsHandle,
+    revision: u64,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ScrollEndState {
     revision: u64,
@@ -611,6 +616,7 @@ pub(crate) struct UiTree {
     scroll_end_states: HashMap<ElementId, ScrollEndState>,
     virtual_scroll_handles: HashMap<ElementId, RetainedVirtualScroll>,
     anchor_placement_handles: Vec<RetainedAnchorPlacement>,
+    layout_bounds_handles: Vec<RetainedLayoutBounds>,
     natural_bounds: HashMap<ElementId, Rect>,
     element_bounds: HashMap<ElementId, Rect>,
     hit_regions: Vec<HitRegion>,

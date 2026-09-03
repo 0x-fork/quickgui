@@ -27,6 +27,23 @@ impl TestAppContext {
                         repaint = true;
                     }
                 }
+                // Production paints every rebuilt frame, and painting is what publishes resolved
+                // anchor placements and laid-out bounds. Views that read those back get the same
+                // one correcting frame here, so a headless test converges like a real window.
+                let observers: Vec<WindowHandle> = self
+                    .windows
+                    .iter()
+                    .filter(|(_, state)| {
+                        !state.retained_geometry_ready && state.ui.observes_painted_geometry()
+                    })
+                    .map(|(handle, _)| *handle)
+                    .collect();
+                for window in observers {
+                    self.prepare_retained_geometry(window)?;
+                    if self.window(window)?.dirty {
+                        repaint = true;
+                    }
+                }
                 if !repaint {
                     return Ok(());
                 }

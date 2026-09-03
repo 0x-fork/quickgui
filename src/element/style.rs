@@ -1186,6 +1186,22 @@ impl Element {
         self.anchor_placement.is_some()
     }
 
+    /// Publish this element's painted bounds through an application-owned handle.
+    ///
+    /// The handle receives the window-relative bounds of the frame QuickGUI was already painting,
+    /// so behavior that must match real layout — a splitter total, a scroll area's viewport and
+    /// content extents — reads [`LayoutBoundsHandle::bounds`] instead of guessing. When the bounds
+    /// change, exactly one correcting frame is requested; unchanged bounds add no redraw source.
+    pub fn report_bounds(mut self, handle: LayoutBoundsHandle) -> Self {
+        self.layout_bounds = Some(handle);
+        self
+    }
+
+    /// Whether this element publishes its painted bounds.
+    pub fn reports_bounds(&self) -> bool {
+        self.layout_bounds.is_some()
+    }
+
     /// Show a delayed, pointer-passive GPU tooltip while this element is hovered.
     ///
     /// The detached tooltip tree is laid out only after its exact delay expires. Entering a

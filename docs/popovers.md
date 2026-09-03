@@ -180,6 +180,12 @@ the paint QuickGUI was already performing; when the resolved value changes, exac
 frame is requested, and an unchanged placement requests none, so a settled popover stays settled.
 `Element::report_anchor_placement(handle)` binds the same reporting to any anchored element.
 
+`LayoutBoundsHandle` is the same contract for painted geometry: `Element::report_bounds(handle)`
+publishes an element's window-relative bounds during the paint already being performed, and a
+changed size earns exactly one correcting frame. Behavior that must match real layout — a splitter
+whose total is whatever flex gave its panes, a scroll area sized from its painted viewport and
+content — reads `LayoutBoundsHandle::bounds` while declaring the next frame instead of guessing.
+
 `arrow_part(element)` then pins the caller-owned arrow to the popup edge that faces the anchor and
 centers it on the anchor along the cross axis, clamped by `arrow_padding`. Size, shape, rotation,
 and color stay application-owned, and the arrow is hidden from assistive technology.

@@ -546,6 +546,81 @@ impl PartialEq for AnchorPlacementHandle {
     }
 }
 
+#[derive(Default)]
+struct LayoutBoundsInner {
+    bounds: Option<Rect>,
+    revision: u64,
+}
+
+/// An application-owned receiver for the window-relative bounds QuickGUI laid out for one element.
+///
+/// Store the handle next to the state that depends on the element's real size — a splitter that
+/// must match its container, a scroll area that must know its viewport and content extents — bind
+/// it with [`Element::report_bounds`], and read [`Self::bounds`] while declaring the next frame.
+/// Like [`AnchorPlacementHandle`], it retains one small allocation and no task, timer, observer, or
+/// idle scheduler source: QuickGUI writes it during the paint it was already performing and
+/// requests exactly one correcting frame when the bounds changed, so a settled window stays
+/// settled.
+///
+/// ```
+/// use quickgui::{LayoutBoundsHandle, div};
+///
+/// let bounds = LayoutBoundsHandle::new();
+/// assert_eq!(bounds.bounds(), None);
+/// let pane = div().report_bounds(bounds.clone());
+/// assert!(pane.reports_bounds());
+/// ```
+#[derive(Clone, Default)]
+pub struct LayoutBoundsHandle(Rc<RefCell<LayoutBoundsInner>>);
+
+impl LayoutBoundsHandle {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The bounds painted on the most recent frame, in logical window coordinates, or `None`
+    /// before the first painted frame.
+    pub fn bounds(&self) -> Option<Rect> {
+        self.0.borrow().bounds
+    }
+
+    /// Forget the last painted bounds so a remounted element cannot read a stale size.
+    pub fn clear(&self) {
+        let mut inner = self.0.borrow_mut();
+        if inner.bounds.is_some() {
+            inner.bounds = None;
+            inner.revision = inner.revision.wrapping_add(1);
+        }
+    }
+
+    pub(crate) fn revision(&self) -> u64 {
+        self.0.borrow().revision
+    }
+
+    pub(crate) fn report(&self, bounds: Rect) {
+        let mut inner = self.0.borrow_mut();
+        if inner.bounds == Some(bounds) {
+            return;
+        }
+        inner.bounds = Some(bounds);
+        inner.revision = inner.revision.wrapping_add(1);
+    }
+}
+
+impl fmt::Debug for LayoutBoundsHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LayoutBoundsHandle")
+            .field("bounds", &self.bounds())
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for LayoutBoundsHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// The side of its anchor an element was placed on.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum AnchorSide {
@@ -1929,6 +2004,7 @@ pub struct Element {
     pub(crate) portal: bool,
     pub(crate) anchor: Option<AnchorStyle>,
     pub(crate) anchor_placement: Option<AnchorPlacementHandle>,
+    pub(crate) layout_bounds: Option<LayoutBoundsHandle>,
     pub(crate) tooltip: Option<Tooltip>,
     pub(crate) app_region: Option<AppRegion>,
     pub(crate) virtual_scroll: Option<VirtualScrollStyle>,

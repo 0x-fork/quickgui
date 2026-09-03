@@ -676,6 +676,9 @@ pub(super) fn paint_element(
         bounds
     };
     element_bounds.insert(element.runtime_id, bounds);
+    if let Some(handle) = &element.layout_bounds {
+        handle.report(bounds);
+    }
     let hit_bounds = expand_hit_bounds(bounds, element.hit_slop);
 
     // A clipped leaf cannot contribute pixels or interaction regions. Avoid emitting offscreen

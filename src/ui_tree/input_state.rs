@@ -283,6 +283,26 @@ pub(super) fn collect_anchor_placement_handles(
     }
 }
 
+/// Collect every mounted element that publishes its painted bounds.
+pub(super) fn collect_layout_bounds_handles(
+    element: &Element,
+    handles: &mut Vec<RetainedLayoutBounds>,
+) {
+    if element.is_display_none() {
+        return;
+    }
+    if let Some(handle) = &element.layout_bounds {
+        let revision = handle.revision();
+        handles.push(RetainedLayoutBounds {
+            handle: handle.clone(),
+            revision,
+        });
+    }
+    for child in &element.children {
+        collect_layout_bounds_handles(child, handles);
+    }
+}
+
 pub(super) fn sync_animations(
     element: &Element,
     animations: &mut HashMap<ElementId, AnimationPlayback>,

@@ -161,9 +161,24 @@ area.root_part(div())
     )
     .child(
         area.scrollbar_part(&self.log, ScrollAreaOrientation::Vertical, div().on_pointer(track))
-            .child(area.thumb_part(ScrollAreaOrientation::Vertical, div().on_pointer(drag))),
+            .child(area.positioned_thumb_part(
+                &self.log,
+                ScrollAreaOrientation::Vertical,
+                160.0,
+                div().on_pointer(drag),
+            )),
     )
 ```
+
+`positioned_thumb_part` places the thumb absolutely inside the scrollbar at
+`ScrollAreaState::thumb_offset` with `ScrollAreaState::thumb_length` for the track length the
+caller laid out, so it follows the offset without the application re-deriving either value; the
+cross-axis size and every visual property stay caller-owned. `thumb_part` is the bare decorator for
+an application that positions the thumb itself. A thumb drag is measured in window coordinates
+from the capture origin, so a thumb that re-lays out under the pointer keeps tracking it exactly.
+To size a scroll area from real layout instead of declared extents, bind `LayoutBoundsHandle`s
+with `Element::report_bounds` on the viewport and content parts and feed the painted sizes to
+`set_geometry` while declaring the next frame.
 
 `ScrollAreaStyleState` is the `data-`-like render state an application styles from: `scrolling`,
 `hovering`, `has_overflow_x` / `has_overflow_y`, and `overflow_x_start` / `overflow_x_end` /
@@ -358,9 +373,10 @@ through bounded properties.
 
 Two things follow from that boundary and differ from the Rust API:
 
-- **A scroll area declares its geometry.** QuickGUI has no layout observer at the hosted boundary,
-  so `viewportSize` and `contentSize` are declared `{ width, height }` extents rather than
-  measured. Everything derived from them stays the core's.
+- **A scroll area measures its own geometry.** The binding reports the painted bounds of the
+  viewport, the content, and each scrollbar through `LayoutBoundsHandle`s, so `viewportSize` and
+  `contentSize` are optional overrides rather than requirements, the thumb is positioned by the
+  core, and a splitter's sizes rescale to the extent flex layout actually gave its panes.
 - **A part whose edge the core owns ignores a declared listener for that same edge.** A checkbox
   inside a group, a navigation-menu trigger, an OTP slot's input, a scroll area's scrollbar, thumb
   and wheel, a drawer's swipe area, and every popup's dismissal register exactly one listener each,

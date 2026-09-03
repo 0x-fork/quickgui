@@ -1227,16 +1227,14 @@ offsets, the derived overflow flags, the thumb arithmetic, and the captured poin
 thumb drags and track presses; the viewport is clipped and the application applies the reported
 offset as a paint-only transform, so the two never fight over the same wheel event.
 
-QuickGUI has no layout observer at the hosted boundary, so the extents the arithmetic needs are
-declared ahead of the core's decision like every other bounded property: `viewportSize` and
-`contentSize` are the boxes the application laid out. Everything else comes back:
+The extents the arithmetic needs come from the painted bounds of the viewport, the content, and
+each scrollbar, which the binding reads back through `LayoutBoundsHandle`s after every frame that
+changed them. `viewportSize` and `contentSize` remain optional overrides for content the layout
+cannot measure. The thumb is positioned by the core along its scrollbar; the application styles
+its cross-axis size and appearance only. Everything else comes back:
 
 ```tsx
-<ScrollArea.Root
-  viewportSize={{ width: 260, height: 160 }}
-  contentSize={{ width: 260, height: rows.length * 22 }}
-  onScrollStateChange={setScroll}
->
+<ScrollArea.Root onScrollStateChange={setScroll}>
   <ScrollArea.Viewport>
     <ScrollArea.Content style={{ transform: `translateY(${-(scroll()?.offset.y ?? 0)}px)` }}>
       {/* rows */}

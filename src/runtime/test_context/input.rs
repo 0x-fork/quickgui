@@ -309,6 +309,90 @@ impl TestAppContext {
         Ok(default_prevented)
     }
 
+    /// Deliver one captured pointer event to an element's `on_pointer` listener.
+    ///
+    /// The event is localized against the element's laid-out bounds exactly as the production
+    /// runtime localizes a captured event, so `local_position`, `local_origin`, and `size` match
+    /// what a real drag delivers. The window's pointer position follows the event.
+    pub fn simulate_pointer(
+        &mut self,
+        window: WindowHandle,
+        element: impl Into<ElementId>,
+        event: PointerEvent,
+    ) -> Result<(), TestAppError> {
+        let element = element.into();
+        self.require_element(window, element)?;
+        let (listener, bounds) = {
+            let state = self.window(window)?;
+            (
+                state.listeners.pointers.get(&element).cloned(),
+                state.ui.element_bounds(element),
+            )
+        };
+        let Some(listener) = listener else {
+            return Err(TestAppError::NotListening {
+                window,
+                element,
+                kind: "pointer",
+            });
+        };
+        self.window_mut(window)?.pointer = Some(event.position);
+        let event = bounds.map_or(event, |bounds| event.localize(bounds));
+        let mut cx = self.event_context(Some(window));
+        listener(self.window_mut(window)?.view.as_any_mut(), &event, &mut cx);
+        self.apply_context(Some(window), cx)?;
+        self.run_until_idle()
+    }
+
+    /// Simulate one complete captured drag: a press at `from`, one move to `to`, and a release.
+    ///
+    /// Each event carries the capture origin and the motion since the preceding event, matching
+    /// the production capture sequence for a left-button drag.
+    pub fn simulate_pointer_drag(
+        &mut self,
+        window: WindowHandle,
+        element: impl Into<ElementId>,
+        from: Point,
+        to: Point,
+    ) -> Result<(), TestAppError> {
+        let element = element.into();
+        let button = MouseButton::Left;
+        let base = PointerEvent {
+            size: Size::ZERO,
+            phase: PointerPhase::Down,
+            position: from,
+            origin: from,
+            local_position: from,
+            local_origin: from,
+            delta: Vector::ZERO,
+            button,
+            modifiers: Modifiers::empty(),
+        };
+        self.simulate_pointer(window, element, base)?;
+        self.simulate_pointer(
+            window,
+            element,
+            PointerEvent {
+                phase: PointerPhase::Move,
+                position: to,
+                local_position: to,
+                delta: to - from,
+                ..base
+            },
+        )?;
+        self.simulate_pointer(
+            window,
+            element,
+            PointerEvent {
+                phase: PointerPhase::Up,
+                position: to,
+                local_position: to,
+                delta: Vector::ZERO,
+                ..base
+            },
+        )
+    }
+
     /// Deliver one deterministic scroll-wheel event through an element's listening ancestors.
     ///
     /// The returned value is true when a callback called [`EventContext::prevent_default`]. This

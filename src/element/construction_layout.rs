@@ -134,6 +134,7 @@ impl Element {
             portal: false,
             anchor: None,
             anchor_placement: None,
+            layout_bounds: None,
             tooltip: None,
             app_region: None,
             virtual_scroll: None,

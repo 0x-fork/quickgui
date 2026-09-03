@@ -16,9 +16,9 @@ use std::time::{Duration, Instant};
 
 use quickgui::{
     Avatar, AvatarLoadingStatus, AvatarState, CheckboxGroup, CheckboxGroupState, Drawer,
-    DrawerModality, DrawerState, MAX_AVATAR_FALLBACK_DELAY, MAX_CHECKBOX_GROUP_VALUES,
-    MAX_DRAWER_SNAP_POINTS, MAX_NAVIGATION_MENU_ITEMS, MAX_OTP_LENGTH, MAX_PREVIEW_CARD_DELAY,
-    NavigationMenu, NavigationMenuActivationDirection, NavigationMenuItem,
+    DrawerModality, DrawerState, LayoutBoundsHandle, MAX_AVATAR_FALLBACK_DELAY,
+    MAX_CHECKBOX_GROUP_VALUES, MAX_DRAWER_SNAP_POINTS, MAX_NAVIGATION_MENU_ITEMS, MAX_OTP_LENGTH,
+    MAX_PREVIEW_CARD_DELAY, NavigationMenu, NavigationMenuActivationDirection, NavigationMenuItem,
     NavigationMenuOrientation, NavigationMenuState, OtpField, OtpFieldState, OtpValidationType,
     PreviewCard, PreviewCardState, ScrollArea, ScrollAreaOrientation, ScrollAreaState, Separator,
     SeparatorOrientation, Size, SwipeDirection,
@@ -391,11 +391,18 @@ impl Default for NativePreviewCardState {
 pub(super) struct NativeScrollAreaState {
     pub(super) state: ScrollAreaState,
     pub(super) keep_mounted: bool,
-    /// The last laid-out track length per axis, learned from a scrollbar's own pointer events.
+    /// The last laid-out track length per axis.
     ///
-    /// A track normally spans the viewport along its axis, so the declared viewport extent is the
-    /// exact default until a press reports the real geometry the core laid out.
+    /// The painted scrollbar bounds are the authority; until a scrollbar has painted, the viewport
+    /// extent along the axis stands in, and a press on the track still reports the exact size.
     pub(super) track_lengths: [f32; 2],
+    /// Extents declared through `viewportSize`/`contentSize`; a zero extent means "measure".
+    declared_viewport: Size,
+    declared_content: Size,
+    /// The painted bounds of the viewport, content, and each scrollbar.
+    pub(super) viewport_bounds: LayoutBoundsHandle,
+    pub(super) content_bounds: LayoutBoundsHandle,
+    pub(super) scrollbar_bounds: [LayoutBoundsHandle; 2],
     owner: u32,
     listens: bool,
     reported: Option<serde_json::Value>,
@@ -407,6 +414,11 @@ impl Default for NativeScrollAreaState {
             state: ScrollAreaState::new(),
             keep_mounted: false,
             track_lengths: [0.0, 0.0],
+            declared_viewport: Size::new(0.0, 0.0),
+            declared_content: Size::new(0.0, 0.0),
+            viewport_bounds: LayoutBoundsHandle::new(),
+            content_bounds: LayoutBoundsHandle::new(),
+            scrollbar_bounds: [LayoutBoundsHandle::new(), LayoutBoundsHandle::new()],
             owner: 0,
             listens: false,
             reported: None,
@@ -414,9 +426,68 @@ impl Default for NativeScrollAreaState {
     }
 }
 
+fn declared_or_measured(declared: Size, measured: Option<Size>) -> Option<Size> {
+    if declared.width > 0.0 && declared.height > 0.0 {
+        return Some(declared);
+    }
+    let measured = measured?;
+    Some(Size::new(
+        if declared.width > 0.0 {
+            declared.width
+        } else {
+            measured.width
+        },
+        if declared.height > 0.0 {
+            declared.height
+        } else {
+            measured.height
+        },
+    ))
+}
+
 impl NativeScrollAreaState {
     pub(super) fn track_length(&self, orientation: ScrollAreaOrientation) -> f32 {
         self.track_lengths[axis_index(orientation)]
+    }
+
+    /// Fold the last painted geometry into the state: a declared extent wins, a painted one
+    /// fills in what was not declared, and the track lengths follow the painted scrollbars.
+    fn adopt_painted_geometry(&mut self) -> bool {
+        let size_of = |handle: &LayoutBoundsHandle| {
+            handle
+                .bounds()
+                .map(|bounds| Size::new(bounds.width, bounds.height))
+        };
+        let viewport = declared_or_measured(self.declared_viewport, size_of(&self.viewport_bounds));
+        let content = declared_or_measured(self.declared_content, size_of(&self.content_bounds));
+        let mut changed = false;
+        // `axis_index` maps the vertical axis to slot 0 and the horizontal axis to slot 1; a
+        // vertical track runs along the height and a horizontal one along the width.
+        let vertical = axis_index(ScrollAreaOrientation::Vertical);
+        let horizontal = axis_index(ScrollAreaOrientation::Horizontal);
+        if let (Some(viewport), Some(content)) = (viewport, content) {
+            changed |= self.state.set_geometry(viewport, content);
+            if self.track_lengths[vertical] <= 0.0 {
+                self.track_lengths[vertical] = viewport.height;
+            }
+            if self.track_lengths[horizontal] <= 0.0 {
+                self.track_lengths[horizontal] = viewport.width;
+            }
+        }
+        for (axis, handle) in self.scrollbar_bounds.iter().enumerate() {
+            if let Some(bounds) = handle.bounds() {
+                let length = if axis == vertical {
+                    bounds.height
+                } else {
+                    bounds.width
+                };
+                if length > 0.0 && self.track_lengths[axis] != length {
+                    self.track_lengths[axis] = length;
+                    changed = true;
+                }
+            }
+        }
+        changed
     }
 
     fn snapshot(&self) -> serde_json::Value {
@@ -792,11 +863,11 @@ impl NativeComponentStates {
         if let Some(threshold) = threshold {
             retained.state = retained.state.overflow_edge_threshold(threshold);
         }
-        if retained.state.set_geometry(viewport, content) {
-            // A track normally spans the viewport along its axis; a press replaces this with the
-            // scrollbar's own laid-out extent.
-            retained.track_lengths = [viewport.width, viewport.height];
-        }
+        retained.declared_viewport = viewport;
+        retained.declared_content = content;
+        // Declared extents apply immediately; anything left undeclared is measured from the
+        // painted viewport and content bounds once they exist.
+        retained.adopt_painted_geometry();
     }
 
     fn sync_otp_field(&mut self, key: u64, id: u32, node: &NativeNode) {
@@ -1022,6 +1093,7 @@ impl NativeComponentStates {
             }
         }
         for retained in self.base_ui.scroll_areas.values_mut() {
+            retained.adopt_painted_geometry();
             let snapshot = retained.snapshot();
             if retained.reported.as_ref() == Some(&snapshot) {
                 continue;
@@ -1457,7 +1529,11 @@ pub(super) fn apply_base_ui_part(
         SCROLL_AREA_VIEWPORT_PART => {
             let area = ScrollArea::new(root);
             let element = area.viewport_part(element);
-            if !listeners_enabled || !components.base_ui.scroll_areas.contains_key(&key) {
+            let Some(retained) = components.base_ui.scroll_areas.get(&key) else {
+                return Some(element);
+            };
+            let element = element.report_bounds(retained.viewport_bounds.clone());
+            if !listeners_enabled {
                 return Some(element);
             }
             let wheel = cx.scroll_wheel_listener(area.viewport_id(), move |view, event, cx| {
@@ -1469,7 +1545,13 @@ pub(super) fn apply_base_ui_part(
             });
             element.on_scroll_wheel(wheel)
         }
-        SCROLL_AREA_CONTENT_PART => ScrollArea::new(root).content_part(element),
+        SCROLL_AREA_CONTENT_PART => {
+            let element = ScrollArea::new(root).content_part(element);
+            match components.base_ui.scroll_areas.get(&key) {
+                Some(retained) => element.report_bounds(retained.content_bounds.clone()),
+                None => element,
+            }
+        }
         SCROLL_AREA_SCROLLBAR_PART => {
             let Some(retained) = components.base_ui.scroll_areas.get(&key) else {
                 return Some(element);
@@ -1479,7 +1561,9 @@ pub(super) fn apply_base_ui_part(
             if !area.shows_scrollbar(&retained.state, orientation) {
                 return None;
             }
-            let element = area.scrollbar_part(&retained.state, orientation, element);
+            let element = area
+                .scrollbar_part(&retained.state, orientation, element)
+                .report_bounds(retained.scrollbar_bounds[axis_index(orientation)].clone());
             if !listeners_enabled {
                 return Some(element);
             }
@@ -1514,7 +1598,12 @@ pub(super) fn apply_base_ui_part(
             if !area.shows_scrollbar(&retained.state, orientation) {
                 return None;
             }
-            let element = area.thumb_part(orientation, element);
+            let element = area.positioned_thumb_part(
+                &retained.state,
+                orientation,
+                retained.track_length(orientation),
+                element,
+            );
             if !listeners_enabled {
                 return Some(element);
             }

@@ -4,6 +4,10 @@
 
 Implemented now:
 
+- painted-bounds reporting: `LayoutBoundsHandle` with `Element::report_bounds` publishes an
+  element's laid-out window bounds from the paint already being performed and requests one
+  correcting frame when they change; the hosted scroll area and splitter bindings size themselves
+  from it instead of from declared extents;
 - the remaining Base UI components: `Separator` (orientation-only dividers), `Avatar` with an
   `AvatarState` whose Idle/Loading/Loaded/Error status arms one exact fallback deadline,
   `CheckboxGroup` with a 256-value bounded set and a parent checkbox derived from its children,
