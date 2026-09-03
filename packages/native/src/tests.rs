@@ -346,6 +346,167 @@ fn swift_ui_button_rejects_unknown_modifiers() {
             .contains("unsupported SwiftUI modifier")
     );
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn swift_ui_form_controls_decode_from_the_native_tree() {
+    let mut tree = NativeTree::default();
+    let label_id = 90;
+    let mut label = NativeNode::new(NodeTag::Text);
+    label.text = Arc::from("Volume");
+    tree.nodes.insert(label_id, label);
+
+    let mut slider = NativeNode::new(NodeTag::SwiftUiSlider);
+    slider.children.push(label_id);
+    slider.set_property(property::VALUE, Some(PropertyValue::Number(0.4)));
+    slider.set_property(property::MINIMUM, Some(PropertyValue::Number(0.0)));
+    slider.set_property(property::MAXIMUM, Some(PropertyValue::Number(1.0)));
+    slider.set_property(property::STEP, Some(PropertyValue::Number(0.1)));
+    slider.set_property(
+        property::INPUT_LISTENER,
+        Some(PropertyValue::Bool(true)),
+    );
+    let slider = swift_ui_slider(1, &slider, &tree).unwrap();
+    assert_eq!(slider.value, f64::from(0.4_f32));
+    assert_eq!(slider.minimum, 0.0);
+    assert_eq!(slider.maximum, 1.0);
+    assert_eq!(slider.step, Some(0.1_f32.into()));
+    assert_eq!(slider.label.as_deref(), Some("Volume"));
+    assert!(slider.has_value_change);
+
+    let mut toggle = NativeNode::new(NodeTag::SwiftUiToggle);
+    toggle.set_property(property::CHECKED, Some(PropertyValue::Bool(true)));
+    let toggle = swift_ui_toggle(2, &toggle, &tree).unwrap();
+    assert!(toggle.is_on);
+
+    let mut progress = NativeNode::new(NodeTag::SwiftUiProgressView);
+    progress.set_property(property::VALUE, Some(PropertyValue::Number(3.0)));
+    progress.set_property(property::MAXIMUM, Some(PropertyValue::Number(10.0)));
+    progress.set_property(
+        property::VALUE_TEXT,
+        Some(PropertyValue::String(Arc::from("3 of 10"))),
+    );
+    let progress = swift_ui_progress_view(3, &progress, &tree).unwrap();
+    assert_eq!(progress.value, Some(3.0));
+    assert_eq!(progress.total, 10.0);
+    assert_eq!(progress.current_value_label.as_deref(), Some("3 of 10"));
+
+    let mut stepper = NativeNode::new(NodeTag::SwiftUiStepper);
+    stepper.set_property(property::VALUE, Some(PropertyValue::Number(2.0)));
+    stepper.set_property(property::STEP, Some(PropertyValue::Number(0.5)));
+    let stepper = swift_ui_stepper(4, &stepper, &tree).unwrap();
+    assert_eq!(stepper.value, 2.0);
+    assert_eq!(stepper.step, 0.5);
+
+    let mut field = NativeNode::new(NodeTag::SwiftUiTextField);
+    field.set_property(
+        property::VALUE,
+        Some(PropertyValue::String(Arc::from("Ada"))),
+    );
+    field.set_property(
+        property::PLACEHOLDER,
+        Some(PropertyValue::String(Arc::from("Name"))),
+    );
+    field.set_property(property::PASSWORD, Some(PropertyValue::Bool(true)));
+    field.set_property(
+        property::SUBMIT_LISTENER,
+        Some(PropertyValue::Bool(true)),
+    );
+    let field = swift_ui_text_field(5, &field).unwrap();
+    assert_eq!(&*field.text, "Ada");
+    assert_eq!(field.placeholder.as_deref(), Some("Name"));
+    assert!(field.secure);
+    assert!(field.has_submit);
+
+    let mut picker = NativeNode::new(NodeTag::SwiftUiPicker);
+    picker.children.push(label_id);
+    picker.set_property(
+        property::VALUE,
+        Some(PropertyValue::String(Arc::from("grid"))),
+    );
+    picker.set_property(
+        property::ITEMS,
+        Some(PropertyValue::String(Arc::from(
+            r#"[{"value":"list","label":"List","systemImage":"list.bullet"},{"value":"grid","label":"Grid","disabled":true}]"#,
+        ))),
+    );
+    picker.set_property(
+        property::SWIFT_UI_PICKER_STYLE,
+        Some(PropertyValue::String(Arc::from("segmented"))),
+    );
+    let picker = swift_ui_picker(6, &picker, &tree).unwrap();
+    assert_eq!(&*picker.selection, "grid");
+    assert_eq!(picker.style, SwiftUiPickerStyle::Segmented);
+    assert_eq!(picker.options.len(), 2);
+    assert_eq!(picker.options[0].system_image.as_deref(), Some("list.bullet"));
+    assert!(picker.options[1].disabled);
+
+    let mut tabs = NativeNode::new(NodeTag::SwiftUiPicker);
+    tabs.set_property(
+        property::SWIFT_UI_PICKER_STYLE,
+        Some(PropertyValue::String(Arc::from("segmented"))),
+    );
+    tabs.set_property(
+        property::ROLE,
+        Some(PropertyValue::String(Arc::from("tabs"))),
+    );
+    let tabs = swift_ui_picker(16, &tabs, &tree).unwrap();
+    assert_eq!(tabs.style, SwiftUiPickerStyle::Tabs);
+
+    let mut date = NativeNode::new(NodeTag::SwiftUiDatePicker);
+    date.set_property(
+        property::CIVIL_VALUE,
+        Some(PropertyValue::String(Arc::from("1788525000.25"))),
+    );
+    date.set_property(
+        property::CIVIL_MINIMUM,
+        Some(PropertyValue::String(Arc::from("1767225600"))),
+    );
+    date.set_property(
+        property::SWIFT_UI_DATE_PICKER_COMPONENTS,
+        Some(PropertyValue::String(Arc::from("date"))),
+    );
+    date.set_property(
+        property::SWIFT_UI_DATE_PICKER_STYLE,
+        Some(PropertyValue::String(Arc::from("field"))),
+    );
+    let date = swift_ui_date_picker(7, &date, &tree).unwrap();
+    assert_eq!(date.value, 1_788_525_000.25);
+    assert_eq!(date.minimum, Some(1_767_225_600.0));
+    assert_eq!(date.components, SwiftUiDatePickerComponents::Date);
+    assert_eq!(date.style, SwiftUiDatePickerStyle::Field);
+
+    let mut color = NativeNode::new(NodeTag::SwiftUiColorPicker);
+    color.set_property(
+        property::VALUE,
+        Some(PropertyValue::String(Arc::from("#3366ffff"))),
+    );
+    color.set_property(
+        property::SWIFT_UI_COLOR_SUPPORTS_OPACITY,
+        Some(PropertyValue::Bool(false)),
+    );
+    let color = swift_ui_color_picker(8, &color, &tree).unwrap();
+    assert_eq!(&*color.selection, "#3366ffff");
+    assert!(!color.supports_opacity);
+
+    let mut gauge = NativeNode::new(NodeTag::SwiftUiGauge);
+    gauge.set_property(property::VALUE, Some(PropertyValue::Number(0.72)));
+    gauge.set_property(
+        property::SWIFT_UI_GAUGE_STYLE,
+        Some(PropertyValue::String(Arc::from(
+            "accessoryLinearCapacity",
+        ))),
+    );
+    gauge.set_property(
+        property::SWIFT_UI_GAUGE_MINIMUM_VALUE_LABEL,
+        Some(PropertyValue::String(Arc::from("0%"))),
+    );
+    let gauge = swift_ui_gauge(9, &gauge, &tree).unwrap();
+    assert_eq!(gauge.value, f64::from(0.72_f32));
+    assert_eq!(gauge.style, SwiftUiGaugeStyle::AccessoryLinearCapacity);
+    assert_eq!(gauge.minimum_value_label.as_deref(), Some("0%"));
+}
+
 #[test]
 fn queued_input_and_submit_survive_until_javascript_commits_the_controlled_value() {
     let input_id = 7;

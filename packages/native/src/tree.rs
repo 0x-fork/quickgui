@@ -20,6 +20,15 @@ pub(super) enum NodeTag {
     SwiftUiPopoverContent,
     Image,
     Shader,
+    SwiftUiSlider,
+    SwiftUiToggle,
+    SwiftUiProgressView,
+    SwiftUiStepper,
+    SwiftUiTextField,
+    SwiftUiPicker,
+    SwiftUiDatePicker,
+    SwiftUiColorPicker,
+    SwiftUiGauge,
 }
 
 impl NodeTag {
@@ -42,6 +51,15 @@ impl NodeTag {
             15 => Ok(Self::SwiftUiPopoverContent),
             16 => Ok(Self::Image),
             17 => Ok(Self::Shader),
+            18 => Ok(Self::SwiftUiSlider),
+            19 => Ok(Self::SwiftUiToggle),
+            20 => Ok(Self::SwiftUiProgressView),
+            21 => Ok(Self::SwiftUiStepper),
+            22 => Ok(Self::SwiftUiTextField),
+            23 => Ok(Self::SwiftUiPicker),
+            24 => Ok(Self::SwiftUiDatePicker),
+            25 => Ok(Self::SwiftUiColorPicker),
+            26 => Ok(Self::SwiftUiGauge),
             _ => Err(ProtocolError::new(format!("unknown node tag {value}"))),
         }
     }

@@ -29,6 +29,49 @@ For simple-label buttons, `Button` follows Expo UI's prop shape (`label`, `syste
 `target`, `testID`, `onPress`, and `modifiers`). The modifiers subpath currently implements
 `buttonStyle`, `buttonBorderShape`, `controlSize`, `labelStyle`, `tint`, and `disabled`.
 
+The same host also exposes controlled native `Slider`, `Toggle`, `ProgressView`, `Stepper`,
+`TextField`, `SecureField`, `Picker`, `SegmentedControl`, `DatePicker`, and `ColorPicker` components,
+plus native `Gauge`. Value-changing controls report typed Solid callbacks; the Rust descriptor tree
+remains the source of truth:
+
+```tsx
+import { Host, Slider } from "@quickgui/solid/swift-ui";
+import { createSignal } from "solid-js";
+
+const [volume, setVolume] = createSignal(0.5);
+
+<Host matchContents>
+  <Slider
+    label={`Volume ${Math.round(volume() * 100)}%`}
+    value={volume()}
+    min={0}
+    max={1}
+    step={0.05}
+    onValueChange={setVolume}
+  />
+</Host>;
+```
+
+`SegmentedControl` defaults to SwiftUI's value-selection `Picker` style. Set `role="tabs"` for the
+neutral segmented-tabs treatment used by Xcode navigation on macOS 27. `Picker` supports
+`automatic`, `menu`, `segmented`, `radioGroup`, and `inline` styles:
+
+```tsx
+import { Host, SegmentedControl } from "@quickgui/solid/swift-ui";
+
+<Host matchContents>
+  <SegmentedControl
+    role="tabs"
+    selection={layout()}
+    options={[
+      { value: "list", label: "List" },
+      { value: "grid", label: "Grid" },
+    ]}
+    onSelectionChange={setLayout}
+  />
+</Host>;
+```
+
 Ordinary QuickGUI components can be mounted back inside SwiftUI with `QuickGUIHostView`. This is
 the counterpart of Expo UI's `RNHostView`: it accepts one QuickGUI subtree, retains a separate
 core renderer for it, and supports fixed dimensions or per-axis `matchContents` measurement.
@@ -113,5 +156,5 @@ The [system API example](../../examples/system-api-solid/app.tsx) demonstrates c
 app environment, clipboard, display, notification, menu, tray, shortcut, single-instance,
 deep-link, secure-storage, autostart, permission, preference, desktop, power, window, and updater
 services from `@quickgui/native` alongside the Solid renderer.
-The [SwiftUI example](../../examples/swift-ui-solid/app.tsx) is a centered native Liquid Glass
-button whose native popover contains an ordinary interactive QuickGUI subtree.
+The [SwiftUI example](../../examples/swift-ui-solid/app.tsx) exercises the native form, picker,
+date, color, gauge, Liquid Glass button, and reverse-hosted popover surfaces together.

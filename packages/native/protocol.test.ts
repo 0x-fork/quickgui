@@ -74,8 +74,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v26", () => {
-    expect(PROTOCOL_VERSION).toBe(26);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v28", () => {
+    expect(PROTOCOL_VERSION).toBe(28);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -173,7 +173,63 @@ describe("binary mutation protocol", () => {
     batch.setProperty(10, PropertyCode.SwiftUIPresentationListener, true);
     batch.createElement(11, NativeNodeTag.SwiftUIPopoverTrigger);
     batch.createElement(12, NativeNodeTag.SwiftUIPopoverContent);
-    expect(batch.mutationCount).toBe(72);
+    batch.createElement(13, NativeNodeTag.SwiftUISlider);
+    batch.setProperty(13, PropertyCode.Value, 0.5);
+    batch.setProperty(13, PropertyCode.Minimum, 0);
+    batch.setProperty(13, PropertyCode.Maximum, 1);
+    batch.setProperty(13, PropertyCode.Step, 0.1);
+    batch.createElement(14, NativeNodeTag.SwiftUIToggle);
+    batch.setProperty(14, PropertyCode.Checked, true);
+    batch.createElement(15, NativeNodeTag.SwiftUIProgressView);
+    batch.setProperty(15, PropertyCode.Value, 0.75);
+    batch.setProperty(15, PropertyCode.Maximum, 1);
+    batch.createElement(16, NativeNodeTag.SwiftUIStepper);
+    batch.setProperty(16, PropertyCode.Value, 2);
+    batch.setProperty(16, PropertyCode.Minimum, 0);
+    batch.setProperty(16, PropertyCode.Maximum, 10);
+    batch.setProperty(16, PropertyCode.Step, 1);
+    batch.createElement(17, NativeNodeTag.SwiftUITextField);
+    batch.setProperty(17, PropertyCode.Value, "Ada");
+    batch.setProperty(17, PropertyCode.Placeholder, "Name");
+    batch.setProperty(17, PropertyCode.Password, false);
+    batch.setProperty(17, PropertyCode.InputListener, true);
+    batch.setProperty(17, PropertyCode.SubmitListener, true);
+    batch.createElement(18, NativeNodeTag.SwiftUIPicker);
+    batch.setProperty(18, PropertyCode.Value, "grid");
+    batch.setProperty(
+      18,
+      PropertyCode.Items,
+      JSON.stringify([
+        { value: "list", label: "List" },
+        { value: "grid", label: "Grid" },
+      ]),
+    );
+    batch.setProperty(18, PropertyCode.SwiftUIPickerStyle, "segmented");
+    batch.setProperty(18, PropertyCode.InputListener, true);
+    batch.createElement(19, NativeNodeTag.SwiftUIDatePicker);
+    batch.setProperty(19, PropertyCode.CivilValue, "1725091200.25");
+    batch.setProperty(19, PropertyCode.CivilMinimum, "1704067200");
+    batch.setProperty(19, PropertyCode.CivilMaximum, "1767225600");
+    batch.setProperty(19, PropertyCode.SwiftUIDatePickerComponents, "date");
+    batch.setProperty(19, PropertyCode.SwiftUIDatePickerStyle, "field");
+    batch.setProperty(19, PropertyCode.InputListener, true);
+    batch.createElement(20, NativeNodeTag.SwiftUIColorPicker);
+    batch.setProperty(20, PropertyCode.Value, "#3366ffff");
+    batch.setProperty(20, PropertyCode.SwiftUIColorSupportsOpacity, false);
+    batch.setProperty(20, PropertyCode.InputListener, true);
+    batch.createElement(21, NativeNodeTag.SwiftUIGauge);
+    batch.setProperty(21, PropertyCode.Value, 0.72);
+    batch.setProperty(21, PropertyCode.Minimum, 0);
+    batch.setProperty(21, PropertyCode.Maximum, 1);
+    batch.setProperty(21, PropertyCode.ValueText, "72%");
+    batch.setProperty(21, PropertyCode.SwiftUIGaugeMinimumValueLabel, "0%");
+    batch.setProperty(21, PropertyCode.SwiftUIGaugeMaximumValueLabel, "100%");
+    batch.setProperty(
+      21,
+      PropertyCode.SwiftUIGaugeStyle,
+      "accessoryLinearCapacity",
+    );
+    expect(batch.mutationCount).toBe(117);
     expect(batch.finish().byteLength).toBeGreaterThan(10);
   });
 
@@ -843,7 +899,7 @@ describe("binary mutation protocol", () => {
     expect(NativePart.DialogViewport).toBe("dialog-viewport");
   });
 
-  test("encodes every Base UI-aligned menu, select, and combobox part under protocol v26", () => {
+  test("encodes every Base UI-aligned menu, select, and combobox part under protocol v28", () => {
     const batch = new MutationBatch();
     // The whole `Menu.Root` declaration travels on the trigger, which is the one part the core
     // keeps mounted whether the level is open or closed.
@@ -885,7 +941,7 @@ describe("binary mutation protocol", () => {
     batch.setProperty(4, PropertyCode.HighlightItemOnHover, false);
 
     const bytes = batch.finish();
-    expect(bytes.readUInt16LE(4)).toBe(26);
+    expect(bytes.readUInt16LE(4)).toBe(28);
     expect(batch.mutationCount).toBe(29);
   });
 

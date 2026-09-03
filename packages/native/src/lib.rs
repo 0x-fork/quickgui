@@ -69,9 +69,12 @@ use quickgui::{
 #[cfg(target_os = "macos")]
 use quickgui::{
     MacEmbeddedView, MacSwiftUiHost, SwiftUiButton, SwiftUiButtonBorderShape, SwiftUiButtonRole,
-    SwiftUiButtonStyle, SwiftUiControlSize, SwiftUiElement, SwiftUiLabelStyle, SwiftUiModifier,
-    SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor, SwiftUiQuickGuiHost,
-    native_view,
+    SwiftUiButtonStyle, SwiftUiColorPicker, SwiftUiControlSize, SwiftUiDatePicker,
+    SwiftUiDatePickerComponents, SwiftUiDatePickerStyle, SwiftUiElement, SwiftUiGauge,
+    SwiftUiGaugeStyle, SwiftUiLabelStyle, SwiftUiModifier, SwiftUiPicker, SwiftUiPickerOption,
+    SwiftUiPickerStyle, SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor,
+    SwiftUiProgressView, SwiftUiQuickGuiHost, SwiftUiSlider, SwiftUiStepper, SwiftUiTextField,
+    SwiftUiToggle, native_view,
 };
 
 mod dialog;
@@ -92,7 +95,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 26;
+const PROTOCOL_VERSION: u16 = 28;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -469,7 +472,14 @@ mod property {
     pub const OPEN_ON_INPUT_CLICK: u16 = 337;
     /// Base UI's combobox `highlightItemOnHover`.
     pub const HIGHLIGHT_ITEM_ON_HOVER: u16 = 338;
-    pub const LAST: u16 = HIGHLIGHT_ITEM_ON_HOVER;
+    pub const SWIFT_UI_PICKER_STYLE: u16 = 339;
+    pub const SWIFT_UI_DATE_PICKER_COMPONENTS: u16 = 340;
+    pub const SWIFT_UI_DATE_PICKER_STYLE: u16 = 341;
+    pub const SWIFT_UI_COLOR_SUPPORTS_OPACITY: u16 = 342;
+    pub const SWIFT_UI_GAUGE_STYLE: u16 = 343;
+    pub const SWIFT_UI_GAUGE_MINIMUM_VALUE_LABEL: u16 = 344;
+    pub const SWIFT_UI_GAUGE_MAXIMUM_VALUE_LABEL: u16 = 345;
+    pub const LAST: u16 = SWIFT_UI_GAUGE_MAXIMUM_VALUE_LABEL;
 }
 
 #[derive(Default)]

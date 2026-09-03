@@ -69,6 +69,11 @@ fn main() {
         "cargo:rustc-link-search=native={}/usr/lib/swift",
         sdk.trim()
     );
+    // SwiftUI's Xcode 26 control bindings reference MainActor metadata even though this bridge
+    // exposes a synchronous C ABI. Swift autolinking is disabled above so Rust remains in charge
+    // of the final link; name the one Swift runtime dylib those bindings require explicitly.
+    println!("cargo:rustc-link-lib=dylib=swift_Concurrency");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
     println!("cargo:rustc-link-lib=framework=SwiftUI");
     println!("cargo:rustc-link-lib=framework=AppKit");
 }

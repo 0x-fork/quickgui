@@ -101,7 +101,7 @@ Implemented now:
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
 - JavaScript bindings for the Base UI-aligned menu, select, and combobox parts and props, at
-  protocol v26: a compound `Menu` (`Root`/`Trigger`/`Portal`/`Backdrop`/`Positioner`/`Popup`/
+  protocol v28: a compound `Menu` (`Root`/`Trigger`/`Portal`/`Backdrop`/`Positioner`/`Popup`/
   `Arrow`/`Item`/`LinkItem`/`SubmenuRoot`/`SubmenuTrigger`/`Group`/`GroupLabel`/`RadioGroup`/
   `RadioItem`/`RadioItemIndicator`/`CheckboxItem`/`CheckboxItemIndicator`/`Separator`) whose rows
   are ordinary application-styled child nodes over the core's `MenuState` and `PopoverMenu` model,

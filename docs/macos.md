@@ -299,16 +299,34 @@ The native Liquid Glass example embeds an AppKit `NSButton` with the macOS 26
 cargo run --release --example liquid_glass_button
 ```
 
-Solid applications can instead describe real SwiftUI controls through the Rust-owned host bridge:
+With the `swift-ui` feature enabled, the Rust core exposes descriptors for native buttons, sliders,
+toggles, progress views, steppers, text fields, pickers, date pickers, color pickers, and gauges.
+`SwiftUiSegmentedControl` and `SwiftUiSegmentedTabs` are discoverable aliases for `SwiftUiPicker`.
+`SwiftUiPicker::segmented` selects the value-selection treatment, while `SwiftUiPicker::tabs`
+selects the neutral segmented-tabs role used for Xcode-style navigation on macOS 27.
+`MacSwiftUiHost::new_with_control_events` reports button presses, controlled value changes,
+text-field submissions, and popover presentation without blocking the AppKit main thread.
+
+Solid applications adapt those same descriptors into typed reactive components:
 
 ```tsx
-import { Button, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle } from "@quickgui/solid/swift-ui/modifiers";
+import { Host, Slider } from "@quickgui/solid/swift-ui";
 
 <Host matchContents>
-  <Button label="Save changes" modifiers={[buttonStyle("glass")]} />
+  <Slider
+    label="Volume"
+    value={volume()}
+    min={0}
+    max={1}
+    step={0.05}
+    onValueChange={setVolume}
+  />
 </Host>;
 ```
+
+The Solid subpath also exports controlled `Toggle`, `ProgressView`, `Stepper`, `TextField`,
+`SecureField`, `Picker`, `SegmentedControl`, `DatePicker`, and `ColorPicker` components, plus
+`Gauge`, alongside the existing `Button`, `Popover`, and `QuickGUIHostView`.
 
 `QuickGUIHostView` provides the reverse direction, analogous to Expo UI's `RNHostView`. It creates
 one child retained renderer in the Rust core, reparents that renderer's stable AppKit/WGPU view
@@ -324,9 +342,9 @@ then the trigger requests presentation unless that handler prevents the default 
 AppKit owns the popover window, it is natively above the owner QuickGUI scene; a `QuickGUIHostView`
 inside `Popover.Content` makes ordinary QuickGUI components interactive there.
 
-Run `cd examples/swift-ui-solid && bun run dev` for the centered white-background example. Its
-Liquid Glass SwiftUI button opens a native popover containing QuickGUI text, input, and button
-components.
+Run `cd examples/swift-ui-solid && bun run dev` for a sidebar gallery with one live page per exposed
+native SwiftUI control. Its Popover page opens a native popover containing QuickGUI text, input,
+and button components.
 
 See also `cargo run --release --example native_view` and
 `cargo run --release --example overlays`.

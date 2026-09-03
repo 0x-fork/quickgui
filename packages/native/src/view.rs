@@ -438,10 +438,14 @@ impl NativeSwiftUiHostState {
     fn new(window: u32, events: &EventQueue, invalidator: quickgui::WindowInvalidator) -> Self {
         let action_events = Rc::clone(events);
         let presentation_events = Rc::clone(events);
+        let value_events = Rc::clone(events);
+        let submit_events = Rc::clone(events);
         let action_invalidator = invalidator.clone();
-        let presentation_invalidator = invalidator;
+        let presentation_invalidator = invalidator.clone();
+        let value_invalidator = invalidator.clone();
+        let submit_invalidator = invalidator;
         Self {
-            host: MacSwiftUiHost::new_with_events(
+            host: MacSwiftUiHost::new_with_control_events(
                 move |target| {
                     let Ok(target) = u32::try_from(target) else {
                         return;
@@ -471,6 +475,36 @@ impl NativeSwiftUiHostState {
                         },
                     );
                     presentation_invalidator.invalidate();
+                },
+                move |target, value| {
+                    let Ok(target) = u32::try_from(target) else {
+                        return;
+                    };
+                    enqueue_event(
+                        &value_events,
+                        QueuedEvent {
+                            kind: "input",
+                            window,
+                            target,
+                            value: Some(Arc::from(value)),
+                        },
+                    );
+                    value_invalidator.invalidate();
+                },
+                move |target| {
+                    let Ok(target) = u32::try_from(target) else {
+                        return;
+                    };
+                    enqueue_event(
+                        &submit_events,
+                        QueuedEvent {
+                            kind: "submit",
+                            window,
+                            target,
+                            value: None,
+                        },
+                    );
+                    submit_invalidator.invalidate();
                 },
             ),
         }
@@ -566,6 +600,341 @@ fn swift_ui_button(
 }
 
 #[cfg(target_os = "macos")]
+pub(super) fn swift_ui_slider(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiSlider, String> {
+    let mut slider = SwiftUiSlider::new(
+        u64::from(id),
+        f64::from(node.number(property::VALUE).unwrap_or(0.0)),
+    )
+    .range(
+        f64::from(node.number(property::MINIMUM).unwrap_or(0.0)),
+        f64::from(node.number(property::MAXIMUM).unwrap_or(1.0)),
+    )
+    .modifiers(swift_ui_modifiers(node)?)
+    .on_value_change(
+        node.boolean(property::INPUT_LISTENER)
+            .unwrap_or(false),
+    );
+    if let Some(step) = node.number(property::STEP).filter(|step| *step > 0.0) {
+        slider = slider.step(f64::from(step));
+    }
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        slider = slider.label(label);
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        slider = slider.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(slider)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_toggle(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiToggle, String> {
+    let mut toggle = SwiftUiToggle::new(
+        u64::from(id),
+        node.boolean(property::CHECKED).unwrap_or(false),
+    )
+    .modifiers(swift_ui_modifiers(node)?)
+    .on_value_change(
+        node.boolean(property::INPUT_LISTENER)
+            .unwrap_or(false),
+    );
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        toggle = toggle.label(label);
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        toggle = toggle.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(toggle)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_progress_view(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiProgressView, String> {
+    let mut progress = match node.number(property::VALUE) {
+        Some(value) => SwiftUiProgressView::new(
+            u64::from(id),
+            f64::from(value),
+            f64::from(node.number(property::MAXIMUM).unwrap_or(1.0)),
+        ),
+        None => SwiftUiProgressView::indeterminate(u64::from(id)),
+    }
+    .modifiers(swift_ui_modifiers(node)?);
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        progress = progress.label(label);
+    }
+    if let Some(current_value_label) = node.string(property::VALUE_TEXT) {
+        progress = progress.current_value_label(Arc::<str>::from(current_value_label));
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        progress = progress.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(progress)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_stepper(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiStepper, String> {
+    let mut stepper = SwiftUiStepper::new(
+        u64::from(id),
+        f64::from(node.number(property::VALUE).unwrap_or(0.0)),
+    )
+    .range(
+        f64::from(node.number(property::MINIMUM).unwrap_or(0.0)),
+        f64::from(node.number(property::MAXIMUM).unwrap_or(100.0)),
+    )
+    .step(f64::from(node.number(property::STEP).unwrap_or(1.0)))
+    .modifiers(swift_ui_modifiers(node)?)
+    .on_value_change(
+        node.boolean(property::INPUT_LISTENER)
+            .unwrap_or(false),
+    );
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        stepper = stepper.label(label);
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        stepper = stepper.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(stepper)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_text_field(
+    id: u32,
+    node: &NativeNode,
+) -> std::result::Result<SwiftUiTextField, String> {
+    let mut field = SwiftUiTextField::new(
+        u64::from(id),
+        Arc::<str>::from(node.string(property::VALUE).unwrap_or_default()),
+    )
+    .secure(node.boolean(property::PASSWORD).unwrap_or(false))
+    .modifiers(swift_ui_modifiers(node)?)
+    .on_value_change(
+        node.boolean(property::INPUT_LISTENER)
+            .unwrap_or(false),
+    )
+    .on_submit(
+        node.boolean(property::SUBMIT_LISTENER)
+            .unwrap_or(false),
+    );
+    if let Some(placeholder) = node.string(property::PLACEHOLDER) {
+        field = field.placeholder(Arc::<str>::from(placeholder));
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        field = field.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(field)
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeSwiftUiPickerOption {
+    value: String,
+    label: String,
+    system_image: Option<String>,
+    #[serde(default)]
+    disabled: bool,
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_picker(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiPicker, String> {
+    let payload = node.string(property::ITEMS).unwrap_or("[]");
+    if payload.len() > MAX_OPTIONS_JSON_BYTES {
+        return Err(format!(
+            "SwiftUI Picker {id} options exceed the {MAX_OPTIONS_JSON_BYTES}-byte limit"
+        ));
+    }
+    let declared: Vec<NativeSwiftUiPickerOption> = serde_json::from_str(payload)
+        .map_err(|error| format!("invalid SwiftUI Picker {id} options: {error}"))?;
+    let mut values = HashSet::with_capacity(declared.len());
+    let mut options = Vec::with_capacity(declared.len());
+    for option in declared {
+        if option.value.is_empty() {
+            return Err(format!("SwiftUI Picker {id} option values cannot be empty"));
+        }
+        if !values.insert(option.value.clone()) {
+            return Err(format!(
+                "SwiftUI Picker {id} contains duplicate option value {:?}",
+                option.value
+            ));
+        }
+        let mut converted = SwiftUiPickerOption::new(option.value, option.label);
+        if let Some(system_image) = option.system_image.filter(|value| !value.is_empty()) {
+            converted = converted.system_image(system_image);
+        }
+        options.push(converted.disabled(option.disabled));
+    }
+    let style = match (
+        node.string(property::ROLE),
+        node.string(property::SWIFT_UI_PICKER_STYLE),
+    ) {
+        (Some("tabs"), _) => SwiftUiPickerStyle::Tabs,
+        (_, Some("menu")) => SwiftUiPickerStyle::Menu,
+        (_, Some("segmented")) => SwiftUiPickerStyle::Segmented,
+        (_, Some("radioGroup")) => SwiftUiPickerStyle::RadioGroup,
+        (_, Some("inline")) => SwiftUiPickerStyle::Inline,
+        _ => SwiftUiPickerStyle::Automatic,
+    };
+    let mut picker = SwiftUiPicker::new(
+        u64::from(id),
+        Arc::<str>::from(node.string(property::VALUE).unwrap_or_default()),
+        options,
+    )
+    .style(style)
+    .modifiers(swift_ui_modifiers(node)?)
+    .on_value_change(
+        node.boolean(property::INPUT_LISTENER)
+            .unwrap_or(false),
+    );
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        picker = picker.label(label);
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        picker = picker.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(picker)
+}
+
+#[cfg(target_os = "macos")]
+fn swift_ui_epoch(node: &NativeNode, property: u16) -> Option<f64> {
+    node.string(property)
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_date_picker(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiDatePicker, String> {
+    let value = swift_ui_epoch(node, property::CIVIL_VALUE).unwrap_or(0.0);
+    let mut picker = SwiftUiDatePicker::new(u64::from(id), value)
+        .range(
+            swift_ui_epoch(node, property::CIVIL_MINIMUM),
+            swift_ui_epoch(node, property::CIVIL_MAXIMUM),
+        )
+        .components(
+            match node.string(property::SWIFT_UI_DATE_PICKER_COMPONENTS) {
+                Some("date") => SwiftUiDatePickerComponents::Date,
+                Some("hourAndMinute") => SwiftUiDatePickerComponents::HourAndMinute,
+                _ => SwiftUiDatePickerComponents::DateAndTime,
+            },
+        )
+        .style(match node.string(property::SWIFT_UI_DATE_PICKER_STYLE) {
+            Some("field") => SwiftUiDatePickerStyle::Field,
+            Some("graphical") => SwiftUiDatePickerStyle::Graphical,
+            Some("stepperField") => SwiftUiDatePickerStyle::StepperField,
+            _ => SwiftUiDatePickerStyle::Automatic,
+        })
+        .modifiers(swift_ui_modifiers(node)?)
+        .on_value_change(
+            node.boolean(property::INPUT_LISTENER)
+                .unwrap_or(false),
+        );
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        picker = picker.label(label);
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        picker = picker.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(picker)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_color_picker(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiColorPicker, String> {
+    let mut picker = SwiftUiColorPicker::new(
+        u64::from(id),
+        Arc::<str>::from(node.string(property::VALUE).unwrap_or("#000000ff")),
+    )
+    .supports_opacity(
+        node.boolean(property::SWIFT_UI_COLOR_SUPPORTS_OPACITY)
+            .unwrap_or(true),
+    )
+    .modifiers(swift_ui_modifiers(node)?)
+    .on_value_change(
+        node.boolean(property::INPUT_LISTENER)
+            .unwrap_or(false),
+    );
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        picker = picker.label(label);
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        picker = picker.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(picker)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn swift_ui_gauge(
+    id: u32,
+    node: &NativeNode,
+    tree: &NativeTree,
+) -> std::result::Result<SwiftUiGauge, String> {
+    let mut gauge = SwiftUiGauge::new(
+        u64::from(id),
+        f64::from(node.number(property::VALUE).unwrap_or(0.0)),
+    )
+    .range(
+        f64::from(node.number(property::MINIMUM).unwrap_or(0.0)),
+        f64::from(node.number(property::MAXIMUM).unwrap_or(1.0)),
+    )
+    .style(match node.string(property::SWIFT_UI_GAUGE_STYLE) {
+        Some("accessoryCircular") => SwiftUiGaugeStyle::AccessoryCircular,
+        Some("accessoryCircularCapacity") => SwiftUiGaugeStyle::AccessoryCircularCapacity,
+        Some("accessoryLinear") => SwiftUiGaugeStyle::AccessoryLinear,
+        Some("accessoryLinearCapacity") => SwiftUiGaugeStyle::AccessoryLinearCapacity,
+        _ => SwiftUiGaugeStyle::Automatic,
+    })
+    .modifiers(swift_ui_modifiers(node)?);
+    let label = swift_ui_text_content(node, tree);
+    if !label.is_empty() {
+        gauge = gauge.label(label);
+    }
+    if let Some(label) = node.string(property::VALUE_TEXT) {
+        gauge = gauge.current_value_label(Arc::<str>::from(label));
+    }
+    if let Some(label) = node.string(property::SWIFT_UI_GAUGE_MINIMUM_VALUE_LABEL) {
+        gauge = gauge.minimum_value_label(Arc::<str>::from(label));
+    }
+    if let Some(label) = node.string(property::SWIFT_UI_GAUGE_MAXIMUM_VALUE_LABEL) {
+        gauge = gauge.maximum_value_label(Arc::<str>::from(label));
+    }
+    if let Some(test_id) = node.string(property::SWIFT_UI_TEST_ID) {
+        gauge = gauge.test_id(Arc::<str>::from(test_id));
+    }
+    Ok(gauge)
+}
+
+#[cfg(target_os = "macos")]
 fn swift_ui_children(
     children: &[u32],
     tree: &NativeTree,
@@ -590,6 +959,29 @@ fn swift_ui_element(
 ) -> Option<std::result::Result<SwiftUiElement, String>> {
     match node.tag {
         NodeTag::SwiftUiButton => Some(swift_ui_button(id, node, tree).map(SwiftUiElement::Button)),
+        NodeTag::SwiftUiSlider => Some(swift_ui_slider(id, node, tree).map(SwiftUiElement::Slider)),
+        NodeTag::SwiftUiToggle => Some(swift_ui_toggle(id, node, tree).map(SwiftUiElement::Toggle)),
+        NodeTag::SwiftUiProgressView => Some(
+            swift_ui_progress_view(id, node, tree).map(SwiftUiElement::ProgressView),
+        ),
+        NodeTag::SwiftUiStepper => {
+            Some(swift_ui_stepper(id, node, tree).map(SwiftUiElement::Stepper))
+        }
+        NodeTag::SwiftUiTextField => {
+            Some(swift_ui_text_field(id, node).map(SwiftUiElement::TextField))
+        }
+        NodeTag::SwiftUiPicker => {
+            Some(swift_ui_picker(id, node, tree).map(SwiftUiElement::Picker))
+        }
+        NodeTag::SwiftUiDatePicker => {
+            Some(swift_ui_date_picker(id, node, tree).map(SwiftUiElement::DatePicker))
+        }
+        NodeTag::SwiftUiColorPicker => {
+            Some(swift_ui_color_picker(id, node, tree).map(SwiftUiElement::ColorPicker))
+        }
+        NodeTag::SwiftUiGauge => {
+            Some(swift_ui_gauge(id, node, tree).map(SwiftUiElement::Gauge))
+        }
         NodeTag::SwiftUiQuickGuiHost => Some((|| {
             let embedded_id = node
                 .number(property::SWIFT_UI_EMBEDDED_WINDOW)
@@ -1055,6 +1447,15 @@ pub(super) fn build_element(
             }
         }
         NodeTag::SwiftUiButton
+        | NodeTag::SwiftUiSlider
+        | NodeTag::SwiftUiToggle
+        | NodeTag::SwiftUiProgressView
+        | NodeTag::SwiftUiStepper
+        | NodeTag::SwiftUiTextField
+        | NodeTag::SwiftUiPicker
+        | NodeTag::SwiftUiDatePicker
+        | NodeTag::SwiftUiColorPicker
+        | NodeTag::SwiftUiGauge
         | NodeTag::SwiftUiQuickGuiHost
         | NodeTag::SwiftUiPopover
         | NodeTag::SwiftUiPopoverTrigger
@@ -1383,6 +1784,15 @@ pub(super) fn build_element(
         | NodeTag::Terminal => {}
         NodeTag::SwiftUiHost
         | NodeTag::SwiftUiButton
+        | NodeTag::SwiftUiSlider
+        | NodeTag::SwiftUiToggle
+        | NodeTag::SwiftUiProgressView
+        | NodeTag::SwiftUiStepper
+        | NodeTag::SwiftUiTextField
+        | NodeTag::SwiftUiPicker
+        | NodeTag::SwiftUiDatePicker
+        | NodeTag::SwiftUiColorPicker
+        | NodeTag::SwiftUiGauge
         | NodeTag::SwiftUiQuickGuiHost
         | NodeTag::SwiftUiPopover
         | NodeTag::SwiftUiPopoverTrigger

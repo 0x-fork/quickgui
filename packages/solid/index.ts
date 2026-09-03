@@ -195,6 +195,17 @@ const properties: Record<string, PropertyEntry> = {
   controlSize: { code: PropertyCode.SwiftUIControlSize },
   target: { code: PropertyCode.SwiftUITarget },
   testID: { code: PropertyCode.SwiftUITestId },
+  pickerStyle: { code: PropertyCode.SwiftUIPickerStyle },
+  datePickerComponents: { code: PropertyCode.SwiftUIDatePickerComponents },
+  datePickerStyle: { code: PropertyCode.SwiftUIDatePickerStyle },
+  supportsOpacity: { code: PropertyCode.SwiftUIColorSupportsOpacity },
+  gaugeStyle: { code: PropertyCode.SwiftUIGaugeStyle },
+  gaugeMinimumValueLabel: {
+    code: PropertyCode.SwiftUIGaugeMinimumValueLabel,
+  },
+  gaugeMaximumValueLabel: {
+    code: PropertyCode.SwiftUIGaugeMaximumValueLabel,
+  },
   embeddedWindow: { code: PropertyCode.SwiftUIEmbeddedWindow },
   isPresented: { code: PropertyCode.SwiftUIIsPresented },
   attachmentAnchor: { code: PropertyCode.SwiftUIAttachmentAnchor },
@@ -541,6 +552,7 @@ const explicitFalseProperties = new Set<PropertyCode>([
   PropertyCode.AutoHighlight,
   PropertyCode.OpenOnInputClick,
   PropertyCode.HighlightItemOnHover,
+  PropertyCode.SwiftUIColorSupportsOpacity,
 ]);
 
 const colorProperties = new Set([
@@ -1763,6 +1775,15 @@ const universal = createUniversalRenderer<NativeNode>({
         "swift-ui-popover",
         "swift-ui-popover-trigger",
         "swift-ui-popover-content",
+        "swift-ui-slider",
+        "swift-ui-toggle",
+        "swift-ui-progress-view",
+        "swift-ui-stepper",
+        "swift-ui-text-field",
+        "swift-ui-picker",
+        "swift-ui-date-picker",
+        "swift-ui-color-picker",
+        "swift-ui-gauge",
       ].includes(name)
     ) {
       throw new TypeError(`unknown QuickGUI element <${tag}>`);

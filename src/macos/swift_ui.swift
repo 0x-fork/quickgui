@@ -12,7 +12,25 @@ typealias QuickGUIPresentationCallback = @convention(c) (
   Bool
 ) -> Void
 
+typealias QuickGUIValueCallback = @convention(c) (
+  UnsafeMutableRawPointer?,
+  UInt64,
+  UnsafePointer<CChar>?
+) -> Void
+
+typealias QuickGUISubmitCallback = @convention(c) (
+  UnsafeMutableRawPointer?,
+  UInt64
+) -> Void
+
 private let quickGUIGlassEffectInset: CGFloat = 24
+
+private struct QuickGUIPickerOption: Decodable, Equatable {
+  let value: String
+  let label: String
+  let systemImage: String?
+  let disabled: Bool
+}
 
 private struct QuickGUIElement: Decodable, Identifiable, Equatable {
   let id: UInt64
@@ -24,6 +42,25 @@ private struct QuickGUIElement: Decodable, Identifiable, Equatable {
   let testID: String?
   let modifiers: [QuickGUIModifier]?
   let hasAction: Bool?
+  let value: Double?
+  let minimum: Double?
+  let maximum: Double?
+  let step: Double?
+  let isOn: Bool?
+  let total: Double?
+  let currentValueLabel: String?
+  let text: String?
+  let placeholder: String?
+  let secure: Bool?
+  let hasValueChange: Bool?
+  let hasSubmit: Bool?
+  let selection: String?
+  let options: [QuickGUIPickerOption]?
+  let style: String?
+  let components: String?
+  let supportsOpacity: Bool?
+  let minimumValueLabel: String?
+  let maximumValueLabel: String?
   let matchHorizontal: Bool?
   let matchVertical: Bool?
   let width: Double?
@@ -59,15 +96,21 @@ private final class QuickGUIActionSink {
   let context: UnsafeMutableRawPointer?
   let actionCallback: QuickGUIActionCallback?
   let presentationCallback: QuickGUIPresentationCallback?
+  let valueCallback: QuickGUIValueCallback?
+  let submitCallback: QuickGUISubmitCallback?
 
   init(
     context: UnsafeMutableRawPointer?,
     actionCallback: QuickGUIActionCallback?,
-    presentationCallback: QuickGUIPresentationCallback?
+    presentationCallback: QuickGUIPresentationCallback?,
+    valueCallback: QuickGUIValueCallback?,
+    submitCallback: QuickGUISubmitCallback?
   ) {
     self.context = context
     self.actionCallback = actionCallback
     self.presentationCallback = presentationCallback
+    self.valueCallback = valueCallback
+    self.submitCallback = submitCallback
   }
 
   func sendAction(_ id: UInt64) {
@@ -76,6 +119,17 @@ private final class QuickGUIActionSink {
 
   func sendPresentation(_ id: UInt64, _ isPresented: Bool) {
     presentationCallback?(context, id, isPresented)
+  }
+
+  func sendValue(_ id: UInt64, _ value: String) {
+    guard let valueCallback else { return }
+    value.withCString { pointer in
+      valueCallback(context, id, pointer)
+    }
+  }
+
+  func sendSubmit(_ id: UInt64) {
+    submitCallback?(context, id)
   }
 }
 
@@ -169,6 +223,117 @@ private struct QuickGUIEmbeddedRepresentable: NSViewRepresentable {
 
   static func dismantleNSView(_ nsView: QuickGUIEmbeddedContainerView, coordinator: ()) {
     nsView.detach()
+  }
+}
+
+/// Compatibility bridge for the macOS 27 segmented-tabs role. Xcode 27 exposes this as
+/// SwiftUI's `.tabs` picker style; when QuickGUI is built by Xcode 26, the public AppKit role is
+/// selected dynamically so an app running on macOS 27 still receives the native treatment.
+private struct QuickGUITabsPickerRepresentable: NSViewRepresentable {
+  let element: QuickGUIElement
+  let actionSink: QuickGUIActionSink
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(actionSink: actionSink)
+  }
+
+  func makeNSView(context: Context) -> NSSegmentedControl {
+    let control = NSSegmentedControl(frame: .zero)
+    control.trackingMode = .selectOne
+    control.segmentDistribution = .fillEqually
+    control.target = context.coordinator
+    control.action = #selector(Coordinator.selectionChanged(_:))
+    return control
+  }
+
+  func updateNSView(_ control: NSSegmentedControl, context: Context) {
+    let options = element.options ?? []
+    context.coordinator.update(
+      id: element.id,
+      options: options,
+      hasValueChange: element.hasValueChange ?? false
+    )
+
+    control.segmentCount = options.count
+    control.isEnabled = context.environment.isEnabled
+    control.controlSize = quickGUIAppKitControlSize(context.environment.controlSize)
+
+    let roleSelector = NSSelectorFromString("setRole:")
+    if control.responds(to: roleSelector) {
+      // NSSegmentedControl.Role.tabs. KVC keeps this bridge buildable with the Xcode 26 SDK while
+      // still selecting the public macOS 27 role at runtime.
+      control.setValue(NSNumber(value: 1), forKey: "role")
+      control.segmentStyle = .automatic
+    } else {
+      control.segmentStyle = .capsule
+    }
+    if #available(macOS 26.0, *) {
+      control.borderShape = .capsule
+    }
+
+    var selectedSegment = -1
+    for (index, option) in options.enumerated() {
+      control.setImage(nil, forSegment: index)
+      control.setLabel(option.label, forSegment: index)
+      if option.label.isEmpty, let name = option.systemImage,
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: option.value)
+      {
+        control.setImage(image, forSegment: index)
+      }
+      control.setEnabled(context.environment.isEnabled && !option.disabled, forSegment: index)
+      control.setToolTip(option.label.isEmpty ? nil : option.label, forSegment: index)
+      if option.value == element.selection {
+        selectedSegment = index
+      }
+    }
+    control.selectedSegment = selectedSegment
+    control.invalidateIntrinsicContentSize()
+  }
+
+  static func dismantleNSView(_ control: NSSegmentedControl, coordinator: Coordinator) {
+    control.target = nil
+    control.action = nil
+  }
+
+  final class Coordinator: NSObject {
+    private let actionSink: QuickGUIActionSink
+    private var id: UInt64 = 0
+    private var options: [QuickGUIPickerOption] = []
+    private var hasValueChange = false
+
+    init(actionSink: QuickGUIActionSink) {
+      self.actionSink = actionSink
+    }
+
+    fileprivate func update(
+      id: UInt64,
+      options: [QuickGUIPickerOption],
+      hasValueChange: Bool
+    ) {
+      self.id = id
+      self.options = options
+      self.hasValueChange = hasValueChange
+    }
+
+    @objc fileprivate func selectionChanged(_ sender: NSSegmentedControl) {
+      let index = sender.selectedSegment
+      guard hasValueChange, options.indices.contains(index) else { return }
+      actionSink.sendValue(id, options[index].value)
+    }
+  }
+}
+
+private func quickGUIAppKitControlSize(_ size: SwiftUI.ControlSize) -> NSControl.ControlSize {
+  switch size {
+  case .mini: return .mini
+  case .small: return .small
+  case .large: return .large
+  case .extraLarge:
+    if #available(macOS 26.0, *) {
+      return .extraLarge
+    }
+    return .large
+  default: return .regular
   }
 }
 
@@ -346,6 +511,24 @@ private struct QuickGUIElementView: View {
     switch element.type {
     case "button":
       return swiftUIButton(element)
+    case "slider":
+      return swiftUISlider(element)
+    case "toggle":
+      return swiftUIToggle(element)
+    case "progressView":
+      return swiftUIProgressView(element)
+    case "stepper":
+      return swiftUIStepper(element)
+    case "textField":
+      return swiftUITextField(element)
+    case "picker":
+      return swiftUIPicker(element)
+    case "datePicker":
+      return swiftUIDatePicker(element)
+    case "colorPicker":
+      return swiftUIColorPicker(element)
+    case "gauge":
+      return swiftUIGauge(element)
     case "quickGuiHost":
       var result = AnyView(QuickGUIEmbeddedRepresentable(store: store, id: element.id))
       if element.width != nil || element.height != nil {
@@ -389,7 +572,313 @@ private struct QuickGUIElementView: View {
       }
     }
 
-    var result = AnyView(button)
+    return decorate(AnyView(button), with: element)
+  }
+
+  private func swiftUISlider(_ element: QuickGUIElement) -> AnyView {
+    let bounds = numericBounds(element, defaultMinimum: 0, defaultMaximum: 1)
+    let value = Binding<Double>(
+      get: { min(max(element.value ?? bounds.lowerBound, bounds.lowerBound), bounds.upperBound) },
+      set: { next in
+        guard element.hasValueChange ?? false else { return }
+        actionSink.sendValue(element.id, String(next))
+      }
+    )
+    let label = element.label ?? ""
+    let slider: AnyView
+    if let step = element.step, step.isFinite, step > 0 {
+      slider = AnyView(
+        Slider(value: value, in: bounds, step: step) {
+          Text(label)
+        }
+      )
+    } else {
+      slider = AnyView(
+        Slider(value: value, in: bounds) {
+          Text(label)
+        }
+      )
+    }
+    return decorate(slider, with: element)
+  }
+
+  private func swiftUIToggle(_ element: QuickGUIElement) -> AnyView {
+    let isOn = Binding<Bool>(
+      get: { element.isOn ?? false },
+      set: { next in
+        guard element.hasValueChange ?? false else { return }
+        actionSink.sendValue(element.id, next ? "true" : "false")
+      }
+    )
+    let toggle = Toggle(isOn: isOn) {
+      Text(element.label ?? "")
+    }
+    return decorate(AnyView(toggle), with: element)
+  }
+
+  private func swiftUIProgressView(_ element: QuickGUIElement) -> AnyView {
+    let label = element.label ?? ""
+    let progress: AnyView
+    if let value = element.value {
+      let total = element.total.flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? 1
+      if let currentValueLabel = element.currentValueLabel, !currentValueLabel.isEmpty {
+        progress = AnyView(
+          ProgressView(value: value, total: total) {
+            Text(label)
+          } currentValueLabel: {
+            Text(currentValueLabel)
+          }
+        )
+      } else {
+        progress = AnyView(
+          ProgressView(value: value, total: total) {
+            Text(label)
+          }
+        )
+      }
+    } else {
+      progress = AnyView(ProgressView {
+        Text(label)
+      })
+    }
+    return decorate(progress, with: element)
+  }
+
+  private func swiftUIStepper(_ element: QuickGUIElement) -> AnyView {
+    let bounds = numericBounds(element, defaultMinimum: 0, defaultMaximum: 100)
+    let value = Binding<Double>(
+      get: { min(max(element.value ?? bounds.lowerBound, bounds.lowerBound), bounds.upperBound) },
+      set: { next in
+        guard element.hasValueChange ?? false else { return }
+        actionSink.sendValue(element.id, String(next))
+      }
+    )
+    let step = element.step.flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? 1
+    let stepper = Stepper(value: value, in: bounds, step: step) {
+      Text(element.label ?? "")
+    }
+    return decorate(AnyView(stepper), with: element)
+  }
+
+  private func swiftUITextField(_ element: QuickGUIElement) -> AnyView {
+    let text = Binding<String>(
+      get: { element.text ?? "" },
+      set: { next in
+        guard element.hasValueChange ?? false else { return }
+        actionSink.sendValue(element.id, next)
+      }
+    )
+    let field: AnyView
+    if element.secure ?? false {
+      field = AnyView(SecureField(element.placeholder ?? "", text: text))
+    } else {
+      field = AnyView(TextField(element.placeholder ?? "", text: text))
+    }
+    let submitting = field.onSubmit {
+      guard element.hasSubmit ?? false else { return }
+      actionSink.sendSubmit(element.id)
+    }
+    return decorate(AnyView(submitting), with: element)
+  }
+
+  private func swiftUIPicker(_ element: QuickGUIElement) -> AnyView {
+    let selection = Binding<String>(
+      get: { element.selection ?? "" },
+      set: { next in
+        guard element.hasValueChange ?? false else { return }
+        actionSink.sendValue(element.id, next)
+      }
+    )
+    let picker = Picker(selection: selection) {
+      ForEach(element.options ?? [], id: \.value) { option in
+        Group {
+          if let systemImage = option.systemImage, !systemImage.isEmpty {
+            Label(option.label, systemImage: systemImage)
+          } else {
+            Text(option.label)
+          }
+        }
+        .tag(option.value)
+        .disabled(option.disabled)
+      }
+    } label: {
+      Text(element.label ?? "")
+    }
+    var result: AnyView
+    switch element.style {
+    case "menu": result = AnyView(picker.pickerStyle(.menu))
+    case "segmented": result = AnyView(picker.pickerStyle(.segmented))
+    case "tabs":
+      #if compiler(>=6.4)
+        if #available(macOS 27.0, *) {
+          result = AnyView(picker.pickerStyle(.tabs))
+        } else {
+          result = quickGUITabsPickerFallback(element)
+        }
+      #else
+        result = quickGUITabsPickerFallback(element)
+      #endif
+    case "radioGroup": result = AnyView(picker.pickerStyle(.radioGroup))
+    case "inline": result = AnyView(picker.pickerStyle(.inline))
+    default: result = AnyView(picker.pickerStyle(.automatic))
+    }
+    if element.label == nil {
+      result = AnyView(result.labelsHidden())
+    }
+    return decorate(result, with: element)
+  }
+
+  private func quickGUITabsPickerFallback(_ element: QuickGUIElement) -> AnyView {
+    let tabs = QuickGUITabsPickerRepresentable(element: element, actionSink: actionSink)
+    if #available(macOS 27.0, *) {
+      return AnyView(tabs)
+    }
+    if #available(macOS 26.0, *) {
+      return AnyView(
+        tabs
+          .padding(3)
+          .glassEffect(.regular.interactive(), in: Capsule())
+      )
+    }
+    return AnyView(tabs)
+  }
+
+  private func swiftUIDatePicker(_ element: QuickGUIElement) -> AnyView {
+    let components: DatePickerComponents = switch element.components {
+    case "date": [.date]
+    case "hourAndMinute": [.hourAndMinute]
+    default: [.date, .hourAndMinute]
+    }
+    var minimum = element.minimum.flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0) : nil }
+    var maximum = element.maximum.flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0) : nil }
+    if let lower = minimum, let upper = maximum, upper < lower {
+      swap(&minimum, &maximum)
+    }
+    let value = Binding<Date>(
+      get: {
+        let raw = element.value.flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0) : nil }
+          ?? Date(timeIntervalSince1970: 0)
+        return min(max(raw, minimum ?? raw), maximum ?? raw)
+      },
+      set: { next in
+        guard element.hasValueChange ?? false else { return }
+        actionSink.sendValue(element.id, String(next.timeIntervalSince1970))
+      }
+    )
+    let picker: AnyView
+    if let minimum, let maximum {
+      picker = AnyView(
+        DatePicker(
+          element.label ?? "",
+          selection: value,
+          in: minimum...maximum,
+          displayedComponents: components
+        )
+      )
+    } else if let minimum {
+      picker = AnyView(
+        DatePicker(
+          element.label ?? "",
+          selection: value,
+          in: minimum...,
+          displayedComponents: components
+        )
+      )
+    } else if let maximum {
+      picker = AnyView(
+        DatePicker(
+          element.label ?? "",
+          selection: value,
+          in: ...maximum,
+          displayedComponents: components
+        )
+      )
+    } else {
+      picker = AnyView(
+        DatePicker(
+          element.label ?? "",
+          selection: value,
+          displayedComponents: components
+        )
+      )
+    }
+    var result: AnyView = switch element.style {
+    case "field": AnyView(picker.datePickerStyle(.field))
+    case "graphical": AnyView(picker.datePickerStyle(.graphical))
+    case "stepperField": AnyView(picker.datePickerStyle(.stepperField))
+    default: AnyView(picker.datePickerStyle(.automatic))
+    }
+    if element.label == nil {
+      result = AnyView(result.labelsHidden())
+    }
+    return decorate(result, with: element)
+  }
+
+  private func swiftUIColorPicker(_ element: QuickGUIElement) -> AnyView {
+    let supportsOpacity = element.supportsOpacity ?? true
+    let selection = Binding<Color>(
+      get: { element.selection.flatMap(quickGUIColor) ?? .accentColor },
+      set: { next in
+        guard element.hasValueChange ?? false,
+          let encoded = quickGUIHexColor(next, supportsOpacity: supportsOpacity)
+        else { return }
+        actionSink.sendValue(element.id, encoded)
+      }
+    )
+    var result = AnyView(
+      ColorPicker(
+        element.label ?? "",
+        selection: selection,
+        supportsOpacity: supportsOpacity
+      )
+    )
+    if element.label == nil {
+      result = AnyView(result.labelsHidden())
+    }
+    return decorate(result, with: element)
+  }
+
+  private func swiftUIGauge(_ element: QuickGUIElement) -> AnyView {
+    let bounds = numericBounds(element, defaultMinimum: 0, defaultMaximum: 1)
+    let value = min(max(element.value ?? bounds.lowerBound, bounds.lowerBound), bounds.upperBound)
+    let gauge = Gauge(value: value, in: bounds) {
+      Text(element.label ?? "")
+    } currentValueLabel: {
+      if let label = element.currentValueLabel {
+        Text(label)
+      }
+    } minimumValueLabel: {
+      if let label = element.minimumValueLabel {
+        Text(label)
+      }
+    } maximumValueLabel: {
+      if let label = element.maximumValueLabel {
+        Text(label)
+      }
+    }
+    let result: AnyView = switch element.style {
+    case "accessoryCircular": AnyView(gauge.gaugeStyle(.accessoryCircular))
+    case "accessoryCircularCapacity": AnyView(gauge.gaugeStyle(.accessoryCircularCapacity))
+    case "accessoryLinear": AnyView(gauge.gaugeStyle(.accessoryLinear))
+    case "accessoryLinearCapacity": AnyView(gauge.gaugeStyle(.accessoryLinearCapacity))
+    default: AnyView(gauge.gaugeStyle(.automatic))
+    }
+    return decorate(result, with: element)
+  }
+
+  private func numericBounds(
+    _ element: QuickGUIElement,
+    defaultMinimum: Double,
+    defaultMaximum: Double
+  ) -> ClosedRange<Double> {
+    let minimum = element.minimum.flatMap { $0.isFinite ? $0 : nil } ?? defaultMinimum
+    let proposedMaximum = element.maximum.flatMap { $0.isFinite ? $0 : nil } ?? defaultMaximum
+    let maximum = proposedMaximum > minimum ? proposedMaximum : minimum + 1
+    return minimum...maximum
+  }
+
+  private func decorate(_ view: AnyView, with element: QuickGUIElement) -> AnyView {
+    var result = view
     for modifier in element.modifiers ?? [] {
       result = apply(modifier, to: result)
     }
@@ -576,6 +1065,17 @@ private func quickGUIColor(_ value: String) -> Color? {
   return Color(red: red, green: green, blue: blue, opacity: alpha)
 }
 
+private func quickGUIHexColor(_ color: Color, supportsOpacity: Bool) -> String? {
+  guard let converted = NSColor(color).usingColorSpace(.sRGB) else { return nil }
+  let red = Int((min(max(converted.redComponent, 0), 1) * 255).rounded())
+  let green = Int((min(max(converted.greenComponent, 0), 1) * 255).rounded())
+  let blue = Int((min(max(converted.blueComponent, 0), 1) * 255).rounded())
+  let alpha = supportsOpacity
+    ? Int((min(max(converted.alphaComponent, 0), 1) * 255).rounded())
+    : 255
+  return String(format: "#%02x%02x%02x%02x", red, green, blue, alpha)
+}
+
 private final class QuickGUIHostHandle {
   let actionSink: QuickGUIActionSink
   let store: QuickGUIElementStore
@@ -584,12 +1084,16 @@ private final class QuickGUIHostHandle {
   init(
     context: UnsafeMutableRawPointer?,
     actionCallback: QuickGUIActionCallback?,
-    presentationCallback: QuickGUIPresentationCallback?
+    presentationCallback: QuickGUIPresentationCallback?,
+    valueCallback: QuickGUIValueCallback?,
+    submitCallback: QuickGUISubmitCallback?
   ) {
     let actionSink = QuickGUIActionSink(
       context: context,
       actionCallback: actionCallback,
-      presentationCallback: presentationCallback
+      presentationCallback: presentationCallback,
+      valueCallback: valueCallback,
+      submitCallback: submitCallback
     )
     let store = QuickGUIElementStore()
     self.actionSink = actionSink
@@ -615,14 +1119,18 @@ private final class QuickGUIHostHandle {
 func quickGUISwiftUIHostCreate(
   _ context: UnsafeMutableRawPointer?,
   _ actionCallback: QuickGUIActionCallback?,
-  _ presentationCallback: QuickGUIPresentationCallback?
+  _ presentationCallback: QuickGUIPresentationCallback?,
+  _ valueCallback: QuickGUIValueCallback?,
+  _ submitCallback: QuickGUISubmitCallback?
 ) -> UnsafeMutableRawPointer? {
   precondition(Thread.isMainThread)
   return Unmanaged.passRetained(
     QuickGUIHostHandle(
       context: context,
       actionCallback: actionCallback,
-      presentationCallback: presentationCallback
+      presentationCallback: presentationCallback,
+      valueCallback: valueCallback,
+      submitCallback: submitCallback
     )
   ).toOpaque()
 }

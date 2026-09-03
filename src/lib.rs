@@ -544,8 +544,12 @@ pub use svg_renderer::{MAX_GPU_SVG_CACHE_BYTES, MAX_GPU_SVG_CACHE_ENTRIES};
 #[cfg(all(target_os = "macos", feature = "swift-ui"))]
 pub use swift_ui::{
     MacEmbeddedView, MacSwiftUiHost, SwiftUiButton, SwiftUiButtonBorderShape, SwiftUiButtonRole,
-    SwiftUiButtonStyle, SwiftUiControlSize, SwiftUiElement, SwiftUiLabelStyle, SwiftUiModifier,
-    SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor, SwiftUiQuickGuiHost,
+    SwiftUiButtonStyle, SwiftUiColorPicker, SwiftUiControlSize, SwiftUiDatePicker,
+    SwiftUiDatePickerComponents, SwiftUiDatePickerStyle, SwiftUiElement, SwiftUiGauge,
+    SwiftUiGaugeStyle, SwiftUiLabelStyle, SwiftUiModifier, SwiftUiPicker, SwiftUiPickerOption,
+    SwiftUiPickerStyle, SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor,
+    SwiftUiProgressView, SwiftUiQuickGuiHost, SwiftUiSegmentedControl, SwiftUiSegmentedTabs,
+    SwiftUiSlider, SwiftUiStepper, SwiftUiTextField, SwiftUiToggle,
 };
 pub use table::{
     MAX_TABLE_COLUMN_WIDTH, MAX_TABLE_COLUMNS, MAX_TABLE_ROWS, MAX_TABLE_SELECTION_RANGES,

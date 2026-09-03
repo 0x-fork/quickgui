@@ -1,9 +1,14 @@
 # QuickGUI SwiftUI
 
-This example embeds a real SwiftUI Liquid Glass `Button` in QuickGUI, presents a native popover,
-then reverse-hosts ordinary QuickGUI `View`, `Text`, `Input`, and `Button` components inside it.
-The embedded subtree keeps its Rust renderer and native input/accessibility surface instead of
-being translated into SwiftUI controls.
+This example is a sidebar gallery of the native SwiftUI components exposed through QuickGUI. The
+left rail is a semantic vertical `Tabs` list, and the right pane mounts one live component demo per
+page with the state reported back to Solid.
+
+The gallery includes real SwiftUI `Button`, `Slider`, `Toggle`, `ProgressView`, `Stepper`,
+`TextField`, `SecureField`, `Picker`, segmented tabs, `DatePicker`, `ColorPicker`, and `Gauge`
+controls. The Popover page presents a native popover that reverse-hosts ordinary QuickGUI `View`,
+`Text`, `Input`, and `Button` components. That embedded subtree keeps its Rust renderer and native
+input/accessibility surface instead of being translated into SwiftUI controls.
 
 ```console
 cd examples/swift-ui-solid

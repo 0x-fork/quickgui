@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 26;
+export const PROTOCOL_VERSION = 28;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -22,6 +22,15 @@ export const enum NativeNodeTag {
   SwiftUIPopoverContent = 15,
   Image = 16,
   Shader = 17,
+  SwiftUISlider = 18,
+  SwiftUIToggle = 19,
+  SwiftUIProgressView = 20,
+  SwiftUIStepper = 21,
+  SwiftUITextField = 22,
+  SwiftUIPicker = 23,
+  SwiftUIDatePicker = 24,
+  SwiftUIColorPicker = 25,
+  SwiftUIGauge = 26,
 }
 
 export const enum PropertyCode {
@@ -368,6 +377,13 @@ export const enum PropertyCode {
   AutoHighlight = 336,
   OpenOnInputClick = 337,
   HighlightItemOnHover = 338,
+  SwiftUIPickerStyle = 339,
+  SwiftUIDatePickerComponents = 340,
+  SwiftUIDatePickerStyle = 341,
+  SwiftUIColorSupportsOpacity = 342,
+  SwiftUIGaugeStyle = 343,
+  SwiftUIGaugeMinimumValueLabel = 344,
+  SwiftUIGaugeMaximumValueLabel = 345,
 }
 
 /**

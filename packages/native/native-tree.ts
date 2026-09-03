@@ -23,7 +23,16 @@ export type NativeElementName =
   | "swift-ui-quickgui-host"
   | "swift-ui-popover"
   | "swift-ui-popover-trigger"
-  | "swift-ui-popover-content";
+  | "swift-ui-popover-content"
+  | "swift-ui-slider"
+  | "swift-ui-toggle"
+  | "swift-ui-progress-view"
+  | "swift-ui-stepper"
+  | "swift-ui-text-field"
+  | "swift-ui-picker"
+  | "swift-ui-date-picker"
+  | "swift-ui-color-picker"
+  | "swift-ui-gauge";
 export type NativeEventType =
   | "click"
   | "mouseenter"
@@ -152,38 +161,64 @@ export class QuickGuiEvent {
   }
 }
 
+function nativeNodeTag(name: NativeElementName): NativeNodeTag {
+  switch (name) {
+    case "button":
+      return NativeNodeTag.Button;
+    case "input":
+    case "textarea":
+      return NativeNodeTag.Input;
+    case "markdown":
+      return NativeNodeTag.Markdown;
+    case "virtual-list":
+      return NativeNodeTag.VirtualList;
+    case "terminal":
+      return NativeNodeTag.Terminal;
+    case "svg":
+      return NativeNodeTag.Svg;
+    case "image":
+      return NativeNodeTag.Image;
+    case "shader":
+      return NativeNodeTag.Shader;
+    case "swift-ui-host":
+      return NativeNodeTag.SwiftUIHost;
+    case "swift-ui-button":
+      return NativeNodeTag.SwiftUIButton;
+    case "swift-ui-quickgui-host":
+      return NativeNodeTag.SwiftUIQuickGUIHost;
+    case "swift-ui-popover":
+      return NativeNodeTag.SwiftUIPopover;
+    case "swift-ui-popover-trigger":
+      return NativeNodeTag.SwiftUIPopoverTrigger;
+    case "swift-ui-popover-content":
+      return NativeNodeTag.SwiftUIPopoverContent;
+    case "swift-ui-slider":
+      return NativeNodeTag.SwiftUISlider;
+    case "swift-ui-toggle":
+      return NativeNodeTag.SwiftUIToggle;
+    case "swift-ui-progress-view":
+      return NativeNodeTag.SwiftUIProgressView;
+    case "swift-ui-stepper":
+      return NativeNodeTag.SwiftUIStepper;
+    case "swift-ui-text-field":
+      return NativeNodeTag.SwiftUITextField;
+    case "swift-ui-picker":
+      return NativeNodeTag.SwiftUIPicker;
+    case "swift-ui-date-picker":
+      return NativeNodeTag.SwiftUIDatePicker;
+    case "swift-ui-color-picker":
+      return NativeNodeTag.SwiftUIColorPicker;
+    case "swift-ui-gauge":
+      return NativeNodeTag.SwiftUIGauge;
+    case "view":
+    case "div":
+    case "text":
+      return NativeNodeTag.View;
+  }
+}
+
 export function createNativeElement(name: NativeElementName): NativeNode {
-  const tag =
-    name === "swift-ui-host"
-      ? NativeNodeTag.SwiftUIHost
-      : name === "swift-ui-button"
-        ? NativeNodeTag.SwiftUIButton
-        : name === "swift-ui-quickgui-host"
-          ? NativeNodeTag.SwiftUIQuickGUIHost
-          : name === "swift-ui-popover"
-            ? NativeNodeTag.SwiftUIPopover
-            : name === "swift-ui-popover-trigger"
-              ? NativeNodeTag.SwiftUIPopoverTrigger
-              : name === "swift-ui-popover-content"
-                ? NativeNodeTag.SwiftUIPopoverContent
-                : name === "button"
-                  ? NativeNodeTag.Button
-                  : name === "input" || name === "textarea"
-                    ? NativeNodeTag.Input
-                    : name === "markdown"
-                      ? NativeNodeTag.Markdown
-                      : name === "virtual-list"
-                        ? NativeNodeTag.VirtualList
-                        : name === "terminal"
-                          ? NativeNodeTag.Terminal
-                          : name === "svg"
-                            ? NativeNodeTag.Svg
-                            : name === "image"
-                              ? NativeNodeTag.Image
-                              : name === "shader"
-                                ? NativeNodeTag.Shader
-                                : NativeNodeTag.View;
-  const node = new NativeNode(tag);
+  const node = new NativeNode(nativeNodeTag(name));
   if (name === "textarea")
     setNativeProperty(node, PropertyCode.Multiline, true);
   return node;

@@ -547,6 +547,13 @@ All notable user-facing changes to QuickGUI are recorded here.
   state during a render pass — where no `EventContext` exists — can still declare an initial value.
 
 ### macOS
+
+- Expanded the Rust-owned SwiftUI host with controlled `Slider`, `Toggle`, `ProgressView`,
+  `Stepper`, `TextField`, `SecureField`, `Picker`, segmented picker, `DatePicker`, and `ColorPicker`
+  support, plus native `Gauge`. Native value and submit events are queued back through the existing
+  asynchronous host boundary, and `@quickgui/solid/swift-ui` exposes typed reactive adapters for
+  the same core descriptors under mutation protocol v28. Pickers also expose macOS 27's native
+  segmented-tabs role for the neutral Xcode-style navigation treatment.
 - Native menu items now honor an explicit declaration accelerator ahead of both the keymap binding
   and the AppKit standard binding for a role, and hidden items set `NSMenuItem.hidden` and no
   longer claim the Command-W close fallback.

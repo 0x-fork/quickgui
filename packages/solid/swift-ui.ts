@@ -54,6 +54,129 @@ export interface ButtonProps extends CommonViewModifierProps {
   ref?: ((node: NativeNode) => void) | NativeNode;
 }
 
+export interface SliderProps extends CommonViewModifierProps {
+  /** Controlled slider value. */
+  value: number;
+  min?: number;
+  max?: number;
+  /** Omit for a continuous slider. */
+  step?: number;
+  label?: string;
+  onValueChange?: (value: number, event: QuickGuiEvent) => void;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export interface ToggleProps extends CommonViewModifierProps {
+  /** Controlled SwiftUI `isOn` value. */
+  isOn: boolean;
+  label?: string;
+  onIsOnChange?: (isOn: boolean, event: QuickGuiEvent) => void;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export interface ProgressViewProps extends CommonViewModifierProps {
+  /** Omit for an indeterminate progress indicator. */
+  value?: number;
+  total?: number;
+  label?: string;
+  currentValueLabel?: string;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export interface StepperProps extends CommonViewModifierProps {
+  /** Controlled stepper value. */
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  label?: string;
+  onValueChange?: (value: number, event: QuickGuiEvent) => void;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export interface TextFieldProps extends CommonViewModifierProps {
+  /** Controlled field value. */
+  value: string;
+  placeholder?: string;
+  onValueChange?: (value: string, event: QuickGuiEvent) => void;
+  onSubmit?: (event: QuickGuiEvent) => void;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export type PickerStyle =
+  | "automatic"
+  | "menu"
+  | "segmented"
+  | "radioGroup"
+  | "inline";
+
+export interface PickerOption {
+  value: string;
+  label: string;
+  systemImage?: string;
+  disabled?: boolean;
+}
+
+export interface PickerProps extends CommonViewModifierProps {
+  /** Controlled selected option value. */
+  selection: string;
+  options: readonly PickerOption[];
+  label?: string;
+  style?: PickerStyle;
+  onSelectionChange?: (selection: string, event: QuickGuiEvent) => void;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export type SegmentedControlRole = "valueSelection" | "tabs";
+
+export interface SegmentedControlProps extends Omit<PickerProps, "style"> {
+  /** Use `tabs` for Xcode-style neutral segmented tab navigation on macOS 27. */
+  role?: SegmentedControlRole;
+}
+
+export type DatePickerComponents = "date" | "hourAndMinute" | "dateAndTime";
+export type DatePickerStyle = "automatic" | "field" | "graphical" | "stepperField";
+
+export interface DatePickerProps extends CommonViewModifierProps {
+  /** Controlled JavaScript date. */
+  value: Date;
+  min?: Date;
+  max?: Date;
+  label?: string;
+  displayedComponents?: DatePickerComponents;
+  style?: DatePickerStyle;
+  onValueChange?: (value: Date, event: QuickGuiEvent) => void;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export interface ColorPickerProps extends CommonViewModifierProps {
+  /** Controlled SwiftUI color string, including named colors and CSS-style hex colors. */
+  selection: string;
+  label?: string;
+  supportsOpacity?: boolean;
+  onSelectionChange?: (selection: string, event: QuickGuiEvent) => void;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
+export type GaugeStyle =
+  | "automatic"
+  | "accessoryCircular"
+  | "accessoryCircularCapacity"
+  | "accessoryLinear"
+  | "accessoryLinearCapacity";
+
+export interface GaugeProps extends CommonViewModifierProps {
+  value: number;
+  min?: number;
+  max?: number;
+  label?: string;
+  currentValueLabel?: string;
+  minimumValueLabel?: string;
+  maximumValueLabel?: string;
+  style?: GaugeStyle;
+  ref?: ((node: NativeNode) => void) | NativeNode;
+}
+
 export interface QuickGUIHostViewProps extends CommonViewModifierProps {
   /** The one ordinary QuickGUI subtree rendered by this reverse host. */
   children?: unknown;
@@ -119,6 +242,363 @@ export function Host(props: HostProps): NativeNode {
 export function Button(props: ButtonProps): NativeNode {
   const node = createElement("swift-ui-button");
   spread(node, props);
+  return node;
+}
+
+/** A real controlled SwiftUI `Slider`. It must be nested under a SwiftUI {@link Host}. */
+export function Slider(props: SliderProps): NativeNode {
+  const node = createElement("swift-ui-slider");
+  const handleInput = (event: QuickGuiEvent) => {
+    const value = Number(event.value);
+    if (Number.isFinite(value)) props.onValueChange?.(value, event);
+  };
+  spread(node, {
+    get value() {
+      return props.value;
+    },
+    get min() {
+      return props.min;
+    },
+    get max() {
+      return props.max;
+    },
+    get step() {
+      return props.step;
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get onInput() {
+      return props.onValueChange ? handleInput : undefined;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+/** A real controlled SwiftUI `Toggle`. It must be nested under a SwiftUI {@link Host}. */
+export function Toggle(props: ToggleProps): NativeNode {
+  const node = createElement("swift-ui-toggle");
+  const handleInput = (event: QuickGuiEvent) => {
+    if (event.value === "true") props.onIsOnChange?.(true, event);
+    else if (event.value === "false") props.onIsOnChange?.(false, event);
+  };
+  spread(node, {
+    get checked() {
+      return props.isOn;
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get onInput() {
+      return props.onIsOnChange ? handleInput : undefined;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+/** A determinate or indeterminate native SwiftUI `ProgressView`. */
+export function ProgressView(props: ProgressViewProps): NativeNode {
+  const node = createElement("swift-ui-progress-view");
+  spread(node, {
+    get value() {
+      return props.value;
+    },
+    get max() {
+      return props.total;
+    },
+    get valueText() {
+      return props.currentValueLabel;
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+/** A real controlled SwiftUI `Stepper`. It must be nested under a SwiftUI {@link Host}. */
+export function Stepper(props: StepperProps): NativeNode {
+  const node = createElement("swift-ui-stepper");
+  const handleInput = (event: QuickGuiEvent) => {
+    const value = Number(event.value);
+    if (Number.isFinite(value)) props.onValueChange?.(value, event);
+  };
+  spread(node, {
+    get value() {
+      return props.value;
+    },
+    get min() {
+      return props.min;
+    },
+    get max() {
+      return props.max;
+    },
+    get step() {
+      return props.step;
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get onInput() {
+      return props.onValueChange ? handleInput : undefined;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+function createTextField(props: TextFieldProps, secure: boolean): NativeNode {
+  const node = createElement("swift-ui-text-field");
+  const handleInput = (event: QuickGuiEvent) =>
+    props.onValueChange?.(event.value ?? "", event);
+  spread(node, {
+    get value() {
+      return props.value;
+    },
+    get placeholder() {
+      return props.placeholder;
+    },
+    type: secure ? "password" : "text",
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get onInput() {
+      return props.onValueChange ? handleInput : undefined;
+    },
+    get onSubmit() {
+      return props.onSubmit;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+/** A real controlled SwiftUI `TextField`. It must be nested under a SwiftUI {@link Host}. */
+export function TextField(props: TextFieldProps): NativeNode {
+  return createTextField(props, false);
+}
+
+/** A real controlled SwiftUI `SecureField`. It must be nested under a SwiftUI {@link Host}. */
+export function SecureField(props: TextFieldProps): NativeNode {
+  return createTextField(props, true);
+}
+
+function createPicker(
+  props: PickerProps,
+  forcedStyle?: () => PickerStyle | undefined,
+  forcedRole?: () => string | undefined,
+): NativeNode {
+  const node = createElement("swift-ui-picker");
+  const handleInput = (event: QuickGuiEvent) =>
+    props.onSelectionChange?.(event.value ?? "", event);
+  spread(node, {
+    get value() {
+      return props.selection;
+    },
+    get items() {
+      return props.options;
+    },
+    get pickerStyle() {
+      return forcedStyle?.() ?? props.style;
+    },
+    get role() {
+      return forcedRole?.();
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get onInput() {
+      return props.onSelectionChange ? handleInput : undefined;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+/** A controlled native SwiftUI `Picker`. */
+export function Picker(props: PickerProps): NativeNode {
+  return createPicker(props);
+}
+
+/** A controlled SwiftUI picker using the native segmented style. */
+export function SegmentedControl(props: SegmentedControlProps): NativeNode {
+  return createPicker(
+    props,
+    () => "segmented",
+    () => props.role,
+  );
+}
+
+function epochSeconds(value: Date | undefined, property: string): string | undefined {
+  if (value === undefined) return undefined;
+  const milliseconds = value.getTime();
+  if (!Number.isFinite(milliseconds)) {
+    throw new TypeError(`SwiftUI DatePicker ${property} must be a valid Date`);
+  }
+  return String(milliseconds / 1_000);
+}
+
+/** A controlled native SwiftUI `DatePicker`. */
+export function DatePicker(props: DatePickerProps): NativeNode {
+  const node = createElement("swift-ui-date-picker");
+  const handleInput = (event: QuickGuiEvent) => {
+    const seconds = Number(event.value);
+    if (Number.isFinite(seconds)) {
+      props.onValueChange?.(new Date(seconds * 1_000), event);
+    }
+  };
+  spread(node, {
+    get civilValue() {
+      return epochSeconds(props.value, "value");
+    },
+    get civilMinimum() {
+      return epochSeconds(props.min, "min");
+    },
+    get civilMaximum() {
+      return epochSeconds(props.max, "max");
+    },
+    get datePickerComponents() {
+      return props.displayedComponents;
+    },
+    get datePickerStyle() {
+      return props.style;
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get onInput() {
+      return props.onValueChange ? handleInput : undefined;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+/** A controlled native SwiftUI `ColorPicker`. */
+export function ColorPicker(props: ColorPickerProps): NativeNode {
+  const node = createElement("swift-ui-color-picker");
+  const handleInput = (event: QuickGuiEvent) =>
+    props.onSelectionChange?.(event.value ?? "", event);
+  spread(node, {
+    get value() {
+      return props.selection;
+    },
+    get supportsOpacity() {
+      return props.supportsOpacity;
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get onInput() {
+      return props.onSelectionChange ? handleInput : undefined;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
+  return node;
+}
+
+/** A native SwiftUI `Gauge`. */
+export function Gauge(props: GaugeProps): NativeNode {
+  const node = createElement("swift-ui-gauge");
+  spread(node, {
+    get value() {
+      return props.value;
+    },
+    get min() {
+      return props.min;
+    },
+    get max() {
+      return props.max;
+    },
+    get valueText() {
+      return props.currentValueLabel;
+    },
+    get gaugeMinimumValueLabel() {
+      return props.minimumValueLabel;
+    },
+    get gaugeMaximumValueLabel() {
+      return props.maximumValueLabel;
+    },
+    get gaugeStyle() {
+      return props.style;
+    },
+    get modifiers() {
+      return props.modifiers;
+    },
+    get testID() {
+      return props.testID;
+    },
+    get children() {
+      return props.label;
+    },
+    get ref() {
+      return props.ref;
+    },
+  });
   return node;
 }
 
