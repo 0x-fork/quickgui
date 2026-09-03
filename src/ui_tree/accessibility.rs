@@ -487,6 +487,9 @@ pub(super) fn accessibility_role(role: AccessibilityRole) -> Role {
         AccessibilityRole::MenuBar => Role::MenuBar,
         AccessibilityRole::Alert => Role::Alert,
         AccessibilityRole::Status => Role::Status,
+        AccessibilityRole::Navigation => Role::Navigation,
+        AccessibilityRole::ScrollView => Role::ScrollView,
+        AccessibilityRole::ScrollBar => Role::ScrollBar,
     }
 }
 

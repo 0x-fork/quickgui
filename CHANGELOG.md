@@ -5,6 +5,37 @@ All notable user-facing changes to QuickGUI are recorded here.
 ## Unreleased
 
 ### Framework
+- Added the remaining Base UI-derived unstyled components, each a caller-owned `*_part` decorator
+  set with bounded state, module tests, a `TestAppContext` interaction/accessibility test, and no
+  idle source: `Separator` / `separator()` (Separator role with a horizontal-by-default
+  orientation); `Avatar` / `AvatarState` (Image role and accessible name on the root,
+  accessibility-hidden image and fallback parts, Idle/Loading/Loaded/Error status, an exact
+  `MAX_AVATAR_FALLBACK_DELAY`-bounded fallback deadline, and `Avatar::apply_loading_status` as the
+  `on_loading_status_change` counterpart); `CheckboxGroup` / `CheckboxGroupState`
+  (`MAX_CHECKBOX_GROUP_VALUES`-bounded declared and checked value sets, group-disabled propagation,
+  per-value parts bound to the existing `Checkbox`, and a parent part whose on/mixed/off state is
+  derived from the children); `PreviewCard` / `PreviewCardState` (Link-role trigger, 600 ms
+  hover-open and 300 ms pointer-leave close on exact one-shot deadlines, immediate focus opening,
+  and portal/positioner/popup/arrow/backdrop parts over the in-window `Popover`); `ScrollArea` /
+  `ScrollAreaState` / `ScrollAreaStyleState` (ScrollView and ScrollBar roles, clamped offsets,
+  per-edge overflow flags on a bounded `overflow_edge_threshold`, thumb extents with a 24 px floor,
+  captured thumb-drag and track-press arithmetic mirroring the built-in overlay scrollbar, and
+  `keep_mounted`); `OtpField` / `OtpFieldState` (up to `MAX_OTP_LENGTH` one-character slots composed
+  from the existing `text_input()`, Numeric/Alpha/Alphanumeric/None validation, masking, auto
+  advance, replace-on-retype, paste distribution, contextual Backspace/Delete/arrow/Home/End
+  actions, and `auto_submit` through `EventContext::submit_form`); `Drawer` / `DrawerState`
+  (root/trigger/portal/backdrop/viewport/popup/content/title/description/close/swipe-area parts,
+  `Modal`/`TrapFocus`/`NonModal` modality, `MAX_DRAWER_SNAP_POINTS` bounded snap points,
+  velocity-aware swipe dismissal reported as a `DrawerGesture`, `MAX_NESTED_DRAWERS` bounded
+  declared nesting, and `Dialog`'s focus containment and restoration); and `NavigationMenu` /
+  `NavigationMenuState` (Navigation landmark, List-role list, item/trigger/icon/content/link parts,
+  per-item popover panels, one roving Tab stop with bounded arrow/Home/End navigation, exact 50 ms
+  hover open and close deadlines, Escape closing inside the bar, and an exposed
+  `activation_direction`).
+- Added the `AccessibilityRole::Navigation`, `AccessibilityRole::ScrollView`, and
+  `AccessibilityRole::ScrollBar` projections used by the new components.
+- Added the `examples/base_ui_components.rs` caller-styled gallery covering all eight components and
+  the [`docs/base-ui-components.md`](docs/base-ui-components.md) guide.
 - Added compositing layers: an element that declares a transform beyond a pure translation, a
   subtree blur or drop shadow, a backdrop effect, or a non-normal blend mode now renders its whole
   subtree — Glyphon text included — into a bounded offscreen texture and composites it back through

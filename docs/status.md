@@ -4,6 +4,18 @@
 
 Implemented now:
 
+- the remaining Base UI components: `Separator` (orientation-only dividers), `Avatar` with an
+  `AvatarState` whose Idle/Loading/Loaded/Error status arms one exact fallback deadline,
+  `CheckboxGroup` with a 256-value bounded set and a parent checkbox derived from its children,
+  `PreviewCard` with 600 ms hover-open and 300 ms pointer-leave close deadlines over the in-window
+  `Popover`, `ScrollArea` with caller-styled viewport/scrollbar/thumb/corner parts and a
+  `ScrollAreaStyleState` render snapshot beside the untouched built-in overlay scrollbars,
+  `OtpField` with up to 12 one-character slots composed from `text_input()` plus auto-advance,
+  paste distribution, and `submit_form` auto-submission, `Drawer` with bounded snap points,
+  velocity-aware swipe dismissal, and `Dialog`'s focus containment and restoration, and
+  `NavigationMenu` with a Navigation landmark, one roving trigger stop, exact 50 ms hover
+  deadlines, and per-item popover panels. All eight are unstyled decorators with bounded state and
+  no idle source;
 - Compositing layers: `Element::transform` / `rotate_degrees` / `scale` / `skew_degrees` with
   `transform_origin` and state-style overrides, `Filter::Blur` and `Filter::DropShadow` over a whole
   subtree, `backdrop_blur` / `backdrop_filter`, and `blend_mode` with eleven exact separable CSS
