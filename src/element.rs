@@ -481,6 +481,12 @@ pub enum AccessibilityRole {
     Alert,
     /// A polite live region for advisory status messages.
     Status,
+    /// A collection of navigation links presented as one landmark.
+    Navigation,
+    /// A clipped scroll viewport whose content is larger than its box.
+    ScrollView,
+    /// A scrollbar whose numeric value is the current scroll position.
+    ScrollBar,
 }
 
 /// Axis projected for accessibility roles whose behavior changes with orientation.

@@ -257,13 +257,16 @@ cargo run --release --example text_services
 The range and feedback gallery styles sliders, range sliders, progress bars, meters, number fields,
 and splitters over the unstyled descriptors; the toolbar gallery adds roving-focus toolbars, toggle
 groups, and the bounded toast queue; the date gallery shows segmented date and time fields with an
-optional calendar; the menubar gallery composes an in-window menubar from popover menus:
+optional calendar; the menubar gallery composes an in-window menubar from popover menus; the Base UI
+gallery styles separators, avatars, checkbox groups, preview cards, scroll areas, OTP fields,
+drawers, and a navigation menu:
 
 ```console
 cargo run --release --example range_controls
 cargo run --release --example toolbar_toast
 cargo run --release --example date_fields
 cargo run --release --example menubar
+cargo run --release --example base_ui_components
 ```
 
 The platform-services and window-controls examples exercise the application shell: activation

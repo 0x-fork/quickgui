@@ -97,6 +97,7 @@ Start at the [documentation index](docs/README.md).
 - [Popovers and popover menus](docs/popovers.md)
 - [Select and autocomplete](docs/select-and-autocomplete.md)
 - [Dialogs](docs/dialogs.md)
+- [Base UI components (separator, avatar, checkbox group, preview card, scroll area, OTP field, drawer, navigation menu)](docs/base-ui-components.md)
 - [Unstyled component roadmap](docs/component-roadmap.md)
 - [Virtual tables and trees](docs/data-collections.md)
 - [Range and feedback components](docs/range-and-feedback.md)
@@ -222,6 +223,7 @@ cargo run --release --example range_controls
 cargo run --release --example toolbar_toast
 cargo run --release --example date_fields
 cargo run --release --example menubar
+cargo run --release --example base_ui_components
 cargo run --release --example platform_services
 cargo run --release --example window_controls
 cargo run --features inspector --example inspector

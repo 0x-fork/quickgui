@@ -9,9 +9,11 @@ mod animated_image;
 mod animation;
 mod assets;
 mod autocomplete;
+mod avatar;
 mod background;
 mod calendar;
 mod canvas;
+mod checkbox_group;
 mod clipboard;
 mod color;
 mod combobox;
@@ -24,6 +26,7 @@ mod date_field;
 mod dialog;
 mod disclosure;
 mod display;
+mod drawer;
 mod element;
 mod entity;
 mod event;
@@ -60,7 +63,9 @@ mod menubar;
 mod metrics;
 #[cfg(target_os = "macos")]
 mod native_view;
+mod navigation_menu;
 mod number_field;
+mod otp_field;
 mod paint_order;
 mod path;
 mod path_renderer;
@@ -69,13 +74,16 @@ mod platform;
 mod popover;
 mod popover_component;
 mod popover_menu;
+mod preview_card;
 mod progress;
 mod renderer;
 mod runtime;
 mod scene;
 mod scheduler;
+mod scroll_area;
 mod select;
 mod selection_control;
+mod separator;
 mod slider;
 mod spell;
 mod splitter;
@@ -126,6 +134,7 @@ pub use autocomplete::{
     AutocompleteSelectionBehavior, AutocompleteState, MAX_AUTOCOMPLETE_VALUE_BYTES,
     MAX_AUTOCOMPLETE_VISIBLE_ROWS,
 };
+pub use avatar::{Avatar, AvatarLoadingStatus, AvatarState, MAX_AVATAR_FALLBACK_DELAY, avatar};
 pub use background::{BackgroundTaskError, MAX_PENDING_BACKGROUND_TASKS, TaskSpawnError};
 pub use calendar::{
     CALENDAR_WEEK_DAYS, Calendar, CalendarNextDay, CalendarNextMonth, CalendarNextWeek,
@@ -134,6 +143,9 @@ pub use calendar::{
     CalendarWeekday, MAX_CALENDAR_WEEKS, calendar, calendar_key_bindings,
 };
 pub use canvas::Canvas;
+pub use checkbox_group::{
+    CheckboxGroup, CheckboxGroupState, MAX_CHECKBOX_GROUP_VALUES, checkbox_group,
+};
 pub use clipboard::{
     ClipboardBookmark, ClipboardData, ClipboardEntry, ClipboardError, ClipboardImage,
     ClipboardImageFormat, ClipboardItem, ClipboardString, ExternalPaths,
@@ -180,6 +192,11 @@ pub use display::{
     Display, DisplayError, DisplayId, DisplayUuid, Displays, MAX_DISPLAY_NAME_BYTES, MAX_DISPLAYS,
 };
 pub use display::{DisplayEvent, MAX_DISPLAY_COLOR_DEPTH, MAX_DISPLAY_EVENTS};
+pub use drawer::{
+    DEFAULT_DRAWER_DISMISS_VELOCITY, Drawer, DrawerGesture, DrawerModality, DrawerState,
+    MAX_DRAWER_DISMISS_VELOCITY, MAX_DRAWER_SNAP_POINTS, MAX_NESTED_DRAWERS, SwipeDirection,
+    drawer_popup,
+};
 #[cfg(target_os = "macos")]
 pub use element::native_view;
 pub use element::{
@@ -283,10 +300,23 @@ pub use menubar::{
 pub use metrics::{FrameMetrics, RenderStats};
 #[cfg(target_os = "macos")]
 pub use native_view::MacNativeView;
+pub use navigation_menu::{
+    DEFAULT_NAVIGATION_MENU_CLOSE_DELAY, DEFAULT_NAVIGATION_MENU_DELAY, MAX_NAVIGATION_MENU_DELAY,
+    MAX_NAVIGATION_MENU_ITEMS, NAVIGATION_MENU_HORIZONTAL_KEY_CONTEXT,
+    NAVIGATION_MENU_VERTICAL_KEY_CONTEXT, NavigationMenu, NavigationMenuActivationDirection,
+    NavigationMenuClose, NavigationMenuEntry, NavigationMenuFirst, NavigationMenuItem,
+    NavigationMenuLast, NavigationMenuNext, NavigationMenuOrientation, NavigationMenuPrevious,
+    NavigationMenuState, navigation_menu, navigation_menu_key_bindings,
+};
 pub use number_field::{
     MAX_NUMBER_FIELD_PRECISION, MAX_NUMBER_FIELD_TEXT_BYTES, NUMBER_FIELD_REPEAT_DELAY,
     NUMBER_FIELD_REPEAT_INTERVAL, NumberField, NumberFieldFormat, NumberFieldState, number_field,
     number_field_root,
+};
+pub use otp_field::{
+    MAX_OTP_LENGTH, OTP_FIELD_KEY_CONTEXT, OtpField, OtpFieldBackspace, OtpFieldDelete,
+    OtpFieldFirst, OtpFieldLast, OtpFieldNext, OtpFieldPrevious, OtpFieldState, OtpValidationType,
+    otp_field, otp_field_key_bindings,
 };
 pub use path::{
     Background, FillOptions, FillRule, GradientColorSpace, LineCap, LineJoin, LinearColorStop,
@@ -345,6 +375,10 @@ pub use popover_menu::{
     PopoverMenuClose, PopoverMenuError, PopoverMenuFirst, PopoverMenuItem, PopoverMenuItemKind,
     PopoverMenuItemState, PopoverMenuLast, PopoverMenuNext, PopoverMenuOpenSubmenu,
     PopoverMenuPrevious, popover_menu_key_bindings,
+};
+pub use preview_card::{
+    DEFAULT_PREVIEW_CARD_CLOSE_DELAY, DEFAULT_PREVIEW_CARD_DELAY, MAX_PREVIEW_CARD_DELAY,
+    PreviewCard, PreviewCardState, preview_card_trigger,
 };
 pub use progress::{Meter, Progress, meter, progress};
 pub use quickgui_system::{
@@ -441,6 +475,11 @@ pub use scene::{
     Hyphens, MAX_TEXT_SHADOW_SAMPLES, MAX_TEXT_SPACING, OverflowWrap, TextDirection, TextShadow,
     TextTransform, WordBreak,
 };
+pub use scroll_area::{
+    DEFAULT_SCROLL_AREA_LINE_HEIGHT, DEFAULT_SCROLL_AREA_OVERFLOW_THRESHOLD,
+    MAX_SCROLL_AREA_OVERFLOW_THRESHOLD, MIN_SCROLL_AREA_THUMB_LENGTH, ScrollArea,
+    ScrollAreaOrientation, ScrollAreaState, ScrollAreaStyleState, scroll_area_viewport,
+};
 pub use select::{
     MAX_SELECT_TYPEAHEAD_BYTES, MAX_SELECT_VISIBLE_ROWS, SELECT_TYPEAHEAD_TIMEOUT, SelectListState,
     SelectOptionState, SelectPopoverLayout, SelectState,
@@ -448,6 +487,7 @@ pub use select::{
 pub use selection_control::{
     Checkbox, Radio, RadioGroup, Switch, checkbox, radio, radio_group, switch,
 };
+pub use separator::{Separator, SeparatorOrientation, separator};
 pub use slider::{
     MAX_SLIDER_THUMBS, Slider, SliderDecrement, SliderIncrement, SliderLargeDecrement,
     SliderLargeIncrement, SliderMaximum, SliderMinimum, SliderOrientation, SliderState,
