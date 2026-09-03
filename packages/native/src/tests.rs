@@ -7927,3 +7927,60 @@ fn a_dialog_declared_inside_a_panel_covers_the_window() {
     let popup = cx.element_bounds(window, core.popover_id()).unwrap();
     assert!((popup.width - 120.0).abs() < 0.5 && (popup.height - 60.0).abs() < 0.5, "{popup:?}");
 }
+
+#[test]
+fn a_declared_button_pressed_with_the_mouse_focuses_without_visible_focus_styles() {
+    let button_id = 690;
+    let mut tree = NativeTree::default();
+    let mut button = NativeNode::new(NodeTag::Button);
+    button.parent = Some(ROOT_NODE);
+    button.set_property(property::WIDTH, Some(PropertyValue::Number(120.0)));
+    button.set_property(property::HEIGHT, Some(PropertyValue::Number(32.0)));
+    button.set_property(property::CLICK_LISTENER, Some(PropertyValue::Bool(true)));
+    tree.nodes.insert(button_id, button);
+    tree.nodes
+        .get_mut(&ROOT_NODE)
+        .unwrap()
+        .children
+        .push(button_id);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let button = ElementId::new(button_id as u64);
+    cx.run_until_idle().unwrap();
+
+    // The hosted binding has no pointer path of its own: the press reaches the core's window-level
+    // pointer dispatch, which focuses the button the way a native click does, so focus lands but
+    // its styles stay hidden until the keyboard is used, like CSS `:focus-visible`.
+    cx.simulate_mouse_down(
+        window,
+        button,
+        quickgui::MouseDownEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(10.0, 10.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 1,
+            first_mouse: false,
+        },
+    )
+    .unwrap();
+    cx.simulate_mouse_up(
+        window,
+        button,
+        quickgui::MouseUpEvent {
+            button: quickgui::MouseButton::Left,
+            position: quickgui::Point::new(10.0, 10.0),
+            modifiers: quickgui::Modifiers::empty(),
+            click_count: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(button));
+    assert!(!cx.focus_visible(window).unwrap());
+
+    // Tab is keyboard input, so the focus it lands — here the same button — shows its styles.
+    cx.simulate_keystrokes(window, "tab").unwrap();
+    assert_eq!(cx.focused(window).unwrap(), Some(button));
+    assert!(cx.focus_visible(window).unwrap());
+}

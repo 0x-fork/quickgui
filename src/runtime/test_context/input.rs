@@ -55,6 +55,33 @@ impl TestAppContext {
         Ok(self.window(window)?.ui.focused())
     }
 
+    /// Whether the focused element paints its focus styles, like CSS `:focus-visible`.
+    ///
+    /// Simulated pointer input that lands focus leaves this false, simulated key input that lands
+    /// or reveals focus makes it true, and a programmatic [`Self::focus`] keeps the previous
+    /// answer. A fresh window starts true, so a test that focuses programmatically sees the focus
+    /// styles until a simulated press hides them. Text inputs paint theirs regardless.
+    pub fn focus_visible(&self, window: WindowHandle) -> Result<bool, TestAppError> {
+        Ok(self.window(window)?.ui.focus_visible())
+    }
+
+    /// Open the dispatch scope one simulated input event runs inside, exactly as the production
+    /// runtime does when a native pointer or key event arrives.
+    fn begin_input_dispatch(
+        &mut self,
+        window: WindowHandle,
+        modality: InputModality,
+    ) -> Result<InputDispatchScope, TestAppError> {
+        Ok(self.window_mut(window)?.ui.begin_input_dispatch(modality))
+    }
+
+    /// Close a scope from [`Self::begin_input_dispatch`]; a window the event closed needs none.
+    fn end_input_dispatch(&mut self, window: WindowHandle, scope: InputDispatchScope) {
+        if let Ok(state) = self.window_mut(window) {
+            state.ui.end_input_dispatch(scope);
+        }
+    }
+
     pub fn focused_input_value(
         &self,
         window: WindowHandle,
@@ -112,6 +139,19 @@ impl TestAppContext {
         element: impl Into<ElementId>,
     ) -> Result<(), TestAppError> {
         let element = element.into();
+        // A semantic click is a pointer click, so the focus it lands paints no ring — unless it is
+        // the activation a key press performs, which nests inside that key's own dispatch.
+        let scope = self.begin_input_dispatch(window, InputModality::Pointer)?;
+        let result = self.click_element(window, element);
+        self.end_input_dispatch(window, scope);
+        result
+    }
+
+    fn click_element(
+        &mut self,
+        window: WindowHandle,
+        element: ElementId,
+    ) -> Result<(), TestAppError> {
         self.require_element(window, element)?;
         if !self.window(window)?.ui.is_clickable(element) {
             return Err(TestAppError::NotClickable { window, element });
@@ -188,11 +228,16 @@ impl TestAppContext {
             position,
             modifiers,
         };
-        let mut cx = self.event_context(Some(window));
-        listener(self.window_mut(window)?.view.as_any_mut(), &event, &mut cx);
-        self.apply_context(Some(window), cx)?;
-        self.queue_dispatch(TestDispatch::Event(window, Event::ContextMenu(event)))?;
-        self.run_until_idle()
+        let scope = self.begin_input_dispatch(window, InputModality::Pointer)?;
+        let result = (|| {
+            let mut cx = self.event_context(Some(window));
+            listener(self.window_mut(window)?.view.as_any_mut(), &event, &mut cx);
+            self.apply_context(Some(window), cx)?;
+            self.queue_dispatch(TestDispatch::Event(window, Event::ContextMenu(event)))?;
+            self.run_until_idle()
+        })();
+        self.end_input_dispatch(window, scope);
+        result
     }
 
     /// Deliver a targeted desktop mouse press through outside capture, capture, and bubble.
@@ -278,6 +323,23 @@ impl TestAppContext {
         event: MouseListenerEvent,
     ) -> Result<bool, TestAppError> {
         self.require_element(window, element)?;
+        // A desktop mouse event is pointer input for the whole of its dispatch, so a listener
+        // that focuses from it lands a focus with no ring, exactly as in a native window.
+        let scope = self.begin_input_dispatch(window, InputModality::Pointer)?;
+        let result = self.dispatch_mouse_event(window, element, kind, button, event);
+        self.end_input_dispatch(window, scope);
+        result
+    }
+
+    fn dispatch_mouse_event(
+        &mut self,
+        window: WindowHandle,
+        element: ElementId,
+        kind: MouseListenerKind,
+        button: Option<MouseButton>,
+        event: MouseListenerEvent,
+    ) -> Result<bool, TestAppError> {
+        let press = kind == MouseListenerKind::Down && button == Some(MouseButton::Left);
         let mut path = Vec::with_capacity(8);
         if !self
             .window(window)?
@@ -304,6 +366,14 @@ impl TestAppContext {
             if stop_propagation {
                 break;
             }
+        }
+        if press && !default_prevented {
+            // The production press focuses the innermost interactive element under the pointer
+            // once no listener prevented the default. The named target stands in for the point,
+            // so a simulated press lands pointer focus — and hides its ring — like a real one.
+            let previous = self.window(window)?.ui.focused();
+            self.window_mut(window)?.ui.press_target(element);
+            self.focus_changed(window, previous)?;
         }
         self.run_until_idle()?;
         Ok(default_prevented)
@@ -338,10 +408,15 @@ impl TestAppContext {
         };
         self.window_mut(window)?.pointer = Some(event.position);
         let event = bounds.map_or(event, |bounds| event.localize(bounds));
-        let mut cx = self.event_context(Some(window));
-        listener(self.window_mut(window)?.view.as_any_mut(), &event, &mut cx);
-        self.apply_context(Some(window), cx)?;
-        self.run_until_idle()
+        let scope = self.begin_input_dispatch(window, InputModality::Pointer)?;
+        let result = (|| {
+            let mut cx = self.event_context(Some(window));
+            listener(self.window_mut(window)?.view.as_any_mut(), &event, &mut cx);
+            self.apply_context(Some(window), cx)?;
+            self.run_until_idle()
+        })();
+        self.end_input_dispatch(window, scope);
+        result
     }
 
     /// Simulate one complete captured drag: a press at `from`, one move to `to`, and a release.
@@ -548,22 +623,27 @@ impl TestAppContext {
                 .map(|capture| capture.target),
         };
 
-        let mut current = target;
-        while let Some(id) = current {
-            let listener = self.window(window)?.listeners.touches.get(&id).cloned();
-            if let Some(listener) = listener {
-                let mut cx = self.event_context(Some(window));
-                listener(self.window_mut(window)?.view.as_any_mut(), &event, &mut cx);
-                let stop_propagation = cx.stop_event_propagation;
-                self.apply_context(Some(window), cx)?;
-                if stop_propagation {
-                    break;
+        let scope = self.begin_input_dispatch(window, InputModality::Pointer)?;
+        let result = (|| {
+            let mut current = target;
+            while let Some(id) = current {
+                let listener = self.window(window)?.listeners.touches.get(&id).cloned();
+                if let Some(listener) = listener {
+                    let mut cx = self.event_context(Some(window));
+                    listener(self.window_mut(window)?.view.as_any_mut(), &event, &mut cx);
+                    let stop_propagation = cx.stop_event_propagation;
+                    self.apply_context(Some(window), cx)?;
+                    if stop_propagation {
+                        break;
+                    }
                 }
+                current = self.window(window)?.ui.parent_touch_listener(id);
             }
-            current = self.window(window)?.ui.parent_touch_listener(id);
-        }
-        self.queue_dispatch(TestDispatch::Event(window, Event::Touch(event)))?;
-        self.run_until_idle()
+            self.queue_dispatch(TestDispatch::Event(window, Event::Touch(event)))?;
+            self.run_until_idle()
+        })();
+        self.end_input_dispatch(window, scope);
+        result
     }
 
     /// Deliver one deterministic Force Touch event to an attached element listener.
@@ -689,16 +769,22 @@ impl TestAppContext {
         if self.window(window)?.ui.focused_text_input().is_none() {
             return Err(TestAppError::NoFocusedTextInput(window));
         }
-        let result = self.window_mut(window)?.ui.input_replace(text);
-        let changed = result.change.is_some();
-        self.apply_input_result(window, result)?;
-        if changed {
-            self.queue_dispatch(TestDispatch::Event(
-                window,
-                Event::TextInput(text.to_owned()),
-            ))?;
-        }
-        self.run_until_idle()
+        // Typed text is keyboard input, so a listener that focuses from it shows the ring.
+        let scope = self.begin_input_dispatch(window, InputModality::Keyboard)?;
+        let result = (|| {
+            let result = self.window_mut(window)?.ui.input_replace(text);
+            let changed = result.change.is_some();
+            self.apply_input_result(window, result)?;
+            if changed {
+                self.queue_dispatch(TestDispatch::Event(
+                    window,
+                    Event::TextInput(text.to_owned()),
+                ))?;
+            }
+            self.run_until_idle()
+        })();
+        self.end_input_dispatch(window, scope);
+        result
     }
 
     /// Simulate one or more whitespace-separated normalized keystrokes.
@@ -734,24 +820,28 @@ impl TestAppContext {
         window: WindowHandle,
         stroke: Keystroke,
     ) -> Result<(), TestAppError> {
-        self.window(window)?;
-        self.invoke_key_event(
-            window,
-            KeyListenerEvent::Up(KeyUpEvent {
-                key: stroke.key.clone(),
-                key_char: stroke.key_char.clone(),
-                modifiers: stroke.modifiers,
-            }),
-        )?;
-        self.queue_dispatch(TestDispatch::Event(
-            window,
-            Event::KeyUp {
-                key: stroke.key,
-                key_char: stroke.key_char,
-                modifiers: stroke.modifiers,
-            },
-        ))?;
-        self.run_until_idle()
+        let scope = self.begin_input_dispatch(window, InputModality::Keyboard)?;
+        let result = (|| {
+            self.invoke_key_event(
+                window,
+                KeyListenerEvent::Up(KeyUpEvent {
+                    key: stroke.key.clone(),
+                    key_char: stroke.key_char.clone(),
+                    modifiers: stroke.modifiers,
+                }),
+            )?;
+            self.queue_dispatch(TestDispatch::Event(
+                window,
+                Event::KeyUp {
+                    key: stroke.key,
+                    key_char: stroke.key_char,
+                    modifiers: stroke.modifiers,
+                },
+            ))?;
+            self.run_until_idle()
+        })();
+        self.end_input_dispatch(window, scope);
+        result
     }
 
     pub(super) fn simulate_keystroke_values(
@@ -763,42 +853,78 @@ impl TestAppContext {
         let mut prefix = Vec::new();
         for stroke in strokes {
             prefix.push(stroke);
-            loop {
-                let contexts = self.window(window)?.ui.key_context_stack();
-                let matched = self.keymap.bindings_for_input(&prefix, &contexts);
-                if matched.pending {
-                    break;
-                }
-                if !matched.bindings.is_empty() {
-                    let fallback = prefix.last().cloned();
-                    let consumed = self.dispatch_bindings(window, &matched.bindings)?;
-                    if !consumed && let Some(fallback) = fallback {
-                        self.handle_keystroke_fallback(window, fallback)?;
-                    }
-                    self.run_until_idle()?;
-                    prefix.clear();
-                    break;
-                }
-                let replay = prefix.remove(0);
-                self.handle_keystroke_fallback(window, replay)?;
-                self.run_until_idle()?;
-                if prefix.is_empty() {
-                    break;
-                }
-            }
+            // Each stroke is one key event: everything it does, including the click Enter or an
+            // arrow performs, is keyboard-driven and lands a visible focus.
+            let scope = self.begin_input_dispatch(window, InputModality::Keyboard)?;
+            let result = self.advance_keystroke_prefix(window, &mut prefix);
+            self.end_input_dispatch(window, scope);
+            result?;
         }
         if !prefix.is_empty() {
+            let scope = self.begin_input_dispatch(window, InputModality::Keyboard)?;
+            let result = self.finish_keystroke_prefix(window, &prefix);
+            self.end_input_dispatch(window, scope);
+            result?;
+        }
+        self.run_until_idle()
+    }
+
+    /// Deliver the newest stroke of `prefix`, replaying earlier strokes no binding completes.
+    fn advance_keystroke_prefix(
+        &mut self,
+        window: WindowHandle,
+        prefix: &mut Vec<Keystroke>,
+    ) -> Result<(), TestAppError> {
+        // Tab and the arrows reveal focus before anything else happens, like the production key
+        // event does, so the focused control shows its ring even when the press moves nothing.
+        if prefix
+            .last()
+            .is_some_and(|stroke| stroke.key.reveals_focus())
+        {
+            self.window_mut(window)?.ui.reveal_focus();
+        }
+        loop {
             let contexts = self.window(window)?.ui.key_context_stack();
-            let matched = self.keymap.bindings_for_input(&prefix, &contexts);
-            if matched.bindings.is_empty() {
-                return Err(TestAppError::IncompleteKeystrokeSequence);
+            let matched = self.keymap.bindings_for_input(prefix, &contexts);
+            if matched.pending {
+                break;
             }
-            let fallback = prefix.last().cloned();
-            let consumed = self.dispatch_bindings(window, &matched.bindings)?;
-            if !consumed && let Some(fallback) = fallback {
-                self.handle_keystroke_fallback(window, fallback)?;
+            if !matched.bindings.is_empty() {
+                let fallback = prefix.last().cloned();
+                let consumed = self.dispatch_bindings(window, &matched.bindings)?;
+                if !consumed && let Some(fallback) = fallback {
+                    self.handle_keystroke_fallback(window, fallback)?;
+                }
+                self.run_until_idle()?;
+                prefix.clear();
+                break;
             }
+            let replay = prefix.remove(0);
+            self.handle_keystroke_fallback(window, replay)?;
             self.run_until_idle()?;
+            if prefix.is_empty() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Resolve a prefix the supplied sequence ended on: an exact shorter binding is selected,
+    /// while a prefix with no exact binding fails.
+    fn finish_keystroke_prefix(
+        &mut self,
+        window: WindowHandle,
+        prefix: &[Keystroke],
+    ) -> Result<(), TestAppError> {
+        let contexts = self.window(window)?.ui.key_context_stack();
+        let matched = self.keymap.bindings_for_input(prefix, &contexts);
+        if matched.bindings.is_empty() {
+            return Err(TestAppError::IncompleteKeystrokeSequence);
+        }
+        let fallback = prefix.last().cloned();
+        let consumed = self.dispatch_bindings(window, &matched.bindings)?;
+        if !consumed && let Some(fallback) = fallback {
+            self.handle_keystroke_fallback(window, fallback)?;
         }
         self.run_until_idle()
     }

@@ -569,378 +569,200 @@ impl Runtime {
                 WindowEvent::MouseInput { state, button, .. } => {
                     let pressed = state == ElementState::Pressed;
                     let button = map_mouse_button(button);
-                    #[cfg(feature = "inspector")]
-                    {
-                        let (consumed, mut repaint, action) = {
-                            let window = self.window.as_mut().expect("window checked above");
-                            let point = window.pointer.unwrap_or(Point::ZERO);
-                            window.inspector.as_mut().map_or(
-                                (false, false, InspectorPointerAction::None),
-                                |inspector| {
-                                    inspector.pointer_button(
-                                        point,
-                                        pressed,
-                                        button == MouseButton::Left,
-                                    )
-                                },
-                            )
-                        };
-                        if consumed {
-                            match action {
-                                InspectorPointerAction::None => {}
-                                InspectorPointerAction::StartPicking => {
-                                    repaint |= self
-                                        .window
-                                        .as_mut()
-                                        .and_then(|window| window.inspector.as_mut())
-                                        .is_some_and(InspectorState::start_picking);
-                                }
-                                InspectorPointerAction::Close => {
-                                    self.config.inspector = false;
-                                    if let Some(window) = &mut self.window {
-                                        window.inspector = None;
-                                        reconcile_inspector_pointer_state(window);
-                                        if window.listeners.observes_window_state {
-                                            window.view_dirty = true;
-                                        }
-                                    }
-                                    repaint = true;
-                                }
-                            }
-                            let window = self.window.as_mut().expect("window retained");
-                            if repaint && window.scheduler.invalidate() {
-                                window.window.request_redraw();
-                            }
-                            return;
-                        }
-                    }
-                    #[cfg(target_os = "macos")]
-                    let native_click_count = platform_click_count;
-                    #[cfg(not(target_os = "macos"))]
-                    let native_click_count = platform_click_count;
-                    let (mouse_position, click_count, first_mouse) = {
-                        let window = self.window.as_mut().expect("window checked above");
-                        let position = window.pointer;
-                        let click_position = position.unwrap_or(Point::ZERO);
-                        let first_mouse = !window.focused;
-                        let click_count = if pressed {
-                            window.pressed_mouse_buttons.press(button);
-                            window.mouse_clicks.press(
-                                button,
-                                click_position,
-                                Instant::now(),
-                                native_click_count,
-                            )
-                        } else {
-                            let count = window.mouse_clicks.release(button, native_click_count);
-                            window.pressed_mouse_buttons.release(button);
-                            count
-                        };
-                        (position, click_count, first_mouse)
-                    };
-                    #[cfg(target_os = "macos")]
-                    let suppress_external_release = if button == MouseButton::Left {
-                        let window = self.window.as_mut().expect("window checked above");
-                        if pressed {
-                            window.suppress_external_drag_release = false;
-                            if let Some(monitor) = &window.external_drag_monitor {
-                                monitor.disarm();
-                            }
-                            window.external_drag_mouse_down = None;
-                            false
-                        } else {
-                            window.external_drag_mouse_down = None;
-                            if let Some(monitor) = &window.external_drag_monitor {
-                                monitor.disarm();
-                            }
-                            std::mem::take(&mut window.suppress_external_drag_release)
-                        }
-                    } else {
-                        false
-                    };
-                    #[cfg(target_os = "macos")]
-                    if suppress_external_release {
-                        // Preserve raw button symmetry for application event handlers, but do not
-                        // route the native drag's terminal release back through retained hit
-                        // testing where it could activate a control under the drop position.
-                        self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
-                        return;
-                    }
-                    if pressed {
-                        let window = self.window.as_mut().expect("window checked above");
-                        if window.ui.clear_tooltip() && window.scheduler.invalidate() {
-                            window.window.request_redraw();
-                        }
-                    }
-                    let scrollbar_consumed = {
-                        let window = self.window.as_mut().expect("window checked above");
-                        if window.pointer_capture.is_some() || window.any_drag_active() {
-                            false
-                        } else {
-                            let now = Instant::now();
-                            let consumed = if button == MouseButton::Left
-                                && window.ui.scrollbar_drag_active()
-                            {
-                                if !pressed {
-                                    let result = window.ui.end_scrollbar_drag(now);
-                                    window.view_dirty |= result.view_dirty;
-                                    window.ui.update_scrollbar_hover(window.pointer, now);
-                                }
-                                true
-                            } else if button == MouseButton::Left && pressed {
-                                if let Some(view_dirty) =
-                                    window.ui.begin_scrollbar_drag(window.pointer)
-                                {
-                                    window.view_dirty |= view_dirty;
-                                    true
-                                } else {
-                                    false
-                                }
-                            } else {
-                                window
-                                    .pointer
-                                    .is_some_and(|point| window.ui.is_over_scrollbar(point))
-                            };
-                            if consumed && window.scheduler.invalidate() {
-                                window.window.request_redraw();
-                            }
-                            consumed
-                        }
-                    };
-                    if scrollbar_consumed {
-                        return;
-                    }
-                    let app_region_consumed = self.window.as_ref().is_some_and(|window| {
-                        window.pointer_capture.is_none()
-                            && !window.any_drag_active()
-                            && window
-                                .pointer
-                                .is_some_and(|point| window.ui.is_app_region_drag(point))
-                    });
-                    if app_region_consumed {
-                        if button == MouseButton::Left
-                            && pressed
-                            && self.config.is_movable
-                            && let Some(window) = self.window.as_ref()
+                    // Every focus change this press or release causes — a listener's `cx.focus`,
+                    // the retained press default, the click it completes — is pointer-driven, so
+                    // one scope covers the whole arm and each early exit leaves through the block
+                    // instead of returning past the scope's end.
+                    let scope = self.begin_input_dispatch(InputModality::Pointer);
+                    'mouse_input: {
+                        #[cfg(feature = "inspector")]
                         {
-                            #[cfg(target_os = "macos")]
-                            let result = perform_window_drag(
-                                &window.window,
-                                self.config.title_bar_style != TitleBarStyle::Default,
-                            );
-                            #[cfg(not(target_os = "macos"))]
-                            let result = window
-                                .window
-                                .drag_window()
-                                .map_err(|error| error.to_string());
-                            if let Err(error) = result {
-                                tracing::warn!(%error, "could not start window drag from app region");
+                            let (consumed, mut repaint, action) = {
+                                let window = self.window.as_mut().expect("window checked above");
+                                let point = window.pointer.unwrap_or(Point::ZERO);
+                                window.inspector.as_mut().map_or(
+                                    (false, false, InspectorPointerAction::None),
+                                    |inspector| {
+                                        inspector.pointer_button(
+                                            point,
+                                            pressed,
+                                            button == MouseButton::Left,
+                                        )
+                                    },
+                                )
+                            };
+                            if consumed {
+                                match action {
+                                    InspectorPointerAction::None => {}
+                                    InspectorPointerAction::StartPicking => {
+                                        repaint |= self
+                                            .window
+                                            .as_mut()
+                                            .and_then(|window| window.inspector.as_mut())
+                                            .is_some_and(InspectorState::start_picking);
+                                    }
+                                    InspectorPointerAction::Close => {
+                                        self.config.inspector = false;
+                                        if let Some(window) = &mut self.window {
+                                            window.inspector = None;
+                                            reconcile_inspector_pointer_state(window);
+                                            if window.listeners.observes_window_state {
+                                                window.view_dirty = true;
+                                            }
+                                        }
+                                        repaint = true;
+                                    }
+                                }
+                                let window = self.window.as_mut().expect("window retained");
+                                if repaint && window.scheduler.invalidate() {
+                                    window.window.request_redraw();
+                                }
+                                break 'mouse_input;
                             }
-                            #[cfg(target_os = "macos")]
-                            if let Some(window) = &mut self.window {
+                        }
+                        #[cfg(target_os = "macos")]
+                        let native_click_count = platform_click_count;
+                        #[cfg(not(target_os = "macos"))]
+                        let native_click_count = platform_click_count;
+                        let (mouse_position, click_count, first_mouse) = {
+                            let window = self.window.as_mut().expect("window checked above");
+                            let position = window.pointer;
+                            let click_position = position.unwrap_or(Point::ZERO);
+                            let first_mouse = !window.focused;
+                            let click_count = if pressed {
+                                window.pressed_mouse_buttons.press(button);
+                                window.mouse_clicks.press(
+                                    button,
+                                    click_position,
+                                    Instant::now(),
+                                    native_click_count,
+                                )
+                            } else {
+                                let count = window.mouse_clicks.release(button, native_click_count);
+                                window.pressed_mouse_buttons.release(button);
+                                count
+                            };
+                            (position, click_count, first_mouse)
+                        };
+                        #[cfg(target_os = "macos")]
+                        let suppress_external_release = if button == MouseButton::Left {
+                            let window = self.window.as_mut().expect("window checked above");
+                            if pressed {
+                                window.suppress_external_drag_release = false;
+                                if let Some(monitor) = &window.external_drag_monitor {
+                                    monitor.disarm();
+                                }
+                                window.external_drag_mouse_down = None;
+                                false
+                            } else {
                                 window.external_drag_mouse_down = None;
                                 if let Some(monitor) = &window.external_drag_monitor {
                                     monitor.disarm();
                                 }
+                                std::mem::take(&mut window.suppress_external_drag_release)
                             }
-                        }
-                        return;
-                    }
-                    // A direct captured-pointer release is terminal cleanup, not a preventable
-                    // default. Deliver it before general mouse-up callbacks so closing or
-                    // preventing from those callbacks cannot strand capture.
-                    let terminal_capture = if pressed {
-                        None
-                    } else {
-                        let window = self.window.as_mut().expect("window checked above");
-                        window.drag_candidate = None;
-                        window
-                            .pointer_capture
-                            .filter(|capture| capture.button == button)
-                            .map(|capture| {
-                                window.pointer_capture = None;
-                                let position = window.pointer.unwrap_or(capture.position);
-                                (
-                                    capture.target,
-                                    PointerEvent {
-                                        // The captured element localizes the event before delivery.
-                                        size: Size::ZERO,
-                                        phase: PointerPhase::Up,
-                                        position,
-                                        origin: capture.origin,
-                                        local_position: position,
-                                        local_origin: capture.origin,
-                                        delta: position - capture.position,
-                                        button,
-                                        modifiers: self.modifiers,
-                                    },
-                                )
-                            })
-                    };
-                    if let Some((target, event)) = terminal_capture
-                        && !self.invoke_pointer(event_loop, target, event)
-                    {
-                        return;
-                    }
-
-                    let default_prevented = if let Some(position) = mouse_position {
-                        let result = if pressed {
-                            self.invoke_mouse_event_at(
-                                event_loop,
-                                position,
-                                MouseListenerKind::Down,
-                                Some(button),
-                                MouseListenerEvent::Down(MouseDownEvent {
-                                    button,
-                                    position,
-                                    modifiers: self.modifiers,
-                                    click_count,
-                                    first_mouse,
-                                }),
-                            )
                         } else {
-                            self.invoke_mouse_event_at(
-                                event_loop,
-                                position,
-                                MouseListenerKind::Up,
-                                Some(button),
-                                MouseListenerEvent::Up(MouseUpEvent {
-                                    button,
-                                    position,
-                                    modifiers: self.modifiers,
-                                    click_count,
-                                }),
-                            )
+                            false
                         };
-                        let Some(default_prevented) = result else {
-                            return;
-                        };
-                        default_prevented
-                    } else {
-                        false
-                    };
-
-                    let internal_drag_release = (button == MouseButton::Left && !pressed)
-                        .then(|| {
-                            self.window
-                                .as_ref()
-                                .filter(|window| window.drag_session.is_some())
-                                .and_then(|window| {
-                                    window.pointer.or_else(|| {
-                                        window.drag_session.as_ref().map(|drag| drag.position)
-                                    })
-                                })
-                        })
-                        .flatten();
-                    if let Some(position) = internal_drag_release {
-                        if !self.finish_internal_drag(event_loop, position) {
-                            return;
-                        }
-                        self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
-                        return;
-                    }
-                    if default_prevented {
-                        if !pressed {
-                            let window = self.window.as_mut().expect("window checked above");
-                            if window.ui.cancel_pointer_interaction()
-                                && window.scheduler.invalidate()
-                            {
-                                window.window.request_redraw();
-                            }
-                        }
-                        self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
-                        return;
-                    }
-                    if button == MouseButton::Right && pressed {
-                        let (target, position, dismiss) = self
-                            .window
-                            .as_ref()
-                            .and_then(|window| {
-                                let position = window.pointer?;
-                                Some((
-                                    window.ui.context_menu_listener_at(position),
-                                    position,
-                                    window.ui.dismiss_request_for_pointer(Some(position)),
-                                ))
-                            })
-                            .unwrap_or((None, Point::ZERO, None));
-                        if let Some(dismiss) = dismiss {
-                            self.invoke_dismiss(event_loop, dismiss);
-                            if self.window.is_none() {
-                                return;
-                            }
-                        }
-                        if let Some(target) = target {
+                        #[cfg(target_os = "macos")]
+                        if suppress_external_release {
+                            // Preserve raw button symmetry for application event handlers, but do not
+                            // route the native drag's terminal release back through retained hit
+                            // testing where it could activate a control under the drop position.
                             self.dispatch(
                                 event_loop,
                                 Event::MouseButton { button, pressed },
                                 false,
                             );
-                            self.invoke_context_menu(
-                                event_loop,
-                                ContextMenuEvent {
-                                    target,
-                                    position,
-                                    modifiers: self.modifiers,
-                                },
-                            );
-                            return;
+                            break 'mouse_input;
                         }
-                    }
-                    let (pointer_result, previous_focus, captured) = {
-                        let window = self.window.as_mut().expect("window checked above");
-                        let previous_focus = window.ui.focused();
-                        let result = if button == MouseButton::Left {
-                            let RuntimeWindow { ui, renderer, .. } = window;
-                            ui.pointer_button(
-                                window.pointer,
-                                pressed,
-                                self.modifiers.contains(Modifiers::SHIFT),
-                                Instant::now(),
-                                renderer,
-                            )
-                        } else {
-                            crate::ui_tree::PointerResult {
-                                repaint: false,
-                                clicked: None,
-                                dismissed: None,
-                                pointer_listener: window
-                                    .pointer
-                                    .and_then(|point| window.ui.pointer_listener_at(point)),
-                                drag_source: None,
+                        if pressed {
+                            let window = self.window.as_mut().expect("window checked above");
+                            if window.ui.clear_tooltip() && window.scheduler.invalidate() {
+                                window.window.request_redraw();
+                            }
+                        }
+                        let scrollbar_consumed = {
+                            let window = self.window.as_mut().expect("window checked above");
+                            if window.pointer_capture.is_some() || window.any_drag_active() {
+                                false
+                            } else {
+                                let now = Instant::now();
+                                let consumed = if button == MouseButton::Left
+                                    && window.ui.scrollbar_drag_active()
+                                {
+                                    if !pressed {
+                                        let result = window.ui.end_scrollbar_drag(now);
+                                        window.view_dirty |= result.view_dirty;
+                                        window.ui.update_scrollbar_hover(window.pointer, now);
+                                    }
+                                    true
+                                } else if button == MouseButton::Left && pressed {
+                                    if let Some(view_dirty) =
+                                        window.ui.begin_scrollbar_drag(window.pointer)
+                                    {
+                                        window.view_dirty |= view_dirty;
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    window
+                                        .pointer
+                                        .is_some_and(|point| window.ui.is_over_scrollbar(point))
+                                };
+                                if consumed && window.scheduler.invalidate() {
+                                    window.window.request_redraw();
+                                }
+                                consumed
                             }
                         };
-                        let captured = if pressed {
-                            if window.pointer_capture.is_none() {
-                                result.pointer_listener.and_then(|target| {
-                                    let position = window.pointer?;
-                                    let capture = PointerCapture {
-                                        target,
-                                        button,
-                                        origin: position,
-                                        position,
-                                    };
-                                    window.pointer_capture = Some(capture);
-                                    Some((
-                                        target,
-                                        PointerEvent {
-                                            // The captured element localizes the event before delivery.
-                                            size: Size::ZERO,
-                                            phase: PointerPhase::Down,
-                                            position,
-                                            origin: position,
-                                            local_position: position,
-                                            local_origin: position,
-                                            delta: Vector::ZERO,
-                                            button,
-                                            modifiers: self.modifiers,
-                                        },
-                                    ))
-                                })
-                            } else {
-                                None
+                        if scrollbar_consumed {
+                            break 'mouse_input;
+                        }
+                        let app_region_consumed = self.window.as_ref().is_some_and(|window| {
+                            window.pointer_capture.is_none()
+                                && !window.any_drag_active()
+                                && window
+                                    .pointer
+                                    .is_some_and(|point| window.ui.is_app_region_drag(point))
+                        });
+                        if app_region_consumed {
+                            if button == MouseButton::Left
+                                && pressed
+                                && self.config.is_movable
+                                && let Some(window) = self.window.as_ref()
+                            {
+                                #[cfg(target_os = "macos")]
+                                let result = perform_window_drag(
+                                    &window.window,
+                                    self.config.title_bar_style != TitleBarStyle::Default,
+                                );
+                                #[cfg(not(target_os = "macos"))]
+                                let result = window
+                                    .window
+                                    .drag_window()
+                                    .map_err(|error| error.to_string());
+                                if let Err(error) = result {
+                                    tracing::warn!(%error, "could not start window drag from app region");
+                                }
+                                #[cfg(target_os = "macos")]
+                                if let Some(window) = &mut self.window {
+                                    window.external_drag_mouse_down = None;
+                                    if let Some(monitor) = &window.external_drag_monitor {
+                                        monitor.disarm();
+                                    }
+                                }
                             }
+                            break 'mouse_input;
+                        }
+                        // A direct captured-pointer release is terminal cleanup, not a preventable
+                        // default. Deliver it before general mouse-up callbacks so closing or
+                        // preventing from those callbacks cannot strand capture.
+                        let terminal_capture = if pressed {
+                            None
                         } else {
+                            let window = self.window.as_mut().expect("window checked above");
                             window.drag_candidate = None;
                             window
                                 .pointer_capture
@@ -965,41 +787,239 @@ impl Runtime {
                                     )
                                 })
                         };
-                        if button == MouseButton::Left && pressed {
-                            window.drag_candidate = result.drag_source.and_then(|source| {
+                        if let Some((target, event)) = terminal_capture
+                            && !self.invoke_pointer(event_loop, target, event)
+                        {
+                            break 'mouse_input;
+                        }
+
+                        let default_prevented = if let Some(position) = mouse_position {
+                            let result = if pressed {
+                                self.invoke_mouse_event_at(
+                                    event_loop,
+                                    position,
+                                    MouseListenerKind::Down,
+                                    Some(button),
+                                    MouseListenerEvent::Down(MouseDownEvent {
+                                        button,
+                                        position,
+                                        modifiers: self.modifiers,
+                                        click_count,
+                                        first_mouse,
+                                    }),
+                                )
+                            } else {
+                                self.invoke_mouse_event_at(
+                                    event_loop,
+                                    position,
+                                    MouseListenerKind::Up,
+                                    Some(button),
+                                    MouseListenerEvent::Up(MouseUpEvent {
+                                        button,
+                                        position,
+                                        modifiers: self.modifiers,
+                                        click_count,
+                                    }),
+                                )
+                            };
+                            let Some(default_prevented) = result else {
+                                break 'mouse_input;
+                            };
+                            default_prevented
+                        } else {
+                            false
+                        };
+
+                        let internal_drag_release = (button == MouseButton::Left && !pressed)
+                            .then(|| {
+                                self.window
+                                    .as_ref()
+                                    .filter(|window| window.drag_session.is_some())
+                                    .and_then(|window| {
+                                        window.pointer.or_else(|| {
+                                            window.drag_session.as_ref().map(|drag| drag.position)
+                                        })
+                                    })
+                            })
+                            .flatten();
+                        if let Some(position) = internal_drag_release {
+                            if !self.finish_internal_drag(event_loop, position) {
+                                break 'mouse_input;
+                            }
+                            self.dispatch(
+                                event_loop,
+                                Event::MouseButton { button, pressed },
+                                false,
+                            );
+                            break 'mouse_input;
+                        }
+                        if default_prevented {
+                            if !pressed {
+                                let window = self.window.as_mut().expect("window checked above");
+                                if window.ui.cancel_pointer_interaction()
+                                    && window.scheduler.invalidate()
+                                {
+                                    window.window.request_redraw();
+                                }
+                            }
+                            self.dispatch(
+                                event_loop,
+                                Event::MouseButton { button, pressed },
+                                false,
+                            );
+                            break 'mouse_input;
+                        }
+                        if button == MouseButton::Right && pressed {
+                            let (target, position, dismiss) = self
+                                .window
+                                .as_ref()
+                                .and_then(|window| {
+                                    let position = window.pointer?;
+                                    Some((
+                                        window.ui.context_menu_listener_at(position),
+                                        position,
+                                        window.ui.dismiss_request_for_pointer(Some(position)),
+                                    ))
+                                })
+                                .unwrap_or((None, Point::ZERO, None));
+                            if let Some(dismiss) = dismiss {
+                                self.invoke_dismiss(event_loop, dismiss);
+                                if self.window.is_none() {
+                                    break 'mouse_input;
+                                }
+                            }
+                            if let Some(target) = target {
+                                self.dispatch(
+                                    event_loop,
+                                    Event::MouseButton { button, pressed },
+                                    false,
+                                );
+                                self.invoke_context_menu(
+                                    event_loop,
+                                    ContextMenuEvent {
+                                        target,
+                                        position,
+                                        modifiers: self.modifiers,
+                                    },
+                                );
+                                break 'mouse_input;
+                            }
+                        }
+                        let (pointer_result, previous_focus, captured) = {
+                            let window = self.window.as_mut().expect("window checked above");
+                            let previous_focus = window.ui.focused();
+                            let result = if button == MouseButton::Left {
+                                let RuntimeWindow { ui, renderer, .. } = window;
+                                ui.pointer_button(
+                                    window.pointer,
+                                    pressed,
+                                    self.modifiers.contains(Modifiers::SHIFT),
+                                    Instant::now(),
+                                    renderer,
+                                )
+                            } else {
+                                crate::ui_tree::PointerResult {
+                                    repaint: false,
+                                    clicked: None,
+                                    dismissed: None,
+                                    pointer_listener: window
+                                        .pointer
+                                        .and_then(|point| window.ui.pointer_listener_at(point)),
+                                    drag_source: None,
+                                }
+                            };
+                            let captured = if pressed {
+                                if window.pointer_capture.is_none() {
+                                    result.pointer_listener.and_then(|target| {
+                                        let position = window.pointer?;
+                                        let capture = PointerCapture {
+                                            target,
+                                            button,
+                                            origin: position,
+                                            position,
+                                        };
+                                        window.pointer_capture = Some(capture);
+                                        Some((
+                                            target,
+                                            PointerEvent {
+                                                // The captured element localizes the event before delivery.
+                                                size: Size::ZERO,
+                                                phase: PointerPhase::Down,
+                                                position,
+                                                origin: position,
+                                                local_position: position,
+                                                local_origin: position,
+                                                delta: Vector::ZERO,
+                                                button,
+                                                modifiers: self.modifiers,
+                                            },
+                                        ))
+                                    })
+                                } else {
+                                    None
+                                }
+                            } else {
+                                window.drag_candidate = None;
                                 window
-                                    .pointer
-                                    .map(|origin| DragCandidate { source, origin })
-                            });
+                                    .pointer_capture
+                                    .filter(|capture| capture.button == button)
+                                    .map(|capture| {
+                                        window.pointer_capture = None;
+                                        let position = window.pointer.unwrap_or(capture.position);
+                                        (
+                                            capture.target,
+                                            PointerEvent {
+                                                // The captured element localizes the event before delivery.
+                                                size: Size::ZERO,
+                                                phase: PointerPhase::Up,
+                                                position,
+                                                origin: capture.origin,
+                                                local_position: position,
+                                                local_origin: capture.origin,
+                                                delta: position - capture.position,
+                                                button,
+                                                modifiers: self.modifiers,
+                                            },
+                                        )
+                                    })
+                            };
+                            if button == MouseButton::Left && pressed {
+                                window.drag_candidate = result.drag_source.and_then(|source| {
+                                    window
+                                        .pointer
+                                        .map(|origin| DragCandidate { source, origin })
+                                });
+                            }
+                            if result.repaint && window.scheduler.invalidate() {
+                                window.window.request_redraw();
+                            }
+                            (result, previous_focus, captured)
+                        };
+                        #[cfg(target_os = "macos")]
+                        if button == MouseButton::Left
+                            && pressed
+                            && pointer_result.drag_source.is_some()
+                        {
+                            if let Some(window) = &mut self.window {
+                                window.external_drag_mouse_down = capture_left_mouse_down();
+                            }
+                            self.arm_external_drag_monitor();
                         }
-                        if result.repaint && window.scheduler.invalidate() {
-                            window.window.request_redraw();
+                        self.announce_focus_change(event_loop, previous_focus);
+                        if let Some((target, event)) = captured
+                            && !self.invoke_pointer(event_loop, target, event)
+                        {
+                            break 'mouse_input;
                         }
-                        (result, previous_focus, captured)
-                    };
-                    #[cfg(target_os = "macos")]
-                    if button == MouseButton::Left
-                        && pressed
-                        && pointer_result.drag_source.is_some()
-                    {
-                        if let Some(window) = &mut self.window {
-                            window.external_drag_mouse_down = capture_left_mouse_down();
+                        self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
+                        if let Some(request) = pointer_result.dismissed {
+                            self.invoke_dismiss(event_loop, request);
                         }
-                        self.arm_external_drag_monitor();
+                        if let Some(id) = pointer_result.clicked {
+                            self.invoke_click(event_loop, id);
+                        }
                     }
-                    self.announce_focus_change(event_loop, previous_focus);
-                    if let Some((target, event)) = captured
-                        && !self.invoke_pointer(event_loop, target, event)
-                    {
-                        return;
-                    }
-                    self.dispatch(event_loop, Event::MouseButton { button, pressed }, false);
-                    if let Some(request) = pointer_result.dismissed {
-                        self.invoke_dismiss(event_loop, request);
-                    }
-                    if let Some(id) = pointer_result.clicked {
-                        self.invoke_click(event_loop, id);
-                    }
+                    self.end_input_dispatch(scope);
                 }
                 WindowEvent::Touch(touch) => {
                     let event = {
@@ -1231,100 +1251,111 @@ impl Runtime {
                 WindowEvent::KeyboardInput { event, .. } => {
                     let stroke = self.keyboard.keystroke(&event, self.modifiers);
                     let key = stroke.key.clone();
-                    #[cfg(feature = "inspector")]
-                    if event.state == ElementState::Pressed
-                        && key == Key::Escape
-                        && self
-                            .window
-                            .as_ref()
-                            .is_some_and(|state| state.inspector.is_some())
-                    {
-                        self.config.inspector = false;
-                        let state = self.window.as_mut().expect("window checked above");
-                        state.inspector = None;
-                        reconcile_inspector_pointer_state(state);
-                        if state.listeners.observes_window_state {
-                            state.view_dirty = true;
-                        }
-                        if state.scheduler.invalidate() {
-                            state.window.request_redraw();
-                        }
-                        return;
+                    // Every focus change this key causes is keyboard-driven, so one scope covers
+                    // the whole arm and each early exit leaves through the block. Tab and the
+                    // arrows reveal focus up front, so the focused control shows its ring even
+                    // when the press turns out to move nothing.
+                    let scope = self.begin_input_dispatch(InputModality::Keyboard);
+                    if event.state == ElementState::Pressed && key.reveals_focus() {
+                        self.reveal_focus();
                     }
-                    if event.state == ElementState::Pressed {
-                        if key == Key::Escape
-                            && window_dismisses_system_popover_on_escape(&self.config)
+                    'keyboard_input: {
+                        #[cfg(feature = "inspector")]
+                        if event.state == ElementState::Pressed
+                            && key == Key::Escape
+                            && self
+                                .window
+                                .as_ref()
+                                .is_some_and(|state| state.inspector.is_some())
                         {
-                            if let Some(handle) = self.current_handle() {
-                                self.close_requests.push(handle);
+                            self.config.inspector = false;
+                            let state = self.window.as_mut().expect("window checked above");
+                            state.inspector = None;
+                            reconcile_inspector_pointer_state(state);
+                            if state.listeners.observes_window_state {
+                                state.view_dirty = true;
                             }
-                            return;
+                            if state.scheduler.invalidate() {
+                                state.window.request_redraw();
+                            }
+                            break 'keyboard_input;
                         }
-                        if key == Key::Escape && self.cancel_internal_drag() {
+                        if event.state == ElementState::Pressed {
+                            if key == Key::Escape
+                                && window_dismisses_system_popover_on_escape(&self.config)
+                            {
+                                if let Some(handle) = self.current_handle() {
+                                    self.close_requests.push(handle);
+                                }
+                                break 'keyboard_input;
+                            }
+                            if key == Key::Escape && self.cancel_internal_drag() {
+                                if self
+                                    .invoke_key_event(
+                                        event_loop,
+                                        KeyListenerEvent::Down(KeyDownEvent {
+                                            key: key.clone(),
+                                            key_char: stroke.key_char.clone(),
+                                            text: event.text.as_ref().map(ToString::to_string),
+                                            modifiers: stroke.modifiers,
+                                            repeat: event.repeat,
+                                        }),
+                                    )
+                                    .is_none()
+                                {
+                                    break 'keyboard_input;
+                                }
+                                self.dispatch(
+                                    event_loop,
+                                    Event::KeyDown {
+                                        key,
+                                        key_char: stroke.key_char,
+                                        modifiers: stroke.modifiers,
+                                        repeat: event.repeat,
+                                    },
+                                    false,
+                                );
+                                break 'keyboard_input;
+                            }
+                            self.handle_pressed_key(
+                                event_loop,
+                                PendingKey {
+                                    stroke,
+                                    repeat: event.repeat,
+                                    text: event.text.map(|text| text.to_string()),
+                                },
+                            );
+                        } else {
+                            let Keystroke {
+                                key,
+                                key_char,
+                                modifiers,
+                            } = stroke;
                             if self
                                 .invoke_key_event(
                                     event_loop,
-                                    KeyListenerEvent::Down(KeyDownEvent {
+                                    KeyListenerEvent::Up(KeyUpEvent {
                                         key: key.clone(),
-                                        key_char: stroke.key_char.clone(),
-                                        text: event.text.as_ref().map(ToString::to_string),
-                                        modifiers: stroke.modifiers,
-                                        repeat: event.repeat,
+                                        key_char: key_char.clone(),
+                                        modifiers,
                                     }),
                                 )
                                 .is_none()
                             {
-                                return;
+                                break 'keyboard_input;
                             }
                             self.dispatch(
                                 event_loop,
-                                Event::KeyDown {
+                                Event::KeyUp {
                                     key,
-                                    key_char: stroke.key_char,
-                                    modifiers: stroke.modifiers,
-                                    repeat: event.repeat,
+                                    key_char,
+                                    modifiers,
                                 },
                                 false,
                             );
-                            return;
                         }
-                        self.handle_pressed_key(
-                            event_loop,
-                            PendingKey {
-                                stroke,
-                                repeat: event.repeat,
-                                text: event.text.map(|text| text.to_string()),
-                            },
-                        );
-                    } else {
-                        let Keystroke {
-                            key,
-                            key_char,
-                            modifiers,
-                        } = stroke;
-                        if self
-                            .invoke_key_event(
-                                event_loop,
-                                KeyListenerEvent::Up(KeyUpEvent {
-                                    key: key.clone(),
-                                    key_char: key_char.clone(),
-                                    modifiers,
-                                }),
-                            )
-                            .is_none()
-                        {
-                            return;
-                        }
-                        self.dispatch(
-                            event_loop,
-                            Event::KeyUp {
-                                key,
-                                key_char,
-                                modifiers,
-                            },
-                            false,
-                        );
                     }
+                    self.end_input_dispatch(scope);
                 }
                 WindowEvent::Ime(Ime::Preedit(text, cursor)) => {
                     let result = self

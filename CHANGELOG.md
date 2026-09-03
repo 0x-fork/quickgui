@@ -11,6 +11,17 @@ All notable user-facing changes to QuickGUI are recorded here.
   yet, now leaves its parent's child list too, so an assistive client no longer aborts on an
   unresolved id. A hosted table cell with text children took the process down this way whenever a
   screen reader was attached.
+- Focus styles now follow focus visibility, like CSS `:focus-visible`: a pointer press that lands
+  focus — a click on a button, an accordion trigger, or a tab, including a `cx.focus` a listener
+  performs during the press — paints no `focus` styles (`focusOutline`, `focusBackgroundColor`,
+  `focusColor`, `focusBackground`, `focusTransform`), while focus a key lands — Tab, a roving
+  arrow, or a listener focusing in response to a key — paints them, and Tab or an arrow that moves
+  nothing reveals the focus already there. A programmatic focus keeps the current visibility. Text
+  inputs and text areas still paint their focus styles whenever focused, as a native text field
+  always shows its ring. Keyboard focus, accessibility focus, and focus traps are unchanged.
+  `TestAppContext::focus_visible` reports the flag, and every simulated input drives it exactly as
+  production input does; a simulated left press that no listener prevents now also applies the
+  production press default and focuses its target.
 - Added `Element::w_fraction` and `Element::h_fraction`, which size an element as a fraction of
   its parent the way `w_full` and `h_full` size it to the whole, and `Element::is_viewport_portal`,
   which tells a host composing trees from declarations that an overlay's box is meant to be laid

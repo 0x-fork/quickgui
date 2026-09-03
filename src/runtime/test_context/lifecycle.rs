@@ -452,7 +452,7 @@ impl TestAppContext {
                     }
                     Some(element) => {
                         let state = self.window_mut(origin)?;
-                        state.pending_focus = Some(element);
+                        state.pending_focus = Some(state.ui.pending_focus(element));
                         state.dirty = true;
                     }
                     None => {

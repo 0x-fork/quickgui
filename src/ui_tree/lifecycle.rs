@@ -90,6 +90,10 @@ impl UiTree {
             drag_over: None,
             drag_preview: None,
             focused: None,
+            // Nothing has been clicked yet, so an initial or programmatic focus shows its ring the
+            // way a browser paints an autofocused control before any pointer interaction.
+            focus_visible: true,
+            input_modality: None,
             active_focus_trap: None,
             focusable_ids: HashSet::with_capacity(32),
             clickable_ids: HashSet::with_capacity(32),

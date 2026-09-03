@@ -102,6 +102,13 @@ matching release path without inventing a key-down or native input service. Test
 prove that a handled shortcut never leaks into a raw key listener, an explicitly propagated action
 does fall through, stopped propagation remains independent from editing defaults, and listener-only
 dispatch does not increment `render_count`.
+Every simulated input runs inside the same dispatch scope production opens for a native event, so
+`focus_visible` reports what the focus styles do: a `click`, `simulate_mouse_down`, or a listener
+that focuses from one lands focus without its styles, while `simulate_keystrokes` — Tab, a roving
+arrow, Enter activating a button, an action listener that focuses — lands or reveals a visible
+focus. A press that no listener prevents also applies the production press default and focuses the
+target's nearest pointer-focusable element. A programmatic `focus` keeps the current visibility,
+which starts visible.
 The same production default-key path covers radio groups and tabs. Tabs tests assert the single
 roving Tab stop, axis-specific arrows, Home/End, manual Enter/Space activation, automatic
 activation, looping and non-looping edges, disabled-item skipping, panel mounting, exact

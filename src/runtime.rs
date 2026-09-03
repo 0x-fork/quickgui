@@ -102,7 +102,8 @@ use crate::{
     },
     scheduler::FrameScheduler,
     ui_tree::{
-        DismissRequest, FormAttempt, InputResult, MouseHoverChange, TabNavigationTarget, UiTree,
+        DismissRequest, FormAttempt, InputDispatchScope, InputModality, InputResult,
+        MouseHoverChange, PendingFocus, TabNavigationTarget, UiTree,
     },
 };
 
@@ -559,7 +560,9 @@ struct RuntimeWindow {
     suppress_external_drag_release: bool,
     cursor: CursorIcon,
     ime_target: Option<ElementId>,
-    pending_focus: Option<ElementId>,
+    /// A focus request waiting for the rebuild that introduces its target, with the input that
+    /// made it, so the focus it lands paints the way that input dictates.
+    pending_focus: Option<PendingFocus>,
     occluded: bool,
     minimized: bool,
     fullscreen: bool,

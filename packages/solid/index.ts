@@ -9125,6 +9125,11 @@ export namespace JSX {
     activeBackground?: number | string | GradientDeclaration;
     activeOutline?: string;
     activeTransform?: string | readonly string[] | TransformMatrix;
+    /**
+     * The `focus*` styles paint only while focus is visible, like CSS `:focus-visible`: focus a
+     * pointer press lands paints none of them, focus a key lands paints them all, and text inputs
+     * paint theirs whenever focused.
+     */
     focusBackground?: number | string | GradientDeclaration;
     focusBackgroundColor?: number | string;
     focusColor?: number | string;

@@ -44,6 +44,7 @@ impl UiTree {
             LayoutFrame::root(Point::ZERO, viewport),
         )?;
         let mut source_order = 0;
+        let styled_focus = self.styled_focus();
         let mut transition_context = StyleTransitionPaintContext {
             playbacks: Some(&mut self.style_transitions),
             request_frame: &mut self.style_transition_frame_requested,
@@ -61,7 +62,7 @@ impl UiTree {
             self.pressed,
             self.dragging,
             self.drag_over,
-            self.focused,
+            styled_focus,
             self.scale_factor,
             scene,
             renderer,
@@ -188,6 +189,7 @@ impl UiTree {
                 LayoutFrame::root(Point::ZERO, viewport),
             )?;
             let mut source_order = 0;
+            let styled_focus = self.styled_focus();
             collect_layout_hit_regions(
                 root,
                 &self.taffy,
@@ -199,7 +201,7 @@ impl UiTree {
                 self.pressed,
                 self.dragging,
                 self.drag_over,
-                self.focused,
+                styled_focus,
                 LayoutFrame::root(Point::ZERO, viewport),
                 viewport,
                 viewport,

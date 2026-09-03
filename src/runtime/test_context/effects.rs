@@ -589,9 +589,9 @@ impl TestAppContext {
                     )
                     .map_err(|error| TestAppError::View(error.to_string()))?;
                 if let Some(request) = state.pending_focus.take()
-                    && state.ui.is_focusable(request)
+                    && state.ui.is_focusable(request.element)
                 {
-                    state.ui.focus(request);
+                    state.ui.focus_as(request.element, request.modality);
                 }
                 state.dirty = false;
                 state.render_count += 1;

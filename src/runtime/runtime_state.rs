@@ -265,7 +265,7 @@ impl Runtime {
                 if !window.view_dirty {
                     return false;
                 }
-                window.pending_focus = Some(element);
+                window.pending_focus = Some(window.ui.pending_focus(element));
                 if window.visible && window.scheduler.invalidate() {
                     window.window.request_redraw();
                 }
@@ -297,7 +297,7 @@ impl Runtime {
             if !entry.state.view_dirty {
                 return false;
             }
-            entry.state.pending_focus = Some(element);
+            entry.state.pending_focus = Some(entry.state.ui.pending_focus(element));
             if entry.state.visible && entry.state.scheduler.invalidate() {
                 entry.state.window.request_redraw();
             }

@@ -81,6 +81,41 @@ pub const MAX_MOUSE_EVENT_PATH: usize = 256;
 /// Maximum retained ancestor depth traversed by one focused action or key event.
 pub const MAX_FOCUSED_EVENT_PATH: usize = 256;
 
+/// The device delivering the input event a window is dispatching.
+///
+/// Focus styles follow the device like CSS `:focus-visible`: a pointer that lands focus paints no
+/// ring, because the user is already looking at what they clicked, while a key that lands focus
+/// paints one, because the ring is how a keyboard user finds focus at all.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum InputModality {
+    /// A mouse, trackpad, or touch press or release is being dispatched.
+    Pointer,
+    /// A key press or release is being dispatched.
+    Keyboard,
+}
+
+/// Receipt for one [`UiTree::begin_input_dispatch`], handed back to
+/// [`UiTree::end_input_dispatch`].
+///
+/// Only the outermost scope clears the modality. Enter activating a button dispatches that click
+/// inside the key event, and the focus the click lands must still count as keyboard-driven.
+#[derive(Clone, Copy, Debug)]
+#[must_use = "an input dispatch scope must be closed with `UiTree::end_input_dispatch`"]
+pub(crate) struct InputDispatchScope {
+    outermost: bool,
+}
+
+/// A focus request kept through exactly one rebuild, with the device that made it.
+///
+/// `EventContext::focus` may name an element the same event's rebuild introduces. The request is
+/// applied after that rebuild, outside the dispatch that produced it, so it carries the modality
+/// along and the focus it finally lands paints exactly as an already-mounted target would have.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PendingFocus {
+    pub(crate) element: ElementId,
+    pub(crate) modality: Option<InputModality>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct MouseHoverChange {
     pub(crate) key: MouseListenerKey,
@@ -691,6 +726,17 @@ pub(crate) struct UiTree {
     drag_over: Option<ElementId>,
     drag_preview: Option<DragPreview>,
     focused: Option<ElementId>,
+    /// Whether the focused element paints its focus styles, like CSS `:focus-visible`.
+    ///
+    /// Pointer-driven focus hides them, keyboard-driven focus shows them, and a programmatic focus
+    /// outside any input keeps the previous answer. Text inputs are exempt and always paint theirs.
+    focus_visible: bool,
+    /// The device delivering the input event being dispatched, if one is in flight.
+    ///
+    /// Set once when a pointer or key dispatch starts, so every focus change it causes — including
+    /// one a listener requests through `EventContext::focus` — resolves its visibility from the
+    /// device instead of from flags threaded through each listener.
+    input_modality: Option<InputModality>,
     active_focus_trap: Option<ElementId>,
     focusable_ids: HashSet<ElementId>,
     clickable_ids: HashSet<ElementId>,
