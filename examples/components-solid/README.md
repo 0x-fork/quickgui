@@ -1,38 +1,72 @@
 # QuickGUI Solid components
 
-One window showing every compound component `@quickgui/solid` binds. Each is a *declaration*: the
-Rust core owns filtering, clamping, snapping, virtualization, keyboard navigation, focus policy,
-and every deadline, and reports what it decided back as an asynchronous payload.
+A sidebar gallery of every compound component `@quickgui/solid` binds: the left rail is a vertical
+`Tabs` list with one entry per component, and the right pane shows that component's demo in a
+scrollable content area.
 
-- **Option sources** — `Select`, `Combobox`, and `Autocomplete`, each opening a native popover
-  window the core renders from the declared `appearance`.
-- **Range, ordering, and roving focus** — `Slider`, `NumberField`, `Splitter`, `Toolbar`, and
-  `ToggleGroup`, all named by one `scope` per instance.
-- **Virtual table** — a five-thousand-row `Table` that declares only the rows the core last
-  reported as visible, with multiple selection and a sortable, resizable column.
-- **Lazy tree** — a `Tree` whose one `pending` branch asks for its children exactly once through
-  `onLoadChildren`, answered with a single validated `setChildren` splice.
-- **Dates and times** — `DateField`, `TimeField`, and `Calendar` over ISO civil values with no time
-  zone.
-- **Menus** — an in-window `Menubar` whose menus are declared `PopoverMenu` surfaces, plus a
-  `ContextMenu` opening at the exact secondary-click point.
-- **Tabs, dialogs, and toasts** — `Tabs` with automatic activation, an in-window `Dialog` with the
-  core's own focus trap, and a `Toast` queue whose timed dismissals report through `onDismiss`.
-- **Popover and tooltip parts** — the Base UI compound `Popover` and `Tooltip`, printing the side
-  and alignment the retained tree really resolved to rather than the one that was declared.
-- **Range parts and reported state** — `Slider.Label`/`Value`/`Control`/`Indicator` with the core's
-  own commit boundary and `data-dragging` flag, a `NumberField.ScrubArea` whose cursor styles from
-  `useNumberFieldState().scrubbing`, and `Progress` parts reporting the core's derived status.
-- **Toast provider and manager** — `useToastManager()` over the declared queue, with each toast's
-  stack index, limited flag, and core-computed offset.
-- **Base UI menu parts** — the compound `Menu` whose rows are application-styled child nodes, with
-  a link row, a checkbox row, a radio group, and a hover-opening submenu, plus a `ContextMenu`
-  declaring its cursor-point rows with exactly the same components.
-- **Base UI select and combobox parts** — a `multiple` `Select` declared with the `items` map form
-  and the core's own scroll arrows, and a `multiple` `Combobox` whose chips come back from the
-  core, both styling themselves from `useSelectState()` and `useComboboxState()`.
+Each demo is a *live* declaration rather than a sketch — you open it, change it, and the last line
+of the panel prints the state the Rust core reported back. The core owns filtering, clamping,
+snapping, virtualization, keyboard navigation, focus policy, placement, and every deadline;
+JavaScript owns only the controlled value, the element tree, and the paint.
 
 ```console
-cd examples/components-solid
-bun run dev
+bun run --cwd examples/components-solid dev
 ```
+
+## Appearance
+
+Nothing here hardcodes a palette. The example reads the appearance the window is really rendering
+in — `Window.getState().appearance`, kept current through `Window.onStateChange` and
+`Appearance.onChange` from `@quickgui/native` — and derives one of two palettes from it. Light is
+the default; dark is used only while the system is dark, and the switch is live. The window's own
+extent (`WindowState.viewportSize`) is tracked the same way and printed in the header, because the
+hosted boundary has no layout observer.
+
+Every signal write in the file happens inside an event handler or an `on*Change` callback. No
+component body and no memo ever writes a signal.
+
+## The tabs
+
+| Group | Tabs |
+| --- | --- |
+| Disclosure and layout | Accordion, Collapsible, Separator, Splitter, Tabs, Scroll Area |
+| Overlays | Alert Dialog, Dialog, Drawer, Popover, Preview Card, Tooltip |
+| Menus | Context Menu, Menu, Menubar, Navigation Menu, Toolbar |
+| Option sources | Autocomplete, Combobox, Select |
+| Selection | Checkbox, Checkbox Group, Radio, Switch, Toggle, Toggle Group |
+| Text and forms | Field, Fieldset, Form, Input, OTP Field, Number Field |
+| Dates | Calendar, Date Field, Time Field |
+| Feedback | Meter, Progress, Toast |
+| Identity | Avatar, Button |
+| Collections | Table, Tree |
+
+Notable details each demo exercises:
+
+- **Scroll Area** declares `viewportSize` and `contentSize` (both optional now — the native side
+  also measures them from painted bounds), applies the core's clamped offset to the content as a
+  paint-only `translateY`, and prints `hasOverflowY` / `overflowYStart` / `overflowYEnd` alongside
+  it. The thumb's own position and length are the native side's; the application declares only its
+  width and paint.
+- **Splitter** drives its pane sizes entirely from `onSizesChange`, with one collapsible pane.
+- **Table** declares only the rows the core last reported through `onVisibleRangeChange` out of five
+  thousand, with multiple selection, a sortable column, and reported column widths.
+- **Tree** has one `pending` branch that asks for its children exactly once through
+  `onLoadChildren`, answered with a single validated `setChildren` splice.
+- **Toast** drives `useToastManager()` — `add`, `update`, `closeAll` — and prints each toast's
+  stack index, `limited` flag, and core-computed offset.
+- **Menu** uses the Base UI row parts, including a link row, a checkbox row, a radio group, and a
+  hover-opening submenu, each styling itself from `useMenuItemState()`.
+- **Popover** and **Tooltip** print the placement the retained tree really resolved to, not the one
+  that was declared.
+- **Slider**, **Number Field**, **Progress**, and **Meter** read `useSliderState()`,
+  `useNumberFieldState()`, and `useGaugeState()` for the core's own `dragging`, `scrubbing`,
+  `status`, and formatted `displayValue`.
+
+## Known gaps this example ran into
+
+- **`@quickgui/solid` binds no `Form` compound.** The Rust core has one, but there is no `form`
+  part in `packages/native/protocol.ts` and no `Form` export in `packages/solid/index.ts`. The
+  **Form** tab is therefore a `Fieldset` of `Field` roots whose `validationMode` defaults to
+  `"onSubmit"`, plus the submit edge an `Input`/`Field.Control` reports through `onSubmit`.
+- **`Slider.Thumb` is not positioned by the core.** The application places it absolutely from the
+  value it declared, unlike `ScrollArea.Thumb`, which the core positions along its track.
