@@ -168,6 +168,32 @@ fn declared_active(node: &NativeNode) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Concatenate the declared visible text of one node's subtree.
+///
+/// Base UI derives several accessible names from the text a part renders — a menu item's label, a
+/// select option's text, a group's label. The retained tree already holds that text, so the
+/// binding reads it there instead of asking JavaScript for a second copy.
+pub(super) fn declared_text_content(node: &NativeNode, tree: &NativeTree) -> String {
+    let mut content = String::new();
+    let mut pending = node.children.iter().copied().rev().collect::<Vec<_>>();
+    let mut visited = 0;
+    while let Some(id) = pending.pop() {
+        visited += 1;
+        if visited > MAX_TREE_DEPTH || content.len() > MAX_COMPONENT_VALUE_BYTES {
+            break;
+        }
+        let Some(child) = tree.nodes.get(&id) else {
+            continue;
+        };
+        if child.tag == NodeTag::Text {
+            content.push_str(&child.text);
+        } else {
+            pending.extend(child.children.iter().copied().rev());
+        }
+    }
+    content
+}
+
 pub(super) fn declares_change(node: &NativeNode) -> bool {
     node.boolean(property::COMPONENT_CHANGE_LISTENER)
         .unwrap_or(false)
@@ -295,6 +321,8 @@ pub(super) struct NativeComponentStates {
     pub(super) base_ui: NativeBaseUiStates,
     /// Retained Base UI-aligned popover and tooltip instances declared in this window.
     pub(super) popovers: NativePopoverStates,
+    /// Retained Base UI-aligned menu levels declared in this window.
+    pub(super) menu_compound: NativeMenuCompounds,
 }
 
 impl NativeComponentStates {
@@ -306,6 +334,12 @@ impl NativeComponentStates {
     /// crosses back to the hosted runtime.
     pub(super) fn sync(&mut self, tree: &NativeTree, window: u32, events: &EventQueue) {
         self.sync_aligned(tree, window, events);
+        // The surface parts a picker declares are separate nodes, so they are collected once and
+        // handed to the picker they name rather than re-walked per instance.
+        let picker_surfaces = gather_picker_surfaces(tree);
+        // Declared option children are collected in one depth-first pass so a picker's rows keep
+        // their declaration order wherever in the compound the application put them.
+        let picker_options = gather_picker_options(tree);
         let mut sliders = HashSet::new();
         let mut splitters = HashSet::new();
         let mut toolbars = HashSet::new();
@@ -359,15 +393,18 @@ impl NativeComponentStates {
                 }
                 SELECT_PART if live.selects.len() < MAX_COMPONENT_INSTANCES => {
                     live.selects.insert(key);
-                    self.sync_select(key, *id, node, tree);
+                    let surface = picker_surfaces.get(&key).copied().unwrap_or_default();
+                    self.sync_select(key, *id, node, &picker_options, surface);
                 }
                 COMBOBOX_PART if live.comboboxes.len() < MAX_COMPONENT_INSTANCES => {
                     live.comboboxes.insert(key);
-                    self.sync_combobox(key, *id, node, tree);
+                    let surface = picker_surfaces.get(&key).copied().unwrap_or_default();
+                    self.sync_combobox(key, *id, node, &picker_options, surface);
                 }
                 AUTOCOMPLETE_PART if live.autocompletes.len() < MAX_COMPONENT_INSTANCES => {
                     live.autocompletes.insert(key);
-                    self.sync_autocomplete(key, *id, node, tree);
+                    let surface = picker_surfaces.get(&key).copied().unwrap_or_default();
+                    self.sync_autocomplete(key, *id, node, &picker_options, surface);
                 }
                 TABLE_PART if live.tables.len() < MAX_COMPONENT_INSTANCES => {
                     live.tables.insert(key);
@@ -408,6 +445,7 @@ impl NativeComponentStates {
         let mut popovers = std::mem::take(&mut self.popovers);
         popovers.sync(tree, window, events);
         self.popovers = popovers;
+        self.sync_menus(tree, window, events);
     }
 
     fn sync_slider(&mut self, key: u64, id: u32, node: &NativeNode) {

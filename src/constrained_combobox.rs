@@ -540,6 +540,19 @@ where
         true
     }
 
+    /// Forget that the control was interacted with, for a form that has just been reset.
+    ///
+    /// This is the counterpart of [`Self::reset_dirty`]: a value applied from a declaration is not
+    /// an interaction, so a host that seeds the control reports Base UI's `data-touched` only for
+    /// what the user really did.
+    pub const fn reset_touched(&mut self) -> bool {
+        if !self.touched {
+            return false;
+        }
+        self.touched = false;
+        true
+    }
+
     /// Forget that the value changed, for a form that has just been submitted or reset.
     pub const fn reset_dirty(&mut self) -> bool {
         if !self.dirty {

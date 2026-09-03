@@ -708,6 +708,9 @@ impl NativeRuntime {
         // Declared menus adopt the core's own contextual navigation, typeahead, activation, and
         // dismissal bindings instead of a JavaScript keyboard implementation.
         application = application.bind_keys(quickgui::popover_menu_key_bindings());
+        // A declared `Menu.Root` may be horizontal, which installs the core's own horizontal menu
+        // key context instead; both sets are bound so either orientation navigates natively.
+        application = application.bind_keys(quickgui::popover_menu_horizontal_key_bindings());
         // Declared range, ordering, and roving-focus components likewise adopt the core's typed
         // actions instead of a JavaScript keyboard implementation.
         application = application.bind_keys(quickgui::slider_key_bindings());

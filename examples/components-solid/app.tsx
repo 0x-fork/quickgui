@@ -11,6 +11,7 @@ import {
   DateField,
   Dialog,
   Drawer,
+  Menu,
   Menubar,
   NavigationMenu,
   NumberField,
@@ -34,8 +35,12 @@ import {
   Tooltip,
   Tree,
   View,
+  useComboboxChips,
+  useComboboxState,
   useGaugeState,
+  useMenuItemState,
   useNumberFieldState,
+  useSelectState,
   usePopoverPlacement,
   useSliderState,
   useTabsState,
@@ -660,6 +665,302 @@ function Menus() {
   );
 }
 
+
+/**
+ * The Base UI-shaped menu compound: rows are application-styled child nodes, and the core owns
+ * their identity, roving highlight, toggle policy, radio exclusivity, activation, and closing.
+ */
+function AlignedMenu() {
+  const [open, setOpen] = createSignal(false);
+  const [wrap, setWrap] = createSignal(false);
+  const [density, setDensity] = createSignal("cozy");
+  const [activated, setActivated] = createSignal("nothing yet");
+  const rowStyle = {
+    display: "flex" as const,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    gap: 12,
+    paddingLeft: 10,
+    paddingRight: 10,
+    height: 26,
+    borderRadius: 6,
+  };
+
+  return (
+    <Panel title="Base UI menu parts">
+      <Menu.Root
+        open={open()}
+        onOpenChange={setOpen}
+        side="bottom"
+        align="start"
+        sideOffset={6}
+      >
+        <Menu.Trigger style={controlStyle}>
+          <Text style={{ fontSize: 12, color: ink }}>Edit</Text>
+        </Menu.Trigger>
+        <Menu.Positioner>
+          <Menu.Popup
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              width: 240,
+              padding: 4,
+              gap: 2,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: border,
+              backgroundColor: "#101725",
+            }}
+          >
+            <Menu.GroupLabel
+              value="clipboard"
+              label="Clipboard"
+              style={{ paddingLeft: 10, height: 20, justifyContent: "center" }}
+            >
+              <Text style={{ fontSize: 11, color: muted }}>Clipboard</Text>
+            </Menu.GroupLabel>
+            <MenuRow value="copy" label="Copy" onActivate={setActivated} />
+            <Menu.LinkItem
+              value="docs"
+              label="Documentation"
+              href="https://quickgui.dev"
+              style={rowStyle}
+              onNavigate={(href) => setActivated(`link ${href}`)}
+            >
+              <Text style={{ fontSize: 12, color: ink }}>Documentation</Text>
+            </Menu.LinkItem>
+            <Menu.Separator style={{ height: 1, backgroundColor: border, marginTop: 4, marginBottom: 4 }} />
+            <Menu.CheckboxItem
+              value="wrap"
+              label="Wrap lines"
+              checked={wrap()}
+              onCheckedChange={setWrap}
+              style={rowStyle}
+            >
+              <Text style={{ fontSize: 12, color: ink }}>Wrap lines</Text>
+              <Menu.CheckboxItemIndicator>
+                <Text style={{ fontSize: 12, color: accent }}>{wrap() ? "✓" : ""}</Text>
+              </Menu.CheckboxItemIndicator>
+            </Menu.CheckboxItem>
+            <Menu.RadioGroup name="density" value={density()} onValueChange={setDensity}>
+              <For each={["compact", "cozy"]}>
+                {(value) => (
+                  <Menu.RadioItem value={value} label={value} style={rowStyle}>
+                    <Text style={{ fontSize: 12, color: ink }}>{value}</Text>
+                    <Menu.RadioItemIndicator>
+                      <Text style={{ fontSize: 12, color: accent }}>
+                        {density() === value ? "●" : ""}
+                      </Text>
+                    </Menu.RadioItemIndicator>
+                  </Menu.RadioItem>
+                )}
+              </For>
+            </Menu.RadioGroup>
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger
+                value="recent"
+                label="Open recent"
+                openOnHover
+                style={rowStyle}
+              >
+                <Text style={{ fontSize: 12, color: ink }}>Open recent</Text>
+                <Text style={{ fontSize: 12, color: muted }}>›</Text>
+              </Menu.SubmenuTrigger>
+              <Menu.Positioner side="right" align="start" sideOffset={4}>
+                <Menu.Popup
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    width: 200,
+                    padding: 4,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: border,
+                    backgroundColor: "#101725",
+                  }}
+                >
+                  <MenuRow value="notes" label="notes.md" onActivate={setActivated} />
+                  <MenuRow value="readme" label="README.md" onActivate={setActivated} />
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.SubmenuRoot>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Root>
+
+      <ContextMenu.Root scope="canvas" onSelect={(details) => setActivated(`context ${details.id}`)}>
+        <ContextMenu.Trigger
+          style={{
+            height: 56,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: border,
+            borderStyle: "dashed",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Menu.Item value="cut" label="Cut" />
+          <Menu.Item value="copy" label="Copy" />
+          <Menu.Separator />
+          <Menu.Item value="paste" label="Paste" />
+          <Text style={{ fontSize: 12, color: muted }}>Right-click: the same row parts</Text>
+        </ContextMenu.Trigger>
+      </ContextMenu.Root>
+
+      <Text style={{ fontSize: 12, color: muted }}>
+        {`activated ${activated()} · wrap ${wrap()} · density ${density()}`}
+      </Text>
+    </Panel>
+  );
+}
+
+/** One command row that styles itself from the state the core reports for it. */
+function MenuRow(props: { value: string; label: string; onActivate: (value: string) => void }) {
+  return (
+    <Menu.Item
+      value={props.value}
+      label={props.label}
+      onClick={() => props.onActivate(props.value)}
+      style={{
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        paddingLeft: 10,
+        paddingRight: 10,
+        height: 26,
+        borderRadius: 6,
+      }}
+    >
+      <MenuRowLabel label={props.label} />
+    </Menu.Item>
+  );
+}
+
+function MenuRowLabel(props: { label: string }) {
+  const state = useMenuItemState();
+  return (
+    <Text style={{ fontSize: 12, color: state().highlighted ? "#ffffff" : ink }}>
+      {props.label}
+    </Text>
+  );
+}
+
+/** The Base UI-shaped select and combobox parts, and the state the core publishes for them. */
+function AlignedPickerParts() {
+  const [sizes, setSizes] = createSignal<readonly string[]>(["m"]);
+  const [tags, setTags] = createSignal<readonly string[]>(["rust"]);
+  const appearance = {
+    width: 220,
+    rowHeight: 28,
+    background: "#101725",
+    color: ink,
+    highlightBackground: accent,
+    highlightColor: "#ffffff",
+    mutedColor: muted,
+  } as const;
+
+  return (
+    <Panel title="Base UI select and combobox parts">
+      <Row>
+        <Select.Root
+          scope="sizes"
+          ariaLabel="Sizes"
+          multiple
+          values={sizes()}
+          onValuesChange={setSizes}
+          alignItemWithTrigger
+          appearance={appearance}
+          items={{ s: "Small", m: "Medium", l: "Large" }}
+          style={{ ...controlStyle, width: 200 }}
+        >
+          <Select.Value>
+            <SelectValueText />
+          </Select.Value>
+          <Select.Icon>
+            <Text style={{ fontSize: 12, color: muted }}>▾</Text>
+          </Select.Icon>
+          <Select.Positioner side="bottom" align="start" sideOffset={6}>
+            <Select.ScrollUpArrow />
+            <Select.ScrollDownArrow />
+          </Select.Positioner>
+        </Select.Root>
+
+        <Combobox.Root
+          scope="tags"
+          ariaLabel="Tags"
+          multiple
+          values={tags()}
+          onValuesChange={setTags}
+          filterMode="startsWith"
+          autoHighlight
+          placeholder="Tags"
+          appearance={appearance}
+          items={[
+            { value: "rust", label: "Rust" },
+            { value: "zig", label: "Zig" },
+            { value: "swift", label: "Swift" },
+          ]}
+          style={{ ...controlStyle, width: 200, justifyContent: "flex-start" }}
+        />
+      </Row>
+      <ComboboxChips />
+      <SelectStateLine />
+    </Panel>
+  );
+}
+
+function SelectValueText() {
+  const state = useSelectState();
+  return (
+    <Text style={{ fontSize: 12, color: state().placeholder ? muted : ink }}>
+      {state().placeholder ? "Pick sizes" : "Selected"}
+    </Text>
+  );
+}
+
+function ComboboxChips() {
+  const chips = useComboboxChips();
+  return (
+    <Combobox.Chips style={{ display: "flex", flexDirection: "row", gap: 6 }}>
+      <For each={chips()}>
+        {(chip, index) => (
+          <Combobox.Chip
+            index={index()}
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              paddingLeft: 8,
+              paddingRight: 6,
+              height: 22,
+              borderRadius: 11,
+              backgroundColor: "#1b2436",
+            }}
+          >
+            <Text style={{ fontSize: 11, color: ink }}>{chip.label}</Text>
+            <Combobox.ChipRemove index={index()} ariaLabel={`Remove ${chip.label}`}>
+              <Text style={{ fontSize: 11, color: muted }}>×</Text>
+            </Combobox.ChipRemove>
+          </Combobox.Chip>
+        )}
+      </For>
+    </Combobox.Chips>
+  );
+}
+
+function SelectStateLine() {
+  const select = useSelectState();
+  const combobox = useComboboxState();
+  return (
+    <Text style={{ fontSize: 12, color: muted }}>
+      {`select filled ${select().filled} · touched ${select().touched} · combobox ${combobox().status}`}
+    </Text>
+  );
+}
+
 /** Tabs, an in-window dialog, and the core-owned toast queue. */
 function SurfacesAndFeedback() {
   const [tab, setTab] = createSignal("overview");
@@ -836,6 +1137,8 @@ function ComponentsExample() {
         <AlignedPopoverAndTooltip />
         <AlignedRangeParts />
         <AlignedToastStack />
+        <AlignedMenu />
+        <AlignedPickerParts />
       </View>
     </View>
   );

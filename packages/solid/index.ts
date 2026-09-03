@@ -24,6 +24,7 @@ import {
   MAX_OPTIONS_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
+  MAX_MENU_LINK_BYTES,
   MAX_STYLE_DECLARATION_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativeNode,
@@ -460,6 +461,16 @@ const properties: Record<string, PropertyEntry> = {
     code: PropertyCode.ExitDuration,
     normalize: normalizeMilliseconds,
   },
+
+  // Base UI-aligned menus, selects, and comboboxes. Every one is a declaration the core reads
+  // before it decides anything, because the hosted boundary is never asked a question.
+  closeParentOnEsc: { code: PropertyCode.CloseParentOnEsc },
+  href: { code: PropertyCode.Href, normalize: normalizeMenuLink },
+  multiple: { code: PropertyCode.Multiple },
+  alignItemWithTrigger: { code: PropertyCode.AlignItemWithTrigger },
+  autoHighlight: { code: PropertyCode.AutoHighlight },
+  openOnInputClick: { code: PropertyCode.OpenOnInputClick },
+  highlightItemOnHover: { code: PropertyCode.HighlightItemOnHover },
 };
 
 /** Background properties that accept either one color or one declared gradient. */
@@ -523,6 +534,12 @@ const explicitFalseProperties = new Set<PropertyCode>([
   PropertyCode.FocusableWhenDisabled,
   PropertyCode.Parent,
   PropertyCode.StackExpanded,
+  PropertyCode.CloseParentOnEsc,
+  PropertyCode.Multiple,
+  PropertyCode.AlignItemWithTrigger,
+  PropertyCode.AutoHighlight,
+  PropertyCode.OpenOnInputClick,
+  PropertyCode.HighlightItemOnHover,
 ]);
 
 const colorProperties = new Set([
@@ -1310,6 +1327,24 @@ function normalizeComponentValue(value: PropertyInput): string | null {
   if (textEncoder.encode(text).length > MAX_COMPONENT_VALUE_BYTES) {
     throw new TypeError(
       `QuickGUI component scopes and values are limited to ${MAX_COMPONENT_VALUE_BYTES} bytes`,
+    );
+  }
+  return text;
+}
+
+/**
+ * Bound one declared `Menu.LinkItem` destination exactly as the Rust core bounds it.
+ *
+ * A URL is longer than a component scope, so it carries its own bound rather than borrowing the
+ * scope's; anything longer is refused before it can cross the boundary.
+ */
+function normalizeMenuLink(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  const text = String(value);
+  if (text.length === 0) return null;
+  if (textEncoder.encode(text).length > MAX_MENU_LINK_BYTES) {
+    throw new TypeError(
+      `QuickGUI menu links are bounded to ${MAX_MENU_LINK_BYTES} bytes`,
     );
   }
   return text;
@@ -4017,6 +4052,32 @@ export interface ComponentChangeDetails {
   validationDelay?: FieldValidationDelays;
   /** Base UI's `onOpenChangeComplete`: the transition the core just finished. */
   openChangeComplete?: boolean;
+  /** The side a menu popup was really placed on. */
+  side?: "top" | "bottom" | "left" | "right";
+  /** The cross-axis alignment a menu popup really used. */
+  align?: "start" | "center" | "end";
+  /** Whether a menu's anchor left the collision viewport entirely. */
+  anchorHidden?: boolean;
+  /** Whether the roving highlight is on this menu row. */
+  highlighted?: boolean;
+  /** Whether a menu row refuses activation. */
+  disabled?: boolean;
+  /** A checkable menu row's state, or `null` for a row that is not checkable. */
+  checked?: boolean | null;
+  /** The stable identifier of the menu row the core just activated. */
+  activated?: string;
+  /** The destination a `Menu.LinkItem` carried into the core's own open-URL path. */
+  href?: string;
+  /** Every value a multiple select holds, in source order. */
+  selectedValues?: readonly string[];
+  /** Every value a multiple combobox holds as a chip, in chip order. */
+  chipValues?: readonly string[];
+  /** The label of each chip a multiple combobox holds. */
+  chipLabels?: readonly string[];
+  /** The joined label text a select's `Value` part renders. */
+  valueText?: string | null;
+  /** The core's own select or combobox part state, styled from the way Base UI styles `data-*`. */
+  state?: Record<string, unknown>;
 }
 
 /** The side and alignment an anchored surface really resolved to. */
@@ -4904,10 +4965,37 @@ export function ContextMenuRoot(props: JSX.ContextMenuRootProps): NativeNode {
       props.onSelect?.(details, event);
     },
   };
+  // The Base UI-shaped item parts are the same components here, so the context-menu root also
+  // supplies the menu compound context they read; the Rust binding gathers the rows from the
+  // trigger's own subtree and the core paints them in its cursor-point surface.
+  const scope = props.scope ?? createComponentScope("qg-context-menu");
+  const menu: MenuCompoundContextValue = {
+    scope,
+    state: () => settledMenu,
+    reportState: () => {},
+    open: () => false,
+    setOpen: () => {},
+    modal: () => undefined,
+    orientation: () => undefined,
+    loopFocus: () => props.loop,
+    closeParentOnEsc: () => undefined,
+    disabled: () => undefined,
+    openOnHover: () => undefined,
+    delay: () => undefined,
+    closeDelay: () => undefined,
+    positioning: () => ({}),
+    declarePositioning: () => {},
+    submenu: false,
+  };
   return ContextMenuContext({
     value: context,
     get children() {
-      return props.children as SolidElement;
+      return MenuCompoundContext({
+        value: menu,
+        get children() {
+          return props.children as SolidElement;
+        },
+      });
     },
   }) as unknown as NativeNode;
 }
@@ -4935,6 +5023,591 @@ export function ContextMenuTrigger(
 export const ContextMenu = Object.assign(ContextMenuRoot, {
   Root: ContextMenuRoot,
   Trigger: ContextMenuTrigger,
+});
+
+// ---------------------------------------------------------------------------
+// Base UI-aligned Menu compound
+//
+// `Menu.Root` is a logical coordinator; the trigger is the one part the core keeps mounted whether
+// the menu is open or closed, so it carries the whole declaration and every other part repeats the
+// compound scope. Rows are ordinary child nodes: the application owns every pixel, and the core
+// owns their identity, `menuitem` semantics, roving highlight, typeahead, toggle policy, radio
+// groups, activation, and mount policy.
+// ---------------------------------------------------------------------------
+
+/** Everything the core decided about one menu surface, matching Base UI's popup `data-*`. */
+export interface MenuSurfaceState {
+  open: boolean;
+  side: "top" | "bottom" | "left" | "right";
+  align: "start" | "center" | "end";
+  anchorHidden: boolean;
+}
+
+const settledMenu: MenuSurfaceState = {
+  open: false,
+  side: "bottom",
+  align: "start",
+  anchorHidden: false,
+};
+
+/** Everything the core decided about one menu row, matching Base UI's item `data-*`. */
+export interface MenuItemState {
+  highlighted: boolean;
+  disabled: boolean;
+  /** `null` for a row that is not checkable. */
+  checked: boolean | null;
+  /** Whether this row's submenu is open. */
+  open: boolean;
+}
+
+const settledMenuItem: MenuItemState = {
+  highlighted: false,
+  disabled: false,
+  checked: null,
+  open: false,
+};
+
+interface MenuCompoundContextValue {
+  scope: string;
+  state: () => MenuSurfaceState;
+  reportState: (next: MenuSurfaceState) => void;
+  open: () => boolean;
+  setOpen: (open: boolean, event: QuickGuiEvent) => void;
+  modal: () => boolean | undefined;
+  orientation: () => "horizontal" | "vertical" | undefined;
+  loopFocus: () => boolean | undefined;
+  closeParentOnEsc: () => boolean | undefined;
+  disabled: () => boolean | undefined;
+  openOnHover: () => boolean | undefined;
+  delay: () => number | undefined;
+  closeDelay: () => number | undefined;
+  positioning: () => AnchorPositioning;
+  declarePositioning: (positioning: AnchorPositioning) => void;
+  submenu: boolean;
+}
+
+interface MenuRadioGroupContextValue {
+  value: () => string | undefined;
+  setValue: (value: string, event: QuickGuiEvent) => void;
+}
+
+const MenuCompoundContext = createContext<MenuCompoundContextValue | null>(
+  null,
+);
+const MenuRadioGroupContext = createContext<MenuRadioGroupContextValue | null>(
+  null,
+);
+const MenuItemStateContext = createContext<(() => MenuItemState) | null>(null);
+
+function requireMenu(component: string): MenuCompoundContextValue {
+  const context = useContext(MenuCompoundContext);
+  if (!context) {
+    throw new TypeError(`${component} must be used inside <Menu.Root>`);
+  }
+  return context;
+}
+
+function createMenuRoot(
+  submenu: boolean,
+  props: JSX.MenuRootProps,
+): NativeNode {
+  const [uncontrolled, setUncontrolled] = createSignal(
+    props.defaultOpen ?? false,
+  );
+  const [state, setState] = createSignal<MenuSurfaceState>(settledMenu);
+  const [declared, setDeclared] = createSignal<AnchorPositioning>({});
+  const open = () => props.open ?? uncontrolled();
+  const context: MenuCompoundContextValue = {
+    scope: props.scope ?? createComponentScope("qg-menu"),
+    state,
+    reportState: setState,
+    open,
+    setOpen(next, event) {
+      if (props.open === undefined) setUncontrolled(next);
+      props.onOpenChange?.(next, event);
+    },
+    modal: () => props.modal,
+    orientation: () => props.orientation,
+    loopFocus: () => props.loopFocus,
+    closeParentOnEsc: () => props.closeParentOnEsc,
+    disabled: () => props.disabled,
+    openOnHover: () => props.openOnHover,
+    delay: () => props.delay,
+    closeDelay: () => props.closeDelay,
+    // The positioner is unmounted while the menu is closed, so its declaration is routed to the
+    // trigger, which the core keeps mounted either way.
+    positioning: () => {
+      const override = declared();
+      return {
+        side: override.side ?? props.side,
+        align: override.align ?? props.align,
+        sideOffset: override.sideOffset ?? props.sideOffset,
+        alignOffset: override.alignOffset ?? props.alignOffset,
+        collisionPadding: override.collisionPadding ?? props.collisionPadding,
+        sticky: override.sticky ?? props.sticky,
+      };
+    },
+    declarePositioning: setDeclared,
+    submenu,
+  };
+  return MenuCompoundContext({
+    value: context,
+    get children() {
+      return props.children as SolidElement;
+    },
+  }) as unknown as NativeNode;
+}
+
+/** Logical root of a Base UI-shaped menu. It creates no native element. */
+export function MenuRoot(props: JSX.MenuRootProps): NativeNode {
+  return createMenuRoot(false, props);
+}
+
+/** Logical root of one nested menu level. */
+export function MenuSubmenuRoot(props: JSX.MenuRootProps): NativeNode {
+  return createMenuRoot(true, props);
+}
+
+/** Read what the core decided about the enclosing menu surface. */
+export function useMenuState(): () => MenuSurfaceState {
+  const context = optionalContext(MenuCompoundContext);
+  return context ? context.state : () => settledMenu;
+}
+
+/** Read what the core decided about the enclosing menu row. */
+export function useMenuItemState(): () => MenuItemState {
+  const context = optionalContext(MenuItemStateContext);
+  return context ?? (() => settledMenuItem);
+}
+
+/** Everything a menu trigger repeats so the Rust binding rebuilds the core descriptor. */
+function menuTriggerProps(
+  context: MenuCompoundContextValue,
+  props: JSX.MenuTriggerProps,
+): object {
+  const positioning = () => context.positioning();
+  return {
+    scope: context.scope,
+    get open() {
+      return context.open();
+    },
+    get modal() {
+      return context.modal();
+    },
+    get orientation() {
+      return context.orientation();
+    },
+    get loopFocus() {
+      return context.loopFocus();
+    },
+    get closeParentOnEsc() {
+      return context.closeParentOnEsc();
+    },
+    get disabled() {
+      return props.disabled ?? context.disabled();
+    },
+    get openOnHover() {
+      return props.openOnHover ?? context.openOnHover();
+    },
+    get delay() {
+      return props.delay ?? context.delay();
+    },
+    get closeDelay() {
+      return props.closeDelay ?? context.closeDelay();
+    },
+    get side() {
+      return positioning().side;
+    },
+    get align() {
+      return positioning().align;
+    },
+    get sideOffset() {
+      return positioning().sideOffset;
+    },
+    get alignOffset() {
+      return positioning().alignOffset;
+    },
+    get collisionPadding() {
+      return positioning().collisionPadding;
+    },
+    get sticky() {
+      return positioning().sticky;
+    },
+    onComponentChange: componentChangeReader((details, event) => {
+      const next: MenuSurfaceState = {
+        open: details.open === true,
+        side: details.side ?? context.state().side,
+        align: details.align ?? context.state().align,
+        anchorHidden: details.anchorHidden ?? false,
+      };
+      context.reportState(next);
+      if (typeof details.open === "boolean" && details.open !== context.open()) {
+        context.setOpen(details.open, event);
+      }
+    }),
+  };
+}
+
+/** Menu trigger. It carries the whole `Menu.Root` declaration the core reads. */
+export function MenuTrigger(props: JSX.MenuTriggerProps): NativeNode {
+  const context = requireMenu("Menu.Trigger");
+  return createPartNode(
+    "button",
+    omit(props, "openOnHover", "delay", "closeDelay"),
+    universal.mergeProps(menuTriggerProps(context, props), {
+      part: NativePart.MenuTrigger,
+    }),
+  );
+}
+
+/**
+ * Submenu trigger.
+ *
+ * It is both a row of its parent level and the trigger of its own, so the core owns its
+ * `menuitem` semantics, its `has-popup` relationship, and the expanded state it publishes.
+ */
+export function MenuSubmenuTrigger(
+  props: JSX.MenuSubmenuTriggerProps,
+): NativeNode {
+  const context = requireMenu("Menu.SubmenuTrigger");
+  const [state, setState] = createSignal<MenuItemState>(settledMenuItem);
+  return createPartNode(
+    "view",
+    omit(
+      props,
+      "openOnHover",
+      "delay",
+      "closeDelay",
+      "value",
+      "label",
+      "closeOnClick",
+      "children",
+    ),
+    universal.mergeProps(
+      menuTriggerProps(context, props),
+      { part: NativePart.MenuSubmenuTrigger },
+      {
+        get partValue() {
+          return props.value ?? context.scope;
+        },
+        get ariaLabel() {
+          return props.label;
+        },
+        get closeOnClick() {
+          return props.closeOnClick;
+        },
+        // One node is both a row of its parent level and the trigger of its own, so it reports
+        // both the row state the core derived and the surface state its own level resolved to.
+        onComponentChange: componentChangeReader((details, event) => {
+          if (details.highlighted !== undefined) {
+            setState({
+              highlighted: details.highlighted === true,
+              disabled: details.disabled === true,
+              checked: details.checked ?? null,
+              open: details.open === true,
+            });
+          }
+          if (details.side !== undefined || details.align !== undefined) {
+            context.reportState({
+              open: details.open === true,
+              side: details.side ?? context.state().side,
+              align: details.align ?? context.state().align,
+              anchorHidden: details.anchorHidden ?? false,
+            });
+          }
+          if (typeof details.open === "boolean" && details.open !== context.open()) {
+            context.setOpen(details.open, event);
+          }
+        }),
+        get children() {
+          return MenuItemStateContext({
+            value: state,
+            get children() {
+              return props.children as SolidElement;
+            },
+          });
+        },
+      },
+    ),
+  );
+}
+
+/** One declared part of a menu that only repeats the compound scope. */
+function menuPart(
+  component: string,
+  element: NativeElementName,
+  part: NativePartName,
+  props: JSX.NativeProps,
+): NativeNode {
+  const context = requireMenu(component);
+  return createPartNode(element, props, { part, scope: context.scope });
+}
+
+/** Portal boundary. QuickGUI's retained overlay node is itself the portal. */
+export function MenuPortal(props: JSX.NativeProps): NativeNode {
+  return menuPart("Menu.Portal", "view", NativePart.MenuPortal, props);
+}
+
+/** Application-owned positioner. Base UI declares the placement props here. */
+export function MenuPositioner(props: JSX.MenuPositionerProps): NativeNode {
+  const context = requireMenu("Menu.Positioner");
+  context.declarePositioning({
+    get side() {
+      return props.side;
+    },
+    get align() {
+      return props.align;
+    },
+    get sideOffset() {
+      return props.sideOffset;
+    },
+    get alignOffset() {
+      return props.alignOffset;
+    },
+    get collisionPadding() {
+      return props.collisionPadding;
+    },
+    get sticky() {
+      return props.sticky;
+    },
+  });
+  return createPartNode(
+    "view",
+    omit(props, "side", "align", "sideOffset", "alignOffset", "collisionPadding", "sticky"),
+    { part: NativePart.MenuPositioner, scope: context.scope },
+  );
+}
+
+/** Full-viewport pointer layer for a modal menu. The core hides it from assistive technology. */
+export function MenuBackdrop(props: JSX.NativeProps): NativeNode {
+  return menuPart("Menu.Backdrop", "view", NativePart.MenuBackdrop, props);
+}
+
+/** The menu surface. The core owns its role, dismissal, focus restoration, and key bindings. */
+export function MenuPopup(props: JSX.NativeProps): NativeNode {
+  return menuPart("Menu.Popup", "view", NativePart.MenuPopup, props);
+}
+
+/** Caller-owned arrow pinned to the edge the popup really opened against. */
+export function MenuArrow(props: JSX.NativeProps): NativeNode {
+  return menuPart("Menu.Arrow", "view", NativePart.MenuArrow, props);
+}
+
+/** A related group of rows. */
+export function MenuGroup(props: JSX.NativeProps): NativeNode {
+  return menuPart("Menu.Group", "view", NativePart.MenuGroup, props);
+}
+
+/** A group's visible label row. */
+export function MenuGroupLabel(props: JSX.MenuGroupLabelProps): NativeNode {
+  const context = requireMenu("Menu.GroupLabel");
+  return createPartNode("view", omit(props, "value", "label"), {
+    part: NativePart.MenuGroupLabel,
+    scope: context.scope,
+    get partValue() {
+      return props.value;
+    },
+    get ariaLabel() {
+      return props.label;
+    },
+  });
+}
+
+/** A non-interactive divider row. */
+export function MenuSeparator(props: JSX.NativeProps): NativeNode {
+  return menuPart("Menu.Separator", "view", NativePart.MenuSeparator, props);
+}
+
+/** Shared declaration for every interactive row. */
+function menuItemPart(
+  component: string,
+  part: NativePartName,
+  props: JSX.MenuItemProps,
+  extra: object = {},
+  report?: (details: ComponentChangeDetails, event: QuickGuiEvent) => void,
+): NativeNode {
+  const context = requireMenu(component);
+  const [state, setState] = createSignal<MenuItemState>(settledMenuItem);
+  return createPartNode(
+    "view",
+    omit(props, "value", "label", "closeOnClick", "children"),
+    universal.mergeProps(
+      {
+        part,
+        scope: context.scope,
+        get partValue() {
+          return props.value;
+        },
+        get ariaLabel() {
+          return props.label;
+        },
+        get closeOnClick() {
+          return props.closeOnClick;
+        },
+        onComponentChange: componentChangeReader((details, event) => {
+          setState({
+            highlighted: details.highlighted === true,
+            disabled: details.disabled === true,
+            checked: details.checked ?? null,
+            open: details.open === true,
+          });
+          report?.(details, event);
+        }),
+        get children() {
+          return MenuItemStateContext({
+            value: state,
+            get children() {
+              return props.children as SolidElement;
+            },
+          });
+        },
+      },
+      extra,
+    ),
+  );
+}
+
+/**
+ * One command row. Activation, closing policy, and semantics come from the core.
+ *
+ * This is the component; the same name also types one entry of the JSON `items` model a
+ * `PopoverMenu` or `ContextMenu` declares, which is the other way to declare a menu's rows.
+ */
+export function MenuItem(props: JSX.MenuItemProps): NativeNode {
+  return menuItemPart("Menu.Item", NativePart.MenuItem, props, {});
+}
+
+/**
+ * One link row.
+ *
+ * QuickGUI has no document to navigate, so activation reaches the platform through the core's own
+ * open-URL path and the destination is reported back here.
+ */
+export function MenuLinkItem(props: JSX.MenuLinkItemProps): NativeNode {
+  return menuItemPart(
+    "Menu.LinkItem",
+    NativePart.MenuLinkItem,
+    props,
+    {
+      get href() {
+        return props.href;
+      },
+    },
+    (details, event) => {
+      if (details.href !== undefined) props.onNavigate?.(details.href, event);
+    },
+  );
+}
+
+/** One checkbox row. The core owns the toggle and reports the value it committed. */
+export function MenuCheckboxItem(props: JSX.MenuCheckboxItemProps): NativeNode {
+  return menuItemPart(
+    "Menu.CheckboxItem",
+    NativePart.MenuCheckboxItem,
+    props,
+    {
+      get checked() {
+        return props.checked;
+      },
+    },
+    (details, event) => {
+      if (typeof details.checked === "boolean") {
+        props.onCheckedChange?.(details.checked, event);
+      }
+    },
+  );
+}
+
+/** A checkbox row's mark. Mount it only while the row is checked, exactly as Base UI does. */
+export function MenuCheckboxItemIndicator(props: JSX.NativeProps): NativeNode {
+  return menuPart(
+    "Menu.CheckboxItemIndicator",
+    "view",
+    NativePart.MenuCheckboxItemIndicator,
+    props,
+  );
+}
+
+/** A radio group. The core keeps exactly one of its rows checked. */
+export function MenuRadioGroup(props: JSX.MenuRadioGroupProps): NativeNode {
+  const context = requireMenu("Menu.RadioGroup");
+  const [uncontrolled, setUncontrolled] = createSignal(props.defaultValue);
+  const value = () => props.value ?? uncontrolled();
+  const group: MenuRadioGroupContextValue = {
+    value,
+    setValue(next, event) {
+      if (props.value === undefined) setUncontrolled(next);
+      props.onValueChange?.(next, event);
+    },
+  };
+  return createPartNode(
+    "view",
+    omit(props, "value", "defaultValue", "onValueChange", "children"),
+    {
+      part: NativePart.MenuRadioGroup,
+      scope: context.scope,
+      get partValue() {
+        return props.name;
+      },
+      get activeValue() {
+        return value();
+      },
+      onComponentChange: componentChangeReader((details, event) => {
+        if (typeof details.value === "string") group.setValue(details.value, event);
+      }),
+      get children() {
+        return MenuRadioGroupContext({
+          value: group,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
+    },
+  );
+}
+
+/** One radio row. */
+export function MenuRadioItem(props: JSX.MenuRadioItemProps): NativeNode {
+  const group = optionalContext(MenuRadioGroupContext);
+  return menuItemPart("Menu.RadioItem", NativePart.MenuRadioItem, props, {
+    get checked() {
+      return props.checked ?? (group ? group.value() === props.value : undefined);
+    },
+  });
+}
+
+/** A radio row's mark. */
+export function MenuRadioItemIndicator(props: JSX.NativeProps): NativeNode {
+  return menuPart(
+    "Menu.RadioItemIndicator",
+    "view",
+    NativePart.MenuRadioItemIndicator,
+    props,
+  );
+}
+
+/** Base UI-shaped compound parts for an in-window menu. */
+export const Menu = Object.assign(MenuRoot, {
+  Root: MenuRoot,
+  Trigger: MenuTrigger,
+  Portal: MenuPortal,
+  Backdrop: MenuBackdrop,
+  Positioner: MenuPositioner,
+  Popup: MenuPopup,
+  Arrow: MenuArrow,
+  Item: MenuItem,
+  LinkItem: MenuLinkItem,
+  SubmenuRoot: MenuSubmenuRoot,
+  SubmenuTrigger: MenuSubmenuTrigger,
+  Group: MenuGroup,
+  GroupLabel: MenuGroupLabel,
+  RadioGroup: MenuRadioGroup,
+  RadioItem: MenuRadioItem,
+  RadioItemIndicator: MenuRadioItemIndicator,
+  CheckboxItem: MenuCheckboxItem,
+  CheckboxItemIndicator: MenuCheckboxItemIndicator,
+  Separator: MenuSeparator,
 });
 
 
@@ -5081,6 +5754,19 @@ export interface PickerAppearance {
   mutedColor?: ColorValue;
 }
 
+/**
+ * Pass one declared option source through in either of Base UI's two shapes.
+ *
+ * `items` is an array of option objects, or the map form — one entry per value and its label. The
+ * Rust binding decodes both, so JavaScript reshapes nothing.
+ */
+function pickerOptionSource(
+  items: readonly OptionDeclaration[] | Readonly<Record<string, string>> | undefined,
+): unknown {
+  if (items === undefined) return undefined;
+  return Array.isArray(items) ? items.slice() : { ...items };
+}
+
 function encodePickerAppearance(
   appearance: PickerAppearance | undefined,
 ): Record<string, unknown> | undefined {
@@ -5112,33 +5798,64 @@ export function SelectRoot(props: JSX.SelectProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
     props.defaultValue,
   );
+  const [uncontrolledValues, setUncontrolledValues] = createSignal<
+    readonly string[]
+  >(props.defaultValues ?? []);
+  const [state, setState] = createSignal<SelectPartState>(settledSelectState);
+  const [valueText, setValueText] = createSignal<string | null>(null);
+  const scope = props.scope ?? createComponentScope("qg-select");
   const value = () => props.value ?? uncontrolled();
+  const values = () => props.values ?? uncontrolledValues();
+  const context: PickerContextValue = {
+    scope,
+    selectState: state,
+    comboboxState: () => settledComboboxState,
+    valueText,
+    chips: () => [],
+  };
   return createPartNode(
     "button",
     omit(
       props,
       "value",
       "defaultValue",
+      "values",
+      "defaultValues",
       "onValueChange",
+      "onValuesChange",
       "onOpenChange",
       "onCommit",
       "items",
       "appearance",
+      "children",
     ),
     {
       part: NativePart.Select,
+      scope,
       get options() {
-        return props.items ? props.items.slice() : undefined;
+        return pickerOptionSource(props.items);
       },
       get appearance() {
         return encodePickerAppearance(props.appearance);
       },
       get activeValue() {
-        return value();
+        return props.multiple ? undefined : value();
+      },
+      get values() {
+        return props.multiple ? values().slice() : undefined;
       },
       onComponentChange: componentChangeReader((details, event) => {
-        if (details.value !== undefined) {
-          const next = typeof details.value === "string" ? details.value : undefined;
+        if (details.state) setState(details.state as unknown as SelectPartState);
+        if (details.valueText !== undefined) setValueText(details.valueText ?? null);
+        if (props.multiple) {
+          if (details.selectedValues !== undefined) {
+            const next = details.selectedValues.slice();
+            if (props.values === undefined) setUncontrolledValues(next);
+            props.onValuesChange?.(next, event);
+          }
+        } else if (details.value !== undefined) {
+          const next =
+            typeof details.value === "string" ? details.value : undefined;
           if (props.value === undefined) setUncontrolled(next);
           props.onValueChange?.(next, event);
         }
@@ -5147,19 +5864,481 @@ export function SelectRoot(props: JSX.SelectProps): NativeNode {
         }
       }),
       onCommit: commitListener(props.onCommit),
+      get children() {
+        return PickerContext({
+          value: context,
+          get children() {
+            return props.children as SolidElement;
+          },
+        });
+      },
     },
   );
 }
 
 /** One declared option. The core paints the row itself, so this node mounts nothing. */
 export function SelectOption(props: JSX.OptionProps): NativeNode {
-  return createPartNode("view", props, { part: NativePart.Option });
+  const scope = props.scope ?? optionalContext(PickerContext)?.scope;
+  return createPartNode("view", props, { part: NativePart.Option, scope });
+}
+
+
+// ---------------------------------------------------------------------------
+// Base UI-aligned select and combobox parts
+//
+// The option and result lists live in a separate native child window the core paints from the
+// bounded `appearance` declaration, so the popup-side parts are declarations rather than
+// owner-window elements: they name the surface, its placement, its scroll affordances, and the
+// options it holds. Every owner-window part — label, value, icon, backdrop, input group, chips,
+// clear, trigger, status, empty — is a real element decorated by the core's own part descriptor.
+// ---------------------------------------------------------------------------
+
+/** Everything the core decided about one select, matching Base UI's trigger `data-*`. */
+export interface SelectPartState {
+  popupOpen: boolean;
+  popupSide: "top" | "bottom" | "left" | "right";
+  pressed: boolean;
+  placeholder: boolean;
+  valid: boolean;
+  invalid: boolean;
+  dirty: boolean;
+  touched: boolean;
+  filled: boolean;
+  focused: boolean;
+  readOnly: boolean;
+  required: boolean;
+}
+
+const settledSelectState: SelectPartState = {
+  popupOpen: false,
+  popupSide: "bottom",
+  pressed: false,
+  placeholder: true,
+  valid: true,
+  invalid: false,
+  dirty: false,
+  touched: false,
+  filled: false,
+  focused: false,
+  readOnly: false,
+  required: false,
+};
+
+/** Everything the core decided about one combobox, matching Base UI's input `data-*`. */
+export interface ComboboxPartState {
+  popupOpen: boolean;
+  pressed: boolean;
+  placeholder: boolean;
+  valid: boolean;
+  invalid: boolean;
+  dirty: boolean;
+  touched: boolean;
+  filled: boolean;
+  focused: boolean;
+  readOnly: boolean;
+  required: boolean;
+  /** The polite live-region text the core derived for `Combobox.Status`. */
+  status: string;
+  /** Whether the query really matched nothing, which is when `Combobox.Empty` mounts. */
+  empty: boolean;
+  resultCount: number;
+}
+
+const settledComboboxState: ComboboxPartState = {
+  popupOpen: false,
+  pressed: false,
+  placeholder: true,
+  valid: true,
+  invalid: false,
+  dirty: false,
+  touched: false,
+  filled: false,
+  focused: false,
+  readOnly: false,
+  required: false,
+  status: "",
+  empty: false,
+  resultCount: 0,
+};
+
+interface PickerContextValue {
+  scope: string;
+  selectState: () => SelectPartState;
+  comboboxState: () => ComboboxPartState;
+  /** The joined label text a select's `Value` part renders, or `null` for the placeholder. */
+  valueText: () => string | null;
+  chips: () => readonly { value: string; label: string }[];
+}
+
+const PickerContext = createContext<PickerContextValue | null>(null);
+
+function pickerScope(component: string, declared: string | undefined): string {
+  const context = optionalContext(PickerContext);
+  const scope = declared ?? context?.scope;
+  if (!scope) {
+    throw new TypeError(`${component} must be used inside its picker root`);
+  }
+  return scope;
+}
+
+/** Read what the core decided about the enclosing select. */
+export function useSelectState(): () => SelectPartState {
+  const context = optionalContext(PickerContext);
+  return context ? context.selectState : () => settledSelectState;
+}
+
+/** Read what the core decided about the enclosing combobox or autocomplete. */
+export function useComboboxState(): () => ComboboxPartState {
+  const context = optionalContext(PickerContext);
+  return context ? context.comboboxState : () => settledComboboxState;
+}
+
+/** Read the chips a multiple combobox holds, in chip order. */
+export function useComboboxChips(): () => readonly { value: string; label: string }[] {
+  const context = optionalContext(PickerContext);
+  return context ? context.chips : () => [];
+}
+
+/** One declared part that only repeats its picker's scope. */
+function pickerPart(
+  component: string,
+  element: NativeElementName,
+  part: NativePartName,
+  props: JSX.NativeScopedProps,
+): NativeNode {
+  const scope = pickerScope(component, props.scope);
+  return createPartNode(element, props, { part, scope });
+}
+
+/** The select's visible label. The trigger points its accessible name at this identity. */
+export function SelectLabel(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.Label", "view", NativePart.SelectLabel, props);
+}
+
+/** The select's value text. Render `useSelectState()`'s value, or the placeholder. */
+export function SelectValue(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.Value", "view", NativePart.SelectValue, props);
+}
+
+/** The select's trigger affordance. */
+export function SelectIcon(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.Icon", "view", NativePart.SelectIcon, props);
+}
+
+/** An owner-window dimming layer mounted only while the core holds the surface open. */
+export function SelectBackdrop(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.Backdrop", "view", NativePart.SelectBackdrop, props);
+}
+
+/** The option-surface boundary. It declares the placement; the core paints the window. */
+export function SelectPortal(props: JSX.SelectPositionerProps): NativeNode {
+  return pickerPart("Select.Portal", "view", NativePart.SelectPortal, props);
+}
+
+/** The option-surface positioner. `side`, `align`, and `sideOffset` are declared here. */
+export function SelectPositioner(props: JSX.SelectPositionerProps): NativeNode {
+  return pickerPart(
+    "Select.Positioner",
+    "view",
+    NativePart.SelectPositioner,
+    props,
+  );
+}
+
+/** The option surface itself. The core paints it in its own native window. */
+export function SelectPopup(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.Popup", "view", NativePart.SelectPopup, props);
+}
+
+/** A decorative arrow on the option surface. */
+export function SelectArrow(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.Arrow", "view", NativePart.SelectArrow, props);
+}
+
+/** The scrolling option list. */
+export function SelectList(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.List", "view", NativePart.SelectList, props);
+}
+
+/** One declared option. Its `ItemText` supplies the label when none is declared. */
+export function SelectItem(props: JSX.OptionProps): NativeNode {
+  const scope = pickerScope("Select.Item", props.scope);
+  return createPartNode("view", props, { part: NativePart.SelectItem, scope });
+}
+
+/** One option's visible text. It is the option's label when `label` is omitted. */
+export function SelectItemText(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Select.ItemText", "view", NativePart.SelectItemText, props);
+}
+
+/** One option's selected mark. */
+export function SelectItemIndicator(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Select.ItemIndicator",
+    "view",
+    NativePart.SelectItemIndicator,
+    props,
+  );
+}
+
+/** An option group. Its label becomes the searchable group name of the options inside it. */
+export function SelectGroup(props: JSX.OptionProps): NativeNode {
+  const scope = pickerScope("Select.Group", props.scope);
+  return createPartNode("view", props, { part: NativePart.SelectGroup, scope });
+}
+
+/** An option group's label. */
+export function SelectGroupLabel(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Select.GroupLabel",
+    "view",
+    NativePart.SelectGroupLabel,
+    props,
+  );
+}
+
+/** A divider between option groups. */
+export function SelectSeparator(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Select.Separator",
+    "view",
+    NativePart.SelectSeparator,
+    props,
+  );
+}
+
+/**
+ * Declares the upward scroll affordance the core mounts inside its option surface.
+ *
+ * While the pointer rests on it the option window advances one row every 50 ms, each step an exact
+ * one-shot deadline armed by the previous one.
+ */
+export function SelectScrollUpArrow(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Select.ScrollUpArrow",
+    "view",
+    NativePart.SelectScrollUpArrow,
+    props,
+  );
+}
+
+/** Declares the downward scroll affordance the core mounts inside its option surface. */
+export function SelectScrollDownArrow(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Select.ScrollDownArrow",
+    "view",
+    NativePart.SelectScrollDownArrow,
+    props,
+  );
+}
+
+/** The combobox's visible label. */
+export function ComboboxLabel(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Label", "view", NativePart.ComboboxLabel, props);
+}
+
+/** The combobox's committed-value text. */
+export function ComboboxValue(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Value", "view", NativePart.ComboboxValue, props);
+}
+
+/** The combobox's affordance glyph. */
+export function ComboboxIcon(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Icon", "view", NativePart.ComboboxIcon, props);
+}
+
+/** The wrapper holding the input, its chips, and its affordances. */
+export function ComboboxInputGroup(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Combobox.InputGroup",
+    "view",
+    NativePart.ComboboxInputGroup,
+    props,
+  );
+}
+
+/** The clear control. The core clears the committed value and every chip. */
+export function ComboboxClear(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Clear", "button", NativePart.ComboboxClear, props);
+}
+
+/**
+ * The surface trigger.
+ *
+ * QuickGUI's combobox opens from its own input, so this part carries Base UI's button semantics
+ * and the `controls` relationship while the input keeps the opening behavior.
+ */
+export function ComboboxTrigger(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Combobox.Trigger",
+    "button",
+    NativePart.ComboboxTrigger,
+    props,
+  );
+}
+
+/** The chip container of a multiple combobox. */
+export function ComboboxChips(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Chips", "view", NativePart.ComboboxChips, props);
+}
+
+/** One chip. `index` names the chip position the core retained. */
+export function ComboboxChip(props: JSX.ComboboxChipProps): NativeNode {
+  const scope = pickerScope("Combobox.Chip", props.scope);
+  return createPartNode("view", omit(props, "index"), {
+    part: NativePart.ComboboxChip,
+    scope,
+    get itemIndex() {
+      return props.index ?? 0;
+    },
+  });
+}
+
+/** One chip's remove control. The core removes the chip and reports the new set. */
+export function ComboboxChipRemove(props: JSX.ComboboxChipProps): NativeNode {
+  const scope = pickerScope("Combobox.ChipRemove", props.scope);
+  return createPartNode("button", omit(props, "index"), {
+    part: NativePart.ComboboxChipRemove,
+    scope,
+    get itemIndex() {
+      return props.index ?? 0;
+    },
+  });
+}
+
+/** An owner-window dimming layer mounted only while the core holds the surface open. */
+export function ComboboxBackdrop(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Combobox.Backdrop",
+    "view",
+    NativePart.ComboboxBackdrop,
+    props,
+  );
+}
+
+/** The suggestion-surface boundary. */
+export function ComboboxPortal(props: JSX.SelectPositionerProps): NativeNode {
+  return pickerPart("Combobox.Portal", "view", NativePart.ComboboxPortal, props);
+}
+
+/** The suggestion-surface positioner. */
+export function ComboboxPositioner(props: JSX.SelectPositionerProps): NativeNode {
+  return pickerPart(
+    "Combobox.Positioner",
+    "view",
+    NativePart.ComboboxPositioner,
+    props,
+  );
+}
+
+/** The suggestion surface itself. The core paints it in its own native window. */
+export function ComboboxPopup(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Popup", "view", NativePart.ComboboxPopup, props);
+}
+
+/** A decorative arrow on the suggestion surface. */
+export function ComboboxArrow(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Arrow", "view", NativePart.ComboboxArrow, props);
+}
+
+/** The polite live region. Render `useComboboxState()`'s `status` inside it. */
+export function ComboboxStatus(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Status", "view", NativePart.ComboboxStatus, props);
+}
+
+/** The no-results part. The core mounts it only while the query really matched nothing. */
+export function ComboboxEmpty(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Empty", "view", NativePart.ComboboxEmpty, props);
+}
+
+/** The scrolling result list. */
+export function ComboboxList(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.List", "view", NativePart.ComboboxList, props);
+}
+
+/** A grid-shaped result row. */
+export function ComboboxRow(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart("Combobox.Row", "view", NativePart.ComboboxRow, props);
+}
+
+/** One declared result. */
+export function ComboboxItem(props: JSX.OptionProps): NativeNode {
+  const scope = pickerScope("Combobox.Item", props.scope);
+  return createPartNode("view", props, { part: NativePart.ComboboxItem, scope });
+}
+
+/** One result's selected mark. */
+export function ComboboxItemIndicator(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Combobox.ItemIndicator",
+    "view",
+    NativePart.ComboboxItemIndicator,
+    props,
+  );
+}
+
+/** A result group. Its label becomes the searchable group name of the results inside it. */
+export function ComboboxGroup(props: JSX.OptionProps): NativeNode {
+  const scope = pickerScope("Combobox.Group", props.scope);
+  return createPartNode("view", props, {
+    part: NativePart.ComboboxGroup,
+    scope,
+  });
+}
+
+/** A result group's label. */
+export function ComboboxGroupLabel(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Combobox.GroupLabel",
+    "view",
+    NativePart.ComboboxGroupLabel,
+    props,
+  );
+}
+
+/** A wrapper around the mounted rows. */
+export function ComboboxCollection(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Combobox.Collection",
+    "view",
+    NativePart.ComboboxCollection,
+    props,
+  );
+}
+
+/** A divider between result groups. */
+export function ComboboxSeparator(props: JSX.NativeScopedProps): NativeNode {
+  return pickerPart(
+    "Combobox.Separator",
+    "view",
+    NativePart.ComboboxSeparator,
+    props,
+  );
 }
 
 /** Base-UI-shaped compound parts for a select. */
 export const Select = Object.assign(SelectRoot, {
   Root: SelectRoot,
+  /** Base UI's name for the declaration-carrying trigger; `Select.Root` is the same node. */
+  Trigger: SelectRoot,
   Option: SelectOption,
+  Label: SelectLabel,
+  Value: SelectValue,
+  Icon: SelectIcon,
+  Backdrop: SelectBackdrop,
+  Portal: SelectPortal,
+  Positioner: SelectPositioner,
+  Popup: SelectPopup,
+  Arrow: SelectArrow,
+  List: SelectList,
+  Item: SelectItem,
+  ItemText: SelectItemText,
+  ItemIndicator: SelectItemIndicator,
+  Group: SelectGroup,
+  GroupLabel: SelectGroupLabel,
+  Separator: SelectSeparator,
+  ScrollUpArrow: SelectScrollUpArrow,
+  ScrollDownArrow: SelectScrollDownArrow,
 });
 
 /**
@@ -5172,24 +6351,47 @@ export function ComboboxRoot(props: JSX.ComboboxProps): NativeNode {
   const [uncontrolled, setUncontrolled] = createSignal<string | undefined>(
     props.defaultValue,
   );
+  const [uncontrolledValues, setUncontrolledValues] = createSignal<
+    readonly string[]
+  >(props.defaultValues ?? []);
+  const [state, setState] = createSignal<ComboboxPartState>(
+    settledComboboxState,
+  );
+  const [chips, setChips] = createSignal<
+    readonly { value: string; label: string }[]
+  >([]);
+  const scope = props.scope ?? createComponentScope("qg-combobox");
   const value = () => props.value ?? uncontrolled();
-  return createPartNode(
+  const values = () => props.values ?? uncontrolledValues();
+  const context: PickerContextValue = {
+    scope,
+    selectState: () => settledSelectState,
+    comboboxState: state,
+    valueText: () => null,
+    chips,
+  };
+  const input = createPartNode(
     "input",
     omit(
       props,
       "value",
       "defaultValue",
+      "values",
+      "defaultValues",
       "onValueChange",
+      "onValuesChange",
       "onInputValueChange",
       "onOpenChange",
       "onCommit",
       "items",
       "appearance",
+      "children",
     ),
     {
       part: NativePart.Combobox,
+      scope,
       get options() {
-        return props.items ? props.items.slice() : undefined;
+        return pickerOptionSource(props.items);
       },
       get appearance() {
         return encodePickerAppearance(props.appearance);
@@ -5197,7 +6399,26 @@ export function ComboboxRoot(props: JSX.ComboboxProps): NativeNode {
       get activeValue() {
         return value();
       },
+      get values() {
+        return props.multiple ? values().slice() : undefined;
+      },
       onComponentChange: componentChangeReader((details, event) => {
+        if (details.state)
+          setState(details.state as unknown as ComboboxPartState);
+        if (details.chipValues !== undefined) {
+          const labels = details.chipLabels ?? [];
+          setChips(
+            details.chipValues.map((chip, index) => ({
+              value: chip,
+              label: labels[index] ?? chip,
+            })),
+          );
+          if (props.multiple) {
+            const next = details.chipValues.slice();
+            if (props.values === undefined) setUncontrolledValues(next);
+            props.onValuesChange?.(next, event);
+          }
+        }
         if (details.value !== undefined) {
           const next = typeof details.value === "string" ? details.value : undefined;
           if (props.value === undefined) setUncontrolled(next);
@@ -5213,12 +6434,47 @@ export function ComboboxRoot(props: JSX.ComboboxProps): NativeNode {
       onCommit: commitListener(props.onCommit),
     },
   );
+  // The input is a leaf: a text field paints its own content, so the compound's other parts are
+  // siblings of it rather than children. Declared `Item` nodes are gathered from the whole
+  // compound, so they keep working wherever the application puts them.
+  return PickerContext({
+    value: context,
+    get children() {
+      return [input, props.children] as unknown as SolidElement;
+    },
+  }) as unknown as NativeNode;
 }
 
 /** Base-UI-shaped compound parts for a constrained combobox. */
 export const Combobox = Object.assign(ComboboxRoot, {
   Root: ComboboxRoot,
+  /** Base UI's name for the declaration-carrying input; `Combobox.Root` is the same node. */
+  Input: ComboboxRoot,
   Option: SelectOption,
+  Label: ComboboxLabel,
+  Value: ComboboxValue,
+  Icon: ComboboxIcon,
+  InputGroup: ComboboxInputGroup,
+  Clear: ComboboxClear,
+  Trigger: ComboboxTrigger,
+  Chips: ComboboxChips,
+  Chip: ComboboxChip,
+  ChipRemove: ComboboxChipRemove,
+  Backdrop: ComboboxBackdrop,
+  Portal: ComboboxPortal,
+  Positioner: ComboboxPositioner,
+  Popup: ComboboxPopup,
+  Arrow: ComboboxArrow,
+  Status: ComboboxStatus,
+  Empty: ComboboxEmpty,
+  List: ComboboxList,
+  Row: ComboboxRow,
+  Item: ComboboxItem,
+  ItemIndicator: ComboboxItemIndicator,
+  Group: ComboboxGroup,
+  GroupLabel: ComboboxGroupLabel,
+  Collection: ComboboxCollection,
+  Separator: ComboboxSeparator,
 });
 
 /**
@@ -5228,7 +6484,15 @@ export const Combobox = Object.assign(ComboboxRoot, {
  * reports the exact value it holds through `onInputValueChange`.
  */
 export function AutocompleteRoot(props: JSX.AutocompleteProps): NativeNode {
-  return createPartNode(
+  const scope = props.scope ?? createComponentScope("qg-autocomplete");
+  const context: PickerContextValue = {
+    scope,
+    selectState: () => settledSelectState,
+    comboboxState: () => settledComboboxState,
+    valueText: () => null,
+    chips: () => [],
+  };
+  const input = createPartNode(
     "input",
     omit(
       props,
@@ -5237,11 +6501,13 @@ export function AutocompleteRoot(props: JSX.AutocompleteProps): NativeNode {
       "onCommit",
       "items",
       "appearance",
+      "children",
     ),
     {
       part: NativePart.Autocomplete,
+      scope,
       get options() {
-        return props.items ? props.items.slice() : undefined;
+        return pickerOptionSource(props.items);
       },
       get appearance() {
         return encodePickerAppearance(props.appearance);
@@ -5257,12 +6523,44 @@ export function AutocompleteRoot(props: JSX.AutocompleteProps): NativeNode {
       onCommit: commitListener(props.onCommit),
     },
   );
+  return PickerContext({
+    value: context,
+    get children() {
+      return [input, props.children] as unknown as SolidElement;
+    },
+  }) as unknown as NativeNode;
 }
 
-/** Base-UI-shaped compound parts for a free-form autocomplete. */
+/**
+ * Base-UI-shaped compound parts for a free-form autocomplete.
+ *
+ * The core's `AutocompleteState` shares the combobox's owner-window parts, so the same `Label`,
+ * `Value`, `Icon`, `InputGroup`, `Clear`, `Status`, and `Empty` components mount here. Chips,
+ * `multiple`, `readOnly`, and `required` belong to the constrained combobox only.
+ */
 export const Autocomplete = Object.assign(AutocompleteRoot, {
   Root: AutocompleteRoot,
+  /** Base UI's name for the declaration-carrying input; `Autocomplete.Root` is the same node. */
+  Input: AutocompleteRoot,
   Option: SelectOption,
+  Label: ComboboxLabel,
+  Value: ComboboxValue,
+  Icon: ComboboxIcon,
+  InputGroup: ComboboxInputGroup,
+  Clear: ComboboxClear,
+  Portal: ComboboxPortal,
+  Positioner: ComboboxPositioner,
+  Popup: ComboboxPopup,
+  Arrow: ComboboxArrow,
+  Status: ComboboxStatus,
+  Empty: ComboboxEmpty,
+  List: ComboboxList,
+  Item: ComboboxItem,
+  ItemIndicator: ComboboxItemIndicator,
+  Group: ComboboxGroup,
+  GroupLabel: ComboboxGroupLabel,
+  Collection: ComboboxCollection,
+  Separator: ComboboxSeparator,
 });
 
 /** One declared table column. */
@@ -8425,11 +9723,106 @@ export namespace JSX {
     items?: readonly MenuItem[];
     appearance?: MenuAppearance;
     onSelect?: (details: MenuSelectDetails, event: QuickGuiEvent) => void;
+    /** Stable key shared by the compound's parts. One is generated when it is omitted. */
+    scope?: string;
+    /** Wrap the highlight at the ends of a level. Defaults to `true`. */
+    loop?: boolean;
   }
 
   export interface ContextMenuTriggerProps extends NativeProps {
     onSelect?: EventHandler;
   }
+
+  /** Base UI's `Menu.Root` props. The trigger carries them across the hosted boundary. */
+  export interface MenuRootProps {
+    children?: unknown;
+    /** Stable key shared by every part of one menu level. One is generated when it is omitted. */
+    scope?: string;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean, event: QuickGuiEvent) => void;
+    /** Contain Tab focus inside the popup and expect a mounted `Menu.Backdrop`. */
+    modal?: boolean;
+    /** `"horizontal"` installs the core's horizontal menu key context. */
+    orientation?: "horizontal" | "vertical";
+    /** Wrap the highlight at the ends of the level. Defaults to `true`. */
+    loopFocus?: boolean;
+    /** Dismissing this level with Escape closes the level above it too. */
+    closeParentOnEsc?: boolean;
+    /** Refuse to open at all. */
+    disabled?: boolean;
+    /** Trigger `openOnHover` default for the whole level. */
+    openOnHover?: boolean;
+    delay?: number;
+    closeDelay?: number;
+    side?: "top" | "bottom" | "left" | "right";
+    align?: "start" | "center" | "end";
+    sideOffset?: number;
+    alignOffset?: number;
+    collisionPadding?: number;
+    sticky?: boolean;
+  }
+
+  export interface MenuTriggerProps extends NativeProps {
+    /** Open after `delay` while the pointer rests on the trigger. */
+    openOnHover?: boolean;
+    delay?: number;
+    closeDelay?: number;
+  }
+
+  export interface MenuPositionerProps extends NativeProps {
+    side?: "top" | "bottom" | "left" | "right";
+    align?: "start" | "center" | "end";
+    sideOffset?: number;
+    alignOffset?: number;
+    collisionPadding?: number;
+    sticky?: boolean;
+  }
+
+  /** One declared menu row. */
+  export interface MenuItemProps extends NativeProps {
+    /** The row's stable identifier. Required for every interactive row. */
+    value?: string;
+    /** Accessible name and typeahead label. Defaults to the row's own declared text. */
+    label?: string;
+    /** Override the core's default close policy for this row. */
+    closeOnClick?: boolean;
+    disabled?: boolean;
+  }
+
+  export interface MenuLinkItemProps extends MenuItemProps {
+    /** The destination the core hands to its own open-URL path. */
+    href?: string;
+    /** Reported once the core has opened the destination. */
+    onNavigate?: (href: string, event: QuickGuiEvent) => void;
+  }
+
+  export interface MenuCheckboxItemProps extends MenuItemProps {
+    checked?: boolean;
+    onCheckedChange?: (checked: boolean, event: QuickGuiEvent) => void;
+  }
+
+  export interface MenuRadioItemProps extends MenuItemProps {
+    checked?: boolean;
+  }
+
+  export interface MenuRadioGroupProps extends NativeProps {
+    /** The group's own name. Defaults to one derived from the declaring node. */
+    name?: string;
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string, event: QuickGuiEvent) => void;
+  }
+
+  export interface MenuGroupLabelProps extends NativeProps {
+    /** A stable identifier for the label row. */
+    value?: string;
+    label?: string;
+  }
+
+  export interface MenuSubmenuTriggerProps
+    extends MenuTriggerProps,
+      MenuItemProps {}
 
   export interface TooltipProviderProps extends NativeProps {
     /** Group open deadline in milliseconds. Defaults to the core's 600 ms. */
@@ -8520,12 +9913,23 @@ export namespace JSX {
 
   /** A declared option source shared by the select, combobox, and autocomplete. */
   export interface PickerSourceProps extends NativeScopedProps {
-    /** Bounded option source. Omit it to declare the options as child `Option` nodes instead. */
-    items?: readonly OptionDeclaration[];
+    /**
+     * Bounded option source, in either of Base UI's two shapes.
+     *
+     * An array of option objects, or the map form — one entry per value and its label. Omit it to
+     * declare the options as child `Item` nodes instead.
+     */
+    items?: readonly OptionDeclaration[] | Readonly<Record<string, string>>;
     /** Structural geometry and paint for the rows the core renders in its own window. */
     appearance?: PickerAppearance;
-    /** `"fuzzy"` ranks with the core's own matcher; `"none"` keeps a pre-filtered source in order. */
-    filterMode?: "fuzzy" | "none";
+    /**
+     * Base UI's `filter`, answered by the core.
+     *
+     * `"contains"` and `"startsWith"` keep the source order, `"fuzzy"` ranks with the core's own
+     * matcher and is the only mode that reports label highlight ranges, and `"none"` keeps a
+     * source an application or service already filtered.
+     */
+    filterMode?: "fuzzy" | "contains" | "startsWith" | "none";
     /** Accessible name for the control the core decorates. */
     ariaLabel?: string;
     /** Reported when the core opens or closes its own native popover window. */
@@ -8537,6 +9941,20 @@ export namespace JSX {
     value?: string;
     defaultValue?: string;
     onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
+    /** Accept more than one value, Base UI's `multiple`. */
+    multiple?: boolean;
+    /** Controlled value set of a multiple select, bounded by the core's own 256 values. */
+    values?: readonly string[];
+    defaultValues?: readonly string[];
+    onValuesChange?: (values: readonly string[], event: QuickGuiEvent) => void;
+    /** Require a value before form submission. */
+    required?: boolean;
+    /** Refuse every value change while staying focusable, unlike `disabled`. */
+    readOnly?: boolean;
+    /** Expect a mounted `Select.Backdrop`; QuickGUI adds no dimming of its own. */
+    modal?: boolean;
+    /** Line the selected row up with the trigger, Base UI's `alignItemWithTrigger`. */
+    alignItemWithTrigger?: boolean;
     /** One edge per commit, even when the committed value did not move. */
     onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
   }
@@ -8549,6 +9967,23 @@ export namespace JSX {
     inputValue?: string;
     onValueChange?: (value: string | undefined, event: QuickGuiEvent) => void;
     onInputValueChange?: (value: string, event: QuickGuiEvent) => void;
+    /** Accept more than one value as chips, Base UI's `multiple`. */
+    multiple?: boolean;
+    /** Controlled chip set, bounded by the core's own 64 values. */
+    values?: readonly string[];
+    defaultValues?: readonly string[];
+    onValuesChange?: (values: readonly string[], event: QuickGuiEvent) => void;
+    /** Highlight the first result as soon as the query changes. */
+    autoHighlight?: boolean;
+    /** Open the suggestion surface when the input itself is pressed. Defaults to `true`. */
+    openOnInputClick?: boolean;
+    /** Move the highlight onto a hovered row. Defaults to `true`. */
+    highlightItemOnHover?: boolean;
+    /** Wrap the highlight at the ends of the result list. Defaults to `true`. */
+    loopFocus?: boolean;
+    /** Refuse every value change while staying focusable. */
+    readOnly?: boolean;
+    required?: boolean;
     onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
   }
 
@@ -8558,6 +9993,19 @@ export namespace JSX {
     inputValue?: string;
     onInputValueChange?: (value: string, event: QuickGuiEvent) => void;
     onCommit?: (details: CommitDetails, event: QuickGuiEvent) => void;
+  }
+
+  /** A declared picker surface part. The core resolves the real placement in its own window. */
+  export interface SelectPositionerProps extends NativeScopedProps {
+    side?: "top" | "bottom" | "left" | "right";
+    align?: "start" | "center" | "end";
+    sideOffset?: number;
+  }
+
+  /** One declared chip of a multiple combobox. */
+  export interface ComboboxChipProps extends NativeScopedProps {
+    /** The chip's position in the set the core retained. */
+    index?: number;
   }
 
   /** One declared option node. It contributes no element: the core paints every row itself. */

@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 25;
+export const PROTOCOL_VERSION = 26;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -359,6 +359,15 @@ export const enum PropertyCode {
   EnterDuration = 329,
   ExitDuration = 330,
   StackExpanded = 331,
+  // Base UI-aligned menu, select, and combobox props. Each one is declared ahead of the core's
+  // decision, because a hosted renderer is never asked a synchronous question.
+  CloseParentOnEsc = 332,
+  Href = 333,
+  Multiple = 334,
+  AlignItemWithTrigger = 335,
+  AutoHighlight = 336,
+  OpenOnInputClick = 337,
+  HighlightItemOnHover = 338,
 }
 
 /**
@@ -545,6 +554,66 @@ export const NativePart = {
   FieldItem: "field-item",
   FieldValidity: "field-validity",
   DialogViewport: "dialog-viewport",
+  Menu: "menu",
+  MenuTrigger: "menu-trigger",
+  MenuPortal: "menu-portal",
+  MenuBackdrop: "menu-backdrop",
+  MenuPositioner: "menu-positioner",
+  MenuPopup: "menu-popup",
+  MenuArrow: "menu-arrow",
+  MenuItem: "menu-item",
+  MenuLinkItem: "menu-link-item",
+  MenuSubmenuRoot: "menu-submenu-root",
+  MenuSubmenuTrigger: "menu-submenu-trigger",
+  MenuGroup: "menu-group",
+  MenuGroupLabel: "menu-group-label",
+  MenuRadioGroup: "menu-radio-group",
+  MenuRadioItem: "menu-radio-item",
+  MenuRadioItemIndicator: "menu-radio-item-indicator",
+  MenuCheckboxItem: "menu-checkbox-item",
+  MenuCheckboxItemIndicator: "menu-checkbox-item-indicator",
+  MenuSeparator: "menu-separator",
+  SelectLabel: "select-label",
+  SelectValue: "select-value",
+  SelectIcon: "select-icon",
+  SelectBackdrop: "select-backdrop",
+  SelectPortal: "select-portal",
+  SelectPositioner: "select-positioner",
+  SelectPopup: "select-popup",
+  SelectArrow: "select-arrow",
+  SelectList: "select-list",
+  SelectItem: "select-item",
+  SelectItemText: "select-item-text",
+  SelectItemIndicator: "select-item-indicator",
+  SelectGroup: "select-group",
+  SelectGroupLabel: "select-group-label",
+  SelectSeparator: "select-separator",
+  SelectScrollUpArrow: "select-scroll-up-arrow",
+  SelectScrollDownArrow: "select-scroll-down-arrow",
+  ComboboxLabel: "combobox-label",
+  ComboboxValue: "combobox-value",
+  ComboboxIcon: "combobox-icon",
+  ComboboxInputGroup: "combobox-input-group",
+  ComboboxClear: "combobox-clear",
+  ComboboxTrigger: "combobox-trigger",
+  ComboboxChips: "combobox-chips",
+  ComboboxChip: "combobox-chip",
+  ComboboxChipRemove: "combobox-chip-remove",
+  ComboboxBackdrop: "combobox-backdrop",
+  ComboboxPortal: "combobox-portal",
+  ComboboxPositioner: "combobox-positioner",
+  ComboboxPopup: "combobox-popup",
+  ComboboxArrow: "combobox-arrow",
+  ComboboxStatus: "combobox-status",
+  ComboboxEmpty: "combobox-empty",
+  ComboboxList: "combobox-list",
+  ComboboxRow: "combobox-row",
+  ComboboxItem: "combobox-item",
+  ComboboxItemIndicator: "combobox-item-indicator",
+  ComboboxGroup: "combobox-group",
+  ComboboxGroupLabel: "combobox-group-label",
+  ComboboxCollection: "combobox-collection",
+  ComboboxSeparator: "combobox-separator",
 } as const;
 
 export type NativePartName = (typeof NativePart)[keyof typeof NativePart];
@@ -667,6 +736,21 @@ export const MAX_DIALOG_TRANSITION_MS = 10_000;
 
 /** Largest number-field scrub sensitivity, in logical pixels per step. */
 export const MAX_NUMBER_FIELD_SCRUB_SENSITIVITY = 256;
+
+/** Longest menu hover open or close deadline, in milliseconds. */
+export const MAX_MENU_HOVER_DELAY_MS = 10_000;
+
+/** Longest bounded `Menu.LinkItem` destination accepted by the Rust binding. */
+export const MAX_MENU_LINK_BYTES = 8 * 1024;
+
+/** Most rows one declared in-window menu level retains. */
+export const MAX_MENU_ITEMS = 2_048;
+
+/** Most values one multiple select retains. */
+export const MAX_SELECT_VALUES = 256;
+
+/** Most chips one multiple combobox retains. */
+export const MAX_COMBOBOX_VALUES = 64;
 
 export type NativePropertyValue = boolean | number | string | null;
 

@@ -401,9 +401,21 @@ group in the same update, so a group can never retain two checked values.
 The Solid renderer exposes this model as `PopoverMenu.Root` / `Trigger` / `Popup`. Rows are declared
 as one bounded JSON model rather than JSX children, so the core still owns validation, highlighting,
 typeahead, toggle policy, submenu models, and every accessibility relationship, and no synchronous
-question crosses the hosted boundary while a menu is open. `popover_menu_key_bindings()` is
-installed once by the binding, so declared menus adopt the same contextual navigation as Rust
-applications. See [Solid 2 renderer](solid.md#declared-popover-and-context-menus).
+question crosses the hosted boundary while a menu is open. `popover_menu_key_bindings()` and
+`popover_menu_horizontal_key_bindings()` are installed once by the binding, so declared menus adopt
+the same contextual navigation as Rust applications. See
+[Solid 2 renderer](solid.md#declared-popover-and-context-menus).
+
+`MenuState` is bound as the Base UI-shaped `Menu` compound, whose rows *are* JSX children:
+`Menu.Root` (logical) with `open`, `modal`, `orientation`, `loopFocus`, `closeParentOnEsc`, and
+`disabled`; `Menu.Trigger` with `openOnHover`, `delay`, and `closeDelay`; `Menu.Portal`,
+`Backdrop`, `Positioner`, `Popup`, and `Arrow`; and `Menu.Item`, `LinkItem`, `SubmenuRoot`,
+`SubmenuTrigger`, `Group`, `GroupLabel`, `RadioGroup`, `RadioItem`, `RadioItemIndicator`,
+`CheckboxItem`, `CheckboxItemIndicator`, and `Separator` as ordinary child nodes. The application
+owns every pixel of a row; the core owns its derived identity, `menuitem` semantics, roving
+highlight, typeahead, toggle policy, activation, and closing policy, and publishes `MenuPartState`
+and `MenuItemPartState` through `useMenuState()` and `useMenuItemState()`. See
+[Solid 2 renderer](solid.md#base-ui-menu-parts).
 
 ## Roles, placement, and nesting
 

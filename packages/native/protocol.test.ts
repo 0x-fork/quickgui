@@ -12,6 +12,11 @@ import {
   MAX_GRADIENT_STOPS,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
+  MAX_MENU_HOVER_DELAY_MS,
+  MAX_MENU_ITEMS,
+  MAX_MENU_LINK_BYTES,
+  MAX_SELECT_VALUES,
+  MAX_COMBOBOX_VALUES,
   MAX_AVATAR_FALLBACK_DELAY_MS,
   MAX_CHECKBOX_GROUP_VALUES,
   MAX_DRAWER_SNAP_POINTS,
@@ -69,8 +74,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v25", () => {
-    expect(PROTOCOL_VERSION).toBe(25);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v26", () => {
+    expect(PROTOCOL_VERSION).toBe(26);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -836,5 +841,82 @@ describe("binary mutation protocol", () => {
     expect(NativePart.ToolbarGroup).toBe("toolbar-group");
     expect(NativePart.FieldItem).toBe("field-item");
     expect(NativePart.DialogViewport).toBe("dialog-viewport");
+  });
+
+  test("encodes every Base UI-aligned menu, select, and combobox part under protocol v26", () => {
+    const batch = new MutationBatch();
+    // The whole `Menu.Root` declaration travels on the trigger, which is the one part the core
+    // keeps mounted whether the level is open or closed.
+    batch.createElement(1, NativeNodeTag.Button);
+    batch.setProperty(1, PropertyCode.Part, NativePart.MenuTrigger);
+    batch.setProperty(1, PropertyCode.Scope, "edit");
+    batch.setProperty(1, PropertyCode.Open, true);
+    batch.setProperty(1, PropertyCode.Modal, true);
+    batch.setProperty(1, PropertyCode.Orientation, "horizontal");
+    batch.setProperty(1, PropertyCode.LoopFocus, false);
+    batch.setProperty(1, PropertyCode.CloseParentOnEsc, true);
+    batch.setProperty(1, PropertyCode.OpenOnHover, true);
+    batch.setProperty(1, PropertyCode.Delay, 100);
+
+    // A row is an ordinary child node: the core owns its identity, semantics, and activation.
+    batch.createElement(2, NativeNodeTag.View);
+    batch.setProperty(2, PropertyCode.Part, NativePart.MenuLinkItem);
+    batch.setProperty(2, PropertyCode.Scope, "edit");
+    batch.setProperty(2, PropertyCode.PartValue, "docs");
+    batch.setProperty(2, PropertyCode.Href, "https://example.invalid/docs");
+    batch.setProperty(2, PropertyCode.CloseOnClick, false);
+
+    // A select declares Base UI's `multiple`, `readOnly`, `required`, `modal`, and
+    // `alignItemWithTrigger` ahead of every decision the core makes about them.
+    batch.createElement(3, NativeNodeTag.Button);
+    batch.setProperty(3, PropertyCode.Part, NativePart.Select);
+    batch.setProperty(3, PropertyCode.Multiple, true);
+    batch.setProperty(3, PropertyCode.ReadOnly, true);
+    batch.setProperty(3, PropertyCode.Required, true);
+    batch.setProperty(3, PropertyCode.AlignItemWithTrigger, true);
+    batch.setProperty(3, PropertyCode.Values, '["alpha","bravo"]');
+
+    // A combobox declares the filter policy and the highlight behavior the core answers.
+    batch.createElement(4, NativeNodeTag.Input);
+    batch.setProperty(4, PropertyCode.Part, NativePart.Combobox);
+    batch.setProperty(4, PropertyCode.FilterMode, "startsWith");
+    batch.setProperty(4, PropertyCode.AutoHighlight, true);
+    batch.setProperty(4, PropertyCode.OpenOnInputClick, false);
+    batch.setProperty(4, PropertyCode.HighlightItemOnHover, false);
+
+    const bytes = batch.finish();
+    expect(bytes.readUInt16LE(4)).toBe(26);
+    expect(batch.mutationCount).toBe(29);
+  });
+
+  test("keeps every menu, select, and combobox code and part name stable", () => {
+    expect(PropertyCode.CloseParentOnEsc).toBe(332);
+    expect(PropertyCode.Href).toBe(333);
+    expect(PropertyCode.Multiple).toBe(334);
+    expect(PropertyCode.AlignItemWithTrigger).toBe(335);
+    expect(PropertyCode.AutoHighlight).toBe(336);
+    expect(PropertyCode.OpenOnInputClick).toBe(337);
+    expect(PropertyCode.HighlightItemOnHover).toBe(338);
+    expect(MAX_MENU_HOVER_DELAY_MS).toBe(10_000);
+    expect(MAX_MENU_LINK_BYTES).toBe(8 * 1024);
+    expect(MAX_MENU_ITEMS).toBe(2_048);
+    expect(MAX_SELECT_VALUES).toBe(256);
+    expect(MAX_COMBOBOX_VALUES).toBe(64);
+
+    // Every part name below is the exact string the Rust binding matches on.
+    expect(NativePart.Menu).toBe("menu");
+    expect(NativePart.MenuTrigger).toBe("menu-trigger");
+    expect(NativePart.MenuPopup).toBe("menu-popup");
+    expect(NativePart.MenuSubmenuTrigger).toBe("menu-submenu-trigger");
+    expect(NativePart.MenuRadioItemIndicator).toBe("menu-radio-item-indicator");
+    expect(NativePart.MenuCheckboxItemIndicator).toBe(
+      "menu-checkbox-item-indicator",
+    );
+    expect(NativePart.SelectItemText).toBe("select-item-text");
+    expect(NativePart.SelectScrollUpArrow).toBe("select-scroll-up-arrow");
+    expect(NativePart.SelectScrollDownArrow).toBe("select-scroll-down-arrow");
+    expect(NativePart.ComboboxChipRemove).toBe("combobox-chip-remove");
+    expect(NativePart.ComboboxCollection).toBe("combobox-collection");
+    expect(NativePart.ComboboxEmpty).toBe("combobox-empty");
   });
 });

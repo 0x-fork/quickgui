@@ -51,6 +51,12 @@ impl View for NativeView {
             // The core decides focus; the binding only reports the transition to the two nodes
             // that declared a listener.
             Event::FocusChanged(focused) => {
+                // Base UI's `data-focused` and the `data-touched` edge it implies belong to the
+                // core, so the focus the retained tree really moved is written straight into the
+                // declared picker instances.
+                if sync_picker_focus(&mut self.components, *focused) {
+                    cx.invalidate();
+                }
                 let next = focused
                     .map(quickgui::ElementId::as_u64)
                     .and_then(|value| u32::try_from(value).ok())
@@ -283,27 +289,70 @@ impl View for NativeView {
             move |view, action: &NativeMenuSelect, _cx| {
                 // Selection is declared ahead of the core's decision, exactly like every other
                 // listener, so a menu without an `onSelect` handler queues nothing.
-                let declared = view
-                    .tree
-                    .borrow()
-                    .nodes
-                    .get(&action.node)
-                    .is_some_and(|node| node.boolean(property::SELECT_LISTENER).unwrap_or(false));
-                if !declared {
-                    return;
+                let (selects, clicks, changes) = {
+                    let tree = view.tree.borrow();
+                    match tree.nodes.get(&action.node) {
+                        Some(node) => (
+                            node.boolean(property::SELECT_LISTENER).unwrap_or(false),
+                            node.boolean(property::CLICK_LISTENER).unwrap_or(false),
+                            declares_change(node),
+                        ),
+                        None => return,
+                    }
+                };
+                if selects {
+                    enqueue_event(
+                        &select_events,
+                        QueuedEvent {
+                            kind: "menuselect",
+                            window,
+                            target: action.node,
+                            value: Some(action.event_value()),
+                        },
+                    );
                 }
-                enqueue_event(
-                    &select_events,
-                    QueuedEvent {
-                        kind: "menuselect",
+                // A Base UI-shaped row declared as a child node reports the same activation the
+                // in-window compound reports, so one component works in either menu host.
+                if clicks {
+                    enqueue_event(
+                        &select_events,
+                        QueuedEvent {
+                            kind: "click",
+                            window,
+                            target: action.node,
+                            value: None,
+                        },
+                    );
+                }
+                if changes {
+                    let mut payload = serde_json::Map::new();
+                    payload.insert(
+                        "activated".to_owned(),
+                        serde_json::Value::String(action.item.to_string()),
+                    );
+                    if let Some(checked) = action.checked {
+                        payload.insert("checked".to_owned(), serde_json::Value::Bool(checked));
+                    }
+                    enqueue_component_change(
+                        &select_events,
                         window,
-                        target: action.node,
-                        value: Some(action.event_value()),
-                    },
-                );
+                        action.node,
+                        serde_json::Value::Object(payload),
+                    );
+                }
             },
         );
-        root.on_action(menu_action).on_action(menu_select)
+        // QuickGUI has no document to navigate, so a declared `Menu.LinkItem` in a core-painted
+        // menu reaches the platform through the core's own open-URL path.
+        let open_link = cx.action_listener(
+            ElementId::new(ROOT_ELEMENT_ID),
+            move |_view, action: &quickgui::OpenMenuLink, cx| {
+                let _ = cx.open_url(Arc::clone(&action.url));
+            },
+        );
+        root.on_action(menu_action)
+            .on_action(menu_select)
+            .on_action(open_link)
     }
 }
 
@@ -1067,6 +1116,19 @@ pub(super) fn build_element(
                 listeners_enabled,
             )?;
         }
+        if owns_menu_part(part) {
+            element = apply_menu_part(
+                element,
+                part,
+                id,
+                window,
+                node,
+                events,
+                states.components,
+                cx,
+                listeners_enabled,
+            )?;
+        }
     }
     element = apply_controls(element, node, tree);
 
@@ -1098,7 +1160,7 @@ pub(super) fn build_element(
         } else {
             ContextMenuState::new()
         };
-        element = apply_context_menu(element, element_id, id, node, state, cx);
+        element = apply_context_menu(element, element_id, id, node, tree, state, cx);
     }
 
     let anchor_id = node
@@ -1143,6 +1205,7 @@ pub(super) fn build_element(
             listeners_enabled
                 && !base_ui_owns_dismiss(declared_part)
                 && !popover_part_owns_dismiss(declared_part)
+                && !menu_part_owns_dismiss(declared_part)
                 && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
@@ -1167,6 +1230,7 @@ pub(super) fn build_element(
             listeners_enabled
                 && !base_ui_owns_dismiss(declared_part)
                 && !popover_part_owns_dismiss(declared_part)
+                && !menu_part_owns_dismiss(declared_part)
                 && node.boolean(property::DISMISS_LISTENER).unwrap_or(false)
                 && (dismiss_on_escape || dismiss_on_pointer_outside),
             element_id,
@@ -1179,6 +1243,7 @@ pub(super) fn build_element(
 
     if listeners_enabled
         && !base_ui_owns_click(declared_part)
+        && !menu_part_owns_click(declared_part)
         && node.boolean(property::CLICK_LISTENER).unwrap_or(false)
     {
         let events = Rc::clone(events);
@@ -1569,6 +1634,11 @@ pub(super) fn native_part_element_id_with(
         return Some(derived);
     }
     if let Some(derived) = popover_part_element_id(part, id, node, components) {
+        return Some(derived);
+    }
+    if owns_menu_part(part)
+        && let Some(derived) = menu_part_element_id(part, id, node, components)
+    {
         return Some(derived);
     }
     native_part_element_id(id, node)

@@ -434,8 +434,9 @@ separate native window that a hosted retained tree cannot reach synchronously.
 
 | Component | Parts | Declared props | Core guide |
 | --- | --- | --- | --- |
+| `Menu` | `Root`, `Trigger`, `Portal`, `Backdrop`, `Positioner`, `Popup`, `Arrow`, `Item`, `LinkItem`, `SubmenuRoot`, `SubmenuTrigger`, `Group`, `GroupLabel`, `RadioGroup`, `RadioItem`, `RadioItemIndicator`, `CheckboxItem`, `CheckboxItemIndicator`, `Separator` | see [Base UI menu parts](#base-ui-menu-parts) | [popovers](popovers.md) |
 | `PopoverMenu` | `Root`, `Trigger`, `Popup` | `items`, `appearance`, `open`, `defaultOpen`, `onOpenChange`, `onSelect`, `placement`, `gap`, `viewportMargin`, `dismissOnEscape`, `dismissOnPointerOutside` | [popovers](popovers.md) |
-| `ContextMenu` | `Root`, `Trigger` | `items`, `appearance`, `onSelect` | [context menus](context-menus.md) |
+| `ContextMenu` | `Root`, `Trigger`, plus every `Menu` row part | `items` or child row parts, `appearance`, `onSelect`, `scope`, `loop` | [context menus](context-menus.md) |
 
 ```tsx
 const [open, setOpen] = createSignal(false);
@@ -506,6 +507,114 @@ the native invariant that opening a menu anywhere replaces the one already open.
 
 Because the surface is core-rendered, a context menu has no JavaScript-rendered rows and therefore
 no `Popup` part; style it through `appearance` instead.
+
+### Base UI menu parts
+
+`Menu` is the compound form of the same model. Where `PopoverMenu` declares its rows as one bounded
+JSON model the core also paints, `Menu` declares them as ordinary child nodes: the application owns
+every pixel of a row, and the core owns the row's identity, `menuitem` semantics, roving highlight,
+typeahead, toggle policy, radio groups, activation, and mount policy. Use `PopoverMenu` when the
+core should render the surface too; use `Menu` when the rows are application-styled elements.
+
+`Menu.Root` is a logical coordinator that creates no element. The trigger is the one part the core
+keeps mounted whether the level is open or closed, so it carries the whole declaration and every
+other part only repeats the compound scope.
+
+| Part | Element | Declared props |
+| --- | --- | --- |
+| `Menu.Root` | none | `open`, `defaultOpen`, `onOpenChange`, `modal`, `orientation`, `loopFocus`, `closeParentOnEsc`, `disabled`, `openOnHover`, `delay`, `closeDelay`, `side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`, `sticky` |
+| `Menu.Trigger` | `button` | `openOnHover`, `delay`, `closeDelay` |
+| `Menu.Portal` / `Menu.Positioner` | `view` | `side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`, `sticky` |
+| `Menu.Backdrop` | `view` | — |
+| `Menu.Popup` | `view` | — |
+| `Menu.Arrow` | `view` | — |
+| `Menu.Item` | `view` | `value`, `label`, `closeOnClick`, `disabled` |
+| `Menu.LinkItem` | `view` | `href`, `onNavigate`, plus every `Menu.Item` prop |
+| `Menu.SubmenuRoot` | none | every `Menu.Root` prop |
+| `Menu.SubmenuTrigger` | `view` | every `Menu.Trigger` and `Menu.Item` prop |
+| `Menu.Group` / `Menu.GroupLabel` | `view` | `value`, `label` on the label |
+| `Menu.RadioGroup` | `view` | `name`, `value`, `defaultValue`, `onValueChange` |
+| `Menu.RadioItem` / `Menu.RadioItemIndicator` | `view` | `value`, `label`, `checked` |
+| `Menu.CheckboxItem` / `Menu.CheckboxItemIndicator` | `view` | `checked`, `onCheckedChange` |
+| `Menu.Separator` | `view` | — |
+
+```tsx
+const [open, setOpen] = createSignal(false);
+const [wrap, setWrap] = createSignal(false);
+const [density, setDensity] = createSignal("cozy");
+
+<Menu.Root open={open()} onOpenChange={setOpen} modal side="bottom" align="start">
+  <Menu.Trigger openOnHover delay={120}>Edit</Menu.Trigger>
+  <Menu.Positioner sideOffset={6}>
+    <Menu.Popup style={{ backgroundColor: "#101014", borderRadius: 8, padding: 4 }}>
+      <Menu.GroupLabel value="clipboard" label="Clipboard">Clipboard</Menu.GroupLabel>
+      <Menu.Item value="copy" label="Copy" onClick={copy}>Copy</Menu.Item>
+      <Menu.LinkItem value="docs" label="Documentation" href="https://quickgui.dev">
+        Documentation
+      </Menu.LinkItem>
+      <Menu.Separator style={{ height: 1, backgroundColor: "#26262e" }} />
+      <Menu.CheckboxItem value="wrap" label="Wrap lines" checked={wrap()} onCheckedChange={setWrap}>
+        <Menu.CheckboxItemIndicator>✓</Menu.CheckboxItemIndicator>
+        <Text>Wrap lines</Text>
+      </Menu.CheckboxItem>
+      <Menu.RadioGroup name="density" value={density()} onValueChange={setDensity}>
+        <Menu.RadioItem value="compact" label="Compact">Compact</Menu.RadioItem>
+        <Menu.RadioItem value="cozy" label="Cozy">Cozy</Menu.RadioItem>
+      </Menu.RadioGroup>
+      <Menu.SubmenuRoot>
+        <Menu.SubmenuTrigger value="recent" label="Open recent" openOnHover>
+          Open recent
+        </Menu.SubmenuTrigger>
+        <Menu.Positioner side="right" align="start">
+          <Menu.Popup>
+            <Menu.Item value="notes" label="notes.md">notes.md</Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.SubmenuRoot>
+    </Menu.Popup>
+  </Menu.Positioner>
+</Menu.Root>
+```
+
+Every interactive row declares a stable `value`; that identity — never a positional index — is what
+the core derives the row's element identity from and what activation reports back. `label` is the
+accessible name and typeahead label and defaults to the row's own declared text. A row that
+declares no `value`, or an interactive row with no label at all, declares nothing rather than
+reaching a core constructor that would reject the whole level.
+
+Activation is entirely the core's: the declared `onClick` on a row is dropped in favor of the
+activation the core decided, which arrives as the ordinary `click` event plus one `componentchange`
+carrying `activated`, and — for a checkbox row — the `checked` value the core toggled to. A radio
+row's new value is reported on its `Menu.RadioGroup` as `onValueChange`, because that is where Base
+UI publishes it and where the core keeps exactly one row checked. A command row closes the level
+after activating unless it declares `closeOnClick={false}`; checkbox and radio rows stay open.
+
+`useMenuState()` reports what the core decided about the enclosing surface — `open`, the `side` and
+`align` it really resolved to, and `anchorHidden` — and `useMenuItemState()` reports the enclosing
+row's `highlighted`, `disabled`, `checked`, and submenu `open`. Both are the core's own snapshots,
+published during the paint QuickGUI was already performing.
+
+`Menu.LinkItem` has no document to navigate: activation hands `href` to the core's own open-URL
+path and reports it back through `onNavigate`, bounded by `MAX_MENU_LINK_BYTES` (8 KiB).
+`orientation="horizontal"` installs the core's horizontal menu key context, so Left and Right move
+the highlight and Down opens the highlighted submenu. `closeParentOnEsc` dispatches the core's
+`MenuCloseParent` action up the focus path, because Escape reaches exactly one dismiss region.
+
+`ContextMenu.Root` accepts exactly the same row components. A cursor-point context menu is painted
+by the core in its own window, so those rows contribute a model rather than owner-window elements:
+they mount nothing, and their activation still reports through `onClick` and `onSelect`. Nested
+levels inside a context menu are declared with the `items` model rather than `Menu.SubmenuRoot`.
+
+```tsx
+<ContextMenu.Root scope="canvas" onSelect={(item) => run(item.id)}>
+  <ContextMenu.Trigger style={{ flex: 1 }}>
+    <Menu.Item value="cut" label="Cut" />
+    <Menu.Item value="copy" label="Copy" />
+    <Menu.Separator />
+    <Menu.Item value="paste" label="Paste" disabled={!canPaste()} />
+  </ContextMenu.Trigger>
+</ContextMenu.Root>
+```
 
 ## In-window dialogs
 
@@ -724,9 +833,9 @@ can wait on the hosted runtime while the core is deciding what a keystroke means
 
 | Component | Parts | Declared props | Reported through | Core guide |
 | --- | --- | --- | --- | --- |
-| `Select` | `Root`, `Option` | `scope`, `items` or child `Option` nodes, `value`/`defaultValue`, `appearance`, `filterMode`, `ariaLabel`, `disabled` | `onValueChange(value, event)`, `onOpenChange(open, event)`, `onCommit(details, event)` | [select and autocomplete](select-and-autocomplete.md) |
-| `Combobox` | `Root`, `Option` | the same, plus `inputValue` and `placeholder` | the same, plus `onInputValueChange(value, event)` | [select and autocomplete](select-and-autocomplete.md) |
-| `Autocomplete` | `Root`, `Option` | `scope`, `items`, `inputValue`, `placeholder`, `appearance`, `filterMode` | `onInputValueChange(value, event)`, `onOpenChange`, `onCommit` | [select and autocomplete](select-and-autocomplete.md) |
+| `Select` | `Root`, `Option`, and the [Base UI parts](#base-ui-select-and-combobox-parts) | `scope`, `items` or child `Item`/`Option` nodes, `value`/`defaultValue`, `appearance`, `filterMode`, `ariaLabel`, `disabled`, `multiple`, `values`, `required`, `readOnly`, `modal`, `alignItemWithTrigger` | `onValueChange(value, event)`, `onValuesChange(values, event)`, `onOpenChange(open, event)`, `onCommit(details, event)` | [select and autocomplete](select-and-autocomplete.md) |
+| `Combobox` | `Root`, `Option`, and the [Base UI parts](#base-ui-select-and-combobox-parts) | the same, plus `inputValue`, `placeholder`, `autoHighlight`, `openOnInputClick`, `highlightItemOnHover`, `loopFocus` | the same, plus `onInputValueChange(value, event)` | [select and autocomplete](select-and-autocomplete.md) |
+| `Autocomplete` | `Root`, `Option`, and the shared [Base UI parts](#base-ui-select-and-combobox-parts) | `scope`, `items`, `inputValue`, `placeholder`, `appearance`, `filterMode` | `onInputValueChange(value, event)`, `onOpenChange`, `onCommit` | [select and autocomplete](select-and-autocomplete.md) |
 
 `Select.Root` renders the trigger; `Combobox.Root` and `Autocomplete.Root` render the input. The
 options are either one bounded `items` array or child `Option` nodes, which contribute no element of
@@ -755,9 +864,10 @@ their own:
 
 `appearance` carries only geometry and paint: `width`, `rowHeight`, `maxVisibleRows`, `anchorGap`,
 `fontSize`, `radius`, `padding`, `verticalPadding`, `background`, `color`, `highlightBackground`,
-`highlightColor`, `selectedBackground`, and `mutedColor`. `filterMode` selects the core's own
-bounded fuzzy matcher (`"fuzzy"`, the default) or no filtering at all (`"none"`) for a source an
-application or service already filtered.
+`highlightColor`, `selectedBackground`, and `mutedColor`. `filterMode` is Base UI's `filter` policy: `"contains"` (the combobox default)
+and `"startsWith"` keep the source order, `"fuzzy"` ranks with the core's own bounded matcher and is
+the only mode that reports label highlight ranges, and `"none"` keeps a source an application or
+service already filtered.
 
 `inputValue` seeds the core's retained editing text; every edit after that belongs to the core,
 which reports the exact value it holds. `onCommit` is an edge, not a value: committing the same
@@ -767,6 +877,110 @@ Because the core's replacement mutators close a live native popover — somethin
 cannot do — the binding rebuilds a picker's retained state only when the declaration itself changes
 and the popover is closed. A declaration committed while the surface is open is applied as soon as
 the core closes it, which is the frame the close already schedules.
+
+### Base UI select and combobox parts
+
+The option and result lists live in a separate native child window the core paints from
+`appearance`, so the compound splits in two. The owner-window parts are real elements the core
+decorates with its own part descriptors; the popup-side parts are declarations that name the
+surface the core builds and the options it holds, and mount nothing at all.
+
+| Component | Owner-window parts | Declaration-only parts |
+| --- | --- | --- |
+| `Select` | `Root` (= `Trigger`), `Label`, `Value`, `Icon`, `Backdrop` | `Portal`, `Positioner`, `Popup`, `Arrow`, `List`, `Item`, `ItemText`, `ItemIndicator`, `Group`, `GroupLabel`, `Separator`, `ScrollUpArrow`, `ScrollDownArrow` |
+| `Combobox` | `Root` (= `Input`), `Label`, `Value`, `Icon`, `InputGroup`, `Clear`, `Trigger`, `Chips`, `Chip`, `ChipRemove`, `Backdrop`, `Status`, `Empty` | `Portal`, `Positioner`, `Popup`, `Arrow`, `List`, `Row`, `Item`, `ItemIndicator`, `Group`, `GroupLabel`, `Collection`, `Separator` |
+| `Autocomplete` | `Root` (= `Input`), and every `Combobox` owner-window part the core shares | the same declaration-only parts |
+
+`Select.Root` is a button, so its parts may be its children. `Combobox.Root` and
+`Autocomplete.Root` are text inputs, which paint their own content, so their parts are siblings
+that repeat the compound scope — the root supplies that scope automatically. Declared `Item` nodes
+are gathered from the whole compound in declaration order, so they work in either position.
+
+| Base UI prop | Component | What the core owns |
+| --- | --- | --- |
+| `multiple` | `Select`, `Combobox` | the bounded value set (256 for a select, 64 chips for a combobox), the toggle policy, and the joined value text |
+| `values` / `defaultValues` / `onValuesChange` | `Select`, `Combobox` | the controlled set; a value naming no declared option adds nothing |
+| `required`, `readOnly` | `Select`, `Combobox` | the refusal itself, not just the projection: a read-only control keeps its Tab stop and refuses every change |
+| `modal` | `Select` | the intent a mounted `Select.Backdrop` paints against |
+| `alignItemWithTrigger` | `Select` | lining the selected row up with the trigger, over the declared trigger height |
+| `items` map form | all three | `{ value: label }` as well as the option array |
+| `filterMode` | `Combobox`, `Autocomplete` | `"contains"` (the combobox default), `"startsWith"`, `"fuzzy"` (the only mode that reports highlight ranges), `"none"` |
+| `autoHighlight`, `openOnInputClick`, `highlightItemOnHover`, `loopFocus` | `Combobox` | the highlight and opening policy |
+
+```tsx
+<Select.Root
+  scope="fruit"
+  ariaLabel="Fruit"
+  multiple
+  values={fruit()}
+  onValuesChange={setFruit}
+  alignItemWithTrigger
+  items={{ alpha: "Alpha", bravo: "Bravo", charlie: "Charlie" }}
+>
+  <Select.Label>Fruit</Select.Label>
+  <Select.Value><Text>{useSelectState()().placeholder ? "Pick fruit" : label()}</Text></Select.Value>
+  <Select.Icon>▾</Select.Icon>
+  <Select.Positioner side="bottom" align="start" sideOffset={6}>
+    <Select.ScrollUpArrow />
+    <Select.List>
+      <Select.Group>
+        <Select.GroupLabel>Common</Select.GroupLabel>
+        <Select.Item partValue="alpha">
+          <Select.ItemText>Alpha</Select.ItemText>
+          <Select.ItemIndicator />
+        </Select.Item>
+      </Select.Group>
+    </Select.List>
+    <Select.ScrollDownArrow />
+  </Select.Positioner>
+</Select.Root>
+```
+
+`Select.ScrollUpArrow` and `Select.ScrollDownArrow` declare that the option surface should mount the
+core's own hovered scroll affordances: while the pointer rests on one, the option window advances
+one row every 50 ms, each step an exact one-shot deadline armed by the previous one, and leaving
+the arrow or reaching the end of the list cancels it.
+
+```tsx
+<Combobox.Root
+  scope="tags"
+  ariaLabel="Tags"
+  multiple
+  values={tags()}
+  onValuesChange={setTags}
+  filterMode="startsWith"
+  autoHighlight
+  items={allTags}
+/>
+<Combobox.Label>Tags</Combobox.Label>
+<Combobox.InputGroup>
+  <Combobox.Chips>
+    <For each={useComboboxChips()()}>
+      {(chip, index) => (
+        <Combobox.Chip index={index()}>
+          <Text>{chip.label}</Text>
+          <Combobox.ChipRemove index={index()} ariaLabel={`Remove ${chip.label}`}>×</Combobox.ChipRemove>
+        </Combobox.Chip>
+      )}
+    </For>
+  </Combobox.Chips>
+  <Combobox.Clear ariaLabel="Clear">×</Combobox.Clear>
+</Combobox.InputGroup>
+<Combobox.Status><Text>{useComboboxState()().status}</Text></Combobox.Status>
+<Combobox.Empty><Text>No results</Text></Combobox.Empty>
+```
+
+`useSelectState()` and `useComboboxState()` report the core's own part snapshots — Base UI's
+`data-popup-open`, `data-pressed`, `data-placeholder`, `data-valid`, `data-invalid`, `data-dirty`,
+`data-touched`, `data-filled`, `data-focused`, `data-readonly`, and `data-required`, plus the
+combobox's derived `status` text, `empty` edge, and `resultCount`. `useComboboxChips()` reports the
+chip set the core retained, with the label it took from the matching option. Seeding a declared
+value is a declaration rather than an interaction, so `dirty` and `touched` start clean and move
+only for what the user really did.
+
+`Combobox.Empty` is mounted only while the core's own query really matched nothing, and
+`Combobox.Trigger` carries Base UI's button semantics and `controls` relationship — QuickGUI's
+combobox opens from its input, so the trigger does not open the surface itself.
 
 ## Virtual tables and trees
 

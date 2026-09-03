@@ -37,6 +37,7 @@ import {
   Fieldset,
   Input,
   Markdown,
+  Menu,
   Menubar,
   NavigationMenu,
   NumberField,
@@ -1995,18 +1996,23 @@ describe("declared option sources, virtual collections, and stateful fields", ()
       ]),
     });
 
+    // A text input paints its own content, so the compound's other declarations are siblings of
+    // it; the Rust binding gathers every declared option from the whole compound in order.
     const combobox = window.root.children[0]!;
-    const autocomplete = window.root.children[1]!;
+    const apple = window.root.children[1]!;
+    const banana = window.root.children[2]!;
+    const autocomplete = window.root.children[3]!;
     expect(combobox.tag).toBe(NativeNodeTag.Input);
     expect(combobox.properties.get(PropertyCode.Part)).toBe("combobox");
     expect(combobox.properties.get(PropertyCode.InputValue)).toBe("ap");
     expect(combobox.properties.get(PropertyCode.Options)).toBeUndefined();
-    expect(combobox.children).toHaveLength(2);
-    expect(combobox.children[0]!.properties.get(PropertyCode.Part)).toBe("option");
-    expect(combobox.children[0]!.properties.get(PropertyCode.PartValue)).toBe("apple");
-    expect(combobox.children[0]!.properties.get(PropertyCode.Value)).toBe("Apple");
-    expect(combobox.children[0]!.properties.get(PropertyCode.Group)).toBe("recent");
-    expect(combobox.children[1]!.properties.get(PropertyCode.Disabled)).toBe(true);
+    expect(combobox.properties.get(PropertyCode.Scope)).toBe("fruit");
+    expect(apple.properties.get(PropertyCode.Part)).toBe("option");
+    expect(apple.properties.get(PropertyCode.Scope)).toBe("fruit");
+    expect(apple.properties.get(PropertyCode.PartValue)).toBe("apple");
+    expect(apple.properties.get(PropertyCode.Value)).toBe("Apple");
+    expect(apple.properties.get(PropertyCode.Group)).toBe("recent");
+    expect(banana.properties.get(PropertyCode.Disabled)).toBe(true);
     expect(autocomplete.properties.get(PropertyCode.Part)).toBe("autocomplete");
     expect(autocomplete.properties.get(PropertyCode.FilterMode)).toBe("none");
 
@@ -4064,6 +4070,503 @@ describe("Base UI-aligned popovers, tooltips, range parts, toasts, tabs, and fie
       JSON.stringify({ openChangeComplete: false }),
     );
     expect(completed).toBe(false);
+    window.close();
+  });
+});
+
+describe("Base UI-aligned menus, selects, and comboboxes", () => {
+  test("declares the whole menu compound on the trigger and adopts what the core decides", async () => {
+    await app.whenReady();
+    let open: boolean | undefined;
+    let checked: boolean | undefined;
+    let density: string | undefined;
+    let navigated: string | undefined;
+    let state: solid.MenuSurfaceState | undefined;
+    const window = new Window({
+      title: "Menu",
+      renderer: createRenderer(() =>
+        createComponent(Menu.Root, {
+          scope: "edit",
+          open: true,
+          modal: true,
+          orientation: "vertical",
+          loopFocus: false,
+          closeParentOnEsc: true,
+          side: "top",
+          align: "end",
+          sideOffset: 8,
+          onOpenChange: (next: boolean) => {
+            open = next;
+          },
+          get children() {
+            return [
+              createComponent(Menu.Trigger, {
+                openOnHover: true,
+                delay: 120,
+                closeDelay: 40,
+                children: "Edit",
+              }),
+              createComponent(Menu.Positioner, {
+                collisionPadding: 12,
+                get children() {
+                  return createComponent(Menu.Popup, {
+                    get children() {
+                      return [
+                        createComponent(Menu.GroupLabel, {
+                          value: "clipboard",
+                          label: "Clipboard",
+                        }),
+                        createComponent(Menu.Item, {
+                          value: "copy",
+                          label: "Copy",
+                          closeOnClick: false,
+                        }),
+                        createComponent(Menu.LinkItem, {
+                          value: "docs",
+                          label: "Documentation",
+                          href: "https://example.invalid/docs",
+                          onNavigate: (href: string) => {
+                            navigated = href;
+                          },
+                        }),
+                        createComponent(Menu.Separator, {}),
+                        createComponent(Menu.CheckboxItem, {
+                          value: "wrap",
+                          label: "Wrap lines",
+                          checked: false,
+                          onCheckedChange: (next: boolean) => {
+                            checked = next;
+                          },
+                          get children() {
+                            return createComponent(
+                              Menu.CheckboxItemIndicator,
+                              {},
+                            );
+                          },
+                        }),
+                        createComponent(Menu.RadioGroup, {
+                          name: "density",
+                          value: "cozy",
+                          onValueChange: (next: string) => {
+                            density = next;
+                          },
+                          get children() {
+                            return [
+                              createComponent(Menu.RadioItem, {
+                                value: "compact",
+                                label: "Compact",
+                              }),
+                              createComponent(Menu.RadioItem, {
+                                value: "cozy",
+                                label: "Cozy",
+                                get children() {
+                                  return createComponent(
+                                    Menu.RadioItemIndicator,
+                                    {},
+                                  );
+                                },
+                              }),
+                            ];
+                          },
+                        }),
+                      ];
+                    },
+                  });
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const trigger = window.root.children[0]!;
+    expect(trigger.tag).toBe(NativeNodeTag.Button);
+    expect(trigger.properties.get(PropertyCode.Part)).toBe("menu-trigger");
+    expect(trigger.properties.get(PropertyCode.Scope)).toBe("edit");
+    // The trigger is the one part the core keeps mounted either way, so the whole `Menu.Root`
+    // declaration travels on it.
+    expect(trigger.properties.get(PropertyCode.Open)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.Modal)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.LoopFocus)).toBe(false);
+    expect(trigger.properties.get(PropertyCode.CloseParentOnEsc)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.OpenOnHover)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.Delay)).toBe(120);
+    expect(trigger.properties.get(PropertyCode.CloseDelay)).toBe(40);
+    expect(trigger.properties.get(PropertyCode.Side)).toBe("top");
+    expect(trigger.properties.get(PropertyCode.Align)).toBe("end");
+    expect(trigger.properties.get(PropertyCode.SideOffset)).toBe(8);
+    // The positioner is unmounted while the menu is closed, so its own declaration is routed to
+    // the trigger the core always holds.
+    expect(trigger.properties.get(PropertyCode.CollisionPadding)).toBe(12);
+
+    const positioner = window.root.children[1]!;
+    const popup = positioner.children[0]!;
+    expect(positioner.properties.get(PropertyCode.Part)).toBe("menu-positioner");
+    expect(popup.properties.get(PropertyCode.Part)).toBe("menu-popup");
+    const rows = popup.children;
+    expect(rows.map((row) => row.properties.get(PropertyCode.Part))).toEqual([
+      "menu-group-label",
+      "menu-item",
+      "menu-link-item",
+      "menu-separator",
+      "menu-checkbox-item",
+      "menu-radio-group",
+    ]);
+    const copy = rows[1]!;
+    const link = rows[2]!;
+    const wrap = rows[4]!;
+    const group = rows[5]!;
+    expect(copy.properties.get(PropertyCode.PartValue)).toBe("copy");
+    expect(copy.properties.get(PropertyCode.AccessibilityLabel)).toBe("Copy");
+    expect(copy.properties.get(PropertyCode.CloseOnClick)).toBe(false);
+    expect(link.properties.get(PropertyCode.Href)).toBe(
+      "https://example.invalid/docs",
+    );
+    expect(wrap.properties.get(PropertyCode.Checked)).toBe(false);
+    expect(group.properties.get(PropertyCode.ActiveValue)).toBe("cozy");
+    // Membership stays in the core's model: the group's value decides which row is checked.
+    expect(group.children[1]!.properties.get(PropertyCode.Checked)).toBe(true);
+    expect(group.children[0]!.properties.get(PropertyCode.Checked)).toBe(false);
+
+    // Everything the core decided arrives as one asynchronous change on the part that owns it.
+    window._dispatchEvent(
+      "componentchange",
+      wrap.id,
+      JSON.stringify({ activated: "wrap", checked: true }),
+    );
+    expect(checked).toBe(true);
+    window._dispatchEvent(
+      "componentchange",
+      link.id,
+      JSON.stringify({ activated: "docs", href: "https://example.invalid/docs" }),
+    );
+    expect(navigated).toBe("https://example.invalid/docs");
+    window._dispatchEvent(
+      "componentchange",
+      group.id,
+      JSON.stringify({ value: "compact" }),
+    );
+    expect(density).toBe("compact");
+    window._dispatchEvent(
+      "componentchange",
+      trigger.id,
+      JSON.stringify({ open: false, side: "bottom", align: "start", anchorHidden: true }),
+    );
+    expect(open).toBe(false);
+    expect(state).toBeUndefined();
+    window.close();
+  });
+
+  test("declares a submenu level and the same item parts inside a context menu", async () => {
+    await app.whenReady();
+    const window = new Window({
+      title: "Submenu",
+      renderer: createRenderer(() => [
+        createComponent(Menu.Root, {
+          scope: "file",
+          open: true,
+          get children() {
+            return [
+              createComponent(Menu.Trigger, { children: "File" }),
+              createComponent(Menu.Portal, {
+                get children() {
+                  return createComponent(Menu.Popup, {
+                    get children() {
+                      return createComponent(Menu.SubmenuRoot, {
+                        scope: "recent",
+                        open: true,
+                        get children() {
+                          return [
+                            createComponent(Menu.SubmenuTrigger, {
+                              value: "recent",
+                              label: "Open recent",
+                              openOnHover: true,
+                            }),
+                            createComponent(Menu.Positioner, {
+                              get children() {
+                                return createComponent(Menu.Popup, {
+                                  get children() {
+                                    return createComponent(Menu.Item, {
+                                      value: "notes",
+                                      label: "notes.md",
+                                    });
+                                  },
+                                });
+                              },
+                            }),
+                          ];
+                        },
+                      });
+                    },
+                  });
+                },
+              }),
+            ];
+          },
+        }),
+        createComponent(ContextMenu.Root, {
+          scope: "canvas",
+          get children() {
+            return createComponent(ContextMenu.Trigger, {
+              get children() {
+                return [
+                  createComponent(Menu.Item, { value: "copy", label: "Copy" }),
+                  createComponent(Menu.Item, { value: "paste", label: "Paste" }),
+                ];
+              },
+            });
+          },
+        }),
+      ]),
+    });
+
+    // `Menu.SubmenuRoot` is a logical coordinator like `Menu.Root`, so the nested level's trigger
+    // and positioner are ordinary rows of the parent popup carrying the child scope.
+    const portal = window.root.children[1]!;
+    const popup = portal.children[0]!;
+    const submenuTrigger = popup.children[0]!;
+    expect(submenuTrigger.properties.get(PropertyCode.Part)).toBe(
+      "menu-submenu-trigger",
+    );
+    expect(submenuTrigger.properties.get(PropertyCode.Scope)).toBe("recent");
+    expect(submenuTrigger.properties.get(PropertyCode.PartValue)).toBe("recent");
+    expect(submenuTrigger.properties.get(PropertyCode.OpenOnHover)).toBe(true);
+    expect(submenuTrigger.properties.get(PropertyCode.Open)).toBe(true);
+    const nested = popup.children[1]!.children[0]!.children[0]!;
+    expect(nested.properties.get(PropertyCode.Part)).toBe("menu-item");
+    expect(nested.properties.get(PropertyCode.Scope)).toBe("recent");
+
+    // The same item parts declare a cursor-point context menu's rows.
+    const contextTrigger = window.root.children[2]!;
+    expect(contextTrigger.properties.get(PropertyCode.Part)).toBe(
+      "context-menu-trigger",
+    );
+    expect(
+      contextTrigger.children.map((row) =>
+        row.properties.get(PropertyCode.PartValue),
+      ),
+    ).toEqual(["copy", "paste"]);
+    window.close();
+  });
+
+  test("declares Base UI's select parts, multiple values, and the map item form", async () => {
+    await app.whenReady();
+    let values: readonly string[] | undefined;
+    const window = new Window({
+      title: "Select parts",
+      renderer: createRenderer(() =>
+        createComponent(Select.Root, {
+          scope: "fruit",
+          ariaLabel: "Fruit",
+          multiple: true,
+          values: ["alpha"],
+          required: true,
+          readOnly: true,
+          modal: true,
+          alignItemWithTrigger: true,
+          filterMode: "startsWith",
+          items: { alpha: "Alpha", bravo: "Bravo" },
+          onValuesChange: (next: readonly string[]) => {
+            values = next;
+          },
+          get children() {
+            return [
+              createComponent(Select.Label, { children: "Fruit" }),
+              createComponent(Select.Value, {}),
+              createComponent(Select.Icon, {}),
+              createComponent(Select.Backdrop, {}),
+              createComponent(Select.Positioner, {
+                side: "top",
+                align: "end",
+                sideOffset: 12,
+                get children() {
+                  return [
+                    createComponent(Select.ScrollUpArrow, {}),
+                    createComponent(Select.List, {
+                      get children() {
+                        return createComponent(Select.Group, {
+                          get children() {
+                            return [
+                              createComponent(Select.GroupLabel, {
+                                children: "Common",
+                              }),
+                              createComponent(Select.Item, {
+                                partValue: "alpha",
+                                get children() {
+                                  return [
+                                    createComponent(Select.ItemText, {
+                                      children: "Alpha",
+                                    }),
+                                    createComponent(Select.ItemIndicator, {}),
+                                  ];
+                                },
+                              }),
+                            ];
+                          },
+                        });
+                      },
+                    }),
+                    createComponent(Select.ScrollDownArrow, {}),
+                  ];
+                },
+              }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const trigger = window.root.children[0]!;
+    expect(trigger.properties.get(PropertyCode.Part)).toBe("select");
+    expect(trigger.properties.get(PropertyCode.Multiple)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.Required)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.ReadOnly)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.Modal)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.AlignItemWithTrigger)).toBe(true);
+    expect(trigger.properties.get(PropertyCode.FilterMode)).toBe("startsWith");
+    expect(trigger.properties.get(PropertyCode.Values)).toBe('["alpha"]');
+    // Base UI's map `items` form travels unchanged; the Rust binding decodes both shapes.
+    expect(trigger.properties.get(PropertyCode.Options)).toBe(
+      JSON.stringify({ alpha: "Alpha", bravo: "Bravo" }),
+    );
+    // A multiple select declares no single `activeValue`.
+    expect(trigger.properties.get(PropertyCode.ActiveValue)).toBeUndefined();
+
+    const parts = trigger.children.map((child) =>
+      child.properties.get(PropertyCode.Part),
+    );
+    expect(parts).toEqual([
+      "select-label",
+      "select-value",
+      "select-icon",
+      "select-backdrop",
+      "select-positioner",
+    ]);
+    const positioner = trigger.children[4]!;
+    expect(positioner.properties.get(PropertyCode.Side)).toBe("top");
+    expect(positioner.properties.get(PropertyCode.SideOffset)).toBe(12);
+    expect(
+      positioner.children.map((child) => child.properties.get(PropertyCode.Part)),
+    ).toEqual([
+      "select-scroll-up-arrow",
+      "select-list",
+      "select-scroll-down-arrow",
+    ]);
+    for (const child of trigger.children) {
+      expect(child.properties.get(PropertyCode.Scope)).toBe("fruit");
+    }
+
+    window._dispatchEvent(
+      "componentchange",
+      trigger.id,
+      JSON.stringify({
+        selectedValues: ["alpha", "bravo"],
+        valueText: "Alpha, Bravo",
+        open: false,
+        state: { ...{ popupOpen: false, required: true, filled: true } },
+      }),
+    );
+    expect(values).toEqual(["alpha", "bravo"]);
+    window.close();
+  });
+
+  test("declares Base UI's combobox parts, chips, and filter policy", async () => {
+    await app.whenReady();
+    let chips: readonly string[] | undefined;
+    const window = new Window({
+      title: "Combobox parts",
+      renderer: createRenderer(() =>
+        createComponent(Combobox.Root, {
+          scope: "tags",
+          ariaLabel: "Tags",
+          multiple: true,
+          values: ["rust"],
+          filterMode: "contains",
+          autoHighlight: true,
+          openOnInputClick: false,
+          highlightItemOnHover: false,
+          loopFocus: false,
+          readOnly: true,
+          required: true,
+          items: [{ value: "rust", label: "Rust" }],
+          onValuesChange: (next: readonly string[]) => {
+            chips = next;
+          },
+          get children() {
+            return [
+              createComponent(Combobox.Label, { children: "Tags" }),
+              createComponent(Combobox.InputGroup, {
+                get children() {
+                  return [
+                    createComponent(Combobox.Chips, {
+                      get children() {
+                        return createComponent(Combobox.Chip, {
+                          index: 0,
+                          get children() {
+                            return createComponent(Combobox.ChipRemove, {
+                              index: 0,
+                              ariaLabel: "Remove Rust",
+                            });
+                          },
+                        });
+                      },
+                    }),
+                    createComponent(Combobox.Clear, {}),
+                    createComponent(Combobox.Trigger, {}),
+                  ];
+                },
+              }),
+              createComponent(Combobox.Status, {}),
+              createComponent(Combobox.Empty, { children: "No results" }),
+            ];
+          },
+        }),
+      ),
+    });
+
+    const input = window.root.children[0]!;
+    expect(input.tag).toBe(NativeNodeTag.Input);
+    expect(input.properties.get(PropertyCode.Part)).toBe("combobox");
+    expect(input.properties.get(PropertyCode.Multiple)).toBe(true);
+    expect(input.properties.get(PropertyCode.FilterMode)).toBe("contains");
+    expect(input.properties.get(PropertyCode.AutoHighlight)).toBe(true);
+    expect(input.properties.get(PropertyCode.OpenOnInputClick)).toBe(false);
+    expect(input.properties.get(PropertyCode.HighlightItemOnHover)).toBe(false);
+    expect(input.properties.get(PropertyCode.LoopFocus)).toBe(false);
+    expect(input.properties.get(PropertyCode.ReadOnly)).toBe(true);
+    expect(input.properties.get(PropertyCode.Required)).toBe(true);
+    expect(input.properties.get(PropertyCode.Values)).toBe('["rust"]');
+
+    // A text input paints its own content, so every other part is a sibling that repeats the
+    // scope the Rust binding resolves the instance from.
+    const label = window.root.children[1]!;
+    const inputGroup = window.root.children[2]!;
+    expect(label.properties.get(PropertyCode.Part)).toBe("combobox-label");
+    expect(label.properties.get(PropertyCode.Scope)).toBe("tags");
+    expect(inputGroup.properties.get(PropertyCode.Part)).toBe(
+      "combobox-input-group",
+    );
+    const chipsNode = inputGroup.children[0]!;
+    const chip = chipsNode.children[0]!;
+    expect(chip.properties.get(PropertyCode.Part)).toBe("combobox-chip");
+    expect(chip.properties.get(PropertyCode.ItemIndex)).toBe(0);
+    expect(chip.children[0]!.properties.get(PropertyCode.Part)).toBe(
+      "combobox-chip-remove",
+    );
+    expect(window.root.children[3]!.properties.get(PropertyCode.Part)).toBe(
+      "combobox-status",
+    );
+    expect(window.root.children[4]!.properties.get(PropertyCode.Part)).toBe(
+      "combobox-empty",
+    );
+
+    window._dispatchEvent(
+      "componentchange",
+      input.id,
+      JSON.stringify({ chipValues: ["rust", "zig"], chipLabels: ["Rust", "Zig"] }),
+    );
+    expect(chips).toEqual(["rust", "zig"]);
     window.close();
   });
 });

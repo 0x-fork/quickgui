@@ -47,8 +47,8 @@ use quickgui::{
     MAX_FIELD_VALIDATION_DEBOUNCE, MAX_NUMBER_FIELD_SCRUB_SENSITIVITY, MAX_POPOVER_ALIGN_OFFSET,
     MAX_POPOVER_COLLISION_PADDING, MAX_POPOVER_HOVER_DELAY, MAX_POPOVER_SIDE_OFFSET,
     MAX_TOAST_DURATION, MAX_TOAST_SWIPE_THRESHOLD, MAX_TOOLTIP_COLLISION_PADDING,
-    MAX_TOOLTIP_DELAY, MAX_TOOLTIP_GROUP_TIMEOUT, MAX_TOOLTIP_SIDE_OFFSET,
-    NumberFieldScrubDirection, PopoverHoverState, ProgressStatus, SliderThumbAlignment,
+    MAX_TOOLTIP_DELAY, MAX_TOOLTIP_GROUP_TIMEOUT, MAX_TOOLTIP_SIDE_OFFSET, MenuOrientation,
+    MenuState, NumberFieldScrubDirection, PopoverHoverState, ProgressStatus, SliderThumbAlignment,
     TabsActivationDirection, TabsState, ToastParts, ToastSwipeDirection, TooltipCursorAxis,
     TooltipProvider, TooltipState, ValueFormat, anchor_placement,
 };
@@ -92,7 +92,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 25;
+const PROTOCOL_VERSION: u16 = 26;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -455,7 +455,21 @@ mod property {
     pub const ENTER_DURATION: u16 = 329;
     pub const EXIT_DURATION: u16 = 330;
     pub const STACK_EXPANDED: u16 = 331;
-    pub const LAST: u16 = STACK_EXPANDED;
+    /// Base UI's `Menu.Root` `closeParentOnEsc`.
+    pub const CLOSE_PARENT_ON_ESC: u16 = 332;
+    /// Base UI's `Menu.LinkItem` `href`.
+    pub const HREF: u16 = 333;
+    /// Base UI's `multiple` on a select or combobox.
+    pub const MULTIPLE: u16 = 334;
+    /// Base UI's `Select.Positioner` `alignItemWithTrigger`.
+    pub const ALIGN_ITEM_WITH_TRIGGER: u16 = 335;
+    /// Base UI's combobox `autoHighlight`.
+    pub const AUTO_HIGHLIGHT: u16 = 336;
+    /// Base UI's combobox `openOnInputClick`.
+    pub const OPEN_ON_INPUT_CLICK: u16 = 337;
+    /// Base UI's combobox `highlightItemOnHover`.
+    pub const HIGHLIGHT_ITEM_ON_HOVER: u16 = 338;
+    pub const LAST: u16 = HIGHLIGHT_ITEM_ON_HOVER;
 }
 
 #[derive(Default)]
@@ -945,6 +959,7 @@ mod base_ui;
 mod collections;
 mod components;
 mod events;
+mod menus;
 mod pickers;
 mod popover_menu;
 mod popovers;
@@ -959,6 +974,7 @@ use base_ui::*;
 use collections::*;
 use components::*;
 use events::*;
+use menus::*;
 use pickers::*;
 use popover_menu::*;
 use popovers::*;

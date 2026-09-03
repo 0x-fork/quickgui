@@ -25,6 +25,12 @@ and every deadline, and reports what it decided back as an asynchronous payload.
   `useNumberFieldState().scrubbing`, and `Progress` parts reporting the core's derived status.
 - **Toast provider and manager** — `useToastManager()` over the declared queue, with each toast's
   stack index, limited flag, and core-computed offset.
+- **Base UI menu parts** — the compound `Menu` whose rows are application-styled child nodes, with
+  a link row, a checkbox row, a radio group, and a hover-opening submenu, plus a `ContextMenu`
+  declaring its cursor-point rows with exactly the same components.
+- **Base UI select and combobox parts** — a `multiple` `Select` declared with the `items` map form
+  and the core's own scroll arrows, and a `multiple` `Combobox` whose chips come back from the
+  core, both styling themselves from `useSelectState()` and `useComboboxState()`.
 
 ```console
 cd examples/components-solid

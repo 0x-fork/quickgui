@@ -96,6 +96,23 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
+- JavaScript bindings for the Base UI-aligned menu, select, and combobox parts and props, at
+  protocol v26: a compound `Menu` (`Root`/`Trigger`/`Portal`/`Backdrop`/`Positioner`/`Popup`/
+  `Arrow`/`Item`/`LinkItem`/`SubmenuRoot`/`SubmenuTrigger`/`Group`/`GroupLabel`/`RadioGroup`/
+  `RadioItem`/`RadioItemIndicator`/`CheckboxItem`/`CheckboxItemIndicator`/`Separator`) whose rows
+  are ordinary application-styled child nodes over the core's `MenuState` and `PopoverMenu` model,
+  with `modal`, `orientation`, `loopFocus`, `closeParentOnEsc`, `disabled`, Trigger `openOnHover`/
+  `delay`/`closeDelay`, `href` through the core's own open-URL path, and `useMenuState()` /
+  `useMenuItemState()` reporting the core's `MenuPartState` and `MenuItemPartState`;
+  `ContextMenu.Root` accepting exactly the same row components as a bounded model its cursor-point
+  surface paints; `Select.Label`/`Value`/`Icon`/`Backdrop`/`Portal`/`Positioner`/`Popup`/`Arrow`/
+  `List`/`Item`/`ItemText`/`ItemIndicator`/`Group`/`GroupLabel`/`Separator`/`ScrollUpArrow`/
+  `ScrollDownArrow` with `multiple`, `required`, `readOnly`, `modal`, `alignItemWithTrigger`, the
+  `items` map form, and `useSelectState()`; and `Combobox`/`Autocomplete` `Label`/`Value`/`Icon`/
+  `Input`/`InputGroup`/`Clear`/`Trigger`/`Chips`/`Chip`/`ChipRemove`/`Status`/`Empty` and the
+  declaration-only popup parts, with `multiple` chips, the `filter` policy (`contains`,
+  `startsWith`, `fuzzy`, `none`), `autoHighlight`, `openOnInputClick`, `highlightItemOnHover`,
+  `loopFocus`, `readOnly`, `required`, and `useComboboxState()` / `useComboboxChips()`;
 - JavaScript bindings for the Base UI-aligned compound parts and props, at protocol v25: the
   `Popover` compound (`Portal`/`Backdrop`/`Positioner`/`Popup`/`Arrow`/`Viewport`/`Title`/
   `Description`/`Close`) with `side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`,

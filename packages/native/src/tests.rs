@@ -6624,3 +6624,935 @@ fn malformed_aligned_declarations_declare_nothing_instead_of_panicking() {
         ToggleState::Off
     );
 }
+
+// ---------------------------------------------------------------------------
+// Base UI-aligned menus, selects, and comboboxes
+//
+// Every test below declares the compound exactly the way the Solid renderer does and then asks
+// the core what it decided: which identity a row mounted under, which row the model holds
+// checked, and what the asynchronous payload carried. Nothing here re-derives a row identity, a
+// toggle, or a filter in the binding.
+// ---------------------------------------------------------------------------
+
+fn menu_application() -> quickgui::Application {
+    base_ui_application()
+        .bind_keys(quickgui::popover_menu_key_bindings())
+        .bind_keys(quickgui::popover_menu_horizontal_key_bindings())
+}
+
+fn mounted_menu_view(
+    tree: NativeTree,
+    events: EventQueue,
+) -> (
+    quickgui::TestAppContext,
+    quickgui::TestWindowHandle<NativeView>,
+) {
+    let view = component_part_view(93, tree, events);
+    quickgui::TestAppContext::from_application(
+        menu_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .expect("the hosted menu view mounts")
+}
+
+/// The last queued change for one instance that carries `field`.
+///
+/// A menu row reports two different things on the same channel — the activation edge and the
+/// roving item state — so a test that wants one of them names the field it is waiting for.
+fn component_change_field(events: &EventQueue, target: u32, field: &str) -> serde_json::Value {
+    let queue = events.borrow();
+    let mut latest = serde_json::Value::Null;
+    for event in queue.iter() {
+        if event.kind != "componentchange" || event.target != target {
+            continue;
+        }
+        let payload: serde_json::Value =
+            serde_json::from_str(event.value.as_deref().unwrap_or("null"))
+                .expect("a component change carries bounded JSON");
+        if payload.get(field).is_some() {
+            latest = payload;
+        }
+    }
+    latest
+}
+
+/// The identity one declared row mounts under, derived exactly the way the binding derives it.
+fn menu_row_id(scope: &str, items: &[PopoverMenuItem], index: usize) -> ElementId {
+    let popup = menu_popup_id(ElementId::named(scope));
+    PopoverMenu::new(items.to_vec())
+        .expect("a declared level is valid")
+        .item_element_id(popup, index)
+        .expect("an interactive row has an identity")
+}
+
+#[test]
+fn declared_menu_parts_mount_the_core_rows_and_report_what_it_activated() {
+    let root_id = 1_400;
+    let trigger_id = 1_401;
+    let positioner_id = 1_402;
+    let popup_id = 1_403;
+    let label_id = 1_404;
+    let copy_id = 1_405;
+    let separator_id = 1_406;
+    let wrap_id = 1_407;
+    let group_id = 1_408;
+    let compact_id = 1_409;
+    let cozy_id = 1_410;
+
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "menu",
+        "edit",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        trigger_id,
+        root_id,
+        NodeTag::Button,
+        "menu-trigger",
+        "edit",
+        &[],
+        &[],
+        &[
+            (property::OPEN, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        positioner_id,
+        root_id,
+        NodeTag::View,
+        "menu-positioner",
+        "edit",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        popup_id,
+        positioner_id,
+        NodeTag::View,
+        "menu-popup",
+        "edit",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        label_id,
+        popup_id,
+        NodeTag::View,
+        "menu-group-label",
+        "edit",
+        &[],
+        &[
+            (property::PART_VALUE, "clipboard"),
+            (property::ACCESSIBILITY_LABEL, "Clipboard"),
+        ],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        copy_id,
+        popup_id,
+        NodeTag::View,
+        "menu-item",
+        "edit",
+        &[],
+        &[
+            (property::PART_VALUE, "copy"),
+            (property::ACCESSIBILITY_LABEL, "Copy"),
+        ],
+        &[
+            (property::CLICK_LISTENER, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        separator_id,
+        popup_id,
+        NodeTag::View,
+        "menu-separator",
+        "edit",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        wrap_id,
+        popup_id,
+        NodeTag::View,
+        "menu-checkbox-item",
+        "edit",
+        &[],
+        &[
+            (property::PART_VALUE, "wrap"),
+            (property::ACCESSIBILITY_LABEL, "Wrap lines"),
+        ],
+        &[
+            (property::CHECKED, false),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        group_id,
+        popup_id,
+        NodeTag::View,
+        "menu-radio-group",
+        "edit",
+        &[],
+        &[(property::PART_VALUE, "density")],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    for (id, value, label) in [
+        (compact_id, "compact", "Compact"),
+        (cozy_id, "cozy", "Cozy"),
+    ] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            group_id,
+            NodeTag::View,
+            "menu-radio-item",
+            "edit",
+            &[],
+            &[
+                (property::PART_VALUE, value),
+                (property::ACCESSIBILITY_LABEL, label),
+            ],
+            &[(property::COMPONENT_CHANGE_LISTENER, true)],
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_menu_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    // The declared rows become the core's own model, so each row mounts under the identity the
+    // model derived and the popup points its active descendant at exactly that identity.
+    let items = [
+        PopoverMenuItem::group_label("Clipboard"),
+        PopoverMenuItem::action(ElementId::named("copy"), "Copy", ()),
+        PopoverMenuItem::separator(),
+        PopoverMenuItem::checkbox(ElementId::named("wrap"), "Wrap lines", false, ()),
+        PopoverMenuItem::radio(
+            ElementId::named("compact"),
+            "Compact",
+            ElementId::named("density"),
+            false,
+            (),
+        ),
+        PopoverMenuItem::radio(
+            ElementId::named("cozy"),
+            "Cozy",
+            ElementId::named("density"),
+            false,
+            (),
+        ),
+    ];
+    let copy = menu_row_id("edit", &items, 1);
+    let wrap = menu_row_id("edit", &items, 3);
+    let compact = menu_row_id("edit", &items, 4);
+    for element in [
+        menu_trigger_id(ElementId::named("edit")),
+        menu_popup_id(ElementId::named("edit")),
+        copy,
+        wrap,
+        compact,
+    ] {
+        assert!(cx.contains_element(window, element).unwrap());
+    }
+
+    // A checkbox row toggles inside the core's model and stays open, exactly as Base UI does.
+    cx.click(window, wrap).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change_field(&events, wrap_id, "activated")["checked"],
+        true
+    );
+
+    // A radio row's new value belongs to its group, exactly as Base UI reports `onValueChange`.
+    cx.click(window, compact).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change_field(&events, group_id, "value")["value"],
+        serde_json::json!("compact")
+    );
+
+    // A command row closes the level after activating, which is the core's own default policy,
+    // so every surface part unmounts and the trigger reports the value it committed.
+    cx.click(window, copy).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change_field(&events, copy_id, "activated")["activated"],
+        serde_json::json!("copy")
+    );
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .any(|event| event.kind == "click" && event.target == copy_id)
+    );
+    let _ = view;
+    assert!(
+        !cx.contains_element(window, menu_popup_id(ElementId::named("edit")))
+            .unwrap()
+    );
+    assert!(
+        cx.contains_element(window, menu_trigger_id(ElementId::named("edit")))
+            .unwrap()
+    );
+}
+
+#[test]
+fn a_declared_submenu_trigger_is_a_row_of_its_parent_and_the_trigger_of_its_own_level() {
+    let root_id = 1_420;
+    let trigger_id = 1_421;
+    let positioner_id = 1_422;
+    let popup_id = 1_423;
+    let submenu_root_id = 1_424;
+    let submenu_trigger_id = 1_425;
+    let submenu_positioner_id = 1_426;
+    let submenu_popup_id = 1_427;
+    let nested_item_id = 1_428;
+
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "menu",
+        "file",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        trigger_id,
+        root_id,
+        NodeTag::Button,
+        "menu-trigger",
+        "file",
+        &[],
+        &[],
+        &[(property::OPEN, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        positioner_id,
+        root_id,
+        NodeTag::View,
+        "menu-positioner",
+        "file",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        popup_id,
+        positioner_id,
+        NodeTag::View,
+        "menu-popup",
+        "file",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        submenu_root_id,
+        popup_id,
+        NodeTag::View,
+        "menu-submenu-root",
+        "recent",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        submenu_trigger_id,
+        submenu_root_id,
+        NodeTag::View,
+        "menu-submenu-trigger",
+        "recent",
+        &[],
+        &[
+            (property::PART_VALUE, "recent"),
+            (property::ACCESSIBILITY_LABEL, "Open recent"),
+        ],
+        &[
+            (property::OPEN, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    declare_aligned_part(
+        &mut tree,
+        submenu_positioner_id,
+        submenu_root_id,
+        NodeTag::View,
+        "menu-positioner",
+        "recent",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        submenu_popup_id,
+        submenu_positioner_id,
+        NodeTag::View,
+        "menu-popup",
+        "recent",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        nested_item_id,
+        submenu_popup_id,
+        NodeTag::View,
+        "menu-item",
+        "recent",
+        &[],
+        &[
+            (property::PART_VALUE, "notes"),
+            (property::ACCESSIBILITY_LABEL, "notes.md"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (cx, view) = mounted_menu_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    // The nested level anchors to the row identity its parent's model derived, so exactly one
+    // element carries the submenu trigger and the parent's active descendant can reach it.
+    let parent_items = [PopoverMenuItem::submenu(
+        ElementId::named("recent"),
+        "Open recent",
+        PopoverMenu::new(Vec::new()).unwrap(),
+    )];
+    let row = menu_row_id("file", &parent_items, 0);
+    assert!(cx.contains_element(window, row).unwrap());
+    assert!(
+        !cx.contains_element(window, menu_trigger_id(ElementId::named("recent")))
+            .unwrap(),
+        "a submenu trigger is a row of its parent, not a second standalone trigger"
+    );
+
+    // The nested level is its own compound: its popup and rows mount under its own scope.
+    let nested_items = [PopoverMenuItem::action(
+        ElementId::named("notes"),
+        "notes.md",
+        (),
+    )];
+    assert!(
+        cx.contains_element(window, menu_popup_id(ElementId::named("recent")))
+            .unwrap()
+    );
+    assert!(
+        cx.contains_element(window, menu_row_id("recent", &nested_items, 0))
+            .unwrap()
+    );
+}
+
+#[test]
+fn declared_menu_link_items_and_malformed_rows_decline_instead_of_panicking() {
+    let root_id = 1_440;
+    let trigger_id = 1_441;
+    let positioner_id = 1_442;
+    let popup_id = 1_443;
+    let link_id = 1_444;
+    let nameless_id = 1_445;
+    let oversized_id = 1_446;
+
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        root_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "menu",
+        "help",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        trigger_id,
+        root_id,
+        NodeTag::Button,
+        "menu-trigger",
+        "help",
+        &[],
+        &[],
+        &[(property::OPEN, true)],
+    );
+    declare_aligned_part(
+        &mut tree,
+        positioner_id,
+        root_id,
+        NodeTag::View,
+        "menu-positioner",
+        "help",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        popup_id,
+        positioner_id,
+        NodeTag::View,
+        "menu-popup",
+        "help",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        link_id,
+        popup_id,
+        NodeTag::View,
+        "menu-link-item",
+        "help",
+        &[],
+        &[
+            (property::PART_VALUE, "docs"),
+            (property::ACCESSIBILITY_LABEL, "Documentation"),
+            (property::HREF, "https://example.invalid/docs"),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    // A row without a stable identity declares nothing rather than reaching a core constructor.
+    declare_aligned_part(
+        &mut tree,
+        nameless_id,
+        popup_id,
+        NodeTag::View,
+        "menu-item",
+        "help",
+        &[],
+        &[(property::ACCESSIBILITY_LABEL, "Nameless")],
+        &[],
+    );
+    // An oversized destination is refused before the core would truncate it.
+    declare_aligned_part(
+        &mut tree,
+        oversized_id,
+        popup_id,
+        NodeTag::View,
+        "menu-link-item",
+        "help",
+        &[],
+        &[
+            (property::PART_VALUE, "huge"),
+            (property::ACCESSIBILITY_LABEL, "Huge"),
+            (
+                property::HREF,
+                &"h".repeat(quickgui::MAX_POPOVER_MENU_LINK_BYTES + 1),
+            ),
+        ],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_menu_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    let items = [
+        PopoverMenuItem::link(
+            ElementId::named("docs"),
+            "Documentation",
+            "https://example.invalid/docs",
+        ),
+        PopoverMenuItem::link(ElementId::named("huge"), "Huge", ""),
+    ];
+    let link = menu_row_id("help", &items, 0);
+    assert!(cx.contains_element(window, link).unwrap());
+    // The nameless row contributed no model entry, so the oversized link is the second row.
+    assert!(
+        cx.contains_element(window, menu_row_id("help", &items, 1))
+            .unwrap()
+    );
+
+    // Activation hands the destination to the core's own open-URL path, which `TestAppContext`
+    // answers with `Unsupported`; the reported edge is enqueued before that request is made.
+    let _ = cx.click(window, link);
+    assert_eq!(
+        component_change_field(&events, link_id, "href")["href"],
+        serde_json::json!("https://example.invalid/docs")
+    );
+}
+
+#[test]
+fn a_declared_context_menu_accepts_the_same_child_item_parts() {
+    let trigger_id = 1_460;
+    let copy_id = 1_461;
+    let paste_id = 1_462;
+
+    let mut tree = NativeTree::default();
+    declare_aligned_part(
+        &mut tree,
+        trigger_id,
+        ROOT_NODE,
+        NodeTag::View,
+        "context-menu-trigger",
+        "canvas",
+        &[],
+        &[],
+        &[(property::SELECT_LISTENER, true)],
+    );
+    for (id, value, label) in [(copy_id, "copy", "Copy"), (paste_id, "paste", "Paste")] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            trigger_id,
+            NodeTag::View,
+            "menu-item",
+            "canvas",
+            &[],
+            &[
+                (property::PART_VALUE, value),
+                (property::ACCESSIBILITY_LABEL, label),
+            ],
+            &[(property::CLICK_LISTENER, true)],
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (cx, view) = mounted_menu_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+
+    // The core paints a context menu in its own cursor-point window, so the declared rows are a
+    // model rather than owner-window elements: they mount nothing and the trigger stays.
+    assert!(
+        cx.contains_element(window, ElementId::new(u64::from(trigger_id)))
+            .unwrap()
+    );
+    let items = [
+        PopoverMenuItem::action(ElementId::named("copy"), "Copy", ()),
+        PopoverMenuItem::action(ElementId::named("paste"), "Paste", ()),
+    ];
+    for index in 0..items.len() {
+        assert!(
+            !cx.contains_element(window, menu_row_id("canvas", &items, index))
+                .unwrap(),
+            "a context-menu row contributes a declaration, not an element"
+        );
+    }
+}
+
+#[test]
+fn declared_select_parts_report_the_core_part_state_and_every_selected_value() {
+    let select_id = 1_480;
+    let label_id = 1_481;
+    let value_id = 1_482;
+    let icon_id = 1_483;
+    let positioner_id = 1_484;
+    let up_arrow_id = 1_485;
+    let down_arrow_id = 1_486;
+    let group_id = 1_487;
+    let group_label_id = 1_488;
+    let alpha_id = 1_489;
+    let bravo_id = 1_490;
+
+    let mut tree = NativeTree::default();
+    let mut select = component_part_node(
+        NodeTag::Button,
+        ROOT_NODE,
+        "select",
+        &[
+            (property::SCOPE, "fruit"),
+            (property::ACCESSIBILITY_LABEL, "Fruit"),
+            (property::VALUES, r#"["alpha","bravo"]"#),
+        ],
+        &[
+            (property::MULTIPLE, true),
+            (property::REQUIRED, true),
+            (property::READ_ONLY, true),
+            (property::MODAL, true),
+            (property::ALIGN_ITEM_WITH_TRIGGER, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    select.set_property(
+        property::OPTIONS,
+        Some(PropertyValue::String(Arc::from(
+            r#"{"alpha":"Alpha","bravo":"Bravo","charlie":"Charlie"}"#,
+        ))),
+    );
+    insert_component_node(&mut tree, select_id, ROOT_NODE, select);
+    for (id, part) in [
+        (label_id, "select-label"),
+        (value_id, "select-value"),
+        (icon_id, "select-icon"),
+    ] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            select_id,
+            NodeTag::View,
+            part,
+            "fruit",
+            &[],
+            &[],
+            &[],
+        );
+    }
+    declare_aligned_part(
+        &mut tree,
+        positioner_id,
+        select_id,
+        NodeTag::View,
+        "select-positioner",
+        "fruit",
+        &[(property::SIDE_OFFSET, 12.0)],
+        &[(property::SIDE, "top")],
+        &[],
+    );
+    for (id, part) in [
+        (up_arrow_id, "select-scroll-up-arrow"),
+        (down_arrow_id, "select-scroll-down-arrow"),
+    ] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            positioner_id,
+            NodeTag::View,
+            part,
+            "fruit",
+            &[],
+            &[],
+            &[],
+        );
+    }
+    declare_aligned_part(
+        &mut tree,
+        group_id,
+        positioner_id,
+        NodeTag::View,
+        "select-group",
+        "fruit",
+        &[],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        group_label_id,
+        group_id,
+        NodeTag::View,
+        "select-group-label",
+        "fruit",
+        &[],
+        &[],
+        &[],
+    );
+    for (id, value) in [(alpha_id, "alpha"), (bravo_id, "bravo")] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            group_id,
+            NodeTag::View,
+            "select-item",
+            "fruit",
+            &[],
+            &[(property::PART_VALUE, value)],
+            &[],
+        );
+    }
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (cx, view) = mounted_menu_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("fruit");
+
+    // The owner-window parts mount under the identities the core derives from the scope alone.
+    for element in [
+        root,
+        SelectState::<Arc<str>>::label_id(root),
+        SelectState::<Arc<str>>::value_id(root),
+        SelectState::<Arc<str>>::icon_id(root),
+    ] {
+        assert!(cx.contains_element(window, element).unwrap());
+    }
+
+    // The core paints the option list in its own native window, so every popup-side part is a
+    // declaration and mounts nothing at all in the owner window.
+    for element in [
+        SelectState::<Arc<str>>::scroll_up_arrow_id(root),
+        SelectState::<Arc<str>>::list_id(root),
+        SelectState::<Arc<str>>::surface_id(root),
+    ] {
+        assert!(!cx.contains_element(window, element).unwrap());
+    }
+
+    // The `items` map form and the declared value set both reach the core, and the state it
+    // publishes is exactly Base UI's own trigger snapshot.
+    let reported = component_change(&events, select_id);
+    assert_eq!(
+        reported["selectedValues"],
+        serde_json::json!(["alpha", "bravo"])
+    );
+    assert_eq!(reported["valueText"], serde_json::json!("Alpha, Bravo"));
+    let state = &reported["state"];
+    assert_eq!(state["required"], true);
+    assert_eq!(state["readOnly"], true);
+    assert_eq!(state["filled"], true);
+    assert_eq!(state["placeholder"], false);
+    // Seeding a declared value is not an interaction, so the core's own edges stay clean.
+    assert_eq!(state["dirty"], false);
+    assert_eq!(state["touched"], false);
+    assert_eq!(state["popupOpen"], false);
+    assert_eq!(state["popupSide"], serde_json::json!("top"));
+}
+
+#[test]
+fn declared_combobox_parts_mount_chips_status_and_the_cores_empty_edge() {
+    let combobox_id = 1_500;
+    let label_id = 1_501;
+    let group_wrapper_id = 1_502;
+    let clear_id = 1_503;
+    let status_id = 1_504;
+    let empty_id = 1_505;
+    let chips_id = 1_506;
+    let chip_id = 1_507;
+    let chip_remove_id = 1_508;
+
+    let mut tree = NativeTree::default();
+    let mut combobox = component_part_node(
+        NodeTag::Input,
+        ROOT_NODE,
+        "combobox",
+        &[
+            (property::SCOPE, "tags"),
+            (property::ACCESSIBILITY_LABEL, "Tags"),
+            (property::VALUES, r#"["rust"]"#),
+            (property::FILTER_MODE, "startsWith"),
+        ],
+        &[
+            (property::MULTIPLE, true),
+            (property::AUTO_HIGHLIGHT, true),
+            (property::OPEN_ON_INPUT_CLICK, false),
+            (property::HIGHLIGHT_ITEM_ON_HOVER, false),
+            (property::LOOP_FOCUS, false),
+            (property::REQUIRED, true),
+            (property::COMPONENT_CHANGE_LISTENER, true),
+        ],
+    );
+    combobox.set_property(
+        property::OPTIONS,
+        Some(PropertyValue::String(Arc::from(
+            r#"[{"value":"rust","label":"Rust"},{"value":"zig","label":"Zig"}]"#,
+        ))),
+    );
+    insert_component_node(&mut tree, combobox_id, ROOT_NODE, combobox);
+    // A text input paints its own content, so every other part of the compound is a sibling of it
+    // that repeats the scope; the Rust binding resolves the instance from that scope alone.
+    for (id, part) in [
+        (label_id, "combobox-label"),
+        (group_wrapper_id, "combobox-input-group"),
+        (clear_id, "combobox-clear"),
+        (status_id, "combobox-status"),
+        (empty_id, "combobox-empty"),
+        (chips_id, "combobox-chips"),
+    ] {
+        declare_aligned_part(
+            &mut tree,
+            id,
+            ROOT_NODE,
+            NodeTag::View,
+            part,
+            "tags",
+            &[],
+            &[],
+            &[],
+        );
+    }
+    declare_aligned_part(
+        &mut tree,
+        chip_id,
+        chips_id,
+        NodeTag::View,
+        "combobox-chip",
+        "tags",
+        &[(property::ITEM_INDEX, 0.0)],
+        &[],
+        &[],
+    );
+    declare_aligned_part(
+        &mut tree,
+        chip_remove_id,
+        chip_id,
+        NodeTag::Button,
+        "combobox-chip-remove",
+        "tags",
+        &[(property::ITEM_INDEX, 0.0)],
+        &[(property::ACCESSIBILITY_LABEL, "Remove Rust")],
+        &[],
+    );
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_menu_view(tree, Rc::clone(&events));
+    let window = view.window_handle();
+    let root = ElementId::named("tags");
+
+    for element in [
+        ComboboxState::<Arc<str>>::label_id(root),
+        ComboboxState::<Arc<str>>::input_group_id(root),
+        ComboboxState::<Arc<str>>::clear_id(root),
+        ComboboxState::<Arc<str>>::status_id(root),
+        ComboboxState::<Arc<str>>::chips_id(root),
+        ComboboxState::<Arc<str>>::chip_id(root, 0),
+        ComboboxState::<Arc<str>>::chip_remove_id(root, 0),
+    ] {
+        assert!(cx.contains_element(window, element).unwrap());
+    }
+    // `Combobox.Empty` mounts only while the core really matched nothing.
+    assert!(
+        !cx.contains_element(window, ComboboxState::<Arc<str>>::empty_id(root))
+            .unwrap()
+    );
+
+    let reported = component_change(&events, combobox_id);
+    assert_eq!(reported["chipValues"], serde_json::json!(["rust"]));
+    assert_eq!(reported["chipLabels"], serde_json::json!(["Rust"]));
+    assert_eq!(reported["state"]["required"], true);
+    assert_eq!(reported["state"]["touched"], false);
+    assert!(
+        reported["state"]["status"]
+            .as_str()
+            .is_some_and(|status| !status.is_empty())
+    );
+
+    // Removing a chip is the core's decision; the binding reports the set it kept.
+    cx.click(window, ComboboxState::<Arc<str>>::chip_remove_id(root, 0))
+        .unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        component_change(&events, combobox_id)["chipValues"],
+        serde_json::json!([])
+    );
+}

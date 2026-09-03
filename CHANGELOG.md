@@ -546,6 +546,76 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 
 ### JavaScript tooling
+- Bound the Base UI-aligned menu, select, and combobox parts and props to JavaScript at protocol
+  version 26. `Menu` is the compound form of the core's `MenuState` plus `PopoverMenu` model, and
+  its rows are ordinary application-styled child nodes rather than a JSON model the core paints:
+  `Menu.Root` is a logical coordinator carrying `open`/`defaultOpen`/`onOpenChange`, `modal`,
+  `orientation`, `loopFocus`, `closeParentOnEsc`, and `disabled`; `Menu.Trigger` adds `openOnHover`
+  with `delay` and `closeDelay`; `Menu.Portal`, `Backdrop`, `Positioner`, `Popup`, and `Arrow`
+  decorate caller-owned surface elements; and `Menu.Item`, `LinkItem`, `SubmenuRoot`,
+  `SubmenuTrigger`, `Group`, `GroupLabel`, `RadioGroup`, `RadioItem`, `RadioItemIndicator`,
+  `CheckboxItem`, `CheckboxItemIndicator`, and `Separator` declare the rows. The binding gathers
+  the declared rows of one level in one depth-first pass and hands them to the core, so a row's
+  derived identity, `menuitem` semantics, roving highlight, typeahead, toggle policy, radio
+  exclusivity, activation, and closing policy are all the core's and none of them is reimplemented
+  in JavaScript.
+- Reported everything a menu decides as one asynchronous `componentchange`: `useMenuState()`
+  carries the core's `MenuPartState` (`open`, the resolved `side` and `align`, `anchorHidden`) and
+  `useMenuItemState()` carries `MenuItemPartState` (`highlighted`, `disabled`, `checked`, submenu
+  `open`). An activated row reports `activated`, a checkbox row reports the `checked` value the
+  core toggled to through `onCheckedChange`, a radio row reports its group's new `value` through
+  `Menu.RadioGroup`'s `onValueChange`, and a `Menu.LinkItem` hands its bounded `href` to the core's
+  own open-URL path and reports it through `onNavigate`. A submenu trigger is one element that is
+  both a row of its parent level and the trigger of its own, so it anchors to the identity the
+  parent model derived instead of a second standalone trigger.
+- Kept the existing JSON-`items` `PopoverMenu` and `ContextMenu` bindings working unchanged, and
+  taught `ContextMenu.Root` to accept exactly the same row components. A cursor-point menu is
+  painted by the core in its own window, so those rows contribute a bounded model rather than
+  owner-window elements: they mount nothing at all, and their activation still reports through
+  `onClick` and `onSelect`.
+- Bound Base UI's `Select` parts and props. `Select.Label`, `Value`, `Icon`, and `Backdrop` are
+  owner-window elements the core decorates; `Portal`, `Positioner`, `Popup`, `Arrow`, `List`,
+  `Item`, `ItemText`, `ItemIndicator`, `Group`, `GroupLabel`, `Separator`, `ScrollUpArrow`, and
+  `ScrollDownArrow` are declarations, because the option list lives in a separate native child
+  window the core paints from `appearance`. `Select.Item` is the child option declaration alongside
+  the `items` prop and takes its label from `Select.ItemText`; a `Select.Group` label becomes the
+  searchable group name of the options inside it; and the scroll arrows switch the binding onto the
+  core's own `element_with_parts`, whose hovered decorators advance the option window one row every
+  50 ms on exact one-shot deadlines. `multiple` with a bounded value array, `required`, `readOnly`,
+  `modal`, `alignItemWithTrigger`, and the `items` map form join the existing props, and
+  `useSelectState()` reports the core's whole `SelectPartState`.
+- Bound Base UI's `Combobox` and `Autocomplete` parts and props: `Label`, `Value`, `Icon`, `Input`,
+  `InputGroup`, `Clear`, `Trigger`, `Chips`, `Chip`, `ChipRemove`, `Backdrop`, `Status`, and
+  `Empty` as owner-window elements, and `Portal`, `Positioner`, `Popup`, `Arrow`, `List`, `Row`,
+  `Item`, `ItemIndicator`, `Group`, `GroupLabel`, `Collection`, and `Separator` as declarations.
+  `multiple` turns the declared value set into the core's bounded chips, `useComboboxChips()`
+  reports the set it retained with the label it took from each option, `Combobox.Empty` mounts only
+  while the core's own query really matched nothing, and `useComboboxState()` reports
+  `ComboboxPartState` plus the derived `Status` text and result count. `filterMode` became Base
+  UI's `filter` policy — `contains` (the combobox default), `startsWith`, `fuzzy`, and `none` — and
+  `autoHighlight`, `openOnInputClick`, `highlightItemOnHover`, `loopFocus`, `readOnly`, and
+  `required` are declared ahead of every decision the core makes with them.
+- Made a text input's compound siblings rather than children: `Combobox.Root` and
+  `Autocomplete.Root` are still the declaration-carrying input, but their children now mount beside
+  it instead of inside it, because a text field paints its own content. Declared option nodes are
+  gathered from the whole compound in declaration order, so a `Combobox.Option` keeps working in
+  either position, and every part resolves its instance from the scope the root supplies.
+- Declared ahead of the core everything it must decide synchronously: seven new property codes
+  (`closeParentOnEsc`, `href`, `multiple`, `alignItemWithTrigger`, `autoHighlight`,
+  `openOnInputClick`, `highlightItemOnHover`) beside the existing scope, value, orientation,
+  `readOnly`, `required`, `modal`, `loopFocus`, `openOnHover`, `delay`, and `closeDelay`
+  declarations. A menu row without a stable value, an interactive row with no label, an oversized
+  `href`, a malformed `items` map, and a duplicate option value all decline or clamp instead of
+  reaching a core constructor that would panic, and a declared `onClick` on a row whose activation
+  the core owns is dropped rather than registered twice.
+- Added `SelectState::reset_touched` and `ComboboxState::reset_touched` to the core, the
+  counterpart of the existing `reset_dirty`: a value applied from a declaration is not an
+  interaction, so a hosted control reports Base UI's `data-touched` only for what the user did.
+- Added the two compounds to `examples/components-solid`, binding tables and worked examples to
+  `docs/solid.md`, Solid sections to `docs/popovers.md`, `docs/context-menus.md`, and
+  `docs/select-and-autocomplete.md`, and six Rust binding tests through `TestAppContext` plus four
+  Solid tests and two protocol tests covering identity, mount policy, reported payloads, bounds,
+  and malformed declarations.
 - Bound the Base UI-aligned compound parts and props to JavaScript at protocol version 25. The
   `Popover` compound gained `Portal`, `Backdrop`, `Positioner`, `Popup`, `Arrow`, `Viewport`,
   `Title`, `Description`, and `Close` parts beside the existing one-element `Content`, with

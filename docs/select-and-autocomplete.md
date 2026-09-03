@@ -430,3 +430,24 @@ that replaces a source, layout, or selection closes a live native popover — so
 has no `EventContext` for — the binding rebuilds the retained state only when the declaration
 itself changes and the popover is closed. See the
 [Solid 2 renderer](solid.md#option-sources-select-combobox-and-autocomplete).
+
+### Base UI parts in Solid
+
+The compound is split exactly the way the core is. `Select.Label`, `Value`, `Icon`, and `Backdrop`,
+and `Combobox.Label`, `Value`, `Icon`, `InputGroup`, `Clear`, `Trigger`, `Chips`, `Chip`,
+`ChipRemove`, `Backdrop`, `Status`, and `Empty` are owner-window elements the core decorates with
+the part descriptors documented above. The popup-side parts — `Portal`, `Positioner`, `Popup`,
+`Arrow`, `List`, `Row`, `Item`, `ItemText`, `ItemIndicator`, `Group`, `GroupLabel`, `Collection`,
+`Separator`, `ScrollUpArrow`, and `ScrollDownArrow` — are declarations: the option surface is a
+separate native child window the core paints from `appearance`, so they name what that surface
+holds instead of contributing owner-window elements. `Select.Item` is the child option declaration
+alongside the `items` prop, its `ItemText` supplies the label when none is declared, and a
+`Select.Group` label becomes the searchable group name of the options inside it.
+
+`multiple` with a bounded value array, `required`, `readOnly`, `modal`, `alignItemWithTrigger`, the
+`items` map form, the `filter` policy (`contains`, `startsWith`, `fuzzy`, `none`), `autoHighlight`,
+`openOnInputClick`, `highlightItemOnHover`, and `loopFocus` are all declared ahead of the core's
+decision. `useSelectState()` and `useComboboxState()` report the core's own `SelectPartState` and
+`ComboboxPartState` snapshots, including the combobox's derived `Status` text and `Empty` edge, and
+`useComboboxChips()` reports the chip set the core retained. See
+[Solid 2 renderer](solid.md#base-ui-select-and-combobox-parts).

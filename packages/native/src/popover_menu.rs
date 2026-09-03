@@ -481,17 +481,27 @@ pub(super) fn native_context_menu_state(view: &mut NativeView) -> &mut ContextMe
 }
 
 /// Attach the core's cursor-point context menu to a caller-owned target.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_context_menu(
     element: Element,
     element_id: ElementId,
     id: u32,
     node: &NativeNode,
+    tree: &NativeTree,
     state: ContextMenuState,
     cx: &mut ViewContext<'_, NativeView>,
 ) -> Element {
-    let Some(declaration) = node
+    let declaration = node
         .string(property::MENU)
-        .and_then(NativeMenuDeclaration::parse)
+        .and_then(NativeMenuDeclaration::parse);
+    // A context menu declares its rows either as one bounded JSON model or as the Base UI-shaped
+    // child item parts; the child parts unmount and contribute the same core row model.
+    let rows: Rc<[PopoverMenuItem]> = match &declaration {
+        Some(_) => Rc::from(Vec::new()),
+        None => Rc::from(context_menu_rows(id, tree)),
+    };
+    let Some(declaration) =
+        declaration.or_else(|| (!rows.is_empty()).then(NativeMenuDeclaration::default))
     else {
         return state.target_part(element_id, element);
     };
@@ -506,11 +516,12 @@ pub(super) fn apply_context_menu(
         style.layout(),
         move |view, _event| {
             view.context_menu_owner = Some(id);
-            Some(
-                PopoverMenu::new(menu_items(id, &entries, 0))
-                    .ok()?
-                    .loop_focus(loops),
-            )
+            let items = if rows.is_empty() {
+                menu_items(id, &entries, 0)
+            } else {
+                rows.iter().cloned().collect()
+            };
+            Some(PopoverMenu::new(items).ok()?.loop_focus(loops))
         },
         move || {
             let mut root = div().flex_col().py(style.vertical_padding);

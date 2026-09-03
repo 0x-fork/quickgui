@@ -95,6 +95,15 @@ The cursor-point surface is a separate native window, so its rows are rendered b
 the declaration's `appearance` values instead of from JavaScript. See
 [Solid 2 renderer](solid.md#declared-popover-and-context-menus).
 
+`ContextMenu.Root` also accepts the Base UI-shaped row components — `Menu.Item`, `Menu.LinkItem`,
+`Menu.CheckboxItem`, `Menu.RadioGroup` with `Menu.RadioItem`, `Menu.GroupLabel`, and
+`Menu.Separator` — as children of its trigger. The core paints a cursor-point menu in its own
+window, so those rows contribute a bounded model rather than owner-window elements: they mount
+nothing, the core owns their identity, checked state, radio-group exclusivity, and closing policy,
+and activation still reports through `onClick` and `onSelect`. Nested levels stay on the `items`
+model, because a submenu the core paints has no declared popup to gather rows from. See
+[Solid 2 renderer](solid.md#base-ui-menu-parts).
+
 ## Submenu pointer behavior
 
 Hovering a submenu row highlights it immediately and opens it after the exact
