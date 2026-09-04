@@ -235,8 +235,8 @@ export interface LinkProps
   replace?: boolean;
   /** Require an exact pathname for active styling. */
   end?: boolean;
-  activeStyle?: JSX.Style;
-  inactiveStyle?: JSX.Style;
+  activeStyle?: JSX.StyleProp;
+  inactiveStyle?: JSX.StyleProp;
   onClick?: (event: QuickGuiEvent) => void;
 }
 
@@ -260,12 +260,9 @@ export function Link(props: LinkProps): JSX.Element {
         const conditional = router.isActive(props.href, props.end)
           ? props.activeStyle
           : props.inactiveStyle;
-        return {
-          ...props.style,
-          ...conditional,
-          // A link remains interactive even when rendered inside a custom title-bar drag region.
-          appRegion: "no-drag",
-        };
+        // A style array merges left to right, so the active style layers over the base one and a
+        // link remains interactive even when rendered inside a custom title-bar drag region.
+        return [props.style, conditional, { appRegion: "no-drag" }] as JSX.StyleProp;
       },
       onClick(event: QuickGuiEvent) {
         props.onClick?.(event);

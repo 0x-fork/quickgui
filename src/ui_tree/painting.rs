@@ -91,6 +91,10 @@ pub(super) fn push_background_image(
 ///
 /// `styled_focus` is the element whose focus styles paint this frame — see
 /// `UiTree::styled_focus` — which is the focused element only while focus is visible.
+/// `focus_within` is whether the element or a descendant owns focus, and `group_style` is the
+/// overlay of the element's group styles whose groups are in their state — see
+/// `GroupScope::resolve`.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn resolved_transform(
     element: &Element,
     hovered: &HashSet<ElementId>,
@@ -98,6 +102,8 @@ pub(super) fn resolved_transform(
     dragging: Option<ElementId>,
     drag_over: Option<ElementId>,
     styled_focus: Option<ElementId>,
+    focus_within: bool,
+    group_style: Option<&ElementStateStyle>,
 ) -> (Transform2D, Point) {
     let empty = ElementStateStyle::default();
     let interaction = if drag_over == Some(element.runtime_id) {
@@ -126,19 +132,93 @@ pub(super) fn resolved_transform(
     } else {
         &empty
     };
+    let within = if focus_within {
+        &element.focus_within
+    } else {
+        &empty
+    };
+    let group = group_style.unwrap_or(&empty);
     let transform = disabled
         .transform
         .or(interaction.transform)
         .or(invalid.transform)
         .or(focus.transform)
+        .or(within.transform)
+        .or(group.transform)
         .unwrap_or(element.visual.transform);
     let origin = disabled
         .transform_origin
         .or(interaction.transform_origin)
         .or(invalid.transform_origin)
         .or(focus.transform_origin)
+        .or(within.transform_origin)
+        .or(group.transform_origin)
         .unwrap_or(element.visual.transform_origin);
     (transform, origin)
+}
+
+/// One enclosing group while the tree is walked, linked to the group outside it.
+///
+/// A member resolves its group styles against this chain: the nearest scope when it names no
+/// group, or the nearest scope carrying its name. The chain lives on the recursion's own stack
+/// frames, so groups allocate nothing per element.
+#[derive(Clone, Copy)]
+pub(super) struct GroupScope<'a> {
+    parent: Option<&'a GroupScope<'a>>,
+    name: Option<&'a str>,
+    hovered: bool,
+    /// Whether the held press, if any, is on this group or inside it.
+    pressed: bool,
+}
+
+impl<'a> GroupScope<'a> {
+    /// The scope an element's children resolve against when the element is a group.
+    pub(super) fn for_children(
+        element: &'a Element,
+        hovered: &HashSet<ElementId>,
+        pressed_path: &[ElementId],
+        parent: Option<&'a GroupScope<'a>>,
+    ) -> Option<Self> {
+        element.group.then(|| GroupScope {
+            parent,
+            name: element.group_name.as_deref(),
+            hovered: hovered.contains(&element.runtime_id),
+            pressed: pressed_path.contains(&element.runtime_id),
+        })
+    }
+
+    /// Whether the group an entry follows — the nearest, or the nearest carrying its name — is in
+    /// the entry's state this frame.
+    fn in_state(scope: Option<&GroupScope<'_>>, target: Option<&str>, state: GroupState) -> bool {
+        let mut current = scope;
+        while let Some(scope) = current {
+            if target.is_none_or(|name| scope.name == Some(name)) {
+                return match state {
+                    GroupState::Hover => scope.hovered,
+                    GroupState::Active => scope.pressed,
+                };
+            }
+            current = scope.parent;
+        }
+        false
+    }
+
+    /// Every group style whose group is in its state, laid over one another in declaration order,
+    /// or `None` when none applies this frame.
+    pub(super) fn resolve(
+        scope: Option<&GroupScope<'_>>,
+        element: &Element,
+    ) -> Option<ElementStateStyle> {
+        let mut merged: Option<ElementStateStyle> = None;
+        for entry in &element.group_styles {
+            if Self::in_state(scope, entry.target.as_deref(), entry.state) {
+                merged
+                    .get_or_insert_with(ElementStateStyle::default)
+                    .overlay(&entry.style);
+            }
+        }
+        merged
+    }
 }
 
 /// The window-space point a transform origin fraction names inside an element's border box.
@@ -366,6 +446,7 @@ pub(super) fn element_hit_region(
         || element.focusable
         || element.blocks_pointer
         || element.app_region.is_some()
+        || element.group
         || element.has_stateful_paint()
         || element.has_stateful_cursor())
     {
@@ -395,7 +476,9 @@ pub(super) fn element_hit_region(
             dragging: element.dragging.cursor_style,
             drag_over: element.drag_over.cursor_style,
         },
-        stateful: element.has_stateful_paint(),
+        // A group tracks hover for its descendants' group styles even when it paints nothing
+        // stateful itself.
+        stateful: element.has_stateful_paint() || element.group,
         blocks_pointer: element.blocks_pointer,
         app_region: element.app_region,
         order,
@@ -416,6 +499,9 @@ pub(super) fn collect_layout_hit_regions(
     dragging: Option<ElementId>,
     drag_over: Option<ElementId>,
     styled_focus: Option<ElementId>,
+    pressed_path: &[ElementId],
+    focused_path: &[ElementId],
+    groups: Option<&GroupScope<'_>>,
     parent_origin: LayoutFrame,
     parent_clip: Rect,
     viewport: Rect,
@@ -452,10 +538,20 @@ pub(super) fn collect_layout_hit_regions(
     } else {
         natural
     };
+    let focus_within = focused_path.contains(&element.runtime_id);
+    let group_style = GroupScope::resolve(groups, element);
     // Mirror the paint path: a pure translation moves the painted box, anything else transforms
     // it through a compositing group whose accumulated matrix the hit region carries.
-    let (declared_transform, transform_origin) =
-        resolved_transform(element, hovered, pressed, dragging, drag_over, styled_focus);
+    let (declared_transform, transform_origin) = resolved_transform(
+        element,
+        hovered,
+        pressed,
+        dragging,
+        drag_over,
+        styled_focus,
+        focus_within,
+        group_style.as_ref(),
+    );
     let window_transform =
         declared_transform.around(transform_origin_point(bounds, transform_origin));
     let translated = window_transform.is_translation();
@@ -570,6 +666,10 @@ pub(super) fn collect_layout_hit_regions(
         parent_origin,
     );
     child_origin.transform = group_transform;
+    // A group opens the scope its descendants resolve against, chained to the groups outside it
+    // so a member can follow a named one past the nearest.
+    let own_scope = GroupScope::for_children(element, hovered, pressed_path, groups);
+    let child_groups = own_scope.as_ref().or(groups);
     for child in &element.children {
         collect_layout_hit_regions(
             child,
@@ -584,6 +684,9 @@ pub(super) fn collect_layout_hit_regions(
             dragging,
             drag_over,
             styled_focus,
+            pressed_path,
+            focused_path,
+            child_groups,
             child_origin,
             child_clip,
             viewport,
@@ -611,6 +714,9 @@ pub(super) fn paint_element(
     dragging: Option<ElementId>,
     drag_over: Option<ElementId>,
     styled_focus: Option<ElementId>,
+    pressed_path: &[ElementId],
+    focused_path: &[ElementId],
+    groups: Option<&GroupScope<'_>>,
     scale_factor: f32,
     scene: &mut Scene,
     renderer: &mut impl TextLayoutEngine,
@@ -671,11 +777,21 @@ pub(super) fn paint_element(
     } else {
         natural
     };
+    let focus_within = focused_path.contains(&element.runtime_id);
+    let group_style = GroupScope::resolve(groups, element);
     // A subtree transform never moves layout. A pure translation is folded into the painted box
     // here — children, clips, and hit bounds follow it for free — while anything else opens a
     // compositing group below.
-    let (declared_transform, transform_origin) =
-        resolved_transform(element, hovered, pressed, dragging, drag_over, styled_focus);
+    let (declared_transform, transform_origin) = resolved_transform(
+        element,
+        hovered,
+        pressed,
+        dragging,
+        drag_over,
+        styled_focus,
+        focus_within,
+        group_style.as_ref(),
+    );
     let window_transform =
         declared_transform.around(transform_origin_point(bounds, transform_origin));
     let translated = window_transform.is_translation();
@@ -757,11 +873,19 @@ pub(super) fn paint_element(
     } else {
         &empty_state
     };
+    let focus_within_state = if focus_within {
+        &element.focus_within
+    } else {
+        &empty_state
+    };
+    let group_state = group_style.as_ref().unwrap_or(&empty_state);
     let target_fill = disabled_state
         .background
         .or(interaction_state.background)
         .or(invalid_state.background)
         .or(focus_state.background)
+        .or(focus_within_state.background)
+        .or(group_state.background)
         .or(element.visual.background)
         .unwrap_or(Color::TRANSPARENT);
     let target_border = disabled_state
@@ -769,6 +893,8 @@ pub(super) fn paint_element(
         .or(interaction_state.border_color)
         .or(invalid_state.border_color)
         .or(focus_state.border_color)
+        .or(focus_within_state.border_color)
+        .or(group_state.border_color)
         .or(element.visual.border_color)
         .unwrap_or(Color::TRANSPARENT);
     let target_border_widths = disabled_state
@@ -776,6 +902,8 @@ pub(super) fn paint_element(
         .or(interaction_state.border_width)
         .or(invalid_state.border_width)
         .or(focus_state.border_width)
+        .or(focus_within_state.border_width)
+        .or(group_state.border_width)
         .map(Insets::all)
         .unwrap_or(element.visual.border_widths);
     let target_radius = disabled_state
@@ -783,18 +911,24 @@ pub(super) fn paint_element(
         .or(interaction_state.radius)
         .or(invalid_state.radius)
         .or(focus_state.radius)
+        .or(focus_within_state.radius)
+        .or(group_state.radius)
         .unwrap_or(element.visual.radius);
     let target_gradient = disabled_state
         .background_gradient
         .or(interaction_state.background_gradient)
         .or(invalid_state.background_gradient)
         .or(focus_state.background_gradient)
+        .or(focus_within_state.background_gradient)
+        .or(group_state.background_gradient)
         .or(element.visual.background_gradient);
     let target_outline = disabled_state
         .outline
         .or(interaction_state.outline)
         .or(invalid_state.outline)
         .or(focus_state.outline)
+        .or(focus_within_state.outline)
+        .or(group_state.outline)
         .or(element.visual.outline);
     let target_shadows = disabled_state
         .shadows
@@ -802,6 +936,8 @@ pub(super) fn paint_element(
         .or(interaction_state.shadows.as_deref())
         .or(invalid_state.shadows.as_deref())
         .or(focus_state.shadows.as_deref())
+        .or(focus_within_state.shadows.as_deref())
+        .or(group_state.shadows.as_deref())
         .or(element.visual.shadows.as_deref())
         .unwrap_or_default();
     let target_opacity = disabled_state
@@ -809,6 +945,8 @@ pub(super) fn paint_element(
         .or(interaction_state.opacity)
         .or(invalid_state.opacity)
         .or(focus_state.opacity)
+        .or(focus_within_state.opacity)
+        .or(group_state.opacity)
         .unwrap_or(element.visual.opacity)
         .clamp(0.0, 1.0);
     let target_state_text_color = disabled_state
@@ -816,6 +954,8 @@ pub(super) fn paint_element(
         .or(interaction_state.text_color)
         .or(invalid_state.text_color)
         .or(focus_state.text_color)
+        .or(focus_within_state.text_color)
+        .or(group_state.text_color)
         .or(inherited_state_text_color);
     let sampled_transition = element.transition.as_ref().map(|config| {
         let text_fallback = sane_transition_color(element.resolved_typography.color, Color::BLACK);
@@ -1542,6 +1682,10 @@ pub(super) fn paint_element(
         parent_origin,
     );
     child_origin.transform = group_transform;
+    // A group opens the scope its descendants resolve against, chained to the groups outside it
+    // so a member can follow a named one past the nearest.
+    let own_scope = GroupScope::for_children(element, hovered, pressed_path, groups);
+    let child_groups = own_scope.as_ref().or(groups);
     for child in &element.children {
         paint_element(
             child,
@@ -1554,6 +1698,9 @@ pub(super) fn paint_element(
             dragging,
             drag_over,
             styled_focus,
+            pressed_path,
+            focused_path,
+            child_groups,
             scale_factor,
             scene,
             renderer,

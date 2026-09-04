@@ -7,6 +7,9 @@ import {
   MAX_OPTIONS_JSON_BYTES,
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
+  MAX_GROUP_STYLES_PER_ELEMENT,
+  MAX_HOVER_GROUP_NAME_BYTES,
+  MAX_STATE_STYLE_JSON_BYTES,
   MAX_STYLE_DECLARATION_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativeNodeTag,
@@ -2634,6 +2637,270 @@ describe("declared option sources, virtual collections, and stateful fields", ()
       "2px solid #60a5fa",
     );
     expect(tile.properties.get(PropertyCode.FocusTransform)).toBe("scale(1.01)");
+  });
+
+  test("projects nested interaction states as one bounded declaration per state", () => {
+    const decode = (
+      node: { properties: Map<PropertyCode, unknown> },
+      code: PropertyCode,
+    ) => JSON.parse(String(node.properties.get(code)));
+    const tile = createComponent(Button, {
+      style: {
+        backgroundColor: "#ffffff",
+        hover: {
+          background: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
+          color: "#f8fafc",
+          borderColor: "#93c5fd",
+          borderWidth: "2px",
+          borderRadius: 12,
+          outline: "2px dashed #93c5fd",
+          boxShadow: "0 4px 12px -2px #0000003d",
+          opacity: 0.9,
+          cursor: "pointer",
+          transform: "scale(1.03) translate(0, -2px)",
+          transformOrigin: "left top",
+        },
+        active: {
+          backgroundColor: "#0b1220",
+          transform: { a: 0.98, b: 0, c: 0, d: 0.98, tx: 0, ty: 0 },
+        },
+        focus: { outline: "2px solid #60a5fa" },
+        disabled: { opacity: 0.5, cursor: "not-allowed" },
+        invalid: { borderColor: "#ef4444" },
+        dragging: { opacity: 0.6 },
+        dragOver: { background: "#eff6ff", outline: "none", boxShadow: "none" },
+        groupHover: { group: "sidebar", opacity: 1 },
+        groupActive: [
+          { opacity: 0.8 },
+          { group: "list", transform: "scale(0.98)" },
+        ],
+        focusWithin: { outline: "1px solid #93c5fd" },
+      },
+      children: "Apply",
+    });
+
+    expect(decode(tile, PropertyCode.HoverStyle)).toEqual({
+      background: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
+      color: parseColor("#f8fafc"),
+      borderColor: parseColor("#93c5fd"),
+      borderWidth: 2,
+      borderRadius: 12,
+      outline: "2px dashed #93c5fd",
+      boxShadow: [
+        {
+          offsetX: 0,
+          offsetY: 4,
+          blurRadius: 12,
+          spreadRadius: -2,
+          color: parseColor("#0000003d"),
+          inset: false,
+        },
+      ],
+      opacity: 0.9,
+      cursor: "pointer",
+      transform: "scale(1.03) translate(0, -2px)",
+      transformOrigin: "left top",
+    });
+    expect(decode(tile, PropertyCode.ActiveStyle)).toEqual({
+      backgroundColor: parseColor("#0b1220"),
+      transform: JSON.stringify({ a: 0.98, b: 0, c: 0, d: 0.98, tx: 0, ty: 0 }),
+    });
+    expect(decode(tile, PropertyCode.FocusStyle)).toEqual({
+      outline: "2px solid #60a5fa",
+    });
+    expect(decode(tile, PropertyCode.DisabledStyle)).toEqual({
+      opacity: 0.5,
+      cursor: "not-allowed",
+    });
+    expect(decode(tile, PropertyCode.InvalidStyle)).toEqual({
+      borderColor: parseColor("#ef4444"),
+    });
+    expect(decode(tile, PropertyCode.DraggingStyle)).toEqual({ opacity: 0.6 });
+    // `none` travels as an explicit removal, not as an absent declaration.
+    expect(decode(tile, PropertyCode.DragOverStyle)).toEqual({
+      backgroundColor: parseColor("#eff6ff"),
+      outline: "none",
+      boxShadow: [],
+    });
+    expect(decode(tile, PropertyCode.GroupHoverStyle)).toEqual({
+      group: "sidebar",
+      opacity: 1,
+    });
+    // A group state with several entries travels as a list, one entry per group it follows.
+    expect(decode(tile, PropertyCode.GroupActiveStyle)).toEqual([
+      { opacity: 0.8 },
+      { group: "list", transform: "scale(0.98)" },
+    ]);
+    expect(decode(tile, PropertyCode.FocusWithinStyle)).toEqual({
+      outline: "1px solid #93c5fd",
+    });
+    // The base style and the flat legacy codes are untouched by nested states.
+    expect(tile.properties.get(PropertyCode.BackgroundColor)).toBe(
+      parseColor("#ffffff"),
+    );
+    expect(tile.properties.has(PropertyCode.HoverBackgroundColor)).toBe(false);
+  });
+
+  test("tells a nested state style apart from the flag that shares its name", () => {
+    const [style, setStyle] = createSignal<Record<string, unknown>>({
+      disabled: { opacity: 0.5 },
+      hover: { opacity: 0.9 },
+    });
+    const button = createComponent(Button, {
+      disabled: true,
+      get style() {
+        return style();
+      },
+      children: "Save",
+    });
+    expect(button.properties.get(PropertyCode.Disabled)).toBe(true);
+    expect(
+      JSON.parse(String(button.properties.get(PropertyCode.DisabledStyle))),
+    ).toEqual({ opacity: 0.5 });
+
+    // Withdrawing the state styles clears their declarations without touching the flag.
+    setStyle({});
+    flush();
+    expect(button.properties.has(PropertyCode.DisabledStyle)).toBe(false);
+    expect(button.properties.has(PropertyCode.HoverStyle)).toBe(false);
+    expect(button.properties.get(PropertyCode.Disabled)).toBe(true);
+  });
+
+  test("marks hover groups with `group`, named or not, apart from option group labels", () => {
+    const row = createComponent(View, { group: true });
+    expect(row.properties.get(PropertyCode.HoverGroup)).toBe(true);
+    expect(row.properties.has(PropertyCode.Group)).toBe(false);
+
+    const sidebar = createComponent(View, { group: "sidebar" });
+    expect(sidebar.properties.get(PropertyCode.HoverGroup)).toBe("sidebar");
+    expect(sidebar.properties.has(PropertyCode.Group)).toBe(false);
+    setProp(sidebar, "group", false);
+    expect(sidebar.properties.has(PropertyCode.HoverGroup)).toBe(false);
+    expect(() =>
+      setProp(sidebar, "group", "x".repeat(MAX_HOVER_GROUP_NAME_BYTES + 1)),
+    ).toThrow("hover group names");
+    expect(() => setProp(sidebar, "group", " ")).toThrow("cannot be empty");
+
+    // An option-like part's `group` is its option group label, never a hover group.
+    const option = createComponent(Select.Option, {
+      partValue: "apple",
+      label: "Apple",
+      group: "Fruit",
+    });
+    expect(option.properties.get(PropertyCode.Group)).toBe("Fruit");
+    expect(option.properties.has(PropertyCode.HoverGroup)).toBe(false);
+  });
+
+  test("refuses layout, unpaintable, and unbounded declarations inside a state", () => {
+    const node = createElement("view");
+    expect(() => setProp(node, "hover", { padding: 12 })).toThrow("paint-only");
+    expect(() => setProp(node, "hover", { borderRadius: "50%" })).toThrow(
+      "logical pixels",
+    );
+    expect(() =>
+      setProp(node, "hover", { outline: "2px solid chartreuse" }),
+    ).toThrow("unsupported QuickGUI color");
+    expect(() => setProp(node, "groupHover", { cursor: "pointer" })).toThrow(
+      "cannot declare a cursor",
+    );
+    expect(() => setProp(node, "hover", { group: "sidebar" })).toThrow(
+      "only `groupHover` and `groupActive`",
+    );
+    expect(() => setProp(node, "focusWithin", { cursor: "pointer" })).toThrow(
+      "cannot declare a cursor",
+    );
+    expect(() =>
+      setProp(
+        node,
+        "groupHover",
+        Array.from({ length: MAX_GROUP_STYLES_PER_ELEMENT + 1 }, (_, index) => ({
+          group: `g${index}`,
+          opacity: 1,
+        })),
+      ),
+    ).toThrow("follows at most");
+    expect(() =>
+      setProp(node, "hover", {
+        transform: `a${"b".repeat(MAX_STYLE_DECLARATION_BYTES)}`,
+      }),
+    ).toThrow("style declarations");
+    expect(() =>
+      setProp(node, "hover", { cursor: "x".repeat(MAX_STATE_STYLE_JSON_BYTES) }),
+    ).toThrow("bounded to");
+    // An empty state declares nothing at all.
+    setProp(node, "hover", {});
+    expect(node.properties.has(PropertyCode.HoverStyle)).toBe(false);
+  });
+
+  test("accepts style arrays that merge left to right and skip falsy entries", () => {
+    const [selected, setSelected] = createSignal(false);
+    const card = {
+      padding: 12,
+      backgroundColor: "#ffffff",
+      hover: { opacity: 0.9, transform: "scale(1.01)" },
+    };
+    const node = createComponent(View, {
+      get style() {
+        return [
+          card,
+          selected() && { backgroundColor: "#eff6ff", hover: { opacity: 1 } },
+          null,
+          [undefined, { borderRadius: 8 }],
+        ];
+      },
+    });
+    const hover = () =>
+      JSON.parse(String(node.properties.get(PropertyCode.HoverStyle)));
+    expect(node.properties.get(PropertyCode.Padding)).toBe(12);
+    expect(node.properties.get(PropertyCode.BackgroundColor)).toBe(
+      parseColor("#ffffff"),
+    );
+    expect(node.properties.get(PropertyCode.BorderRadius)).toBe(8);
+    expect(hover()).toEqual({ opacity: 0.9, transform: "scale(1.01)" });
+
+    setSelected(true);
+    flush();
+    expect(node.properties.get(PropertyCode.BackgroundColor)).toBe(
+      parseColor("#eff6ff"),
+    );
+    // A later state object adds to and overrides keys of an earlier one instead of replacing it.
+    expect(hover()).toEqual({ opacity: 1, transform: "scale(1.01)" });
+
+    setSelected(false);
+    flush();
+    expect(node.properties.get(PropertyCode.BackgroundColor)).toBe(
+      parseColor("#ffffff"),
+    );
+    expect(hover()).toEqual({ opacity: 0.9, transform: "scale(1.01)" });
+    expect(node.properties.get(PropertyCode.BorderRadius)).toBe(8);
+  });
+
+  test("flattenStyle exposes the array merge and a later null removes a state", () => {
+    expect(
+      solid.flattenStyle([
+        { padding: 4, hover: { opacity: 1 } },
+        false,
+        [{ padding: 8 }, { hover: null }],
+      ]),
+    ).toEqual({ padding: 8, hover: null });
+    // Group entries for the same group merge; entries for different groups accumulate.
+    expect(
+      solid.flattenStyle([
+        { groupHover: { opacity: 1 } },
+        { groupHover: { group: "sidebar", opacity: 0.6 } },
+        { groupHover: [{ opacity: 0.9 }, { group: "sidebar", transform: "scale(1.02)" }] },
+      ]),
+    ).toEqual({
+      groupHover: [
+        { opacity: 0.9 },
+        { group: "sidebar", opacity: 0.6, transform: "scale(1.02)" },
+      ],
+    });
+    expect(
+      solid.flattenStyle([{ groupHover: { opacity: 1 } }, { groupHover: null }]),
+    ).toEqual({ groupHover: null });
+    expect(solid.flattenStyle(undefined)).toEqual({});
+    expect(solid.flattenStyle({ color: "#ffffff" })).toEqual({ color: "#ffffff" });
   });
 
   test("projects sticky positioning, horizontal scrolling, and scroll snapping", () => {

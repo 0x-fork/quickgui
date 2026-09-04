@@ -67,10 +67,11 @@ CSS Grid 形式のトラックを使って、2 次元レイアウトを作れま
 <Button
   style={{
     backgroundColor: "#ffffff",
-    hoverBackgroundColor: "#f4f4f5",
-    activeBackgroundColor: "#e4e4e7",
-    focusOutline: "2px solid #f97316",
     outlineOffset: 2,
+    hover: { backgroundColor: "#f4f4f5" },
+    active: { backgroundColor: "#e4e4e7" },
+    focus: { outline: "2px solid #f97316" },
+    disabled: { opacity: 0.5 },
   }}
 >
   <Text>Continue</Text>

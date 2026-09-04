@@ -1,5 +1,5 @@
 import { app, Window } from "@quickgui/native";
-import { Text, View, createRenderer } from "@quickgui/solid";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { For } from "solid-js";
 
 await app.whenReady();
@@ -326,10 +326,11 @@ function Transforms() {
   } as const;
   return (
     <Panel title="Transforms and blending">
-      <View style={{ ...card, transform: "rotate(-3deg)" }}>
+      {/* A style array merges left to right, so a variant is one entry rather than a spread. */}
+      <View style={[card, { transform: "rotate(-3deg)" }]}>
         <Text style={{ fontSize: 12, color: ink }}>rotate(-3deg)</Text>
       </View>
-      <View style={{ ...card, transform: "skew(8deg, 0)", transformOrigin: "left center" }}>
+      <View style={[card, { transform: "skew(8deg, 0)", transformOrigin: "left center" }]}>
         <Text style={{ fontSize: 12, color: ink }}>skew from the left edge</Text>
       </View>
       <View
@@ -337,9 +338,11 @@ function Transforms() {
           ...card,
           transform: "scale(0.96)",
           transition: { property: "background-color", duration: "120ms", easing: "ease-out" },
-          hoverTransform: "scale(1.03) translate(0, -2px)",
-          hoverBackground: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
-          hoverOutline: "2px solid #93c5fd",
+          hover: {
+            transform: "scale(1.03) translate(0, -2px)",
+            background: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
+            outline: "2px solid #93c5fd",
+          },
           outlineOffset: 3,
           cursor: "pointer",
         }}
@@ -371,6 +374,95 @@ function Transforms() {
         <View
           style={{ flex: 1, borderRadius: 10, backgroundColor: "#94a3b8", mixBlendMode: "overlay" }}
         />
+      </View>
+    </Panel>
+  );
+}
+
+/**
+ * Interaction states the core paints on its own: a hover group revealing its member, a drop zone
+ * lighting up for a compatible payload, and a disabled control dimming itself.
+ */
+function InteractionStates() {
+  const rowStyle = {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    height: 40,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 10,
+    backgroundColor: "#1b2434",
+    transition: "background-color 120ms",
+    hover: { backgroundColor: "#243047" },
+    // Tab to a row's button and the row itself shows the ring.
+    focusWithin: { outline: "1px solid #93c5fd" },
+  } as const;
+  const actionStyle = {
+    height: 26,
+    paddingLeft: 10,
+    paddingRight: 10,
+    borderRadius: 7,
+    backgroundColor: "#2b3a5c",
+    opacity: 0,
+    transition: "opacity 120ms, background-color 120ms",
+    groupHover: { opacity: 1 },
+    groupActive: { opacity: 0.7 },
+    hover: { backgroundColor: "#3b82f6", transform: "translate(0, -1px)" },
+    active: { backgroundColor: "#1d4ed8", transform: "scale(0.97)" },
+    focus: { outline: "2px solid #93c5fd" },
+    disabled: { opacity: 0.35, cursor: "not-allowed" },
+  } as const;
+  return (
+    <Panel title="Interaction states">
+      <View group="list" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <For each={["Quarterly report", "Roadmap draft"]}>
+          {(title, index) => (
+            <View group style={rowStyle}>
+              <Text style={{ flex: 1, fontSize: 13, color: ink }}>{title}</Text>
+              {/* Follows the whole list, not the row: every hint shows while the list is hovered. */}
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: muted,
+                  opacity: 0,
+                  transition: "opacity 120ms",
+                  groupHover: { group: "list", opacity: 1 },
+                }}
+              >
+                {`⌘${index() + 1}`}
+              </Text>
+              <Button style={actionStyle}>
+                <Text style={{ fontSize: 12, color: ink }}>Rename</Text>
+              </Button>
+              <Button disabled style={actionStyle}>
+                <Text style={{ fontSize: 12, color: ink }}>Share</Text>
+              </Button>
+            </View>
+          )}
+        </For>
+      </View>
+      <View
+        dropKinds={["files", "local"]}
+        draggable={{ id: "swatch", text: "swatch" }}
+        style={{
+          height: 54,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderStyle: "dashed",
+          borderColor: panelBorder,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "background-color 120ms, border-color 120ms",
+          dragging: { opacity: 0.6 },
+          dragOver: { borderColor: "#38bdf8", background: "#38bdf826" },
+        }}
+      >
+        <Text style={{ fontSize: 12, color: muted }}>
+          hover a row to reveal Rename; drag a file here, or drag this zone itself
+        </Text>
       </View>
     </Panel>
   );
@@ -519,6 +611,7 @@ function StylingExample() {
         <BordersAndOutlines />
         <Filters />
         <Transforms />
+        <InteractionStates />
         <StickyHeaders />
         <ScrollSnap />
       </View>

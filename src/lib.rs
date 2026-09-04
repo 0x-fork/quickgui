@@ -207,11 +207,11 @@ pub use element::{
     BackgroundPosition, BackgroundRepeat, BackgroundSize, Element, ElementId, ElementStateStyle,
     FocusHandle, GridTrack, IntoElement, LayoutBoundsHandle, MAX_BACKGROUND_IMAGE_TILES,
     MAX_BOX_SHADOWS_PER_ELEMENT, MAX_CONTAINER_QUERIES_PER_WINDOW, MAX_CONTAINER_QUERY_DEPTH,
-    MAX_CORNER_RADIUS, MAX_GRID_TRACKS, MAX_KEY_LISTENERS_PER_ELEMENT,
-    MAX_MOUSE_LISTENERS_PER_ELEMENT, MAX_OUTLINE_OFFSET, MAX_OUTLINE_WIDTH, Outline,
-    ResolvedAnchorPlacement, ToggleState, UserSelect, Visibility, anchor_placement, button, canvas,
-    container_query, custom_shader, div, form, img, overlay, path, styled_text_area,
-    styled_text_input, submit_button, svg, text, text_area, text_input,
+    MAX_CORNER_RADIUS, MAX_GRID_TRACKS, MAX_GROUP_STYLES_PER_ELEMENT, MAX_HOVER_GROUP_NAME_BYTES,
+    MAX_KEY_LISTENERS_PER_ELEMENT, MAX_MOUSE_LISTENERS_PER_ELEMENT, MAX_OUTLINE_OFFSET,
+    MAX_OUTLINE_WIDTH, Outline, ResolvedAnchorPlacement, ToggleState, UserSelect, Visibility,
+    anchor_placement, button, canvas, container_query, custom_shader, div, form, img, overlay,
+    path, styled_text_area, styled_text_input, submit_button, svg, text, text_area, text_input,
 };
 pub use entity::{
     Entity, EntityId, EventEmitter, MAX_ENTITY_EVENT_DELIVERIES_PER_TURN,

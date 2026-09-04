@@ -1492,14 +1492,119 @@ bounds are described in [graphics](graphics.md). Transforms are paint-only: layo
 reported bounds never move, and pointer positions are inverse-mapped so clicks follow the painted
 pixels.
 
-Hover, active, and focus variants exist for exactly the three things the core's `ElementStateStyle`
-can swap — the gradient, the outline ring, and the transform — alongside the existing colors:
+### Interaction states
 
-| State | Props |
-| --- | --- |
-| hover | `hoverBackgroundColor`, `hoverColor`, `hoverBackground`, `hoverOutline`, `hoverTransform` |
-| active | `activeBackgroundColor`, `activeColor`, `activeBackground`, `activeOutline`, `activeTransform` |
-| focus | `focusBackgroundColor`, `focusColor`, `focusBackground`, `focusOutline`, `focusTransform` — painted only while focus is visible, like CSS `:focus-visible` |
+Interaction states are nested objects inside `style`. Each one is a paint-only override the Rust
+core swaps in on its own — which element is hovered, pressed, visibly focused, disabled, invalid,
+dragging, a compatible drop target, or inside a hovered group is never asked of JavaScript — and
+each accepts exactly what the core's `ElementStateStyle` can carry:
+
+| State | Paints while | Needs |
+| --- | --- | --- |
+| `hover` | the pointer rests on the element | |
+| `active` | a pointer press on the element is held | |
+| `focus` | the element owns visible keyboard focus, like CSS `:focus-visible` | a focusable element |
+| `disabled` | the `disabled` prop is set | |
+| `invalid` | the `invalid` prop is set | |
+| `dragging` | the element is the source of an active drag | `draggable` |
+| `dragOver` | a payload the element accepts is over it | `dropKinds` |
+| `groupHover` | the nearest ancestor declared `group`, or the one an entry names, is hovered, like Tailwind's `group-hover` | a `group` ancestor |
+| `groupActive` | a press inside that group is held, like Tailwind's `group-active` | a `group` ancestor |
+| `focusWithin` | the element or a descendant owns keyboard focus, like CSS `:focus-within`, whether or not that focus is visible | |
+
+A state may declare `background`/`backgroundColor`, `color`, `borderColor`, `borderWidth`,
+`borderRadius`, `outline`, `boxShadow`, `opacity`, `cursor`, `transform`, and `transformOrigin`.
+Anything else — padding, a size, a font — throws a `TypeError`, because a state never relayouts.
+`outline: "none"` and `boxShadow: "none"` remove the base ring or shadows for that state, a state
+outline uses the element's own `outlineOffset`, and colors are validated and packed in JavaScript
+exactly as the base properties are.
+
+```tsx
+<View
+  group
+  style={{
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 8,
+    borderRadius: 8,
+    transition: "background-color 120ms",
+    hover: { backgroundColor: "#f4f4f5" },
+  }}
+>
+  <Text style={{ flex: 1 }}>Quarterly report</Text>
+  <Button
+    style={{
+      opacity: 0,
+      transition: "opacity 120ms, background-color 120ms",
+      groupHover: { opacity: 1 },
+      hover: { backgroundColor: "#e4e4e7", transform: "translate(0, -1px)" },
+      active: { backgroundColor: "#d4d4d8", transform: "scale(0.98)" },
+      focus: { outline: "2px solid #60a5fa" },
+      disabled: { opacity: 0.4, cursor: "not-allowed" },
+    }}
+  >
+    Rename
+  </Button>
+</View>
+
+<View
+  dropKinds={["files"]}
+  onFilesDropped={(event) => open(dropEventFromEvent(event)?.paths ?? [])}
+  style={{
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    dragOver: { borderColor: "#2563eb", background: "#eff6ff" },
+  }}
+/>
+```
+
+States cascade the way CSS does. Within one element, `disabled` wins over the interaction state,
+which wins over `invalid`, then `focus`, then `focusWithin`, then the group states, then the base
+style; among the interaction states `dragOver` beats `dragging`, which beats `active`, which beats
+`hover`. Because the group states sit beneath the element's own states, the revealed button above
+keeps its `groupHover` opacity while the pointer rests on it and its own `hover` only changes the
+fill. Group states layer in declaration order with `groupActive` always over `groupHover`, so a
+held press wins over the hover beneath it.
+
+`group` marks the hover group. It counts as hovered wherever the pointer rests inside its bounds —
+over its own padding or over any descendant, interactive or not — unless a surface above it consumes
+the pointer, as a dismissible overlay or a captured pointer listener does. Nested groups re-anchor
+their own descendants: an unnamed `groupHover` follows the nearest group. To follow a group beyond
+the nearest one, name it — `group="sidebar"` — and declare `groupHover: { group: "sidebar", … }`,
+Tailwind's `group/sidebar` and `group-hover/sidebar`. A named group is still the nearest group for
+members that name none, and a member naming a group no ancestor carries never paints. A group state
+may list several entries — `groupHover: [{ opacity: 1 }, { group: "sidebar", opacity: 0.6 }]` —
+each following its own group, layered in order with later entries winning where they overlap; in a
+style array, entries for the same group merge and entries for different groups accumulate. One
+element follows at most `MAX_GROUP_STYLES_PER_ELEMENT` (8) group states. `groupHover`,
+`groupActive`, and `focusWithin` cannot declare a `cursor`, because the pointer is over some other
+element. Names are bounded by `MAX_HOVER_GROUP_NAME_BYTES` (256). The `group` prop of `Select.Item`,
+`Combobox.Option`, and the other option parts is that option's group label, which those components
+declare separately.
+
+```tsx
+<View group="sidebar" style={{ display: "flex", flexDirection: "column" }}>
+  <For each={rows()}>
+    {(row) => (
+      <View group style={{ display: "flex", flexDirection: "row", gap: 8 }}>
+        <Text style={{ flex: 1 }}>{row.title}</Text>
+        {/* Follows the row it sits in, and dims while a press inside the row is held. */}
+        <Button style={{ opacity: 0, groupHover: { opacity: 1 }, groupActive: { opacity: 0.7 } }}>
+          Rename
+        </Button>
+        {/* Follows the whole sidebar instead of its row. */}
+        <Text style={{ opacity: 0, groupHover: { group: "sidebar", opacity: 0.6 } }}>
+          ⌘{row.index}
+        </Text>
+      </View>
+    )}
+  </For>
+</View>
+```
 
 Focus styles follow focus visibility. A pointer press that lands focus — a click on a button, an
 accordion trigger, a tab — paints none of them, because the pointer already shows what was
@@ -1514,23 +1619,29 @@ styles are gated.
 ```tsx
 <Button
   style={{
-    hoverBackground: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
-    hoverTransform: "scale(1.03) translate(0, -2px)",
-    focusOutline: "2px solid #60a5fa",
     outlineOffset: 3,
+    hover: {
+      background: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
+      transform: "scale(1.03) translate(0, -2px)",
+    },
+    focus: { outline: "2px solid #60a5fa" },
   }}
 >
   Publish
 </Button>
 ```
 
-A state outline uses the element's own `outlineOffset`, because that is the one offset the core's
-state style carries. Gradients are swapped rather than interpolated: only the transitionable solid
-background, border, radius, shadow, opacity, and text color animate.
+Gradients are swapped rather than interpolated: only the transitionable solid background, border,
+radius, shadow, opacity, and text color animate through the element's `transition`.
+
+The flat `hoverBackgroundColor`, `hoverColor`, `hoverBackground`, `hoverOutline`, and
+`hoverTransform` names, and their `active*` and `focus*` counterparts, still work and overlay the
+nested form, but they are deprecated: the nested objects cover every property the core can swap and
+every state it tracks.
 
 Every declaration on this page is bounded before it crosses N-API. A gradient, filter, transform,
 outline, or text-shadow string past `MAX_STYLE_DECLARATION_BYTES` (4 096) throws a `TypeError` in
-JavaScript, and a declaration the Rust grammar does not cover — an unknown filter function, a color
+JavaScript, a nested state past `MAX_STATE_STYLE_JSON_BYTES` (16 KiB) throws a `RangeError`, and a declaration the Rust grammar does not cover — an unknown filter function, a color
 outside the supported CSS grammar, an unparsable angle — declares nothing at all instead of reaching
 a core constructor. Colors inside these strings accept the same `#rgb`, `#rrggbb`, `#rrggbbaa`,
 `rgb()`, `rgba()`, `transparent`, `black`, and `white` grammar the renderer packs everywhere else.
@@ -1563,8 +1674,19 @@ than text is not bridged yet; the retained mutation protocol has no detached-sub
 
 All Solid host components are intentionally unstyled. Their `style` prop uses web-shaped names
 for the currently bridged QuickGUI layout, text, paint, overflow, cursor, positioning, and
-`appRegion` properties. Native events are flushed at a Solid 2 event boundary before the retained
+`appRegion` properties, plus the nested [interaction states](#interaction-states). Native events are flushed at a Solid 2 event boundary before the retained
 mutation batch is submitted.
+
+`style` also accepts an array, the React Native way: entries merge left to right and later values
+win, `false`, `null`, and `undefined` entries are skipped, and nested arrays flatten, so a
+conditional style is one expression rather than a spread. A nested state merges one level deep — a
+later `hover` adds to or overrides individual keys of an earlier `hover` instead of replacing it —
+and a later `hover: null` removes it. `flattenStyle` exposes the same merge for components that
+compose styles of their own, and `Link` composes its `activeStyle` this way.
+
+```tsx
+<View style={[card, selected() && selectedCard, props.style]} />
+```
 
 Borders can be set per edge, and shadows use CSS `box-shadow` order and syntax:
 
@@ -1692,7 +1814,8 @@ they accept so the core can decide compatibility while the pointer is still movi
 An application-local drop reports the declared `id`, the originating node, and whether the payload
 stayed inside this window, crossed between QuickGUI windows, or came from another application. A
 `files` drop reports absolute paths. `onDragOver` is not bound: the Rust core reports drag hovering
-on the window rather than through a per-element listener.
+on the window rather than through a per-element listener, and a drop target paints itself while a
+compatible payload is over it through the `dragOver` [interaction state](#interaction-states).
 
 Physical `code` values are not reported. The core normalizes keys to a layout-independent command
 identity plus the printable character, which is what accelerators and keymaps match on.

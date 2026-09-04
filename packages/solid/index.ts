@@ -26,6 +26,9 @@ import {
   MAX_KEYMAP_JSON_BYTES,
   MAX_MENU_JSON_BYTES,
   MAX_MENU_LINK_BYTES,
+  MAX_GROUP_STYLES_PER_ELEMENT,
+  MAX_HOVER_GROUP_NAME_BYTES,
+  MAX_STATE_STYLE_JSON_BYTES,
   MAX_STYLE_DECLARATION_BYTES,
   MAX_TOOLTIP_TEXT_BYTES,
   NativeNode,
@@ -89,6 +92,8 @@ const properties: Record<string, PropertyEntry> = {
   marginLeft: { code: PropertyCode.MarginLeft },
   backgroundColor: { code: PropertyCode.BackgroundColor, color: true },
   color: { code: PropertyCode.Color, color: true },
+  // Flat legacy state names. The nested `hover`, `active`, and `focus` objects are canonical; the
+  // Rust binding overlays these on top of them so a partial migration paints what both declared.
   hoverBackgroundColor: {
     code: PropertyCode.HoverBackgroundColor,
     color: true,
@@ -307,7 +312,12 @@ const properties: Record<string, PropertyEntry> = {
   firstWeekday: { code: PropertyCode.FirstWeekday },
   rowHeight: { code: PropertyCode.RowHeight },
   headerHeight: { code: PropertyCode.HeaderHeight },
-  group: { code: PropertyCode.Group, normalize: normalizeComponentValue },
+  // An option-like part's group label. The parts route their own `group` prop here so the
+  // node-level `group` keeps Tailwind's hover-group meaning.
+  optionGroup: {
+    code: PropertyCode.Group,
+    normalize: normalizeComponentValue,
+  },
   editing: { code: PropertyCode.Editing, normalize: normalizeCollectionJson },
   disclosure: { code: PropertyCode.Disclosure },
   loadingLabel: { code: PropertyCode.LoadingLabel },
@@ -397,7 +407,7 @@ const properties: Record<string, PropertyEntry> = {
   transformOrigin: { code: PropertyCode.TransformOrigin },
   mixBlendMode: { code: PropertyCode.MixBlendMode },
 
-  // State styling the core's own `ElementStateStyle` supports.
+  // Flat legacy state styling; `hover: { outline, transform }` and friends are canonical.
   hoverOutline: {
     code: PropertyCode.HoverOutline,
     normalize: normalizeStyleDeclaration,
@@ -732,6 +742,29 @@ function setProperty(
     );
     return;
   }
+  if (name === "group") {
+    // Tailwind's group marker: `true` opens an unnamed group and a string names one for
+    // `groupHover: { group }` and `groupActive: { group }`. Option-like parts route their own
+    // group label elsewhere.
+    setNativeProperty(
+      node,
+      PropertyCode.HoverGroup,
+      typeof value === "string"
+        ? normalizeHoverGroupName(value)
+        : value === true
+          ? true
+          : null,
+    );
+    return;
+  }
+  const stateCode = stateStyleCodes[name];
+  if (
+    stateCode !== undefined &&
+    isStateStyleDeclaration(name, value, previous)
+  ) {
+    setNativeProperty(node, stateCode, encodeStateStyle(name, value));
+    return;
+  }
   const entry = properties[name];
   if (!entry) return;
   const normalized = entry.normalize
@@ -762,13 +795,79 @@ function setMatchContents(node: NativeNode, value: PropertyInput): void {
   );
 }
 
+/**
+ * Flatten a `style` prop — one object, or an array of objects and falsy entries nested to any
+ * depth — into the single object the renderer diffs, the React Native way: entries merge left to
+ * right and later values win, so a conditional style is one expression. A nested interaction
+ * state merges one level deep, so a later `hover` adds to or overrides individual keys of an
+ * earlier `hover` instead of replacing it; a later `hover: null` removes it.
+ */
+export function flattenStyle(style: JSX.StyleProp): JSX.Style {
+  const flattened: Record<string, unknown> = {};
+  mergeStyleInto(flattened, style);
+  return flattened as JSX.Style;
+}
+
+function mergeStyleInto(target: Record<string, unknown>, style: unknown): void {
+  if (Array.isArray(style)) {
+    for (const entry of style) mergeStyleInto(target, entry);
+    return;
+  }
+  // `false`, `null`, and `undefined` entries are skipped, as is anything that is not a style.
+  if (!isRecord(style)) return;
+  for (const [name, value] of Object.entries(style)) {
+    const current = target[name];
+    if (!(name in stateStyleCodes) || !isStateEntries(name, value)) {
+      target[name] = value;
+    } else if (!isStateEntries(name, current)) {
+      target[name] = value;
+    } else if (groupStates.has(name)) {
+      target[name] = mergeGroupStateEntries(current, value);
+    } else {
+      target[name] = { ...(current as object), ...(value as object) };
+    }
+  }
+}
+
+/** Whether a value is a state declaration that can be merged into: an object, or a group list. */
+function isStateEntries(name: string, value: unknown): boolean {
+  return isRecord(value) || (groupStates.has(name) && Array.isArray(value));
+}
+
+/**
+ * Merge two group-state declarations: entries following the same group — both unnamed, or both
+ * naming the same one — merge key by key, and entries following different groups accumulate, so a
+ * style array can add a second group to follow without losing the first.
+ */
+function mergeGroupStateEntries(current: unknown, value: unknown): unknown {
+  const entries = groupStateEntries(current);
+  for (const entry of groupStateEntries(value)) {
+    const index = entries.findIndex(
+      (existing) => existing.group === entry.group,
+    );
+    if (index === -1) entries.push(entry);
+    else entries[index] = { ...entries[index], ...entry };
+  }
+  return entries.length === 1 ? entries[0] : entries;
+}
+
+function groupStateEntries(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.filter(isRecord).map((entry) => ({ ...entry }));
+  }
+  return isRecord(value) ? [{ ...value }] : [];
+}
+
 function setStyle(
   node: NativeNode,
   value: PropertyInput,
   previous: PropertyInput,
 ): void {
-  const next = isRecord(value) ? value : {};
-  const old = isRecord(previous) ? previous : {};
+  const next = flattenStyle(value as JSX.StyleProp) as Record<string, unknown>;
+  const old = flattenStyle(previous as JSX.StyleProp) as Record<
+    string,
+    unknown
+  >;
   for (const name of Object.keys(old)) {
     if (!(name in next)) setProperty(node, name, null, old[name]);
   }
@@ -841,6 +940,242 @@ function setBackground(
 
 function isGradient(value: string): boolean {
   return /(?:^|\s)(?:linear|radial|conic)-gradient\(/.test(value.trim());
+}
+
+/**
+ * Property codes for the nested interaction-state objects, one bounded JSON declaration each.
+ *
+ * Every state is a declaration the core resolves on its own: which element is hovered, pressed,
+ * visibly focused, disabled, invalid, dragging, a compatible drop target, or inside a hovered
+ * group is never asked of JavaScript.
+ */
+const stateStyleCodes: Record<string, PropertyCode> = {
+  hover: PropertyCode.HoverStyle,
+  active: PropertyCode.ActiveStyle,
+  focus: PropertyCode.FocusStyle,
+  disabled: PropertyCode.DisabledStyle,
+  invalid: PropertyCode.InvalidStyle,
+  dragging: PropertyCode.DraggingStyle,
+  dragOver: PropertyCode.DragOverStyle,
+  groupHover: PropertyCode.GroupHoverStyle,
+  groupActive: PropertyCode.GroupActiveStyle,
+  focusWithin: PropertyCode.FocusWithinStyle,
+};
+
+/** States declared once per group they follow, so they accept a list of entries. */
+const groupStates = new Set(["groupHover", "groupActive"]);
+
+/** States painted while the pointer rests on some other element, so they cannot pick a cursor. */
+const pointerlessStates = new Set(["groupHover", "groupActive", "focusWithin"]);
+
+/** The paint-only properties a state may swap in: exactly what the core's `ElementStateStyle` carries. */
+const stateStyleProperties =
+  "background, backgroundColor, color, borderColor, borderWidth, borderRadius, outline, " +
+  "boxShadow, opacity, cursor, transform, and transformOrigin";
+
+type EncodedStateStyle = {
+  /** The named hover group a `groupHover` follows. */
+  group?: string;
+  backgroundColor?: number;
+  background?: string;
+  color?: number;
+  borderColor?: number;
+  borderWidth?: number;
+  borderRadius?: number;
+  outline?: string;
+  boxShadow?: EncodedBoxShadow[];
+  opacity?: number;
+  cursor?: string;
+  transform?: string;
+  transformOrigin?: string;
+};
+
+/**
+ * Whether `name` declares a nested state style.
+ *
+ * `disabled` and `invalid` are also boolean flags, so a withdrawal is a state style only when the
+ * value it withdraws was one; the other state names have no second meaning.
+ */
+function isStateStyleDeclaration(
+  name: string,
+  value: PropertyInput,
+  previous: PropertyInput,
+): boolean {
+  if (!(name in stateStyleCodes)) return false;
+  if (isRecord(value) || (groupStates.has(name) && Array.isArray(value))) {
+    return true;
+  }
+  if (value === null || value === undefined || value === false) {
+    return isRecord(previous) || !(name in properties);
+  }
+  return false;
+}
+
+/**
+ * Encode one nested state as the bounded JSON declaration the Rust binding parses into the core's
+ * own `ElementStateStyle`. A group state may be a list of entries, one per group it follows, which
+ * the core layers in declaration order.
+ *
+ * Colors are validated and packed here, exactly as every base color property is, so a declaration
+ * the core cannot paint throws at the JavaScript boundary instead of silently painting nothing.
+ * Layout properties are refused for the same reason: a state is paint-only in the core.
+ */
+function encodeStateStyle(state: string, value: PropertyInput): string | null {
+  const entries =
+    groupStates.has(state) && Array.isArray(value) ? value : [value];
+  const encoded: EncodedStateStyle[] = [];
+  for (const entry of entries) {
+    if (entry === null || entry === undefined || entry === false) continue;
+    if (!isRecord(entry)) {
+      throw new TypeError(`QuickGUI \`${state}\` must be a style object`);
+    }
+    const declaration = encodeStateEntry(state, entry);
+    if (declaration !== null) encoded.push(declaration);
+  }
+  if (encoded.length === 0) return null;
+  if (encoded.length > MAX_GROUP_STYLES_PER_ELEMENT) {
+    throw new TypeError(
+      `QuickGUI \`${state}\` follows at most ${MAX_GROUP_STYLES_PER_ELEMENT} groups`,
+    );
+  }
+  return bounded(
+    JSON.stringify(encoded.length === 1 ? encoded[0] : encoded),
+    MAX_STATE_STYLE_JSON_BYTES,
+    `\`${state}\` style declarations`,
+  );
+}
+
+function encodeStateEntry(
+  state: string,
+  value: Record<string, unknown>,
+): EncodedStateStyle | null {
+  const encoded: EncodedStateStyle = {};
+  for (const [name, declared] of Object.entries(value)) {
+    if (declared === null || declared === undefined || declared === false) continue;
+    switch (name) {
+      case "background":
+      case "backgroundGradient": {
+        if (
+          isRecord(declared) ||
+          (typeof declared === "string" && isGradient(declared))
+        ) {
+          const gradient = normalizeStyleDeclaration(declared);
+          if (gradient !== null) encoded.background = gradient;
+        } else {
+          encoded.backgroundColor = parseColor(declared as number | string);
+        }
+        break;
+      }
+      case "backgroundColor":
+      case "color":
+      case "borderColor":
+        encoded[name] = parseColor(declared as number | string);
+        break;
+      case "borderWidth":
+      case "borderRadius":
+        encoded[name] = stateLength(state, name, declared);
+        break;
+      case "opacity":
+        if (typeof declared !== "number" || !Number.isFinite(declared)) {
+          throw new TypeError(
+            `QuickGUI \`${state}\` opacity must be a finite number`,
+          );
+        }
+        encoded.opacity = declared;
+        break;
+      case "outline":
+        encoded.outline = normalizeOutlineShorthand(declared);
+        break;
+      case "boxShadow": {
+        const shadows = parseBoxShadowList(declared);
+        if (shadows !== null) encoded.boxShadow = shadows;
+        break;
+      }
+      case "cursor":
+        if (pointerlessStates.has(state)) {
+          throw new TypeError(
+            `QuickGUI \`${state}\` styles cannot declare a cursor; the pointer rests on another element`,
+          );
+        }
+        encoded.cursor = String(declared);
+        break;
+      case "group":
+        if (!groupStates.has(state)) {
+          throw new TypeError(
+            `QuickGUI only \`groupHover\` and \`groupActive\` follow a named group; \`${state}\` cannot declare \`group\``,
+          );
+        }
+        encoded.group = normalizeHoverGroupName(declared);
+        break;
+      case "transform": {
+        const transform = normalizeStyleDeclaration(declared);
+        if (transform !== null) encoded.transform = transform;
+        break;
+      }
+      case "transformOrigin":
+        encoded.transformOrigin = String(declared).trim();
+        break;
+      default:
+        throw new TypeError(
+          `QuickGUI \`${state}\` styles are paint-only and accept ${stateStyleProperties}, not \`${name}\``,
+        );
+    }
+  }
+  return Object.keys(encoded).length === 0 ? null : encoded;
+}
+
+/** A hover group name is non-empty and bounded exactly as the core bounds it. */
+function normalizeHoverGroupName(value: unknown): string {
+  const name = String(value).trim();
+  if (name === "") {
+    throw new TypeError("QuickGUI hover group names cannot be empty");
+  }
+  if (inputTextEncoder.encode(name).length > MAX_HOVER_GROUP_NAME_BYTES) {
+    throw new TypeError(
+      `QuickGUI hover group names are limited to ${MAX_HOVER_GROUP_NAME_BYTES} bytes`,
+    );
+  }
+  return name;
+}
+
+/**
+ * An option-like part's `group` is its option group label, never a hover group, so it travels
+ * under the option-group property and leaves the node-level `group` its Tailwind meaning.
+ */
+function optionPartProps(props: JSX.OptionProps): object {
+  return universal.mergeProps(omit(props, "group"), {
+    get optionGroup() {
+      return props.group;
+    },
+  }) as object;
+}
+
+/** A state length is whole logical pixels: the core swaps one paint-only width or radius. */
+function stateLength(state: string, name: string, value: unknown): number {
+  const length =
+    typeof value === "number" ? value : normalizeLength(String(value));
+  if (typeof length !== "number" || !Number.isFinite(length)) {
+    throw new TypeError(
+      `QuickGUI \`${state}\` ${name} must be a number of logical pixels`,
+    );
+  }
+  return length;
+}
+
+/**
+ * Validate the CSS `outline` shorthand a state declares and pass it on whole; the Rust binding
+ * splits it with the grammar the base `outline` already uses, and `none` removes the ring.
+ */
+function normalizeOutlineShorthand(value: unknown): string {
+  if (typeof value === "number") return `${value}px`;
+  const shorthand = String(value).trim();
+  if (shorthand === "" || shorthand.toLowerCase() === "none") return "none";
+  for (const token of splitCssTokens(shorthand)) {
+    if (token === "solid" || token === "dashed" || token === "dotted") continue;
+    if (typeof normalizeLength(token) === "number") continue;
+    parseColor(token);
+  }
+  return normalizeStyleDeclaration(shorthand) ?? "none";
 }
 
 /**
@@ -1230,12 +1565,20 @@ type EncodedBoxShadow = {
 };
 
 function normalizeBoxShadow(value: PropertyInput): string | null {
+  const shadows = parseBoxShadowList(value);
+  return shadows === null || shadows.length === 0
+    ? null
+    : JSON.stringify(shadows);
+}
+
+/** The declared shadow entries; `none` is an empty list and an absent declaration is `null`. */
+function parseBoxShadowList(value: PropertyInput): EncodedBoxShadow[] | null {
   if (value === null || value === undefined || value === false) return null;
   if (typeof value !== "string") {
     throw new TypeError("QuickGUI boxShadow must use the CSS box-shadow shorthand");
   }
   const shorthand = value.trim();
-  if (shorthand === "" || shorthand.toLowerCase() === "none") return null;
+  if (shorthand === "" || shorthand.toLowerCase() === "none") return [];
 
   const declarations = splitCssList(shorthand);
   if (declarations.length > MAX_BOX_SHADOWS_PER_ELEMENT) {
@@ -1243,7 +1586,7 @@ function normalizeBoxShadow(value: PropertyInput): string | null {
       `QuickGUI boxShadow supports at most ${MAX_BOX_SHADOWS_PER_ELEMENT} shadows`,
     );
   }
-  return JSON.stringify(declarations.map(parseBoxShadowDeclaration));
+  return declarations.map(parseBoxShadowDeclaration);
 }
 
 function parseBoxShadowDeclaration(declaration: string): EncodedBoxShadow {
@@ -5901,7 +6244,10 @@ export function SelectRoot(props: JSX.SelectProps): NativeNode {
 /** One declared option. The core paints the row itself, so this node mounts nothing. */
 export function SelectOption(props: JSX.OptionProps): NativeNode {
   const scope = props.scope ?? optionalContext(PickerContext)?.scope;
-  return createPartNode("view", props, { part: NativePart.Option, scope });
+  return createPartNode("view", optionPartProps(props), {
+    part: NativePart.Option,
+    scope,
+  });
 }
 
 
@@ -6085,7 +6431,10 @@ export function SelectList(props: JSX.NativeScopedProps): NativeNode {
 /** One declared option. Its `ItemText` supplies the label when none is declared. */
 export function SelectItem(props: JSX.OptionProps): NativeNode {
   const scope = pickerScope("Select.Item", props.scope);
-  return createPartNode("view", props, { part: NativePart.SelectItem, scope });
+  return createPartNode("view", optionPartProps(props), {
+    part: NativePart.SelectItem,
+    scope,
+  });
 }
 
 /** One option's visible text. It is the option's label when `label` is omitted. */
@@ -6106,7 +6455,10 @@ export function SelectItemIndicator(props: JSX.NativeScopedProps): NativeNode {
 /** An option group. Its label becomes the searchable group name of the options inside it. */
 export function SelectGroup(props: JSX.OptionProps): NativeNode {
   const scope = pickerScope("Select.Group", props.scope);
-  return createPartNode("view", props, { part: NativePart.SelectGroup, scope });
+  return createPartNode("view", optionPartProps(props), {
+    part: NativePart.SelectGroup,
+    scope,
+  });
 }
 
 /** An option group's label. */
@@ -6286,7 +6638,7 @@ export function ComboboxRow(props: JSX.NativeScopedProps): NativeNode {
 /** One declared result. */
 export function ComboboxItem(props: JSX.OptionProps): NativeNode {
   const scope = pickerScope("Combobox.Item", props.scope);
-  return createPartNode("view", props, { part: NativePart.ComboboxItem, scope });
+  return createPartNode("view", optionPartProps(props), { part: NativePart.ComboboxItem, scope });
 }
 
 /** One result's selected mark. */
@@ -6302,7 +6654,7 @@ export function ComboboxItemIndicator(props: JSX.NativeScopedProps): NativeNode 
 /** A result group. Its label becomes the searchable group name of the results inside it. */
 export function ComboboxGroup(props: JSX.OptionProps): NativeNode {
   const scope = pickerScope("Combobox.Group", props.scope);
-  return createPartNode("view", props, {
+  return createPartNode("view", optionPartProps(props), {
     part: NativePart.ComboboxGroup,
     scope,
   });
@@ -9019,9 +9371,13 @@ export namespace JSX {
     background?: number | string | GradientDeclaration;
     backgroundColor?: number | string;
     color?: number | string;
+    /** @deprecated Declare `hover: { backgroundColor }` instead. */
     hoverBackgroundColor?: number | string;
+    /** @deprecated Declare `hover: { color }` instead. */
     hoverColor?: number | string;
+    /** @deprecated Declare `active: { backgroundColor }` instead. */
     activeBackgroundColor?: number | string;
+    /** @deprecated Declare `active: { color }` instead. */
     activeColor?: number | string;
     transition?: number | string | TransitionDeclaration;
     opacity?: number;
@@ -9140,27 +9496,108 @@ export namespace JSX {
     transformOrigin?: string;
     mixBlendMode?: BlendMode;
 
+    /** @deprecated Declare `hover: { background }` instead. */
     hoverBackground?: number | string | GradientDeclaration;
+    /** @deprecated Declare `hover: { outline }` instead. */
     hoverOutline?: string;
+    /** @deprecated Declare `hover: { transform }` instead. */
     hoverTransform?: string | readonly string[] | TransformMatrix;
+    /** @deprecated Declare `active: { background }` instead. */
     activeBackground?: number | string | GradientDeclaration;
+    /** @deprecated Declare `active: { outline }` instead. */
     activeOutline?: string;
+    /** @deprecated Declare `active: { transform }` instead. */
     activeTransform?: string | readonly string[] | TransformMatrix;
-    /**
-     * The `focus*` styles paint only while focus is visible, like CSS `:focus-visible`: focus a
-     * pointer press lands paints none of them, focus a key lands paints them all, and text inputs
-     * paint theirs whenever focused.
-     */
+    /** @deprecated Declare `focus: { background }` instead. */
     focusBackground?: number | string | GradientDeclaration;
+    /** @deprecated Declare `focus: { backgroundColor }` instead. */
     focusBackgroundColor?: number | string;
+    /** @deprecated Declare `focus: { color }` instead. */
     focusColor?: number | string;
+    /** @deprecated Declare `focus: { outline }` instead. */
     focusOutline?: string;
+    /** @deprecated Declare `focus: { transform }` instead. */
     focusTransform?: string | readonly string[] | TransformMatrix;
 
     /** Snap axis and strictness, such as `"x mandatory"` or `"y proximity"`. */
     scrollSnapType?: string;
     scrollSnapAlign?: "start" | "center" | "end";
     scrollSnapStop?: "normal" | "always";
+
+    /**
+     * Interaction states, each a paint-only override the Rust core swaps in on its own: no
+     * JavaScript round trip decides what is hovered, pressed, or focused. Declare `transition`
+     * on the element to animate between them.
+     */
+    /** While the pointer rests on this element. */
+    hover?: StateStyle | null;
+    /** While a pointer press on this element is held. */
+    active?: StateStyle | null;
+    /**
+     * While this element owns visible keyboard focus, like CSS `:focus-visible`: focus a pointer
+     * press lands paints nothing, focus a key lands paints it all, and text inputs paint theirs
+     * whenever focused.
+     */
+    focus?: StateStyle | null;
+    /** While the `disabled` prop is set. */
+    disabled?: StateStyle | null;
+    /** While the `invalid` prop is set. */
+    invalid?: StateStyle | null;
+    /** While this `draggable` element is the source of an active drag. */
+    dragging?: StateStyle | null;
+    /** While a payload one of this element's `dropKinds` accepts is over it. */
+    dragOver?: StateStyle | null;
+    /**
+     * While the nearest ancestor declared `group` — or the ancestor an entry's `group` names — is
+     * hovered, like Tailwind's `group-hover`. A list follows several groups at once; entries layer
+     * in order, later ones winning. Group states sit beneath this element's own states, so a
+     * revealed button the pointer reaches keeps every group value its own `hover` does not
+     * override.
+     */
+    groupHover?: GroupStateStyle | readonly GroupStateStyle[] | null;
+    /**
+     * While a press inside the nearest ancestor `group` — or the one an entry names — is held,
+     * like Tailwind's `group-active`. It layers over `groupHover`.
+     */
+    groupActive?: GroupStateStyle | readonly GroupStateStyle[] | null;
+    /**
+     * While this element or any descendant owns keyboard focus, like CSS `:focus-within`. Unlike
+     * `focus`, it follows the focus itself rather than focus visibility.
+     */
+    focusWithin?: Omit<StateStyle, "cursor"> | null;
+  }
+
+  /** One `groupHover` or `groupActive` entry; it may name the group it follows, never a cursor. */
+  export interface GroupStateStyle extends Omit<StateStyle, "cursor"> {
+    /**
+     * The `group="name"` ancestor to follow, past any nearer group, like Tailwind's
+     * `group-hover/name`. Omitted, the nearest ancestor group is followed.
+     */
+    group?: string;
+  }
+
+  /**
+   * The paint-only overrides one interaction state swaps in: exactly what the core's own
+   * `ElementStateStyle` carries. Layout never changes with a state.
+   */
+  export interface StateStyle {
+    /** A color, a CSS gradient function, or the declared gradient object form. */
+    background?: number | string | GradientDeclaration;
+    backgroundColor?: number | string;
+    color?: number | string;
+    borderColor?: number | string;
+    /** Uniform border width in logical pixels. */
+    borderWidth?: number | string;
+    /** Uniform corner radius in logical pixels. */
+    borderRadius?: number | string;
+    /** CSS `outline` shorthand, a plain width, or `none`; uses the element's own `outlineOffset`. */
+    outline?: number | string;
+    /** CSS `box-shadow` list replacing the element's shadows, or `none`. */
+    boxShadow?: string;
+    opacity?: number;
+    cursor?: string;
+    transform?: string | readonly string[] | TransformMatrix;
+    transformOrigin?: string;
   }
 
   /** Combinable decoration lines. `none` clears an inherited decoration. */
@@ -9223,12 +9660,44 @@ export namespace JSX {
     stops: readonly GradientStop[];
   }
 
-  export interface NativeProps extends Style {
+  /** The interaction states `Style` nests; they live inside `style`, never as props of their own. */
+  export type StateName =
+    | "hover"
+    | "active"
+    | "focus"
+    | "disabled"
+    | "invalid"
+    | "dragging"
+    | "dragOver"
+    | "groupHover"
+    | "groupActive"
+    | "focusWithin";
+
+  /**
+   * What `style` accepts: one style, or an array of styles and falsy entries nested to any depth,
+   * merged left to right by `flattenStyle`.
+   */
+  export type StyleProp =
+    | Style
+    | false
+    | null
+    | undefined
+    | ReadonlyArray<StyleProp>;
+
+  export interface NativeProps extends Omit<Style, StateName> {
     children?: unknown;
-    style?: Style;
+    style?: StyleProp;
     class?: string;
     className?: string;
     disabled?: boolean;
+    /** Expose web-style invalid state; the `style.invalid` variant paints while it is set. */
+    invalid?: boolean;
+    /**
+     * Makes this element the group its descendants' `groupHover` and `groupActive` styles follow,
+     * like Tailwind's `group`: `true` opens an unnamed group, and a string names it so a
+     * descendant can follow it past a nearer group with `groupHover: { group: "name" }`.
+     */
+    group?: boolean | string;
     role?: string;
     tabIndex?: number;
     /** Keep keyboard focus where it is when this element is activated with a pointer. */

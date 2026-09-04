@@ -80,6 +80,11 @@ macro_rules! spacing_scale_methods {
 /// Maximum CSS-like box shadows retained by one element or interaction-state override.
 pub const MAX_BOX_SHADOWS_PER_ELEMENT: usize = 8;
 
+/// Longest name a group can be declared with or targeted by, in bytes.
+pub const MAX_HOVER_GROUP_NAME_BYTES: usize = 256;
+/// Most group states — `group_hover` and `group_active` entries together — one element follows.
+pub const MAX_GROUP_STYLES_PER_ELEMENT: usize = 8;
+
 /// Largest accepted outline width in logical pixels.
 pub const MAX_OUTLINE_WIDTH: f32 = 1_024.0;
 /// Largest number of repeated background-image tiles painted for one element.
@@ -1501,8 +1506,32 @@ impl ElementStateStyle {
         self
     }
 
+    /// Paint this state's outline as evenly spaced dashes.
+    pub fn outline_dashed(self) -> Self {
+        self.outline_style(BorderStyle::Dashed)
+    }
+
+    /// Paint this state's outline as evenly distributed dots.
+    pub fn outline_dotted(self) -> Self {
+        self.outline_style(BorderStyle::Dotted)
+    }
+
+    fn outline_style(mut self, style: BorderStyle) -> Self {
+        let outline = self
+            .outline
+            .unwrap_or_else(|| Outline::new(0.0, Color::TRANSPARENT));
+        self.outline = Some(outline.style(style));
+        self
+    }
+
     pub fn border_color(mut self, color: Color) -> Self {
         self.border_color = Some(color);
+        self
+    }
+
+    /// Override the paint-only border width while this state is active, keeping the border color.
+    pub fn border_width(mut self, width: f32) -> Self {
+        self.border_width = Some(finite_nonnegative(width));
         self
     }
 
@@ -1568,6 +1597,46 @@ impl ElementStateStyle {
         self.shadow(shadow_2xl_preset())
     }
 
+    /// Lay `other` over this style: every value it declares replaces the one here.
+    pub(crate) fn overlay(&mut self, other: &Self) {
+        if other.background.is_some() {
+            self.background = other.background;
+        }
+        if other.background_gradient.is_some() {
+            self.background_gradient = other.background_gradient;
+        }
+        if other.outline.is_some() {
+            self.outline = other.outline;
+        }
+        if other.border_color.is_some() {
+            self.border_color = other.border_color;
+        }
+        if other.border_width.is_some() {
+            self.border_width = other.border_width;
+        }
+        if other.radius.is_some() {
+            self.radius = other.radius;
+        }
+        if other.text_color.is_some() {
+            self.text_color = other.text_color;
+        }
+        if other.shadows.is_some() {
+            self.shadows = other.shadows.clone();
+        }
+        if other.opacity.is_some() {
+            self.opacity = other.opacity;
+        }
+        if other.cursor_style.is_some() {
+            self.cursor_style = other.cursor_style;
+        }
+        if other.transform.is_some() {
+            self.transform = other.transform;
+        }
+        if other.transform_origin.is_some() {
+            self.transform_origin = other.transform_origin;
+        }
+    }
+
     fn has_paint_overrides(&self) -> bool {
         self.background.is_some()
             || self.background_gradient.is_some()
@@ -1579,6 +1648,24 @@ impl ElementStateStyle {
             || self.shadows.is_some()
             || self.opacity.is_some()
     }
+}
+
+/// Which state of an ancestor group a member's style follows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GroupState {
+    /// The group is hovered.
+    Hover,
+    /// A press inside the group is held.
+    Active,
+}
+
+/// One paint-only style a member paints while an ancestor group is in one state.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GroupStateStyle {
+    pub(crate) state: GroupState,
+    /// The named group to follow; `None` follows the nearest group.
+    pub(crate) target: Option<Arc<str>>,
+    pub(crate) style: ElementStateStyle,
 }
 
 fn shadow_sm_preset() -> BoxShadow {
@@ -1961,6 +2048,14 @@ pub struct Element {
     pub(crate) invalid_style: ElementStateStyle,
     pub(crate) dragging: ElementStateStyle,
     pub(crate) drag_over: ElementStateStyle,
+    /// Paint while this element or a descendant owns keyboard focus, like CSS `:focus-within`.
+    pub(crate) focus_within: ElementStateStyle,
+    /// Styles following the state of an ancestor group, in declaration order; later ones win.
+    pub(crate) group_styles: Vec<GroupStateStyle>,
+    /// Whether descendants' `group_hover` and `group_active` styles follow this element.
+    pub(crate) group: bool,
+    /// The name descendants can target this group by.
+    pub(crate) group_name: Option<Arc<str>>,
     pub(crate) clickable: bool,
     pub(crate) pointer_listener: bool,
     pub(crate) scroll_wheel_listener: bool,

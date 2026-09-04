@@ -44,6 +44,112 @@ impl Element {
         self
     }
 
+    /// Make this element the group whose hover and presses its descendants' [`Self::group_hover`]
+    /// and [`Self::group_active`] styles follow, like Tailwind's `group`.
+    ///
+    /// The group is hovered whenever the pointer rests anywhere inside its bounds — over its own
+    /// padding or over any descendant, interactive or not — unless a surface above it consumes the
+    /// pointer, as a dismissible overlay or a captured pointer listener does, and active while a
+    /// press on it or on any clickable descendant is held. Every descendant resolves against its
+    /// nearest group, so groups nest.
+    pub fn group(mut self) -> Self {
+        self.group = true;
+        self
+    }
+
+    /// Make this element a group its descendants can follow by name, like Tailwind's
+    /// `group/name`, so a member can follow it past a nearer group.
+    ///
+    /// A named group is still the nearest group for members that name none. Names are bounded by
+    /// [`MAX_HOVER_GROUP_NAME_BYTES`](crate::MAX_HOVER_GROUP_NAME_BYTES).
+    pub fn group_named(mut self, name: impl Into<Arc<str>>) -> Self {
+        self.group = true;
+        self.group_name = Some(bounded_hover_group_name(name.into()));
+        self
+    }
+
+    /// Paint-only styling while the nearest [`Self::group`] ancestor is hovered.
+    ///
+    /// This is Tailwind's `group-hover`: a row reveals its actions, a card lifts its icon. Group
+    /// styles layer beneath the element's own hover, active, focus, validation, and drag states
+    /// and above its base style, so an action button the pointer reaches keeps every group value
+    /// its own `hover` does not override. Declared more than once — for different groups, or with
+    /// [`Self::group_active`] — every entry whose group is in its state paints, later declarations
+    /// winning where they overlap, as matching CSS rules of equal specificity do; one element
+    /// follows at most [`MAX_GROUP_STYLES_PER_ELEMENT`](crate::MAX_GROUP_STYLES_PER_ELEMENT)
+    /// group states. A cursor declared here is ignored, because the pointer is over some other
+    /// element.
+    pub fn group_hover(self, style: impl FnOnce(ElementStateStyle) -> ElementStateStyle) -> Self {
+        self.group_style(GroupState::Hover, None, style)
+    }
+
+    /// Paint-only styling while the nearest ancestor [`Self::group_named`] `name` is hovered, like
+    /// Tailwind's `group-hover/name`.
+    ///
+    /// The member skips every nearer group on the way to that name and paints nothing when no
+    /// ancestor carries it.
+    pub fn group_hover_named(
+        self,
+        name: impl Into<Arc<str>>,
+        style: impl FnOnce(ElementStateStyle) -> ElementStateStyle,
+    ) -> Self {
+        let name = bounded_hover_group_name(name.into());
+        self.group_style(GroupState::Hover, Some(name), style)
+    }
+
+    /// Paint-only styling while a press inside the nearest [`Self::group`] ancestor is held, like
+    /// Tailwind's `group-active`.
+    ///
+    /// Declare it after [`Self::group_hover`] so the press wins over the hover beneath it, as the
+    /// CSS `:hover`-then-`:active` rule order does.
+    pub fn group_active(self, style: impl FnOnce(ElementStateStyle) -> ElementStateStyle) -> Self {
+        self.group_style(GroupState::Active, None, style)
+    }
+
+    /// Paint-only styling while a press inside the nearest ancestor [`Self::group_named`] `name`
+    /// is held, like Tailwind's `group-active/name`.
+    pub fn group_active_named(
+        self,
+        name: impl Into<Arc<str>>,
+        style: impl FnOnce(ElementStateStyle) -> ElementStateStyle,
+    ) -> Self {
+        let name = bounded_hover_group_name(name.into());
+        self.group_style(GroupState::Active, Some(name), style)
+    }
+
+    /// Paint-only styling while this element or any descendant owns keyboard focus, like CSS
+    /// `:focus-within`.
+    ///
+    /// Unlike [`Self::focus`], this follows focus itself rather than focus visibility, so a field
+    /// container highlights whenever its input is focused, however that focus arrived. A cursor
+    /// declared here is ignored.
+    pub fn focus_within(
+        mut self,
+        style: impl FnOnce(ElementStateStyle) -> ElementStateStyle,
+    ) -> Self {
+        self.focus_within = style(ElementStateStyle::default());
+        self
+    }
+
+    #[track_caller]
+    fn group_style(
+        mut self,
+        state: GroupState,
+        target: Option<Arc<str>>,
+        style: impl FnOnce(ElementStateStyle) -> ElementStateStyle,
+    ) -> Self {
+        assert!(
+            self.group_styles.len() < MAX_GROUP_STYLES_PER_ELEMENT,
+            "one element follows at most {MAX_GROUP_STYLES_PER_ELEMENT} group states"
+        );
+        self.group_styles.push(GroupStateStyle {
+            state,
+            target,
+            style: style(ElementStateStyle::default()),
+        });
+        self
+    }
+
     pub fn accessibility_role(mut self, role: AccessibilityRole) -> Self {
         self.accessibility.role = role;
         self
@@ -585,4 +691,13 @@ impl Element {
         }
         self
     }
+}
+
+#[track_caller]
+fn bounded_hover_group_name(name: Arc<str>) -> Arc<str> {
+    assert!(
+        !name.is_empty() && name.len() <= MAX_HOVER_GROUP_NAME_BYTES,
+        "a group name is one to {MAX_HOVER_GROUP_NAME_BYTES} bytes"
+    );
+    name
 }

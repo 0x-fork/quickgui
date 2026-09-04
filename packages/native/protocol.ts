@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 28;
+export const PROTOCOL_VERSION = 30;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -384,6 +384,21 @@ export const enum PropertyCode {
   SwiftUIGaugeStyle = 343,
   SwiftUIGaugeMinimumValueLabel = 344,
   SwiftUIGaugeMaximumValueLabel = 345,
+  /** Nested `hover` state style: one bounded JSON declaration of paint-only overrides. */
+  HoverStyle = 346,
+  ActiveStyle = 347,
+  FocusStyle = 348,
+  DisabledStyle = 349,
+  InvalidStyle = 350,
+  DraggingStyle = 351,
+  DragOverStyle = 352,
+  GroupHoverStyle = 353,
+  /** Marks the group whose hover and presses descendants' group styles follow. */
+  HoverGroup = 354,
+  /** Nested `groupActive` state: one entry or a list, each following its own group. */
+  GroupActiveStyle = 355,
+  /** Nested `focusWithin` state style. */
+  FocusWithinStyle = 356,
 }
 
 /**
@@ -689,6 +704,15 @@ export const MAX_MENUBAR_MENUS = 64;
  * renderer rejects it before it reaches the boundary.
  */
 export const MAX_STYLE_DECLARATION_BYTES = 4096;
+
+/** Longest nested interaction-state style declaration (`hover`, `dragOver`, …) the Rust binding parses. */
+export const MAX_STATE_STYLE_JSON_BYTES = 16 * 1024;
+
+/** Longest group name a `group` prop declares or a `groupHover`/`groupActive` follows. */
+export const MAX_HOVER_GROUP_NAME_BYTES = 256;
+
+/** Most `groupHover` and `groupActive` entries one element follows, counted together. */
+export const MAX_GROUP_STYLES_PER_ELEMENT = 8;
 
 /** Most color stops the Rust core retains for one gradient. */
 export const MAX_GRADIENT_STOPS = 8;

@@ -192,8 +192,8 @@ const controlStyle = () =>
     fontSize: 13,
     cursor: "default",
     userSelect: "none",
-    hoverBackgroundColor: p().controlHover,
-    focusOutline: `2px solid ${p().accent}`,
+    hover: { backgroundColor: p().controlHover },
+    focus: { outline: `2px solid ${p().accent}` },
     outlineOffset: 2,
   }) as const;
 
@@ -208,7 +208,7 @@ const inputStyle = () =>
     borderWidth: 1,
     color: p().ink,
     fontSize: 13,
-    focusOutline: `2px solid ${p().accent}`,
+    focus: { outline: `2px solid ${p().accent}` },
     outlineOffset: 2,
   }) as const;
 
@@ -236,7 +236,7 @@ const menuRowStyle = () =>
     paddingRight: 10,
     height: 28,
     borderRadius: 6,
-    hoverBackgroundColor: p().selection,
+    hover: { backgroundColor: p().selection },
   }) as const;
 
 const pickerAppearance = (): PickerAppearance => ({
@@ -378,8 +378,10 @@ function Btn(props: {
         borderColor: props.primary === true ? p().accent : p().border,
         // A filled button darkens its own fill on hover instead of taking the neutral hover
         // background, which would put its light label on a light surface.
-        hoverBackgroundColor:
-          props.primary === true ? p().accentHover : p().controlHover,
+        hover: {
+          backgroundColor:
+            props.primary === true ? p().accentHover : p().controlHover,
+        },
         opacity: props.disabled === true ? 0.5 : 1,
       }}
       onClick={() => props.onClick()}
@@ -463,8 +465,8 @@ function AccordionDemo() {
                     // The ring is drawn inside the header with the item's own corner radius, so
                     // it never lands on top of the rounded 1px border around the item.
                     borderRadius: 9,
-                    hoverBackgroundColor: p().controlHover,
-                    focusOutline: `2px solid ${p().accent}`,
+                    hover: { backgroundColor: p().controlHover },
+                    focus: { outline: `2px solid ${p().accent}` },
                     outlineOffset: -2,
                   }}
                 >
@@ -548,7 +550,7 @@ function AlertDialogDemo() {
                     ...controlStyle(),
                     backgroundColor: p().danger,
                     borderColor: p().danger,
-                    hoverBackgroundColor: p().dangerHover,
+                    hover: { backgroundColor: p().dangerHover },
                   }}
                   onClick={() => {
                     setOutcome("deleted");
@@ -769,9 +771,11 @@ function CalendarDemo() {
                       justifyContent: "center",
                       backgroundColor:
                         date === day() ? p().accent : p().panelAlt,
-                      hoverBackgroundColor:
-                        date === day() ? p().accent : p().controlHover,
-                      focusOutline: `2px solid ${p().accent}`,
+                      hover: {
+                        backgroundColor:
+                          date === day() ? p().accent : p().controlHover,
+                      },
+                      focus: { outline: `2px solid ${p().accent}` },
                       outlineOffset: 1,
                     }}
                   >
@@ -821,8 +825,8 @@ function CheckboxDemo() {
       paddingLeft: 8,
       paddingRight: 10,
       borderRadius: 8,
-      hoverBackgroundColor: p().controlHover,
-      focusOutline: `2px solid ${p().accent}`,
+      hover: { backgroundColor: p().controlHover },
+      focus: { outline: `2px solid ${p().accent}` },
     }) as const;
 
   const tick = (checked: boolean | "indeterminate") =>
@@ -909,8 +913,8 @@ function CheckboxGroupDemo() {
       paddingLeft: 8,
       paddingRight: 10,
       borderRadius: 8,
-      hoverBackgroundColor: p().controlHover,
-      focusOutline: `2px solid ${p().accent}`,
+      hover: { backgroundColor: p().controlHover },
+      focus: { outline: `2px solid ${p().accent}` },
     }) as const;
 
   return (
@@ -1536,7 +1540,7 @@ function FieldsetDemo() {
             borderRadius: 11,
             padding: 2,
             backgroundColor: saving() ? p().accent : p().track,
-            focusOutline: `2px solid ${p().accent}`,
+            focus: { outline: `2px solid ${p().accent}` },
           }}
         >
           <Switch.Thumb
@@ -1699,8 +1703,8 @@ function FormDemo() {
                     paddingLeft: 8,
                     paddingRight: 10,
                     borderRadius: 8,
-                    hoverBackgroundColor: p().controlHover,
-                    focusOutline: `2px solid ${p().accent}`,
+                    hover: { backgroundColor: p().controlHover },
+                    focus: { outline: `2px solid ${p().accent}` },
                   }}
                 >
                   <Radio.Indicator
@@ -2195,7 +2199,7 @@ function MeterDemo() {
               height: 14,
               borderRadius: 7,
               backgroundColor: p().accent,
-              focusOutline: `2px solid ${p().accent}`,
+              focus: { outline: `2px solid ${p().accent}` },
               outlineOffset: 2,
             }}
           />
@@ -2463,7 +2467,7 @@ function PopoverDemo() {
               ...controlStyle(),
               backgroundColor: p().accent,
               borderColor: p().accent,
-              hoverBackgroundColor: p().accentHover,
+              hover: { backgroundColor: p().accentHover },
             }}
           >
             <Text style={{ fontSize: 12, color: p().onAccent }}>Account</Text>
@@ -2643,8 +2647,8 @@ function RadioDemo() {
       paddingLeft: 8,
       paddingRight: 12,
       borderRadius: 8,
-      hoverBackgroundColor: p().controlHover,
-      focusOutline: `2px solid ${p().accent}`,
+      hover: { backgroundColor: p().controlHover },
+      focus: { outline: `2px solid ${p().accent}` },
     }) as const;
 
   const dot = (on: boolean) =>
@@ -2992,8 +2996,8 @@ function SliderDemo() {
       borderWidth: 1,
       borderColor: p().border,
       boxShadow: "0 1px 2px #0000003d",
-      activeBackgroundColor: p().controlHover,
-      focusOutline: `2px solid ${p().accent}`,
+      active: { backgroundColor: p().controlHover },
+      focus: { outline: `2px solid ${p().accent}` },
       outlineOffset: 2,
     }) as const;
 
@@ -3109,7 +3113,7 @@ function SplitterDemo() {
                     width: 6,
                     backgroundColor: p().border,
                     cursor: "col-resize",
-                    focusOutline: `2px solid ${p().accent}`,
+                    focus: { outline: `2px solid ${p().accent}` },
                   }}
                 />
               </Show>
@@ -3148,7 +3152,7 @@ function SwitchDemo() {
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: on ? p().accent : p().track,
-      focusOutline: `2px solid ${p().accent}`,
+      focus: { outline: `2px solid ${p().accent}` },
       outlineOffset: 2,
     }) as const;
 
@@ -4098,9 +4102,11 @@ function Gallery() {
                       userSelect: "none",
                       backgroundColor:
                         tab() === demo.id ? p().accent : "transparent",
-                      hoverBackgroundColor:
-                        tab() === demo.id ? p().accent : p().controlHover,
-                      focusOutline: `2px solid ${p().accent}`,
+                      hover: {
+                        backgroundColor:
+                          tab() === demo.id ? p().accent : p().controlHover,
+                      },
+                      focus: { outline: `2px solid ${p().accent}` },
                       outlineOffset: -2,
                     }}
                   >

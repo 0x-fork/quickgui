@@ -6,6 +6,21 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### Framework
 
+- Added `Element::group`, `Element::group_hover`, and `Element::group_active`, Tailwind's `group`,
+  `group-hover`, and `group-active`: a descendant's group variants paint while its nearest group is
+  hovered or holds a press, which the core decides from the retained hit regions and the pressed
+  element's ancestry, so a row can reveal its actions without a listener or a rebuild. Group
+  variants layer above the base style and beneath the element's own hover, active, focus,
+  validation, and drag variants, so a revealed action the pointer reaches keeps every group value
+  its own hover does not override. They can be declared several times — for different groups, or
+  for hover and active — and every entry whose group is in its state paints, later declarations
+  winning where they overlap, up to `MAX_GROUP_STYLES_PER_ELEMENT`. `Element::group_named` with
+  `group_hover_named` and `group_active_named` are `group/name` and `group-hover/name`: a member
+  follows the nearest ancestor group carrying that name past any nearer group, and a named group
+  is still the nearest group for members that name none. `Element::focus_within` paints while the
+  element or a descendant owns keyboard focus, like CSS `:focus-within`, following the focus itself
+  rather than its visibility. `ElementStateStyle` gained `border_width`, `outline_dashed`, and
+  `outline_dotted`.
 - Added a renderer-neutral Rust `Router` with bounded pattern compilation, normalized internal
   locations, decoded parameters and query pairs, active matching, and memory-history traversal;
   `@quickgui/native` re-exposes it and `@quickgui/solid` adds `Router`, `Route`, `Link`, `Outlet`,
@@ -619,6 +634,26 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### JavaScript tooling
 
+- Interaction states in `@quickgui/solid` are nested `style` objects — `hover`, `active`, `focus`,
+  `disabled`, `invalid`, `dragging`, `dragOver`, `groupHover`, `groupActive`, and `focusWithin` —
+  each accepting every property
+  the core's `ElementStateStyle` can swap: `background`/`backgroundColor`, `color`, `borderColor`,
+  `borderWidth`, `borderRadius`, `outline`, `boxShadow`, `opacity`, `cursor`, `transform`, and
+  `transformOrigin`, with `outline: "none"` and `boxShadow: "none"` as explicit removals. A `group`
+  prop marks the hover group a descendant's `groupHover` follows: `true` opens an unnamed group and
+  a string names one that `groupHover: { group: "name" }` follows past nearer groups. `Select.Item`,
+  `Combobox.Option`, and the other option parts keep their `group` label prop and route it
+  themselves. `groupHover` and `groupActive` also accept a list of entries, one per group they
+  follow, and in a style array entries for the same group merge while entries for different groups
+  accumulate. Each state crosses N-API
+  as one bounded JSON declaration (`MAX_STATE_STYLE_JSON_BYTES`), a layout property inside a state
+  throws a `TypeError`, and the `invalid` prop now sets the core's invalid state on any element.
+  The flat `hoverBackgroundColor`-style names still work, overlay the nested form, and are
+  deprecated. The native protocol is now version 30, so `@quickgui/native` must be rebuilt.
+- `style` in `@quickgui/solid` accepts an array — objects and `false`/`null`/`undefined` entries,
+  nested to any depth — merged left to right with later values winning, so a conditional style is
+  one expression. Nested interaction states merge one level deep. `flattenStyle` exposes the same
+  merge, and `Link` now layers `activeStyle` over `style` through it instead of spreading.
 - `Tooltip.Root`'s `hoverable` defaults to `false`; declare `hoverable` to keep a tooltip open while
   the pointer rests on its popup.
 - `DateField.Segment` and `TimeField.Segment` declared without children now show the core's own

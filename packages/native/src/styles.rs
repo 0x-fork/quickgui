@@ -13,8 +13,9 @@ use quickgui::{
     BackgroundPosition, BackgroundRepeat, BackgroundSize, BlendMode, BorderStyle, ColorStops,
     Corners, Direction, DropShadow, ElementStateStyle, Filter, Gradient, GradientCenter,
     GradientColorSpace, Hyphens, LinearColorStop, MAX_FILTERS_PER_ELEMENT, MAX_GRADIENT_STOPS,
-    Outline, OverflowWrap, RadialGradientExtent, RadialGradientShape, SnapAlign, SnapStrictness,
-    TextDirection, TextShadow, TextTransform, Transform2D, WordBreak,
+    MAX_GROUP_STYLES_PER_ELEMENT, MAX_HOVER_GROUP_NAME_BYTES, Outline, OverflowWrap,
+    RadialGradientExtent, RadialGradientShape, SnapAlign, SnapStrictness, TextDirection,
+    TextShadow, TextTransform, Transform2D, WordBreak,
 };
 
 /// Longest declared style string parsed from one property.
@@ -1150,64 +1151,328 @@ fn apply_filters(mut element: Element, node: &NativeNode) -> Element {
     element
 }
 
-/// One state's declared extra style, applied through the core's own `ElementStateStyle`.
-#[derive(Clone, Copy, Default)]
-pub(super) struct NativeStateStyle {
-    pub(super) background: Option<Color>,
-    pub(super) color: Option<Color>,
-    pub(super) gradient: Option<Gradient>,
-    pub(super) outline: Option<Outline>,
-    pub(super) transform: Option<Transform2D>,
+// ---------------------------------------------------------------------------------------------
+// Interaction-state styles
+// ---------------------------------------------------------------------------------------------
+
+/// Longest nested state-style declaration parsed from one `hover`-shaped property.
+pub(super) const MAX_STATE_STYLE_JSON_BYTES: usize = 16 * 1024;
+
+/// The property codes one interaction state is declared through.
+pub(super) struct StateStyleCodes {
+    /// The nested JSON declaration carrying everything the core's `ElementStateStyle` can swap.
+    pub(super) style: u16,
+    /// The flat declarations (`hoverBackgroundColor`, …) hover, active, and focus keep honouring.
+    /// They overlay the nested declaration, so an application migrating one property at a time
+    /// sees no change.
+    pub(super) legacy: Option<LegacyStateStyleCodes>,
 }
 
-impl NativeStateStyle {
-    pub(super) fn declared(&self) -> bool {
-        self.background.is_some()
-            || self.color.is_some()
-            || self.gradient.is_some()
-            || self.outline.is_some()
-            || self.transform.is_some()
-    }
+pub(super) struct LegacyStateStyleCodes {
+    pub(super) background: u16,
+    pub(super) color: u16,
+    pub(super) gradient: u16,
+    pub(super) outline: u16,
+    pub(super) transform: u16,
+}
 
-    pub(super) fn apply(self, mut style: ElementStateStyle) -> ElementStateStyle {
-        if let Some(color) = self.background {
-            style = style.bg(color);
+pub(super) const HOVER_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::HOVER_STYLE,
+    legacy: Some(LegacyStateStyleCodes {
+        background: property::HOVER_BACKGROUND_COLOR,
+        color: property::HOVER_COLOR,
+        gradient: property::HOVER_BACKGROUND_GRADIENT,
+        outline: property::HOVER_OUTLINE,
+        transform: property::HOVER_TRANSFORM,
+    }),
+};
+pub(super) const ACTIVE_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::ACTIVE_STYLE,
+    legacy: Some(LegacyStateStyleCodes {
+        background: property::ACTIVE_BACKGROUND_COLOR,
+        color: property::ACTIVE_COLOR,
+        gradient: property::ACTIVE_BACKGROUND_GRADIENT,
+        outline: property::ACTIVE_OUTLINE,
+        transform: property::ACTIVE_TRANSFORM,
+    }),
+};
+pub(super) const FOCUS_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::FOCUS_STYLE,
+    legacy: Some(LegacyStateStyleCodes {
+        background: property::FOCUS_BACKGROUND_COLOR,
+        color: property::FOCUS_COLOR,
+        gradient: property::FOCUS_BACKGROUND_GRADIENT,
+        outline: property::FOCUS_OUTLINE,
+        transform: property::FOCUS_TRANSFORM,
+    }),
+};
+pub(super) const DISABLED_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::DISABLED_STYLE,
+    legacy: None,
+};
+pub(super) const INVALID_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::INVALID_STYLE,
+    legacy: None,
+};
+pub(super) const DRAGGING_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::DRAGGING_STYLE,
+    legacy: None,
+};
+pub(super) const DRAG_OVER_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::DRAG_OVER_STYLE,
+    legacy: None,
+};
+pub(super) const FOCUS_WITHIN_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::FOCUS_WITHIN_STYLE,
+    legacy: None,
+};
+
+/// One nested state-style declaration exactly as the renderer encodes it: colors packed the way
+/// every color property travels, lengths in logical pixels, and every string in the grammar the
+/// matching base property already uses. Unknown keys are ignored so an older binary tolerates a
+/// newer renderer.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct StateStyleDeclaration {
+    background_color: Option<u32>,
+    background: Option<String>,
+    color: Option<u32>,
+    border_color: Option<u32>,
+    border_width: Option<f32>,
+    border_radius: Option<f32>,
+    outline: Option<String>,
+    box_shadow: Option<Vec<NativeBoxShadow>>,
+    opacity: Option<f32>,
+    cursor: Option<String>,
+    transform: Option<String>,
+    transform_origin: Option<String>,
+    /// The named group a `groupHover` or `groupActive` entry follows.
+    group: Option<String>,
+}
+
+/// A group state's declaration: one entry, or a list of entries each following its own group.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum GroupStyleDeclarations {
+    One(StateStyleDeclaration),
+    Many(Vec<StateStyleDeclaration>),
+}
+
+/// The group a node declares: `Some(None)` for an unnamed group, `Some(Some(name))` for a named
+/// one, and `None` when it declares no group or a name the core would refuse.
+pub(super) fn native_group(node: &NativeNode) -> Option<Option<Arc<str>>> {
+    match node.property(property::HOVER_GROUP)? {
+        PropertyValue::Bool(true) => Some(None),
+        PropertyValue::String(name)
+            if !name.is_empty() && name.len() <= MAX_HOVER_GROUP_NAME_BYTES =>
+        {
+            Some(Some(name.clone()))
         }
-        if let Some(gradient) = self.gradient {
-            style = style.bg_gradient(gradient);
-        }
-        if let Some(color) = self.color {
-            style = style.text_color(color);
-        }
-        if let Some(outline) = self.outline {
-            style = style.outline_offset(outline.width, outline.color, outline.offset);
-        }
-        if let Some(transform) = self.transform {
-            style = style.transform(transform);
-        }
-        style
+        _ => None,
     }
 }
 
-/// Collect one state's declared style from the four properties that declare it.
+/// The entries of one group state — `groupHover` or `groupActive` — in declaration order, each
+/// with the named group it follows, or `None` for the nearest one.
+///
+/// Entries past the core's `MAX_GROUP_STYLES_PER_ELEMENT` are dropped in source order, an entry
+/// naming a group the core would refuse is dropped, and an entry declaring nothing is not an entry.
+pub(super) fn native_group_styles(
+    node: &NativeNode,
+    code: u16,
+) -> Vec<(Option<Arc<str>>, ElementStateStyle)> {
+    let outline_offset = node.number(property::OUTLINE_OFFSET).unwrap_or(0.0);
+    let Some(declarations) = node
+        .string(code)
+        .filter(|value| value.len() <= MAX_STATE_STYLE_JSON_BYTES)
+        .and_then(|value| serde_json::from_str::<GroupStyleDeclarations>(value).ok())
+    else {
+        return Vec::new();
+    };
+    let declarations = match declarations {
+        GroupStyleDeclarations::One(declaration) => vec![declaration],
+        GroupStyleDeclarations::Many(declarations) => declarations,
+    };
+    declarations
+        .into_iter()
+        .take(MAX_GROUP_STYLES_PER_ELEMENT)
+        .filter_map(|declaration| {
+            let target = match declaration.group.as_deref() {
+                None => None,
+                Some(name) if !name.is_empty() && name.len() <= MAX_HOVER_GROUP_NAME_BYTES => {
+                    Some(Arc::<str>::from(name))
+                }
+                Some(_) => return None,
+            };
+            let style = apply_state_style_declaration(
+                ElementStateStyle::default(),
+                declaration,
+                node,
+                outline_offset,
+            );
+            (style != ElementStateStyle::default()).then_some((target, style))
+        })
+        .collect()
+}
+
+/// Collect one state's declared style, or `None` when the state declares nothing at all, so an
+/// empty state never registers a core state style.
 pub(super) fn native_state_style(
     node: &NativeNode,
-    background: u16,
-    color: u16,
-    gradient: u16,
-    outline: u16,
-    transform: u16,
-) -> NativeStateStyle {
-    let offset = node.number(property::OUTLINE_OFFSET).unwrap_or(0.0);
-    NativeStateStyle {
-        background: node.color(background),
-        color: node.color(color),
-        gradient: node.string(gradient).and_then(parse_gradient),
-        outline: node
-            .string(outline)
-            .and_then(|value| parse_outline(value, offset)),
-        transform: node.string(transform).and_then(parse_transform),
+    codes: &StateStyleCodes,
+) -> Option<ElementStateStyle> {
+    let outline_offset = node.number(property::OUTLINE_OFFSET).unwrap_or(0.0);
+    let mut style = ElementStateStyle::default();
+    if let Some(declaration) = node
+        .string(codes.style)
+        .filter(|value| value.len() <= MAX_STATE_STYLE_JSON_BYTES)
+        .and_then(|value| serde_json::from_str::<StateStyleDeclaration>(value).ok())
+    {
+        style = apply_state_style_declaration(style, declaration, node, outline_offset);
     }
+    if let Some(legacy) = &codes.legacy {
+        if let Some(color) = node.color(legacy.background) {
+            style = style.bg(color);
+        }
+        if let Some(gradient) = node.string(legacy.gradient).and_then(parse_gradient) {
+            style = style.bg_gradient(gradient);
+        }
+        if let Some(color) = node.color(legacy.color) {
+            style = style.text_color(color);
+        }
+        if let Some(outline) = node
+            .string(legacy.outline)
+            .and_then(|value| parse_outline(value, outline_offset))
+        {
+            style = state_outline(style, outline);
+        }
+        if let Some(transform) = node.string(legacy.transform).and_then(parse_transform) {
+            style = style.transform(transform);
+        }
+    }
+    (style != ElementStateStyle::default()).then_some(style)
+}
+
+fn apply_state_style_declaration(
+    mut style: ElementStateStyle,
+    declaration: StateStyleDeclaration,
+    node: &NativeNode,
+    outline_offset: f32,
+) -> ElementStateStyle {
+    if let Some(color) = declaration.background_color {
+        style = style.bg(unpack_color(color));
+    }
+    if let Some(gradient) = declaration.background.as_deref().and_then(parse_gradient) {
+        style = style.bg_gradient(gradient);
+    }
+    if let Some(color) = declaration.color {
+        style = style.text_color(unpack_color(color));
+    }
+    if let Some(color) = declaration.border_color {
+        style = style.border_color(unpack_color(color));
+    }
+    if let Some(width) = declaration.border_width.filter(|width| width.is_finite()) {
+        style = style.border_width(width);
+    }
+    if let Some(radius) = declaration
+        .border_radius
+        .filter(|radius| radius.is_finite())
+    {
+        style = style.rounded(radius);
+    }
+    if let Some(outline) = declaration.outline.as_deref() {
+        if outline.trim().eq_ignore_ascii_case("none") {
+            style = style.outline_none();
+        } else if let Some(outline) = parse_outline(outline, outline_offset) {
+            style = state_outline(style, outline);
+        }
+    }
+    if let Some(shadows) = declaration.box_shadow {
+        if shadows.is_empty() {
+            style = style.shadow_none();
+        } else if let Some(shadows) = box_shadows_from_declarations(
+            shadows,
+            node.color(property::COLOR).unwrap_or(Color::BLACK),
+        ) {
+            style = style.shadows(shadows);
+        }
+    }
+    if let Some(opacity) = declaration.opacity.filter(|opacity| opacity.is_finite()) {
+        style = style.opacity(opacity);
+    }
+    if let Some(name) = declaration.cursor.as_deref() {
+        style = style.cursor(cursor(name));
+    }
+    if let Some(transform) = declaration.transform.as_deref().and_then(parse_transform) {
+        style = style.transform(transform);
+    }
+    if let Some((x, y)) = declaration
+        .transform_origin
+        .as_deref()
+        .and_then(parse_transform_origin)
+    {
+        style = style.transform_origin(x, y);
+    }
+    style
+}
+
+/// Install one parsed outline ring, keeping the dash style the shorthand declared.
+fn state_outline(style: ElementStateStyle, outline: Outline) -> ElementStateStyle {
+    let style = style.outline_offset(outline.width, outline.color, outline.offset);
+    match outline.style {
+        BorderStyle::Dashed => style.outline_dashed(),
+        BorderStyle::Dotted => style.outline_dotted(),
+        _ => style,
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Box shadows
+// ---------------------------------------------------------------------------------------------
+
+/// One CSS `box-shadow` entry exactly as the renderer encodes it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct NativeBoxShadow {
+    offset_x: f32,
+    offset_y: f32,
+    blur_radius: f32,
+    spread_radius: f32,
+    color: Option<u32>,
+    #[serde(default)]
+    inset: bool,
+}
+
+/// The element's declared shadow list, or `None` when it declares none or too many.
+pub(super) fn native_box_shadows(node: &NativeNode) -> Option<Vec<BoxShadow>> {
+    let encoded = node.string(property::BOX_SHADOW)?;
+    let shadows = serde_json::from_str::<Vec<NativeBoxShadow>>(encoded).ok()?;
+    box_shadows_from_declarations(shadows, node.color(property::COLOR).unwrap_or(Color::BLACK))
+}
+
+/// Core shadows for declared entries; an omitted color adopts the element's current text color.
+fn box_shadows_from_declarations(
+    shadows: Vec<NativeBoxShadow>,
+    current_color: Color,
+) -> Option<Vec<BoxShadow>> {
+    if shadows.len() > MAX_BOX_SHADOWS_PER_ELEMENT {
+        return None;
+    }
+    Some(
+        shadows
+            .into_iter()
+            .map(|shadow| {
+                BoxShadow::new(
+                    shadow.offset_x,
+                    shadow.offset_y,
+                    shadow.color.map(unpack_color).unwrap_or(current_color),
+                )
+                .blur_radius(shadow.blur_radius)
+                .spread_radius(shadow.spread_radius)
+                .inset(shadow.inset)
+            })
+            .collect(),
+    )
 }
 
 // ---------------------------------------------------------------------------------------------

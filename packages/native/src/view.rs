@@ -2732,38 +2732,54 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     if let Some(color) = node.color(property::COLOR) {
         element = element.text_color(color);
     }
-    let hover = native_state_style(
-        node,
-        property::HOVER_BACKGROUND_COLOR,
-        property::HOVER_COLOR,
-        property::HOVER_BACKGROUND_GRADIENT,
-        property::HOVER_OUTLINE,
-        property::HOVER_TRANSFORM,
-    );
-    if hover.declared() {
-        element = element.hover(move |style| hover.apply(style));
+    // Interaction states: each is one nested declaration the core's own `ElementStateStyle`
+    // carries whole, so a state that declares nothing registers no state style at all.
+    if let Some(style) = native_state_style(node, &HOVER_STYLE_CODES) {
+        element = element.hover(move |_| style);
     }
-    let active = native_state_style(
-        node,
-        property::ACTIVE_BACKGROUND_COLOR,
-        property::ACTIVE_COLOR,
-        property::ACTIVE_BACKGROUND_GRADIENT,
-        property::ACTIVE_OUTLINE,
-        property::ACTIVE_TRANSFORM,
-    );
-    if active.declared() {
-        element = element.active(move |style| active.apply(style));
+    if let Some(style) = native_state_style(node, &ACTIVE_STYLE_CODES) {
+        element = element.active(move |_| style);
     }
-    let focus = native_state_style(
-        node,
-        property::FOCUS_BACKGROUND_COLOR,
-        property::FOCUS_COLOR,
-        property::FOCUS_BACKGROUND_GRADIENT,
-        property::FOCUS_OUTLINE,
-        property::FOCUS_TRANSFORM,
-    );
-    if focus.declared() {
-        element = element.focus(move |style| focus.apply(style));
+    if let Some(style) = native_state_style(node, &FOCUS_STYLE_CODES) {
+        element = element.focus(move |_| style);
+    }
+    if let Some(style) = native_state_style(node, &DISABLED_STYLE_CODES) {
+        element = element.disabled_style(move |_| style);
+    }
+    if let Some(style) = native_state_style(node, &INVALID_STYLE_CODES) {
+        element = element.invalid_style(move |_| style);
+    }
+    if let Some(style) = native_state_style(node, &DRAGGING_STYLE_CODES) {
+        element = element.dragging(move |_| style);
+    }
+    if let Some(style) = native_state_style(node, &DRAG_OVER_STYLE_CODES) {
+        element = element.drag_over(move |_| style);
+    }
+    if let Some(style) = native_state_style(node, &FOCUS_WITHIN_STYLE_CODES) {
+        element = element.focus_within(move |_| style);
+    }
+    // Group states in a fixed order — hover, then active — so a held press wins over the hover
+    // beneath it whatever order the declaration listed them in. The core bounds the two together.
+    let hover_styles = native_group_styles(node, property::GROUP_HOVER_STYLE);
+    let active_styles = native_group_styles(node, property::GROUP_ACTIVE_STYLE)
+        .into_iter()
+        .take(MAX_GROUP_STYLES_PER_ELEMENT.saturating_sub(hover_styles.len()));
+    for (target, style) in hover_styles {
+        element = match target {
+            Some(name) => element.group_hover_named(name, move |_| style),
+            None => element.group_hover(move |_| style),
+        };
+    }
+    for (target, style) in active_styles {
+        element = match target {
+            Some(name) => element.group_active_named(name, move |_| style),
+            None => element.group_active(move |_| style),
+        };
+    }
+    match native_group(node) {
+        Some(Some(name)) => element = element.group_named(name),
+        Some(None) => element = element.group(),
+        None => {}
     }
     if let Some(transition) = native_transition(node) {
         element = element.transition(transition);
@@ -2865,6 +2881,11 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     }
     if let Some(value) = node.boolean(property::DISABLED) {
         element = element.disabled(value);
+    }
+    // Web-style invalid state on any element, so the `invalid` state style and the native
+    // accessibility flag follow one declaration; text inputs already declared it on their own.
+    if let Some(value) = node.boolean(property::INVALID) {
+        element = element.invalid(value);
     }
     if let Some(value) = node.string(property::ACCESSIBILITY_LABEL) {
         element = element.accessibility_label(value.to_owned());
@@ -3015,18 +3036,6 @@ pub(super) fn unpack_color(value: u32) -> Color {
     )
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct NativeBoxShadow {
-    offset_x: f32,
-    offset_y: f32,
-    blur_radius: f32,
-    spread_radius: f32,
-    color: Option<u32>,
-    #[serde(default)]
-    inset: bool,
-}
-
 fn native_border_widths(node: &NativeNode) -> Insets {
     let border_width = node.number(property::BORDER_WIDTH).unwrap_or(0.0);
     Insets {
@@ -3043,30 +3052,6 @@ fn native_border_widths(node: &NativeNode) -> Insets {
             .number(property::BORDER_LEFT_WIDTH)
             .unwrap_or(border_width),
     }
-}
-
-fn native_box_shadows(node: &NativeNode) -> Option<Vec<BoxShadow>> {
-    let encoded = node.string(property::BOX_SHADOW)?;
-    let shadows = serde_json::from_str::<Vec<NativeBoxShadow>>(encoded).ok()?;
-    if shadows.len() > MAX_BOX_SHADOWS_PER_ELEMENT {
-        return None;
-    }
-    let current_color = node.color(property::COLOR).unwrap_or(Color::BLACK);
-    Some(
-        shadows
-            .into_iter()
-            .map(|shadow| {
-                BoxShadow::new(
-                    shadow.offset_x,
-                    shadow.offset_y,
-                    shadow.color.map(unpack_color).unwrap_or(current_color),
-                )
-                .blur_radius(shadow.blur_radius)
-                .spread_radius(shadow.spread_radius)
-                .inset(shadow.inset)
-            })
-            .collect(),
-    )
 }
 
 pub(super) fn native_font_family(value: &str) -> Option<quickgui::FontFamily> {

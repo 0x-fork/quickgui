@@ -1,4 +1,7 @@
 use super::*;
+use quickgui::{
+    ElementStateStyle, MAX_GROUP_STYLES_PER_ELEMENT, MAX_HOVER_GROUP_NAME_BYTES, Transform2D,
+};
 
 #[test]
 fn hosted_void_mutations_are_fire_and_forget_host_commands() {
@@ -4415,60 +4418,207 @@ fn declared_corner_radii_outlines_and_backgrounds_adopt_the_css_shorthands() {
 }
 
 #[test]
-fn declared_state_styles_collect_the_gradient_outline_and_transform_the_core_supports() {
+fn nested_state_styles_collect_everything_the_core_state_style_can_swap() {
+    let mut node = NativeNode::new(NodeTag::View);
+    node.set_property(property::OUTLINE_OFFSET, Some(PropertyValue::Number(2.0)));
+    node.set_property(property::COLOR, Some(PropertyValue::Color(0xff10_2030)));
+    node.set_property(
+        property::HOVER_STYLE,
+        Some(PropertyValue::String(Arc::from(concat!(
+            r#"{"backgroundColor":4281545523,"background":"linear-gradient(90deg, #000000, #ffffff)","#,
+            r#""color":4294967295,"borderColor":4278190335,"borderWidth":2,"borderRadius":8,"#,
+            r#""outline":"3px dashed #ffffff","#,
+            r#""boxShadow":[{"offsetX":0,"offsetY":4,"blurRadius":12,"spreadRadius":-2,"color":null,"inset":false}],"#,
+            r#""opacity":0.5,"cursor":"grab","transform":"scale(1.05)","transformOrigin":"left top","#,
+            r#""padding":12}"#
+        )))),
+    );
+
+    let style = native_state_style(&node, &HOVER_STYLE_CODES).expect("a declared hover style");
+    let expected = ElementStateStyle::default()
+        .bg(unpack_color(4281545523))
+        .bg_gradient(parse_gradient("linear-gradient(90deg, #000000, #ffffff)").unwrap())
+        .text_color(unpack_color(4294967295))
+        .border_color(unpack_color(4278190335))
+        .border_width(2.0)
+        .rounded(8.0)
+        .outline_offset(3.0, Color::WHITE, 2.0)
+        .outline_dashed()
+        .shadows([BoxShadow::new(0.0, 4.0, unpack_color(0xff10_2030))
+            .blur_radius(12.0)
+            .spread_radius(-2.0)])
+        .opacity(0.5)
+        .cursor(CursorStyle::OpenHand)
+        .transform(Transform2D::scale(1.05, 1.05))
+        .transform_origin(0.0, 0.0);
+    assert_eq!(style, expected);
+
+    // A state that declares nothing must not register a core state style at all.
+    assert!(native_state_style(&NativeNode::new(NodeTag::View), &FOCUS_STYLE_CODES).is_none());
+}
+
+#[test]
+fn groups_travel_as_a_bare_marker_or_a_bounded_name() {
+    let mut node = NativeNode::new(NodeTag::View);
+    assert_eq!(native_group(&node), None);
+    node.set_property(property::HOVER_GROUP, Some(PropertyValue::Bool(true)));
+    assert_eq!(native_group(&node), Some(None));
+    node.set_property(
+        property::HOVER_GROUP,
+        Some(PropertyValue::String(Arc::from("sidebar"))),
+    );
+    assert_eq!(native_group(&node), Some(Some(Arc::<str>::from("sidebar"))));
+    node.set_property(
+        property::HOVER_GROUP,
+        Some(PropertyValue::String(Arc::from(
+            "x".repeat(MAX_HOVER_GROUP_NAME_BYTES + 1),
+        ))),
+    );
+    assert_eq!(native_group(&node), None);
+    node.set_property(property::HOVER_GROUP, Some(PropertyValue::Bool(false)));
+    assert_eq!(native_group(&node), None);
+}
+
+#[test]
+fn group_states_collect_one_entry_per_group_in_declaration_order() {
+    let mut node = NativeNode::new(NodeTag::View);
+    assert!(native_group_styles(&node, property::GROUP_HOVER_STYLE).is_empty());
+
+    // One entry is a plain object; it may name the group it follows.
+    node.set_property(
+        property::GROUP_HOVER_STYLE,
+        Some(PropertyValue::String(Arc::from(
+            r#"{"group":"sidebar","opacity":1}"#,
+        ))),
+    );
+    assert_eq!(
+        native_group_styles(&node, property::GROUP_HOVER_STYLE),
+        vec![(
+            Some(Arc::<str>::from("sidebar")),
+            ElementStateStyle::default().opacity(1.0)
+        )]
+    );
+
+    // Several entries are a list; an entry naming a group the core would refuse and an entry
+    // declaring nothing are dropped, and the rest keep their order.
+    node.set_property(
+        property::GROUP_ACTIVE_STYLE,
+        Some(PropertyValue::String(Arc::from(format!(
+            r#"[{{"opacity":0.8}},{{"group":"list","borderRadius":4}},{{"group":"{}","opacity":0.5}},{{"group":"x"}}]"#,
+            "x".repeat(MAX_HOVER_GROUP_NAME_BYTES + 1)
+        )))),
+    );
+    assert_eq!(
+        native_group_styles(&node, property::GROUP_ACTIVE_STYLE),
+        vec![
+            (None, ElementStateStyle::default().opacity(0.8)),
+            (
+                Some(Arc::<str>::from("list")),
+                ElementStateStyle::default().rounded(4.0)
+            ),
+        ]
+    );
+
+    // Entries past the core's bound are dropped in source order rather than refused.
+    let entries = (0..=MAX_GROUP_STYLES_PER_ELEMENT)
+        .map(|index| format!(r#"{{"borderRadius":{index}}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    node.set_property(
+        property::GROUP_HOVER_STYLE,
+        Some(PropertyValue::String(Arc::from(format!("[{entries}]")))),
+    );
+    let styles = native_group_styles(&node, property::GROUP_HOVER_STYLE);
+    assert_eq!(styles.len(), MAX_GROUP_STYLES_PER_ELEMENT);
+    assert_eq!(styles[1].1, ElementStateStyle::default().rounded(1.0));
+
+    // `focusWithin` is an ordinary single state.
+    node.set_property(
+        property::FOCUS_WITHIN_STYLE,
+        Some(PropertyValue::String(Arc::from(
+            r#"{"outline":"2px solid #ffffff"}"#,
+        ))),
+    );
+    assert_eq!(
+        native_state_style(&node, &FOCUS_WITHIN_STYLE_CODES),
+        Some(ElementStateStyle::default().outline_offset(2.0, Color::WHITE, 0.0))
+    );
+}
+
+#[test]
+fn nested_state_styles_honour_none_keywords_bounds_and_the_flat_legacy_names() {
     let mut node = NativeNode::new(NodeTag::View);
     node.set_property(
-        property::HOVER_BACKGROUND_COLOR,
-        Some(PropertyValue::Color(0xff332211)),
+        property::DRAG_OVER_STYLE,
+        Some(PropertyValue::String(Arc::from(
+            r#"{"outline":"none","boxShadow":[]}"#,
+        ))),
     );
-    node.set_property(property::OUTLINE_OFFSET, Some(PropertyValue::Number(2.0)));
+    assert_eq!(
+        native_state_style(&node, &DRAG_OVER_STYLE_CODES),
+        Some(ElementStateStyle::default().outline_none().shadow_none())
+    );
+
+    // Malformed JSON and an oversize declaration register nothing rather than panicking.
     node.set_property(
-        property::HOVER_OUTLINE,
-        Some(PropertyValue::String(Arc::from("3px solid #ffffff"))),
+        property::ACTIVE_STYLE,
+        Some(PropertyValue::String(Arc::from("{not json"))),
+    );
+    assert!(native_state_style(&node, &ACTIVE_STYLE_CODES).is_none());
+    node.set_property(
+        property::ACTIVE_STYLE,
+        Some(PropertyValue::String(Arc::from(format!(
+            r#"{{"opacity":0.5,"cursor":"{}"}}"#,
+            "x".repeat(MAX_STATE_STYLE_JSON_BYTES)
+        )))),
+    );
+    assert!(native_state_style(&node, &ACTIVE_STYLE_CODES).is_none());
+
+    // Too many shadows drop the list, never the rest of the state.
+    let shadows = (0..=MAX_BOX_SHADOWS_PER_ELEMENT)
+        .map(|index| {
+            format!(
+                r#"{{"offsetX":0,"offsetY":{index},"blurRadius":0,"spreadRadius":0,"color":null,"inset":false}}"#
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    node.set_property(
+        property::DRAGGING_STYLE,
+        Some(PropertyValue::String(Arc::from(format!(
+            r#"{{"boxShadow":[{shadows}],"opacity":0.5}}"#
+        )))),
+    );
+    assert_eq!(
+        native_state_style(&node, &DRAGGING_STYLE_CODES),
+        Some(ElementStateStyle::default().opacity(0.5))
+    );
+
+    // The flat legacy hover declarations overlay the nested one, so a partial migration paints
+    // exactly what both declared.
+    node.set_property(
+        property::HOVER_STYLE,
+        Some(PropertyValue::String(Arc::from(
+            r#"{"backgroundColor":1,"opacity":0.25}"#,
+        ))),
+    );
+    node.set_property(
+        property::HOVER_BACKGROUND_COLOR,
+        Some(PropertyValue::Color(0xff33_2211)),
     );
     node.set_property(
         property::HOVER_TRANSFORM,
         Some(PropertyValue::String(Arc::from("scale(1.05)"))),
     );
-    node.set_property(
-        property::HOVER_BACKGROUND_GRADIENT,
-        Some(PropertyValue::String(Arc::from(
-            "linear-gradient(90deg, #000000, #ffffff)",
-        ))),
-    );
-
-    let style = native_state_style(
-        &node,
-        property::HOVER_BACKGROUND_COLOR,
-        property::HOVER_COLOR,
-        property::HOVER_BACKGROUND_GRADIENT,
-        property::HOVER_OUTLINE,
-        property::HOVER_TRANSFORM,
-    );
-    assert!(style.declared());
-    assert_eq!(style.background, Some(unpack_color(0xff332211)));
-    assert!(style.color.is_none());
     assert_eq!(
-        style.gradient.map(|gradient| gradient.stops().len()),
-        Some(2)
+        native_state_style(&node, &HOVER_STYLE_CODES),
+        Some(
+            ElementStateStyle::default()
+                .bg(unpack_color(0xff33_2211))
+                .opacity(0.25)
+                .transform(Transform2D::scale(1.05, 1.05))
+        )
     );
-    let outline = style.outline.expect("a declared hover outline");
-    assert_eq!((outline.width, outline.offset), (3.0, 2.0));
-    assert_eq!(
-        style.transform,
-        Some(quickgui::Transform2D::scale(1.05, 1.05))
-    );
-
-    // A state that declares nothing must not register a core state style at all.
-    let empty = native_state_style(
-        &NativeNode::new(NodeTag::View),
-        property::FOCUS_BACKGROUND_COLOR,
-        property::FOCUS_COLOR,
-        property::FOCUS_BACKGROUND_GRADIENT,
-        property::FOCUS_OUTLINE,
-        property::FOCUS_TRANSFORM,
-    );
-    assert!(!empty.declared());
 }
 
 #[test]

@@ -104,6 +104,42 @@ Hover, active, focus, validation, and drag-state variants are paint-only. Add
 text color, opacity, and bounded shadow list without rebuilding the view or rerunning Taffy. Layout
 values use `AnimationExt::with_animation`; see [Declarative motion](animations.md).
 
+`group()` marks an element as the group whose hover and presses its descendants follow, and a
+descendant's `group_hover(|style| …)` and `group_active(|style| …)` variants paint while that nearest
+group is hovered or holds a press — Tailwind's `group`, `group-hover`, and `group-active`. The group
+counts as hovered wherever the pointer rests inside it, over its own padding or over any descendant,
+unless a surface above it consumes the pointer, and as active while a press on it or on any
+clickable descendant is held. Group variants layer above the base style and beneath the element's
+own hover, active, focus, validation, and drag variants, so a revealed action button the pointer
+reaches keeps every group value its own `hover` does not override. A cursor declared in them is
+ignored, because the pointer is over some other element.
+
+Group variants can be declared several times. Every entry whose group is in its state paints, later
+declarations winning where they overlap, as matching CSS rules of equal specificity do — declare
+`group_active` after `group_hover` so the press wins — and one element follows at most
+`MAX_GROUP_STYLES_PER_ELEMENT` (8) group states. `group_named("sidebar")` with
+`group_hover_named("sidebar", |style| …)` or `group_active_named` are Tailwind's `group/sidebar` and
+`group-hover/sidebar`: the member follows the nearest ancestor group carrying that name, past any
+nearer group, and paints nothing when no ancestor carries it. A named group is still the nearest
+group for members that name none. Names are bounded by `MAX_HOVER_GROUP_NAME_BYTES`.
+
+`focus_within(|style| …)` paints while the element or any descendant owns keyboard focus, like CSS
+`:focus-within`. Unlike `focus`, it follows the focus itself rather than focus visibility, so a field
+container highlights whenever its input is focused however that focus arrived; it layers beneath
+the element's own `focus` and above its group variants.
+
+```rust
+div().group().flex_row().children([
+    text("Quarterly report"),
+    button()
+        .opacity(0.0)
+        .transition(Duration::from_millis(120))
+        .group_hover(|style| style.opacity(1.0))
+        .group_active(|style| style.opacity(0.8))
+        .child(text("Rename")),
+])
+```
+
 The `focus` variant paints only while focus is *visible*, like CSS `:focus-visible`. Focus that a
 pointer press lands — including a `cx.focus(...)` a listener performs while a press is being
 dispatched — paints no focus styles; focus that a key lands — Tab, a roving arrow, or a listener
@@ -408,7 +444,7 @@ div().blend_mode(BlendMode::Multiply);
 layout box, and that is what `element_bounds` and anchoring report. Pointer input is inverse-mapped
 through the accumulated transform, so clicks, hover, drag, drop, and cursor declarations follow the
 painted pixels. The same builders exist on `ElementStateStyle` for `hover`, `active`, `focus`,
-`disabled`, `invalid`, `dragging`, and `drag_over`.
+`disabled`, `invalid`, `dragging`, `drag_over`, `focus_within`, `group_hover`, and `group_active`.
 
 Anything but a pure translation renders the subtree into a bounded offscreen texture first, as do
 `blur`, `drop_shadow`, `backdrop_blur`, `backdrop_filter`, and a non-`Normal` `blend_mode`. Text is

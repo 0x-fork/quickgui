@@ -38,6 +38,9 @@ import {
   MAX_OTP_LENGTH,
   MAX_PREVIEW_CARD_DELAY_MS,
   MAX_SCROLL_AREA_OVERFLOW_THRESHOLD,
+  MAX_GROUP_STYLES_PER_ELEMENT,
+  MAX_HOVER_GROUP_NAME_BYTES,
+  MAX_STATE_STYLE_JSON_BYTES,
   MAX_STYLE_DECLARATION_BYTES,
   MAX_TABLE_COLUMNS,
   MAX_TABLE_ROWS,
@@ -74,8 +77,8 @@ describe("binary mutation protocol", () => {
     );
   });
 
-  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v28", () => {
-    expect(PROTOCOL_VERSION).toBe(28);
+  test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v30", () => {
+    expect(PROTOCOL_VERSION).toBe(30);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -623,7 +626,13 @@ describe("binary mutation protocol", () => {
     // The Rust binding rejects any property code past its own `property::LAST`, so the two must
     // stay in step whenever a declaration is added.
     expect(PropertyCode.ScrollSnapStop).toBe(291);
+    expect(PropertyCode.HoverStyle).toBe(346);
+    expect(PropertyCode.HoverGroup).toBe(354);
+    expect(PropertyCode.FocusWithinStyle).toBe(356);
+    expect(MAX_GROUP_STYLES_PER_ELEMENT).toBe(8);
     expect(MAX_STYLE_DECLARATION_BYTES).toBe(4096);
+    expect(MAX_STATE_STYLE_JSON_BYTES).toBe(16 * 1024);
+    expect(MAX_HOVER_GROUP_NAME_BYTES).toBe(256);
     expect(MAX_GRADIENT_STOPS).toBe(8);
     expect(MAX_FILTERS_PER_ELEMENT).toBe(8);
   });
@@ -899,7 +908,7 @@ describe("binary mutation protocol", () => {
     expect(NativePart.DialogViewport).toBe("dialog-viewport");
   });
 
-  test("encodes every Base UI-aligned menu, select, and combobox part under protocol v28", () => {
+  test("encodes every Base UI-aligned menu, select, and combobox part under protocol v30", () => {
     const batch = new MutationBatch();
     // The whole `Menu.Root` declaration travels on the trigger, which is the one part the core
     // keeps mounted whether the level is open or closed.
@@ -941,7 +950,7 @@ describe("binary mutation protocol", () => {
     batch.setProperty(4, PropertyCode.HighlightItemOnHover, false);
 
     const bytes = batch.finish();
-    expect(bytes.readUInt16LE(4)).toBe(28);
+    expect(bytes.readUInt16LE(4)).toBe(PROTOCOL_VERSION);
     expect(batch.mutationCount).toBe(29);
   });
 

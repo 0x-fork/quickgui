@@ -837,6 +837,80 @@ fn interaction_states_accept_the_same_cursor_helpers() {
 }
 
 #[test]
+fn groups_and_group_state_variants_are_declared_separately() {
+    let group = div().group();
+    assert!(group.group);
+    // A group tracks state for its members; it paints nothing stateful of its own.
+    assert!(!group.has_stateful_paint());
+
+    let member = div().group_hover(|style| {
+        style
+            .bg(Color::BLACK)
+            .border_width(2.0)
+            .outline(1.0, Color::WHITE)
+            .outline_dashed()
+    });
+    assert!(!member.group);
+    let [entry] = member.group_styles.as_slice() else {
+        panic!("one group style is declared");
+    };
+    assert_eq!(entry.state, GroupState::Hover);
+    assert!(entry.target.is_none());
+    assert_eq!(entry.style.background, Some(Color::BLACK));
+    assert_eq!(entry.style.border_width, Some(2.0));
+    assert_eq!(
+        entry.style.outline.map(|outline| outline.style),
+        Some(BorderStyle::Dashed)
+    );
+    // A member paints on its group's behalf, so its own hit region stays inert.
+    assert!(!member.has_stateful_paint());
+
+    let named = div().group_named("sidebar");
+    assert!(named.group);
+    assert_eq!(named.group_name.as_deref(), Some("sidebar"));
+    let follower = div()
+        .group_hover_named("sidebar", |style| style.opacity(1.0))
+        .group_active(|style| style.opacity(0.8));
+    assert_eq!(follower.group_styles.len(), 2);
+    assert_eq!(follower.group_styles[0].target.as_deref(), Some("sidebar"));
+    assert_eq!(follower.group_styles[0].style.opacity, Some(1.0));
+    assert_eq!(follower.group_styles[1].state, GroupState::Active);
+    assert!(follower.group_styles[1].target.is_none());
+    assert!(
+        std::panic::catch_unwind(|| {
+            div().group_named("x".repeat(MAX_HOVER_GROUP_NAME_BYTES + 1))
+        })
+        .is_err()
+    );
+    assert!(std::panic::catch_unwind(|| div().group_hover_named("", |style| style)).is_err());
+    assert!(
+        std::panic::catch_unwind(|| {
+            (0..=MAX_GROUP_STYLES_PER_ELEMENT)
+                .fold(div(), |element, _| element.group_hover(|style| style))
+        })
+        .is_err()
+    );
+
+    let within = div().focus_within(|style| style.bg(Color::WHITE));
+    assert_eq!(within.focus_within.background, Some(Color::WHITE));
+    assert!(!within.has_stateful_paint());
+
+    let mut overlaid = ElementStateStyle::default().bg(Color::BLACK).rounded(4.0);
+    overlaid.overlay(&ElementStateStyle::default().bg(Color::WHITE).opacity(0.5));
+    assert_eq!(overlaid.background, Some(Color::WHITE));
+    assert_eq!(overlaid.radius, Some(4.0));
+    assert_eq!(overlaid.opacity, Some(0.5));
+
+    let dotted = ElementStateStyle::default().outline_dotted();
+    let outline = dotted.outline.expect("a dotted outline is declared");
+    assert_eq!((outline.width, outline.style), (0.0, BorderStyle::Dotted));
+    assert_eq!(
+        ElementStateStyle::default().border_width(-4.0).border_width,
+        Some(0.0)
+    );
+}
+
+#[test]
 fn opacity_is_bounded_and_interaction_state_opacity_is_paint_only() {
     assert_eq!(div().opacity(-1.0).visual.opacity, 0.0);
     assert_eq!(div().opacity(2.0).visual.opacity, 1.0);

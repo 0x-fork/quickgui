@@ -100,6 +100,13 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
+- nested interaction-state styling in `@quickgui/solid`, at protocol v30: `style.hover`,
+  `active`, `focus`, `disabled`, `invalid`, `dragging`, `dragOver`, `groupHover`, `groupActive`,
+  and `focusWithin` objects carrying every property the core's `ElementStateStyle` can swap, group
+  states listing one entry per group they follow, a boolean or named `group` prop marking the group
+  over the core's new `Element::group`, `group_hover`, `group_active`, and `focus_within` (and the
+  `_named` forms for `group/name` targeting), one bounded JSON
+  declaration per state, and the flat `hover*`/`active*`/`focus*` names kept as deprecated aliases;
 - JavaScript bindings for the Base UI-aligned menu, select, and combobox parts and props, at
   protocol v28: a compound `Menu` (`Root`/`Trigger`/`Portal`/`Backdrop`/`Positioner`/`Popup`/
   `Arrow`/`Item`/`LinkItem`/`SubmenuRoot`/`SubmenuTrigger`/`Group`/`GroupLabel`/`RadioGroup`/

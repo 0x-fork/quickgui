@@ -399,6 +399,10 @@ pub(super) fn sanitize_detached_element(element: &mut Element, preserve_motion: 
     element.invalid_style.cursor_style = None;
     element.dragging.cursor_style = None;
     element.drag_over.cursor_style = None;
+    element.focus_within.cursor_style = None;
+    for entry in &mut element.group_styles {
+        entry.style.cursor_style = None;
+    }
     element.user_select = UserSelect::None;
     element.resolved_user_select = false;
     element.focusable = false;
@@ -1777,9 +1781,16 @@ pub(super) fn element_has_outset_shadow(element: &Element) -> bool {
         element.disabled_style.shadows.as_deref(),
         element.dragging.shadows.as_deref(),
         element.drag_over.shadows.as_deref(),
+        element.focus_within.shadows.as_deref(),
     ]
     .into_iter()
     .flatten()
     .flatten()
     .any(|shadow| !shadow.is_inset())
+        || element
+            .group_styles
+            .iter()
+            .flat_map(|entry| entry.style.shadows.as_deref())
+            .flatten()
+            .any(|shadow| !shadow.is_inset())
 }

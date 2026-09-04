@@ -25,18 +25,18 @@ use quickgui::{
     ContextMenuState, CursorGrabMode, CursorStyle, Dialog as CoreDialog, DialogKind, DisplayId,
     Element, ElementId, Field, Fieldset, FollowMode, FontWeight, GridTrack, Image, Insets,
     IntoElement, LayoutBoundsHandle, ListAlignment, ListState, MAX_BOX_SHADOWS_PER_ELEMENT,
-    MAX_SLIDER_THUMBS, MAX_SPLITTER_PANES, MAX_TOGGLE_GROUP_ITEMS, MAX_TOOLBAR_ITEMS,
-    MacOsVibrancy, MacOsVisualEffectState, Markdown, MarkdownStyle, Meter, PerformanceProfile,
-    Point, PointerPhase, Popover, PopoverKind, PopoverMenu, PopoverMenuActivation, PopoverMenuItem,
-    PopoverMenuItemKind, PopoverMenuItemState, Progress, QuitMode, Radio, RadioGroup, Slider,
-    SliderOrientation, SliderState, Splitter, SplitterOrientation, SplitterState, StateAccessor,
-    Svg, Switch, SystemPopover, TERMINAL_ANSI_COLOR_COUNT, Tab, Tabs, TaskbarProgressState,
-    Terminal, TerminalOptions, TerminalPaddingColor, TerminalStatus, TerminalStyle, TerminalTheme,
-    TextAlign, TitleBarStyle, Toggle, ToggleGroup, ToggleGroupItem, ToggleGroupState, ToggleState,
-    Toolbar, ToolbarItem, ToolbarOrientation, ToolbarState, Tooltip, Transition,
-    TransitionProperties, View, ViewContext, WindowAppearance, WindowBackgroundAppearance,
-    WindowHandle, WindowKind, WindowOptions, button, div, svg as svg_element, text, text_area,
-    text_input,
+    MAX_GROUP_STYLES_PER_ELEMENT, MAX_SLIDER_THUMBS, MAX_SPLITTER_PANES, MAX_TOGGLE_GROUP_ITEMS,
+    MAX_TOOLBAR_ITEMS, MacOsVibrancy, MacOsVisualEffectState, Markdown, MarkdownStyle, Meter,
+    PerformanceProfile, Point, PointerPhase, Popover, PopoverKind, PopoverMenu,
+    PopoverMenuActivation, PopoverMenuItem, PopoverMenuItemKind, PopoverMenuItemState, Progress,
+    QuitMode, Radio, RadioGroup, Slider, SliderOrientation, SliderState, Splitter,
+    SplitterOrientation, SplitterState, StateAccessor, Svg, Switch, SystemPopover,
+    TERMINAL_ANSI_COLOR_COUNT, Tab, Tabs, TaskbarProgressState, Terminal, TerminalOptions,
+    TerminalPaddingColor, TerminalStatus, TerminalStyle, TerminalTheme, TextAlign, TitleBarStyle,
+    Toggle, ToggleGroup, ToggleGroupItem, ToggleGroupState, ToggleState, Toolbar, ToolbarItem,
+    ToolbarOrientation, ToolbarState, Tooltip, Transition, TransitionProperties, View, ViewContext,
+    WindowAppearance, WindowBackgroundAppearance, WindowHandle, WindowKind, WindowOptions, button,
+    div, svg as svg_element, text, text_area, text_input,
 };
 use quickgui::{Event, EventContext};
 // Base UI-aligned compound descriptors. Every type below is a core model the binding only
@@ -95,7 +95,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 28;
+const PROTOCOL_VERSION: u16 = 30;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -479,7 +479,21 @@ mod property {
     pub const SWIFT_UI_GAUGE_STYLE: u16 = 343;
     pub const SWIFT_UI_GAUGE_MINIMUM_VALUE_LABEL: u16 = 344;
     pub const SWIFT_UI_GAUGE_MAXIMUM_VALUE_LABEL: u16 = 345;
-    pub const LAST: u16 = SWIFT_UI_GAUGE_MAXIMUM_VALUE_LABEL;
+    // Nested interaction-state styles: one bounded JSON declaration per state carrying everything
+    // the core's `ElementStateStyle` can swap, plus the hover-group marker whose hover a
+    // descendant's `groupHover` follows. The flat hover/active/focus codes above stay honoured.
+    pub const HOVER_STYLE: u16 = 346;
+    pub const ACTIVE_STYLE: u16 = 347;
+    pub const FOCUS_STYLE: u16 = 348;
+    pub const DISABLED_STYLE: u16 = 349;
+    pub const INVALID_STYLE: u16 = 350;
+    pub const DRAGGING_STYLE: u16 = 351;
+    pub const DRAG_OVER_STYLE: u16 = 352;
+    pub const GROUP_HOVER_STYLE: u16 = 353;
+    pub const HOVER_GROUP: u16 = 354;
+    pub const GROUP_ACTIVE_STYLE: u16 = 355;
+    pub const FOCUS_WITHIN_STYLE: u16 = 356;
+    pub const LAST: u16 = FOCUS_WITHIN_STYLE;
 }
 
 #[derive(Default)]

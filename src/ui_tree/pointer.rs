@@ -9,6 +9,20 @@ impl UiTree {
         self.paint_at(scene, renderer, Instant::now())
     }
 
+    /// An element and its ancestors, innermost first, so a group can tell whether the held press
+    /// or the focus sits inside it; empty when there is no such element.
+    pub(super) fn ancestor_path(&self, element: Option<ElementId>) -> Vec<ElementId> {
+        let mut path = Vec::new();
+        let mut current = element;
+        while let Some(id) = current
+            && path.len() < MAX_MOUSE_EVENT_PATH
+        {
+            path.push(id);
+            current = self.parents.get(&id).copied();
+        }
+        path
+    }
+
     pub(crate) fn paint_at(
         &mut self,
         scene: &mut Scene,
@@ -45,6 +59,8 @@ impl UiTree {
         )?;
         let mut source_order = 0;
         let styled_focus = self.styled_focus();
+        let pressed_path = self.ancestor_path(self.pressed);
+        let focused_path = self.ancestor_path(self.focused);
         let mut transition_context = StyleTransitionPaintContext {
             playbacks: Some(&mut self.style_transitions),
             request_frame: &mut self.style_transition_frame_requested,
@@ -63,6 +79,9 @@ impl UiTree {
             self.dragging,
             self.drag_over,
             styled_focus,
+            &pressed_path,
+            &focused_path,
+            None,
             self.scale_factor,
             scene,
             renderer,
@@ -190,6 +209,8 @@ impl UiTree {
             )?;
             let mut source_order = 0;
             let styled_focus = self.styled_focus();
+            let pressed_path = self.ancestor_path(self.pressed);
+            let focused_path = self.ancestor_path(self.focused);
             let mut resolved_bounds = HashMap::new();
             collect_layout_hit_regions(
                 root,
@@ -204,6 +225,9 @@ impl UiTree {
                 self.dragging,
                 self.drag_over,
                 styled_focus,
+                &pressed_path,
+                &focused_path,
+                None,
                 LayoutFrame::root(Point::ZERO, viewport),
                 viewport,
                 viewport,
