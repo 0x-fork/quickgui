@@ -51,7 +51,9 @@ use winit::{dpi::PhysicalPosition, raw_window_handle::HasWindowHandle};
     target_os = "openbsd",
     target_os = "netbsd"
 ))]
-use crate::platform::{PlatformDialogId, PlatformResponder};
+use crate::platform::PlatformDialogId;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use crate::platform::PlatformResponder;
 use crate::{
     AboutPanelOptions, Action, ActionListener, AnyAction, AppInfo, AppPaths, AssetError, Assets,
     Color, ColorScheme, CursorStyle, Display, DisplayEvent, DisplayId, Displays, Element,
