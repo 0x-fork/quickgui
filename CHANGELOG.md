@@ -4,6 +4,8 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+## 0.1.2 - 2026-09-04
+
 ### Framework
 
 - Added `Element::group`, `Element::group_hover`, and `Element::group_active`, Tailwind's `group`,
@@ -482,7 +484,7 @@ All notable user-facing changes to QuickGUI are recorded here.
   focus rings. Outlines are painted outside the border box and never affect layout, bounded by
   `MAX_OUTLINE_WIDTH` and `MAX_OUTLINE_OFFSET`.
 - Added raster element backgrounds: `bg_image(image, BackgroundSize, BackgroundRepeat,
-  BackgroundPosition)` with `bg_image_cover`, `bg_image_contain`, `bg_image_tiled`, and
+BackgroundPosition)` with `bg_image_cover`, `bg_image_contain`, `bg_image_tiled`, and
   `bg_image_none`. Tiles reuse the existing bounded image primitive and GPU texture cache, are
   masked by the element's rounded corners, and are capped by `MAX_BACKGROUND_IMAGE_TILES` (256).
 - Added bounded CSS-shaped color filters: `Filter`, `Filters`, `ColorMatrix`,
@@ -581,9 +583,6 @@ All notable user-facing changes to QuickGUI are recorded here.
   `NSDocumentController` populates it.
 - Dock menu items now render their declared accelerators.
 
-
-
-
 - Window levels now apply the exact `NSWindowLevel` after Winit's three-level hint;
   `move_window_top`/`move_window_above` use `orderFront:` and `orderWindow:relativeTo:` so a window
   restacks without activating the application or becoming key.
@@ -600,20 +599,12 @@ All notable user-facing changes to QuickGUI are recorded here.
 - `on_did_become_active`/`on_did_resign_active` reuse the existing application observer, adding no
   new native observer.
 
-
-
-
-
 - Added an `NSSpellChecker`-backed default text checking provider covering spelling, guesses,
   corrections, the user replacement dictionary, learned and ignored words, and per-input
   `uniqueSpellDocumentTag` sessions released on unmount, with explicit UTF-8/UTF-16 offset
   conversion at the AppKit boundary.
 - Added the macOS dictionary popover through `NSView showDefinitionForAttributedString:atPoint:` on
   the key window's content view, positioned at a window-local logical point.
-
-
-
-
 
 - Message boxes use `NSAlert` suppression buttons, custom icons, and reassigned key equivalents so
   an explicit default or cancel index wins over AppKit's first-button default.
@@ -630,7 +621,6 @@ All notable user-facing changes to QuickGUI are recorded here.
 - `NSImage` conversion honors QuickGUI template metadata and additional backing-scale
   representations for Dock, About-panel, message-box, and menu icons, and `Image::named_system`
   resolves `NSImage` names and SF Symbols.
-
 
 ### JavaScript tooling
 
@@ -978,9 +968,9 @@ All notable user-facing changes to QuickGUI are recorded here.
   handlers, and an Authenticode `signtool` hook; and `quickgui build --mas` for Mac App Store
   `.pkg` submission.
 - Added window lifecycle events to `@quickgui/native`: `window.on("minimize" | "restore" |
-  "maximize" | "unmaximize" | "enterFullScreen" | "leaveFullScreen" | "readyToShow" |
-  "occlusionChange" | "levelChange" | "willResize" | "willMove" | "resize" | "move" | "focus" |
-  "blur" | "appearanceChange")`, plus `app.on("activate" | "deactivate")`. `willResize` and
+"maximize" | "unmaximize" | "enterFullScreen" | "leaveFullScreen" | "readyToShow" |
+"occlusionChange" | "levelChange" | "willResize" | "willMove" | "resize" | "move" | "focus" |
+"blur" | "appearanceChange")`, plus `app.on("activate" | "deactivate")`. `willResize` and
   `willMove` are notifications: the core answers the window manager synchronously, so the narrowing
   is declared ahead with `window.setResizePolicy({ aspectRatio, minimum, maximum, snap })` and
   `window.setMovePolicy({ keepOnScreen })` instead of blocking on a JavaScript callback.
@@ -1004,7 +994,7 @@ All notable user-facing changes to QuickGUI are recorded here.
   the installed core spell-check provider, bounded to 256 UTF-8 bytes.
 
 - Added `window.onCloseRequested(listener)`, `window.destroy()`, and `window.on("closed" |
-  "closeRequested", …)`. While at least one listener is registered the window declares close
+"closeRequested", …)`. While at least one listener is registered the window declares close
   interception to the core, which prevents the native close and emits `closeRequested` instead;
   `window.close()` or `window.destroy()` completes the held request, and withdrawing the last
   listener restores ordinary native closing.
@@ -1022,7 +1012,6 @@ All notable user-facing changes to QuickGUI are recorded here.
 - Added `Clipboard.availableFormats()`, `Clipboard.has(format)`, `Clipboard.readBuffer(format)`,
   `Clipboard.writeBuffer(format, data)`, `Clipboard.readFindText()`, and
   `Clipboard.writeFindText(text)` over the core's typed clipboard entries.
-
 
 - Added Base-UI-shaped Solid `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`,
   `Accordion`, `Field`, and `Fieldset` compound parts. Each part is one native node that declares
