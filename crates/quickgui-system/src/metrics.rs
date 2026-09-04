@@ -294,8 +294,8 @@ mod platform {
         Foundation::FILETIME,
         System::{
             ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
-            SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX},
-            Threading::{GetCurrentProcess, GetProcessTimes, GetSystemTimeAsFileTime},
+            SystemInformation::{GetSystemTimeAsFileTime, GlobalMemoryStatusEx, MEMORYSTATUSEX},
+            Threading::{GetCurrentProcess, GetProcessTimes},
         },
     };
 
