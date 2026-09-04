@@ -121,7 +121,6 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
@@ -169,14 +168,13 @@ jobs:
             target/npm-release/NPM_SHA256SUMS
           if-no-files-found: error
           retention-days: 30
-      - name: Authenticate with crates.io
-        id: crates-io-auth
-        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
       - name: Publish Rust crates
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: scripts/release-crates.sh --publish
       - name: Publish npm packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: scripts/release-npm.sh --publish target/npm-release
       - name: Verify public registry installs
         run: >-
