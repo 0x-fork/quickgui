@@ -5,6 +5,7 @@ set -euo pipefail
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 cd "$repository_root"
+"$script_dir/release-metadata.sh" >/dev/null
 
 package_target_dir=${QUICKGUI_PACKAGE_TARGET_DIR:-"$repository_root/target/package-gate"}
 if [[ $package_target_dir != /* ]]; then
@@ -154,7 +155,7 @@ assert_only_top_level_entries "quickgui-glyphon-${glyphon_version}" \
 assert_only_top_level_entries "quickgui-system-${system_version}" \
   "${common_cargo_entries[@]}" src
 assert_only_top_level_entries "quickgui-${quickgui_version}" \
-  "${common_cargo_entries[@]}" CHANGELOG.md LICENSE-APACHE LICENSE-MIT README.md \
+  "${common_cargo_entries[@]}" build.rs CHANGELOG.md LICENSE-APACHE LICENSE-MIT README.md \
   THIRD_PARTY_NOTICES.md src
 
 if [[ -d "$scratch_dir/quickgui-${quickgui_version}/vendor" ]]; then

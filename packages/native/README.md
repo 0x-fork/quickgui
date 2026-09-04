@@ -52,7 +52,7 @@ bun run build:native
 bun test packages/native
 ```
 
-The native source declares macOS, Windows, and Linux targets. The 0.0.1 npm release contains and
+The native source declares macOS, Windows, and Linux targets. The current npm release contains and
 supports macOS arm64 and x64 addons; later releases can add other platforms once their addons and
 acceptance gates are ready. A source checkout only needs the host `.node` build for development.
 The source protocol is versioned and malformed batches are rejected transactionally before the

@@ -5,6 +5,7 @@ set -euo pipefail
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 cd "$repository_root"
+"$script_dir/release-metadata.sh" >/dev/null
 
 output_dir=${1:-target/npm-release}
 if [[ $output_dir != /* ]]; then
@@ -13,16 +14,19 @@ fi
 mkdir -p "$output_dir"
 find "$output_dir" -maxdepth 1 -type f \( -name 'quickgui-*.tgz' -o -name 'NPM_SHA256SUMS' \) -delete
 
-npm_version() {
+manifest_version() {
   node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(manifest.version)' "$1"
 }
 
-npm_release_version=$(npm_version packages/native/package.json)
-solid_version=$(npm_version packages/solid/package.json)
-cli_version=$(npm_version packages/cli/package.json)
-if [[ $npm_release_version != "$solid_version" ]] || [[ $npm_release_version != "$cli_version" ]]
+release_version=$(manifest_version package.json)
+native_version=$(manifest_version packages/native/package.json)
+solid_version=$(manifest_version packages/solid/package.json)
+cli_version=$(manifest_version packages/cli/package.json)
+if [[ $release_version != "$native_version" ]] || \
+   [[ $release_version != "$solid_version" ]] || \
+   [[ $release_version != "$cli_version" ]]
 then
-  echo "package-npm-release: all @quickgui packages must have the same version" >&2
+  echo "package-npm-release: all @quickgui packages must match root version $release_version" >&2
   exit 1
 fi
 
@@ -49,9 +53,9 @@ for package_name in native solid cli; do
   (cd "packages/$package_name" && bun pm pack --destination "$output_dir" --quiet)
 done
 
-native_archive="$output_dir/quickgui-native-${npm_release_version}.tgz"
-solid_archive="$output_dir/quickgui-solid-${npm_release_version}.tgz"
-cli_archive="$output_dir/quickgui-cli-${npm_release_version}.tgz"
+native_archive="$output_dir/quickgui-native-${release_version}.tgz"
+solid_archive="$output_dir/quickgui-solid-${release_version}.tgz"
+cli_archive="$output_dir/quickgui-cli-${release_version}.tgz"
 for archive in "$native_archive" "$solid_archive" "$cli_archive"; do
   if [[ ! -f $archive ]]; then
     echo "package-npm-release: missing archive $archive" >&2
@@ -65,7 +69,7 @@ verify_manifest() {
   local manifest_file=$3
   tar -xOf "$archive" package/package.json > "$manifest_file"
   if [[ $(jq -r '.name' "$manifest_file") != "$expected_name" || \
-        $(jq -r '.version' "$manifest_file") != "$npm_release_version" ]]
+        $(jq -r '.version' "$manifest_file") != "$release_version" ]]
   then
     echo "package-npm-release: unexpected name or version in $archive" >&2
     exit 1
@@ -82,14 +86,14 @@ verify_manifest "$native_archive" '@quickgui/native' "$manifest_dir/native.json"
 verify_manifest "$solid_archive" '@quickgui/solid' "$manifest_dir/solid.json"
 verify_manifest "$cli_archive" '@quickgui/cli' "$manifest_dir/cli.json"
 
-if ! jq -e --arg version "$npm_release_version" \
+if ! jq -e --arg version "$release_version" \
   '.dependencies["@quickgui/native"] == $version' \
   "$manifest_dir/solid.json" >/dev/null
 then
   echo "package-npm-release: Solid must depend on the exact native release" >&2
   exit 1
 fi
-if ! jq -e --arg version "$npm_release_version" \
+if ! jq -e --arg version "$release_version" \
   '.dependencies["@quickgui/native"] == $version and
    .dependencies["@quickgui/solid"] == $version and
    .bin.quickgui == "src/cli.ts"' \
@@ -125,4 +129,4 @@ checksum_file="$output_dir/NPM_SHA256SUMS"
 ) > "$checksum_file"
 
 printf '%s\n' \
-  "QUICKGUI_NPM_PACKAGE_RESULT {\"version\":\"$npm_release_version\",\"native\":\"$(basename "$native_archive")\",\"solid\":\"$(basename "$solid_archive")\",\"cli\":\"$(basename "$cli_archive")\",\"checksums\":\"$(basename "$checksum_file")\",\"passed\":true}"
+  "QUICKGUI_NPM_PACKAGE_RESULT {\"version\":\"$release_version\",\"native\":\"$(basename "$native_archive")\",\"solid\":\"$(basename "$solid_archive")\",\"cli\":\"$(basename "$cli_archive")\",\"checksums\":\"$(basename "$checksum_file")\",\"passed\":true}"

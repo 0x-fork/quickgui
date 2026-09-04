@@ -295,8 +295,8 @@ test("project initialization renders a complete Solid scaffold", async () => {
     name: "sample-app",
     scripts: { dev: "quickgui dev", build: "quickgui build" },
     dependencies: {
-      "@quickgui/native": "^0.0.1",
-      "@quickgui/solid": "^0.0.1",
+      "@quickgui/native": "^0.1.2",
+      "@quickgui/solid": "^0.1.2",
     },
   });
   expect(readFileSync(join(project, "quickgui.config.ts"), "utf8")).toContain(

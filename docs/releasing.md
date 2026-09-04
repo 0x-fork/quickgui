@@ -44,17 +44,19 @@ into future crates.io releases. It rejects a dirty source tree by default;
 CI sets `QUICKGUI_PACKAGE_TOOLCHAIN=1.90.0`, making both package creation and the fresh downstream
 resolution use the declared MSRV rather than the runner's newer default compiler.
 
-The GitHub `CI` workflow runs this complete non-interactive gate on clean commits. Pushes, tags, and
-manual dispatches upload one immutable `quickgui-<version>-crates-<commit>` artifact containing all
-six verified `.crate` archives, `SHA256SUMS`, this release guide, and the changelog. Pull requests
-verify the same packages but do not retain release artifacts. Non-tag CI never publishes anything.
+The GitHub `CI` workflow runs this complete non-interactive gate on clean commits. Every non-PR
+invocation uploads one immutable `quickgui-<version>-crates-<commit>` artifact containing all six
+verified `.crate` archives, `SHA256SUMS`, this release guide, and the changelog. Pull requests verify
+the same packages but do not retain release artifacts. The CI workflow never publishes.
 
-A pushed `v*` tag adds the `Publish tagged release` job after the macOS, Windows, and Linux gates.
-The job rejects a tag that is not exactly `v<quickgui-crate-version>` or lacks a dated changelog
-section. It also requires `@quickgui/native`, `@quickgui/solid`, and `@quickgui/cli` to share one npm
-version. The job builds both macOS native architectures, runs the JavaScript tests and typecheck,
-verifies the npm tarballs, publishes both registries in dependency order, installs the public
-packages in fresh Rust and Bun consumers, and only then creates the GitHub Release.
+A pushed `v*` tag starts the separate `Release` workflow, which invokes the reusable CI workflow
+and waits for its macOS, Windows, and Linux gates before publishing. The publish job rejects a tag
+that is not exactly `v<root-package-version>` or lacks a dated changelog section. The root
+`package.json` version is the source of truth; the release gate requires the `quickgui` and
+`quickgui-system` crates, native binding crate, and all three npm packages to match it. The job
+builds both macOS native architectures, runs the JavaScript tests and typecheck, verifies the npm
+tarballs, publishes both registries in dependency order, installs the public packages in fresh
+Rust and Bun consumers, and only then creates the GitHub Release.
 
 ## macOS acceptance evidence
 
@@ -72,14 +74,10 @@ code changed. A release decision may combine the last passing full composition p
 focused performance or display evidence, provided the intervening change and its focused coverage
 are recorded in [the status ledger](status.md).
 
-## One-time trusted publisher setup
+## Registry authentication setup
 
-The release job uses GitHub OIDC and does not require long-lived `CARGO_REGISTRY_TOKEN` or
-`NPM_TOKEN` repository secrets. Before the first automated release, register the workflow on both
-registries. The values are case-sensitive.
-
-For each of these six crates, add a
-[crates.io Trusted Publisher](https://crates.io/docs/trusted-publishing):
+The private GitHub repository cannot use crates.io trusted publishing. Create a crates.io API token
+that can publish these six crates and store it as the `CARGO_REGISTRY_TOKEN` GitHub Actions secret:
 
 - `quickgui-winit`
 - `quickgui-accesskit-winit`
@@ -88,32 +86,35 @@ For each of these six crates, add a
 - `quickgui-system`
 - `quickgui`
 
-Use GitHub owner `egoist`, repository `quickgui`, workflow filename `ci.yml`, and no environment.
-
 For each npm package (`@quickgui/native`, `@quickgui/solid`, and `@quickgui/cli`), add an
-[npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) with the same owner, repository,
-workflow filename, and no environment. Allow `npm publish`. npm requires Node 22.14 or newer and npm
-11.5.1 or newer for OIDC; the workflow uses Node 24 and verifies the npm CLI before publication.
+[npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) with GitHub owner `egoist`,
+repository `quickgui`, workflow filename `release.yml`, and no environment. Allow `npm publish`.
+npm requires Node 22.14 or newer and npm 11.5.1 or newer for OIDC; the workflow uses Node 24 and
+verifies the npm CLI before publication. No `NPM_TOKEN` secret is required.
 
-Creating the workflow does not create these registry-side trust records. A missing or misspelled
-record makes authentication fail before publication.
+Creating the workflow does not create the npm registry-side trust records. A missing or misspelled
+record makes npm authentication fail before publication.
 
 ## Tag-driven publication
 
-Prepare the release commit by updating the root crate version, every changed support-crate version
-and exact dependency, and all three npm package versions. Move the shipped changes out of
-`Unreleased` into a dated `## <crate-version> - YYYY-MM-DD` section. Then create and push an
-annotated tag:
+Prepare the release commit by setting the version in the root `package.json` and mirroring it into
+the `quickgui`, `quickgui-system`, native binding, and three npm package manifests. Update the CLI
+version and generated-project dependency versions to match. The four vendored compatibility forks
+retain upstream-derived versions; bump a fork and its exact dependency only when that fork changes.
+Move the shipped changes out of `Unreleased` into a dated `## <version> - YYYY-MM-DD` section. Then
+create and push an annotated `v<version>` tag:
 
 ```console
 git tag -a v0.1.2 -m "QuickGUI 0.1.2"
 git push origin main v0.1.2
 ```
 
-The Rust and npm version streams are independent: the Git tag follows the root Rust version, while
-the three npm packages share their own version. A Rust-only release may retain an already-published
-npm version only when the newly packed npm tarballs are byte-for-byte identical to that public
-version.
+Pushing the tag starts the release automatically. To start or retry it manually, open the `Release`
+workflow, choose **Run workflow**, and enter the existing tag such as `v0.1.2`. Manual dispatch does
+not create the tag, update package versions, or change the changelog; prepare and push those first.
+
+Every first-party QuickGUI Cargo and npm package uses this one release version. The metadata gate
+reads it from the root `package.json` and fails before packaging if any mirrored version differs.
 
 The workflow publishes crates.io packages in this dependency order:
 
@@ -131,7 +132,8 @@ version only when its registry integrity matches the locally verified tarball. T
 recovery from a partial registry release without attempting to overwrite immutable versions.
 
 The npm tarballs and their SHA-256 checksums are retained as a workflow artifact and attached to the
-GitHub Release. npm trusted publishing adds provenance automatically for this public repository.
+GitHub Release. npm trusted publishing works for the private repository, but does not generate
+provenance for it.
 
 ## Manual recovery
 
@@ -152,7 +154,7 @@ workspace directories with npm directly. Wait for each package to propagate befo
 Never rerun a successful manual publish; first inspect the public registry and continue after the
 last completed package.
 
-Finally, run `scripts/release-registry-smoke.sh <rust-version> <npm-version>` to compile a fresh
-Rust 1.90 consumer without patches, install all three packages in a fresh Bun project, import the
+Finally, run `scripts/release-registry-smoke.sh <version>` to compile a fresh Rust 1.90 consumer
+without patches, install all three packages at that same version in a fresh Bun project, import the
 native and Solid runtimes, and execute the installed CLI. Run the live macOS gates once more from
 the tagged source if the published artifacts differ from the previously recorded candidates.

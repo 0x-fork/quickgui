@@ -7,12 +7,12 @@
     "build": "quickgui build"
   },
   "dependencies": {
-    "@quickgui/native": "^0.0.1",
-    "@quickgui/solid": "^0.0.1",
+    "@quickgui/native": "^0.1.2",
+    "@quickgui/solid": "^0.1.2",
     "solid-js": "2.0.0-rc.3"
   },
   "devDependencies": {
-    "@quickgui/cli": "^0.0.1",
+    "@quickgui/cli": "^0.1.2",
     "@types/bun": "latest",
     "typescript": "latest"
   }

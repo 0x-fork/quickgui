@@ -13,7 +13,7 @@ import { findMinisignTool } from "./packaging/pipeline.ts";
 import { minisignKeygenArguments } from "./packaging/updates.ts";
 import { hostTarget } from "./targets.ts";
 
-export const CLI_VERSION = "0.0.1";
+export const CLI_VERSION = "0.1.2";
 
 export async function runCli(argv: string[]): Promise<number> {
   const command = parseCliArgs(argv);

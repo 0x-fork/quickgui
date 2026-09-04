@@ -18,17 +18,18 @@ esac
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 cd "$repository_root"
+"$script_dir/release-metadata.sh" >/dev/null
 
 archive_dir=${2:-target/npm-release}
 if [[ $archive_dir != /* ]]; then
   archive_dir="$repository_root/$archive_dir"
 fi
 
-npm_version() {
+manifest_version() {
   node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(manifest.version)' "$1"
 }
 
-npm_release_version=$(npm_version packages/native/package.json)
+npm_release_version=$(manifest_version package.json)
 scratch_dir=$(mktemp -d -t quickgui-npm-release.XXXXXX)
 trap 'rm -rf "$scratch_dir"' EXIT
 

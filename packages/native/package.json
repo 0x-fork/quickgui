@@ -1,6 +1,6 @@
 {
   "name": "@quickgui/native",
-  "version": "0.0.1",
+  "version": "0.1.2",
   "description": "Low-overhead Bun and Node-API host for QuickGUI",
   "repository": {
     "type": "git",

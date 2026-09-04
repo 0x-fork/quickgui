@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to publish
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality gates
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+    permissions:
+      contents: read
+
+  publish:
+    name: Publish tagged release
+    if: github.repository == 'egoist/quickgui'
+    needs: quality
+    runs-on: macos-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      QUICKGUI_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - name: Resolve release source
+        id: source
+        run: git rev-parse HEAD | sed 's/^/sha=/' >> "$GITHUB_OUTPUT"
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.15.2
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup toolchain install 1.90.0 --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Verify tagged release metadata
+        id: release
+        run: scripts/release-metadata.sh "$GITHUB_OUTPUT"
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Build macOS native packages
+        run: |
+          bun run build:native --target aarch64-apple-darwin
+          bun run build:native --target x86_64-apple-darwin
+      - name: Test JavaScript packages
+        run: |
+          bun run test:js
+          bun run typecheck:js
+      - name: Build and verify npm tarballs
+        run: scripts/package-npm-release.sh target/npm-release
+      - name: Verify registry publication plan
+        run: |
+          scripts/release-crates.sh --check
+          scripts/release-npm.sh --check target/npm-release
+      - name: Upload npm release candidates
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: quickgui-${{ steps.release.outputs.version }}-npm-${{ steps.source.outputs.sha }}
+          path: |
+            target/npm-release/*.tgz
+            target/npm-release/NPM_SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish Rust crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: scripts/release-crates.sh --publish
+      - name: Publish npm packages
+        run: scripts/release-npm.sh --publish target/npm-release
+      - name: Verify public registry installs
+        run: scripts/release-registry-smoke.sh '${{ steps.release.outputs.version }}'
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if gh release view "$QUICKGUI_RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$QUICKGUI_RELEASE_TAG" --title "QuickGUI $RELEASE_VERSION"
+            gh release upload "$QUICKGUI_RELEASE_TAG" target/npm-release/*.tgz target/npm-release/NPM_SHA256SUMS --clobber
+          else
+            gh release create "$QUICKGUI_RELEASE_TAG" \
+              --verify-tag \
+              --title "QuickGUI $RELEASE_VERSION" \
+              --generate-notes \
+              target/npm-release/*.tgz \
+              target/npm-release/NPM_SHA256SUMS
+          fi

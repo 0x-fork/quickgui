@@ -42,7 +42,7 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 - [Deterministic testing](testing.md) — headless interaction, exact time, geometry assertions, and bounded WGPU screenshots.
 - [Retained-tree inspector](inspector.md) — feature-gated picking, hierarchy/layout/hit/accessibility snapshots, frame damage, and resource bounds.
 - [Examples and performance checks](examples-and-performance.md) — Hacker News, the 100,000-row stress case, benchmarks, and validation.
-- [Releasing QuickGUI 0.1](releasing.md) — clean gates, OIDC trusted publishing, tag automation, and registry smoke tests.
+- [Releasing QuickGUI 0.1](releasing.md) — clean gates, registry authentication, tag automation, and registry smoke tests.
 - [Changelog](../CHANGELOG.md) — user-facing changes in each published QuickGUI version.
 - [Status and roadmap](status.md) — implemented surface, ordered release blockers, later work, and explicit non-goals.
 
