@@ -34,7 +34,13 @@ if [[ -z $release_version ]]; then
   exit 1
 fi
 
+node "$script_dir/sync-release-version.mjs" --check >/dev/null
+
 assert_version "quickgui crate version" "$(cargo_version Cargo.toml)" "$release_version"
+assert_version "quickgui-winit crate version" "$(cargo_version vendor/winit/Cargo.toml)" "$release_version"
+assert_version "quickgui-accesskit-winit crate version" "$(cargo_version vendor/accesskit_winit/Cargo.toml)" "$release_version"
+assert_version "quickgui-cosmic-text crate version" "$(cargo_version vendor/cosmic_text/Cargo.toml)" "$release_version"
+assert_version "quickgui-glyphon crate version" "$(cargo_version vendor/glyphon/Cargo.toml)" "$release_version"
 assert_version "quickgui-system crate version" "$(cargo_version crates/quickgui-system/Cargo.toml)" "$release_version"
 assert_version "native binding crate version" "$(cargo_version packages/native/Cargo.toml)" "$release_version"
 assert_version "@quickgui/native version" "$(manifest_version packages/native/package.json)" "$release_version"

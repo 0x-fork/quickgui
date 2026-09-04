@@ -52,8 +52,8 @@ the same packages but do not retain release artifacts. The CI workflow never pub
 A pushed `v*` tag starts the separate `Release` workflow, which invokes the reusable CI workflow
 and waits for its macOS, Windows, and Linux gates before publishing. The publish job rejects a tag
 that is not exactly `v<root-package-version>` or lacks a dated changelog section. The root
-`package.json` version is the source of truth; the release gate requires the `quickgui` and
-`quickgui-system` crates, native binding crate, and all three npm packages to match it. The job
+`package.json` version is the source of truth; the release gate requires all six published crates,
+the native binding crate, and all three npm packages to match it. The job
 builds both macOS native architectures, runs the JavaScript tests and typecheck, verifies the npm
 tarballs, publishes both registries in dependency order, installs the public packages in fresh
 Rust and Bun consumers, and only then creates the GitHub Release.
@@ -95,26 +95,29 @@ verifies the npm CLI before publication. No `NPM_TOKEN` secret is required.
 Creating the workflow does not create the npm registry-side trust records. A missing or misspelled
 record makes npm authentication fail before publication.
 
-## Tag-driven publication
+## Version-driven publication
 
-Prepare the release commit by setting the version in the root `package.json` and mirroring it into
-the `quickgui`, `quickgui-system`, native binding, and three npm package manifests. Update the CLI
-version and generated-project dependency versions to match. The four vendored compatibility forks
-retain upstream-derived versions; bump a fork and its exact dependency only when that fork changes.
-Move the shipped changes out of `Unreleased` into a dated `## <version> - YYYY-MM-DD` section. Then
-create and push an annotated `v<version>` tag:
+Set only the root `package.json` version, move the shipped changes out of `Unreleased` into a dated
+`## <version> - YYYY-MM-DD` section, and commit those changes. Then create the matching annotated
+tag and push it:
 
 ```console
-git tag -a v0.1.2 -m "QuickGUI 0.1.2"
-git push origin main v0.1.2
+version=$(node -p 'require("./package.json").version')
+git tag -a "v$version" -m "QuickGUI $version"
+git push origin main "v$version"
 ```
 
-Pushing the tag starts the release automatically. To start or retry it manually, open the `Release`
-workflow, choose **Run workflow**, and enter the existing tag such as `v0.1.2`. Manual dispatch does
-not create the tag, update package versions, or change the changelog; prepare and push those first.
+Pushing the tag starts the release automatically. To release manually, open the `Release` workflow,
+choose **Run workflow**, and select the branch containing the release commit. The workflow reads the
+root `package.json` version and uses `v<version>` for the GitHub Release, creating that tag at the
+selected branch commit if it does not already exist. If the tag already points elsewhere, the
+workflow stops before publishing. Manual dispatch does not change the root version or changelog.
 
-Every first-party QuickGUI Cargo and npm package uses this one release version. The metadata gate
-reads it from the root `package.json` and fails before packaging if any mirrored version differs.
+Every QuickGUI Cargo and npm release package uses this one version. CI and the release workflow run
+the version synchronizer in their checkout before compiling or packaging; it updates every package
+manifest, internal dependency pin, generated binding check, and lockfile from the root version.
+You never update the Cargo or npm package versions by hand. `bun run version:check` is available to
+verify an already synchronized checkout without changing files.
 
 The workflow publishes crates.io packages in this dependency order:
 

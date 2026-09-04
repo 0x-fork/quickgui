@@ -1,6 +1,6 @@
 [package]
 name = "quickgui-winit"
-version = "0.30.13-quickgui.2"
+version = "0.1.3"
 authors = [
     "The winit contributors",
     "Pierre Krieger <pierre.krieger1708@gmail.com>",

@@ -137,6 +137,9 @@ for index in "${!crate_names[@]}"; do
   fi
 
   publish_args=(--manifest-path "$manifest")
+  if [[ ${QUICKGUI_RELEASE_ALLOW_DIRTY:-0} == 1 ]]; then
+    publish_args+=(--allow-dirty)
+  fi
   if [[ $crate_name == quickgui-system || $crate_name == quickgui ]]; then
     publish_args+=(--locked)
   fi
