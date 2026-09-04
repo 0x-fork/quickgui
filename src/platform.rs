@@ -438,6 +438,7 @@ pub enum FileIconSize {
 }
 
 impl FileIconSize {
+    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
     pub(crate) const fn pixels(self) -> u32 {
         match self {
             Self::Small => 16,
@@ -1113,7 +1114,9 @@ pub(crate) enum PlatformRequest {
         responder: PlatformResponder<MessageBoxResponse>,
     },
     PreviewFile {
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         path: PathBuf,
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         display_name: Option<Arc<str>>,
         responder: Option<PlatformResponder<()>>,
     },
@@ -1121,7 +1124,9 @@ pub(crate) enum PlatformRequest {
         responder: Option<PlatformResponder<()>>,
     },
     ShowColorPanel {
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         initial: crate::Color,
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         mode: ColorPanelMode,
         responder: Option<PlatformResponder<()>>,
     },
@@ -1129,16 +1134,21 @@ pub(crate) enum PlatformRequest {
         responder: Option<PlatformResponder<()>>,
     },
     ShowFontPanel {
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         font: Box<crate::Font>,
         responder: Option<PlatformResponder<()>>,
     },
     ShareItems {
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         window: Option<WindowHandle>,
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         items: Vec<ShareItem>,
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         anchor: crate::Rect,
         responder: Option<PlatformResponder<()>>,
     },
     AuthenticateWithBiometrics {
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
         reason: Arc<str>,
         responder: PlatformResponder<bool>,
     },
@@ -1628,6 +1638,7 @@ impl PlatformRequest {
         Ok((Self::SetUserTasks { tasks, responder }, response))
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn window(&self) -> Option<WindowHandle> {
         match self {
             Self::Prompt { window, .. }

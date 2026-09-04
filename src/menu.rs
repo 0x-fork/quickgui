@@ -224,6 +224,7 @@ impl MenuIcon {
         self.0.height()
     }
 
+    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
     pub(crate) fn rgba(&self) -> &[u8] {
         self.0.rgba()
     }

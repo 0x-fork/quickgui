@@ -2585,6 +2585,7 @@ impl Scene {
         self.opacity = sanitize_opacity(opacity);
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn current_opacity(&self) -> f32 {
         self.opacity
     }
@@ -2799,6 +2800,7 @@ impl Scene {
         &self.layers[..self.used_layers]
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn has_content_in_plane(&self, plane: ScenePlane) -> bool {
         self.paint_layers()
             .iter()

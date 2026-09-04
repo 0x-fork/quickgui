@@ -433,6 +433,7 @@ impl GpuRenderer {
     }
 
     /// Wait for the latest submitted frame before removing a platform launch cover.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn wait_for_submitted_work(&self) -> Result<(), RendererError> {
         self.device.poll(wgpu::PollType::wait_indefinitely())?;
         Ok(())

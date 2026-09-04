@@ -161,7 +161,9 @@ pub(crate) enum RuntimeEvent {
     ImageLoaded(WindowHandle, ImageLoadCompletion),
     BackgroundCompleted(BackgroundCompletion),
     ForegroundTasksReady,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     MenuWillOpen,
+    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
     MenuAction(usize),
     #[cfg(target_os = "macos")]
     DockMenuAction(usize),
@@ -229,6 +231,7 @@ pub(crate) enum RuntimeEvent {
         target_os = "netbsd"
     ))]
     SecondInstance(SecondInstanceEvent),
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     SystemPreferencesChanged(SystemPreferences),
     Power(PowerEvent),
     Tray(TrayEvent),
@@ -875,6 +878,7 @@ struct DragSession {
     position: Point,
     value: Arc<dyn Any>,
     value_type: TypeId,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     external_payload: Option<ExternalDragPayload>,
 }
 

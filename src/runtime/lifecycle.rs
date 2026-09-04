@@ -47,6 +47,7 @@ impl Runtime {
     }
 
     /// Run the application-wide "did become active" hook.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(super) fn invoke_did_become_active(&mut self, event_loop: &ActiveEventLoop) {
         let Some(mut callback) = self.application_callbacks.did_become_active.take() else {
             return;
@@ -58,6 +59,7 @@ impl Runtime {
     }
 
     /// Run the application-wide "did resign active" hook.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(super) fn invoke_did_resign_active(&mut self, event_loop: &ActiveEventLoop) {
         let Some(mut callback) = self.application_callbacks.did_resign_active.take() else {
             return;

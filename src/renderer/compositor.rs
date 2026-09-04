@@ -385,11 +385,13 @@ impl Compositor {
     /// Whether this compositor has ever allocated anything. A window that never declares a layer
     /// effect keeps this `true` and pays nothing per frame.
     #[cfg(test)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn is_idle(&self) -> bool {
         self.pipelines.is_none() && self.cache.textures.is_empty()
     }
 
     #[cfg(test)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn retained_bytes(&self) -> u64 {
         self.cache.bytes
     }

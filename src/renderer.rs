@@ -190,6 +190,7 @@ pub(crate) enum RendererInitError {
     IncompatibleSurface,
     #[error("the selected graphics adapter does not expose an alpha-capable window surface")]
     TransparentSurfaceUnsupported,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     #[error("could not create the macOS Metal surface: {0}")]
     PlatformSurface(String),
 }
@@ -204,6 +205,7 @@ pub(crate) enum RendererError {
     RenderText(#[from] glyphon::RenderError),
     #[error("could not recreate a lost window surface: {0}")]
     RecreateSurface(String),
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     #[error("could not initialize native-view composition: {0}")]
     NativeComposition(String),
     #[error("this window surface cannot switch to alpha compositing")]
@@ -386,6 +388,7 @@ fn set_metal_drawable_size(layer: &MetalLayer, size: (u32, u32)) {
     unsafe { layer.setDrawableSize(CGSize::new(f64::from(size.0), f64::from(size.1))) };
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn grow_surface_capacity(current: (u32, u32), required: (u32, u32), maximum: u32) -> (u32, u32) {
     fn grow(current: u32, required: u32, maximum: u32) -> u32 {
         if required <= current {

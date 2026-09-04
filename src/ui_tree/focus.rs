@@ -114,6 +114,7 @@ impl UiTree {
         );
     }
 
+    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
     pub(crate) fn action_available(&self, path: &[ElementId], action_type: TypeId) -> bool {
         path.iter().copied().any(|id| {
             self.action_listener_ranges.get(&id).is_some_and(|range| {

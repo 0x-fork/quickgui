@@ -431,6 +431,7 @@ impl ExternalDragText {
         self.truncated
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn from_bounded(text: String, truncated: bool) -> Self {
         debug_assert!(text.len() <= MAX_EXTERNAL_DRAG_TEXT_BYTES);
         Self {

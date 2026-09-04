@@ -734,6 +734,7 @@ fn normalize_rotation_degrees(degrees: u16) -> u16 {
 /// The tray backend reports physical pixels with a top-left origin. The correct scale factor is
 /// the one of the display that ends up containing the converted rectangle, so each candidate
 /// display is tested with its own factor before falling back to the primary display.
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 pub(crate) fn logical_rect_from_physical(
     displays: &Displays,
     position: (f64, f64),

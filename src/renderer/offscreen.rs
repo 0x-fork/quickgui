@@ -78,17 +78,20 @@ impl OffscreenRenderer {
     }
 
     #[cfg(test)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn last_reshaped_text_areas(&self) -> usize {
         self.last_reshaped_text_areas
     }
 
     /// Compositing telemetry for the most recent [`Self::render_to_snapshot`].
     #[cfg(test)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn last_composite(&self) -> CompositeStats {
         self.last_composite
     }
 
     #[cfg(test)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn compositor(&self) -> &Compositor {
         &self.compositor
     }

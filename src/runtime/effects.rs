@@ -513,6 +513,7 @@ impl Runtime {
         Some(false)
     }
 
+    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
     pub(super) fn action_available(&self, action: &AnyAction) -> bool {
         let Some(window) = &self.window else {
             return false;

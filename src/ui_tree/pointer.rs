@@ -1534,6 +1534,7 @@ impl UiTree {
         None
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn drop_offer_target_at<'a, I>(
         &self,
         point: Point,
