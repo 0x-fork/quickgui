@@ -44,6 +44,13 @@ A target build requires the installed `@quickgui/native` package to contain that
 waits for acceptance, staples the DMG, and validates the ticket. The same profile can be configured
 as `macos.notarization.keychainProfile`.
 
+## Native modules
+
+Put a `main.zig` in `modules/<name>/` and import `./modules/<name>` from the application: the CLI
+compiles it into a Node-API addon (Zig 0.16 or newer), generates typed synchronous and
+thread-pool wrappers for every `pub fn`, and embeds the addon in the executable. `quickgui modules`
+runs that step on its own. See the [native modules guide](../../docs/native-modules.md).
+
 ## Configuration
 
 ```ts

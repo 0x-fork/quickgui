@@ -20,16 +20,15 @@ export function DiffPane() {
   const diff = () => store.diff();
   const target = () => diff().target;
   const mode = () => target()?.kind ?? "unstaged";
-  const rows = () => store.diffRows();
+  const rowCount = () => store.diffRowCount();
   const [range, setRange] = createSignal<VisibleRange>({ start: 0, end: 0 });
+  // Only the rows the table is about to paint leave the native module.
   const visible = createMemo(() => {
-    const all = rows();
     const { start, end } = range();
-    const out: { index: number; row: DiffRow }[] = [];
-    for (let index = start; index < Math.min(end, all.length); index += 1) out.push({ index, row: all[index]! });
-    return out;
+    const rows = store.diffRowsIn(start, Math.min(end, rowCount()));
+    return rows.map((row, offset): { index: number; row: DiffRow } => ({ index: start + offset, row }));
   });
-  const primaryFile = () => diff().files[0];
+  const primaryFile = () => diff().diff?.files[0];
   const lineCount = () => store.selectedDiffLineCount();
   const hasLineSelection = () => lineCount() > 0;
   const activeItem = () => store.activeItem();
@@ -140,13 +139,13 @@ export function DiffPane() {
           </View>
         </Show>
         <Show
-          when={rows().length > 0}
+          when={rowCount() > 0}
           fallback={
             <Show when={!diff().loading}>
               <EmptyState
                 ui={app}
                 icon="file"
-                title={primaryFile()?.binary ? "Binary file" : primaryFile() && primaryFile()!.hunks.length === 0 ? "No textual changes" : "Empty file"}
+                title={primaryFile()?.binary ? "Binary file" : primaryFile() && primaryFile()!.hunkCount === 0 ? "No textual changes" : "Empty file"}
                 description={primaryFile()?.binary ? "Binary changes are staged and committed whole." : primaryFile() && primaryFile()!.oldMode !== primaryFile()!.newMode ? "Only the file mode changed." : undefined}
               />
             </Show>
@@ -154,7 +153,7 @@ export function DiffPane() {
         >
           <Table.Root
             scope="diff"
-            rowCount={rows().length}
+            rowCount={rowCount()}
             rowHeight={DIFF_ROW_HEIGHT}
             headerHeight={0}
             selectionMode="multiple"
@@ -186,20 +185,20 @@ function DiffTableRow(props: { index: number; row: DiffRow; mode: "unstaged" | "
 
   const background = () => {
     const current = row();
-    if (current.kind === "line") return current.line.kind === "added" ? theme().diffAdded : current.line.kind === "removed" ? theme().diffRemoved : "transparent";
+    if (current.kind === "line") return current.lineKind === "added" ? theme().diffAdded : current.lineKind === "removed" ? theme().diffRemoved : "transparent";
     if (current.kind === "hunk") return theme().diffHunk;
     if (current.kind === "file") return theme().contentAlt;
     return "transparent";
   };
   const selectedBackground = () => {
     const current = row();
-    if (current.kind === "line") return current.line.kind === "added" ? theme().diffSelectedAdded : current.line.kind === "removed" ? theme().diffSelectedRemoved : theme().diffSelectedContext;
+    if (current.kind === "line") return current.lineKind === "added" ? theme().diffSelectedAdded : current.lineKind === "removed" ? theme().diffSelectedRemoved : theme().diffSelectedContext;
     return theme().diffSelectedContext;
   };
   const gutter = () => {
     const current = row();
     if (current.kind !== "line") return background();
-    return current.line.kind === "added" ? theme().diffAddedGutter : current.line.kind === "removed" ? theme().diffRemovedGutter : theme().contentAlt;
+    return current.lineKind === "added" ? theme().diffAddedGutter : current.lineKind === "removed" ? theme().diffRemovedGutter : theme().contentAlt;
   };
   const textColor = () => {
     const current = row();
@@ -210,22 +209,13 @@ function DiffTableRow(props: { index: number; row: DiffRow; mode: "unstaged" | "
   const marker = () => {
     const current = row();
     if (current.kind !== "line") return " ";
-    return current.line.kind === "added" ? "+" : current.line.kind === "removed" ? "−" : " ";
+    return current.lineKind === "added" ? "+" : current.lineKind === "removed" ? "−" : " ";
   };
   const text = () => {
     const current = row();
-    switch (current.kind) {
-      case "line": {
-        const content = current.line.text.replace(/\t/g, "    ");
-        return content.length > MAX_LINE_CHARACTERS ? `${content.slice(0, MAX_LINE_CHARACTERS)}…` : content;
-      }
-      case "hunk":
-        return `@@ -${current.hunk.oldStart},${current.hunk.oldLines} +${current.hunk.newStart},${current.hunk.newLines} @@${current.hunk.heading ? ` ${current.hunk.heading}` : ""}`;
-      case "file":
-        return current.file.path;
-      case "notice":
-        return current.text;
-    }
+    if (current.kind !== "line") return current.text;
+    const content = current.text.replace(/\t/g, "    ");
+    return content.length > MAX_LINE_CHARACTERS ? `${content.slice(0, MAX_LINE_CHARACTERS)}…` : content;
   };
   const numberStyle = () => ({
     fontFamily: "monospace" as const,
@@ -246,13 +236,13 @@ function DiffTableRow(props: { index: number; row: DiffRow; mode: "unstaged" | "
       }}
     >
       <Table.Cell column="old" style={{ backgroundColor: gutter() }}>
-        <Show when={row().kind === "line" && (row() as Extract<DiffRow, { kind: "line" }>).line.oldLineNumber !== null}>
-          <Text style={numberStyle()}>{String((row() as Extract<DiffRow, { kind: "line" }>).line.oldLineNumber)}</Text>
+        <Show when={row().kind === "line" && row().oldLineNumber !== null}>
+          <Text style={numberStyle()}>{String(row().oldLineNumber)}</Text>
         </Show>
       </Table.Cell>
       <Table.Cell column="new" style={{ backgroundColor: gutter() }}>
-        <Show when={row().kind === "line" && (row() as Extract<DiffRow, { kind: "line" }>).line.newLineNumber !== null}>
-          <Text style={numberStyle()}>{String((row() as Extract<DiffRow, { kind: "line" }>).line.newLineNumber)}</Text>
+        <Show when={row().kind === "line" && row().newLineNumber !== null}>
+          <Text style={numberStyle()}>{String(row().newLineNumber)}</Text>
         </Show>
       </Table.Cell>
       <Table.Cell column="text" style={{ paddingLeft: 8, paddingRight: 8, minWidth: 0, gap: 8 }}>
@@ -289,16 +279,16 @@ function DiffTableRow(props: { index: number; row: DiffRow; mode: "unstaged" | "
               <HunkButton
                 label="Discard hunk"
                 danger
-                onClick={() => void discardHunk(app, (row() as Extract<DiffRow, { kind: "hunk" }>).fileIndex, (row() as Extract<DiffRow, { kind: "hunk" }>).hunkIndex)}
+                onClick={() => void discardHunk(app, row().fileIndex, row().hunkIndex)}
               />
-              <HunkButton label="Stage hunk" onClick={() => void store.stageHunk((row() as Extract<DiffRow, { kind: "hunk" }>).fileIndex, (row() as Extract<DiffRow, { kind: "hunk" }>).hunkIndex)} />
+              <HunkButton label="Stage hunk" onClick={() => void store.stageHunk(row().fileIndex, row().hunkIndex)} />
             </Show>
             <Show when={props.mode === "staged"}>
-              <HunkButton label="Unstage hunk" onClick={() => void store.unstageHunk((row() as Extract<DiffRow, { kind: "hunk" }>).fileIndex, (row() as Extract<DiffRow, { kind: "hunk" }>).hunkIndex)} />
+              <HunkButton label="Unstage hunk" onClick={() => void store.unstageHunk(row().fileIndex, row().hunkIndex)} />
             </Show>
           </View>
         </Show>
-        <Show when={row().kind === "line" && (row() as Extract<DiffRow, { kind: "line" }>).line.noNewline}>
+        <Show when={row().kind === "line" && row().noNewline}>
           <Text tooltip="No newline at end of file" style={{ fontSize: 10, color: theme().textTertiary, flexShrink: 0 }}>⏎̸</Text>
         </Show>
       </Table.Cell>

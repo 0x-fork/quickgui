@@ -13,12 +13,14 @@
   "exports": {
     ".": "./index.ts",
     "./host": "./host.ts",
-    "./protocol": "./protocol.ts"
+    "./protocol": "./protocol.ts",
+    "./modules": "./modules.ts"
   },
   "files": [
     "index.ts",
     "dialog.ts",
     "integrations.ts",
+    "modules.ts",
     "native-tree.ts",
     "routing.ts",
     "single-instance.ts",
@@ -26,6 +28,7 @@
     "tray.ts",
     "host.ts",
     "protocol.ts",
+    "zig",
     "scripts",
     "binding.js",
     "binding.d.ts",

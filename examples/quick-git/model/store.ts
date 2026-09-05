@@ -22,7 +22,7 @@ import {
   type AvailableAgent,
   type GeneratedMessage,
 } from "../agent/commit-message.ts";
-import { countChanges, type DiffFile, type DiffHunk, type DiffLine, type HunkSelection } from "../git/diff.ts";
+import type { Diff, DiffRow, HunkSelection } from "../git/diff.ts";
 import { layoutGraph, type Commit, type GraphRow } from "../git/log.ts";
 import { GitError, GitRunner } from "../git/process.ts";
 import { Repository, type CommitFile, type NumstatEntry } from "../git/repository.ts";
@@ -55,17 +55,13 @@ export interface DiffTarget {
 
 export interface DiffState {
   target?: DiffTarget;
-  files: DiffFile[];
+  /** The parsed diff, held by the native module; the table fetches rows as it paints them. */
+  diff?: Diff;
   loading: boolean;
   error?: string;
 }
 
-/** One row of the diff table: a hunk header or a line. */
-export type DiffRow =
-  | { kind: "file"; fileIndex: number; file: DiffFile }
-  | { kind: "hunk"; fileIndex: number; hunkIndex: number; hunk: DiffHunk }
-  | { kind: "line"; fileIndex: number; hunkIndex: number; lineIndex: number; line: DiffLine }
-  | { kind: "notice"; text: string };
+export type { DiffRow } from "../git/diff.ts";
 
 export interface HistoryState {
   commits: Commit[];
@@ -101,7 +97,9 @@ export interface StoreOptions {
 }
 
 const HISTORY_PAGE = 300;
-const MAX_DIFF_ROWS = 60_000;
+/** Parsed diffs kept for quick switching, bounded by count and by the bytes they came from. */
+const MAX_DIFF_CACHE_ENTRIES = 64;
+const MAX_DIFF_CACHE_BYTES = 64 * 1024 * 1024;
 
 export function createStore(options: StoreOptions) {
   return createRoot((disposeRoot) => {
@@ -193,10 +191,36 @@ function buildStore(options: StoreOptions) {
   });
 
   // --- diff ------------------------------------------------------------------------------------
-  const [diff, setDiff] = createSignal<DiffState>({ files: [], loading: false });
+  const [diff, setDiff] = createSignal<DiffState>({ loading: false });
   const [diffSelection, setDiffSelection] = createSignal<RowRanges>([]);
-  const diffCache = new Map<string, DiffFile[]>();
+  const diffCache = new Map<string, Diff>();
+  let diffCacheBytes = 0;
   let diffController: AbortController | undefined;
+
+  /** Remember a diff as the most recent one, releasing the oldest while the cache is over budget. */
+  function cacheDiff(key: string, parsed: Diff): void {
+    const previous = diffCache.get(key);
+    if (previous) {
+      diffCache.delete(key);
+      diffCacheBytes -= previous.bytes;
+      if (previous !== parsed) previous.close();
+    }
+    diffCache.set(key, parsed);
+    diffCacheBytes += parsed.bytes;
+    for (const [oldKey, old] of diffCache) {
+      if (diffCache.size <= MAX_DIFF_CACHE_ENTRIES && diffCacheBytes <= MAX_DIFF_CACHE_BYTES) break;
+      if (oldKey === key) break;
+      diffCache.delete(oldKey);
+      diffCacheBytes -= old.bytes;
+      old.close();
+    }
+  }
+
+  function clearDiffCache(): void {
+    for (const parsed of diffCache.values()) parsed.close();
+    diffCache.clear();
+    diffCacheBytes = 0;
+  }
 
   const diffTarget = createMemo<DiffTarget | undefined>(() => {
     const item = activeItem();
@@ -211,91 +235,59 @@ function buildStore(options: StoreOptions) {
     };
   });
 
-  const diffRows = createMemo<DiffRow[]>(() => {
-    const rows: DiffRow[] = [];
-    const files = diff().files;
-    files.forEach((file, fileIndex) => {
-      if (files.length > 1) rows.push({ kind: "file", fileIndex, file });
-      if (file.binary) {
-        rows.push({ kind: "notice", text: "Binary file" });
-        return;
-      }
-      file.hunks.forEach((hunk, hunkIndex) => {
-        rows.push({ kind: "hunk", fileIndex, hunkIndex, hunk });
-        hunk.lines.forEach((line, lineIndex) => {
-          if (rows.length >= MAX_DIFF_ROWS) return;
-          rows.push({ kind: "line", fileIndex, hunkIndex, lineIndex, line });
-        });
-      });
-      if (file.truncated) rows.push({ kind: "notice", text: "Diff truncated: the file is too large to show in full." });
-    });
-    if (rows.length >= MAX_DIFF_ROWS) rows.push({ kind: "notice", text: "Diff truncated: too many lines to show." });
-    return rows;
-  });
+  const diffRowCount = () => diff().diff?.rowCount ?? 0;
+  /** The table rows in `[start, end)`, fetched from the native module for the visible range. */
+  function diffRowsIn(start: number, end: number): DiffRow[] {
+    return diff().diff?.rows(start, end) ?? [];
+  }
 
   const diffStats = createMemo(() => {
-    let added = 0;
-    let removed = 0;
-    for (const file of diff().files) {
-      const counts = countChanges(file);
-      added += counts.added;
-      removed += counts.removed;
-    }
-    return { added, removed };
+    const parsed = diff().diff;
+    return { added: parsed?.added ?? 0, removed: parsed?.removed ?? 0 };
   });
 
   /** The changed lines inside the diff table's selected rows, grouped by hunk. */
-  const selectedDiffLines = createMemo(() => {
-    const rows = diffRows();
-    const byHunk = new Map<string, { fileIndex: number; hunkIndex: number; lines: Set<number> }>();
-    for (const [start, end] of diffSelection()) {
-      for (let index = start!; index <= end!; index += 1) {
-        const row = rows[index];
-        if (!row || row.kind !== "line" || row.line.kind === "context") continue;
-        const key = `${row.fileIndex}:${row.hunkIndex}`;
-        let entry = byHunk.get(key);
-        if (!entry) {
-          entry = { fileIndex: row.fileIndex, hunkIndex: row.hunkIndex, lines: new Set() };
-          byHunk.set(key, entry);
-        }
-        entry.lines.add(row.lineIndex);
-      }
-    }
-    return [...byHunk.values()];
-  });
+  const selectedDiffLines = createMemo(() => diff().diff?.selectedLines(diffSelection()) ?? []);
   const selectedDiffLineCount = createMemo(() => selectedDiffLines().reduce((total, entry) => total + entry.lines.size, 0));
 
   async function loadDiff(target: DiffTarget | undefined): Promise<void> {
     diffController?.abort();
     diffController = undefined;
     if (!target) {
-      setDiff({ files: [], loading: false });
+      setDiff({ loading: false });
       return;
     }
     const cached = diffCache.get(target.key);
     if (cached) {
-      setDiff({ target, files: cached, loading: false });
+      cacheDiff(target.key, cached);
+      setDiff({ target, diff: cached, loading: false });
       return;
     }
     const repo = repository();
     if (!repo) return;
     const controller = new AbortController();
     diffController = controller;
-    setDiff((current) => ({ target, files: current.target?.path === target.path ? current.files : [], loading: true }));
+    setDiff((current) => ({
+      target,
+      ...(current.target?.path === target.path && current.diff ? { diff: current.diff } : {}),
+      loading: true,
+    }));
     try {
-      let files: DiffFile[];
-      if (target.kind === "commit") files = await repo.diffCommit(target.sha!, target.path, { signal: controller.signal });
-      else if (target.untracked) files = [await repo.diffUntracked(target.path, { signal: controller.signal })];
-      else if (target.kind === "staged") files = await repo.diffIndex(target.path, target.originalPath, { signal: controller.signal });
-      else files = await repo.diffWorkingTree(target.path, { signal: controller.signal });
-      if (controller.signal.aborted) return;
-      diffCache.set(target.key, files);
-      if (diffCache.size > 64) diffCache.delete(diffCache.keys().next().value!);
-      setDiff({ target, files, loading: false });
+      let parsed: Diff;
+      if (target.kind === "commit") parsed = await repo.diffCommit(target.sha!, target.path, { signal: controller.signal });
+      else if (target.untracked) parsed = await repo.diffUntracked(target.path, { signal: controller.signal });
+      else if (target.kind === "staged") parsed = await repo.diffIndex(target.path, target.originalPath, { signal: controller.signal });
+      else parsed = await repo.diffWorkingTree(target.path, { signal: controller.signal });
+      if (controller.signal.aborted) {
+        parsed.close();
+        return;
+      }
+      cacheDiff(target.key, parsed);
+      setDiff({ target, diff: parsed, loading: false });
       setDiffSelection([]);
     } catch (error) {
       if (controller.signal.aborted) return;
-      setDiff({ target, files: [], loading: false, error: describeError(error) });
+      setDiff({ target, loading: false, error: describeError(error) });
     }
   }
 
@@ -471,7 +463,7 @@ function buildStore(options: StoreOptions) {
         if (nextStashes) setStashes(nextStashes);
         if (nextWorktrees) setWorktrees(nextWorktrees);
         if (nextRemotes) setRemotes(nextRemotes);
-        diffCache.clear();
+        clearDiffCache();
         setGeneration((value) => value + 1);
         reconcileSelection(nextStatus);
       });
@@ -550,7 +542,7 @@ function buildStore(options: StoreOptions) {
       setStatus(undefined);
       setSelection({ unstaged: [], staged: [] });
       setActiveCell(undefined);
-      setDiff({ files: [], loading: false });
+      setDiff({ loading: false });
       setDiffSelection([]);
       setHistory((state) => ({ ...state, commits: [], graph: [], loading: false, exhausted: false }));
       setHistorySelection([]);
@@ -559,7 +551,7 @@ function buildStore(options: StoreOptions) {
       setBody("");
       setAmendSignal(false);
     });
-    diffCache.clear();
+    clearDiffCache();
     stopWatching = watchRepository({
       root: repo.root,
       gitDir: repo.info.gitDir,
@@ -584,7 +576,7 @@ function buildStore(options: StoreOptions) {
       setWorktrees([]);
       setRefs({ local: [], remote: [], tags: [] });
       setStashes([]);
-      setDiff({ files: [], loading: false });
+      setDiff({ loading: false });
       setHistory((state) => ({ ...state, commits: [], graph: [] }));
       setHistorySelection([]);
       setView("changes");
@@ -663,8 +655,7 @@ function buildStore(options: StoreOptions) {
   }
 
   async function applyHunkSelection(action: "stage" | "unstage" | "discard", selections: readonly HunkSelection[], fileIndex: number): Promise<void> {
-    const current = diff();
-    const file = current.files[fileIndex];
+    const file = diff().diff?.file(fileIndex);
     if (!file || selections.length === 0) return;
     const label = action === "stage" ? "Stage lines" : action === "unstage" ? "Unstage lines" : "Discard lines";
     await operation(
@@ -758,26 +749,18 @@ function buildStore(options: StoreOptions) {
       const items = useStaged ? staged() : unstaged();
       const diffs = await Promise.all(
         items.slice(0, 200).map(async (item) => {
-          if (item.entry.kind === "untracked") {
-            const file = await repo.diffUntracked(item.path, { signal: controller.signal });
-            return `diff --git a/${item.path} b/${item.path}\nnew file mode 100644\n--- /dev/null\n+++ b/${item.path}\n${file.hunks
-              .flatMap((hunk) => [`@@ -0,0 +1,${hunk.newLines} @@`, ...hunk.lines.map((line) => `+${line.text}`)])
-              .join("\n")}\n`;
+          const parsed =
+            item.entry.kind === "untracked"
+              ? await repo.diffUntracked(item.path, { signal: controller.signal })
+              : useStaged
+                ? await repo.diffIndex(item.path, item.originalPath, { signal: controller.signal })
+                : await repo.diffWorkingTree(item.path, { signal: controller.signal });
+          try {
+            // The native module renders the prompt text; the parsed diff never reaches JavaScript.
+            return await parsed.renderAsync();
+          } finally {
+            parsed.close();
           }
-          const files = useStaged
-            ? await repo.diffIndex(item.path, item.originalPath, { signal: controller.signal })
-            : await repo.diffWorkingTree(item.path, { signal: controller.signal });
-          return files
-            .map((file) =>
-              [
-                `diff --git a/${file.oldPath ?? file.path} b/${file.newPath ?? file.path}`,
-                ...file.hunks.flatMap((hunk) => [
-                  `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@ ${hunk.heading}`,
-                  ...hunk.lines.map((line) => `${line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " "}${line.text}`),
-                ]),
-              ].join("\n"),
-            )
-            .join("\n");
         }),
       );
       const subjects = await repo.recentSubjects(15, { signal: controller.signal });
@@ -998,7 +981,8 @@ function buildStore(options: StoreOptions) {
     activeItem,
     selectedItems,
     diff,
-    diffRows,
+    diffRowCount,
+    diffRowsIn,
     diffStats,
     diffSelection,
     selectedDiffLines,

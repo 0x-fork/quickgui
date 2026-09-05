@@ -87,6 +87,7 @@ Start at the [documentation index](docs/README.md).
 - [View API and layout](docs/view-api.md)
 - [Solid 2 renderer](docs/solid.md)
 - [Project CLI and application packaging](docs/cli.md)
+- [Native modules in Zig](docs/native-modules.md)
 - [Windows and shared state](docs/windows.md)
 - [Native document windows](docs/document-windows.md)
 - [Displays and window placement](docs/displays.md)

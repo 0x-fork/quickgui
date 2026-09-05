@@ -18,6 +18,7 @@ import type { BunPlugin } from "bun";
 
 import type { MacOSNotarizationConfig, ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
+import { buildNativeModules } from "./modules.ts";
 import {
   macDocumentTypesPlist,
   macTypeDeclarationsPlist,
@@ -253,6 +254,12 @@ export async function buildProject(
   if (info.platform === "darwin" && options.mode === "production") {
     validateMacPackaging(config, options);
   }
+  // Native modules come first: the application bundle `require`s their addons.
+  await buildNativeModules(config, {
+    target: options.target,
+    mode: options.mode,
+    log: (line) => console.log(`[quickgui] ${line}`),
+  });
   const baseOutDir = options.outDir
     ? resolve(config.projectRoot, options.outDir)
     : options.mode === "development"

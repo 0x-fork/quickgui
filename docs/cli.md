@@ -98,6 +98,21 @@ Recognized targets are `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`,
 `@quickgui/native` package contains the corresponding addon; target recognition is not a claim of
 native runtime acceptance.
 
+## Native modules
+
+```console
+quickgui modules
+quickgui modules --release
+quickgui modules --target darwin-x64
+```
+
+A directory `modules/<name>/` holding a `main.zig` is a native module: `quickgui dev` and
+`quickgui build` compile it into a Node-API addon with Zig 0.16 or newer, write the typed
+`modules/<name>/index.ts` the application imports, and embed the addon in the executable.
+`quickgui modules` runs only that step, for `bun test` and type-checking; `--release` uses the
+production optimization mode. The [native modules guide](native-modules.md) covers the type
+mapping, the calling conventions, and the configuration.
+
 ## Icons
 
 Point `icon` at one square PNG of at least 256x256 and QuickGUI generates every container it
@@ -297,6 +312,10 @@ export default defineConfig({
     manifest: true,
     baseUrl: "https://dl.example.com/my-app",
     minisignSecretKey: "keys/quickgui-update.key",
+  },
+  modules: {
+    directory: "modules",     // <directory>/<name>/main.zig, written in Zig
+    optimize: "ReleaseFast",  // default: ReleaseSafe for dev, ReleaseFast for build
   },
   linux: {
     maintainer: "My Team <team@example.com>",

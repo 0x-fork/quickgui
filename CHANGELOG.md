@@ -59,6 +59,16 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ### JavaScript
 
+- Native modules: a `modules/<name>/main.zig` next to the application is compiled by
+  `quickgui dev`, `quickgui build`, and the new `quickgui modules` command into a Node-API addon
+  that Bun embeds in the executable, and `modules/<name>/index.ts` is generated so every `pub fn`
+  is an ordinary typed import, available both as a synchronous call and as an `…Async` variant
+  that runs on the host's native thread pool. Scalars and strings cross directly, structs, slices,
+  optionals, enums, and tagged unions travel as JSON with named TypeScript types generated from
+  the Zig declarations, an `Allocator` parameter is an injected per-call arena, and a Zig error
+  becomes a thrown `NativeModuleError`. The runtime lives in `@quickgui/native/zig` and
+  `@quickgui/native/modules`; a `modules` config key sets the directory and Zig optimization mode.
+  Requires Zig 0.16.
 - `style.selected` is a new nested interaction state on every host component, and `selected` is
   a new boolean prop that sets the native selected flag it follows. A `Table.Row`'s style now
   reaches the core row its cells are laid out in, and the core marks that row selected, so a

@@ -9,6 +9,10 @@ bun install
 bun run --filter quick-git dev
 ```
 
+The diff engine is a [native module](../../docs/native-modules.md) written in Zig
+(`modules/git/main.zig`), so a Zig 0.16 toolchain must be on `PATH`; `quickgui dev` compiles it,
+and `bun run --filter quick-git modules` does so on its own before `bun test`.
+
 Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise the last one opens.
 
 ## What it does
@@ -37,11 +41,22 @@ Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise th
 
 ## How it is built
 
-- `git/` is a pure TypeScript git layer: a bounded process runner (concurrency, priority,
-  cancellation, deadlines, output caps), parsers for porcelain v2 status, unified diffs,
-  `for-each-ref`, `log`, `stash list`, and `worktree list`, plus patch formatting for partial
-  staging. It has no UI dependency and is covered by `bun test`, including an integration suite
-  that runs real git in a temporary repository.
+- `git/` is a TypeScript git layer: a bounded process runner (concurrency, priority,
+  cancellation, deadlines, output caps), parsers for porcelain v2 status, `for-each-ref`, `log`,
+  `stash list`, and `worktree list`, plus patch formatting for partial staging. It has no UI
+  dependency and is covered by `bun test`, including an integration suite that runs real git in a
+  temporary repository.
+- `modules/git/main.zig` is the diff engine, a native module compiled by the CLI. `Diff.open`
+  (`git/diff-handle.ts`) hands git's raw bytes to Zig on the native thread pool and keeps the
+  parsed diff there behind a handle; the table asks for the rows it is about to paint, a
+  selection is resolved to changed lines natively, one file is materialized only when a patch is
+  formatted, and the agent prompt is rendered natively. On the app's 32 MB diff cap, the previous
+  TypeScript parser blocked the app for 76 ms and kept 150 MB of objects on the JavaScript heap;
+  the native diff opens in 35 ms with the event loop running, a 60-row window costs 0.03 ms,
+  resident memory grows 66 MB less, and closing the handle returns about 100 MB at once. Parsed
+  diffs are cached by target, bounded by count and by the bytes they came from, and closed on
+  eviction. Log parsing and the graph layout stay in TypeScript: for those, returning every
+  commit as an object is the point, and JavaScript builds those objects faster than a JSON hop.
 - `agent/` builds the commit-message prompt, bounds the diff by whole files, runs the CLI, and
   parses the answer; it is tested with a fake process runner.
 - `model/` owns application state (Solid signals created outside any component), a recursive

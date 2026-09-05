@@ -47,8 +47,9 @@ describe("Repository", () => {
     expect(unstagedChanges(status).map((item) => item.path).sort()).toEqual(["src/app.ts", "with space.md"]);
 
     const preview = await repo.diffUntracked("with space.md");
-    expect(preview.kind).toBe("added");
-    expect(preview.hunks[0]!.lines.map((line) => line.text)).toEqual(["# Notes"]);
+    expect(preview.files[0]!.kind).toBe("added");
+    expect(preview.file(0)!.hunks[0]!.lines.map((line) => line.text)).toEqual(["# Notes"]);
+    preview.close();
 
     await repo.stage(["src/app.ts", "with space.md"]);
     status = await repo.status();
@@ -82,8 +83,8 @@ describe("Repository", () => {
     await writeFile(join(root, "src", "app.ts"), `${lines.join("\n")}\n`);
     // Three hunks: the top edit, the inserted x lines, and the tail line.
     let files = await repo.diffWorkingTree("src/app.ts");
-    expect(files).toHaveLength(1);
-    const file = files[0]!;
+    expect(files.files).toHaveLength(1);
+    const file = files.file(0)!;
     expect(file.hunks).toHaveLength(3);
     const hunkWith = (candidate: typeof file, text: string) =>
       candidate.hunks.findIndex((hunk) => hunk.lines.some((line) => line.kind === "added" && line.text === text));
@@ -91,16 +92,16 @@ describe("Repository", () => {
     // Stage only the tail hunk.
     await repo.stagePatch(file, [{ hunkIndex: hunkWith(file, "tail added") }]);
     let staged = await repo.diffIndex("src/app.ts", undefined);
-    expect(staged[0]!.hunks).toHaveLength(1);
-    expect(staged[0]!.hunks[0]!.lines.filter((line) => line.kind === "added").map((line) => line.text)).toEqual([
+    expect(staged.file(0)!.hunks).toHaveLength(1);
+    expect(staged.file(0)!.hunks[0]!.lines.filter((line) => line.kind === "added").map((line) => line.text)).toEqual([
       "tail added",
     ]);
     let unstagedFiles = await repo.diffWorkingTree("src/app.ts");
-    expect(unstagedFiles[0]!.hunks).toHaveLength(2);
-    expect(hunkWith(unstagedFiles[0]!, "tail added")).toBe(-1);
+    expect(unstagedFiles.file(0)!.hunks).toHaveLength(2);
+    expect(hunkWith(unstagedFiles.file(0)!, "tail added")).toBe(-1);
 
     // Stage one line pair of the top hunk: the `line 1` replacement only.
-    const remaining = unstagedFiles[0]!;
+    const remaining = unstagedFiles.file(0)!;
     const topIndex = hunkWith(remaining, "line one!");
     const hunk = remaining.hunks[topIndex]!;
     const lineOneRemoved = hunk.lines.findIndex((line) => line.kind === "removed" && line.text === "line 1");
@@ -109,27 +110,27 @@ describe("Repository", () => {
     expect(lineOneAdded).toBeGreaterThanOrEqual(0);
     await repo.stagePatch(remaining, [{ hunkIndex: topIndex, lines: new Set([lineOneRemoved, lineOneAdded]) }]);
     staged = await repo.diffIndex("src/app.ts", undefined);
-    const stagedText = staged[0]!.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.kind !== "context").map((line) => `${line.kind}:${line.text}`));
+    const stagedText = staged.file(0)!.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.kind !== "context").map((line) => `${line.kind}:${line.text}`));
     expect(stagedText).toEqual(["removed:line 1", "added:line one!", "added:tail added"]);
 
     // Unstage the tail hunk again from the staged diff.
-    const tailHunkIndex = staged[0]!.hunks.findIndex((hunk) => hunk.lines.some((line) => line.text === "tail added"));
-    await repo.unstagePatch(staged[0]!, [{ hunkIndex: tailHunkIndex }]);
+    const tailHunkIndex = staged.file(0)!.hunks.findIndex((hunk) => hunk.lines.some((line) => line.text === "tail added"));
+    await repo.unstagePatch(staged.file(0)!, [{ hunkIndex: tailHunkIndex }]);
     staged = await repo.diffIndex("src/app.ts", undefined);
-    expect(staged[0]!.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.kind === "added").map((line) => line.text))).toEqual(["line one!"]);
+    expect(staged.file(0)!.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.kind === "added").map((line) => line.text))).toEqual(["line one!"]);
 
     // Discard the x-lines hunk from the working tree; the file keeps the staged edit and the tail.
     unstagedFiles = await repo.diffWorkingTree("src/app.ts");
-    const xHunk = unstagedFiles[0]!.hunks.findIndex((hunk) => hunk.lines.some((line) => line.kind === "added" && line.text === "x"));
+    const xHunk = unstagedFiles.file(0)!.hunks.findIndex((hunk) => hunk.lines.some((line) => line.kind === "added" && line.text === "x"));
     expect(xHunk).toBeGreaterThanOrEqual(0);
-    await repo.discardPatch(unstagedFiles[0]!, [{ hunkIndex: xHunk }]);
+    await repo.discardPatch(unstagedFiles.file(0)!, [{ hunkIndex: xHunk }]);
     const content = await Bun.file(join(root, "src", "app.ts")).text();
     expect(content).not.toContain("\nx\n");
     expect(content).toContain("line one!\n");
     expect(content).toContain("tail added\n");
     await repo.unstageAll();
     files = await repo.diffWorkingTree("src/app.ts");
-    expect(files[0]!.hunks.length).toBeGreaterThan(0);
+    expect(files.file(0)!.hunks.length).toBeGreaterThan(0);
   });
 
   test("discards tracked changes and trashes untracked files through the injected remover", async () => {
@@ -196,8 +197,10 @@ describe("Repository", () => {
       ["A", "with space.md"],
     ]);
     const diff = await repo.diffCommit(head!.sha, "src/app.ts");
-    expect(diff).toHaveLength(1);
-    expect(diff[0]!.kind).toBe("added");
+    expect(diff.files).toHaveLength(1);
+    expect(diff.files[0]!.kind).toBe("added");
+    expect(diff.file(0)!.hunks[0]!.lines.every((line) => line.kind === "added")).toBe(true);
+    diff.close();
   });
 
   test("surfaces git failures as typed errors and honours cancellation", async () => {

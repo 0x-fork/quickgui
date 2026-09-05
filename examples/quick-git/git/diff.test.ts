@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { countChanges, formatPatch, parseDiff, parseGitHeaderPaths, selectsWholeHunk, syntheticAddedFile } from "./diff.ts";
+import {
+  Diff,
+  countChanges,
+  formatPatch,
+  parseDiff,
+  parseGitHeaderPaths,
+  selectsWholeHunk,
+  syntheticAddedFile,
+  syntheticDiffText,
+  type DiffFile,
+} from "./diff.ts";
 
 const SAMPLE = `diff --git a/src/app.ts b/src/app.ts
 index 422c2b7..6372083 100644
@@ -190,5 +200,134 @@ describe("patch formatting", () => {
     const hunk = app().hunks[0]!;
     expect(selectsWholeHunk(hunk, new Set([1, 2, 3]))).toBe(true);
     expect(selectsWholeHunk(hunk, new Set([1, 2]))).toBe(false);
+  });
+});
+
+describe("retained diffs", () => {
+  test("keeps the parsed diff native and answers the table with rows and counts", () => {
+    const before = Diff.openCount();
+    const diff = Diff.openSync(SAMPLE);
+    expect(Diff.openCount()).toBe(before + 1);
+    expect(diff.files.map((file) => [file.kind, file.path, file.binary, file.hunkCount, file.added, file.removed])).toEqual([
+      ["modified", "src/app.ts", false, 2, 3, 2],
+      ["deleted", "README.md", false, 1, 0, 2],
+      ["renamed", "new dir/name.txt", false, 1, 1, 1],
+      ["added", "image.png", true, 0, 0, 0],
+      ["modified", "script.sh", false, 0, 0, 0],
+    ]);
+    expect(diff.files[2]).toMatchObject({ oldPath: "old dir/name.txt", similarity: 90 });
+    expect(diff.files[4]).toMatchObject({ oldMode: "100644", newMode: "100755" });
+    expect([diff.added, diff.removed]).toEqual([4, 5]);
+    // 5 file headers, 4 hunk headers, 14 lines, and the binary notice.
+    expect(diff.rowCount).toBe(5 + 4 + 14 + 1);
+
+    const rows = diff.rows(0, 4);
+    expect(rows.map((row) => [row.kind, row.text])).toEqual([
+      ["file", "src/app.ts"],
+      ["hunk", "@@ -1,4 +1,5 @@ function main() {"],
+      ["line", "line one"],
+      ["line", "line two"],
+    ]);
+    expect(rows[3]).toMatchObject({ lineKind: "removed", fileIndex: 0, hunkIndex: 0, lineIndex: 1, oldLineNumber: 2, newLineNumber: null });
+    expect(diff.rows(8, 12).map((row) => [row.kind, row.text, row.noNewline])).toEqual([
+      ["hunk", "@@ -10,3 +11,3 @@", false],
+      ["line", "ten", false],
+      ["line", "eleven", false],
+      ["line", "11", false],
+    ]);
+    expect(diff.rows(12, 13)[0]).toMatchObject({ kind: "line", text: "twelve", noNewline: true });
+    expect(diff.rows(17, 19).map((row) => [row.kind, row.text])).toEqual([
+      ["file", "new dir/name.txt"],
+      ["hunk", "@@ -1,1 +1,1 @@"],
+    ]);
+    expect(diff.rows(21, 24).map((row) => [row.kind, row.text])).toEqual([
+      ["file", "image.png"],
+      ["notice", "Binary file"],
+      ["file", "script.sh"],
+    ]);
+    expect(diff.rows(100, 200)).toEqual([]);
+    expect(diff.rows(3, 1)).toEqual([]);
+
+    // The full file only materializes for patch formatting and matches the eager parser.
+    expect(diff.file(0)).toEqual(parseDiff(SAMPLE)[0]!);
+    expect(diff.file(9)).toBeUndefined();
+
+    diff.close();
+    expect(diff.closed).toBe(true);
+    expect(Diff.openCount()).toBe(before);
+    expect(diff.rows(0, 4)).toEqual([]);
+    expect(diff.file(0)).toBeUndefined();
+    diff.close();
+  });
+
+  test("groups the changed lines of a selection by hunk, skipping context and headers", () => {
+    const diff = Diff.openSync(SAMPLE);
+    // Rows 1..7 are the first hunk: header, context, removed, added, added, context, context;
+    // rows 8..12 the second: header, context, removed, added, context.
+    expect(diff.selectedLines([[1, 4], [6, 7], [10, 11]])).toEqual([
+      { fileIndex: 0, hunkIndex: 0, lines: new Set([1, 2]) },
+      { fileIndex: 0, hunkIndex: 1, lines: new Set([1, 2]) },
+    ]);
+    expect(diff.selectedLines([[11, 11], [3, 3], [3, 4]])).toEqual([
+      { fileIndex: 0, hunkIndex: 1, lines: new Set([2]) },
+      { fileIndex: 0, hunkIndex: 0, lines: new Set([1, 2]) },
+    ]);
+    expect(diff.selectedLines([[1, 1], [0, 0]])).toEqual([]);
+    expect(diff.selectedLines([])).toEqual([]);
+    diff.close();
+  });
+
+  test("marks truncation, caps rows, and renders prompt text", () => {
+    const capped = Diff.openSync(SAMPLE, { truncated: true, maxRows: 4 });
+    expect(capped.files.at(-1)!.truncated).toBe(true);
+    const rows = capped.rows(0, capped.rowCount);
+    expect(rows.filter((row) => row.kind === "line")).toHaveLength(2);
+    expect(rows.at(-1)).toMatchObject({ kind: "notice", text: "Diff truncated: too many lines to show." });
+    expect(rows.filter((row) => row.kind === "notice").map((row) => row.text)).toContain(
+      "Diff truncated: the file is too large to show in full.",
+    );
+    expect(capped.added).toBe(4);
+    capped.close();
+
+    const diff = Diff.openSync(SAMPLE);
+    expect(diff.render().split("\n").slice(0, 5)).toEqual([
+      "diff --git a/src/app.ts b/src/app.ts",
+      "@@ -1,4 +1,5 @@ function main() {",
+      " line one",
+      "-line two",
+      "+line 2",
+    ]);
+    expect(diff.render()).toContain("diff --git a/image.png b/image.png\nnew file mode 100644\n--- /dev/null\n+++ b/image.png");
+    diff.close();
+  });
+
+  test("opens on the native thread pool and renders asynchronously", async () => {
+    const diff = await Diff.open(new TextEncoder().encode(SAMPLE));
+    expect(diff.rowCount).toBe(24);
+    const rendered = diff.renderAsync();
+    diff.close();
+    expect(diff.closed).toBe(false);
+    expect((await rendered).startsWith("diff --git a/src/app.ts b/src/app.ts")).toBe(true);
+    expect(diff.closed).toBe(true);
+  });
+
+  test("renders an untracked file as the diff text of an addition", () => {
+    const text = syntheticDiffText("notes.md", "a\nb");
+    expect(text).toBe("diff --git a/notes.md b/notes.md\nnew file mode 100644\n@@ -0,0 +1,2 @@\n+a\n+b\n\\ No newline at end of file\n");
+    // The native parser spells absent optional fields as null; the synthetic builder omits them.
+    const parsed = (diffText: string): DiffFile[] =>
+      parseDiff(diffText).map(({ oldMode, newMode, similarity, ...file }) => ({
+        ...file,
+        ...(oldMode != null ? { oldMode } : {}),
+        ...(newMode != null ? { newMode } : {}),
+        ...(similarity != null ? { similarity } : {}),
+      }));
+    expect(parsed(text)).toEqual([syntheticAddedFile("notes.md", "a\nb")]);
+    expect(parsed(syntheticDiffText("notes.md", "a\nb\n"))).toEqual([syntheticAddedFile("notes.md", "a\nb\n")]);
+    expect(parsed(syntheticDiffText("empty.txt", ""))).toEqual([syntheticAddedFile("empty.txt", "")]);
+    expect(parsed(syntheticDiffText("blob.bin", "", { binary: true }))).toEqual([syntheticAddedFile("blob.bin", "", { binary: true })]);
+    const withSpace = Diff.openSync(syntheticDiffText("with space.md", "# Notes\n"));
+    expect(withSpace.files[0]).toMatchObject({ kind: "added", path: "with space.md", oldPath: null, newPath: "with space.md" });
+    withSpace.close();
   });
 });

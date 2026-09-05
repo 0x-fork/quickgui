@@ -137,6 +137,20 @@ export interface MacAppStoreConfig {
   entitlements?: string;
 }
 
+/** Zig optimization mode used for native modules. */
+export type ZigOptimizeMode = "Debug" | "ReleaseSafe" | "ReleaseFast" | "ReleaseSmall";
+
+/** Native modules: Zig sources compiled into Node-API addons the application imports. */
+export interface NativeModulesConfig {
+  /** Directory whose `<name>/main.zig` subdirectories are modules. Defaults to "modules". */
+  directory?: string;
+  /**
+   * Zig optimization mode. Defaults to `ReleaseSafe` for development builds and `ReleaseFast`
+   * for production builds.
+   */
+  optimize?: ZigOptimizeMode;
+}
+
 export interface QuickGuiConfig {
   name: string;
   identifier: string;
@@ -156,6 +170,8 @@ export interface QuickGuiConfig {
   documentTypes?: DocumentTypeConfig[];
   /** Signed updater manifest generation for `quickgui build --update-manifest`. */
   updates?: UpdatesConfig;
+  /** Native modules written in Zig under `modules/<name>/main.zig`. */
+  modules?: NativeModulesConfig;
   macos?: MacOSConfig;
   windows?: WindowsConfig;
   linux?: LinuxConfig;
@@ -176,6 +192,7 @@ export interface ResolvedQuickGuiConfig {
   icon?: string;
   documentTypes: ResolvedDocumentType[];
   updates?: Required<Pick<UpdatesConfig, "manifest" | "baseUrl">> & UpdatesConfig;
+  modules: Required<Pick<NativeModulesConfig, "directory">> & NativeModulesConfig;
   macos: Required<Pick<MacOSConfig, "minimumSystemVersion" | "category">> & MacOSConfig;
   windows: Required<Pick<WindowsConfig, "hideConsole">> & WindowsConfig;
   linux: Required<Pick<LinuxConfig, "categories" | "section" | "depends" | "appImage" | "deb">> &
@@ -237,6 +254,7 @@ export function resolveConfig(
   const sourceIcon = optionalString(input.icon, "icon", 1_024);
   const documentTypes = resolveDocumentTypes(input.documentTypes);
   const updates = resolveUpdates(input.updates, projectRoot);
+  const modules = resolveNativeModules(input.modules, projectRoot);
   const linuxIcon = optionalString(linux.icon, "linux.icon", 1_024);
   const linuxMaintainer = optionalString(linux.maintainer, "linux.maintainer", 255);
   const linuxComment = optionalString(linux.comment, "linux.comment", 512);
@@ -263,6 +281,7 @@ export function resolveConfig(
     ...(sourceIcon ? { icon: resolveRelative(projectRoot, sourceIcon) } : {}),
     documentTypes,
     ...(updates ? { updates } : {}),
+    modules,
     macos: {
       minimumSystemVersion:
         optionalString(macos.minimumSystemVersion, "macos.minimumSystemVersion", 32) ?? "13.0",
@@ -412,6 +431,24 @@ function resolveUpdates(
     baseUrl: baseUrl.replace(/\/+$/, ""),
     ...(secretKey ? { minisignSecretKey: resolveRelative(projectRoot, secretKey) } : {}),
     ...(notesFile ? { notesFile: resolveRelative(projectRoot, notesFile) } : {}),
+  };
+}
+
+const zigOptimizeModes: readonly ZigOptimizeMode[] = ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"];
+
+function resolveNativeModules(
+  value: unknown,
+  projectRoot: string,
+): Required<Pick<NativeModulesConfig, "directory">> & NativeModulesConfig {
+  const modules = objectOrEmpty(value, "modules");
+  const directory = optionalString(modules.directory, "modules.directory", 1_024) ?? "modules";
+  const optimize = optionalString(modules.optimize, "modules.optimize", 32);
+  if (optimize !== undefined && !(zigOptimizeModes as readonly string[]).includes(optimize)) {
+    throw new CliError(`\`modules.optimize\` must be one of ${zigOptimizeModes.join(", ")}`);
+  }
+  return {
+    directory: resolveRelative(projectRoot, directory),
+    ...(optimize ? { optimize: optimize as ZigOptimizeMode } : {}),
   };
 }
 

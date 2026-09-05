@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "quickgui dev",
     "build": "quickgui build",
+    "modules": "quickgui modules",
     "test": "bun test"
   },
   "dependencies": {

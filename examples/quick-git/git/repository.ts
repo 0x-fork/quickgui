@@ -8,7 +8,7 @@
 import { readFile, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { formatPatch, looksBinary, parseDiff, syntheticAddedFile, type DiffFile, type HunkSelection } from "./diff.ts";
+import { Diff, formatPatch, looksBinary, syntheticDiffText, type DiffFile, type HunkSelection } from "./diff.ts";
 import { LOG_FORMAT, parseLog, type Commit } from "./log.ts";
 import {
   DEFAULT_MAX_OUTPUT_BYTES,
@@ -180,28 +180,26 @@ export class Repository {
   }
 
   /** The unstaged diff of one path (index versus working tree). */
-  async diffWorkingTree(path: string, options: CommandOptions = {}): Promise<DiffFile[]> {
+  async diffWorkingTree(path: string, options: CommandOptions = {}): Promise<Diff> {
     return this.#diff(["diff"], [path], options);
   }
 
   /** The staged diff of one path (HEAD versus index), passing a rename's source too. */
-  async diffIndex(path: string, originalPath: string | undefined, options: CommandOptions = {}): Promise<DiffFile[]> {
+  async diffIndex(path: string, originalPath: string | undefined, options: CommandOptions = {}): Promise<Diff> {
     return this.#diff(["diff", "--cached"], originalPath ? [originalPath, path] : [path], options);
   }
 
-  /** An untracked file rendered as an addition, or `undefined` when it is not previewable. */
-  async diffUntracked(path: string, options: CommandOptions = {}): Promise<DiffFile> {
+  /** An untracked file rendered as an addition: empty and truncated when it is too large. */
+  async diffUntracked(path: string, options: CommandOptions = {}): Promise<Diff> {
     const absolute = join(this.root, path);
     const details = await stat(absolute);
     if (details.size > MAX_UNTRACKED_PREVIEW_BYTES) {
-      const file = syntheticAddedFile(path, "", { binary: false });
-      file.truncated = true;
-      return file;
+      return Diff.open(syntheticDiffText(path, ""), { truncated: true });
     }
     if (options.signal?.aborted) throw abortError(this.root);
     const bytes = new Uint8Array(await readFile(absolute));
-    if (looksBinary(bytes)) return syntheticAddedFile(path, "", { binary: true });
-    return syntheticAddedFile(path, decodeOutput(bytes));
+    if (looksBinary(bytes)) return Diff.open(syntheticDiffText(path, "", { binary: true }));
+    return Diff.open(syntheticDiffText(path, decodeOutput(bytes)));
   }
 
   /** Files touched by one commit, against its first parent. */
@@ -230,7 +228,7 @@ export class Repository {
   }
 
   /** The patch of one commit, optionally narrowed to one path, against its first parent. */
-  async diffCommit(sha: string, path: string | undefined, options: CommandOptions = {}): Promise<DiffFile[]> {
+  async diffCommit(sha: string, path: string | undefined, options: CommandOptions = {}): Promise<Diff> {
     return this.#diff(["show", "--format=", "--first-parent", sha], path === undefined ? [] : [path], options);
   }
 
@@ -499,7 +497,7 @@ export class Repository {
 
   // ---------------------------------------------------------------------------------------------
 
-  async #diff(command: readonly string[], paths: readonly string[], options: CommandOptions): Promise<DiffFile[]> {
+  async #diff(command: readonly string[], paths: readonly string[], options: CommandOptions): Promise<Diff> {
     const result = await this.runner.run(
       [
         "--no-optional-locks",
@@ -515,7 +513,7 @@ export class Repository {
       ],
       { ...this.#options(options), maxOutputBytes: MAX_DIFF_OUTPUT_BYTES },
     );
-    return parseDiff(decodeOutput(result.stdout), { truncated: result.truncated });
+    return Diff.open(result.stdout, { truncated: result.truncated });
   }
 
   async #apply(flags: readonly string[], patch: string, options: CommandOptions): Promise<void> {

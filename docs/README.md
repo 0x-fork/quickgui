@@ -7,6 +7,7 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 - [View API and layout](view-api.md) — declarative views, Tailwind-style helpers, Flexbox, CSS Grid, and parent-size container queries.
 - [Solid 2 renderer](solid.md) — Bun/N-API hosting, unstyled native components, JSX compilation, reactive event boundaries, and the current binding scope.
 - [Project CLI and application packaging](cli.md) — initialization, on-demand TSX development in a real native app, restart ownership, target builds, and macOS signing.
+- [Native modules in Zig](native-modules.md) — `modules/<name>/main.zig` compiled into typed, embedded Node-API addons: the type mapping, injected arenas, errors, synchronous and thread-pool calls, retained state behind handles, and what pays off natively.
 - [Application identity, paths, and system information](application-environment.md) — package metadata, app-scoped standard directories, locale/language data, and immutable runtime access.
 - [Relaunch and signed updates](relaunch-and-updates.md) — orderly Rust-core restart, bounded progress, signature re-verification, and platform installation strategies.
 - [Crash reporting and process metrics](crash-reporting-and-metrics.md) — bounded panic and native-fault reports, retention and upload, an opt-in hang watchdog, and explicit process/system readings.

@@ -128,7 +128,9 @@ export async function runDev(options: DevOptions): Promise<number> {
   try {
     watcher = watch(projectRoot, { recursive: true }, (_event, filename) => {
       const path = filename ? resolve(projectRoot, String(filename)) : undefined;
-      if (path && shouldIgnoreChange(projectRoot, path, config.outDir)) return;
+      if (path && shouldIgnoreChange(projectRoot, path, config.outDir, config.modules.directory)) {
+        return;
+      }
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => queueReload(path), 80);
     });
@@ -241,14 +243,37 @@ async function stopApplication(child: AppProcess): Promise<void> {
   await child.exited;
 }
 
-/** @internal */
-export function shouldIgnoreChange(root: string, path: string, outDir: string): boolean {
+/**
+ * @internal
+ * `modulesDir` is the native modules directory; the `index.ts` the CLI generates in each module
+ * is ignored so writing it during a reload does not queue another one.
+ */
+export function shouldIgnoreChange(
+  root: string,
+  path: string,
+  outDir: string,
+  modulesDir?: string,
+): boolean {
   const pathFromRoot = relative(root, path);
   if (pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) return true;
   if (basename(path).endsWith(".bun-build")) return true;
   const parts = pathFromRoot.split(sep);
-  if (parts.some((part) => [".git", ".quickgui", "node_modules", "target"].includes(part))) {
+  if (
+    parts.some((part) => [".git", ".quickgui", ".zig-cache", "node_modules", "target"].includes(part))
+  ) {
     return true;
+  }
+  if (modulesDir !== undefined) {
+    const pathFromModules = relative(modulesDir, path);
+    const moduleParts = pathFromModules.split(sep);
+    if (
+      !pathFromModules.startsWith("..") &&
+      !isAbsolute(pathFromModules) &&
+      moduleParts.length === 2 &&
+      moduleParts[1] === "index.ts"
+    ) {
+      return true;
+    }
   }
   const outDirFromRoot = relative(root, outDir);
   const outDirIsInsideRoot =

@@ -3,12 +3,13 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { parseCliArgs, type ParsedCliCommand } from "./args.ts";
+import { parseCliArgs, type HelpTopic, type ParsedCliCommand } from "./args.ts";
 import { buildProject } from "./build.ts";
 import { loadConfig } from "./config.ts";
 import { runDev } from "./dev.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { initProject } from "./init.ts";
+import { buildNativeModules } from "./modules.ts";
 import { findMinisignTool } from "./packaging/pipeline.ts";
 import { minisignKeygenArguments } from "./packaging/updates.ts";
 import { hostTarget } from "./targets.ts";
@@ -36,9 +37,37 @@ export async function runCli(argv: string[]): Promise<number> {
       return await runDev(command);
     case "build":
       return await runBuild(command);
+    case "modules":
+      return await runModules(command);
     case "keygen":
       return await runKeygen(command);
   }
+}
+
+async function runModules(
+  command: Extract<ParsedCliCommand, { command: "modules" }>,
+): Promise<number> {
+  const projectRoot = resolve(command.project);
+  const config = await loadConfig(projectRoot, command.configFile);
+  const target = command.target ?? config.target ?? hostTarget();
+  const built = await buildNativeModules(config, {
+    target,
+    mode: command.release ? "production" : "development",
+    log: (line) => console.log(`[quickgui] ${line}`),
+  });
+  if (built.length === 0) {
+    console.log(
+      `[quickgui] No native modules: add modules/<name>/main.zig under ${relativeDisplayPath(config.modules.directory)}`,
+    );
+    return 0;
+  }
+  for (const module of built) {
+    const functions = module.manifest.functions.length;
+    console.log(
+      `[quickgui] ${module.rebuilt ? "Built" : "Up to date:"} ${module.name} (${functions} function${functions === 1 ? "" : "s"}) -> ${relativeDisplayPath(module.indexPath)}`,
+    );
+  }
+  return 0;
 }
 
 async function runKeygen(
@@ -108,7 +137,21 @@ async function runBuild(
   return 0;
 }
 
-function helpText(topic?: "init" | "dev" | "build" | "keygen"): string {
+function helpText(topic?: HelpTopic): string {
+  if (topic === "modules") {
+    return `Usage: quickgui modules [options]
+
+Compile every native module (modules/<name>/main.zig, written in Zig) into a Node-API addon and
+write its typed modules/<name>/index.ts. \`quickgui dev\` and \`quickgui build\` do this
+automatically; run it directly before \`bun test\` or type-checking.
+
+Options:
+  --project <directory>      Project directory (default: .)
+  --config <file>            Config file (default: quickgui.config.ts)
+  --target <target>          Target to compile for (default: host)
+  --release                  Use the production optimization mode
+  -h, --help                 Show this help`;
+  }
   if (topic === "keygen") {
     return `Usage: quickgui keygen [options]
 
@@ -172,6 +215,7 @@ Commands:
   init [directory]           Create a Solid-powered project
   dev                        Run a native app with source reload
   build                      Package a production application
+  modules                    Compile the project's Zig native modules
   keygen                     Create a Minisign update signing key pair
 
 Run \`quickgui help <command>\` for command-specific help.`;

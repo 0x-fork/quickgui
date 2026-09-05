@@ -25,6 +25,7 @@
     "src/error.ts",
     "src/index.ts",
     "src/init.ts",
+    "src/modules.ts",
     "src/targets.ts",
     "templates",
     "README.md"
