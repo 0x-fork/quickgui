@@ -439,6 +439,25 @@ function Gallery() {
                 onSubmit={() => setSubmittedField("text field")}
               />
             </Host>
+            {/* Focus is shared with the native field: only one of the two shows it at a time. */}
+            <Input
+              value={name()}
+              placeholder="Framework input bound to the same value"
+              onInput={(event) => setName(event.value ?? "")}
+              style={{
+                width: 360,
+                height: 28,
+                flexShrink: 0,
+                paddingLeft: 8,
+                paddingRight: 8,
+                color: "#111827",
+                backgroundColor: "#ffffff",
+                borderWidth: 1,
+                borderColor: "#d1d5db",
+                borderRadius: 6,
+                focus: { borderColor: "#2563eb", outline: "3px solid #2563eb55" },
+              }}
+            />
           </DemoPage>
         );
       case "secure-field":

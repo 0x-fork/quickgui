@@ -645,6 +645,7 @@ impl Element {
             || self.focus.has_paint_overrides()
             || self.disabled_style.has_paint_overrides()
             || self.invalid_style.has_paint_overrides()
+            || self.selected_style.has_paint_overrides()
             || self.dragging.has_paint_overrides()
             || self.drag_over.has_paint_overrides()
     }
@@ -655,6 +656,7 @@ impl Element {
             || self.focus.cursor_style.is_some()
             || self.disabled_style.cursor_style.is_some()
             || self.invalid_style.cursor_style.is_some()
+            || self.selected_style.cursor_style.is_some()
             || self.dragging.cursor_style.is_some()
             || self.drag_over.cursor_style.is_some()
     }

@@ -39,7 +39,9 @@ use objc2_app_kit::{
     NSPasteboardTypeString, NSPasteboardTypeURL, NSPasteboardWriting, NSPopUpMenuWindowLevel,
     NSResponder, NSSavePanel, NSScreen, NSTitlePosition, NSView, NSViewLayerContentsRedrawPolicy,
     NSWindow, NSWindowAnimationBehavior, NSWindowButton, NSWindowCollectionBehavior,
-    NSWindowDidResizeNotification, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTabGroup,
+    NSWindowDidBecomeKeyNotification, NSWindowDidChangeOcclusionStateNotification,
+    NSWindowDidExitFullScreenNotification, NSWindowDidResizeNotification,
+    NSWindowDidUpdateNotification, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTabGroup,
     NSWindowTabbingMode, NSWorkspace,
 };
 use objc2_foundation::{

@@ -12,6 +12,18 @@ cd examples/system-api-solid
 bun run dev
 ```
 
+Quick Git is a native git client built as a product rather than a demo. Its pure-TypeScript git
+layer (a bounded process runner plus porcelain v2, unified diff, log, ref, stash, and worktree
+parsers with patch formatting for partial staging) is covered by `bun test`, including real git
+runs in a temporary repository; the UI declares only the visible rows of every list through the
+core-virtualized `Table`, drafts commit messages with the Codex or Claude CLI non-interactively,
+and treats worktrees as first-class:
+
+```console
+cd examples/quick-git
+bun run dev
+```
+
 The Solid routing example declares nested layouts, dynamic and wildcard routes, query-only
 navigation, active `Link` styling, and back/forward controls. Rust owns pattern matching,
 normalization, decoded values, and the bounded memory history; Solid owns only declaration

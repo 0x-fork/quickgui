@@ -1128,9 +1128,13 @@ impl AppRunner {
     }
 
     fn ensure_window_command_target(&self, handle: WindowHandle) -> Result<(), WindowCommandError> {
+        // A handle is a valid target from the moment `open_window` returned it: the platform
+        // window is created on the next event-loop turn, and a command queued before then waits
+        // for it rather than being refused for the few milliseconds of that gap.
         if !matches!(self.status, AppRunStatus::Continue)
             || !(self.runtime.window_handles.contains_key(&handle)
-                || self.runtime.current_handle() == Some(handle))
+                || self.runtime.current_handle() == Some(handle)
+                || self.runtime.window_is_pending(handle))
         {
             Err(WindowCommandError::Unavailable)
         } else {

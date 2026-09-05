@@ -2144,3 +2144,118 @@ fn a_blurred_group_records_two_separable_passes_and_stays_inside_its_budget() {
         "the blur must fall off outwards: {inside} {just_outside} {far_outside}"
     );
 }
+
+#[test]
+fn transparent_present_re_premultiplies_into_the_compositor_encoding() {
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let (device, queue) = renderer.gpu();
+    let format = TextureFormat::Rgba8UnormSrgb;
+    let mut present = super::present::TransparentPresent::new(device, format);
+    let (intermediate, _) = present.target(device, format, 0, 3, 1);
+
+    // Pixel 0 is what linear blending leaves for mid grey at 50% coverage: the premultiplied
+    // linear value `0.5 * decode(0.5)`, encoded, which is 92 out of 255. Pixel 1 is opaque mid
+    // grey, and pixel 2 is clear.
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &intermediate,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &[92, 92, 92, 128, 128, 128, 128, 255, 0, 0, 0, 0],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(12),
+            rows_per_image: Some(1),
+        },
+        wgpu::Extent3d {
+            width: 3,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+    );
+    let output = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("present test output"),
+        size: wgpu::Extent3d {
+            width: 3,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let output_view = output.create_view(&TextureViewDescriptor::default());
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("present test readback"),
+        size: u64::from(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+        label: Some("present test encoder"),
+    });
+    present.present(device, &mut encoder, 0, &output_view);
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: &output,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &readback,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+                rows_per_image: Some(1),
+            },
+        },
+        wgpu::Extent3d {
+            width: 3,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.submit(Some(encoder.finish()));
+    let slice = readback.slice(..);
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    receiver.recv().unwrap().unwrap();
+    let mapped = slice.get_mapped_range().unwrap();
+    let pixels = mapped[..12].to_vec();
+    drop(mapped);
+
+    // A gamma-space compositor expects `coverage * encode(grey)` = 0.5 * 0.5 → 64 of 255, with the
+    // coverage itself untouched. Opaque and clear pixels pass through unchanged.
+    assert!(
+        (pixels[0] as i32 - 64).abs() <= 2,
+        "premultiplied red {}",
+        pixels[0]
+    );
+    assert!(
+        (pixels[1] as i32 - 64).abs() <= 2,
+        "premultiplied green {}",
+        pixels[1]
+    );
+    assert!(
+        (pixels[2] as i32 - 64).abs() <= 2,
+        "premultiplied blue {}",
+        pixels[2]
+    );
+    assert_eq!(pixels[3], 128);
+    assert_eq!(&pixels[4..8], &[128, 128, 128, 255]);
+    assert_eq!(&pixels[8..12], &[0, 0, 0, 0]);
+}

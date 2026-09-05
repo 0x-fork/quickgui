@@ -128,6 +128,7 @@ impl GpuRenderer {
             #[cfg(target_os = "macos")]
             overlay_active: false,
             compositor: Compositor::default(),
+            present: None,
             window,
         })
     }
@@ -658,8 +659,8 @@ impl GpuRenderer {
         #[cfg(not(target_os = "macos"))]
         let overlay_frame: Option<wgpu::SurfaceTexture> = None;
 
-        let view = frame.texture.create_view(&TextureViewDescriptor::default());
-        let overlay_view = overlay_frame
+        let surface_view = frame.texture.create_view(&TextureViewDescriptor::default());
+        let overlay_surface_view = overlay_frame
             .as_ref()
             .map(|frame| frame.texture.create_view(&TextureViewDescriptor::default()));
         let mut encoder = self
@@ -667,7 +668,45 @@ impl GpuRenderer {
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("quickgui frame encoder"),
             });
-        let target_copyable = self.config.usage.contains(TextureUsages::COPY_SRC);
+        let surface_copyable = self.config.usage.contains(TextureUsages::COPY_SRC);
+        // A transparent sRGB frame renders into an intermediate and is re-premultiplied into the
+        // surface afterwards; see `present::TransparentPresent`. The overlay surface is always
+        // transparent, so it takes the same route whenever the base surface would.
+        let re_premultiply = present::needs_present_pass(&self.config);
+        let mut intermediate: Option<(wgpu::Texture, wgpu::TextureView)> = None;
+        let mut overlay_intermediate: Option<(wgpu::Texture, wgpu::TextureView)> = None;
+        if re_premultiply {
+            let present = self.present.get_or_insert_with(|| {
+                present::TransparentPresent::new(&self.device, self.config.format)
+            });
+            intermediate = Some(present.target(
+                &self.device,
+                self.config.format,
+                0,
+                physical_size.width,
+                physical_size.height,
+            ));
+            if overlay_surface_view.is_some() {
+                overlay_intermediate = Some(present.target(
+                    &self.device,
+                    self.config.format,
+                    1,
+                    physical_size.width,
+                    physical_size.height,
+                ));
+            }
+        } else if let Some(present) = &mut self.present {
+            present.release();
+        }
+        let view = intermediate
+            .as_ref()
+            .map_or_else(|| surface_view.clone(), |(_, view)| view.clone());
+        let target_copyable = intermediate.is_some() || surface_copyable;
+        let overlay_view = overlay_surface_view.as_ref().map(|surface| {
+            overlay_intermediate
+                .as_ref()
+                .map_or_else(|| surface.clone(), |(_, view)| view.clone())
+        });
         let composite_stats = {
             let renderers = SceneRenderers {
                 shapes: &self.shapes,
@@ -684,7 +723,11 @@ impl GpuRenderer {
                 scene,
                 &renderers,
                 &view,
-                Some(&frame.texture),
+                Some(
+                    intermediate
+                        .as_ref()
+                        .map_or(&frame.texture, |(texture, _)| texture),
+                ),
                 Some(scene.background()),
                 CompositeFrame {
                     width: physical_size.width,
@@ -696,6 +739,11 @@ impl GpuRenderer {
                 },
             )?
         };
+        if intermediate.is_some()
+            && let Some(present) = &self.present
+        {
+            present.present(&self.device, &mut encoder, 0, &surface_view);
+        }
         if let Some(overlay) = &overlay_view {
             let renderers = SceneRenderers {
                 shapes: &self.shapes,
@@ -712,7 +760,10 @@ impl GpuRenderer {
                 scene,
                 &renderers,
                 overlay,
-                overlay_frame.as_ref().map(|frame| &frame.texture),
+                overlay_intermediate
+                    .as_ref()
+                    .map(|(texture, _)| texture)
+                    .or(overlay_frame.as_ref().map(|frame| &frame.texture)),
                 Some(crate::Color::TRANSPARENT),
                 CompositeFrame {
                     width: physical_size.width,
@@ -723,6 +774,12 @@ impl GpuRenderer {
                     plane: Some(ScenePlane::Overlay),
                 },
             )?;
+            if overlay_intermediate.is_some()
+                && let (Some(present), Some(surface)) =
+                    (&self.present, overlay_surface_view.as_ref())
+            {
+                present.present(&self.device, &mut encoder, 1, surface);
+            }
         }
 
         self.window.pre_present_notify();

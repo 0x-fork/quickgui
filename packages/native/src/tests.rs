@@ -365,10 +365,7 @@ fn swift_ui_form_controls_decode_from_the_native_tree() {
     slider.set_property(property::MINIMUM, Some(PropertyValue::Number(0.0)));
     slider.set_property(property::MAXIMUM, Some(PropertyValue::Number(1.0)));
     slider.set_property(property::STEP, Some(PropertyValue::Number(0.1)));
-    slider.set_property(
-        property::INPUT_LISTENER,
-        Some(PropertyValue::Bool(true)),
-    );
+    slider.set_property(property::INPUT_LISTENER, Some(PropertyValue::Bool(true)));
     let slider = swift_ui_slider(1, &slider, &tree).unwrap();
     assert_eq!(slider.value, f64::from(0.4_f32));
     assert_eq!(slider.minimum, 0.0);
@@ -411,10 +408,7 @@ fn swift_ui_form_controls_decode_from_the_native_tree() {
         Some(PropertyValue::String(Arc::from("Name"))),
     );
     field.set_property(property::PASSWORD, Some(PropertyValue::Bool(true)));
-    field.set_property(
-        property::SUBMIT_LISTENER,
-        Some(PropertyValue::Bool(true)),
-    );
+    field.set_property(property::SUBMIT_LISTENER, Some(PropertyValue::Bool(true)));
     let field = swift_ui_text_field(5, &field).unwrap();
     assert_eq!(&*field.text, "Ada");
     assert_eq!(field.placeholder.as_deref(), Some("Name"));
@@ -441,7 +435,10 @@ fn swift_ui_form_controls_decode_from_the_native_tree() {
     assert_eq!(&*picker.selection, "grid");
     assert_eq!(picker.style, SwiftUiPickerStyle::Segmented);
     assert_eq!(picker.options.len(), 2);
-    assert_eq!(picker.options[0].system_image.as_deref(), Some("list.bullet"));
+    assert_eq!(
+        picker.options[0].system_image.as_deref(),
+        Some("list.bullet")
+    );
     assert!(picker.options[1].disabled);
 
     let mut tabs = NativeNode::new(NodeTag::SwiftUiPicker);
@@ -496,9 +493,7 @@ fn swift_ui_form_controls_decode_from_the_native_tree() {
     gauge.set_property(property::VALUE, Some(PropertyValue::Number(0.72)));
     gauge.set_property(
         property::SWIFT_UI_GAUGE_STYLE,
-        Some(PropertyValue::String(Arc::from(
-            "accessoryLinearCapacity",
-        ))),
+        Some(PropertyValue::String(Arc::from("accessoryLinearCapacity"))),
     );
     gauge.set_property(
         property::SWIFT_UI_GAUGE_MINIMUM_VALUE_LABEL,
@@ -4543,6 +4538,22 @@ fn group_states_collect_one_entry_per_group_in_declaration_order() {
         native_state_style(&node, &FOCUS_WITHIN_STYLE_CODES),
         Some(ElementStateStyle::default().outline_offset(2.0, Color::WHITE, 0.0))
     );
+
+    // `selected` is an ordinary single state as well, following the element's selected flag.
+    node.set_property(
+        property::SELECTED_STYLE,
+        Some(PropertyValue::String(Arc::from(
+            r#"{"backgroundColor":4278190335,"color":4294967295}"#,
+        ))),
+    );
+    assert_eq!(
+        native_state_style(&node, &SELECTED_STYLE_CODES),
+        Some(
+            ElementStateStyle::default()
+                .bg(unpack_color(4278190335))
+                .text_color(unpack_color(4294967295))
+        )
+    );
 }
 
 #[test]
@@ -6139,7 +6150,9 @@ fn slider_control_owns_the_hit_area_and_controlled_echoes_keep_the_upper_thumb()
                 .unwrap()
                 .set_property(
                     property::VALUES,
-                    Some(PropertyValue::String(Arc::from(values.to_string().as_str()))),
+                    Some(PropertyValue::String(Arc::from(
+                        values.to_string().as_str(),
+                    ))),
                 );
             cx.invalidate();
         })
@@ -8414,10 +8427,9 @@ fn a_declared_table_cell_with_text_children_builds_a_consistent_accessibility_tr
     let mut row = component_part_node(NodeTag::View, table_id, "table-row", &[], &[]);
     row.set_property(property::ROW_INDEX, Some(PropertyValue::Number(0.0)));
     insert_component_node(&mut tree, row_id, table_id, row);
-    for (cell_id, text_id, column, value) in [
-        (643, 644, "name", "notes.txt"),
-        (645, 646, "size", "12 KB"),
-    ] {
+    for (cell_id, text_id, column, value) in
+        [(643, 644, "name", "notes.txt"), (645, 646, "size", "12 KB")]
+    {
         let cell = component_part_node(
             NodeTag::View,
             row_id,
@@ -8479,8 +8491,14 @@ fn a_declared_percentage_width_sizes_against_the_parent() {
     insert_component_node(&mut tree, parent_id, ROOT_NODE, parent);
     let mut child = NativeNode::new(NodeTag::View);
     child.parent = Some(parent_id);
-    child.set_property(property::WIDTH, Some(PropertyValue::String(Arc::from("62%"))));
-    child.set_property(property::HEIGHT, Some(PropertyValue::String(Arc::from("50%"))));
+    child.set_property(
+        property::WIDTH,
+        Some(PropertyValue::String(Arc::from("62%"))),
+    );
+    child.set_property(
+        property::HEIGHT,
+        Some(PropertyValue::String(Arc::from("50%"))),
+    );
     insert_component_node(&mut tree, child_id, parent_id, child);
 
     let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
@@ -8524,8 +8542,14 @@ fn a_dialog_declared_inside_a_panel_covers_the_window() {
         &dialog,
         &[(property::OPEN, true)],
     );
-    backdrop.set_property(property::WIDTH, Some(PropertyValue::String(Arc::from("100%"))));
-    backdrop.set_property(property::HEIGHT, Some(PropertyValue::String(Arc::from("100%"))));
+    backdrop.set_property(
+        property::WIDTH,
+        Some(PropertyValue::String(Arc::from("100%"))),
+    );
+    backdrop.set_property(
+        property::HEIGHT,
+        Some(PropertyValue::String(Arc::from("100%"))),
+    );
     insert_component_node(&mut tree, backdrop_id, portal_id, backdrop);
     let mut popup = component_part_node(
         NodeTag::View,
@@ -8549,11 +8573,23 @@ fn a_dialog_declared_inside_a_panel_covers_the_window() {
     let window_bounds = cx
         .element_bounds(window, ElementId::new(crate::ROOT_ELEMENT_ID))
         .unwrap();
-    assert!(window_bounds.width > 200.0 && window_bounds.height > 100.0, "{window_bounds:?}");
-    assert_eq!(cx.element_bounds(window, core.root_id()).unwrap(), window_bounds);
-    assert_eq!(cx.element_bounds(window, core.backdrop_id()).unwrap(), window_bounds);
+    assert!(
+        window_bounds.width > 200.0 && window_bounds.height > 100.0,
+        "{window_bounds:?}"
+    );
+    assert_eq!(
+        cx.element_bounds(window, core.root_id()).unwrap(),
+        window_bounds
+    );
+    assert_eq!(
+        cx.element_bounds(window, core.backdrop_id()).unwrap(),
+        window_bounds
+    );
     let popup = cx.element_bounds(window, core.popover_id()).unwrap();
-    assert!((popup.width - 120.0).abs() < 0.5 && (popup.height - 60.0).abs() < 0.5, "{popup:?}");
+    assert!(
+        (popup.width - 120.0).abs() < 0.5 && (popup.height - 60.0).abs() < 0.5,
+        "{popup:?}"
+    );
 }
 
 #[test]
@@ -8579,7 +8615,10 @@ fn a_context_menu_declared_with_item_parts_and_no_items_opens_the_core_surface()
         .unwrap()
         .children
         .push(target_id);
-    for (id, value, label) in [(rename_id, "rename", "Rename"), (delete_id, "delete", "Delete")] {
+    for (id, value, label) in [
+        (rename_id, "rename", "Rename"),
+        (delete_id, "delete", "Delete"),
+    ] {
         declare_aligned_part(
             &mut tree,
             id,

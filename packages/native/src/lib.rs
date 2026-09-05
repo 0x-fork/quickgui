@@ -62,9 +62,9 @@ use quickgui::{
     Menubar, MenubarState, NumberField, NumberFieldState, PickerFilterMode, PickerItem,
     SelectListState, SelectOptionState, SelectPopoverLayout, SelectState, TableCellPosition,
     TableCellState, TableColumn, TableColumnAlign, TableEditEnded, TableHeaderState, TableLayout,
-    TableSelection, TableSelectionMode, TableSort, TableSortDirection, TableState, TimeField,
-    TimeFieldState, TimeSegment, Toast as CoreToast, ToastEntry, ToastId, ToastKind, ToastManager,
-    ToastViewport, TreeLayout, TreeLoadChildren, TreeNode, TreeRow, TreeState,
+    TableRowState, TableSelection, TableSelectionMode, TableSort, TableSortDirection, TableState,
+    TimeField, TimeFieldState, TimeSegment, Toast as CoreToast, ToastEntry, ToastId, ToastKind,
+    ToastManager, ToastViewport, TreeLayout, TreeLoadChildren, TreeNode, TreeRow, TreeState,
 };
 #[cfg(target_os = "macos")]
 use quickgui::{
@@ -74,7 +74,7 @@ use quickgui::{
     SwiftUiGaugeStyle, SwiftUiLabelStyle, SwiftUiModifier, SwiftUiPicker, SwiftUiPickerOption,
     SwiftUiPickerStyle, SwiftUiPopover, SwiftUiPopoverArrowEdge, SwiftUiPopoverAttachmentAnchor,
     SwiftUiProgressView, SwiftUiQuickGuiHost, SwiftUiSlider, SwiftUiStepper, SwiftUiTextField,
-    SwiftUiToggle, native_view,
+    SwiftUiToggle, native_view_with_outset,
 };
 
 mod dialog;
@@ -95,7 +95,7 @@ use dialog::{
 };
 
 const PROTOCOL_MAGIC: &[u8; 4] = b"QGMB";
-const PROTOCOL_VERSION: u16 = 30;
+const PROTOCOL_VERSION: u16 = 31;
 const ROOT_NODE: u32 = 0;
 const ROOT_ELEMENT_ID: u64 = u64::MAX - 1;
 const MAX_BATCH_BYTES: usize = 16 * 1024 * 1024;
@@ -493,7 +493,12 @@ mod property {
     pub const HOVER_GROUP: u16 = 354;
     pub const GROUP_ACTIVE_STYLE: u16 = 355;
     pub const FOCUS_WITHIN_STYLE: u16 = 356;
-    pub const LAST: u16 = FOCUS_WITHIN_STYLE;
+    /// Nested `selected` state style, painted while the element's `selected` flag is set.
+    pub const SELECTED_STYLE: u16 = 357;
+    /// Web-style `selected` flag on any element: the native accessibility state and the
+    /// `selected` state style follow one declaration.
+    pub const SELECTED: u16 = 358;
+    pub const LAST: u16 = SELECTED;
 }
 
 #[derive(Default)]

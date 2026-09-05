@@ -198,8 +198,6 @@ pub use drawer::{
     MAX_DRAWER_DISMISS_VELOCITY, MAX_DRAWER_SNAP_POINTS, MAX_NESTED_DRAWERS, SwipeDirection,
     drawer_popup,
 };
-#[cfg(target_os = "macos")]
-pub use element::native_view;
 pub use element::{
     AccessibilityAutoComplete, AccessibilityLive, AccessibilityOrientation, AccessibilityPopover,
     AccessibilityRole, AccessibilitySortDirection, AccessibilityValueRange, AnchorAlign,
@@ -213,6 +211,8 @@ pub use element::{
     anchor_placement, button, canvas, container_query, custom_shader, div, form, img, overlay,
     path, styled_text_area, styled_text_input, submit_button, svg, text, text_area, text_input,
 };
+#[cfg(target_os = "macos")]
+pub use element::{native_view, native_view_with_outset};
 pub use entity::{
     Entity, EntityId, EventEmitter, MAX_ENTITY_EVENT_DELIVERIES_PER_TURN,
     MAX_ENTITY_EVENTS_PER_CALLBACK, MAX_ENTITY_NOTIFICATIONS_PER_EVENT,
@@ -304,7 +304,7 @@ pub use menubar::{
 };
 pub use metrics::{FrameMetrics, RenderStats};
 #[cfg(target_os = "macos")]
-pub use native_view::MacNativeView;
+pub use native_view::{MAX_NATIVE_VIEW_OUTSET, MacNativeView};
 pub use navigation_menu::{
     DEFAULT_NAVIGATION_MENU_CLOSE_DELAY, DEFAULT_NAVIGATION_MENU_DELAY, MAX_NAVIGATION_MENU_DELAY,
     MAX_NAVIGATION_MENU_ITEMS, NAVIGATION_MENU_HORIZONTAL_KEY_CONTEXT,
@@ -565,9 +565,9 @@ pub use table::{
     TableEditEnded, TableExtendSelectionDown, TableExtendSelectionUp, TableFirstRow,
     TableHeaderState, TableLastRow, TableLayout, TableMoveColumnLeft, TableMoveColumnRight,
     TableNextColumn, TableNextRow, TablePageDown, TablePageUp, TablePreviousColumn,
-    TablePreviousRow, TableResizeColumnLarger, TableResizeColumnSmaller, TableSelectAll,
-    TableSelection, TableSelectionChanged, TableSelectionMode, TableSort, TableSortDirection,
-    TableState, TableToggleSelection, table_key_bindings,
+    TablePreviousRow, TableResizeColumnLarger, TableResizeColumnSmaller, TableRowState,
+    TableSelectAll, TableSelection, TableSelectionChanged, TableSelectionMode, TableSort,
+    TableSortDirection, TableState, TableToggleSelection, table_key_bindings,
 };
 pub use tabs::{
     Tab, TabState, Tabs, TabsActivationDirection, TabsActivationMovement, TabsIndicatorGeometry,

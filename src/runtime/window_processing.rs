@@ -6,9 +6,15 @@ impl Runtime {
         let _ = event_loop;
         #[cfg(target_os = "macos")]
         let mut refresh_native_tabs = false;
+        // A command for a window whose platform creation is still queued waits for that window;
+        // one for a window that no longer exists, or never will, is dropped.
+        let mut waiting = Vec::new();
         for command in std::mem::take(&mut self.window_commands) {
             let handle = command.handle();
             let Some(window_id) = self.window_handles.get(&handle).copied() else {
+                if self.window_is_pending(handle) && waiting.len() < MAX_PENDING_WINDOW_COMMANDS {
+                    waiting.push(command);
+                }
                 continue;
             };
             #[cfg(target_os = "macos")]
@@ -993,6 +999,7 @@ impl Runtime {
                 _ => {}
             }
         }
+        self.window_commands.extend(waiting);
         #[cfg(target_os = "macos")]
         if refresh_native_tabs {
             self.refresh_native_tab_states();

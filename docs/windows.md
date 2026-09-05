@@ -519,7 +519,9 @@ runner.set_window_always_on_top(handle, true, Some(WindowLevel::ScreenSaver))?;
 
 Each one queues an ordinary `WindowCommand` under the existing `MAX_PENDING_WINDOW_COMMANDS` bound
 and is applied on the next event-loop turn, so an embedder never mutates a native window from
-outside the application thread. `runner.window_state(handle)` and `runner.displays()` supply the
+outside the application thread. A handle is a valid target from the moment `open_window` returns
+it: a command queued before the platform window exists waits for that window's creation on the
+same turn instead of failing, and is dropped only if the window is closed first. `runner.window_state(handle)` and `runner.displays()` supply the
 `WindowState::restore_state` pair, and `WindowOptions::restore` accepts the result unchanged.
 
 Per-window menus and native popup menus need the runtime's window-scoped `EventContext`, which only

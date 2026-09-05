@@ -77,6 +77,13 @@ impl OffscreenRenderer {
         })
     }
 
+    /// The device and queue behind this renderer, for tests of individual passes.
+    #[cfg(test)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn gpu(&self) -> (&Device, &Queue) {
+        (&self.device, &self.queue)
+    }
+
     #[cfg(test)]
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn last_reshaped_text_areas(&self) -> usize {

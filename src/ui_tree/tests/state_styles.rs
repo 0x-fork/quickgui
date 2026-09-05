@@ -408,3 +408,52 @@ fn focus_within_paints_the_focused_element_and_every_ancestor() {
         Some(own_color)
     );
 }
+
+#[test]
+fn selected_paints_while_the_element_is_selected_and_keeps_its_paint_under_hover() {
+    let row = ElementId::new(150);
+    let chosen = Color::rgb8(37, 99, 235);
+    let hover = Color::rgb8(220, 38, 38);
+    let declaration = |selected: bool| {
+        div()
+            .id(row)
+            .size(200.0, 40.0)
+            .clickable()
+            .selected(selected)
+            .selected_style(|style| style.bg(chosen))
+            .hover(|style| style.bg(hover))
+    };
+    let viewport = Size::new(200.0, 40.0);
+    let now = Instant::now();
+    let mut tree = UiTree::new();
+    let mut renderer = TestTextLayout;
+    let mut scene = Scene::new();
+
+    tree.set_root(declaration(false), viewport, 1.0, &mut renderer)
+        .unwrap();
+    tree.paint_at(&mut scene, &mut renderer, now).unwrap();
+    // Neither selected nor hovered: the row paints no box at all.
+    assert!(quad_at(&scene, 100.0).is_none());
+
+    // Hovered: the ordinary hover fill.
+    assert!(tree.pointer_moved(Point::new(100.0, 20.0), &mut renderer));
+    scene.clear(Color::TRANSPARENT);
+    tree.paint_at(&mut scene, &mut renderer, now).unwrap();
+    assert_eq!(fill_at(&scene, 100.0), Some(hover));
+
+    // Selected under the same pointer: the selected fill wins over the hover beneath it, as a
+    // native list row keeps its selection colour while the pointer rests on it.
+    tree.set_root(declaration(true), viewport, 1.0, &mut renderer)
+        .unwrap();
+    tree.pointer_moved(Point::new(100.0, 20.0), &mut renderer);
+    assert!(tree.hovered.contains(&row));
+    scene.clear(Color::TRANSPARENT);
+    tree.paint_at(&mut scene, &mut renderer, now).unwrap();
+    assert_eq!(fill_at(&scene, 100.0), Some(chosen));
+
+    // The pointer leaves: the selection paint stays, because it follows the flag, not the pointer.
+    assert!(tree.pointer_left());
+    scene.clear(Color::TRANSPARENT);
+    tree.paint_at(&mut scene, &mut renderer, now).unwrap();
+    assert_eq!(fill_at(&scene, 100.0), Some(chosen));
+}

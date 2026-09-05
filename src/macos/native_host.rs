@@ -312,6 +312,16 @@ declare_class!(
         fn is_flipped(&self) -> bool {
             true
         }
+
+        #[method(hitTest:)]
+        fn hit_test(&self, point: NSPoint) -> *const NSView {
+            // The clip and rounding containers have no content of their own. A point that reaches
+            // no hosted content falls through to the framework view beneath, so the outset ring a
+            // native control keeps for its effects never shadows the elements it overlaps.
+            let hit: *const NSView = unsafe { msg_send![super(self), hitTest: point] };
+            let this: *const NSView = (self as *const Self).cast();
+            if hit == this { null() } else { hit }
+        }
     }
 );
 
@@ -365,7 +375,10 @@ pub(crate) struct MacNativeHost {
     parent: Retained<NSView>,
     overlay: Retained<QuickGuiOverlayView>,
     accessibility: Option<HybridAccessibilityHost>,
-    event_monitor: Option<Retained<AnyObject>>,
+    notifications: Retained<NSNotificationCenter>,
+    /// Watches the window's first responder so the runtime learns when AppKit takes or returns
+    /// keyboard focus; see [`Self::new`].
+    focus_observer: Retained<NSObject>,
     hosted: HashMap<ElementId, HostedView>,
     seen: HashSet<ElementId>,
     seen_views: HashMap<NonNull<c_void>, ElementId>,
@@ -402,34 +415,42 @@ impl MacNativeHost {
         let native_window = parent
             .window()
             .ok_or_else(|| "the AppKit content view is not attached to a window".to_owned())?;
+        // AppKit moves keyboard focus into a hosted view by click, by Tab through the key view
+        // loop, or from the view's own focus state, and there is no notification for the first
+        // responder itself. The window-update notification follows every event cycle, so compare
+        // the responder there and queue one redraw when its ownership flips; the runtime then
+        // observes the new first responder on that frame without polling while idle.
         let weak_window = Arc::downgrade(window);
-        let monitor_block = RcBlock::new(move |event: NonNull<NSEvent>| {
-            let event_belongs_to_window = MainThreadMarker::new().is_some_and(|mtm| unsafe {
-                event.as_ref().window(mtm).is_some_and(|event_window| {
-                    Retained::as_ptr(&event_window) == Retained::as_ptr(&native_window)
+        let framework_view = parent.clone();
+        let foreign_focus = Cell::new(false);
+        let focus_block = RcBlock::new(move |_notification: NonNull<NSNotification>| {
+            let foreign = framework_view.window().is_some_and(|window| {
+                window.firstResponder().is_some_and(|responder| {
+                    Retained::as_ptr(&responder).cast::<c_void>()
+                        != Retained::as_ptr(&framework_view).cast::<c_void>()
                 })
             });
-            if event_belongs_to_window && let Some(window) = weak_window.upgrade() {
-                // AppKit dispatches this event after the monitor returns. Queueing a redraw lets
-                // the runtime observe the resulting first responder without polling while idle.
+            if foreign_focus.replace(foreign) != foreign
+                && let Some(window) = weak_window.upgrade()
+            {
                 window.request_redraw();
             }
-            event.as_ptr()
         });
-        let event_monitor = unsafe {
-            NSEvent::addLocalMonitorForEventsMatchingMask_handler(
-                NSEventMask::LeftMouseDown
-                    | NSEventMask::RightMouseDown
-                    | NSEventMask::OtherMouseDown,
-                &monitor_block,
+        let notifications = unsafe { NSNotificationCenter::defaultCenter() };
+        let focus_observer = unsafe {
+            notifications.addObserverForName_object_queue_usingBlock(
+                Some(NSWindowDidUpdateNotification),
+                Some(native_window.as_ref()),
+                None,
+                &focus_block,
             )
-        }
-        .ok_or_else(|| "could not monitor native-view focus changes".to_owned())?;
+        };
         Ok(Self {
             parent,
             overlay,
             accessibility,
-            event_monitor: Some(event_monitor),
+            notifications,
+            focus_observer,
             hosted: HashMap::with_capacity(4),
             seen: HashSet::with_capacity(4),
             seen_views: HashMap::with_capacity(4),
@@ -443,6 +464,31 @@ impl MacNativeHost {
     pub fn set_overlay_active(&self, active: bool) {
         self.overlay.ivars().input_active.set(active);
         self.overlay.setHidden(!active);
+    }
+
+    /// Returns whether a hosted AppKit view, or a field editor working for one, is the window's
+    /// first responder.
+    ///
+    /// This is narrower than [`Self::native_focus_active`]: a first responder that is neither the
+    /// Winit view nor a hosted view, such as the window itself before any view claimed focus, does
+    /// not mean a hosted control took the keyboard.
+    pub fn hosted_view_owns_focus(&self) -> bool {
+        if self.hosted.is_empty() {
+            return false;
+        }
+        let Some(responder) = self
+            .parent
+            .window()
+            .and_then(|window| window.firstResponder())
+        else {
+            return false;
+        };
+        let hosted = self
+            .hosted
+            .values()
+            .map(|hosted| hosted.content.retained())
+            .collect::<Vec<_>>();
+        native_focus_owner(&hosted, &responder).is_some()
     }
 
     /// Returns whether AppKit, rather than QuickGUI's Winit view, owns keyboard focus.
@@ -590,10 +636,9 @@ impl Drop for MacNativeHost {
         if let Some(accessibility) = &self.accessibility {
             accessibility.update(&[]);
         }
-        if let Some(event_monitor) = self.event_monitor.take() {
-            unsafe {
-                NSEvent::removeMonitor(&event_monitor);
-            }
+        unsafe {
+            self.notifications
+                .removeObserver(self.focus_observer.as_ref());
         }
         for hosted in self.hosted.values() {
             unsafe {

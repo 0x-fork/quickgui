@@ -24,6 +24,10 @@ typealias QuickGUISubmitCallback = @convention(c) (
 ) -> Void
 
 private let quickGUIGlassEffectInset: CGFloat = 24
+/// Headroom every non-empty host keeps around ordinary controls: a bezel's shadow and the focus
+/// ring are drawn a few points outside the control's own bounds and would otherwise be clipped at
+/// its layout box.
+private let quickGUIControlEffectInset: CGFloat = 6
 
 private struct QuickGUIPickerOption: Decodable, Equatable {
   let value: String
@@ -138,13 +142,52 @@ private struct QuickGUIEmbeddedEntry {
   let size: NSSize
 }
 
+/// Padding the host keeps around its content so controls can draw past their own bounds without
+/// being clipped. Ordinary controls need a few points for bezels and focus rings; Liquid Glass
+/// needs more; an empty host needs none.
+private func quickGUIEffectInset(for elements: [QuickGUIElement]) -> CGFloat {
+  if elements.isEmpty {
+    return 0
+  }
+  if elements.contains(where: quickGUIReservesGlassInset) {
+    return quickGUIGlassEffectInset
+  }
+  return quickGUIControlEffectInset
+}
+
+/// Whether an element draws a Liquid Glass effect that extends well past its own bounds.
+///
+/// Popover content is presented in its own window and never counts.
+private func quickGUIReservesGlassInset(_ element: QuickGUIElement) -> Bool {
+  guard #available(macOS 26.0, *) else { return false }
+  if element.type == "picker", element.style == "tabs" {
+    return true
+  }
+  let glassButton = (element.modifiers ?? []).contains { modifier in
+    modifier.type == "buttonStyle"
+      && (modifier.style == "glass" || modifier.style == "glassProminent")
+  }
+  if glassButton {
+    return true
+  }
+  return (element.trigger ?? []).contains(where: quickGUIReservesGlassInset)
+}
+
 private final class QuickGUIElementStore: ObservableObject {
   @Published var elements: [QuickGUIElement] = []
   @Published private(set) var embeddedRevision: UInt64 = 0
+  /// Padding the root view keeps around the hosted content so effects drawn past a control's
+  /// bounds, from a focus ring to Liquid Glass, are not clipped by the hosting view. The Rust side
+  /// reports it as the view's outset so it never enters QuickGUI layout.
+  @Published private(set) var effectInset: CGFloat = 0
   private var embedded: [UInt64: QuickGUIEmbeddedEntry] = [:]
 
   func updateElements(_ elements: [QuickGUIElement]) {
     self.elements = elements
+    let inset = quickGUIEffectInset(for: elements)
+    if inset != effectInset {
+      effectInset = inset
+    }
   }
 
   func setEmbeddedView(_ id: UInt64, view: NSView, size: NSSize) {
@@ -1020,8 +1063,12 @@ private struct QuickGUIRootView: View {
       store: store,
       actionSink: actionSink
     )
-      .padding(quickGUIGlassEffectInset)
+      .padding(store.effectInset)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+      // QuickGUI places the host exactly where its element is laid out, including under a
+      // transparent titlebar. SwiftUI must not move the content out of the window's safe area
+      // or report that inset in the fitting size, which would grow the host on every build.
+      .ignoresSafeArea()
   }
 }
 
@@ -1198,6 +1245,13 @@ func quickGUISwiftUIHostFittingSize(
   let size = handle.view.fittingSize
   width.pointee = size.width
   height.pointee = size.height
+}
+
+@_cdecl("quickgui_swift_ui_host_effect_inset")
+func quickGUISwiftUIHostEffectInset(_ opaqueHandle: UnsafeMutableRawPointer) -> Double {
+  precondition(Thread.isMainThread)
+  let handle = Unmanaged<QuickGUIHostHandle>.fromOpaque(opaqueHandle).takeUnretainedValue()
+  return Double(handle.store.effectInset)
 }
 
 @_cdecl("quickgui_swift_ui_host_release")

@@ -397,6 +397,7 @@ pub(super) fn sanitize_detached_element(element: &mut Element, preserve_motion: 
     element.focus.cursor_style = None;
     element.disabled_style.cursor_style = None;
     element.invalid_style.cursor_style = None;
+    element.selected_style.cursor_style = None;
     element.dragging.cursor_style = None;
     element.drag_over.cursor_style = None;
     element.focus_within.cursor_style = None;
@@ -1779,6 +1780,7 @@ pub(super) fn element_has_outset_shadow(element: &Element) -> bool {
         element.focus.shadows.as_deref(),
         element.invalid_style.shadows.as_deref(),
         element.disabled_style.shadows.as_deref(),
+        element.selected_style.shadows.as_deref(),
         element.dragging.shadows.as_deref(),
         element.drag_over.shadows.as_deref(),
         element.focus_within.shadows.as_deref(),

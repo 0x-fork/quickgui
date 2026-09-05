@@ -1058,7 +1058,7 @@ lifetime all live in the core.
 
 | Component | Parts | Declared props | Reported through | Core guide |
 | --- | --- | --- | --- | --- |
-| `Table` | `Root`, `Header`, `Row`, `Cell` | `scope`, `columns`, `rowCount`, `rowHeight`, `headerHeight`, `selectionMode`, `selection`, `sort`, `editing` | `onVisibleRangeChange`, `onSelectionChange`, `onSortChange`, `onActiveCellChange`, `onColumnResize`, `onColumnReorder`, `onEditEnd`, `onActivate` | [data collections](data-collections.md) |
+| `Table` | `Root`, `Header`, `Row`, `Cell` | `scope`, `columns`, `rowCount`, `rowHeight`, `headerHeight` (`0` mounts no header), `selectionMode`, `selection`, `sort`, `editing` | `onVisibleRangeChange`, `onSelectionChange`, `onSortChange`, `onActiveCellChange`, `onColumnResize`, `onColumnReorder`, `onEditEnd`, `onActivate` | [data collections](data-collections.md) |
 | `Tree` | `Root`, `Row` | `scope`, `nodes`, `expanded`/`defaultExpanded`, `value`, `rowHeight`, `loadingLabel`, `disclosure`, `setChildren` | `onVisibleRangeChange`, `onExpandedChange`, `onValueChange`, `onLoadChildren`, `onActivate` | [data collections](data-collections.md) |
 
 ```tsx
@@ -1091,7 +1091,11 @@ const [range, setRange] = createSignal({ start: 0, end: 0 });
 A declared `Header`, `Row`, or `Cell` is content, not identity: the core assigns the exact grid,
 tree-item, and active-descendant identity, appends the resize handle it owns, and attaches the row
 and cell interaction itself, so these nodes register no listener of their own. Put an interactive
-control inside a cell as an ordinary child node instead.
+control inside a cell as an ordinary child node instead. A `Table.Row`'s own style is the paint of
+the core row its cells are laid out in — a background, a divider, a `hover` state, a `group` for
+the cells' `groupHover`, and the `selected` state that paints while the core holds the row in the
+table's selection — so a selected row is painted on the frame the selection changed, without a
+round trip through `onSelectionChange`.
 
 `selection` is a list of inclusive `[start, end]` row ranges, which is exactly the shape the core
 retains and reports. `editing` opens the inline editor over one cell; the core reports the end of
@@ -1511,6 +1515,7 @@ each accepts exactly what the core's `ElementStateStyle` can carry:
 | `groupHover` | the nearest ancestor declared `group`, or the one an entry names, is hovered, like Tailwind's `group-hover` | a `group` ancestor |
 | `groupActive` | a press inside that group is held, like Tailwind's `group-active` | a `group` ancestor |
 | `focusWithin` | the element or a descendant owns keyboard focus, like CSS `:focus-within`, whether or not that focus is visible | |
+| `selected` | the `selected` prop is set, or the core marks the element selected — a `Table.Row` inside the table's selection, for one | |
 
 A state may declare `background`/`backgroundColor`, `color`, `borderColor`, `borderWidth`,
 `borderRadius`, `outline`, `boxShadow`, `opacity`, `cursor`, `transform`, and `transformOrigin`.
@@ -1562,9 +1567,10 @@ exactly as the base properties are.
 />
 ```
 
-States cascade the way CSS does. Within one element, `disabled` wins over the interaction state,
-which wins over `invalid`, then `focus`, then `focusWithin`, then the group states, then the base
-style; among the interaction states `dragOver` beats `dragging`, which beats `active`, which beats
+States cascade the way CSS does. Within one element, `disabled` wins over `selected`, which wins
+over the interaction state, which wins over `invalid`, then `focus`, then `focusWithin`, then the
+group states, then the base style — so a selected row keeps its selection colour while the pointer
+rests on it, as a native list does; among the interaction states `dragOver` beats `dragging`, which beats `active`, which beats
 `hover`. Because the group states sit beneath the element's own states, the revealed button above
 keeps its `groupHover` opacity while the pointer rests on it and its own `hover` only changes the
 fill. Group states layer in declaration order with `groupActive` always over `groupHover`, so a

@@ -509,6 +509,15 @@ pub struct TableHeaderState<'a> {
     pub resize_handle: Option<Element>,
 }
 
+/// State supplied to one caller-owned table-row renderer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TableRowState {
+    /// Logical row index.
+    pub row: usize,
+    /// Whether this row is part of the retained row selection.
+    pub selected: bool,
+}
+
 /// State supplied to one caller-owned table-cell renderer.
 #[derive(Clone, Copy, Debug)]
 pub struct TableCellState<'a> {
@@ -527,6 +536,7 @@ pub struct TableCellState<'a> {
 /// Structural geometry retained by one virtualized table.
 ///
 /// No color, typography, padding, border, radius, shadow, or interaction-state paint is retained.
+/// A `header_height` of zero mounts no header row at all, for a list that has nothing to label.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TableLayout {
     pub header_height: f32,
@@ -536,7 +546,7 @@ pub struct TableLayout {
 impl TableLayout {
     pub fn new(header_height: f32, row_height: f32) -> Self {
         Self {
-            header_height: finite_clamped(header_height, 20.0, 256.0, 34.0),
+            header_height: sanitized_header_height(header_height),
             row_height: finite_clamped(row_height, 20.0, 256.0, 32.0),
         }
     }
@@ -546,13 +556,14 @@ impl TableLayout {
         self
     }
 
+    /// Height of the header row, or zero for no header row.
     pub fn header_height(mut self, height: f32) -> Self {
-        self.header_height = finite_clamped(height, 20.0, 256.0, 34.0);
+        self.header_height = sanitized_header_height(height);
         self
     }
 
     fn sanitized(mut self) -> Self {
-        self.header_height = finite_clamped(self.header_height, 20.0, 256.0, 34.0);
+        self.header_height = sanitized_header_height(self.header_height);
         self.row_height = finite_clamped(self.row_height, 20.0, 256.0, 32.0);
         self
     }
@@ -1071,7 +1082,8 @@ impl TableState {
     /// Build the table against a per-instance retained-state accessor.
     ///
     /// A host that renders many declared tables through one view passes an accessor that captures
-    /// which [`TableState`] each registered listener resolves.
+    /// which [`TableState`] each registered listener resolves. Every row is a plain container;
+    /// [`Self::element_with_rows`] lets the caller paint the rows too.
     #[allow(clippy::too_many_arguments)]
     pub fn element_with<V, H, E, RenderHeader, RenderCell, Activate>(
         &mut self,
@@ -1079,14 +1091,55 @@ impl TableState {
         id: impl Into<ElementId>,
         columns: &[TableColumn],
         access_source: StateAccessor<V, TableState>,
-        mut render_header: RenderHeader,
-        mut render_cell: RenderCell,
+        render_header: RenderHeader,
+        render_cell: RenderCell,
         activate: Activate,
     ) -> Element
     where
         V: 'static,
         H: IntoElement,
         E: IntoElement,
+        RenderHeader: FnMut(TableHeaderState<'_>) -> H,
+        RenderCell: FnMut(TableCellState<'_>) -> E,
+        Activate: Fn(&mut V, TableCellPosition, &mut EventContext) + Clone + 'static,
+    {
+        self.element_with_rows(
+            cx,
+            id,
+            columns,
+            access_source,
+            |_| div(),
+            render_header,
+            render_cell,
+            activate,
+        )
+    }
+
+    /// Build the table with a caller-owned container for every mounted row.
+    ///
+    /// `render_row` returns the element a row's cells are laid out in. QuickGUI adds the grid
+    /// tracks, the row height, the row identity, and the collection semantics on top of it, so the
+    /// caller declares only the row's paint — a background, a divider, a hover state, or a
+    /// [`selected_style`](Element::selected_style) that paints while the row is selected — never
+    /// its layout. The renderer runs only for mounted rows.
+    #[allow(clippy::too_many_arguments)]
+    pub fn element_with_rows<V, R, H, E, RenderRow, RenderHeader, RenderCell, Activate>(
+        &mut self,
+        cx: &mut ViewContext<'_, V>,
+        id: impl Into<ElementId>,
+        columns: &[TableColumn],
+        access_source: StateAccessor<V, TableState>,
+        mut render_row: RenderRow,
+        mut render_header: RenderHeader,
+        mut render_cell: RenderCell,
+        activate: Activate,
+    ) -> Element
+    where
+        V: 'static,
+        R: IntoElement,
+        H: IntoElement,
+        E: IntoElement,
+        RenderRow: FnMut(TableRowState) -> R,
         RenderHeader: FnMut(TableHeaderState<'_>) -> H,
         RenderCell: FnMut(TableCellState<'_>) -> E,
         Activate: Fn(&mut V, TableCellPosition, &mut EventContext) + Clone + 'static,
@@ -1341,15 +1394,19 @@ impl TableState {
             headers.push(header);
         }
 
-        let header = div()
-            .accessibility_role(AccessibilityRole::Row)
-            .accessibility_row_index(0)
-            .grid()
-            .grid_template_columns(tracks.clone())
-            .h(layout.header_height)
-            .flex_none()
-            .app_region_no_drag()
-            .children(headers);
+        // A zero header height mounts no header row: the grid then starts at logical row 1 with
+        // nothing above it, and the declared header renderers are simply never invoked.
+        let header = (layout.header_height > 0.0).then(|| {
+            div()
+                .accessibility_role(AccessibilityRole::Row)
+                .accessibility_row_index(0)
+                .grid()
+                .grid_template_columns(tracks.clone())
+                .h(layout.header_height)
+                .flex_none()
+                .app_region_no_drag()
+                .children(std::mem::take(&mut headers))
+        });
 
         let selected = self.selected;
         let editing = self.editing;
@@ -1434,16 +1491,20 @@ impl TableState {
                 cell = align_cell(cell, column.align);
                 cells.push(cell);
             }
-            div()
-                .id(row_id)
-                .accessibility_role(AccessibilityRole::Row)
-                .accessibility_row_index(row_index + 1)
-                .selected(row_selected)
-                .grid()
-                .grid_template_columns(tracks.clone())
-                .h(layout.row_height)
-                .app_region_no_drag()
-                .children(cells)
+            render_row(TableRowState {
+                row: row_index,
+                selected: row_selected,
+            })
+            .into_element()
+            .id(row_id)
+            .accessibility_role(AccessibilityRole::Row)
+            .accessibility_row_index(row_index + 1)
+            .selected(row_selected)
+            .grid()
+            .grid_template_columns(tracks.clone())
+            .h(layout.row_height)
+            .app_region_no_drag()
+            .children(cells)
         });
 
         let body = div()
@@ -1487,7 +1548,7 @@ impl TableState {
             .flex_col()
             .overflow_hidden()
             .app_region_no_drag()
-            .child(header)
+            .children(header)
             .child(body);
         if let Some(selected) = self.selected {
             root = root.accessibility_active_descendant(Self::cell_id(id, selected));
@@ -1686,6 +1747,18 @@ fn derived_table_id(parent: ElementId, tag: u64, first: u64, second: u64) -> Ele
     ElementId::new(hash)
 }
 
+/// Zero (or a value that rounds to it) means no header row; anything else keeps the ordinary
+/// header bounds, and a non-finite or negative value falls back to the default height.
+fn sanitized_header_height(height: f32) -> f32 {
+    if !height.is_finite() || height < 0.0 {
+        34.0
+    } else if height < 1.0 {
+        0.0
+    } else {
+        height.clamp(20.0, 256.0)
+    }
+}
+
 fn finite_clamped(value: f32, minimum: f32, maximum: f32, fallback: f32) -> f32 {
     if value.is_finite() {
         value.clamp(minimum, maximum)
@@ -1711,11 +1784,15 @@ mod tests {
             state.set_layout(
                 TableLayout::default()
                     .row_height(f32::NAN)
-                    .header_height(-10.0)
+                    .header_height(0.0)
             )
         );
         assert_eq!(state.layout.row_height, 32.0);
-        assert_eq!(state.layout.header_height, 20.0);
+        assert_eq!(state.layout.header_height, 0.0);
+        assert_eq!(TableLayout::new(-10.0, 24.0).header_height, 34.0);
+        assert_eq!(TableLayout::new(f32::NAN, 24.0).header_height, 34.0);
+        assert_eq!(TableLayout::new(0.5, 24.0).header_height, 0.0);
+        assert_eq!(TableLayout::new(5.0, 24.0).header_height, 20.0);
         assert_eq!(state.list.logical_scroll_top().item_ix, before.item_ix);
         assert!(state.visible_rows().len() < state.row_count());
     }
@@ -2215,5 +2292,86 @@ mod tests {
                 .count();
             assert_eq!(matching, expected);
         }
+    }
+
+    struct RowsView {
+        table: TableState,
+        rendered: Vec<TableRowState>,
+    }
+
+    impl RowsView {
+        fn new() -> Self {
+            Self {
+                table: TableState::new(8).with_selection_mode(TableSelectionMode::Multiple),
+                rendered: Vec::new(),
+            }
+        }
+
+        fn table(view: &mut Self) -> &mut TableState {
+            &mut view.table
+        }
+    }
+
+    impl View for RowsView {
+        fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+            let columns = [TableColumn::new("name", "Name").track(GridTrack::fr(1.0))];
+            let rendered = std::cell::RefCell::new(Vec::new());
+            let element = self.table.element_with_rows(
+                cx,
+                "rows",
+                &columns,
+                StateAccessor::from(Self::table as fn(&mut Self) -> &mut TableState),
+                |row| {
+                    rendered.borrow_mut().push(row);
+                    div().bg(if row.selected {
+                        Color::rgb8(37, 99, 235)
+                    } else {
+                        Color::TRANSPARENT
+                    })
+                },
+                |header| div().child(text(header.column.label().clone()).no_wrap()),
+                |cell| div().child(text(cell.position.row.to_string()).no_wrap()),
+                |_view, _position, _cx| {},
+            );
+            self.rendered = rendered.into_inner();
+            element
+        }
+    }
+
+    #[test]
+    fn row_renderer_receives_the_mounted_rows_and_their_selection() {
+        let (mut cx, view) = Application::new()
+            .bind_keys(table_key_bindings())
+            .into_test_context(WindowOptions::default(), RowsView::new())
+            .unwrap();
+        let window = view.window_handle();
+        cx.run_until_idle().unwrap();
+
+        // Only mounted rows are rendered, none of them selected yet, and the container the
+        // renderer returned is the core row under the core's own identity.
+        let rendered = cx.read(view, |view| view.rendered.clone()).unwrap();
+        assert!(!rendered.is_empty());
+        assert_eq!(
+            rendered[0],
+            TableRowState {
+                row: 0,
+                selected: false
+            }
+        );
+        assert!(rendered.iter().all(|row| !row.selected));
+        assert!(
+            cx.contains_element(window, TableState::row_id("rows", 0))
+                .unwrap()
+        );
+
+        // Moving the selection re-renders exactly one row as selected.
+        cx.simulate_keystrokes(window, "tab down").unwrap();
+        cx.run_until_idle().unwrap();
+        let rendered = cx.read(view, |view| view.rendered.clone()).unwrap();
+        assert_eq!(rendered.iter().filter(|row| row.selected).count(), 1);
+        assert!(rendered.contains(&TableRowState {
+            row: 1,
+            selected: true
+        }));
     }
 }

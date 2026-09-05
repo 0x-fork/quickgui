@@ -243,6 +243,7 @@ struct CursorStateStyles {
     active: Option<CursorStyle>,
     focus: Option<CursorStyle>,
     invalid: Option<CursorStyle>,
+    selected: Option<CursorStyle>,
     dragging: Option<CursorStyle>,
     drag_over: Option<CursorStyle>,
 }

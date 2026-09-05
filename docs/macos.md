@@ -229,6 +229,12 @@ and the portable `WindowBackgroundAppearance` policy. These transitions add no p
 frame source. Scene pixels still need alpha—normally a transparent window background and a
 translucent sidebar—to reveal the material.
 
+A translucent surface also changes how the frame is presented. The renderer blends in linear
+light, while CoreAnimation composites the layer's premultiplied pixels in the encoded sRGB space,
+which would leave a light fringe on every anti-aliased edge over the material. A window with an
+alpha-capable surface therefore renders into an intermediate texture and a final full-screen pass
+re-encodes each pixel for the compositor. Opaque windows keep presenting directly.
+
 The interactive Solid example exposes every material and effect state:
 
 ```console
@@ -327,6 +333,18 @@ import { Host, Slider } from "@quickgui/solid/swift-ui";
 The Solid subpath also exports controlled `Toggle`, `ProgressView`, `Stepper`, `TextField`,
 `SecureField`, `Picker`, `SegmentedControl`, `DatePicker`, and `ColorPicker` components, plus
 `Gauge`, alongside the existing `Button`, `Popover`, and `QuickGUIHostView`.
+
+`matchContents` sizes the host to the controls' own fitting size, so a hosted control lines up
+with QuickGUI elements at native density. The host keeps a few points of headroom around its
+content for bezels and focus rings, and more around content that draws well past its bounds, a
+`glass` or `glassProminent` button on macOS 26; that headroom is an outset of the AppKit frame
+rather than part of the layout box, so it neither moves siblings nor clips the effect, and clicks
+in the ring that hit no control fall through to the framework. Keyboard focus is shared: when a
+hosted control becomes the window's first responder, the framework blurs its own focused element
+and announces the change, and the next framework focus change makes the Winit view first responder
+again, so exactly one control shows focus at a time. Rust
+callers get the same behaviour from `native_view_with_outset` paired with
+`MacSwiftUiHost::fitting_size` and `MacSwiftUiHost::effect_inset`.
 
 `QuickGUIHostView` provides the reverse direction, analogous to Expo UI's `RNHostView`. It creates
 one child retained renderer in the Rust core, reparents that renderer's stable AppKit/WGPU view

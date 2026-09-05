@@ -444,7 +444,9 @@ div().blend_mode(BlendMode::Multiply);
 layout box, and that is what `element_bounds` and anchoring report. Pointer input is inverse-mapped
 through the accumulated transform, so clicks, hover, drag, drop, and cursor declarations follow the
 painted pixels. The same builders exist on `ElementStateStyle` for `hover`, `active`, `focus`,
-`disabled`, `invalid`, `dragging`, `drag_over`, `focus_within`, `group_hover`, and `group_active`.
+`disabled`, `invalid`, `selected`, `dragging`, `drag_over`, `focus_within`, `group_hover`, and
+`group_active`. `selected_style` follows the element's `selected` flag and sits above the pointer
+states, so a selected list row keeps its colour while hovered, as a native list does.
 
 Anything but a pure translation renders the subtree into a bounded offscreen texture first, as do
 `blur`, `drop_shadow`, `backdrop_blur`, `backdrop_filter`, and a non-`Normal` `blend_mode`. Text is

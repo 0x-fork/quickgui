@@ -230,6 +230,7 @@ const properties: Record<string, PropertyEntry> = {
   headingLevel: { code: PropertyCode.HeadingLevel },
   required: { code: PropertyCode.Required },
   invalid: { code: PropertyCode.Invalid },
+  selected: { code: PropertyCode.Selected },
   validationMessage: { code: PropertyCode.ValidationMessage },
   touched: { code: PropertyCode.Touched },
   dirty: { code: PropertyCode.Dirty },
@@ -960,6 +961,7 @@ const stateStyleCodes: Record<string, PropertyCode> = {
   groupHover: PropertyCode.GroupHoverStyle,
   groupActive: PropertyCode.GroupActiveStyle,
   focusWithin: PropertyCode.FocusWithinStyle,
+  selected: PropertyCode.SelectedStyle,
 };
 
 /** States declared once per group they follow, so they accept a list of entries. */
@@ -993,8 +995,8 @@ type EncodedStateStyle = {
 /**
  * Whether `name` declares a nested state style.
  *
- * `disabled` and `invalid` are also boolean flags, so a withdrawal is a state style only when the
- * value it withdraws was one; the other state names have no second meaning.
+ * `disabled`, `invalid`, and `selected` are also boolean flags, so a withdrawal is a state style
+ * only when the value it withdraws was one; the other state names have no second meaning.
  */
 function isStateStyleDeclaration(
   name: string,
@@ -9543,6 +9545,12 @@ export namespace JSX {
     disabled?: StateStyle | null;
     /** While the `invalid` prop is set. */
     invalid?: StateStyle | null;
+    /**
+     * While the `selected` prop is set, or while the core marks the element selected, such as a
+     * `Table.Row` inside the table's selection. Like a native list row, a selected element keeps
+     * this paint while hovered or pressed: it sits above the pointer states and beneath `disabled`.
+     */
+    selected?: StateStyle | null;
     /** While this `draggable` element is the source of an active drag. */
     dragging?: StateStyle | null;
     /** While a payload one of this element's `dropKinds` accepts is over it. */
@@ -9671,7 +9679,8 @@ export namespace JSX {
     | "dragOver"
     | "groupHover"
     | "groupActive"
-    | "focusWithin";
+    | "focusWithin"
+    | "selected";
 
   /**
    * What `style` accepts: one style, or an array of styles and falsy entries nested to any depth,
@@ -9692,6 +9701,8 @@ export namespace JSX {
     disabled?: boolean;
     /** Expose web-style invalid state; the `style.invalid` variant paints while it is set. */
     invalid?: boolean;
+    /** Expose web-style selected state; the `style.selected` variant paints while it is set. */
+    selected?: boolean;
     /**
      * Makes this element the group its descendants' `groupHover` and `groupActive` styles follow,
      * like Tailwind's `group`: `true` opens an unnamed group, and a string names it so a

@@ -4,6 +4,66 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+### Framework
+
+- Added `Element::selected_style`, a paint-only state that follows the element's `selected` flag
+  the way `invalid_style` follows `invalid`. It sits above the pointer states and beneath
+  `disabled_style`, so a selected list row keeps its selection colour while hovered or pressed,
+  as a native list does.
+- Added `TableState::element_with_rows`, which hands the caller a `TableRowState` for every
+  mounted row and lays the row's cells out inside the container the caller returns, so a table
+  row can declare its own background, divider, hover state, and `selected_style`.
+- A `TableLayout` header height of zero now mounts no header row at all, for a list with nothing
+  to label; it used to be clamped up to a blank 20-pixel band.
+- Text on macOS is rasterized unhinted, as CoreText does, so stems keep their designed weight
+  instead of snapping to the pixel grid; hinted glyphs read as heavier, "shadowed" text next to
+  native controls. Other platforms are unchanged.
+- A declared native `services` menu item no longer aborts the process. AppKit lets one menu hang
+  from one item only, so when Winit's own application menu already holds the services menu, the
+  declared item registers a fresh menu as the application's services menu instead of re-parenting
+  the existing one, which raised an Objective-C exception the Rust runtime could not catch.
+- Text and other anti-aliased edges over a translucent window no longer carry a light fringe. The
+  renderer blends in linear light and wrote premultiplied linear coverage into the sRGB surface,
+  but the compositor multiplies alpha in the encoded space, so every partially covered pixel came
+  out brighter than its neighbours. A transparent window now renders into an intermediate and a
+  final pass re-encodes each pixel as the compositor expects; opaque windows are unchanged and
+  pay nothing.
+- A window command queued between `open_window` returning a handle and the platform window's
+  creation on the next event-loop turn now waits for that window instead of failing with "this
+  context is not attached to a native window". A hosted app that sets the title or represented
+  file of a window it just opened no longer has to know about that gap.
+- A SwiftUI host now measures and lays out at its controls' native size. The host used to pad
+  every subtree by 24 points on each side as headroom for Liquid Glass effects, and that padding
+  was charged to layout, so a hosted text field or button sat inside a ring of empty space and
+  pushed its neighbours apart. The headroom is now a few points for ordinary controls, enough for
+  a bezel and its focus ring, 24 points only when the content contains a glass control, and it is
+  expressed as a native-view *outset*: `native_view_with_outset` and `MacNativeView::with_outset`
+  grow the AppKit frame past the element's layout box without moving siblings, and points in that
+  ring that hit no hosted content fall through to the framework.
+  A host laid out under a transparent titlebar also no longer has its controls pushed below the
+  window's safe area, which grew the host on every build until its content sat at the bottom of
+  a toolbar-height box.
+- A hosted AppKit view that takes keyboard focus now blurs the framework's focused element. The
+  element kept its focus ring and caret, and its listeners never heard about the change, while a
+  SwiftUI text field received every key; the runtime now watches the window's first responder and
+  drops its own focus, announcing it to the view, whenever AppKit owns it, whether the move came
+  from a click, Tab, or the control's own focus state.
+- A custom traffic-light position now survives the window's first appearance. AppKit lays the
+  titlebar out again in the display pass after a window comes onscreen, and again when it becomes
+  key or leaves full screen, each of which reset the controls to the default inset until the next
+  resize; the runtime now re-checks the layout on those transitions and on the window-update
+  notification that follows every event cycle, touching AppKit's views only when they have moved.
+
+### JavaScript
+
+- `style.selected` is a new nested interaction state on every host component, and `selected` is
+  a new boolean prop that sets the native selected flag it follows. A `Table.Row`'s style now
+  reaches the core row its cells are laid out in, and the core marks that row selected, so a
+  selected row paints on the frame the selection changed. Protocol version 31.
+- `Host matchContents` sizes a SwiftUI host to its controls' own size, so native buttons, fields,
+  toggles, and pickers align with QuickGUI elements at native density; the Liquid Glass headroom
+  no longer widens or heightens the host.
+
 ## 0.1.2 - 2026-09-04
 
 ### Framework

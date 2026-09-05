@@ -78,7 +78,7 @@ describe("binary mutation protocol", () => {
   });
 
   test("encodes native controls, SwiftUI reverse hosts, overlays, terminals, SVGs, paint, and pointer capture under protocol v30", () => {
-    expect(PROTOCOL_VERSION).toBe(30);
+    expect(PROTOCOL_VERSION).toBe(31);
     const batch = new MutationBatch();
     batch.createElement(1, NativeNodeTag.Input);
     batch.setProperty(1, PropertyCode.Value, "hello");
@@ -629,6 +629,8 @@ describe("binary mutation protocol", () => {
     expect(PropertyCode.HoverStyle).toBe(346);
     expect(PropertyCode.HoverGroup).toBe(354);
     expect(PropertyCode.FocusWithinStyle).toBe(356);
+    expect(PropertyCode.SelectedStyle).toBe(357);
+    expect(PropertyCode.Selected).toBe(358);
     expect(MAX_GROUP_STYLES_PER_ELEMENT).toBe(8);
     expect(MAX_STYLE_DECLARATION_BYTES).toBe(4096);
     expect(MAX_STATE_STYLE_JSON_BYTES).toBe(16 * 1024);

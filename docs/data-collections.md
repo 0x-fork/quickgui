@@ -75,11 +75,18 @@ let table = self.table.element(
 .bg(colors.surface);
 ```
 
-`TableLayout` retains only fixed header and row heights. The header callback receives the stable
+`TableLayout` retains only fixed header and row heights; a header height of zero mounts no header
+row at all. The header callback receives the stable
 column plus resolved sort direction; the cell callback receives logical position and exact row/cell
 selection state. Both return the complete visible element. QuickGUI adds grid tracks, IDs, sorting
 and selection listeners, virtual positioning, and native collection semantics without colors,
 padding, dividers, typography, radii, or focus paint.
+
+`TableState::element_with_rows` adds a row callback that returns the container each row's cells
+are laid out in, given a `TableRowState` — the logical index and whether the row is selected.
+Declare the row's paint there: a divider, a hover state, or `Element::selected_style`, which paints
+while the core marks the row selected. QuickGUI adds the grid tracks, row height, identity, and
+collection semantics on top, and the callback runs only for mounted rows.
 
 Install `table_key_bindings()` on the application. Arrow keys move the active cell, Page Up and
 Page Down move by the current viewport, Command-Up and Command-Down select the first and last row,

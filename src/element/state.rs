@@ -403,6 +403,20 @@ impl Element {
         self
     }
 
+    /// Paint-only styling while this element is marked [`selected`](Self::selected).
+    ///
+    /// The selection itself stays wherever the application or a collection keeps it; this only
+    /// declares how the element paints while it is the chosen one. Like a native list row, a
+    /// selected element keeps its selected paint while hovered or pressed: this state sits above
+    /// the pointer states and beneath `disabled_style`.
+    pub fn selected_style(
+        mut self,
+        style: impl FnOnce(ElementStateStyle) -> ElementStateStyle,
+    ) -> Self {
+        self.selected_style = style(ElementStateStyle::default());
+        self
+    }
+
     /// Hide this element and its complete subtree from the native accessibility tree.
     ///
     /// Painting, layout, pointer input, and keyboard behavior are unchanged. This is useful for

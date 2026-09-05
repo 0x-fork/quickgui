@@ -1008,6 +1008,7 @@ fn cursor_state_overrides_resolve_live_without_repainting_the_hit_region() {
             active: Some(CursorStyle::ClosedHand),
             focus: Some(CursorStyle::IBeam),
             invalid: None,
+            selected: None,
             dragging: Some(CursorStyle::DragCopy),
             drag_over: Some(CursorStyle::DragLink),
         },

@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build:native": "bun run --filter @quickgui/native build",
-    "test:js": "bun test --conditions=browser ./packages/native ./packages/solid ./packages/cli ./examples/ai-chat-solid/history.test.ts",
+    "test:js": "bun test --conditions=browser ./packages/native ./packages/solid ./packages/cli ./examples/ai-chat-solid/history.test.ts ./examples/quick-git",
     "typecheck:js": "bunx tsc -p tsconfig.json --noEmit",
     "version:sync": "node scripts/sync-release-version.mjs",
     "version:check": "node scripts/sync-release-version.mjs --check"

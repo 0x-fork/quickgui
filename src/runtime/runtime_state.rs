@@ -424,6 +424,13 @@ impl Runtime {
         self.current_window.map(|(_, handle)| handle)
     }
 
+    /// Whether `handle` names a window whose platform creation is still queued.
+    pub(super) fn window_is_pending(&self, handle: WindowHandle) -> bool {
+        self.pending_windows
+            .iter()
+            .any(|request| request.handle == handle)
+    }
+
     pub(super) fn active_window_handle(&self) -> Option<WindowHandle> {
         let active = self.active_window?;
         if self.current_window.is_some_and(|(id, _)| id == active) {

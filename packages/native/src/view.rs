@@ -520,7 +520,7 @@ impl NativeSwiftUiHostState {
         let elements = swift_ui_children(&node.children, tree, embedded_views)?;
         host.sync(&elements)?;
         let fitting = host.fitting_size()?;
-        let mut element = native_view(host.view());
+        let mut element = native_view_with_outset(host.view(), host.effect_inset()?);
         if node
             .boolean(property::SWIFT_UI_MATCH_CONTENTS_HORIZONTAL)
             .unwrap_or(false)
@@ -614,10 +614,7 @@ pub(super) fn swift_ui_slider(
         f64::from(node.number(property::MAXIMUM).unwrap_or(1.0)),
     )
     .modifiers(swift_ui_modifiers(node)?)
-    .on_value_change(
-        node.boolean(property::INPUT_LISTENER)
-            .unwrap_or(false),
-    );
+    .on_value_change(node.boolean(property::INPUT_LISTENER).unwrap_or(false));
     if let Some(step) = node.number(property::STEP).filter(|step| *step > 0.0) {
         slider = slider.step(f64::from(step));
     }
@@ -642,10 +639,7 @@ pub(super) fn swift_ui_toggle(
         node.boolean(property::CHECKED).unwrap_or(false),
     )
     .modifiers(swift_ui_modifiers(node)?)
-    .on_value_change(
-        node.boolean(property::INPUT_LISTENER)
-            .unwrap_or(false),
-    );
+    .on_value_change(node.boolean(property::INPUT_LISTENER).unwrap_or(false));
     let label = swift_ui_text_content(node, tree);
     if !label.is_empty() {
         toggle = toggle.label(label);
@@ -700,10 +694,7 @@ pub(super) fn swift_ui_stepper(
     )
     .step(f64::from(node.number(property::STEP).unwrap_or(1.0)))
     .modifiers(swift_ui_modifiers(node)?)
-    .on_value_change(
-        node.boolean(property::INPUT_LISTENER)
-            .unwrap_or(false),
-    );
+    .on_value_change(node.boolean(property::INPUT_LISTENER).unwrap_or(false));
     let label = swift_ui_text_content(node, tree);
     if !label.is_empty() {
         stepper = stepper.label(label);
@@ -725,14 +716,8 @@ pub(super) fn swift_ui_text_field(
     )
     .secure(node.boolean(property::PASSWORD).unwrap_or(false))
     .modifiers(swift_ui_modifiers(node)?)
-    .on_value_change(
-        node.boolean(property::INPUT_LISTENER)
-            .unwrap_or(false),
-    )
-    .on_submit(
-        node.boolean(property::SUBMIT_LISTENER)
-            .unwrap_or(false),
-    );
+    .on_value_change(node.boolean(property::INPUT_LISTENER).unwrap_or(false))
+    .on_submit(node.boolean(property::SUBMIT_LISTENER).unwrap_or(false));
     if let Some(placeholder) = node.string(property::PLACEHOLDER) {
         field = field.placeholder(Arc::<str>::from(placeholder));
     }
@@ -803,10 +788,7 @@ pub(super) fn swift_ui_picker(
     )
     .style(style)
     .modifiers(swift_ui_modifiers(node)?)
-    .on_value_change(
-        node.boolean(property::INPUT_LISTENER)
-            .unwrap_or(false),
-    );
+    .on_value_change(node.boolean(property::INPUT_LISTENER).unwrap_or(false));
     let label = swift_ui_text_content(node, tree);
     if !label.is_empty() {
         picker = picker.label(label);
@@ -850,10 +832,7 @@ pub(super) fn swift_ui_date_picker(
             _ => SwiftUiDatePickerStyle::Automatic,
         })
         .modifiers(swift_ui_modifiers(node)?)
-        .on_value_change(
-            node.boolean(property::INPUT_LISTENER)
-                .unwrap_or(false),
-        );
+        .on_value_change(node.boolean(property::INPUT_LISTENER).unwrap_or(false));
     let label = swift_ui_text_content(node, tree);
     if !label.is_empty() {
         picker = picker.label(label);
@@ -879,10 +858,7 @@ pub(super) fn swift_ui_color_picker(
             .unwrap_or(true),
     )
     .modifiers(swift_ui_modifiers(node)?)
-    .on_value_change(
-        node.boolean(property::INPUT_LISTENER)
-            .unwrap_or(false),
-    );
+    .on_value_change(node.boolean(property::INPUT_LISTENER).unwrap_or(false));
     let label = swift_ui_text_content(node, tree);
     if !label.is_empty() {
         picker = picker.label(label);
@@ -961,27 +937,23 @@ fn swift_ui_element(
         NodeTag::SwiftUiButton => Some(swift_ui_button(id, node, tree).map(SwiftUiElement::Button)),
         NodeTag::SwiftUiSlider => Some(swift_ui_slider(id, node, tree).map(SwiftUiElement::Slider)),
         NodeTag::SwiftUiToggle => Some(swift_ui_toggle(id, node, tree).map(SwiftUiElement::Toggle)),
-        NodeTag::SwiftUiProgressView => Some(
-            swift_ui_progress_view(id, node, tree).map(SwiftUiElement::ProgressView),
-        ),
+        NodeTag::SwiftUiProgressView => {
+            Some(swift_ui_progress_view(id, node, tree).map(SwiftUiElement::ProgressView))
+        }
         NodeTag::SwiftUiStepper => {
             Some(swift_ui_stepper(id, node, tree).map(SwiftUiElement::Stepper))
         }
         NodeTag::SwiftUiTextField => {
             Some(swift_ui_text_field(id, node).map(SwiftUiElement::TextField))
         }
-        NodeTag::SwiftUiPicker => {
-            Some(swift_ui_picker(id, node, tree).map(SwiftUiElement::Picker))
-        }
+        NodeTag::SwiftUiPicker => Some(swift_ui_picker(id, node, tree).map(SwiftUiElement::Picker)),
         NodeTag::SwiftUiDatePicker => {
             Some(swift_ui_date_picker(id, node, tree).map(SwiftUiElement::DatePicker))
         }
         NodeTag::SwiftUiColorPicker => {
             Some(swift_ui_color_picker(id, node, tree).map(SwiftUiElement::ColorPicker))
         }
-        NodeTag::SwiftUiGauge => {
-            Some(swift_ui_gauge(id, node, tree).map(SwiftUiElement::Gauge))
-        }
+        NodeTag::SwiftUiGauge => Some(swift_ui_gauge(id, node, tree).map(SwiftUiElement::Gauge)),
         NodeTag::SwiftUiQuickGuiHost => Some((|| {
             let embedded_id = node
                 .number(property::SWIFT_UI_EMBEDDED_WINDOW)
@@ -1183,6 +1155,34 @@ pub(super) fn build_element(
     states: &mut NativeElementStates<'_>,
     cx: &mut ViewContext<'_, NativeView>,
     depth: usize,
+) -> Option<Element> {
+    build_element_inner(id, window, tree, events, states, cx, depth, true)
+}
+
+/// Build one declared node's own element — its styles, states, and semantics — without its
+/// children, for a container whose children the core lays out itself, such as a table row.
+pub(super) fn build_element_shell(
+    id: u32,
+    window: u32,
+    tree: &NativeTree,
+    events: &EventQueue,
+    states: &mut NativeElementStates<'_>,
+    cx: &mut ViewContext<'_, NativeView>,
+    depth: usize,
+) -> Option<Element> {
+    build_element_inner(id, window, tree, events, states, cx, depth, false)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_element_inner(
+    id: u32,
+    window: u32,
+    tree: &NativeTree,
+    events: &EventQueue,
+    states: &mut NativeElementStates<'_>,
+    cx: &mut ViewContext<'_, NativeView>,
+    depth: usize,
+    with_children: bool,
 ) -> Option<Element> {
     if depth >= MAX_TREE_DEPTH {
         return None;
@@ -1798,10 +1798,12 @@ pub(super) fn build_element(
         | NodeTag::SwiftUiPopoverTrigger
         | NodeTag::SwiftUiPopoverContent => {}
         NodeTag::Root | NodeTag::View | NodeTag::Button => {
-            element = element.children(node.children.iter().filter_map(|child| {
-                build_element(*child, window, tree, events, states, cx, depth + 1)
-                    .and_then(|element| hoist_portal(element, states))
-            }));
+            if with_children {
+                element = element.children(node.children.iter().filter_map(|child| {
+                    build_element(*child, window, tree, events, states, cx, depth + 1)
+                        .and_then(|element| hoist_portal(element, states))
+                }));
+            }
         }
     }
     Some(element)
@@ -2749,6 +2751,9 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     if let Some(style) = native_state_style(node, &INVALID_STYLE_CODES) {
         element = element.invalid_style(move |_| style);
     }
+    if let Some(style) = native_state_style(node, &SELECTED_STYLE_CODES) {
+        element = element.selected_style(move |_| style);
+    }
     if let Some(style) = native_state_style(node, &DRAGGING_STYLE_CODES) {
         element = element.dragging(move |_| style);
     }
@@ -2886,6 +2891,11 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     // accessibility flag follow one declaration; text inputs already declared it on their own.
     if let Some(value) = node.boolean(property::INVALID) {
         element = element.invalid(value);
+    }
+    // Web-style selected state on any element: a custom list row declares `selected` and the
+    // `selected` state style plus the native accessibility flag follow it.
+    if let Some(value) = node.boolean(property::SELECTED) {
+        element = element.selected(value);
     }
     if let Some(value) = node.string(property::ACCESSIBILITY_LABEL) {
         element = element.accessibility_label(value.to_owned());

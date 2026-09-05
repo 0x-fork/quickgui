@@ -1100,7 +1100,10 @@ impl UiTree {
             } else {
                 None
             };
-            let cursor = interaction_cursor
+            let cursor = region
+                .cursor_states
+                .selected
+                .or(interaction_cursor)
                 .or(region.cursor_states.invalid)
                 .or_else(|| {
                     (self.focused == Some(region.id))

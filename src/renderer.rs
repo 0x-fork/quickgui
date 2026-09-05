@@ -276,6 +276,8 @@ pub(crate) struct GpuRenderer {
     #[cfg(target_os = "macos")]
     overlay_active: bool,
     compositor: Compositor,
+    /// The re-premultiplying presentation of transparent frames, created on first use.
+    present: Option<present::TransparentPresent>,
     window: Arc<Window>,
 }
 
@@ -291,6 +293,7 @@ mod compositor;
 mod gpu;
 #[cfg(any(test, feature = "test-support"))]
 mod offscreen;
+mod present;
 mod text_layout;
 mod text_system;
 

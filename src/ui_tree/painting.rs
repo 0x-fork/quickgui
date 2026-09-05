@@ -132,6 +132,11 @@ pub(super) fn resolved_transform(
     } else {
         &empty
     };
+    let selected = if element.accessibility.selected {
+        &element.selected_style
+    } else {
+        &empty
+    };
     let within = if focus_within {
         &element.focus_within
     } else {
@@ -140,6 +145,7 @@ pub(super) fn resolved_transform(
     let group = group_style.unwrap_or(&empty);
     let transform = disabled
         .transform
+        .or(selected.transform)
         .or(interaction.transform)
         .or(invalid.transform)
         .or(focus.transform)
@@ -148,6 +154,7 @@ pub(super) fn resolved_transform(
         .unwrap_or(element.visual.transform);
     let origin = disabled
         .transform_origin
+        .or(selected.transform_origin)
         .or(interaction.transform_origin)
         .or(invalid.transform_origin)
         .or(focus.transform_origin)
@@ -472,6 +479,11 @@ pub(super) fn element_hit_region(
                 .accessibility
                 .invalid
                 .then_some(element.invalid_style.cursor_style)
+                .flatten(),
+            selected: element
+                .accessibility
+                .selected
+                .then_some(element.selected_style.cursor_style)
                 .flatten(),
             dragging: element.dragging.cursor_style,
             drag_over: element.drag_over.cursor_style,
@@ -873,6 +885,13 @@ pub(super) fn paint_element(
     } else {
         &empty_state
     };
+    // A selected row keeps its selected paint while hovered or pressed, as a native list does, so
+    // the selected state sits above every pointer state and beneath `disabled`.
+    let selected_state = if element.accessibility.selected {
+        &element.selected_style
+    } else {
+        &empty_state
+    };
     let focus_within_state = if focus_within {
         &element.focus_within
     } else {
@@ -881,6 +900,7 @@ pub(super) fn paint_element(
     let group_state = group_style.as_ref().unwrap_or(&empty_state);
     let target_fill = disabled_state
         .background
+        .or(selected_state.background)
         .or(interaction_state.background)
         .or(invalid_state.background)
         .or(focus_state.background)
@@ -890,6 +910,7 @@ pub(super) fn paint_element(
         .unwrap_or(Color::TRANSPARENT);
     let target_border = disabled_state
         .border_color
+        .or(selected_state.border_color)
         .or(interaction_state.border_color)
         .or(invalid_state.border_color)
         .or(focus_state.border_color)
@@ -899,6 +920,7 @@ pub(super) fn paint_element(
         .unwrap_or(Color::TRANSPARENT);
     let target_border_widths = disabled_state
         .border_width
+        .or(selected_state.border_width)
         .or(interaction_state.border_width)
         .or(invalid_state.border_width)
         .or(focus_state.border_width)
@@ -908,6 +930,7 @@ pub(super) fn paint_element(
         .unwrap_or(element.visual.border_widths);
     let target_radius = disabled_state
         .radius
+        .or(selected_state.radius)
         .or(interaction_state.radius)
         .or(invalid_state.radius)
         .or(focus_state.radius)
@@ -916,6 +939,7 @@ pub(super) fn paint_element(
         .unwrap_or(element.visual.radius);
     let target_gradient = disabled_state
         .background_gradient
+        .or(selected_state.background_gradient)
         .or(interaction_state.background_gradient)
         .or(invalid_state.background_gradient)
         .or(focus_state.background_gradient)
@@ -924,6 +948,7 @@ pub(super) fn paint_element(
         .or(element.visual.background_gradient);
     let target_outline = disabled_state
         .outline
+        .or(selected_state.outline)
         .or(interaction_state.outline)
         .or(invalid_state.outline)
         .or(focus_state.outline)
@@ -933,6 +958,7 @@ pub(super) fn paint_element(
     let target_shadows = disabled_state
         .shadows
         .as_deref()
+        .or(selected_state.shadows.as_deref())
         .or(interaction_state.shadows.as_deref())
         .or(invalid_state.shadows.as_deref())
         .or(focus_state.shadows.as_deref())
@@ -942,6 +968,7 @@ pub(super) fn paint_element(
         .unwrap_or_default();
     let target_opacity = disabled_state
         .opacity
+        .or(selected_state.opacity)
         .or(interaction_state.opacity)
         .or(invalid_state.opacity)
         .or(focus_state.opacity)
@@ -951,6 +978,7 @@ pub(super) fn paint_element(
         .clamp(0.0, 1.0);
     let target_state_text_color = disabled_state
         .text_color
+        .or(selected_state.text_color)
         .or(interaction_state.text_color)
         .or(invalid_state.text_color)
         .or(focus_state.text_color)
@@ -1614,13 +1642,20 @@ pub(super) fn paint_element(
             if layer.plane != ScenePlane::Base {
                 return Err(UiError::NativeViewInOverlay(element.runtime_id));
             }
-            if let Some(clip) = parent_clip.intersection(bounds) {
+            // The AppKit frame may carry an outset for effects drawn past the control; layout
+            // and hit regions keep the element's own box.
+            let frame = view.frame(bounds);
+            if let Some(clip) = parent_clip.intersection(frame) {
                 native_views.push(NativeViewPlacement {
                     id: element.runtime_id,
                     view: view.clone(),
-                    bounds,
+                    bounds: frame,
                     clip,
-                    corner_radius: element.visual.corners(element.visual.radius).maximum(),
+                    corner_radius: if view.outset() > 0.0 {
+                        0.0
+                    } else {
+                        element.visual.corners(element.visual.radius).maximum()
+                    },
                     opacity: scene.current_opacity(),
                     z_index: layer.z_index,
                     source_order: order.source,

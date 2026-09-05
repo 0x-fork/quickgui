@@ -94,6 +94,7 @@ impl Element {
             focus: ElementStateStyle::default(),
             disabled_style: ElementStateStyle::default(),
             invalid_style: ElementStateStyle::default(),
+            selected_style: ElementStateStyle::default(),
             dragging: ElementStateStyle::default(),
             drag_over: ElementStateStyle::default(),
             focus_within: ElementStateStyle::default(),

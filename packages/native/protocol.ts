@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-export const PROTOCOL_VERSION = 30;
+export const PROTOCOL_VERSION = 31;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
@@ -399,6 +399,10 @@ export const enum PropertyCode {
   GroupActiveStyle = 355,
   /** Nested `focusWithin` state style. */
   FocusWithinStyle = 356,
+  /** Nested `selected` state style, painted while the element's `selected` flag is set. */
+  SelectedStyle = 357,
+  /** Web-style `selected` flag: the native accessibility state and `style.selected` follow it. */
+  Selected = 358,
 }
 
 /**

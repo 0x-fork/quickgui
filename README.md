@@ -202,6 +202,15 @@ cd examples/components-solid
 bun run dev
 ```
 
+Quick Git is a complete native git client: virtualized change lists and diffs, hunk and line
+staging, commit messages drafted by a local Codex or Claude CLI, history with a lane graph,
+branches, stashes, and first-class worktrees:
+
+```console
+cd examples/quick-git
+bun run dev
+```
+
 This creates and runs the platform-native development host while loading `app.tsx` from disk (an
 `.app` bundle on macOS). Rust framework examples remain available directly through Cargo:
 

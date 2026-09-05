@@ -1007,8 +1007,18 @@ pub(super) fn configure_text_buffer(
         .weight(style.weight)
         .style(style.font_style)
         .font_features(style.features.cosmic());
+    let mut flags = CacheKeyFlags::empty();
     if style.font_thicken {
-        attrs = attrs.cache_key_flags(CacheKeyFlags::FONT_THICKEN);
+        flags |= CacheKeyFlags::FONT_THICKEN;
+    }
+    // Apple platforms rasterize unhinted outlines and never snap stems to the pixel grid. Hinted
+    // glyphs next to native controls read as heavier, "shadowed" text, so macOS text matches the
+    // platform: designed stem weights, anti-aliased at their true positions.
+    if cfg!(target_os = "macos") {
+        flags |= CacheKeyFlags::DISABLE_HINTING;
+    }
+    if !flags.is_empty() {
+        attrs = attrs.cache_key_flags(flags);
     }
     // Cosmic Text tracks spacing in EM, and the buffer's metrics are already scaled, so a logical
     // pixel amount converts with the unscaled font size.

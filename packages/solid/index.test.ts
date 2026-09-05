@@ -2675,6 +2675,7 @@ describe("declared option sources, virtual collections, and stateful fields", ()
           { group: "list", transform: "scale(0.98)" },
         ],
         focusWithin: { outline: "1px solid #93c5fd" },
+        selected: { backgroundColor: "#1d4ed8", color: "#ffffff" },
       },
       children: "Apply",
     });
@@ -2734,6 +2735,10 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     expect(decode(tile, PropertyCode.FocusWithinStyle)).toEqual({
       outline: "1px solid #93c5fd",
     });
+    expect(decode(tile, PropertyCode.SelectedStyle)).toEqual({
+      backgroundColor: parseColor("#1d4ed8"),
+      color: parseColor("#ffffff"),
+    });
     // The base style and the flat legacy codes are untouched by nested states.
     expect(tile.properties.get(PropertyCode.BackgroundColor)).toBe(
       parseColor("#ffffff"),
@@ -2764,6 +2769,21 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     expect(button.properties.has(PropertyCode.DisabledStyle)).toBe(false);
     expect(button.properties.has(PropertyCode.HoverStyle)).toBe(false);
     expect(button.properties.get(PropertyCode.Disabled)).toBe(true);
+
+    // `selected` is a flag and a state style in the same way: a custom list row declares the
+    // flag, and the nested style paints while it is set.
+    const row = createComponent(View, {
+      selected: true,
+      style: { selected: { backgroundColor: "#1d4ed8" } },
+      children: "README.md",
+    });
+    expect(row.properties.get(PropertyCode.Selected)).toBe(true);
+    expect(
+      JSON.parse(String(row.properties.get(PropertyCode.SelectedStyle))),
+    ).toEqual({ backgroundColor: parseColor("#1d4ed8") });
+    setProp(row, "selected", false);
+    expect(row.properties.has(PropertyCode.Selected)).toBe(false);
+    expect(row.properties.has(PropertyCode.SelectedStyle)).toBe(true);
   });
 
   test("marks hover groups with `group`, named or not, apart from option group labels", () => {

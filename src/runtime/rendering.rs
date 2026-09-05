@@ -38,6 +38,8 @@ impl Runtime {
         let system_info = self.system_info.clone();
         let system_preferences = self.system_preferences;
         let event_proxy = self.event_proxy.clone();
+        #[cfg(target_os = "macos")]
+        self.release_focus_to_native_view(event_loop);
         let Some(state) = &mut self.window else {
             return;
         };

@@ -574,7 +574,11 @@ fn build_menu(
             MenuItem::SystemMenu(os_menu) => {
                 let item = menu_item(mtm, &os_menu.name, None, "");
                 match os_menu.menu_type {
-                    SystemMenuType::Services => item.setSubmenu(services_menu),
+                    SystemMenuType::Services => {
+                        item.setSubmenu(
+                            declared_services_menu(mtm, services_menu, &os_menu.name).as_deref(),
+                        );
+                    }
                     SystemMenuType::Window => item.setSubmenu(windows_menu),
                     SystemMenuType::Help => item.setSubmenu(help_menu),
                     SystemMenuType::RecentDocuments => {
@@ -586,6 +590,28 @@ fn build_menu(
         }
     }
     native
+}
+
+/// The menu a declared Services item hangs from.
+///
+/// AppKit populates exactly one services menu, and an `NSMenu` can hang from only one item, so
+/// reusing the application's current services menu while Winit's own application menu still holds
+/// it raises an Objective-C exception the Rust runtime cannot catch. A services menu that already
+/// has a supermenu is therefore left where it is, and a fresh menu is registered as the
+/// application's services menu instead; AppKit keeps it populated from then on.
+fn declared_services_menu(
+    mtm: MainThreadMarker,
+    current: Option<&NSMenu>,
+    name: &str,
+) -> Option<Retained<NSMenu>> {
+    if let Some(current) = current
+        && unsafe { current.supermenu() }.is_none()
+    {
+        return Some(current.retain());
+    }
+    let menu = unsafe { NSMenu::initWithTitle(mtm.alloc(), &NSString::from_str(name)) };
+    unsafe { NSApplication::sharedApplication(mtm).setServicesMenu(Some(&menu)) };
+    Some(menu)
 }
 
 #[allow(clippy::too_many_arguments)]

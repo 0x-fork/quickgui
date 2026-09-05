@@ -38,6 +38,7 @@ unsafe extern "C" {
     ) -> bool;
     fn quickgui_swift_ui_host_remove_embedded_view(handle: *mut c_void, id: u64);
     fn quickgui_swift_ui_host_fitting_size(handle: *mut c_void, width: *mut f64, height: *mut f64);
+    fn quickgui_swift_ui_host_effect_inset(handle: *mut c_void) -> f64;
     fn quickgui_swift_ui_host_release(handle: *mut c_void);
 }
 
@@ -1687,8 +1688,11 @@ impl MacSwiftUiHost {
         self.sync(&elements)
     }
 
-    /// Current fitting size of the hosted SwiftUI subtree, including space for native control
-    /// effects such as Liquid Glass expansion.
+    /// Current fitting size of the hosted SwiftUI controls at their native size.
+    ///
+    /// The headroom the host keeps around content whose effects draw past its bounds, such as
+    /// Liquid Glass, is excluded; [`Self::effect_inset`] reports it, and placing the view with
+    /// [`crate::native_view_with_outset`] keeps it outside layout.
     pub fn fitting_size(&self) -> Result<Size, String> {
         require_main_thread()?;
         let mut width = 0.0;
@@ -1701,7 +1705,22 @@ impl MacSwiftUiHost {
                 "SwiftUI returned an invalid fitting size {width}x{height}"
             ));
         }
-        Ok(Size::new(width as f32, height as f32))
+        let inset = f64::from(self.effect_inset()?) * 2.0;
+        Ok(Size::new(
+            (width - inset).max(1.0) as f32,
+            (height - inset).max(1.0) as f32,
+        ))
+    }
+
+    /// Padding the host keeps on each side of its content for effects that draw past a control's
+    /// bounds; zero unless the content contains such a control.
+    pub fn effect_inset(&self) -> Result<f32, String> {
+        require_main_thread()?;
+        let inset = unsafe { quickgui_swift_ui_host_effect_inset(self.handle.as_ptr()) };
+        if !inset.is_finite() || inset < 0.0 {
+            return Err(format!("SwiftUI returned an invalid effect inset {inset}"));
+        }
+        Ok(inset as f32)
     }
 }
 

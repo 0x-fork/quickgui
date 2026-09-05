@@ -2046,6 +2046,8 @@ pub struct Element {
     pub(crate) focus: ElementStateStyle,
     pub(crate) disabled_style: ElementStateStyle,
     pub(crate) invalid_style: ElementStateStyle,
+    /// Paint while this element is marked selected, like a chosen row of a native list.
+    pub(crate) selected_style: ElementStateStyle,
     pub(crate) dragging: ElementStateStyle,
     pub(crate) drag_over: ElementStateStyle,
     /// Paint while this element or a descendant owns keyboard focus, like CSS `:focus-within`.
@@ -2295,6 +2297,16 @@ pub fn styled_text_area(value: StyledText) -> Element {
 #[cfg(target_os = "macos")]
 pub fn native_view(view: &NSView) -> Element {
     Element::native_view(MacNativeView::new(view))
+}
+
+/// Embed an AppKit view whose frame extends `outset` points past its layout box on every side.
+///
+/// Layout, hit regions, and siblings see the element's own box; only the native frame and its clip
+/// grow, so a control can draw an effect that spills past its bounds, such as Liquid Glass, without
+/// that headroom pushing its neighbours apart. See [`MacNativeView::with_outset`].
+#[cfg(target_os = "macos")]
+pub fn native_view_with_outset(view: &NSView, outset: f32) -> Element {
+    Element::native_view(MacNativeView::new(view).with_outset(outset))
 }
 
 mod construction_layout;

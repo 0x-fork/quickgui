@@ -1226,6 +1226,10 @@ pub(super) const FOCUS_WITHIN_STYLE_CODES: StateStyleCodes = StateStyleCodes {
     style: property::FOCUS_WITHIN_STYLE,
     legacy: None,
 };
+pub(super) const SELECTED_STYLE_CODES: StateStyleCodes = StateStyleCodes {
+    style: property::SELECTED_STYLE,
+    legacy: None,
+};
 
 /// One nested state-style declaration exactly as the renderer encodes it: colors packed the way
 /// every color property travels, lengths in logical pixels, and every string in the grammar the

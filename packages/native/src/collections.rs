@@ -769,6 +769,10 @@ pub(super) fn build_table(
     let root = ElementId::new(key);
     let mut headers: HashMap<u64, Element> = HashMap::new();
     let mut cells: HashMap<(usize, usize), Element> = HashMap::new();
+    // A declared row is the container its cells are laid out in: its paint — background,
+    // divider, hover, and `selected` state — reaches the core row, while its children are the
+    // cells the core positions itself.
+    let mut row_shells: HashMap<usize, Element> = HashMap::new();
     let column_index =
         |names: &[Arc<str>], value: &str| names.iter().position(|name| name.as_ref() == value);
     let names = match states.components.tables.get(&key) {
@@ -809,6 +813,11 @@ pub(super) fn build_table(
         else {
             continue;
         };
+        if let Some(shell) =
+            build_element_shell(row_id, window, tree, events, states, cx, depth + 1)
+        {
+            row_shells.insert(row_index, shell);
+        }
         let mut pending = row.children.clone();
         while let Some(cell_id) = pending.pop() {
             let Some(cell) = tree.nodes.get(&cell_id) else {
@@ -846,11 +855,12 @@ pub(super) fn build_table(
     let Some(retained) = states.components.tables.get_mut(&key) else {
         return wrapper;
     };
-    let table = retained.state.element_with(
+    let table = retained.state.element_with_rows(
         cx,
         root,
         &retained.columns,
         table_accessor(key),
+        move |row: TableRowState| row_shells.remove(&row.row).unwrap_or_else(div),
         move |state: TableHeaderState<'_>| {
             let mut header = headers
                 .remove(&state.column.id().as_u64())

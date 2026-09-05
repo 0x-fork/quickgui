@@ -1,0 +1,1092 @@
+/**
+ * Application state and every action the UI can take.
+ *
+ * The store is created once, outside any component, so its signals can be written from git
+ * completions, watcher callbacks, and menu handlers. Views read signals and call actions; they
+ * never run git themselves.
+ */
+
+import { basename, join, resolve } from "node:path";
+
+import { createEffect, createMemo, createRoot, createSignal, untrack } from "solid-js";
+
+/** Solid 2 batches synchronous writes on its own; this only groups them for readability. */
+const batch = <T,>(work: () => T): T => work();
+
+import {
+  AGENT_TIMEOUT_MS,
+  AgentError,
+  detectAgents,
+  generateCommitMessage,
+  type AgentId,
+  type AvailableAgent,
+  type GeneratedMessage,
+} from "../agent/commit-message.ts";
+import { countChanges, type DiffFile, type DiffHunk, type DiffLine, type HunkSelection } from "../git/diff.ts";
+import { layoutGraph, type Commit, type GraphRow } from "../git/log.ts";
+import { GitError, GitRunner } from "../git/process.ts";
+import { Repository, type CommitFile, type NumstatEntry } from "../git/repository.ts";
+import type { RefCollections, StashEntry } from "../git/refs.ts";
+import { stagedChanges, unstagedChanges, type ChangeItem, type RepositoryStatus } from "../git/status.ts";
+import type { Worktree } from "../git/worktree.ts";
+import { DEFAULT_STATE, rememberRepository, savePersistedState, type PersistedState } from "./persistence.ts";
+import { watchRepository, type ChangeKind } from "./watcher.ts";
+
+export type ViewId = "changes" | "history" | "branches" | "worktrees" | "stashes";
+export type ListId = "unstaged" | "staged";
+export type RowRanges = readonly (readonly number[])[];
+
+export interface Notice {
+  type: "info" | "success" | "error" | "warning";
+  title: string;
+  description?: string;
+  timeout?: number;
+}
+
+export interface DiffTarget {
+  key: string;
+  kind: "unstaged" | "staged" | "commit";
+  path: string;
+  originalPath?: string;
+  untracked: boolean;
+  sha?: string;
+}
+
+export interface DiffState {
+  target?: DiffTarget;
+  files: DiffFile[];
+  loading: boolean;
+  error?: string;
+}
+
+/** One row of the diff table: a hunk header or a line. */
+export type DiffRow =
+  | { kind: "file"; fileIndex: number; file: DiffFile }
+  | { kind: "hunk"; fileIndex: number; hunkIndex: number; hunk: DiffHunk }
+  | { kind: "line"; fileIndex: number; hunkIndex: number; lineIndex: number; line: DiffLine }
+  | { kind: "notice"; text: string };
+
+export interface HistoryState {
+  commits: Commit[];
+  graph: GraphRow[];
+  loading: boolean;
+  exhausted: boolean;
+  allBranches: boolean;
+}
+
+export interface CommitDetailState {
+  sha?: string;
+  files: CommitFile[];
+  loading: boolean;
+  selectedPath?: string;
+}
+
+export interface BusyState {
+  label: string;
+  cancel?: () => void;
+}
+
+export interface GenerationState {
+  agent: AgentId;
+  cancel: () => void;
+}
+
+export interface StoreOptions {
+  runner: GitRunner;
+  persisted: PersistedState;
+  statePath?: string;
+  /** Sends an untracked file to the Trash when discarding it. */
+  trash?: (absolutePath: string) => Promise<void>;
+}
+
+const HISTORY_PAGE = 300;
+const MAX_DIFF_ROWS = 60_000;
+
+export function createStore(options: StoreOptions) {
+  return createRoot(() => buildStore(options));
+}
+
+export type Store = ReturnType<typeof createStore>;
+
+function buildStore(options: StoreOptions) {
+  const runner = options.runner;
+  let notifier: (notice: Notice) => void = (notice) => console.log(`[${notice.type}] ${notice.title}`);
+  let persisted: PersistedState = { ...options.persisted };
+  let persistTimer: ReturnType<typeof setTimeout> | undefined;
+  let stopWatching: (() => void) | undefined;
+
+  // --- repository ------------------------------------------------------------------------------
+  const [repository, setRepository] = createSignal<Repository>();
+  const [mainRepository, setMainRepository] = createSignal<Repository>();
+  const [opening, setOpening] = createSignal<string>();
+  const [worktrees, setWorktrees] = createSignal<Worktree[]>([]);
+  const [status, setStatus] = createSignal<RepositoryStatus>();
+  const [numstat, setNumstat] = createSignal<{ unstaged: Map<string, NumstatEntry>; staged: Map<string, NumstatEntry> }>({
+    unstaged: new Map(),
+    staged: new Map(),
+  });
+  const [generation, setGeneration] = createSignal(0);
+  const [refs, setRefs] = createSignal<RefCollections>({ local: [], remote: [], tags: [] });
+  const [stashes, setStashes] = createSignal<StashEntry[]>([]);
+  const [remotes, setRemotes] = createSignal<string[]>([]);
+  const [recentRepositories, setRecentRepositories] = createSignal<string[]>(persisted.recentRepositories);
+  const [busy, setBusy] = createSignal<BusyState>();
+  const [view, setViewSignal] = createSignal<ViewId>("changes");
+  const [sidebarWidth, setSidebarWidthSignal] = createSignal(persisted.sidebarWidth);
+  const [changesSplit, setChangesSplitSignal] = createSignal(persisted.changesSplit);
+  const [historySplit, setHistorySplitSignal] = createSignal(persisted.historySplit);
+  const [hasHead, setHasHead] = createSignal(true);
+  const [identity, setIdentity] = createSignal<{ name?: string; email?: string }>({});
+
+  const repositoryName = createMemo(() => {
+    const current = repository();
+    return current ? basename(current.root) : "";
+  });
+  const unstaged = createMemo(() => (status() ? unstagedChanges(status()!) : []));
+  const staged = createMemo(() => (status() ? stagedChanges(status()!) : []));
+  const conflicts = createMemo(() => unstaged().filter((item) => item.conflicted).length);
+  const changeCount = createMemo(() => unstaged().length + staged().length);
+
+  // --- selection in the change lists -----------------------------------------------------------
+  const [selection, setSelection] = createSignal<{ unstaged: RowRanges; staged: RowRanges }>({
+    unstaged: [],
+    staged: [],
+  });
+  const [activeCell, setActiveCell] = createSignal<{ list: ListId; row: number }>();
+  const [focusedList, setFocusedList] = createSignal<ListId>("unstaged");
+
+  const selectedItems = (list: ListId): ChangeItem[] => {
+    const items = list === "unstaged" ? unstaged() : staged();
+    const rows = new Set<number>();
+    for (const [start, end] of selection()[list]) {
+      for (let row = start!; row <= end!; row += 1) rows.add(row);
+    }
+    return items.filter((_, index) => rows.has(index));
+  };
+
+  const activeItem = createMemo<ChangeItem | undefined>(() => {
+    // The focused list's selection wins; the active cell refines it to the row the user last
+    // moved to. A table reports an active cell as soon as it mounts, so on its own it means
+    // nothing until a selection exists.
+    const lists: ListId[] = focusedList() === "staged" ? ["staged", "unstaged"] : ["unstaged", "staged"];
+    for (const list of lists) {
+      const selected = selectedItems(list);
+      if (selected.length === 0) continue;
+      const cell = activeCell();
+      const items = list === "unstaged" ? unstaged() : staged();
+      if (cell && cell.list === list && items[cell.row] && selected.includes(items[cell.row]!)) return items[cell.row];
+      return selected[0];
+    }
+    // Nothing chosen yet: show the first change so the diff pane is never empty needlessly.
+    return unstaged()[0] ?? staged()[0];
+  });
+
+  // --- diff ------------------------------------------------------------------------------------
+  const [diff, setDiff] = createSignal<DiffState>({ files: [], loading: false });
+  const [diffSelection, setDiffSelection] = createSignal<RowRanges>([]);
+  const diffCache = new Map<string, DiffFile[]>();
+  let diffController: AbortController | undefined;
+
+  const diffTarget = createMemo<DiffTarget | undefined>(() => {
+    const item = activeItem();
+    if (!item) return undefined;
+    const kind: DiffTarget["kind"] = item.staged ? "staged" : "unstaged";
+    return {
+      key: `${kind}:${item.path}:${generation()}`,
+      kind,
+      path: item.path,
+      ...(item.originalPath ? { originalPath: item.originalPath } : {}),
+      untracked: item.entry.kind === "untracked",
+    };
+  });
+
+  const diffRows = createMemo<DiffRow[]>(() => {
+    const rows: DiffRow[] = [];
+    const files = diff().files;
+    files.forEach((file, fileIndex) => {
+      if (files.length > 1) rows.push({ kind: "file", fileIndex, file });
+      if (file.binary) {
+        rows.push({ kind: "notice", text: "Binary file" });
+        return;
+      }
+      file.hunks.forEach((hunk, hunkIndex) => {
+        rows.push({ kind: "hunk", fileIndex, hunkIndex, hunk });
+        hunk.lines.forEach((line, lineIndex) => {
+          if (rows.length >= MAX_DIFF_ROWS) return;
+          rows.push({ kind: "line", fileIndex, hunkIndex, lineIndex, line });
+        });
+      });
+      if (file.truncated) rows.push({ kind: "notice", text: "Diff truncated: the file is too large to show in full." });
+    });
+    if (rows.length >= MAX_DIFF_ROWS) rows.push({ kind: "notice", text: "Diff truncated: too many lines to show." });
+    return rows;
+  });
+
+  const diffStats = createMemo(() => {
+    let added = 0;
+    let removed = 0;
+    for (const file of diff().files) {
+      const counts = countChanges(file);
+      added += counts.added;
+      removed += counts.removed;
+    }
+    return { added, removed };
+  });
+
+  /** The changed lines inside the diff table's selected rows, grouped by hunk. */
+  const selectedDiffLines = createMemo(() => {
+    const rows = diffRows();
+    const byHunk = new Map<string, { fileIndex: number; hunkIndex: number; lines: Set<number> }>();
+    for (const [start, end] of diffSelection()) {
+      for (let index = start!; index <= end!; index += 1) {
+        const row = rows[index];
+        if (!row || row.kind !== "line" || row.line.kind === "context") continue;
+        const key = `${row.fileIndex}:${row.hunkIndex}`;
+        let entry = byHunk.get(key);
+        if (!entry) {
+          entry = { fileIndex: row.fileIndex, hunkIndex: row.hunkIndex, lines: new Set() };
+          byHunk.set(key, entry);
+        }
+        entry.lines.add(row.lineIndex);
+      }
+    }
+    return [...byHunk.values()];
+  });
+  const selectedDiffLineCount = createMemo(() => selectedDiffLines().reduce((total, entry) => total + entry.lines.size, 0));
+
+  async function loadDiff(target: DiffTarget | undefined): Promise<void> {
+    diffController?.abort();
+    diffController = undefined;
+    if (!target) {
+      setDiff({ files: [], loading: false });
+      return;
+    }
+    const cached = diffCache.get(target.key);
+    if (cached) {
+      setDiff({ target, files: cached, loading: false });
+      return;
+    }
+    const repo = repository();
+    if (!repo) return;
+    const controller = new AbortController();
+    diffController = controller;
+    setDiff((current) => ({ target, files: current.target?.path === target.path ? current.files : [], loading: true }));
+    try {
+      let files: DiffFile[];
+      if (target.kind === "commit") files = await repo.diffCommit(target.sha!, target.path, { signal: controller.signal });
+      else if (target.untracked) files = [await repo.diffUntracked(target.path, { signal: controller.signal })];
+      else if (target.kind === "staged") files = await repo.diffIndex(target.path, target.originalPath, { signal: controller.signal });
+      else files = await repo.diffWorkingTree(target.path, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      diffCache.set(target.key, files);
+      if (diffCache.size > 64) diffCache.delete(diffCache.keys().next().value!);
+      setDiff({ target, files, loading: false });
+      setDiffSelection([]);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setDiff({ target, files: [], loading: false, error: describeError(error) });
+    }
+  }
+
+  // --- commit composer -------------------------------------------------------------------------
+  const [subject, setSubject] = createSignal("");
+  const [body, setBody] = createSignal("");
+  const [amend, setAmendSignal] = createSignal(false);
+  const [committing, setCommitting] = createSignal(false);
+  const [headMessage, setHeadMessage] = createSignal<{ subject: string; body: string }>();
+  const [agents, setAgents] = createSignal<AvailableAgent[]>([]);
+  const [preferredAgent, setPreferredAgentSignal] = createSignal<AgentId | undefined>(persisted.preferredAgent);
+  const [generating, setGenerating] = createSignal<GenerationState>();
+  const [lastGenerated, setLastGenerated] = createSignal<GeneratedMessage>();
+
+  const canCommit = createMemo(() => {
+    if (committing() || !repository()) return false;
+    if (subject().trim().length === 0) return false;
+    if (conflicts() > 0 && staged().length === 0) return false;
+    return staged().length > 0 || amend();
+  });
+
+  void detectAgents().then((found) => {
+    setAgents(found);
+    if (!found.some((agent) => agent.id === untrack(preferredAgent)) && found[0]) {
+      setPreferredAgentSignal(found[0].id);
+    }
+  });
+
+  // --- history ---------------------------------------------------------------------------------
+  const [history, setHistory] = createSignal<HistoryState>({
+    commits: [],
+    graph: [],
+    loading: false,
+    exhausted: false,
+    allBranches: persisted.historyAllBranches,
+  });
+  const [historySelection, setHistorySelection] = createSignal<RowRanges>([]);
+  const [commitDetail, setCommitDetail] = createSignal<CommitDetailState>({ files: [], loading: false });
+  let historyController: AbortController | undefined;
+  let detailController: AbortController | undefined;
+
+  const selectedCommit = createMemo<Commit | undefined>(() => {
+    const [range] = historySelection();
+    const row = range?.[0];
+    return row === undefined ? undefined : history().commits[row];
+  });
+
+  const commitDiffTarget = createMemo<DiffTarget | undefined>(() => {
+    const detail = commitDetail();
+    const commit = selectedCommit();
+    if (!commit || detail.sha !== commit.sha) return undefined;
+    const path = detail.selectedPath ?? detail.files[0]?.path;
+    if (!path) return undefined;
+    const file = detail.files.find((entry) => entry.path === path);
+    return {
+      key: `commit:${commit.sha}:${path}`,
+      kind: "commit",
+      path,
+      ...(file?.originalPath ? { originalPath: file.originalPath } : {}),
+      untracked: false,
+      sha: commit.sha,
+    };
+  });
+
+  createEffect(
+    () => selectedCommit()?.sha,
+    (sha) => {
+      queueMicrotask(() => void loadCommitDetail(sha));
+    },
+  );
+
+  createEffect(
+    () => (view() === "changes" ? diffTarget() : commitDiffTarget()),
+    (target) => {
+      queueMicrotask(() => void loadDiff(target));
+    },
+  );
+
+  async function loadCommitDetail(sha: string | undefined): Promise<void> {
+    detailController?.abort();
+    detailController = undefined;
+    const repo = repository();
+    if (!sha || !repo) {
+      setCommitDetail({ files: [], loading: false });
+      return;
+    }
+    const controller = new AbortController();
+    detailController = controller;
+    setCommitDetail({ sha, files: [], loading: true });
+    try {
+      const files = await repo.commitFiles(sha, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setCommitDetail({ sha, files, loading: false });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setCommitDetail({ sha, files: [], loading: false });
+      notify({ type: "error", title: "Unable to read commit", description: describeError(error) });
+    }
+  }
+
+  async function loadHistory(reset: boolean): Promise<void> {
+    const repo = repository();
+    if (!repo) return;
+    const current = untrack(history);
+    if (!reset && (current.loading || current.exhausted)) return;
+    historyController?.abort();
+    const controller = new AbortController();
+    historyController = controller;
+    setHistory((state) => ({ ...state, loading: true, ...(reset ? { exhausted: false } : {}) }));
+    try {
+      const skip = reset ? 0 : current.commits.length;
+      const page = await repo.log({
+        limit: HISTORY_PAGE,
+        skip,
+        all: current.allBranches,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const commits = reset ? page : [...current.commits, ...page];
+      setHistory((state) => ({
+        ...state,
+        commits,
+        graph: layoutGraph(commits),
+        loading: false,
+        exhausted: page.length < HISTORY_PAGE,
+      }));
+      if (reset) {
+        const previous = untrack(selectedCommit)?.sha;
+        const index = previous ? commits.findIndex((commit) => commit.sha === previous) : -1;
+        setHistorySelection(index >= 0 ? [[index, index]] : commits.length > 0 ? [[0, 0]] : []);
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setHistory((state) => ({ ...state, loading: false }));
+      notify({ type: "error", title: "Unable to load history", description: describeError(error) });
+    }
+  }
+
+  // --- refresh ---------------------------------------------------------------------------------
+  let refreshing = false;
+  let refreshPending: Set<ChangeKind> | undefined;
+
+  async function refresh(kinds: ReadonlySet<ChangeKind> = new Set(["worktree", "index", "refs"])): Promise<void> {
+    if (refreshing) {
+      refreshPending = new Set([...(refreshPending ?? []), ...kinds]);
+      return;
+    }
+    refreshing = true;
+    try {
+      const repo = repository();
+      if (!repo) return;
+      const wantsRefs = kinds.has("refs");
+      const [nextStatus, unstagedStats, stagedStats, nextRefs, nextStashes, nextWorktrees, nextRemotes, head] =
+        await Promise.all([
+          repo.status(),
+          repo.numstat(false),
+          repo.numstat(true),
+          wantsRefs ? repo.refs() : undefined,
+          wantsRefs ? repo.stashes() : undefined,
+          wantsRefs ? repo.worktrees() : undefined,
+          wantsRefs ? repo.remotes() : undefined,
+          repo.hasHead(),
+        ]);
+      if (repository() !== repo) return;
+      batch(() => {
+        setStatus(nextStatus);
+        setNumstat({
+          unstaged: new Map(unstagedStats.map((entry) => [entry.path, entry])),
+          staged: new Map(stagedStats.map((entry) => [entry.path, entry])),
+        });
+        setHasHead(head);
+        if (nextRefs) setRefs(nextRefs);
+        if (nextStashes) setStashes(nextStashes);
+        if (nextWorktrees) setWorktrees(nextWorktrees);
+        if (nextRemotes) setRemotes(nextRemotes);
+        diffCache.clear();
+        setGeneration((value) => value + 1);
+        reconcileSelection(nextStatus);
+      });
+      if (wantsRefs) {
+        void loadHistory(true);
+        void loadHeadMessage(repo);
+      }
+    } catch (error) {
+      if (!(error instanceof GitError && error.aborted)) {
+        notify({ type: "error", title: "Unable to refresh", description: describeError(error) });
+      }
+    } finally {
+      refreshing = false;
+      if (refreshPending) {
+        const pending = refreshPending;
+        refreshPending = undefined;
+        void refresh(pending);
+      }
+    }
+  }
+
+  /** Keep selection on the same paths after the lists change under it. */
+  function reconcileSelection(next: RepositoryStatus): void {
+    const previousUnstaged = selectedItems("unstaged").map((item) => item.path);
+    const previousStaged = selectedItems("staged").map((item) => item.path);
+    const nextUnstaged = unstagedChanges(next);
+    const nextStaged = stagedChanges(next);
+    setSelection({
+      unstaged: rangesFor(nextUnstaged, previousUnstaged),
+      staged: rangesFor(nextStaged, previousStaged),
+    });
+    const cell = activeCell();
+    if (cell) {
+      const items = cell.list === "unstaged" ? nextUnstaged : nextStaged;
+      if (!items[cell.row]) setActiveCell(items.length > 0 ? { list: cell.list, row: Math.min(cell.row, items.length - 1) } : undefined);
+    }
+  }
+
+  async function loadHeadMessage(repo: Repository): Promise<void> {
+    try {
+      const [head] = await repo.log({ limit: 1 });
+      setHeadMessage(head ? { subject: head.subject, body: head.body } : undefined);
+    } catch {
+      setHeadMessage(undefined);
+    }
+  }
+
+  // --- opening ---------------------------------------------------------------------------------
+  async function openRepository(path: string): Promise<boolean> {
+    const target = resolve(path);
+    setOpening(target);
+    try {
+      const repo = await Repository.open(runner, target, options.trash ? { trash: options.trash } : {});
+      await activate(repo, repo);
+      persist({ lastRepository: repo.root, recentRepositories: rememberRepository(persisted.recentRepositories, repo.root) });
+      setRecentRepositories(persisted.recentRepositories);
+      return true;
+    } catch (error) {
+      notify({ type: "error", title: `Unable to open ${basename(target)}`, description: describeError(error) });
+      setRecentRepositories((current) => current.filter((entry) => entry !== target));
+      persist({ recentRepositories: untrack(recentRepositories) });
+      return false;
+    } finally {
+      setOpening(undefined);
+    }
+  }
+
+  async function activate(repo: Repository, main: Repository): Promise<void> {
+    stopWatching?.();
+    diffController?.abort();
+    historyController?.abort();
+    batch(() => {
+      setRepository(repo);
+      setMainRepository(main);
+      setStatus(undefined);
+      setSelection({ unstaged: [], staged: [] });
+      setActiveCell(undefined);
+      setDiff({ files: [], loading: false });
+      setDiffSelection([]);
+      setHistory((state) => ({ ...state, commits: [], graph: [], loading: false, exhausted: false }));
+      setHistorySelection([]);
+      setCommitDetail({ files: [], loading: false });
+      setSubject("");
+      setBody("");
+      setAmendSignal(false);
+    });
+    diffCache.clear();
+    stopWatching = watchRepository({
+      root: repo.root,
+      gitDir: repo.info.gitDir,
+      commonDir: repo.info.commonDir,
+      onChange: (kinds) => void refresh(kinds),
+    });
+    void Promise.all([repo.config("user.name"), repo.config("user.email")]).then(([name, email]) =>
+      setIdentity({ ...(name ? { name } : {}), ...(email ? { email } : {}) }),
+    );
+    await refresh();
+  }
+
+  function closeRepository(): void {
+    stopWatching?.();
+    stopWatching = undefined;
+    diffController?.abort();
+    historyController?.abort();
+    batch(() => {
+      setRepository(undefined);
+      setMainRepository(undefined);
+      setStatus(undefined);
+      setWorktrees([]);
+      setRefs({ local: [], remote: [], tags: [] });
+      setStashes([]);
+      setDiff({ files: [], loading: false });
+      setHistory((state) => ({ ...state, commits: [], graph: [] }));
+      setHistorySelection([]);
+      setView("changes");
+    });
+    persist({ lastRepository: undefined });
+  }
+
+  async function selectWorktree(path: string): Promise<void> {
+    const main = mainRepository();
+    if (!main) return;
+    if (repository()?.root === path) return;
+    try {
+      const repo = path === main.root ? main : await main.worktree(path);
+      await activate(repo, main);
+      setView("changes");
+    } catch (error) {
+      notify({ type: "error", title: "Unable to open worktree", description: describeError(error) });
+    }
+  }
+
+  // --- operations ------------------------------------------------------------------------------
+  async function operation<T>(
+    label: string,
+    run: (repo: Repository, signal: AbortSignal) => Promise<T>,
+    after: { refs?: boolean; success?: Notice | ((result: T) => Notice | undefined) } = {},
+  ): Promise<T | undefined> {
+    const repo = repository();
+    if (!repo) return undefined;
+    const controller = new AbortController();
+    setBusy({ label, cancel: () => controller.abort() });
+    try {
+      const result = await run(repo, controller.signal);
+      const success = typeof after.success === "function" ? after.success(result) : after.success;
+      if (success) notify(success);
+      return result;
+    } catch (error) {
+      if (error instanceof GitError && error.aborted) {
+        notify({ type: "info", title: `${label} cancelled` });
+      } else {
+        notify({ type: "error", title: `${label} failed`, description: describeError(error), timeout: 9000 });
+      }
+      return undefined;
+    } finally {
+      setBusy(undefined);
+      void refresh(new Set<ChangeKind>(after.refs === false ? ["worktree", "index"] : ["worktree", "index", "refs"]));
+    }
+  }
+
+  async function stageItems(items: readonly ChangeItem[]): Promise<void> {
+    if (items.length === 0) return;
+    await operation("Stage", (repo, signal) => repo.stage(items.map((item) => item.path), { signal }), { refs: false });
+  }
+
+  async function unstageItems(items: readonly ChangeItem[]): Promise<void> {
+    if (items.length === 0) return;
+    const paths = items.flatMap((item) => (item.originalPath ? [item.originalPath, item.path] : [item.path]));
+    await operation("Unstage", (repo, signal) => repo.unstage(paths, { signal }), { refs: false });
+  }
+
+  async function discardItems(items: readonly ChangeItem[]): Promise<void> {
+    if (items.length === 0) return;
+    const tracked = items.filter((item) => item.entry.kind !== "untracked").map((item) => item.path);
+    const untracked = items.filter((item) => item.entry.kind === "untracked").map((item) => item.path);
+    await operation("Discard", (repo, signal) => repo.discard(tracked, untracked, { signal }), {
+      refs: false,
+      success: { type: "info", title: items.length === 1 ? `Discarded ${basename(items[0]!.path)}` : `Discarded ${items.length} files` },
+    });
+  }
+
+  function toggleStaging(list: ListId): Promise<void> {
+    const items = selectedItems(list);
+    const cell = activeCell();
+    const fallback = cell && cell.list === list ? (list === "unstaged" ? unstaged() : staged())[cell.row] : undefined;
+    const targets = items.length > 0 ? items : fallback ? [fallback] : [];
+    return list === "unstaged" ? stageItems(targets) : unstageItems(targets);
+  }
+
+  async function applyHunkSelection(action: "stage" | "unstage" | "discard", selections: readonly HunkSelection[], fileIndex: number): Promise<void> {
+    const current = diff();
+    const file = current.files[fileIndex];
+    if (!file || selections.length === 0) return;
+    const label = action === "stage" ? "Stage lines" : action === "unstage" ? "Unstage lines" : "Discard lines";
+    await operation(
+      label,
+      (repo, signal) =>
+        action === "stage"
+          ? repo.stagePatch(file, selections, { signal })
+          : action === "unstage"
+            ? repo.unstagePatch(file, selections, { signal })
+            : repo.discardPatch(file, selections, { signal }),
+      { refs: false },
+    );
+  }
+
+  function stageHunk(fileIndex: number, hunkIndex: number): Promise<void> {
+    return applyHunkSelection("stage", [{ hunkIndex }], fileIndex);
+  }
+  function unstageHunk(fileIndex: number, hunkIndex: number): Promise<void> {
+    return applyHunkSelection("unstage", [{ hunkIndex }], fileIndex);
+  }
+  function discardHunk(fileIndex: number, hunkIndex: number): Promise<void> {
+    return applyHunkSelection("discard", [{ hunkIndex }], fileIndex);
+  }
+
+  async function applySelectedLines(action: "stage" | "unstage" | "discard"): Promise<void> {
+    const groups = selectedDiffLines();
+    if (groups.length === 0) return;
+    // One patch per file; the diff pane shows one file at a time except for renames.
+    const byFile = new Map<number, HunkSelection[]>();
+    for (const group of groups) {
+      const list = byFile.get(group.fileIndex) ?? [];
+      list.push({ hunkIndex: group.hunkIndex, lines: group.lines });
+      byFile.set(group.fileIndex, list);
+    }
+    for (const [fileIndex, selections] of byFile) {
+      await applyHunkSelection(action, selections.sort((left, right) => left.hunkIndex - right.hunkIndex), fileIndex);
+    }
+    setDiffSelection([]);
+  }
+
+  async function commit(): Promise<void> {
+    if (!canCommit()) return;
+    const message = `${subject().trim()}\n\n${body().trim()}`.trim();
+    const amending = amend();
+    setCommitting(true);
+    try {
+      const done = await operation(
+        amending ? "Amend" : "Commit",
+        (repo, signal) => repo.commit(message, { amend: amending, signal }),
+        { success: { type: "success", title: amending ? "Commit amended" : `Committed “${truncate(subject().trim(), 60)}”` } },
+      );
+      if (done !== undefined) {
+        batch(() => {
+          setSubject("");
+          setBody("");
+          setAmendSignal(false);
+        });
+      }
+    } finally {
+      setCommitting(false);
+    }
+  }
+
+  function setAmend(value: boolean): void {
+    setAmendSignal(value);
+    const head = headMessage();
+    if (value && head && subject().trim() === "" && body().trim() === "") {
+      setSubject(head.subject);
+      setBody(head.body);
+    }
+  }
+
+  async function generateMessage(agentId?: AgentId): Promise<void> {
+    const repo = repository();
+    if (!repo) return;
+    const agent = agents().find((candidate) => candidate.id === (agentId ?? preferredAgent())) ?? agents()[0];
+    if (!agent) {
+      notify({
+        type: "warning",
+        title: "No agent CLI found",
+        description: "Install Codex (codex) or Claude Code (claude) to generate commit messages.",
+      });
+      return;
+    }
+    generating()?.cancel();
+    const controller = new AbortController();
+    setGenerating({ agent: agent.id, cancel: () => controller.abort() });
+    setPreferredAgent(agent.id);
+    try {
+      const useStaged = staged().length > 0;
+      const items = useStaged ? staged() : unstaged();
+      const diffs = await Promise.all(
+        items.slice(0, 200).map(async (item) => {
+          if (item.entry.kind === "untracked") {
+            const file = await repo.diffUntracked(item.path, { signal: controller.signal });
+            return `diff --git a/${item.path} b/${item.path}\nnew file mode 100644\n--- /dev/null\n+++ b/${item.path}\n${file.hunks
+              .flatMap((hunk) => [`@@ -0,0 +1,${hunk.newLines} @@`, ...hunk.lines.map((line) => `+${line.text}`)])
+              .join("\n")}\n`;
+          }
+          const files = useStaged
+            ? await repo.diffIndex(item.path, item.originalPath, { signal: controller.signal })
+            : await repo.diffWorkingTree(item.path, { signal: controller.signal });
+          return files
+            .map((file) =>
+              [
+                `diff --git a/${file.oldPath ?? file.path} b/${file.newPath ?? file.path}`,
+                ...file.hunks.flatMap((hunk) => [
+                  `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@ ${hunk.heading}`,
+                  ...hunk.lines.map((line) => `${line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " "}${line.text}`),
+                ]),
+              ].join("\n"),
+            )
+            .join("\n");
+        }),
+      );
+      const subjects = await repo.recentSubjects(15, { signal: controller.signal });
+      const timeout = setTimeout(() => controller.abort(), AGENT_TIMEOUT_MS);
+      let message: GeneratedMessage;
+      try {
+        message = await generateCommitMessage(
+          agent,
+          {
+            repositoryName: repositoryName(),
+            ...(status()?.branch ? { branch: status()!.branch } : {}),
+            diff: diffs.join("\n"),
+            files: items.map((item) => `${item.code} ${item.path}`),
+            recentSubjects: subjects,
+            ...(amend() && headMessage() ? { amending: `${headMessage()!.subject}\n\n${headMessage()!.body}`.trim() } : {}),
+          },
+          repo.root,
+          { signal: controller.signal },
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (controller.signal.aborted) return;
+      batch(() => {
+        setSubject(message.subject);
+        setBody(message.body);
+        setLastGenerated(message);
+      });
+      notify({
+        type: "success",
+        title: `${agent.label} wrote a commit message`,
+        description: `${(message.durationMs / 1000).toFixed(1)}s${useStaged ? "" : " · from unstaged changes"}`,
+        timeout: 3000,
+      });
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof AgentError && error.aborted)) {
+        notify({ type: "info", title: "Generation cancelled", timeout: 2000 });
+        return;
+      }
+      notify({ type: "error", title: "Unable to generate a message", description: describeError(error), timeout: 9000 });
+    } finally {
+      if (generating()?.cancel === (() => controller.abort())) setGenerating(undefined);
+      setGenerating((current) => (current?.agent === agent.id ? undefined : current));
+    }
+  }
+
+  function cancelGeneration(): void {
+    generating()?.cancel();
+    setGenerating(undefined);
+  }
+
+  function setPreferredAgent(agent: AgentId): void {
+    setPreferredAgentSignal(agent);
+    persist({ preferredAgent: agent });
+  }
+
+  // --- remotes, branches, stashes, worktrees -------------------------------------------------
+  const fetch = () =>
+    operation("Fetch", (repo, signal) => repo.fetch({ signal }), { success: { type: "success", title: "Fetched", timeout: 2500 } });
+  const pull = () =>
+    operation("Pull", (repo, signal) => repo.pull({ signal }), { success: { type: "success", title: "Pulled", timeout: 2500 } });
+  const push = async () => {
+    const current = status();
+    const branch = current?.branch;
+    const setUpstream = branch && !current.upstream ? { remote: remotes()[0] ?? "origin", branch } : undefined;
+    await operation("Push", (repo, signal) => repo.push(setUpstream ? { setUpstream } : {}, { signal }), {
+      success: { type: "success", title: setUpstream ? `Pushed and set upstream to ${setUpstream.remote}/${branch}` : "Pushed", timeout: 2500 },
+    });
+  };
+
+  const switchBranch = (name: string) =>
+    operation("Switch branch", (repo, signal) => repo.switchBranch(name, { signal }), {
+      success: { type: "success", title: `Switched to ${name}`, timeout: 2500 },
+    });
+  const createBranch = (name: string, details: { from?: string; checkout?: boolean }) =>
+    operation("Create branch", (repo, signal) => repo.createBranch(name, details, { signal }), {
+      success: { type: "success", title: `Created ${name}`, timeout: 2500 },
+    });
+  const deleteBranch = (name: string, force: boolean) =>
+    operation("Delete branch", (repo, signal) => repo.deleteBranch(name, force, { signal }), {
+      success: { type: "info", title: `Deleted ${name}`, timeout: 2500 },
+    });
+  const checkoutCommit = (sha: string) =>
+    operation("Checkout", (repo, signal) => repo.checkoutCommit(sha, { signal }), {
+      success: { type: "success", title: `Checked out ${sha.slice(0, 7)} (detached)`, timeout: 2500 },
+    });
+
+  const stashPush = (details: { message?: string; includeUntracked?: boolean }) =>
+    operation("Stash", (repo, signal) => repo.stashPush(details, { signal }), {
+      success: { type: "success", title: "Changes stashed", timeout: 2500 },
+    });
+  const stashApply = (ref: string) => operation("Apply stash", (repo, signal) => repo.stashApply(ref, { signal }));
+  const stashPop = (ref: string) => operation("Pop stash", (repo, signal) => repo.stashPop(ref, { signal }));
+  const stashDrop = (ref: string) => operation("Drop stash", (repo, signal) => repo.stashDrop(ref, { signal }));
+
+  const addWorktree = async (details: { path: string; newBranch?: string; branch?: string; base?: string }) => {
+    const main = mainRepository();
+    if (!main) return undefined;
+    const controller = new AbortController();
+    setBusy({ label: "Add worktree", cancel: () => controller.abort() });
+    try {
+      await main.addWorktree(details, { signal: controller.signal });
+      notify({ type: "success", title: `Added worktree at ${basename(details.path)}`, timeout: 3000 });
+      return true;
+    } catch (error) {
+      notify({ type: "error", title: "Unable to add worktree", description: describeError(error), timeout: 9000 });
+      return undefined;
+    } finally {
+      setBusy(undefined);
+      void refresh();
+    }
+  };
+  const removeWorktree = async (path: string, force: boolean) => {
+    const main = mainRepository();
+    if (!main) return;
+    if (repository()?.root === path) await selectWorktree(main.root);
+    const controller = new AbortController();
+    setBusy({ label: "Remove worktree", cancel: () => controller.abort() });
+    try {
+      await main.removeWorktree(path, force, { signal: controller.signal });
+      notify({ type: "info", title: `Removed worktree ${basename(path)}`, timeout: 3000 });
+    } catch (error) {
+      notify({ type: "error", title: "Unable to remove worktree", description: describeError(error), timeout: 9000 });
+    } finally {
+      setBusy(undefined);
+      void refresh();
+    }
+  };
+
+  /** Default location for a new worktree: a sibling directory named after the branch. */
+  function suggestWorktreePath(branch: string): string {
+    const main = mainRepository();
+    const root = main?.root ?? repository()?.root ?? process.cwd();
+    const name = branch.replace(/[\/\\:\s]+/g, "-").replace(/^-+|-+$/g, "") || "worktree";
+    return join(root, "..", `${basename(root)}-${name}`);
+  }
+
+  // --- view state ------------------------------------------------------------------------------
+  function setView(next: ViewId): void {
+    setViewSignal(next);
+    if (next === "history" && untrack(history).commits.length === 0) void loadHistory(true);
+  }
+
+  function setHistoryAllBranches(all: boolean): void {
+    setHistory((state) => ({ ...state, allBranches: all }));
+    persist({ historyAllBranches: all });
+    void loadHistory(true);
+  }
+
+  function selectCommitFile(path: string): void {
+    setCommitDetail((state) => ({ ...state, selectedPath: path }));
+  }
+
+  function setSidebarWidth(width: number): void {
+    setSidebarWidthSignal(width);
+    persist({ sidebarWidth: width });
+  }
+  function setChangesSplit(width: number): void {
+    setChangesSplitSignal(width);
+    persist({ changesSplit: width });
+  }
+  function setHistorySplit(width: number): void {
+    setHistorySplitSignal(width);
+    persist({ historySplit: width });
+  }
+
+  function persist(update: Partial<PersistedState>): void {
+    persisted = { ...persisted, ...update };
+    if (!options.statePath) return;
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      persistTimer = undefined;
+      void savePersistedState(options.statePath!, persisted).catch((error) =>
+        console.error("Unable to save Quick Git state", error),
+      );
+    }, 300);
+  }
+
+  function notify(notice: Notice): void {
+    notifier(notice);
+  }
+
+  function setNotifier(next: (notice: Notice) => void): void {
+    notifier = next;
+  }
+
+  async function flushPersistence(): Promise<void> {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = undefined;
+    }
+    if (options.statePath) await savePersistedState(options.statePath, persisted).catch(() => {});
+  }
+
+  return {
+    // state
+    repository,
+    mainRepository,
+    repositoryName,
+    opening,
+    worktrees,
+    status,
+    numstat,
+    generation,
+    refs,
+    stashes,
+    remotes,
+    recentRepositories,
+    busy,
+    view,
+    sidebarWidth,
+    changesSplit,
+    historySplit,
+    hasHead,
+    identity,
+    unstaged,
+    staged,
+    conflicts,
+    changeCount,
+    selection,
+    activeCell,
+    focusedList,
+    activeItem,
+    selectedItems,
+    diff,
+    diffRows,
+    diffStats,
+    diffSelection,
+    selectedDiffLines,
+    selectedDiffLineCount,
+    subject,
+    body,
+    amend,
+    committing,
+    canCommit,
+    headMessage,
+    agents,
+    preferredAgent,
+    generating,
+    lastGenerated,
+    history,
+    historySelection,
+    selectedCommit,
+    commitDetail,
+    // actions
+    openRepository,
+    closeRepository,
+    selectWorktree,
+    refresh: () => refresh(),
+    setSelection: (list: ListId, ranges: RowRanges) => setSelection((current) => ({ ...current, [list]: ranges })),
+    setActiveCell,
+    setFocusedList,
+    setDiffSelection,
+    stageItems,
+    unstageItems,
+    discardItems,
+    stageAll: () => operation("Stage all", (repo, signal) => repo.stageAll({ signal }), { refs: false }),
+    unstageAll: () => operation("Unstage all", (repo, signal) => repo.unstageAll({ signal }), { refs: false }),
+    toggleStaging,
+    stageHunk,
+    unstageHunk,
+    discardHunk,
+    applySelectedLines,
+    setSubject,
+    setBody,
+    setAmend,
+    commit,
+    generateMessage,
+    cancelGeneration,
+    setPreferredAgent,
+    fetch,
+    pull,
+    push,
+    switchBranch,
+    createBranch,
+    deleteBranch,
+    checkoutCommit,
+    stashPush,
+    stashApply,
+    stashPop,
+    stashDrop,
+    addWorktree,
+    removeWorktree,
+    suggestWorktreePath,
+    setView,
+    loadHistory,
+    setHistoryAllBranches,
+    setHistorySelection,
+    selectCommitFile,
+    setSidebarWidth,
+    setChangesSplit,
+    setHistorySplit,
+    persistedState: () => persisted,
+    setNotifier,
+    flushPersistence,
+    notify,
+    cancelBusy: () => busy()?.cancel?.(),
+  };
+}
+
+function rangesFor(items: readonly ChangeItem[], paths: readonly string[]): RowRanges {
+  if (paths.length === 0) return [];
+  const wanted = new Set(paths);
+  const ranges: number[][] = [];
+  items.forEach((item, index) => {
+    if (!wanted.has(item.path)) return;
+    const last = ranges.at(-1);
+    if (last && last[1] === index - 1) last[1] = index;
+    else ranges.push([index, index]);
+  });
+  return ranges;
+}
+
+export function describeError(error: unknown): string {
+  if (error instanceof GitError) return error.summary;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function truncate(text: string, length: number): string {
+  return text.length <= length ? text : `${text.slice(0, length - 1)}…`;
+}
+
+export { DEFAULT_STATE };

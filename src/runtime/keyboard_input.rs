@@ -729,6 +729,31 @@ impl Runtime {
         true
     }
 
+    /// Drop the framework's focused element while a hosted AppKit view owns keyboard focus.
+    ///
+    /// A native view that becomes first responder, by click, Tab, or its own focus state, takes
+    /// every key event from the Winit view, so the element the framework still counted as focused
+    /// would keep painting its ring and caret without ever receiving input. Blur it the way a
+    /// press on empty space does and announce the change, so the view's listeners run; the next
+    /// framework focus change makes the Winit view first responder again.
+    #[cfg(target_os = "macos")]
+    pub(super) fn release_focus_to_native_view(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(state) = &mut self.window else {
+            return;
+        };
+        let previous = state.ui.focused();
+        if previous.is_none()
+            || !state
+                .native_host
+                .as_ref()
+                .is_some_and(MacNativeHost::hosted_view_owns_focus)
+        {
+            return;
+        }
+        state.ui.blur();
+        self.announce_focus_change(event_loop, previous);
+    }
+
     pub(super) fn announce_focus_change(
         &mut self,
         event_loop: &ActiveEventLoop,

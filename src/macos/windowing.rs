@@ -917,18 +917,31 @@ pub(crate) fn position_traffic_lights(window: &Arc<Window>, position: Point) -> 
     if !window_height.is_finite() || window_height <= 0.0 {
         return Err("AppKit returned an invalid window height".to_owned());
     }
+    let current_titlebar_frame = titlebar_container.frame();
     let (titlebar_frame, button_origins) = traffic_light_layout(
         position,
         window_height,
-        titlebar_container.frame(),
+        current_titlebar_frame,
         close_frame.size.height,
         button_step,
     );
+    let buttons = [Some(close), Some(minimize), zoom];
+    // The layout is re-checked on every window update, so leave AppKit's views untouched when
+    // they already match; only a titlebar AppKit has laid out again pays for the restore.
+    let unchanged = rects_match(current_titlebar_frame, titlebar_frame)
+        && buttons.iter().zip(button_origins).all(|(button, origin)| {
+            button
+                .as_ref()
+                .is_none_or(|button| points_match(NSView::frame(button).origin, origin))
+        });
+    if unchanged {
+        return Ok(());
+    }
 
     unsafe {
         titlebar_container.setFrame(titlebar_frame);
     }
-    for (button, origin) in [Some(close), Some(minimize), zoom]
+    for (button, origin) in buttons
         .into_iter()
         .zip(button_origins)
         .filter_map(|(button, origin)| button.map(|button| (button, origin)))
@@ -951,16 +964,30 @@ pub(crate) fn position_traffic_lights(window: &Arc<Window>, position: Point) -> 
     Ok(())
 }
 
-/// Own the native resize callback that keeps one window's custom traffic-light inset stable.
+fn rects_match(a: NSRect, b: NSRect) -> bool {
+    points_match(a.origin, b.origin)
+        && (a.size.width - b.size.width).abs() <= 0.01
+        && (a.size.height - b.size.height).abs() <= 0.01
+}
+
+fn points_match(a: NSPoint, b: NSPoint) -> bool {
+    (a.x - b.x).abs() <= 0.01 && (a.y - b.y).abs() <= 0.01
+}
+
+/// Own the native window callbacks that keep one window's custom traffic-light inset stable.
 ///
 /// Winit queues `WindowEvent::Resized` from its content view's frame-change callback. AppKit can
 /// perform another private titlebar layout after that callback, so restoring the controls from the
-/// queued event alone is not authoritative. Observe the native window notification, matching
-/// GPUI's `windowDidResize:` lifecycle, and perform the titlebar layout before the notification
-/// finishes.
+/// queued event alone is not authoritative. Observe the native window notifications, matching
+/// GPUI's `windowDidResize:` lifecycle, and perform the titlebar layout before each notification
+/// finishes. AppKit also lays the titlebar out again in the display pass after the window first
+/// comes onscreen, which resets the controls to their default inset until the next resize; a window
+/// shown inactive never becomes key to trigger a restore, so the window-update notification that
+/// follows every event cycle re-checks the layout as well, at the cost of a few frame reads when
+/// nothing changed.
 pub(crate) struct MacTrafficLightHost {
     notifications: Retained<NSNotificationCenter>,
-    observer: Retained<NSObject>,
+    observers: Vec<Retained<NSObject>>,
 }
 
 impl MacTrafficLightHost {
@@ -973,29 +1000,42 @@ impl MacTrafficLightHost {
                 return;
             };
             if let Err(error) = position_traffic_lights(&window, position) {
-                tracing::warn!(%error, "could not restore the configured traffic-light position from the native resize callback");
+                tracing::warn!(%error, "could not restore the configured traffic-light position from a native window callback");
             }
         });
         let notifications = unsafe { NSNotificationCenter::defaultCenter() };
-        let observer = unsafe {
-            notifications.addObserverForName_object_queue_usingBlock(
-                Some(NSWindowDidResizeNotification),
-                Some(native_window.as_ref()),
-                None,
-                &block,
-            )
+        let observers = unsafe {
+            [
+                NSWindowDidResizeNotification,
+                NSWindowDidChangeOcclusionStateNotification,
+                NSWindowDidBecomeKeyNotification,
+                NSWindowDidExitFullScreenNotification,
+                NSWindowDidUpdateNotification,
+            ]
+            .into_iter()
+            .map(|name| {
+                notifications.addObserverForName_object_queue_usingBlock(
+                    Some(name),
+                    Some(native_window.as_ref()),
+                    None,
+                    &block,
+                )
+            })
+            .collect()
         };
         Ok(Self {
             notifications,
-            observer,
+            observers,
         })
     }
 }
 
 impl Drop for MacTrafficLightHost {
     fn drop(&mut self) {
-        unsafe {
-            self.notifications.removeObserver(self.observer.as_ref());
+        for observer in &self.observers {
+            unsafe {
+                self.notifications.removeObserver(observer.as_ref());
+            }
         }
     }
 }
