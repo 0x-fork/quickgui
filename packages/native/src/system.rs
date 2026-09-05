@@ -677,6 +677,9 @@ pub(super) enum AppServiceResponse {
     Unit(quickgui::PlatformResponse<()>),
     Boolean(quickgui::PlatformResponse<bool>),
     DockAttention(quickgui::PlatformResponse<quickgui::DockAttentionRequest>),
+    /// An outcome known up front, so tests can exercise event ordering without a runner.
+    #[cfg(test)]
+    Completed(Option<std::result::Result<(), quickgui::PlatformError>>),
 }
 
 pub(super) struct PendingAppService {
@@ -692,6 +695,12 @@ impl PendingAppService {
             kind,
             response,
         }
+    }
+
+    /// A request whose native operation has already succeeded.
+    #[cfg(test)]
+    pub(super) fn completed(request: u32, kind: &'static str) -> Self {
+        Self::new(request, kind, AppServiceResponse::Completed(Some(Ok(()))))
     }
 
     pub(super) fn request(&self) -> u32 {
@@ -717,6 +726,12 @@ impl PendingAppService {
                 }
                 Poll::Ready(Err(error)) => (None, Some(error.to_string())),
                 Poll::Pending => return Poll::Pending,
+            },
+            #[cfg(test)]
+            AppServiceResponse::Completed(result) => match result.take() {
+                Some(Ok(())) => (None, None),
+                Some(Err(error)) => (None, Some(error.to_string())),
+                None => return Poll::Pending,
             },
         };
         Poll::Ready(super::NativeEvent {

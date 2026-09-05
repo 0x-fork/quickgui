@@ -2259,6 +2259,38 @@ fn hosted_popup_menus_resolve_through_an_asynchronous_request_id() {
 }
 
 #[test]
+fn queued_events_drain_ahead_of_polled_request_completions() {
+    // The core dispatches a chosen popup item and completes the popup in the same turn, and
+    // JavaScript releases the item callbacks on the `popup-menu` completion, so the drained
+    // `menu-action` has to come first or the click is lost.
+    let mut runtime = NativeRuntime::new(NativeAppOptions::default()).expect("a bare runtime");
+    runtime
+        .pending_app_services
+        .push(system::PendingAppService::completed(9, "popup-menu"));
+    enqueue_event(
+        &runtime.events,
+        QueuedEvent {
+            kind: "menu-action",
+            window: 1,
+            target: 42,
+            value: None,
+        },
+    );
+
+    let drained = runtime
+        .drain_events()
+        .into_iter()
+        .map(|event| (event.kind, event.target))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        drained,
+        vec![("menu-action".to_owned(), 42), ("popup-menu".to_owned(), 9)]
+    );
+    assert!(runtime.pending_app_services.is_empty());
+    assert!(runtime.events.borrow().is_empty());
+}
+
+#[test]
 fn a_declared_context_menu_target_opens_the_core_cursor_point_surface() {
     let target_id = 320;
     let mut tree = NativeTree::default();

@@ -76,6 +76,10 @@ All notable user-facing changes to QuickGUI are recorded here.
 - `Host matchContents` sizes a SwiftUI host to its controls' own size, so native buttons, fields,
   toggles, and pickers align with QuickGUI elements at native density; the Liquid Glass headroom
   no longer widens or heightens the host.
+- Choosing an item in a `Menu.popup` menu now runs its `click` callback. The binding drained a
+  finished request ahead of the events queued in the same turn, so the popup's completion reached
+  JavaScript before the chosen item's action and the callbacks had already been released. Queued
+  events now drain first.
 
 ## 0.1.2 - 2026-09-04
 

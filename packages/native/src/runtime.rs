@@ -1252,6 +1252,22 @@ impl NativeRuntime {
                 + self.pending_tray.len()
                 + self.pending_app_services.len(),
         );
+        // Queued events record what already happened; a polled completion only reports that a
+        // request has finished. They must drain in that order: the core dispatches a chosen popup
+        // item and completes the popup in the same turn, and JavaScript releases the item
+        // callbacks on the `popup-menu` completion, so a completion emitted ahead of its
+        // `menu-action` would lose the click.
+        events.extend(self.events.borrow_mut().drain(..).map(|event| NativeEvent {
+            kind: event.kind.to_owned(),
+            window: event.window,
+            target: event.target,
+            value: event.value.map(|value| value.to_string()),
+            paths: None,
+            data: None,
+            width: None,
+            height: None,
+            error: None,
+        }));
         let waker = Waker::noop();
         let mut context = Context::from_waker(waker);
         let mut still_pending = Vec::with_capacity(self.pending_dialogs.len());
@@ -1318,17 +1334,6 @@ impl NativeRuntime {
             }
         }
         self.pending_app_services = still_pending;
-        events.extend(self.events.borrow_mut().drain(..).map(|event| NativeEvent {
-            kind: event.kind.to_owned(),
-            window: event.window,
-            target: event.target,
-            value: event.value.map(|value| value.to_string()),
-            paths: None,
-            data: None,
-            width: None,
-            height: None,
-            error: None,
-        }));
         events
     }
 }
