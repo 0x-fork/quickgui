@@ -150,6 +150,8 @@ export const MONO_FONT_SIZE = 12;
 export const ROW_HEIGHT = 24;
 export const DIFF_ROW_HEIGHT = 20;
 export const TITLEBAR_HEIGHT = 52;
+/** Room above the sidebar's first row for a focus ring, which the scrolling container clips. */
+export const SIDEBAR_TOP_INSET = 4;
 export const TRANSITION = "background-color 90ms, border-color 90ms, color 90ms, opacity 90ms";
 
 type Style = JSX.Style;
@@ -249,6 +251,7 @@ export function createStyles(theme: Theme) {
       minHeight: 0,
       flexDirection: "column",
       gap: 2,
+      paddingTop: SIDEBAR_TOP_INSET,
       paddingLeft: 10,
       paddingRight: 10,
       paddingBottom: 12,

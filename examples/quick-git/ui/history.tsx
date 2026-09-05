@@ -1,5 +1,5 @@
 import { Menu, type QuickGuiEvent } from "@quickgui/native";
-import { Button, Table, Text, View, capturedPointerFromEvent, type VisibleRange } from "@quickgui/solid";
+import { Button, Svg, Table, Text, View, capturedPointerFromEvent, type VisibleRange } from "@quickgui/solid";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { absoluteTime, relativeTime, type Commit, type GraphRow } from "../git/log.ts";
@@ -7,11 +7,11 @@ import { useApp } from "./context.tsx";
 import { DiffPane } from "./diff.tsx";
 import { FileName, StatusGlyph } from "./changes.tsx";
 import { Icon } from "./icons.tsx";
+import { LANE_WIDTH, paintGraphRow } from "./graph.ts";
 import { EmptyState } from "./primitives.tsx";
 import { copyText } from "./sidebar.tsx";
 import { CheckRow } from "./dialogs.tsx";
 
-const LANE_WIDTH = 14;
 const HISTORY_ROW_HEIGHT = 26;
 
 export function HistoryView() {
@@ -102,7 +102,7 @@ export function HistoryView() {
                   style={{ transition: "background-color 60ms", hover: { backgroundColor: app.theme().hover }, selected: { backgroundColor: app.theme().selection } }}
                 >
                   <Table.Cell column="graph">
-                    <Graph row={row().graph} height={HISTORY_ROW_HEIGHT} />
+                    <Graph row={row().graph} width={graphWidth()} height={HISTORY_ROW_HEIGHT} />
                   </Table.Cell>
                   <Table.Cell column="subject" style={{ minWidth: 0, gap: 6, paddingRight: 8 }}>
                     <View onContextMenu={() => contextMenu(row().commit)} style={{ display: "flex", flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6, height: "100%" }}>
@@ -150,57 +150,24 @@ export function HistoryView() {
   );
 }
 
-/** One row of the commit graph painted from views: lanes as lines, the commit as a dot. */
-function Graph(props: { row: GraphRow | undefined; height: number }) {
+/**
+ * One row of the commit graph: one tinted SVG mask per lane color, so lines stay continuous
+ * across rows and elbows are real quarter circles rather than stacked rectangles.
+ */
+function Graph(props: { row: GraphRow | undefined; width: number; height: number }) {
   const app = useApp();
-  const colors = () => app.theme().graph;
-  const x = (lane: number) => 6 + lane * LANE_WIDTH + LANE_WIDTH / 2;
-  const color = (index: number) => colors()[index % colors().length]!;
-  const middle = () => props.height / 2;
+  const palette = () => app.theme().graph;
+  const layers = createMemo(() => (props.row ? paintGraphRow(props.row, props.width, props.height) : []));
   return (
     <View style={{ position: "relative", width: "100%", height: props.height }}>
-      <Show when={props.row}>
-        {(row) => (
-          <>
-            <For each={row().passing}>
-              {(lane) => <View style={{ position: "absolute", left: x(lane.lane) - 1, top: 0, width: 2, height: props.height, backgroundColor: color(lane.color) }} />}
-            </For>
-            <For each={row().edges}>
-              {(edge) => (
-                <Show
-                  when={edge.fromLane !== edge.toLane}
-                  fallback={<View style={{ position: "absolute", left: x(edge.fromLane) - 1, top: middle(), width: 2, height: props.height - middle(), backgroundColor: color(edge.color) }} />}
-                >
-                  <View
-                    style={{
-                      position: "absolute",
-                      left: Math.min(x(edge.fromLane), x(edge.toLane)) - 1,
-                      top: middle() - 1,
-                      width: Math.abs(x(edge.toLane) - x(edge.fromLane)) + 2,
-                      height: 2,
-                      backgroundColor: color(edge.color),
-                    }}
-                  />
-                  <View style={{ position: "absolute", left: x(edge.toLane) - 1, top: middle(), width: 2, height: props.height - middle(), backgroundColor: color(edge.color) }} />
-                </Show>
-              )}
-            </For>
-            <View
-              style={{
-                position: "absolute",
-                left: x(row().lane) - (row().merge ? 4 : 4.5),
-                top: middle() - (row().merge ? 4 : 4.5),
-                width: row().merge ? 8 : 9,
-                height: row().merge ? 8 : 9,
-                borderRadius: 5,
-                backgroundColor: row().merge ? app.theme().content : color(row().color),
-                borderWidth: 2,
-                borderColor: color(row().color),
-              }}
-            />
-          </>
+      <For each={layers()}>
+        {(layer) => (
+          <Svg
+            source={layer.source}
+            style={{ position: "absolute", left: 0, top: 0, width: props.width, height: props.height, color: palette()[layer.color % palette().length]! }}
+          />
         )}
-      </Show>
+      </For>
     </View>
   );
 }

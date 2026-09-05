@@ -17,6 +17,10 @@ export interface AppContext {
   dialog: Accessor<DialogRequest | undefined>;
   openDialog: (request: DialogRequest) => void;
   closeDialog: () => void;
+  /** Ask for a repository folder and open it: in this window if it shows none, else in a new one. */
+  openRepository: () => Promise<void>;
+  /** Show `path`: focus the window that already has it, fill this window if empty, else open one. */
+  openRepositoryPath: (path: string) => Promise<void>;
 }
 
 const Context = createContext<AppContext>();

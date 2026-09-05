@@ -48,6 +48,9 @@ All notable user-facing changes to QuickGUI are recorded here.
   SwiftUI text field received every key; the runtime now watches the window's first responder and
   drops its own focus, announcing it to the view, whenever AppKit owns it, whether the move came
   from a click, Tab, or the control's own focus state.
+- A native popup menu given a position now opens there. The runtime measured the requested
+  top-left point from the bottom of the view, but Winit's content view is flipped, so a menu
+  asked to drop down from a control near the top of the window appeared near the bottom.
 - A custom traffic-light position now survives the window's first appearance. AppKit lays the
   titlebar out again in the display pass after a window comes onscreen, and again when it becomes
   key or leaves full screen, each of which reset the controls to the default inset until the next

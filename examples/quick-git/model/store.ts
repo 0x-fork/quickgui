@@ -29,7 +29,8 @@ import { Repository, type CommitFile, type NumstatEntry } from "../git/repositor
 import type { RefCollections, StashEntry } from "../git/refs.ts";
 import { stagedChanges, unstagedChanges, type ChangeItem, type RepositoryStatus } from "../git/status.ts";
 import type { Worktree } from "../git/worktree.ts";
-import { DEFAULT_STATE, rememberRepository, savePersistedState, type PersistedState } from "./persistence.ts";
+import { canonicalPath } from "./paths.ts";
+import { DEFAULT_STATE, rememberRepository, type Persistence, type PersistedState } from "./persistence.ts";
 import { watchRepository, type ChangeKind } from "./watcher.ts";
 
 export type ViewId = "changes" | "history" | "branches" | "worktrees" | "stashes";
@@ -93,8 +94,8 @@ export interface GenerationState {
 
 export interface StoreOptions {
   runner: GitRunner;
-  persisted: PersistedState;
-  statePath?: string;
+  /** Shared with every other window: the one writer of the state file. */
+  persistence: Persistence;
   /** Sends an untracked file to the Trash when discarding it. */
   trash?: (absolutePath: string) => Promise<void>;
 }
@@ -103,7 +104,17 @@ const HISTORY_PAGE = 300;
 const MAX_DIFF_ROWS = 60_000;
 
 export function createStore(options: StoreOptions) {
-  return createRoot(() => buildStore(options));
+  return createRoot((disposeRoot) => {
+    const store = buildStore(options);
+    return {
+      ...store,
+      /** Stop watching, cancel work, and release every signal; for a window that closed. */
+      dispose: () => {
+        store.dispose();
+        disposeRoot();
+      },
+    };
+  });
 }
 
 export type Store = ReturnType<typeof createStore>;
@@ -111,8 +122,8 @@ export type Store = ReturnType<typeof createStore>;
 function buildStore(options: StoreOptions) {
   const runner = options.runner;
   let notifier: (notice: Notice) => void = (notice) => console.log(`[${notice.type}] ${notice.title}`);
-  let persisted: PersistedState = { ...options.persisted };
-  let persistTimer: ReturnType<typeof setTimeout> | undefined;
+  // A snapshot seeds this window's own signals; the recent list stays live through the shared state.
+  const persisted = options.persistence.current();
   let stopWatching: (() => void) | undefined;
 
   // --- repository ------------------------------------------------------------------------------
@@ -129,7 +140,7 @@ function buildStore(options: StoreOptions) {
   const [refs, setRefs] = createSignal<RefCollections>({ local: [], remote: [], tags: [] });
   const [stashes, setStashes] = createSignal<StashEntry[]>([]);
   const [remotes, setRemotes] = createSignal<string[]>([]);
-  const [recentRepositories, setRecentRepositories] = createSignal<string[]>(persisted.recentRepositories);
+  const recentRepositories = () => options.persistence.state().recentRepositories;
   const [busy, setBusy] = createSignal<BusyState>();
   const [view, setViewSignal] = createSignal<ViewId>("changes");
   const [sidebarWidth, setSidebarWidthSignal] = createSignal(persisted.sidebarWidth);
@@ -510,18 +521,19 @@ function buildStore(options: StoreOptions) {
 
   // --- opening ---------------------------------------------------------------------------------
   async function openRepository(path: string): Promise<boolean> {
-    const target = resolve(path);
+    const target = canonicalPath(path);
     setOpening(target);
     try {
       const repo = await Repository.open(runner, target, options.trash ? { trash: options.trash } : {});
       await activate(repo, repo);
-      persist({ lastRepository: repo.root, recentRepositories: rememberRepository(persisted.recentRepositories, repo.root) });
-      setRecentRepositories(persisted.recentRepositories);
+      persist({
+        lastRepository: repo.root,
+        recentRepositories: rememberRepository(options.persistence.current().recentRepositories, repo.root),
+      });
       return true;
     } catch (error) {
       notify({ type: "error", title: `Unable to open ${basename(target)}`, description: describeError(error) });
-      setRecentRepositories((current) => current.filter((entry) => entry !== target));
-      persist({ recentRepositories: untrack(recentRepositories) });
+      persist({ recentRepositories: options.persistence.current().recentRepositories.filter((entry) => entry !== target) });
       return false;
     } finally {
       setOpening(undefined);
@@ -933,15 +945,7 @@ function buildStore(options: StoreOptions) {
   }
 
   function persist(update: Partial<PersistedState>): void {
-    persisted = { ...persisted, ...update };
-    if (!options.statePath) return;
-    if (persistTimer) clearTimeout(persistTimer);
-    persistTimer = setTimeout(() => {
-      persistTimer = undefined;
-      void savePersistedState(options.statePath!, persisted).catch((error) =>
-        console.error("Unable to save Quick Git state", error),
-      );
-    }, 300);
+    options.persistence.update(update);
   }
 
   function notify(notice: Notice): void {
@@ -952,12 +956,15 @@ function buildStore(options: StoreOptions) {
     notifier = next;
   }
 
-  async function flushPersistence(): Promise<void> {
-    if (persistTimer) {
-      clearTimeout(persistTimer);
-      persistTimer = undefined;
-    }
-    if (options.statePath) await savePersistedState(options.statePath, persisted).catch(() => {});
+  function flushPersistence(): Promise<void> {
+    return options.persistence.flush();
+  }
+
+  function dispose(): void {
+    stopWatching?.();
+    stopWatching = undefined;
+    generating()?.cancel();
+    busy()?.cancel?.();
   }
 
   return {
@@ -1058,9 +1065,10 @@ function buildStore(options: StoreOptions) {
     setSidebarWidth,
     setChangesSplit,
     setHistorySplit,
-    persistedState: () => persisted,
+    persistedState: () => options.persistence.current(),
     setNotifier,
     flushPersistence,
+    dispose,
     notify,
     cancelBusy: () => busy()?.cancel?.(),
   };

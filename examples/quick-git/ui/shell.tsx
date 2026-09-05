@@ -1,4 +1,4 @@
-import { Dialog, Window, type AppearanceMode, type QuickGuiEvent } from "@quickgui/native";
+import { Window, type AppearanceMode, type QuickGuiEvent } from "@quickgui/native";
 import {
   Button,
   Text,
@@ -12,7 +12,7 @@ import { For, Show, Switch, Match, createEffect, createMemo, createSignal } from
 import type { Store } from "../model/store.ts";
 import { BranchesView } from "./branches.tsx";
 import { ChangesView } from "./changes.tsx";
-import { registerCommands } from "./commands.ts";
+import { activateCommands, registerCommands } from "./commands.ts";
 import { AppProvider, useApp, type DialogRequest } from "./context.tsx";
 import { Dialogs } from "./dialogs.tsx";
 import { HistoryView } from "./history.tsx";
@@ -24,7 +24,12 @@ import { createStyles, themeFor } from "./theme.ts";
 import { WelcomeView } from "./welcome.tsx";
 import { WorktreesView } from "./worktrees.tsx";
 
-export function App(props: { store: Store; appearance: () => AppearanceMode }) {
+export function App(props: {
+  store: Store;
+  appearance: () => AppearanceMode;
+  openRepository: () => Promise<void>;
+  openRepositoryPath: (path: string) => Promise<void>;
+}) {
   const window = Window.getCurrentWindow();
   const theme = createMemo(() => themeFor(props.appearance()));
   const styles = createMemo(() => createStyles(theme()));
@@ -40,6 +45,8 @@ export function App(props: { store: Store; appearance: () => AppearanceMode }) {
         dialog,
         openDialog: setDialog,
         closeDialog: () => setDialog(undefined),
+        openRepository: () => props.openRepository(),
+        openRepositoryPath: (path) => props.openRepositoryPath(path),
       }}
     >
       <Toast.Provider timeout={4500} limit={3} pitch={6} swipeDirection="right">
@@ -66,12 +73,13 @@ function Shell() {
         ...(notice.timeout ? { duration: notice.timeout } : {}),
       });
     });
-    const unregister = registerCommands({
-      openRepository: () => void openRepositoryDialog(),
+    const unregister = registerCommands(app.window, {
+      openRepository: () => void app.openRepository(),
       openDialog: app.openDialog,
       focusCommitMessage: () => store.setView("changes"),
     });
     const unfocus = app.window.on("focus", () => {
+      activateCommands(app.window);
       if (store.repository()) void store.refresh();
     });
     return () => {
@@ -80,19 +88,6 @@ function Shell() {
     };
     },
   );
-
-  async function openRepositoryDialog(): Promise<void> {
-    const result = await Dialog.showOpenDialog(app.window, {
-      title: "Open Repository",
-      buttonLabel: "Open",
-      properties: ["openDirectory"],
-    });
-    const [path] = result.filePaths;
-    if (!result.canceled && path) {
-      const opened = await store.openRepository(path);
-      if (opened) store.setView("changes");
-    }
-  }
 
   let sidebarDragStart = 0;
   function handleSidebarPointer(event: QuickGuiEvent): void {
@@ -109,7 +104,7 @@ function Shell() {
 
   return (
     <View style={app.styles().app}>
-      <Show when={store.repository()} fallback={<WelcomeView openRepository={openRepositoryDialog} />}>
+      <Show when={store.repository()} fallback={<WelcomeView openRepository={app.openRepository} />}>
         <View
           style={[
             app.styles().sidebar,

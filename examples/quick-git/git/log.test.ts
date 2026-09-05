@@ -63,7 +63,7 @@ describe("graph layout", () => {
     expect(rows[2]!.edges).toEqual([]);
   });
 
-  test("opens a lane for a merge's second parent and closes it where the branches join", () => {
+  test("opens a lane for a merge's second parent and joins it at the commit where the branches meet", () => {
     // m merges f into d; f branched from b.
     const rows = layoutGraph([
       commit("m", ["d", "f"]),
@@ -72,17 +72,58 @@ describe("graph layout", () => {
       commit("b", ["a"]),
       commit("a", []),
     ]);
-    expect(rows[0]).toMatchObject({ lane: 0, merge: true, laneCount: 2 });
+    // A tip has no line coming in from above.
+    expect(rows[0]).toMatchObject({ lane: 0, merge: true, laneCount: 2, incoming: false, joins: [] });
     expect(rows[0]!.edges).toEqual([
       { fromLane: 0, toLane: 0, color: 0 },
       { fromLane: 0, toLane: 1, color: 1 },
     ]);
-    expect(rows[1]).toMatchObject({ lane: 0 });
+    expect(rows[1]).toMatchObject({ lane: 0, incoming: true });
     expect(rows[1]!.passing).toEqual([{ lane: 1, color: 1 }]);
-    // f sits in lane 1 and its parent b is already awaited in lane 0, so its line ends there.
-    expect(rows[2]).toMatchObject({ lane: 1, color: 1 });
-    expect(rows[2]!.edges).toEqual([{ fromLane: 1, toLane: 0, color: 1 }]);
-    expect(rows[3]).toMatchObject({ lane: 0, laneCount: 1 });
+    // f keeps lane 1 down to b even though lane 0 already awaits b.
+    expect(rows[2]).toMatchObject({ lane: 1, color: 1, incoming: true, laneCount: 2 });
+    expect(rows[2]!.passing).toEqual([{ lane: 0, color: 0 }]);
+    expect(rows[2]!.edges).toEqual([{ fromLane: 1, toLane: 1, color: 1 }]);
+    // Both lines meet in b's node: lane 1 joins from above and the row still spans two lanes.
+    expect(rows[3]).toMatchObject({ lane: 0, color: 0, incoming: true, laneCount: 2 });
+    expect(rows[3]!.joins).toEqual([{ fromLane: 1, color: 1 }]);
+    expect(rows[3]!.passing).toEqual([]);
+    expect(rows[3]!.edges).toEqual([{ fromLane: 0, toLane: 0, color: 0 }]);
+    expect(rows[4]).toMatchObject({ lane: 0, incoming: true, laneCount: 1, edges: [] });
+  });
+
+  test("opens a lane per second parent and joins converging lines where the commits meet", () => {
+    // m2 merges s2 and m1 merges s1; s2 follows s1 on one side branch off base.
+    const rows = layoutGraph([
+      commit("m2", ["m1", "s2"]),
+      commit("m1", ["base", "s1"]),
+      commit("s2", ["s1"]),
+      commit("s1", ["base"]),
+      commit("base", []),
+    ]);
+    expect(rows[0]!.edges).toEqual([
+      { fromLane: 0, toLane: 0, color: 0 },
+      { fromLane: 0, toLane: 1, color: 1 },
+    ]);
+    // Lane 1 still awaits s2, so m1's second parent s1 opens lane 2 rather than sharing it.
+    expect(rows[1]!.edges).toEqual([
+      { fromLane: 0, toLane: 0, color: 0 },
+      { fromLane: 0, toLane: 2, color: 2 },
+    ]);
+    expect(rows[1]!.passing).toEqual([{ lane: 1, color: 1 }]);
+    expect(rows[1]).toMatchObject({ laneCount: 3 });
+    // s2 keeps lane 1 down to s1 while lanes 0 and 2 pass by.
+    expect(rows[2]).toMatchObject({ lane: 1, color: 1, incoming: true });
+    expect(rows[2]!.passing).toEqual([
+      { lane: 0, color: 0 },
+      { lane: 2, color: 2 },
+    ]);
+    // s1 is awaited by lanes 1 and 2: it takes lane 1 and lane 2 joins it from the right.
+    expect(rows[3]).toMatchObject({ lane: 1, color: 1, incoming: true, laneCount: 3 });
+    expect(rows[3]!.joins).toEqual([{ fromLane: 2, color: 2 }]);
+    // base is awaited by lanes 0 and 1: lane 1 joins it from the right and the graph narrows.
+    expect(rows[4]).toMatchObject({ lane: 0, incoming: true, laneCount: 2 });
+    expect(rows[4]!.joins).toEqual([{ fromLane: 1, color: 1 }]);
   });
 
   test("describes relative times", () => {

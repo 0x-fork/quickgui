@@ -7,7 +7,13 @@ import { relativeTime } from "../git/log.ts";
 import type { ViewId } from "../model/store.ts";
 import { useApp } from "./context.tsx";
 import { Icon, type IconName } from "./icons.tsx";
+import { repositoryLabels } from "./labels.ts";
 import { IconButton } from "./primitives.tsx";
+import { SIDEBAR_TOP_INSET, TITLEBAR_HEIGHT } from "./theme.ts";
+
+/** Left inset of the sidebar's content, where the repository menu drops down from. */
+const SIDEBAR_INSET = 10;
+const REPOSITORY_HEADER_HEIGHT = 44;
 
 export function Sidebar() {
   const app = useApp();
@@ -22,27 +28,31 @@ export function Sidebar() {
   const currentBranch = () => store.status()?.branch;
   const activeRoot = () => store.repository()?.root;
 
+  // The header is a repository switcher: a menu dropping down from it lists every known
+  // repository with the current one checked, and a chosen one opens in its own window.
   function repositoryMenu(): void {
-    const recent = store.recentRepositories().filter((path) => path !== store.mainRepository()?.root);
+    const current = store.mainRepository()?.root;
+    const recent = store.recentRepositories();
+    const labels = repositoryLabels(recent);
     void Menu.popup(
       [
+        ...recent.map((path) => ({
+          label: labels.get(path) ?? basename(path),
+          checked: path === current,
+          click: () => {
+            if (path !== current) void app.openRepositoryPath(path);
+          },
+        })),
+        ...(recent.length > 0 ? [{ type: "separator" as const }] : []),
+        { label: "Open Repository…", click: () => void app.openRepository() },
+        { type: "separator" as const },
         { label: "Reveal in Finder", click: () => void Shell.showItemInFolder(store.repository()!.root) },
         { label: "Open in Terminal", click: () => void openInTerminal(store.repository()!.root) },
         { label: "Copy Path", click: () => void copyText(store.repository()!.root) },
-        { type: "separator" },
-        ...(recent.length > 0
-          ? [
-              {
-                type: "submenu" as const,
-                label: "Open Recent",
-                items: recent.map((path) => ({ label: basename(path), click: () => void store.openRepository(path) })),
-              },
-              { type: "separator" as const },
-            ]
-          : []),
+        { type: "separator" as const },
         { label: "Close Repository", click: () => store.closeRepository() },
       ],
-      { window: app.window },
+      { window: app.window, x: SIDEBAR_INSET, y: TITLEBAR_HEIGHT + SIDEBAR_TOP_INSET + REPOSITORY_HEADER_HEIGHT },
     );
   }
 
@@ -61,7 +71,7 @@ export function Sidebar() {
             flexDirection: "row",
             alignItems: "center",
             gap: 9,
-            height: 44,
+            height: REPOSITORY_HEADER_HEIGHT,
             flexShrink: 0,
             paddingLeft: 8,
             paddingRight: 8,

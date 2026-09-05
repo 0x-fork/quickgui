@@ -474,18 +474,27 @@ pub(crate) fn show_popup_menu(
     // the runtime while synchronous AppKit menu tracking is active.
     let view = unsafe { &*handle.ns_view.as_ptr().cast::<NSView>() };
     let (location, view) = if let Some(position) = position {
-        let frame = view.frame();
         (
-            NSPoint::new(
-                f64::from(position.x),
-                frame.size.height - f64::from(position.y),
-            ),
+            popup_location(position, view.frame().size.height, view.isFlipped()),
             Some(view),
         )
     } else {
         (unsafe { NSEvent::mouseLocation() }, None)
     };
     Ok(unsafe { native.popUpMenuPositioningItem_atLocation_inView(None, location, view) })
+}
+
+/// The AppKit location for a popup requested at `position`, window-local from the top-left.
+///
+/// AppKit takes the location in the view's own coordinates: measured from the top when the view is
+/// flipped, as Winit's content view is, and from the bottom otherwise.
+fn popup_location(position: crate::Point, view_height: f64, flipped: bool) -> NSPoint {
+    let y = if flipped {
+        f64::from(position.y)
+    } else {
+        view_height - f64::from(position.y)
+    };
+    NSPoint::new(f64::from(position.x), y)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -912,5 +921,19 @@ mod tests {
         let paste_and_match =
             default_os_action_key_equivalent(OsAction::PasteAndMatchStyle).expect("standard");
         assert_eq!(paste_and_match.0, "v");
+    }
+}
+
+#[cfg(test)]
+mod popup_location_tests {
+    use super::popup_location;
+
+    #[test]
+    fn popup_location_follows_the_view_orientation() {
+        let position = crate::Point::new(10.0, 96.0);
+        let flipped = popup_location(position, 800.0, true);
+        assert_eq!((flipped.x, flipped.y), (10.0, 96.0));
+        let unflipped = popup_location(position, 800.0, false);
+        assert_eq!((unflipped.x, unflipped.y), (10.0, 704.0));
     }
 }

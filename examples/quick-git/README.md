@@ -31,6 +31,9 @@ Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise th
   branch in a sibling directory, remove it, reveal it, open Terminal there, or launch Codex or
   Claude in it. A branch checked out in another worktree opens that worktree instead of failing.
 - Fetch, pull, and push (with automatic upstream), ahead/behind counts, and conflict awareness.
+- **Windows**: every repository gets its own window with its own state. The sidebar header drops
+  down a switcher listing recent repositories; choosing one focuses its window or opens a new one,
+  and *Open Repository…* fills an empty window or opens another.
 
 ## How it is built
 

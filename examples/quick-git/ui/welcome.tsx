@@ -29,7 +29,7 @@ export function WelcomeView(props: { openRepository: () => Promise<void> }) {
         dropKinds="files"
         onFilesDropped={(event) => {
           const [path] = dropEventFromEvent(event)?.paths ?? [];
-          if (path) void store.openRepository(path);
+          if (path) void app.openRepositoryPath(path);
         }}
         style={{
           display: "flex",
@@ -76,7 +76,7 @@ export function WelcomeView(props: { openRepository: () => Promise<void> }) {
                   aria-label={`Open ${basename(path)}`}
                   focusOnPointer={false}
                   disabled={store.opening() !== undefined}
-                  onClick={() => void store.openRepository(path)}
+                  onClick={() => void app.openRepositoryPath(path)}
                   style={{
                     display: "flex",
                     flexDirection: "row",

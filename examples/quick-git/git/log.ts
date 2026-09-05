@@ -93,7 +93,7 @@ export function parseDecorations(decorations: string): CommitRef[] {
   return refs;
 }
 
-/** One painted edge inside a graph row, from a lane in this row to a lane in the next. */
+/** One painted edge leaving a commit's node toward a parent, from its lane into a lane below. */
 export interface GraphEdge {
   fromLane: number;
   toLane: number;
@@ -101,10 +101,20 @@ export interface GraphEdge {
   color: number;
 }
 
+/** A lane from the row above whose line ends in this commit's node. */
+export interface GraphJoin {
+  fromLane: number;
+  color: number;
+}
+
 export interface GraphRow {
   /** Lane of this commit's node. */
   lane: number;
   color: number;
+  /** Whether the node's own lane continues from the row above, because a child awaited it. */
+  incoming: boolean;
+  /** Other lanes from the row above that end in this commit: children on other branches. */
+  joins: GraphJoin[];
   /** Lanes that pass straight through this row without touching the commit. */
   passing: { lane: number; color: number }[];
   /** Edges leaving this commit toward its parents, drawn into the next row. */
@@ -118,8 +128,10 @@ export interface GraphRow {
  * Assign lanes to commits in the order `git log` returned them.
  *
  * Each open lane waits for one commit (the next parent to appear). A commit takes the lane that
- * waits for it, keeps it for its first parent, and opens a lane per extra parent. Colors follow
- * lanes, so one branch keeps one color until it ends.
+ * waits for it, keeps it for its first parent, and opens a lane per extra parent. A branch line
+ * stays in its own lane until its parent's row, where it joins the parent's node, so lines
+ * converge where the history does rather than at the child. Colors follow lanes, so one branch
+ * keeps one color until it ends.
  */
 export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
   const rows: GraphRow[] = [];
@@ -136,6 +148,7 @@ export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
   };
   for (const commit of commits) {
     let lane = lanes.findIndex((entry) => entry?.sha === commit.sha);
+    const incoming = lane >= 0;
     let color: number;
     if (lane < 0) {
       color = nextColor;
@@ -144,11 +157,11 @@ export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
     } else {
       color = lanes[lane]!.color;
     }
-    // Other lanes waiting for this same commit merge into it.
-    const merging: GraphEdge[] = [];
+    // Other lanes waiting for this same commit end in its node.
+    const joins: GraphJoin[] = [];
     lanes.forEach((entry, index) => {
       if (index !== lane && entry?.sha === commit.sha) {
-        merging.push({ fromLane: index, toLane: lane, color: entry.color });
+        joins.push({ fromLane: index, color: entry.color });
         lanes[index] = null;
       }
     });
@@ -161,15 +174,10 @@ export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
     if (first === undefined) {
       lanes[lane] = null;
     } else {
-      const existing = lanes.findIndex((entry, index) => index !== lane && entry?.sha === first);
-      if (existing >= 0) {
-        // The first parent is already awaited elsewhere: this line ends into that lane.
-        edges.push({ fromLane: lane, toLane: existing, color });
-        lanes[lane] = null;
-      } else {
-        lanes[lane] = { sha: first, color };
-        edges.push({ fromLane: lane, toLane: lane, color });
-      }
+      // The line keeps its lane down to the first parent even when another lane already awaits
+      // that parent; both end in the parent's node as joins there.
+      lanes[lane] = { sha: first, color };
+      edges.push({ fromLane: lane, toLane: lane, color });
     }
     for (const parent of others) {
       const existing = lanes.findIndex((entry) => entry?.sha === parent);
@@ -186,8 +194,10 @@ export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
     rows.push({
       lane,
       color,
+      incoming,
+      joins,
       passing,
-      edges: [...merging, ...edges],
+      edges,
       laneCount: Math.max(laneCountBefore, lanes.length, lane + 1),
       merge: commit.parents.length > 1,
     });
