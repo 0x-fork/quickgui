@@ -164,7 +164,7 @@ function replaceBunWorkspaceVersion(relativePath, workspacePath, packageName) {
 const cargoPackages = [
   ["Cargo.toml", "quickgui"],
   ["crates/quickgui-system/Cargo.toml", "quickgui-system"],
-  ["packages/native/Cargo.toml", "quickgui-native-napi"],
+  ["crates/quickgui-host/Cargo.toml", "quickgui-host"],
   ["vendor/winit/Cargo.toml", "quickgui-winit"],
   ["vendor/winit/Cargo.toml.orig", "quickgui-winit"],
   ["vendor/accesskit_winit/Cargo.toml", "quickgui-accesskit-winit"],
@@ -189,7 +189,7 @@ replaceInlineCargoDependency("tests/downstream_smoke/Cargo.toml", "quickgui");
 
 for (const [relativePath, packageName] of [
   ["packages/native/package.json", "@quickgui/native"],
-  ["packages/solid/package.json", "@quickgui/solid"],
+  ["packages/ui/package.json", "@quickgui/ui"],
   ["packages/cli/package.json", "@quickgui/cli"],
 ]) {
   replaceJsonPackageVersion(relativePath, packageName);
@@ -204,10 +204,10 @@ edit("packages/cli/src/cli.ts", (contents) =>
   ),
 );
 
-for (const packageName of ["native", "solid", "cli"]) {
-  edit("packages/cli/templates/solid/package.json", (contents) =>
+for (const packageName of ["native", "ui", "cli"]) {
+  edit("packages/cli/templates/native/package.json", (contents) =>
     replaceMatches(
-      "packages/cli/templates/solid/package.json",
+      "packages/cli/templates/native/package.json",
       contents,
       new RegExp(`("@quickgui/${packageName}": "\\^)[^"]+(")`),
       (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
@@ -215,7 +215,7 @@ for (const packageName of ["native", "solid", "cli"]) {
   );
 }
 
-for (const packageName of ["native", "solid"]) {
+for (const packageName of ["native", "ui"]) {
   edit("packages/cli/src/cli.test.ts", (contents) =>
     replaceMatches(
       "packages/cli/src/cli.test.ts",
@@ -226,20 +226,6 @@ for (const packageName of ["native", "solid"]) {
   );
 }
 
-edit("packages/native/binding.js", (contents) => {
-  const comparisonPattern = /(bindingPackageVersion !== ')[^']+(')/g;
-  const errorPattern = /(package version mismatch, expected )[^ ]+( but)/g;
-  const comparisons = [...contents.matchAll(comparisonPattern)].length;
-  const errors = [...contents.matchAll(errorPattern)].length;
-  if (comparisons === 0 || comparisons !== errors) {
-    throw new Error(
-      `packages/native/binding.js: expected matching native version comparisons and errors, found ${comparisons} and ${errors}`,
-    );
-  }
-  return contents
-    .replace(comparisonPattern, (_match, prefix, suffix) => `${prefix}${version}${suffix}`)
-    .replace(errorPattern, (_match, prefix, suffix) => `${prefix}${version}${suffix}`);
-});
 
 for (const packageName of [
   "quickgui",
@@ -248,25 +234,14 @@ for (const packageName of [
   "quickgui-cosmic-text",
   "quickgui-glyphon",
   "quickgui-system",
+  "quickgui-host",
 ]) {
   replaceCargoLockPackageVersion("Cargo.lock", packageName);
 }
 
-for (const packageName of [
-  "quickgui",
-  "quickgui-winit",
-  "quickgui-accesskit-winit",
-  "quickgui-cosmic-text",
-  "quickgui-glyphon",
-  "quickgui-native-napi",
-  "quickgui-system",
-]) {
-  replaceCargoLockPackageVersion("packages/native/Cargo.lock", packageName);
-}
-
 for (const [workspacePath, packageName] of [
   ["packages/native", "@quickgui/native"],
-  ["packages/solid", "@quickgui/solid"],
+  ["packages/ui", "@quickgui/ui"],
   ["packages/cli", "@quickgui/cli"],
 ]) {
   replaceBunWorkspaceVersion("bun.lock", workspacePath, packageName);

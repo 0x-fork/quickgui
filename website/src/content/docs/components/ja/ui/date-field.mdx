@@ -1,0 +1,43 @@
+ロケールに応じた日付パーツを持つ、キーボード編集可能な分割日付フィールドです。
+
+## インポート
+
+`@quickgui/ui` から `DateField` をインポートします。
+
+```tsx
+import { DateField } from "@quickgui/ui/date-time";
+```
+
+## 使い方
+
+```tsx
+<DateField.Root value={date()} format="ymd" onValueChange={setDate}>
+  <DateField.Segment segment="year" />
+  <Text>–</Text>
+  <DateField.Segment segment="month" />
+  <Text>–</Text>
+  <DateField.Segment segment="day" />
+</DateField.Root>
+```
+
+## 構成
+
+- `DateField.Root`
+- `DateField.Segment`
+
+```tsx
+<DateField.Root>
+  <DateField.Segment />
+</DateField.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `min` | 受け入れる最小値です。 |
+| `max` | 受け入れる最大値です。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+| `disabled` | 操作を無効にし、無効状態を公開します。 |
+

@@ -2,8 +2,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { NATIVE_MODULE_ABI, type NativeModuleManifest } from "@quickgui/native/modules";
+import { NATIVE_MODULE_ABI } from "@quickgui/native/modules";
 
+import { buildProject } from "./build.ts";
 import { resolveConfig } from "./config.ts";
 import { shouldIgnoreChange } from "./dev.ts";
 import {
@@ -13,11 +14,16 @@ import {
   findZig,
   generateNativeModuleSource,
   hoistedName,
+  manifestProbeSource,
+  moduleSymbolPrefix,
+  nativeModuleFfiFunctions,
   parseZigVersion,
+  probeBuildArguments,
   zigBuildArguments,
   zigSourceFiles,
   zigTarget,
   zigVersionSupported,
+  type NativeModuleManifest,
 } from "./modules.ts";
 import { hostTarget } from "./targets.ts";
 
@@ -179,24 +185,43 @@ describe("TypeScript generation", () => {
   const source = generateNativeModuleSource({
     name: "echo",
     manifest: sampleManifest,
-    addonImportPath: "../../.quickgui/modules/echo/darwin-arm64/echo.node",
     entryDisplayPath: "modules/echo/main.zig",
     zigSource: sampleZig,
   });
 
-  test("hoists named Zig types, inlines anonymous ones, and resolves recursive references", () => {
-    expect(source).toContain('import { bindNativeModule, type NativeModuleBinding } from "@quickgui/native/modules";');
+  test("declares the module's entry points and imports only the decoders it uses", () => {
     expect(source).toContain(
-      'const binding: NativeModuleBinding = {"abi":1,"functions":[{"name":"parseHunk","params":["allocator","string"],"result":"json"},{"name":"depth","params":["json"],"result":"number"},{"name":"area","params":["json"],"result":"number"},{"name":"reverse","params":["bytes"],"result":"bytes"},{"name":"nothing","params":[],"result":"void"}]};',
+      [
+        "import {",
+        "  NativeArguments,",
+        "  allocateNativeModuleRequest,",
+        "  awaitNativeModuleResult,",
+        "  decodeNativeBytes,",
+        "  decodeNativeJson,",
+        "  decodeNativeNumber,",
+        "  decodeNativeVoid,",
+        '} from "@quickgui/native/modules";',
+      ].join("\n"),
     );
-    expect(source).toContain('return require("../../.quickgui/modules/echo/darwin-arm64/echo.node");');
+    expect(source).toContain(
+      "declare function quickgui_module_echo_call(index: number, args: Uint8Array, reply: (result: Uint8Array) => void): void;",
+    );
+    expect(source).toContain(
+      "declare function quickgui_module_echo_call_async(request: number, index: number, args: Uint8Array): void;",
+    );
+    expect(source).toContain("  quickgui_module_echo_call(index, args, (bytes: Uint8Array): void => {");
+    expect(source).toContain("  quickgui_module_echo_call_async(request, index, args);");
+    expect(source).not.toContain("decodeNativeString");
+  });
+
+  test("hoists named Zig types, inlines anonymous ones, and resolves recursive references", () => {
     expect(source).toContain(
       "export interface Hunk {\n  heading: string;\n  lines: Line[];\n  stats: { added: number; };\n}",
     );
     expect(source).toContain("export interface Line {\n  kind: Kind;\n  number?: number | null;\n}");
     expect(source).toContain('export type Kind = "context" | "added";');
     expect(source).toContain("export interface Node {\n  children?: Node[];\n}");
-    expect(source).toContain("export type Shape = { circle: number } | { none: Record<string, never> };");
+    expect(source).toContain("export type Shape = { circle?: number; none?: Record<string, never>; };");
     expect(source).not.toContain("__struct_");
   });
 
@@ -210,34 +235,50 @@ describe("TypeScript generation", () => {
         " *",
         " * Zig: `pub fn parseHunk(allocator: std.mem.Allocator, text: []const u8) !Hunk`",
         " */",
-        "export function parseHunk(text: string | Uint8Array): Hunk {",
-        "  return native.call(0, [text]) as Hunk;",
+        "export function parseHunk(text: string): Hunk {",
+        "  const args = new NativeArguments(1);",
+        "  args.string(text);",
+        '  return JSON.parse(decodeNativeJson("echo", "parseHunk", call(0, args.finish()))) as Hunk;',
         "}",
       ].join("\n"),
     );
     expect(source).toContain(
-      "export function parseHunkAsync(text: string | Uint8Array): Promise<Hunk> {\n  return native.callAsync(0, [text]) as Promise<Hunk>;\n}",
+      [
+        "export async function parseHunkAsync(text: string): Promise<Hunk> {",
+        "  const args = new NativeArguments(1);",
+        "  args.string(text);",
+        '  return JSON.parse(decodeNativeJson("echo", "parseHunk", await callAsync(0, args.finish()))) as Hunk;',
+        "}",
+      ].join("\n"),
     );
-    expect(source).toContain("export function depth(node: Node): number {");
+    expect(source).toContain(
+      "export function depth(node: Node): number {\n  const args = new NativeArguments(1);\n  args.json(JSON.stringify(node));\n  return decodeNativeNumber(\"echo\", \"depth\", call(1, args.finish()));\n}",
+    );
     expect(source).toContain("export function area(shape: Shape): number {");
-    expect(source).toContain("export function reverse(bytes: Uint8Array): Uint8Array {");
-    expect(source).toContain("export function nothing(): void {\n  return native.call(4, []) as void;\n}");
+    // `bytes` is an identifier the generated file uses itself, so the parameter is renamed.
+    expect(source).toContain(
+      "export function reverse(bytes_: Uint8Array): Uint8Array {\n  const args = new NativeArguments(1);\n  args.bytes(bytes_);\n  return decodeNativeBytes(\"echo\", \"reverse\", call(3, args.finish()));\n}",
+    );
+    expect(source).toContain(
+      "export function nothing(): void {\n  const args = new NativeArguments(0);\n  decodeNativeVoid(\"echo\", \"nothing\", call(4, args.finish()));\n}",
+    );
+    expect(source).toContain(
+      "export async function nothingAsync(): Promise<void> {\n  const args = new NativeArguments(0);\n  decodeNativeVoid(\"echo\", \"nothing\", await callAsync(4, args.finish()));\n}",
+    );
   });
 
   test("falls back to positional names and rejects unusable export names", () => {
     const positional = generateNativeModuleSource({
       name: "echo",
       manifest: { ...sampleManifest, functions: [sampleManifest.functions[0]!] },
-      addonImportPath: "./echo.node",
       entryDisplayPath: "modules/echo/main.zig",
     });
-    expect(positional).toContain("export function parseHunk(arg1: string | Uint8Array): Hunk {");
+    expect(positional).toContain("export function parseHunk(arg1: string): Hunk {");
     const reserved = { ...sampleManifest.functions[4]!, name: "delete" };
     expect(() =>
       generateNativeModuleSource({
         name: "echo",
         manifest: { ...sampleManifest, functions: [reserved] },
-        addonImportPath: "./echo.node",
         entryDisplayPath: "modules/echo/main.zig",
       }),
     ).toThrow("exports `delete`, which is not a usable JavaScript export name");
@@ -246,7 +287,6 @@ describe("TypeScript generation", () => {
       generateNativeModuleSource({
         name: "echo",
         manifest: { ...sampleManifest, functions: [sampleManifest.functions[4]!, clash] },
-        addonImportPath: "./echo.node",
         entryDisplayPath: "modules/echo/main.zig",
       }),
     ).toThrow("exports both `nothing` and `nothingAsync`");
@@ -280,6 +320,35 @@ describe("toolchain and build inputs", () => {
     expect(() => zigTarget("windows-x64")).toThrow("not supported for windows-x64");
   });
 
+  test("names entry points, FFI bindings, and the manifest probe after the module", () => {
+    expect(moduleSymbolPrefix("git")).toBe("quickgui_module_git");
+    expect(moduleSymbolPrefix("image-codec")).toBe("quickgui_module_image_codec");
+    expect(nativeModuleFfiFunctions("quickgui_module_git")).toEqual([
+      {
+        name: "quickgui_module_git_call",
+        symbol: "quickgui_module_git_call",
+        params: [
+          "u32",
+          "bytes",
+          { callback: { id: "reply", params: ["bytes", { context: "reply" }], returns: "void", lifetime: "call" } },
+          { context: "reply" },
+        ],
+        returns: "void",
+      },
+      {
+        name: "quickgui_module_git_call_async",
+        symbol: "quickgui_module_git_call_async",
+        params: ["u32", "u32", "bytes"],
+        returns: "void",
+      },
+    ]);
+    expect(manifestProbeSource("quickgui_module_git")).toContain("fputs(quickgui_module_git_manifest(), stdout);");
+    expect(manifestProbeSource("quickgui_module_git")).toContain("void quickgui_module_complete(");
+    expect(probeBuildArguments("/usr/bin/zig", "/o/probe.c", "/o/libgit.a", "/o/probe")).toEqual([
+      "/usr/bin/zig", "cc", "-o", "/o/probe", "/o/probe.c", "/o/libgit.a",
+    ]);
+  });
+
   test("builds the zig build-lib invocation", () => {
     expect(
       zigBuildArguments({
@@ -290,20 +359,20 @@ describe("toolchain and build inputs", () => {
         root: "/p/.quickgui/modules/git/darwin-arm64/root.zig",
         entry: "/p/modules/git/main.zig",
         runtime: "/n/zig/quickgui.zig",
-        output: "/p/.quickgui/modules/git/darwin-arm64/git.node",
+        output: "/p/.quickgui/modules/git/darwin-arm64/libgit.a",
         cacheDirectory: "/p/.quickgui/zig-cache",
       }),
     ).toEqual([
       "/usr/bin/zig",
       "build-lib",
-      "-dynamic",
+      "-static",
       "-OReleaseFast",
       "-target",
       "aarch64-macos",
-      "-fallow-shlib-undefined",
+      "-lc",
       "--name",
       "git",
-      "-femit-bin=/p/.quickgui/modules/git/darwin-arm64/git.node",
+      "-femit-bin=/p/.quickgui/modules/git/darwin-arm64/libgit.a",
       "--cache-dir",
       "/p/.quickgui/zig-cache",
       "--dep",
@@ -369,56 +438,29 @@ describe.skipIf(!zigAvailable)("compiling native modules", () => {
     const built = await buildNativeModules(config, { target, mode: "development", log: (line) => lines.push(line) });
     expect(built.map((module) => [module.name, module.rebuilt])).toEqual([["echo", true]]);
     expect(lines[0]).toMatch(/^Built native module echo with Zig \d+\.\d+/);
-    const addonPath = join(root, ".quickgui", "modules", "echo", target, "echo.node");
-    expect(existsSync(addonPath)).toBe(true);
+    const archivePath = join(root, ".quickgui", "modules", "echo", target, "libecho.a");
+    expect(existsSync(archivePath)).toBe(true);
+    expect(built[0]!.archivePath).toBe(archivePath);
+    expect(built[0]!.symbolPrefix).toBe("quickgui_module_echo");
+    expect(built[0]!.manifest.functions.map((spec) => spec.name)).toEqual([
+      "add", "scale", "negate", "nothing", "repeat", "lengthZ", "upper", "reverseBytes", "parseHunk",
+      "countLines", "depth", "area", "describe", "pair", "maybe", "fail", "tooBig", "sumAll", "echoAny",
+      "slowSquare",
+    ]);
     const indexPath = join(root, "modules", "echo", "index.ts");
     const generated = readFileSync(indexPath, "utf8");
-    expect(generated).toContain(`return require("../../.quickgui/modules/echo/${target}/echo.node");`);
+    expect(generated).toContain("declare function quickgui_module_echo_call(");
     expect(generated).toContain("export interface Hunk {");
-    expect(generated).toContain("export function parseHunk(text: string | Uint8Array): Hunk {");
+    expect(generated).toContain("export function parseHunk(text: string): Hunk {");
+    expect(generated).toContain("export function pair(first: number, second: string): [number, string] {");
+    expect(generated).toContain("export function echoAny(value: unknown): unknown {");
 
-    // A second build reuses the addon and leaves the entry point untouched.
+    // A second build reuses the library and leaves the entry point untouched.
     const again = await buildNativeModules(config, { target, mode: "development" });
     expect(again[0]!.rebuilt).toBe(false);
     expect(readFileSync(indexPath, "utf8")).toBe(generated);
 
-    const echo = (await import(indexPath)) as Record<string, (...values: unknown[]) => unknown>;
-    expect(echo.add!(2, 40)).toBe(42);
-    expect(echo.scale!(1.5, 2)).toBe(3);
-    expect(echo.negate!(true)).toBe(false);
-    expect(echo.nothing!()).toBeUndefined();
-    expect(echo.repeat!("ab", 3)).toBe("ababab");
-    expect(echo.repeat!(new TextEncoder().encode("é"), 2)).toBe("éé");
-    expect(echo.lengthZ!("héllo")).toBe(6);
-    expect(echo.upper!("shout")).toBe("SHOUT");
-    expect(Array.from(echo.reverseBytes!(new Uint8Array([1, 2, 3])) as Uint8Array)).toEqual([3, 2, 1]);
-    expect(echo.parseHunk!(" keep\n-old\n+new")).toEqual({
-      heading: "parsed",
-      lines: [
-        { kind: "context", text: "keep", number: 1 },
-        { kind: "removed", text: "old", number: null },
-        { kind: "added", text: "new", number: 2 },
-      ],
-      stats: { added: 1, removed: 1 },
-    });
-    expect(echo.countLines!({ heading: "h", lines: [{ kind: "added", text: "x" }], stats: { added: 1, removed: 0 } })).toBe(1);
-    expect(echo.depth!({ name: "root", children: [{ name: "a", children: [{ name: "b" }] }] })).toBe(3);
-    expect(echo.area!({ square: { side: 3 } })).toBe(9);
-    expect(echo.describe!({ none: {} })).toEqual({ none: {} });
-    expect(echo.pair!(7, "seven")).toEqual([7, "seven"]);
-    expect(echo.maybe!(null)).toBeNull();
-    expect(echo.maybe!(4)).toBe(8);
-    expect(echo.sumAll!([1, 2, 3.5])).toBe(6.5);
-    expect(echo.echoAny!({ a: [1, "x", null] })).toEqual({ a: [1, "x", null] });
-    expect(() => echo.fail!(1)).toThrow("echo.fail failed with NotFound");
-    expect(() => echo.tooBig!()).toThrow("IntegerOutOfRange");
-    expect(() => echo.add!(1.5, 1)).toThrow("NotAnInteger");
-    expect(() => echo.add!("1", 1)).toThrow("echo.add: argument 1 must be a number");
-    await expect(echo.slowSquareAsync!(100_000)).resolves.toBe(4_999_950_000);
-    await expect(Promise.all([echo.addAsync!(1, 2), echo.repeatAsync!("x", 2)])).resolves.toEqual([3, "xx"]);
-    await expect(echo.failAsync!(2)).rejects.toThrow("echo.fail failed with Invalid");
-
-    // Editing the Zig source invalidates the cached addon.
+    // Editing the Zig source invalidates the cached library.
     const entry = join(root, "modules", "echo", "main.zig");
     writeFileSync(entry, `${readFileSync(entry, "utf8")}\npub fn extra() u8 {\n    return 7;\n}\n`);
     const rebuilt = await buildNativeModules(config, { target, mode: "development" });
@@ -435,3 +477,54 @@ describe.skipIf(!zigAvailable)("compiling native modules", () => {
     ).rejects.toThrow("Zig could not compile native module echo");
   }, 240_000);
 });
+
+const hostLibraryStaged = existsSync(
+  resolve(import.meta.dir, "..", "..", "native", "lib", hostTarget(), "libquickgui_host.a"),
+);
+
+describe.skipIf(!zigAvailable || !hostLibraryStaged || Bun.which("node") === null || process.platform !== "darwin")(
+  "native modules in a compiled application",
+  () => {
+    test("calls every value shape through the FFI, synchronously and asynchronously", async () => {
+      const root = fixtureCopy();
+      const config = resolveConfig(
+        { name: "Fixture", identifier: "com.example.fixture", entry: "src/app.ts" },
+        root,
+      );
+      const result = await buildProject(config, { mode: "development", target: hostTarget() });
+      const child = Bun.spawn([result.executablePath], { cwd: root, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+      const [status, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect({ status, stderr }).toEqual({ status: 0, stderr: "" });
+      expect(stdout.trim().split("\n")).toEqual([
+        "add=42",
+        "scale=3",
+        "negate=false",
+        "repeat=ababab",
+        "lengthZ=6",
+        "upper=SHOUT",
+        "reverseBytes=3,2,1",
+        'parseHunk={"heading":"parsed","lines":[{"kind":"context","text":"keep","number":1},{"kind":"removed","text":"old","number":null},{"kind":"added","text":"new","number":2}],"stats":{"added":1,"removed":1}}',
+        "countLines=1",
+        "depth=3",
+        "area=9",
+        'describe={"none":{}}',
+        'pair=[7,"seven"]',
+        "maybeNull=null",
+        "maybe=8",
+        "sumAll=6.5",
+        'echoAny={"a":[1,"x",null]}',
+        "fail=echo.fail failed with NotFound",
+        "tooBig=echo.tooBig failed with IntegerOutOfRange",
+        "notInteger=echo.add failed with NotAnInteger",
+        "slowSquareAsync=4999950000",
+        "addAsync=3",
+        "repeatAsync=xx",
+        "failAsync=echo.fail failed with Invalid",
+      ]);
+    }, 600_000);
+  },
+);

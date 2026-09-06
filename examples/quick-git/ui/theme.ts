@@ -1,5 +1,5 @@
 import type { AppearanceMode } from "@quickgui/native";
-import type { JSX } from "@quickgui/solid";
+import type { Style } from "@quickgui/ui";
 
 export interface Theme {
   appearance: AppearanceMode;
@@ -154,7 +154,7 @@ export const TITLEBAR_HEIGHT = 52;
 export const SIDEBAR_TOP_INSET = 4;
 export const TRANSITION = "background-color 90ms, border-color 90ms, color 90ms, opacity 90ms";
 
-type Style = JSX.Style;
+
 
 /** Styles shared by every view; anything specific to one component lives with it. */
 export function createStyles(theme: Theme) {
@@ -177,7 +177,27 @@ export function createStyles(theme: Theme) {
     disabled: { opacity: 0.4 },
   });
   // AppKit push-button metrics: 22 px regular size, 6 px radius, regular-weight 13 pt label.
-  const button = (kind: "primary" | "secondary" | "danger"): Style => ({
+  const button = (kind: "primary" | "secondary" | "danger"): Style => {
+    const variant: Style = kind === "primary"
+      ? {
+          background: theme.appearance === "light" ? "linear-gradient(180deg, #2b8cff, #0a74f2)" : "linear-gradient(180deg, #3b95ff, #0f7bff)",
+          color: theme.textOnAccent,
+          boxShadow: "inset 0 0.5px 0 #ffffff33, 0 0.5px 1px #00000033",
+          hover: { background: theme.appearance === "light" ? "linear-gradient(180deg, #2483f4, #0568e0)" : "linear-gradient(180deg, #4a9fff, #1f86ff)" },
+          active: { opacity: 0.85 },
+        }
+      : {
+          backgroundColor: theme.appearance === "light" ? "#ffffff" : "#5a5a5e",
+          color: kind === "danger" ? theme.danger : theme.text,
+          boxShadow:
+            theme.appearance === "light"
+              ? "0 0 0 0.5px #00000024, 0 0.5px 1.5px #0000001f"
+              : "0 0 0 0.5px #ffffff1a, 0 0.5px 1.5px #00000066",
+          hover: { backgroundColor: theme.appearance === "light" ? "#f4f4f4" : "#68686c" },
+          active: { backgroundColor: theme.appearance === "light" ? "#e8e8e8" : "#77777b" },
+        };
+    return {
+      ...variant,
     display: "flex",
     height: 22,
     flexShrink: 0,
@@ -196,25 +216,9 @@ export function createStyles(theme: Theme) {
     outlineOffset: 2,
     focus: { outline: `3px solid ${theme.focusRing}` },
     disabled: { opacity: 0.4 },
-    ...(kind === "primary"
-      ? {
-          background: theme.appearance === "light" ? "linear-gradient(180deg, #2b8cff, #0a74f2)" : "linear-gradient(180deg, #3b95ff, #0f7bff)",
-          color: theme.textOnAccent,
-          boxShadow: "inset 0 0.5px 0 #ffffff33, 0 0.5px 1px #00000033",
-          hover: { background: theme.appearance === "light" ? "linear-gradient(180deg, #2483f4, #0568e0)" : "linear-gradient(180deg, #4a9fff, #1f86ff)" },
-          active: { opacity: 0.85 },
-        }
-      : {
-          backgroundColor: theme.appearance === "light" ? "#ffffff" : "#5a5a5e",
-          color: kind === "danger" ? theme.danger : theme.text,
-          boxShadow:
-            theme.appearance === "light"
-              ? "0 0 0 0.5px #00000024, 0 0.5px 1.5px #0000001f"
-              : "0 0 0 0.5px #ffffff1a, 0 0.5px 1.5px #00000066",
-          hover: { backgroundColor: theme.appearance === "light" ? "#f4f4f4" : "#68686c" },
-          active: { backgroundColor: theme.appearance === "light" ? "#e8e8e8" : "#77777b" },
-        }),
-  });
+
+    };
+  };
   return {
     app: {
       position: "relative",

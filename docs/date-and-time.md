@@ -200,4 +200,4 @@ asynchronous `onValueChange`, and a month grid additionally reports the focused 
 displayed month. A time-field segment the core does not own — the seconds segment of a field
 without `showSeconds`, or the period segment of a twenty-four-hour field — contributes no layout,
 paint, or accessibility node. See the
-[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).

@@ -614,7 +614,7 @@ for (const locale of locales) {
     const description = descriptions[key]
     if (!description) throw new Error(`Missing ${locale} description: ${key}`)
 
-    const family = component.kind === 'swift-ui' ? 'swift-ui' : 'solid'
+    const family = component.kind === 'swift-ui' ? 'swift-ui' : 'ui'
     const sourcePath = resolve(componentRoot, family, `${component.slug}.mdx`)
     const destination = resolve(
       componentRoot,

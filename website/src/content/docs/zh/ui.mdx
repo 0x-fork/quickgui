@@ -1,0 +1,75 @@
+QuickGUI 使用 scriptc 将 TypeScript 和 TSX 编译为原生代码。TypeScript 7 负责转换 JSX，Rust 核心负责布局、渲染、输入和平台主线程。Bun 仅用于开发工具。
+
+从 `@quickgui/ui` 导入信号。Setter 接收值，例如 `setCount(count() + 1)`。自定义组件的动态属性声明为 `Accessor<T>`，通过 `props.value()` 读取。`KeyedFor` 在不可变数据更新时保留行，并向子组件提供项访问器。异步数据通过函数、信号和清理回调管理。
+
+## 渲染模型
+
+`createRenderer` 会把一个 QuickGUI UI 根节点挂载到 `Window` 中。JSX 创建的是保留式 QuickGUI 节点，而不是 DOM 元素。
+
+```tsx
+new Window({
+  title: "Tasks",
+  renderer: createRenderer(() => <Tasks />),
+});
+```
+
+Signal 只更新受影响的保留属性。QuickGUI 会重绘发生变化的区域；没有变化时则保持空闲。
+
+## 响应式状态
+
+照常使用 QuickGUI UI 的 Signal、Memo、Resource 和控制流。
+
+```tsx
+function Counter() {
+  const [count, setCount] = createSignal(0);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text>{count()}</Text>
+      <Button onClick={() => setCount(count() + 1)}>
+        <Text>Increment</Text>
+      </Button>
+    </View>
+  );
+}
+```
+
+原生回调会异步进入 QuickGUI UI。回调收到的是核心已经确定的结果；JavaScript 绝不会同步向原生主线程索取值。
+
+## 窗口生命周期
+
+请在 `app.whenReady()` 完成后创建窗口。当 macOS 激活一个没有可见窗口的应用时，通过 `reopen` 事件重新创建主窗口。
+
+```tsx
+app.onReopen( ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
+});
+```
+
+## 当前窗口
+
+如果某项操作属于特定窗口，请在由 QuickGUI 窗口渲染器挂载的组件中使用 `Window.getCurrentWindow()`。
+
+```tsx
+function CloseButton() {
+  const window = Window.getCurrentWindow();
+  return <Button onClick={() => window.close()}><Text>Close</Text></Button>;
+}
+```
+
+## 路由
+
+QuickGUI UI 路由器会投影 QuickGUI 由核心管理的路由表和容量受限的内存历史。
+
+```tsx
+import { Router, route } from "@quickgui/ui/router";
+
+<Router initialPath="/" routes={[
+  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
+]} />;
+```
+
+在 `Router` 下使用 `Link`、`Outlet`、`useLocation`、`useParams`、`useSearchParams`、`useNavigate` 和 `useRouter`。
+
+
+路由参数与查询参数为 `Map<string, string>` 访问器，例如 `params().get("id")`。路由声明是静态的，布局通过 `Outlet` 渲染匹配的子路由。

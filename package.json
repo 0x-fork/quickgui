@@ -10,14 +10,14 @@
   ],
   "scripts": {
     "build:native": "bun run --filter @quickgui/native build",
-    "test:js": "bun run modules:examples && bun test --conditions=browser ./packages/native ./packages/solid ./packages/cli ./examples/ai-chat-solid/history.test.ts ./examples/quick-git",
+    "test:js": "bun test ./packages/native ./packages/ui ./packages/cli",
     "typecheck:js": "bunx tsc -p tsconfig.json --noEmit",
     "version:sync": "node scripts/sync-release-version.mjs",
-    "version:check": "node scripts/sync-release-version.mjs --check",
-    "modules:examples": "bun run --filter quick-git modules"
+    "version:check": "node scripts/sync-release-version.mjs --check"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "latest"
+    "typescript": "7.0.2",
+    "@types/node": "^24.0.0"
   }
 }

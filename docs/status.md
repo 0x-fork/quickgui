@@ -100,7 +100,7 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
-- nested interaction-state styling in `@quickgui/solid`, at protocol v30: `style.hover`,
+- nested interaction-state styling in `@quickgui/ui`, at protocol v30: `style.hover`,
   `active`, `focus`, `disabled`, `invalid`, `dragging`, `dragOver`, `groupHover`, `groupActive`,
   and `focusWithin` objects carrying every property the core's `ElementStateStyle` can swap, group
   states listing one entry per group they follow, a boolean or named `group` prop marking the group
@@ -145,14 +145,13 @@ Implemented now:
   and exposed as a signal-friendly accessor (`usePopoverPlacement`, `useTooltipPlacement`,
   `useSliderState`, `useNumberFieldState`, `useGaugeState`, `useTabsState`), which is how an
   application styles from the real placement the way Base UI styles from `data-side`;
-- JavaScript bindings for the Base UI parity components, at protocol v24: Solid `Separator`,
+- JavaScript bindings for the Base UI parity components, at protocol v31: QuickGUI UI `Separator`,
   `Avatar` (`Root`/`Image`/`Fallback`), `CheckboxGroup` with `Checkbox.Root value`/`parent`
-  members, `PreviewCard`, `ScrollArea`, `OtpField`, `Drawer`, and `NavigationMenu`, each using Base
+  members, `PreviewCard`, `ScrollArea`, `OtpField`, and `NavigationMenu`, each using Base
   UI's own compound and prop names. Every root allocates one bounded scope internally, so the parts
   of an instance resolve to the core's derived identities with no registry; the core keeps the
   avatar load status, the checked value set, the hover and close deadlines, the clamped scroll
-  offsets and derived overflow flags, every OTP slot and its completion edge, the drawer's snap
-  points and captured swipe, and the navigation menu's open item, roving Tab stop, and activation
+  offsets and derived overflow flags, every OTP slot and its completion edge, and the navigation menu's open item, roving Tab stop, and activation
   direction, and reports each of them as one asynchronous `componentchange` event. A part whose
   activation, editing, gesture, or dismissal the core owns ignores a declared listener for that same
   edge rather than registering it twice, and a malformed declaration declares nothing instead of
@@ -168,34 +167,34 @@ Implemented now:
   `transformOrigin`, `mixBlendMode`, and hover/active/focus gradient, outline, and transform
   variants. Every declaration is parsed once in Rust into the core's own bounded value type, and a
   declaration the grammar does not cover declares nothing rather than reaching the core;
-- JavaScript bindings for the declared option sources: Solid `Select`, `Combobox`, and
+- JavaScript bindings for the declared option sources: QuickGUI UI `Select`, `Combobox`, and
   `Autocomplete` compound parts declaring a bounded option source — one `items` array or child
   `Option` nodes — the controlled value, the controlled input text, the filter mode, and one
   bounded `appearance` block the Rust core renders every popover row from in its own native window,
   so filtering, highlight movement, typeahead, surface placement, dismissal, and commit policy stay
   in the core and travel back as asynchronous `componentchange` and `commit` payloads;
-- JavaScript bindings for the virtual collections: Solid `Table` (`Root`/`Header`/`Row`/`Cell`) and
+- JavaScript bindings for the virtual collections: QuickGUI UI `Table` (`Root`/`Header`/`Row`/`Cell`) and
   `Tree` (`Root`/`Row`) declaring columns with sort state and widths, `rowCount`, selection mode
   and controlled selection ranges, the inline-edit position, a tree node source with lazy `pending`
   branches, controlled expansion and selection, and an atomically validated `setChildren` splice,
   with the core owning the virtual window it reports through `onVisibleRangeChange`, column
   resize and reorder, keyboard navigation, and the inline-edit lifetime;
-- JavaScript bindings for the remaining stateful field components: Solid `NumberField`,
+- JavaScript bindings for the remaining stateful field components: QuickGUI UI `NumberField`,
   `DateField`, `TimeField`, `Calendar`, `Menubar`, and a declared `Toast` queue, with the core
   owning numeric parsing and clamping, the bounded stepper repeat, civil-value segment arithmetic,
   month and year movement, menubar roving focus, and the exact toast auto-dismiss deadline the
   binding sleeps on with one `request_repaint_at` instead of a timer of its own;
-- JavaScript bindings for the declared range, ordering, and roving-focus components: Solid
+- JavaScript bindings for the declared range, ordering, and roving-focus components: QuickGUI UI
   `Slider` (single-thumb and range), `Splitter`, `Toolbar`, and `ToggleGroup` compound parts
   declared ahead of time as bounded protocol properties, with the Rust core owning clamping, step
   snapping, thumb ordering, captured pointer arithmetic, pane-size conservation, wrapping arrow
   navigation, disabled-item skipping, and the single roving Tab stop, and every result travelling
   back as one asynchronous `componentchange` payload;
-- JavaScript bindings for the unstyled selection, tab, disclosure, and field descriptors: Solid
+- JavaScript bindings for the unstyled selection, tab, disclosure, and field descriptors: QuickGUI UI
   `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`, `Accordion`, `Field`, and
   `Fieldset` compound parts declared ahead of time as bounded protocol properties, so the Rust core
   keeps ownership of part identity, roles, roving/arrow keyboard behavior, label and description
-  relationships, and inactive-panel mount policy; plus controlled Solid `Dialog`/`AlertDialog`
+  relationships, and inactive-panel mount policy; plus controlled QuickGUI UI `Dialog`/`AlertDialog`
   in-window modal parts whose overlay portal the core mounts only while open and whose
   Escape/backdrop dismissal policy is declared ahead of time, and a delayed native `tooltip`
   property with placement, delay, gap, and viewport-margin controls;
@@ -213,15 +212,14 @@ Implemented now:
 - raster element backgrounds with `Auto`/`Cover`/`Contain`/`Fixed` sizing, four repeat modes, and
   fractional background positions, painted through the existing bounded image primitive and masked
   by the element's rounded corners;
-- experimental macOS Bun/N-API hosting with an externally pumped main-thread application loop,
+- macOS TypeScript/TSX compilation through scriptc and a static Rust C ABI host with a native main-thread application loop,
   a core-backed singleton application readiness lifecycle, dynamically created `Window` instances,
   independent transactional bounded retained trees,
-  window-routed bounded click/hover/input/submit/dismiss delivery, and an unstyled Solid 2 renderer
+  window-routed bounded click/hover/input/submit/dismiss delivery, and an unstyled QuickGUI UI renderer
   exposing `View`, `Text`, `Button`, `Input`, `TextArea`, retained core `Markdown`, variable-height
   `VirtualList`, and controlled core-backed in-window `Popover`, plus a project CLI for
   safe initialization, stable real-`.app` development hosts, candidate-first source restart, and
-  self-contained signed production packaging; this is a first vertical slice, not yet parity with
-  the Rust framework surface or a published JavaScript release;
+  self-contained signed production packaging; the compiled application pipeline currently targets macOS;
 - declared JavaScript popover and context menus over the Rust `PopoverMenu` model and cursor-point
   `ContextMenuState`, with one bounded JSON item model, core-owned validation, typeahead, toggle
   policy, submenu surfaces, and stable-id `onSelect` events; plus JavaScript CSS Grid tracks and

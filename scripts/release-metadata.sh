@@ -42,14 +42,14 @@ assert_version "quickgui-accesskit-winit crate version" "$(cargo_version vendor/
 assert_version "quickgui-cosmic-text crate version" "$(cargo_version vendor/cosmic_text/Cargo.toml)" "$release_version"
 assert_version "quickgui-glyphon crate version" "$(cargo_version vendor/glyphon/Cargo.toml)" "$release_version"
 assert_version "quickgui-system crate version" "$(cargo_version crates/quickgui-system/Cargo.toml)" "$release_version"
-assert_version "native binding crate version" "$(cargo_version packages/native/Cargo.toml)" "$release_version"
+assert_version "native host crate version" "$(cargo_version crates/quickgui-host/Cargo.toml)" "$release_version"
 assert_version "@quickgui/native version" "$(manifest_version packages/native/package.json)" "$release_version"
-assert_version "@quickgui/solid version" "$(manifest_version packages/solid/package.json)" "$release_version"
+assert_version "@quickgui/ui version" "$(manifest_version packages/ui/package.json)" "$release_version"
 assert_version "@quickgui/cli version" "$(manifest_version packages/cli/package.json)" "$release_version"
 assert_version "CLI_VERSION" "$(sed -n 's/^export const CLI_VERSION = "\([^"]*\)";$/\1/p' packages/cli/src/cli.ts)" "$release_version"
-assert_version "Solid template native dependency" "$(template_dependency packages/cli/templates/solid/package.json @quickgui/native)" "^$release_version"
-assert_version "Solid template renderer dependency" "$(template_dependency packages/cli/templates/solid/package.json @quickgui/solid)" "^$release_version"
-assert_version "Solid template CLI dependency" "$(template_dependency packages/cli/templates/solid/package.json @quickgui/cli)" "^$release_version"
+assert_version "Native template native dependency" "$(template_dependency packages/cli/templates/native/package.json @quickgui/native)" "^$release_version"
+assert_version "Native template renderer dependency" "$(template_dependency packages/cli/templates/native/package.json @quickgui/ui)" "^$release_version"
+assert_version "Native template CLI dependency" "$(template_dependency packages/cli/templates/native/package.json @quickgui/cli)" "^$release_version"
 
 release_tag=${QUICKGUI_RELEASE_TAG:-}
 if [[ -z $release_tag && ${GITHUB_REF_TYPE:-} == tag ]]; then

@@ -1,151 +1,218 @@
+/**
+ * The application-side retained node tree.
+ *
+ * Nodes are thin: an id, a tag, a parent, children, and the listeners the application attached.
+ * Property values are not retained here; the Rust host keeps the committed tree and every
+ * reactive binding remembers its own last value. A subtree that is not mounted in a window
+ * records its mutations into one detached buffer that is spliced into the window batch, in
+ * order, the moment the subtree is inserted, so building a view never waits on the host.
+ */
+
 import {
+  MutationBatch,
   NativeNodeTag,
+  NO_ANCHOR,
   PropertyCode,
   type NativePropertyValue,
 } from "./protocol.ts";
+import { hostApplyBatch, hostFocusNode } from "./ffi.ts";
 
-export type ColorValue = number | string;
-export type NativeElementName =
-  | "view"
-  | "div"
-  | "text"
-  | "button"
-  | "input"
-  | "textarea"
-  | "markdown"
-  | "virtual-list"
-  | "terminal"
-  | "svg"
-  | "image"
-  | "shader"
-  | "swift-ui-host"
-  | "swift-ui-button"
-  | "swift-ui-quickgui-host"
-  | "swift-ui-popover"
-  | "swift-ui-popover-trigger"
-  | "swift-ui-popover-content"
-  | "swift-ui-slider"
-  | "swift-ui-toggle"
-  | "swift-ui-progress-view"
-  | "swift-ui-stepper"
-  | "swift-ui-text-field"
-  | "swift-ui-picker"
-  | "swift-ui-date-picker"
-  | "swift-ui-color-picker"
-  | "swift-ui-gauge";
-export type NativeEventType =
-  | "click"
-  | "mouseenter"
-  | "mouseleave"
-  | "input"
-  | "submit"
-  | "dismiss"
-  | "terminal"
-  | "pointer"
-  | "presentationchange"
-  | "menuselect"
-  | "keydown"
-  | "keyup"
-  | "mousedown"
-  | "mouseup"
-  | "mousemove"
-  | "dblclick"
-  | "wheel"
-  | "contextmenu"
-  | "pinch"
-  | "rotate"
-  | "smartmagnify"
-  | "pressure"
-  | "focus"
-  | "blur"
-  | "action"
-  | "dragstart"
-  | "dragend"
-  | "drop"
-  | "filesdropped"
-  | "componentchange"
-  | "commit";
+// Event types, numbered so listeners live in plain arrays.
+export const EVENT_CLICK = 1;
+export const EVENT_MOUSE_ENTER = 2;
+export const EVENT_MOUSE_LEAVE = 3;
+export const EVENT_INPUT = 4;
+export const EVENT_SUBMIT = 5;
+export const EVENT_DISMISS = 6;
+export const EVENT_TERMINAL = 7;
+export const EVENT_POINTER = 8;
+export const EVENT_PRESENTATION_CHANGE = 9;
+export const EVENT_MENU_SELECT = 10;
+export const EVENT_KEY_DOWN = 11;
+export const EVENT_KEY_UP = 12;
+export const EVENT_MOUSE_DOWN = 13;
+export const EVENT_MOUSE_UP = 14;
+export const EVENT_MOUSE_MOVE = 15;
+export const EVENT_DOUBLE_CLICK = 16;
+export const EVENT_WHEEL = 17;
+export const EVENT_CONTEXT_MENU = 18;
+export const EVENT_PINCH = 19;
+export const EVENT_ROTATE = 20;
+export const EVENT_SMART_MAGNIFY = 21;
+export const EVENT_PRESSURE = 22;
+export const EVENT_FOCUS = 23;
+export const EVENT_BLUR = 24;
+export const EVENT_ACTION = 25;
+export const EVENT_DRAG_START = 26;
+export const EVENT_DRAG_END = 27;
+export const EVENT_DROP = 28;
+export const EVENT_FILES_DROPPED = 29;
+export const EVENT_COMPONENT_CHANGE = 30;
+export const EVENT_COMMIT = 31;
 
-/** Declared input listeners whose presence is one boolean property. */
-const inputListenerProperties: ReadonlyMap<NativeEventType, PropertyCode> = new Map([
-  ["keydown", PropertyCode.KeyDownListener],
-  ["keyup", PropertyCode.KeyUpListener],
-  ["mousedown", PropertyCode.MouseDownListener],
-  ["mouseup", PropertyCode.MouseUpListener],
-  ["mousemove", PropertyCode.MouseMoveListener],
-  ["dblclick", PropertyCode.DoubleClickListener],
-  ["wheel", PropertyCode.ScrollListener],
-  ["contextmenu", PropertyCode.ContextMenuListener],
-  ["pinch", PropertyCode.PinchListener],
-  ["rotate", PropertyCode.RotationListener],
-  ["smartmagnify", PropertyCode.SmartMagnifyListener],
-  ["pressure", PropertyCode.PressureListener],
-  ["action", PropertyCode.ActionListener],
-  ["drop", PropertyCode.DropListener],
-  ["filesdropped", PropertyCode.DropListener],
-]);
-export type NativeEventListener = (event: QuickGuiEvent) => void;
-
-export interface NativeNodeHost {
-  readonly nativeId: number;
-  readonly app: { readonly nativeId: number };
-  readonly nodes: Map<number, NativeNode>;
-  readonly closed: boolean;
-  flush(): number | undefined;
-  _trackMount(dispose: () => void): () => void;
-  _focusNode(node: NativeNode): boolean;
-  _enqueueCreate(node: NativeNode): void;
-  _enqueueProperty(
-    node: NativeNode,
-    property: PropertyCode,
-    value: NativePropertyValue,
-    color: boolean,
-  ): void;
-  _enqueueText(node: NativeNode): void;
-  _enqueueInsert(
-    parent: NativeNode,
-    child: NativeNode,
-    before?: NativeNode,
-  ): void;
-  _enqueueRemove(parent: NativeNode, child: NativeNode): void;
-  _enqueueCleanup(parent: NativeNode, children: readonly NativeNode[]): void;
+/** Map one native event kind onto its numeric type, or 0 for kinds nodes never receive. */
+export function eventTypeFromKind(kind: string): number {
+  switch (kind) {
+    case "click":
+      return EVENT_CLICK;
+    case "mouseenter":
+      return EVENT_MOUSE_ENTER;
+    case "mouseleave":
+      return EVENT_MOUSE_LEAVE;
+    case "input":
+      return EVENT_INPUT;
+    case "submit":
+      return EVENT_SUBMIT;
+    case "dismiss":
+      return EVENT_DISMISS;
+    case "terminal":
+      return EVENT_TERMINAL;
+    case "pointer":
+      return EVENT_POINTER;
+    case "presentationchange":
+      return EVENT_PRESENTATION_CHANGE;
+    case "menuselect":
+      return EVENT_MENU_SELECT;
+    case "keydown":
+      return EVENT_KEY_DOWN;
+    case "keyup":
+      return EVENT_KEY_UP;
+    case "mousedown":
+      return EVENT_MOUSE_DOWN;
+    case "mouseup":
+      return EVENT_MOUSE_UP;
+    case "mousemove":
+      return EVENT_MOUSE_MOVE;
+    case "dblclick":
+      return EVENT_DOUBLE_CLICK;
+    case "wheel":
+      return EVENT_WHEEL;
+    case "contextmenu":
+      return EVENT_CONTEXT_MENU;
+    case "pinch":
+      return EVENT_PINCH;
+    case "rotate":
+      return EVENT_ROTATE;
+    case "smartmagnify":
+      return EVENT_SMART_MAGNIFY;
+    case "pressure":
+      return EVENT_PRESSURE;
+    case "focus":
+      return EVENT_FOCUS;
+    case "blur":
+      return EVENT_BLUR;
+    case "action":
+      return EVENT_ACTION;
+    case "dragstart":
+      return EVENT_DRAG_START;
+    case "dragend":
+      return EVENT_DRAG_END;
+    case "drop":
+      return EVENT_DROP;
+    case "filesdropped":
+      return EVENT_FILES_DROPPED;
+    case "componentchange":
+      return EVENT_COMPONENT_CHANGE;
+    case "commit":
+      return EVENT_COMMIT;
+    default:
+      return 0;
+  }
 }
 
-let nextNodeId = 1;
-
-export class NativeNode {
-  readonly id: number;
-  readonly tag: NativeNodeTag;
-  text: string;
-  parent: NativeNode | undefined;
-  readonly children: NativeNode[] = [];
-  readonly properties = new Map<PropertyCode, NativePropertyValue>();
-  readonly colorProperties = new Set<PropertyCode>();
-  readonly listeners = new Map<NativeEventType, NativeEventListener>();
-  host: NativeNodeHost | undefined;
-  materialized = false;
-
-  constructor(tag: NativeNodeTag, text = "", id = allocateNodeId()) {
-    this.id = id;
-    this.tag = tag;
-    this.text = text;
+/** The declared-listener property the host reads for one event type, or 0 when it is implicit. */
+function listenerPropertyFor(type: number): number {
+  switch (type) {
+    case EVENT_CLICK:
+      return PropertyCode.ClickListener;
+    case EVENT_MOUSE_ENTER:
+    case EVENT_MOUSE_LEAVE:
+      return PropertyCode.HoverListener;
+    case EVENT_INPUT:
+      return PropertyCode.InputListener;
+    case EVENT_SUBMIT:
+      return PropertyCode.SubmitListener;
+    case EVENT_DISMISS:
+      return PropertyCode.DismissListener;
+    case EVENT_TERMINAL:
+      return PropertyCode.TerminalStatusListener;
+    case EVENT_POINTER:
+      return PropertyCode.PointerListener;
+    case EVENT_PRESENTATION_CHANGE:
+      return PropertyCode.SwiftUIPresentationListener;
+    case EVENT_MENU_SELECT:
+      return PropertyCode.SelectListener;
+    case EVENT_KEY_DOWN:
+      return PropertyCode.KeyDownListener;
+    case EVENT_KEY_UP:
+      return PropertyCode.KeyUpListener;
+    case EVENT_MOUSE_DOWN:
+      return PropertyCode.MouseDownListener;
+    case EVENT_MOUSE_UP:
+      return PropertyCode.MouseUpListener;
+    case EVENT_MOUSE_MOVE:
+      return PropertyCode.MouseMoveListener;
+    case EVENT_DOUBLE_CLICK:
+      return PropertyCode.DoubleClickListener;
+    case EVENT_WHEEL:
+      return PropertyCode.ScrollListener;
+    case EVENT_CONTEXT_MENU:
+      return PropertyCode.ContextMenuListener;
+    case EVENT_PINCH:
+      return PropertyCode.PinchListener;
+    case EVENT_ROTATE:
+      return PropertyCode.RotationListener;
+    case EVENT_SMART_MAGNIFY:
+      return PropertyCode.SmartMagnifyListener;
+    case EVENT_PRESSURE:
+      return PropertyCode.PressureListener;
+    case EVENT_FOCUS:
+    case EVENT_BLUR:
+      return PropertyCode.FocusListener;
+    case EVENT_ACTION:
+      return PropertyCode.ActionListener;
+    case EVENT_DRAG_START:
+    case EVENT_DRAG_END:
+      return PropertyCode.DragListener;
+    case EVENT_DROP:
+    case EVENT_FILES_DROPPED:
+      return PropertyCode.DropListener;
+    case EVENT_COMPONENT_CHANGE:
+      return PropertyCode.ComponentChangeListener;
+    case EVENT_COMMIT:
+      return PropertyCode.CommitListener;
+    default:
+      return 0;
   }
+}
 
-  /** Focus this mounted node, matching the web `HTMLElement.focus()` shape. */
-  focus(): boolean {
-    return this.host?._focusNode(this) ?? false;
+/** Event types that share one declared-listener property. */
+function sharesListenerProperty(type: number, other: number): boolean {
+  return listenerPropertyFor(type) === listenerPropertyFor(other);
+}
+
+export type NativeEventListener = (event: QuickGuiEvent) => void;
+
+export class NativeListener {
+  readonly type: number;
+  readonly listener: NativeEventListener;
+
+  constructor(type: number, listener: NativeEventListener) {
+    this.type = type;
+    this.listener = listener;
   }
 }
 
 export class QuickGuiEvent {
-  readonly type: NativeEventType;
+  readonly type: number;
   readonly target: NativeNode;
   currentTarget: NativeNode;
   defaultPrevented = false;
   propagationStopped = false;
+  /** The bounded payload the host attached, usually JSON, or `undefined`. */
   readonly value: string | undefined;
 
-  constructor(type: NativeEventType, target: NativeNode, value?: string) {
+  constructor(type: number, target: NativeNode, value: string | undefined) {
     this.type = type;
     this.target = target;
     this.currentTarget = target;
@@ -161,260 +228,339 @@ export class QuickGuiEvent {
   }
 }
 
-function nativeNodeTag(name: NativeElementName): NativeNodeTag {
-  switch (name) {
-    case "button":
-      return NativeNodeTag.Button;
-    case "input":
-    case "textarea":
-      return NativeNodeTag.Input;
-    case "markdown":
-      return NativeNodeTag.Markdown;
-    case "virtual-list":
-      return NativeNodeTag.VirtualList;
-    case "terminal":
-      return NativeNodeTag.Terminal;
-    case "svg":
-      return NativeNodeTag.Svg;
-    case "image":
-      return NativeNodeTag.Image;
-    case "shader":
-      return NativeNodeTag.Shader;
-    case "swift-ui-host":
-      return NativeNodeTag.SwiftUIHost;
-    case "swift-ui-button":
-      return NativeNodeTag.SwiftUIButton;
-    case "swift-ui-quickgui-host":
-      return NativeNodeTag.SwiftUIQuickGUIHost;
-    case "swift-ui-popover":
-      return NativeNodeTag.SwiftUIPopover;
-    case "swift-ui-popover-trigger":
-      return NativeNodeTag.SwiftUIPopoverTrigger;
-    case "swift-ui-popover-content":
-      return NativeNodeTag.SwiftUIPopoverContent;
-    case "swift-ui-slider":
-      return NativeNodeTag.SwiftUISlider;
-    case "swift-ui-toggle":
-      return NativeNodeTag.SwiftUIToggle;
-    case "swift-ui-progress-view":
-      return NativeNodeTag.SwiftUIProgressView;
-    case "swift-ui-stepper":
-      return NativeNodeTag.SwiftUIStepper;
-    case "swift-ui-text-field":
-      return NativeNodeTag.SwiftUITextField;
-    case "swift-ui-picker":
-      return NativeNodeTag.SwiftUIPicker;
-    case "swift-ui-date-picker":
-      return NativeNodeTag.SwiftUIDatePicker;
-    case "swift-ui-color-picker":
-      return NativeNodeTag.SwiftUIColorPicker;
-    case "swift-ui-gauge":
-      return NativeNodeTag.SwiftUIGauge;
-    case "view":
-    case "div":
-    case "text":
-      return NativeNodeTag.View;
+let nextNodeId = 1;
+
+function allocateNodeId(): number {
+  if (nextNodeId >= 0xffff_ffff) throw new Error("QuickGUI native node id space exhausted");
+  const id = nextNodeId;
+  nextNodeId += 1;
+  return id;
+}
+
+/**
+ * One window's mutation sink. `Window` extends this so nodes never depend on window lifecycle.
+ */
+export class NodeHost {
+  readonly appId: number;
+  readonly nativeId: number;
+  readonly nodes = new Map<number, NativeNode>();
+  batch = new MutationBatch();
+  flushScheduled = false;
+  closed = false;
+  /** Whether the native window exists; earlier mutations accumulate into the initial batch. */
+  nativeReady = false;
+
+  constructor(appId: number, nativeId: number) {
+    this.appId = appId;
+    this.nativeId = nativeId;
+  }
+
+  scheduleFlush(): void {
+    if (this.flushScheduled || this.closed || !this.nativeReady) return;
+    this.flushScheduled = true;
+    queueMicrotask(() => {
+      this.flushScheduled = false;
+      if (!this.closed) this.flush();
+    });
+  }
+
+  /** Commit every recorded mutation as one bounded batch. */
+  flush(): void {
+    if (this.closed || !this.nativeReady) return;
+    this.flushScheduled = false;
+    if (this.batch.empty) return;
+    const bytes = this.batch.finish();
+    this.batch = new MutationBatch();
+    hostApplyBatch(this.appId, this.nativeId, bytes);
+  }
+
+  /** Take the recorded mutations without sending them, for a window's initial batch. */
+  takeBatch(): Uint8Array {
+    this.flushScheduled = false;
+    const batch = this.batch;
+    this.batch = new MutationBatch();
+    return batch.finish();
+  }
+
+  focusNode(node: NativeNode): boolean {
+    if (this.closed || node.host !== this) return false;
+    this.flush();
+    hostFocusNode(this.appId, this.nativeId, node.id);
+    return true;
   }
 }
 
-export function createNativeElement(name: NativeElementName): NativeNode {
-  const node = new NativeNode(nativeNodeTag(name));
-  if (name === "textarea")
-    setNativeProperty(node, PropertyCode.Multiline, true);
+export class NativeNode {
+  readonly id: number;
+  readonly tag: number;
+  text: string;
+  parent: NativeNode | undefined = undefined;
+  readonly children: NativeNode[] = [];
+  /** The window this node is mounted in, when mounted. */
+  host: NodeHost | undefined = undefined;
+  /** Mutations recorded while this node roots a detached subtree. */
+  pending: MutationBatch | undefined = undefined;
+  listeners: NativeListener[] | undefined = undefined;
+  /**
+   * Nodes a sentinel keeps immediately before itself: a fragment's members or a reactive
+   * region's current content. They move, mount, and unmount together with the sentinel.
+   */
+  group: NativeNode[] | undefined = undefined;
+  /** Set once the host removed this node; a removed node cannot be inserted again. */
+  removed = false;
+
+  constructor(tag: number, text: string, id: number) {
+    this.id = id;
+    this.tag = tag;
+    this.text = text;
+  }
+
+  /** Focus this mounted node, matching the web `HTMLElement.focus()` shape. */
+  focus(): boolean {
+    const host = this.host;
+    return host === undefined ? false : host.focusNode(this);
+  }
+}
+
+/** The batch a mutation on `node` belongs to: its window's, or the detached root's buffer. */
+function batchFor(node: NativeNode): MutationBatch {
+  let current: NativeNode | undefined = node;
+  while (current !== undefined) {
+    const host = current.host;
+    if (host !== undefined) {
+      host.scheduleFlush();
+      return host.batch;
+    }
+    const pending = current.pending;
+    if (pending !== undefined) return pending;
+    current = current.parent;
+  }
+  throw new Error("a removed QuickGUI node cannot be mutated");
+}
+
+export function createNativeElement(tag: number): NativeNode {
+  const node = new NativeNode(tag, "", allocateNodeId());
+  const pending = new MutationBatch();
+  pending.createElement(node.id, tag);
+  node.pending = pending;
   return node;
 }
 
 export function createNativeText(value: string): NativeNode {
-  return new NativeNode(NativeNodeTag.Text, value);
+  const node = new NativeNode(NativeNodeTag.Text, value, allocateNodeId());
+  const pending = new MutationBatch();
+  pending.createText(node.id, value);
+  node.pending = pending;
+  return node;
 }
 
 export function createNativeSentinel(): NativeNode {
-  return new NativeNode(NativeNodeTag.Sentinel);
+  const node = new NativeNode(NativeNodeTag.Sentinel, "", allocateNodeId());
+  const pending = new MutationBatch();
+  pending.createSentinel(node.id);
+  node.pending = pending;
+  return node;
+}
+
+/** The window root node: mounted from the start and never recorded as a creation. */
+export function createRootNode(host: NodeHost, id: number): NativeNode {
+  const node = new NativeNode(NativeNodeTag.View, "", id);
+  node.host = host;
+  host.nodes.set(id, node);
+  return node;
 }
 
 export function replaceNativeText(node: NativeNode, value: string): void {
-  if (node.tag !== NativeNodeTag.Text)
-    throw new TypeError("replaceText expects a text node");
+  if (node.tag !== NativeNodeTag.Text) throw new TypeError("replaceText expects a text node");
   if (node.text === value) return;
   node.text = value;
-  if (node.materialized) node.host?._enqueueText(node);
+  batchFor(node).replaceText(node.id, value);
 }
 
-export function setNativeProperty(
-  node: NativeNode,
-  property: PropertyCode,
-  value: NativePropertyValue,
-  options: { color?: boolean } = {},
-): void {
-  const normalized = value ?? null;
-  if (normalized === null) {
-    if (!node.properties.delete(property)) return;
-    node.colorProperties.delete(property);
-  } else {
-    const previous = node.properties.get(property);
-    if (
-      Object.is(previous, normalized) &&
-      node.colorProperties.has(property) === !!options.color
-    ) {
-      return;
+export function setNativeProperty(node: NativeNode, property: number, value: NativePropertyValue, color: boolean): void {
+  batchFor(node).setProperty(node.id, property, value, color);
+}
+
+export function setNativeString(node: NativeNode, property: number, value: string): void {
+  batchFor(node).setString(node.id, property, value);
+}
+
+export function setNativeNumber(node: NativeNode, property: number, value: number): void {
+  batchFor(node).setNumber(node.id, property, value);
+}
+
+export function setNativeBoolean(node: NativeNode, property: number, value: boolean): void {
+  batchFor(node).setBoolean(node.id, property, value);
+}
+
+export function setNativeColor(node: NativeNode, property: number, value: number): void {
+  batchFor(node).setColor(node.id, property, value);
+}
+
+export function clearNativeProperty(node: NativeNode, property: number): void {
+  batchFor(node).clearProperty(node.id, property);
+}
+
+function hasListenerSharing(node: NativeNode, type: number): boolean {
+  const listeners = node.listeners;
+  if (listeners === undefined) return false;
+  for (const entry of listeners) {
+    if (sharesListenerProperty(entry.type, type)) return true;
+  }
+  return false;
+}
+
+/** Attach, replace, or remove the listener for one event type and declare it to the host. */
+export function setNativeEventListener(node: NativeNode, type: number, listener: NativeEventListener | undefined): void {
+  let listeners = node.listeners;
+  if (listeners === undefined) {
+    if (listener === undefined) return;
+    listeners = [];
+    node.listeners = listeners;
+  }
+  let index = -1;
+  for (let i = 0; i < listeners.length; i++) {
+    if (listeners[i]!.type === type) {
+      index = i;
+      break;
     }
-    node.properties.set(property, normalized);
-    if (options.color) node.colorProperties.add(property);
-    else node.colorProperties.delete(property);
   }
-  if (node.materialized) {
-    node.host?._enqueueProperty(node, property, normalized, !!options.color);
-  }
-}
-
-export function setNativeEventListener(
-  node: NativeNode,
-  type: NativeEventType,
-  listener: NativeEventListener | undefined,
-): void {
-  if (listener) node.listeners.set(type, listener);
-  else node.listeners.delete(type);
-  if (type === "click") {
-    setNativeProperty(
-      node,
-      PropertyCode.ClickListener,
-      node.listeners.has("click"),
-    );
-  } else if (type === "input") {
-    setNativeProperty(
-      node,
-      PropertyCode.InputListener,
-      node.listeners.has("input"),
-    );
-  } else if (type === "submit") {
-    setNativeProperty(
-      node,
-      PropertyCode.SubmitListener,
-      node.listeners.has("submit"),
-    );
-  } else if (type === "dismiss") {
-    setNativeProperty(
-      node,
-      PropertyCode.DismissListener,
-      node.listeners.has("dismiss"),
-    );
-  } else if (type === "terminal") {
-    setNativeProperty(
-      node,
-      PropertyCode.TerminalStatusListener,
-      node.listeners.has("terminal"),
-    );
-  } else if (type === "pointer") {
-    setNativeProperty(
-      node,
-      PropertyCode.PointerListener,
-      node.listeners.has("pointer"),
-    );
-  } else if (inputListenerProperties.has(type)) {
-    const code = inputListenerProperties.get(type)!;
-    // `drop` and `filesdropped` share one declared listener property; the accepted payload kinds
-    // are declared separately through `dropKinds`.
-    const declared =
-      code === PropertyCode.DropListener
-        ? node.listeners.has("drop") || node.listeners.has("filesdropped")
-        : node.listeners.has(type);
-    setNativeProperty(node, code, declared);
-  } else if (type === "focus" || type === "blur") {
-    setNativeProperty(
-      node,
-      PropertyCode.FocusListener,
-      node.listeners.has("focus") || node.listeners.has("blur"),
-    );
-  } else if (type === "dragstart" || type === "dragend") {
-    setNativeProperty(
-      node,
-      PropertyCode.DragListener,
-      node.listeners.has("dragstart") || node.listeners.has("dragend"),
-    );
-  } else if (type === "menuselect") {
-    setNativeProperty(
-      node,
-      PropertyCode.SelectListener,
-      node.listeners.has("menuselect"),
-    );
-  } else if (type === "commit") {
-    // Committing an option, a number, or a collection row is an edge, not a value: the same
-    // commit can repeat while the controlled value never moves, so it travels on its own channel.
-    setNativeProperty(
-      node,
-      PropertyCode.CommitListener,
-      node.listeners.has("commit"),
-    );
-  } else if (type === "componentchange") {
-    // A declared range, ordering, or roving-focus component reports whatever the Rust core
-    // decided as one asynchronous payload; the declaration only says whether anyone listens.
-    setNativeProperty(
-      node,
-      PropertyCode.ComponentChangeListener,
-      node.listeners.has("componentchange"),
-    );
-  } else if (type === "presentationchange") {
-    setNativeProperty(
-      node,
-      PropertyCode.SwiftUIPresentationListener,
-      node.listeners.has("presentationchange"),
-    );
+  if (listener === undefined) {
+    if (index >= 0) listeners.splice(index, 1);
+  } else if (index >= 0) {
+    listeners[index] = new NativeListener(type, listener);
   } else {
-    const listensForHover =
-      node.listeners.has("mouseenter") || node.listeners.has("mouseleave");
-    setNativeProperty(node, PropertyCode.HoverListener, listensForHover);
+    listeners.push(new NativeListener(type, listener));
+  }
+  const property = listenerPropertyFor(type);
+  if (property === 0) return;
+  setNativeBoolean(node, property, hasListenerSharing(node, type));
+}
+
+function materialize(node: NativeNode, host: NodeHost): void {
+  node.host = host;
+  host.nodes.set(node.id, node);
+  for (const child of node.children) materialize(child, host);
+  const group = node.group;
+  if (group !== undefined) {
+    // Group members are siblings that were inserted alongside the sentinel already.
   }
 }
 
-export function insertNativeNode(
-  parent: NativeNode,
-  node: NativeNode,
-  anchor?: NativeNode,
-): void {
-  if (anchor && anchor.parent !== parent)
-    throw new Error("anchor is not a child of parent");
+function dematerialize(node: NativeNode): void {
+  const host = node.host;
+  if (host !== undefined) host.nodes.delete(node.id);
+  node.host = undefined;
+  for (const child of node.children) dematerialize(child);
+}
+
+/** Mark a subtree removed: it can no longer be mounted, and its links are released. */
+function retire(node: NativeNode): void {
+  node.removed = true;
+  node.pending = undefined;
+  node.listeners = undefined;
+  for (const child of node.children) {
+    child.parent = undefined;
+    retire(child);
+  }
+  node.children.splice(0, node.children.length);
+  node.group = undefined;
+}
+
+/** Insert `item` at `index`, shifting later entries right. */
+function insertAt(array: NativeNode[], index: number, item: NativeNode): void {
+  array.push(item);
+  let position = array.length - 1;
+  while (position > index) {
+    array[position] = array[position - 1]!;
+    position -= 1;
+  }
+  array[index] = item;
+}
+
+function indexOfChild(parent: NativeNode, node: NativeNode): number {
+  const children = parent.children;
+  for (let i = 0; i < children.length; i++) {
+    if (children[i] === node) return i;
+  }
+  return -1;
+}
+
+/**
+ * Insert `node` into `parent` before `anchor`, or at the end.
+ *
+ * A node already in the tree moves; a detached subtree's recorded mutations are spliced in
+ * first, so the host sees creation, properties, and insertion in order.
+ */
+export function insertNativeNode(parent: NativeNode, node: NativeNode, anchor: NativeNode | undefined): void {
+  if (node.removed) throw new Error("a removed QuickGUI node cannot be inserted again");
   if (node === parent) throw new Error("a native node cannot contain itself");
+  if (anchor !== undefined && anchor.parent !== parent) throw new Error("anchor is not a child of parent");
   if (anchor === node && node.parent === parent) return;
-
-  if (node.parent) {
-    const previousIndex = node.parent.children.indexOf(node);
-    if (previousIndex >= 0) node.parent.children.splice(previousIndex, 1);
+  const group = node.group;
+  if (group !== undefined) {
+    for (const member of group) insertNativeNode(parent, member, anchor);
   }
-  const index = anchor
-    ? parent.children.indexOf(anchor)
-    : parent.children.length;
-  parent.children.splice(index, 0, node);
+  const previousParent = node.parent;
+  if (previousParent !== undefined) {
+    const previousIndex = indexOfChild(previousParent, node);
+    if (previousIndex >= 0) previousParent.children.splice(previousIndex, 1);
+  }
+  const index = anchor === undefined ? parent.children.length : indexOfChild(parent, anchor);
+  insertAt(parent.children, index < 0 ? parent.children.length : index, node);
   node.parent = parent;
-
-  if (parent.host) {
-    materialize(node, parent.host);
-    parent.host._enqueueInsert(parent, node, anchor);
+  const batch = batchFor(parent);
+  const pending = node.pending;
+  if (pending !== undefined) {
+    batch.append(pending);
+    node.pending = undefined;
+  }
+  batch.insert(parent.id, node.id, anchor === undefined ? NO_ANCHOR : anchor.id);
+  const host = parent.host;
+  if (host !== undefined && node.host !== host) {
+    if (node.host !== undefined) throw new Error("a native node cannot move between QuickGUI windows");
+    materialize(node, host);
   }
 }
 
+/** Remove one child subtree; the host releases it and the node cannot be reused. */
 export function removeNativeNode(parent: NativeNode, node: NativeNode): void {
   if (node.parent !== parent) return;
-  const index = parent.children.indexOf(node);
+  const group = node.group;
+  if (group !== undefined) {
+    for (const member of group) removeNativeNode(parent, member);
+  }
+  const index = indexOfChild(parent, node);
   if (index >= 0) parent.children.splice(index, 1);
   node.parent = undefined;
-  if (node.materialized && parent.host)
-    parent.host._enqueueRemove(parent, node);
+  batchFor(parent).remove(parent.id, node.id);
   dematerialize(node);
+  retire(node);
 }
 
-export function cleanupNativeNodes(
-  parent: NativeNode,
-  nodes: readonly NativeNode[],
-): void {
-  const attached = nodes.filter((node) => node.parent === parent);
+/** Remove every listed child in one mutation. */
+export function cleanupNativeNodes(parent: NativeNode, nodes: readonly NativeNode[]): void {
+  const attached: NativeNode[] = [];
+  for (const node of nodes) {
+    if (node.parent === parent) attached.push(node);
+  }
   if (attached.length === 0) return;
+  const ids: number[] = [];
   for (const node of attached) {
-    const index = parent.children.indexOf(node);
+    const group = node.group;
+    if (group !== undefined) {
+      for (const member of group) removeNativeNode(parent, member);
+    }
+    const index = indexOfChild(parent, node);
     if (index >= 0) parent.children.splice(index, 1);
     node.parent = undefined;
+    ids.push(node.id);
   }
-  if (parent.host) parent.host._enqueueCleanup(parent, attached);
-  for (const node of attached) dematerialize(node);
+  batchFor(parent).cleanup(parent.id, ids);
+  for (const node of attached) {
+    dematerialize(node);
+    retire(node);
+  }
 }
 
 export function getNativeParent(node: NativeNode): NativeNode | undefined {
@@ -422,19 +568,76 @@ export function getNativeParent(node: NativeNode): NativeNode | undefined {
 }
 
 export function getNativeFirstChild(node: NativeNode): NativeNode | undefined {
-  return node.children[0];
+  return node.children.length > 0 ? node.children[0] : undefined;
 }
 
 export function getNativeNextSibling(node: NativeNode): NativeNode | undefined {
-  if (!node.parent) return undefined;
-  const index = node.parent.children.indexOf(node);
-  return index < 0 ? undefined : node.parent.children[index + 1];
+  const parent = node.parent;
+  if (parent === undefined) return undefined;
+  const index = indexOfChild(parent, node);
+  if (index < 0 || index + 1 >= parent.children.length) return undefined;
+  return parent.children[index + 1];
 }
 
 export function isNativeText(node: NativeNode): boolean {
   return node.tag === NativeNodeTag.Text;
 }
 
+/** Deliver one host event to a mounted node, bubbling through its ancestors. */
+export function dispatchNativeEvent(host: NodeHost, type: number, targetId: number, value: string | undefined): void {
+  const target = host.nodes.get(targetId);
+  if (target === undefined) return;
+  const event = new QuickGuiEvent(type, target, value);
+  if (type === EVENT_MOUSE_ENTER || type === EVENT_MOUSE_LEAVE) {
+    invokeListeners(target, event);
+    return;
+  }
+  let current: NativeNode | undefined = target;
+  while (current !== undefined) {
+    event.currentTarget = current;
+    invokeListeners(current, event);
+    if (event.propagationStopped) break;
+    current = current.parent;
+  }
+}
+
+function invokeListeners(node: NativeNode, event: QuickGuiEvent): void {
+  const listeners = node.listeners;
+  if (listeners === undefined) return;
+  for (const entry of listeners) {
+    if (entry.type === event.type) {
+      entry.listener(event);
+      return;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Colors
+// ---------------------------------------------------------------------------
+
+export type ColorValue = number | string;
+
+function hexDigit(code: number): number {
+  if (code >= 48 && code <= 57) return code - 48;
+  if (code >= 97 && code <= 102) return code - 87;
+  if (code >= 65 && code <= 70) return code - 55;
+  return -1;
+}
+
+function hexByte(text: string, index: number, doubled: boolean): number {
+  const high = hexDigit(text.charCodeAt(index));
+  const low = doubled ? high : hexDigit(text.charCodeAt(index + 1));
+  if (high < 0 || low < 0) return -1;
+  return high * 16 + low;
+}
+
+export function packColor(r: number, g: number, b: number, a: number): number {
+  const component = (value: number): number => Math.max(0, Math.min(255, Math.round(value)));
+  return (component(r) | (component(g) << 8) | (component(b) << 16) | (component(a) << 24)) >>> 0;
+}
+
+/** Parse a packed RGBA integer, `#rgb[a]`, `#rrggbb[aa]`, `rgb()`, `rgba()`, or a keyword. */
 export function parseColor(value: ColorValue): number {
   if (typeof value === "number") return value >>> 0;
   const color = value.trim().toLowerCase();
@@ -444,84 +647,30 @@ export function parseColor(value: ColorValue): number {
   if (color.startsWith("#")) {
     const hex = color.slice(1);
     if (hex.length === 3 || hex.length === 4) {
-      const [r = "0", g = "0", b = "0", a = "f"] = hex;
-      return packColor(
-        Number.parseInt(r + r, 16),
-        Number.parseInt(g + g, 16),
-        Number.parseInt(b + b, 16),
-        Number.parseInt(a + a, 16),
-      );
+      const r = hexByte(hex, 0, true);
+      const g = hexByte(hex, 1, true);
+      const b = hexByte(hex, 2, true);
+      const a = hex.length === 4 ? hexByte(hex, 3, true) : 255;
+      if (r >= 0 && g >= 0 && b >= 0 && a >= 0) return packColor(r, g, b, a);
+    } else if (hex.length === 6 || hex.length === 8) {
+      const r = hexByte(hex, 0, false);
+      const g = hexByte(hex, 2, false);
+      const b = hexByte(hex, 4, false);
+      const a = hex.length === 8 ? hexByte(hex, 6, false) : 255;
+      if (r >= 0 && g >= 0 && b >= 0 && a >= 0) return packColor(r, g, b, a);
     }
-    if (hex.length === 6 || hex.length === 8) {
-      return packColor(
-        Number.parseInt(hex.slice(0, 2), 16),
-        Number.parseInt(hex.slice(2, 4), 16),
-        Number.parseInt(hex.slice(4, 6), 16),
-        hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) : 255,
-      );
-    }
-  }
-  const rgb = color.match(/^rgba?\(([^)]+)\)$/);
-  if (rgb) {
-    const parts = rgb[1]?.split(",").map((part) => part.trim()) ?? [];
+  } else if ((color.startsWith("rgba(") || color.startsWith("rgb(")) && color.endsWith(")")) {
+    const inner = color.slice(color.indexOf("(") + 1, color.length - 1);
+    const parts = inner.split(",");
     if (parts.length === 3 || parts.length === 4) {
-      return packColor(
-        Number(parts[0]),
-        Number(parts[1]),
-        Number(parts[2]),
-        parts[3] === undefined ? 255 : Math.round(Number(parts[3]) * 255),
-      );
+      const r = Number(parts[0]!.trim());
+      const g = Number(parts[1]!.trim());
+      const b = Number(parts[2]!.trim());
+      const a = parts.length === 4 ? Math.round(Number(parts[3]!.trim()) * 255) : 255;
+      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b) && Number.isFinite(a)) {
+        return packColor(r, g, b, a);
+      }
     }
   }
-  throw new TypeError(`unsupported QuickGUI color \`${value}\``);
-}
-
-function packColor(r: number, g: number, b: number, a: number): number {
-  const component = (value: number) =>
-    Math.max(0, Math.min(255, Math.round(value)));
-  return (
-    (component(r) |
-      (component(g) << 8) |
-      (component(b) << 16) |
-      (component(a) << 24)) >>>
-    0
-  );
-}
-
-function allocateNodeId(): number {
-  if (nextNodeId >= 0xffff_ffff)
-    throw new Error("QuickGUI native node id space exhausted");
-  return nextNodeId++;
-}
-
-function materialize(node: NativeNode, host: NativeNodeHost): void {
-  if (node.materialized) {
-    if (node.host !== host)
-      throw new Error("a native node cannot move between QuickGUI windows");
-    return;
-  }
-  node.host = host;
-  node.materialized = true;
-  host.nodes.set(node.id, node);
-  host._enqueueCreate(node);
-  for (const [property, value] of node.properties) {
-    host._enqueueProperty(
-      node,
-      property,
-      value,
-      node.colorProperties.has(property),
-    );
-  }
-  for (const child of node.children) {
-    materialize(child, host);
-    host._enqueueInsert(node, child);
-  }
-}
-
-function dematerialize(node: NativeNode): void {
-  const host = node.host;
-  if (host) host.nodes.delete(node.id);
-  node.materialized = false;
-  node.host = undefined;
-  for (const child of node.children) dematerialize(child);
+  throw new TypeError("unsupported QuickGUI color `" + value + "`");
 }

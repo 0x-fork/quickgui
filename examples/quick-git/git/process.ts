@@ -8,13 +8,16 @@
  * carries the command, the exit code, and git's own stderr. Nothing here touches the UI.
  */
 
+import { executableExists, inheritedEnvironment, runProcess } from "../process.ts";
+import { join } from "node:path";
+
 export type GitPriority = "interactive" | "background";
 
 export interface GitCommandOptions {
   /** Working directory the command runs in. */
   cwd: string;
   /** Aborting kills the process; the promise rejects with an aborted `GitError`. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /** Bytes written to the process's stdin before it is closed. */
   stdin?: string | Uint8Array;
   /** Wall-clock deadline. Defaults to sixty seconds; network commands pass more. */
@@ -55,8 +58,8 @@ export class GitError extends Error {
       timedOut?: boolean;
     },
   ) {
-    super(message);
-    this.name = "GitError";
+    super(details.stderr.trim() || message);
+    this.name = details.aborted ? "AbortError" : "GitError";
     this.command = details.command;
     this.cwd = details.cwd;
     this.exitCode = details.exitCode;
@@ -83,11 +86,11 @@ export const DEFAULT_GIT_TIMEOUT_MS = 60_000;
 export const NETWORK_GIT_TIMEOUT_MS = 10 * 60_000;
 export const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 
-const decoder = new TextDecoder("utf-8", { fatal: false });
+
 
 /** Decode git output as UTF-8, tolerating paths that are not. */
 export function decodeOutput(bytes: Uint8Array): string {
-  return decoder.decode(bytes);
+  return new TextDecoder().decode(bytes);
 }
 
 interface QueuedCommand {
@@ -115,8 +118,9 @@ export class GitRunner {
   constructor(options: GitRunnerOptions = {}) {
     this.executable = options.executable ?? resolveGitExecutable();
     this.concurrency = Math.max(1, options.concurrency ?? 4);
+    const spreadOptions0 = inheritedEnvironment();
     this.#env = {
-      ...inheritedEnvironment(),
+      ...spreadOptions0,
       // Never block on a credential or passphrase prompt: there is no terminal to answer it.
       GIT_TERMINAL_PROMPT: "0",
       // Read-only commands must not take the index lock the app's own writes need.
@@ -170,7 +174,7 @@ export class GitRunner {
       const entry: QueuedCommand = {
         priority,
         start: () => {
-          signal?.removeEventListener("abort", onAbort);
+          if (signal !== undefined) signal.removeEventListener("abort", onAbort);
           this.#running += 1;
           resolve();
         },
@@ -188,14 +192,14 @@ export class GitRunner {
           }),
         );
       };
-      signal?.addEventListener("abort", onAbort, { once: true });
+      if (signal !== undefined) signal.addEventListener("abort", onAbort, { once: true });
       // Interactive work goes ahead of every queued background command, behind earlier
       // interactive commands, so a diff the user asked for never waits behind history paging.
       const insertAt =
         priority === "interactive"
           ? this.#queue.findIndex((queued) => queued.priority === "background")
           : -1;
-      if (insertAt >= 0) this.#queue.splice(insertAt, 0, entry);
+      if (insertAt >= 0) { const tail = this.#queue.splice(insertAt); this.#queue.push(entry); for (const queued of tail) this.#queue.push(queued); }
       else this.#queue.push(entry);
     });
   }
@@ -217,136 +221,39 @@ export class GitRunner {
     ];
     const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
     const timeoutMs = options.timeoutMs ?? DEFAULT_GIT_TIMEOUT_MS;
-    let child: ReturnType<typeof Bun.spawn>;
-    try {
-      child = Bun.spawn(command, {
-        cwd: options.cwd,
-        env: { ...this.#env, ...(options.env ?? {}) },
-        stdin: options.stdin === undefined ? "ignore" : "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
+    const result = await runProcess(command, {
+      cwd: options.cwd,
+      env: { ...this.#env, ...(options.env ?? {}) },
+      ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
+      signal: options.signal,
+      maxOutputBytes,
+      timeoutMs,
+    });
+    const { stdout, stderr, exitCode, truncated, aborted, timedOut } = result;
+    if (aborted || timedOut) {
+      throw new GitError(timedOut ? `git ${args.at(0) ?? ""} timed out` : `git ${args.at(0) ?? ""} was cancelled`, {
+        command, cwd: options.cwd, exitCode, stderr, aborted, timedOut,
       });
-    } catch (error) {
-      throw new GitError(
-        `unable to start git: ${error instanceof Error ? error.message : String(error)}`,
-        { command, cwd: options.cwd, exitCode: null, stderr: "" },
-      );
     }
-
-    let aborted = false;
-    let timedOut = false;
-    let truncated = false;
-    const kill = () => {
-      try {
-        child.kill();
-      } catch {
-        // Already gone.
-      }
-    };
-    const onAbort = () => {
-      aborted = true;
-      kill();
-    };
-    options.signal?.addEventListener("abort", onAbort, { once: true });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      kill();
-    }, timeoutMs);
-
-    if (options.stdin !== undefined && child.stdin && typeof child.stdin !== "number") {
-      const writer = child.stdin;
-      try {
-        writer.write(options.stdin);
-        await writer.end();
-      } catch {
-        // The process may have exited before reading all of its input; the exit code tells.
-      }
+    if (exitCode !== 0 && !(options.allowExitCodes ?? []).includes(exitCode) && !truncated) {
+      throw new GitError(`git ${args.filter((argument) => !argument.startsWith("-")).slice(0, 2).join(" ")} failed`, {
+        command, cwd: options.cwd, exitCode, stderr,
+      });
     }
-
-    const collectStdout = async (): Promise<Uint8Array> => {
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      const stream = child.stdout as ReadableStream<Uint8Array>;
-      const reader = stream.getReader();
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (total + value.byteLength > maxOutputBytes) {
-          const room = Math.max(0, maxOutputBytes - total);
-          if (room > 0) chunks.push(value.subarray(0, room));
-          total += room;
-          truncated = true;
-          kill();
-          break;
-        }
-        chunks.push(value);
-        total += value.byteLength;
-      }
-      // Drain whatever is left so the process can exit.
-      try {
-        for (;;) {
-          const { done } = await reader.read();
-          if (done) break;
-        }
-      } catch {
-        // Killed mid-read.
-      }
-      return concat(chunks, total);
-    };
-
-    try {
-      const [stdout, stderrText, exitCode] = await Promise.all([
-        collectStdout(),
-        new Response(child.stderr as ReadableStream<Uint8Array>).text(),
-        child.exited,
-      ]);
-      const allowed = options.allowExitCodes ?? [];
-      if (aborted || timedOut) {
-        throw new GitError(
-          timedOut ? `git ${args[0] ?? ""} timed out` : `git ${args[0] ?? ""} was cancelled`,
-          { command, cwd: options.cwd, exitCode, stderr: stderrText, aborted, timedOut },
-        );
-      }
-      if (exitCode !== 0 && !allowed.includes(exitCode) && !truncated) {
-        throw new GitError(
-          `git ${args.filter((argument) => !argument.startsWith("-")).slice(0, 2).join(" ")} failed`,
-          { command, cwd: options.cwd, exitCode, stderr: stderrText },
-        );
-      }
-      return { stdout, stderr: stderrText, exitCode, truncated };
-    } finally {
-      clearTimeout(timer);
-      options.signal?.removeEventListener("abort", onAbort);
-    }
+    return { stdout, stderr, exitCode, truncated };
   }
-}
-
-function concat(chunks: Uint8Array[], total: number): Uint8Array {
-  if (chunks.length === 1) return chunks[0]!;
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
-}
-
-function inheritedEnvironment(): Record<string, string> {
-  const inherited: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (typeof value === "string") inherited[key] = value;
-  }
-  return inherited;
 }
 
 export function resolveGitExecutable(): string {
   const override = process.env.QUICK_GIT_EXECUTABLE?.trim();
   if (override) return override;
-  const onPath = Bun.which("git");
-  if (onPath) return onPath;
+  for (const directory of (process.env.PATH ?? "").split(":")) {
+    if (!directory) continue;
+    const candidate = join(directory, "git");
+    if (executableExists(candidate)) return candidate;
+  }
   for (const candidate of ["/opt/homebrew/bin/git", "/usr/local/bin/git", "/usr/bin/git"]) {
-    if (Bun.which(candidate)) return candidate;
+    if (executableExists(candidate)) return candidate;
   }
   return "git";
 }

@@ -1,0 +1,30 @@
+An accessible press target that you style and compose with text or other content.
+
+## Import
+
+Import `Button` from `@quickgui/ui`.
+
+```tsx
+import { Button } from "@quickgui/ui";
+```
+
+## Usage
+
+```tsx
+<Button
+  onClick={save}
+  style={{ height: 40, paddingLeft: 16, paddingRight: 16 }}
+>
+  Save changes
+</Button>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `children` | Content mounted inside the component. |
+| `onClick` | Runs after the core resolves an activation. |
+| `disabled` | Prevents interaction and exposes the disabled state. |
+

@@ -1,0 +1,45 @@
+Presents QuickGUI content in a separate native child window that can extend beyond its owner.
+
+## Import
+
+Import `SystemPopover` from `@quickgui/ui`.
+
+```tsx
+import { SystemPopover } from "@quickgui/ui/popover";
+```
+
+## Usage
+
+```tsx
+<SystemPopover.Root open={open()} onOpenChange={setOpen}>
+  <SystemPopover.Trigger><Text>Open native popover</Text></SystemPopover.Trigger>
+  <SystemPopover.Content width={320} height={180} placement="bottom">
+    <SettingsPanel />
+  </SystemPopover.Content>
+</SystemPopover.Root>
+```
+
+## Anatomy
+
+- `SystemPopover.Root`
+- `SystemPopover.Trigger`
+- `SystemPopover.Content`
+
+```tsx
+<SystemPopover.Root>
+  <SystemPopover.Trigger />
+  <SystemPopover.Content />
+</SystemPopover.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `open` | Controlled open state. |
+| `defaultOpen` | Initial state when the component owns whether it is open. |
+| `onOpenChange` | Reports an open or close decision from the core. |
+| `width` | Declared logical width. |
+| `height` | Declared logical height. |
+| `placement` | Requested native child-window placement. |
+

@@ -1,3 +1,4 @@
+import "../testing/native-module.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -133,7 +134,7 @@ describe("patch formatting", () => {
 
   test("stages chosen lines: unselected additions vanish, unselected removals stay as context", () => {
     // Keep only the `+line 2b` addition of the first hunk.
-    const patch = formatPatch(app(), [{ hunkIndex: 0, lines: new Set([3]) }]);
+    const patch = formatPatch(app(), [{ hunkIndex: 0, lines: [3] }]);
     expect(patch.split("\n").slice(3)).toEqual([
       "@@ -1,4 +1,5 @@ function main() {",
       " line one",
@@ -146,7 +147,7 @@ describe("patch formatting", () => {
   });
 
   test("unstages chosen lines in reverse: unselected additions stay, unselected removals vanish", () => {
-    const patch = formatPatch(app(), [{ hunkIndex: 0, lines: new Set([1]) }], { reverse: true });
+    const patch = formatPatch(app(), [{ hunkIndex: 0, lines: [1] }], { reverse: true });
     expect(patch.split("\n").slice(3)).toEqual([
       "@@ -1,6 +1,5 @@ function main() {",
       " line one",
@@ -166,7 +167,7 @@ describe("patch formatting", () => {
   });
 
   test("returns nothing when the selection changes no line", () => {
-    expect(formatPatch(app(), [{ hunkIndex: 0, lines: new Set([0]) }])).toBe("");
+    expect(formatPatch(app(), [{ hunkIndex: 0, lines: [0] }])).toBe("");
     expect(formatPatch(app(), [{ hunkIndex: 9 }])).toBe("");
   });
 
@@ -175,16 +176,16 @@ describe("patch formatting", () => {
     const deleted = files[1]!;
     expect(formatPatch(deleted, [{ hunkIndex: 0 }])).toContain("deleted file mode 100644");
     expect(formatPatch(deleted, [{ hunkIndex: 0 }])).toContain("+++ /dev/null");
-    const partial = formatPatch(deleted, [{ hunkIndex: 0, lines: new Set([0]) }]);
+    const partial = formatPatch(deleted, [{ hunkIndex: 0, lines: [0] }]);
     expect(partial).not.toContain("deleted file mode");
     expect(partial).toContain("--- a/README.md\n+++ b/README.md\n@@ -1,2 +1 @@\n-hello\n world\n");
 
     const added = syntheticAddedFile("notes.md", "a\nb\n");
-    expect(formatPatch(added, [{ hunkIndex: 0, lines: new Set([0]) }])).toBe(
+    expect(formatPatch(added, [{ hunkIndex: 0, lines: [0] }])).toBe(
       "diff --git a/notes.md b/notes.md\nnew file mode 100644\n--- /dev/null\n+++ b/notes.md\n@@ -0,0 +1 @@\n+a\n",
     );
     // Unstaging part of an added file must keep the file in the index.
-    const reverse = formatPatch(added, [{ hunkIndex: 0, lines: new Set([0]) }], { reverse: true });
+    const reverse = formatPatch(added, [{ hunkIndex: 0, lines: [0] }], { reverse: true });
     expect(reverse).not.toContain("new file mode");
     expect(reverse).toContain("@@ -1 +1,2 @@\n+a\n b\n");
     expect(formatPatch(added, [{ hunkIndex: 0 }], { reverse: true })).toContain("new file mode 100644");
@@ -198,8 +199,8 @@ describe("patch formatting", () => {
 
   test("knows when a line set covers a whole hunk", () => {
     const hunk = app().hunks[0]!;
-    expect(selectsWholeHunk(hunk, new Set([1, 2, 3]))).toBe(true);
-    expect(selectsWholeHunk(hunk, new Set([1, 2]))).toBe(false);
+    expect(selectsWholeHunk(hunk, [1, 2, 3])).toBe(true);
+    expect(selectsWholeHunk(hunk, [1, 2])).toBe(false);
   });
 });
 

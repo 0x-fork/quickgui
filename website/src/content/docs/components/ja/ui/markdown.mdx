@@ -1,0 +1,25 @@
+保持型の Markdown を描画し、ストリーミング内容向けの差分更新にも対応します。
+
+## インポート
+
+`@quickgui/ui` から `Markdown` をインポートします。
+
+```tsx
+import { Markdown } from "@quickgui/ui";
+```
+
+## 使い方
+
+```tsx
+<Markdown content={message()} streaming={isStreaming()} />
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `content` | 組版・描画する Markdown ソースです。 |
+| `source` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
+| `streaming` | 追記された内容に Markdown の差分更新を使います。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+

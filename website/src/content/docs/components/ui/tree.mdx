@@ -1,0 +1,47 @@
+A virtualized hierarchical collection with expansion, selection, and keyboard navigation.
+
+## Import
+
+Import `Tree` from `@quickgui/ui`.
+
+```tsx
+import { Tree } from "@quickgui/ui/collections";
+```
+
+## Usage
+
+```tsx
+<Tree.Root
+  nodes={nodes}
+  expanded={expanded()}
+  value={selected()}
+  onExpandedChange={setExpanded}
+  onValueChange={setSelected}
+>
+  <For each={visibleNodes()}>{(node) =>
+    <Tree.Row nodeId={node.id}><Text>{node.label}</Text></Tree.Row>
+  }</For>
+</Tree.Root>
+```
+
+## Anatomy
+
+- `Tree.Root`
+- `Tree.Row`
+
+```tsx
+<Tree.Root>
+  <Tree.Row />
+</Tree.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `nodes` | Bounded hierarchical node declarations for the tree. |
+| `expanded` | Controlled expanded tree node identifiers. |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `onExpandedChange` | Reports the ordered node identifiers expanded by the core. |
+| `onValueChange` | Reports the value accepted by the core. |
+

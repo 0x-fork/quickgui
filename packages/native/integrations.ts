@@ -1,42 +1,34 @@
-import { Buffer } from "node:buffer";
-import { resolve as resolvePath } from "node:path";
-import * as binding from "./binding.js";
+/**
+ * Background system integrations: autostart, protocol registration, secure storage, updates,
+ * crash reporting, and process metrics. Each call runs on a host worker thread and resolves on
+ * the application thread; capability checks answer synchronously.
+ */
 
-export type AutoStartMode =
-  | "native"
-  | "macos-launch-agent"
-  | "macos-apple-script"
-  | "linux-systemd"
-  | "windows-system";
+import { decodeBase64, encodeBase64 } from "./base64.ts";
+import { allocateRequest, callService, isNullJson, sendInvoke } from "./requests.ts";
+
+export type AutoStartMode = "native" | "macos-launch-agent" | "macos-apple-script" | "linux-systemd" | "windows-system";
 
 export interface AutoStartOptions {
-  /** Portable registration identifier: ASCII letters, digits, dots, underscores, and hyphens. */
   appName: string;
-  /** Defaults to the current packaged executable. */
   executable?: string;
-  arguments?: readonly string[];
+  arguments?: string[];
   mode?: AutoStartMode;
-  /** Required by some macOS autostart modes. */
   bundleIdentifier?: string;
 }
 
 export interface ProtocolRegistrationOptions {
   scheme: string;
   appName: string;
-  /** Stable reverse-DNS identifier used for Linux desktop integration. */
   appId: string;
-  /** Defaults to the current packaged executable. */
   executable?: string;
-  arguments?: readonly string[];
+  arguments?: string[];
 }
 
 export interface UpdateClientOptions {
   currentVersion: string;
-  /** Minisign public key, either raw or in Minisign's public-key file format. */
   publicKey: string;
-  /** Defaults to QuickGUI's current `system-architecture` target. */
   target?: string;
-  /** Hard download limit. The core caps this at 2 GiB. */
   maximumDownloadBytes?: number;
 }
 
@@ -54,12 +46,12 @@ export interface UpdateInstallOptions {
   targetExecutable?: string;
   retainBackup?: boolean;
   windowsMode?: "basic-ui" | "quiet" | "passive";
-  installerArguments?: readonly string[];
+  installerArguments?: string[];
 }
 
 export interface InstalledUpdate {
   version: string;
-  disposition: "applied" | "installer-launched";
+  disposition: string;
   installedPath: string;
   backupPath?: string;
   installerProcessId?: number;
@@ -67,27 +59,29 @@ export interface InstalledUpdate {
   relaunchRecommended: boolean;
 }
 
-export type CrashKind = "panic" | "signal" | "hang";
+export interface UpdateProgress {
+  phase: string;
+  chunkBytes?: number;
+  downloadedBytes?: number;
+  totalBytes?: number;
+  path?: string;
+}
 
-export type CrashBacktracePolicy = "disabled" | "environment" | "always";
+export interface CrashParameter {
+  key: string;
+  value: string;
+}
 
 export interface CrashReporterOptions {
   appName: string;
   appVersion: string;
   appIdentifier: string;
-  /** Defaults to `<log directory>/crashes`. Must be an absolute path. */
   directory?: string;
-  /** Retained reports, 1..=128. Defaults to 16. */
   maxReports?: number;
-  /** Bytes per report, 1024..=1048576. Defaults to 65536. */
   maxReportBytes?: number;
-  /** Bounded key/value pairs stored in every report. At most 32 entries. */
-  parameters?: Readonly<Record<string, string>>;
-  /** Remembered HTTPS endpoint for `uploadPending()`. */
+  parameters?: CrashParameter[];
   uploadEndpoint?: string;
-  /** Panic backtrace policy. Defaults to `environment` (`RUST_BACKTRACE`). */
-  backtrace?: CrashBacktracePolicy;
-  /** Install the native fatal-signal handler. Defaults to `true`. */
+  backtrace?: "disabled" | "environment" | "always";
   captureSignals?: boolean;
 }
 
@@ -100,8 +94,7 @@ export interface CrashLocation {
 export interface CrashReport {
   schemaVersion: number;
   id: string;
-  kind: CrashKind;
-  /** RFC 3339 UTC timestamp. */
+  kind: string;
   timestamp: string;
   appName: string;
   appVersion: string;
@@ -117,7 +110,7 @@ export interface CrashReport {
   signal?: number;
   signalName?: string;
   faultAddress?: string;
-  parameters: Record<string, string>;
+  parameters: CrashParameter[];
 }
 
 export interface CrashUploadSummary {
@@ -130,10 +123,8 @@ export interface ProcessMetrics {
   cpuUserSeconds: number;
   cpuSystemSeconds: number;
   residentBytes: number;
-  /** macOS `phys_footprint`. Undefined on other platforms. */
   footprintBytes?: number;
   virtualBytes: number;
-  /** Undefined where the platform has no inexpensive thread count (Windows). */
   threadCount?: number;
   uptimeSeconds: number;
 }
@@ -146,365 +137,253 @@ export interface SystemMemory {
 }
 
 export interface CpuUsage {
-  /** Percent of one core since the previous sample; undefined for the first sample. */
   percent?: number;
   intervalSeconds: number;
   cpuSeconds: number;
   totalCpuSeconds: number;
 }
 
-export interface CpuSampler {
-  sample(): Promise<CpuUsage>;
+async function invokeVoid(method: string, params: string): Promise<void> {
+  await sendInvoke(method, params, undefined);
 }
 
-export type UpdateProgressPhase =
-  | "download-started"
-  | "downloaded"
-  | "download-finished"
-  | "verification-started"
-  | "verification-finished"
-  | "staged";
-
-export interface UpdateProgress {
-  phase: UpdateProgressPhase;
-  chunkBytes?: number;
-  downloadedBytes?: number;
-  totalBytes?: number;
-  path?: string;
+async function invokeBoolean(method: string, params: string): Promise<boolean> {
+  return (await sendInvoke(method, params, undefined)) === "true";
 }
 
-export interface UpdateStageOptions {
-  onProgress?: (progress: UpdateProgress) => void;
-}
-
-/**
- * Bounded crash reporting backed by the Rust core.
- *
- * `start()` installs the process-wide panic hook and, unless `captureSignals` is false, a native
- * fatal-fault handler that writes a minimal pre-rendered report from an async-signal-safe path.
- */
-export const CrashReporter = Object.freeze({
-  isStarted(): boolean {
-    return binding.isCrashReporterStarted();
-  },
-
-  /** Install the reporter and resolve with the directory holding retained reports. */
-  start(options: CrashReporterOptions): Promise<string> {
-    return binding.startCrashReporter(nativeCrashReporterOptions(options));
-  },
-
-  async getLastCrashReport(): Promise<CrashReport | undefined> {
-    const reports = await binding.getLastCrashReport();
-    return reports.length > 0 ? normalizeCrashReport(reports[0]!) : undefined;
-  },
-
-  async getPendingReports(): Promise<CrashReport[]> {
-    const reports = await binding.getPendingCrashReports();
-    return reports.map(normalizeCrashReport);
-  },
-
-  async addExtraParameter(key: string, value: string): Promise<void> {
-    await binding.addCrashExtraParameter(key, value);
-  },
-
-  removeExtraParameter(key: string): Promise<boolean> {
-    return binding.removeCrashExtraParameter(key);
-  },
-
-  deleteReport(id: string): Promise<boolean> {
-    return binding.deleteCrashReport(id);
-  },
-
-  /** POST every retained report to `endpoint`, deleting the ones the endpoint accepts. */
-  uploadPending(endpoint?: string): Promise<CrashUploadSummary> {
-    return binding.uploadPendingCrashReports(endpoint);
-  },
-});
-
-/** Explicit, on-demand process and system readings. Nothing is sampled in the background. */
-export const Metrics = Object.freeze({
-  getProcessMetrics(): Promise<ProcessMetrics> {
-    return binding.getProcessMetrics() as Promise<ProcessMetrics>;
-  },
-
-  getSystemMemory(): Promise<SystemMemory> {
-    return binding.getSystemMemory() as Promise<SystemMemory>;
-  },
-
-  /** Create a stateful sampler; each `sample()` reports usage since that sampler's last call. */
-  createCpuSampler(): CpuSampler {
-    const sampler = new binding.NativeCpuUsageSampler();
-    return Object.freeze({
-      sample: () => sampler.sample() as Promise<CpuUsage>,
-    });
-  },
-});
-
-function nativeCrashReporterOptions(
-  options: CrashReporterOptions,
-): binding.NativeCrashReporterOptions {
-  const native: binding.NativeCrashReporterOptions = {
-    appName: options.appName,
-    appVersion: options.appVersion,
-    appIdentifier: options.appIdentifier,
-  };
-  if (options.directory !== undefined) native.directory = resolvePath(options.directory);
-  if (options.maxReports !== undefined) native.maxReports = options.maxReports;
-  if (options.maxReportBytes !== undefined) native.maxReportBytes = options.maxReportBytes;
-  if (options.parameters !== undefined) {
-    native.parameters = Object.entries(options.parameters).map(([key, value]) => ({ key, value }));
+export class AutoStart {
+  static isSupported(): boolean {
+    return callService("is-auto-start-supported", "") === "true";
   }
-  if (options.uploadEndpoint !== undefined) native.uploadEndpoint = options.uploadEndpoint;
-  if (options.backtrace !== undefined) native.backtrace = options.backtrace;
-  if (options.captureSignals !== undefined) native.captureSignals = options.captureSignals;
-  return native;
-}
-
-export function normalizeCrashReport(report: binding.NativeCrashReport): CrashReport {
-  const parameters: Record<string, string> = {};
-  for (const parameter of report.parameters) parameters[parameter.key] = parameter.value;
-  const normalized: CrashReport = {
-    schemaVersion: report.schemaVersion,
-    id: report.id,
-    kind: report.kind as CrashKind,
-    timestamp: report.timestamp,
-    appName: report.appName,
-    appVersion: report.appVersion,
-    appIdentifier: report.appIdentifier,
-    operatingSystem: report.operatingSystem,
-    architecture: report.architecture,
-    processId: report.processId,
-    message: report.message,
-    parameters,
-  };
-  if (report.operatingSystemVersion !== undefined) {
-    normalized.operatingSystemVersion = report.operatingSystemVersion;
+  static enable(options: AutoStartOptions): Promise<void> {
+    return invokeVoid("enable-auto-start", JSON.stringify(options));
   }
-  if (report.thread !== undefined) normalized.thread = report.thread;
-  if (report.location !== undefined) normalized.location = { ...report.location };
-  if (report.backtrace !== undefined) normalized.backtrace = report.backtrace;
-  if (report.signal !== undefined) normalized.signal = report.signal;
-  if (report.signalName !== undefined) normalized.signalName = report.signalName;
-  if (report.faultAddress !== undefined) normalized.faultAddress = report.faultAddress;
-  return normalized;
-}
-
-export function normalizeUpdateProgress(
-  progress: binding.NativeUpdateProgress,
-): UpdateProgress {
-  const normalized: UpdateProgress = { phase: progress.phase as UpdateProgressPhase };
-  if (progress.chunkBytes !== undefined) normalized.chunkBytes = progress.chunkBytes;
-  if (progress.downloadedBytes !== undefined) {
-    normalized.downloadedBytes = progress.downloadedBytes;
+  static disable(options: AutoStartOptions): Promise<void> {
+    return invokeVoid("disable-auto-start", JSON.stringify(options));
   }
-  if (progress.totalBytes !== undefined) normalized.totalBytes = progress.totalBytes;
-  if (progress.path !== undefined) normalized.path = progress.path;
-  return normalized;
+  static isEnabled(options: AutoStartOptions): Promise<boolean> {
+    return invokeBoolean("is-auto-start-enabled", JSON.stringify(options));
+  }
 }
-/** Native login-launch registration. Operations run outside the JavaScript event loop. */
-export const AutoStart = Object.freeze({
-  isSupported(): boolean {
-    return binding.isAutoStartSupported();
-  },
 
-  enable(options: AutoStartOptions): Promise<void> {
-    return binding.enableAutoStart(nativeAutoStartOptions(options));
-  },
+export class Protocol {
+  static supportsDynamicRegistration(): boolean {
+    return callService("supports-dynamic-protocol-registration", "") === "true";
+  }
+  static register(options: ProtocolRegistrationOptions): Promise<boolean> {
+    return invokeBoolean("register-protocol", JSON.stringify(options));
+  }
+  static unregister(options: ProtocolRegistrationOptions): Promise<boolean> {
+    return invokeBoolean("unregister-protocol", JSON.stringify(options));
+  }
+  static isRegistered(options: ProtocolRegistrationOptions): Promise<boolean> {
+    return invokeBoolean("is-protocol-registered", JSON.stringify(options));
+  }
+}
 
-  disable(options: AutoStartOptions): Promise<void> {
-    return binding.disableAutoStart(nativeAutoStartOptions(options));
-  },
+/** Custom URL schemes: the URLs this launch was asked to open, and dynamic registration. */
+export class DeepLink {
+  /** Deep links passed on the command line of this launch. */
+  static getLaunchUrls(): string[] {
+    return urlsFromArguments(process.argv.slice(1));
+  }
+  static supportsDynamicRegistration(): boolean {
+    return Protocol.supportsDynamicRegistration();
+  }
+  static register(options: ProtocolRegistrationOptions): Promise<boolean> {
+    return Protocol.register(options);
+  }
+  static unregister(options: ProtocolRegistrationOptions): Promise<boolean> {
+    return Protocol.unregister(options);
+  }
+  static isRegistered(options: ProtocolRegistrationOptions): Promise<boolean> {
+    return Protocol.isRegistered(options);
+  }
+}
 
-  isEnabled(options: AutoStartOptions): Promise<boolean> {
-    return binding.isAutoStartEnabled(nativeAutoStartOptions(options));
-  },
-});
+/** The custom-scheme URLs among a launch's arguments; `http(s)` links and ordinary paths are skipped. */
+export function urlsFromArguments(argv: string[]): string[] {
+  const urls: string[] = [];
+  for (const argument of argv) {
+    let href: string | undefined = undefined;
+    try {
+      const url = new URL(argument);
+      if (url.protocol !== "http:" && url.protocol !== "https:") href = url.href;
+    } catch {
+      // Ordinary CLI flags and filesystem paths are not deep links.
+    }
+    if (href !== undefined) urls.push(href);
+  }
+  return urls;
+}
 
-/** Native URL-scheme registration. macOS schemes are declared in the signed app bundle. */
-export const Protocol = Object.freeze({
-  supportsDynamicRegistration(): boolean {
-    return binding.supportsDynamicProtocolRegistration();
-  },
+export class SecureStorage {
+  static isSupported(): boolean {
+    return callService("is-secure-storage-supported", "") === "true";
+  }
+  static set(service: string, account: string, value: Uint8Array): Promise<boolean> {
+    return invokeBoolean("set-secure-storage", JSON.stringify({ service, account, value: encodeBase64(value) }));
+  }
+  static setText(service: string, account: string, value: string): Promise<boolean> {
+    return SecureStorage.set(service, account, new TextEncoder().encode(value));
+  }
+  static async get(service: string, account: string): Promise<Uint8Array | undefined> {
+    const json = await sendInvoke("get-secure-storage", JSON.stringify({ service, account }), undefined);
+    if (isNullJson(json)) return undefined;
+    return decodeBase64(JSON.parse(json) as string);
+  }
+  static async getText(service: string, account: string): Promise<string | undefined> {
+    const bytes = await SecureStorage.get(service, account);
+    return bytes === undefined ? undefined : new TextDecoder().decode(bytes);
+  }
+  static delete(service: string, account: string): Promise<boolean> {
+    return invokeBoolean("delete-secure-storage", JSON.stringify({ service, account }));
+  }
+}
 
-  async register(options: ProtocolRegistrationOptions): Promise<void> {
-    await binding.registerProtocol(nativeProtocolOptions(options));
-  },
-
-  unregister(options: ProtocolRegistrationOptions): Promise<boolean> {
-    return binding.unregisterProtocol(nativeProtocolOptions(options));
-  },
-
-  isRegistered(options: ProtocolRegistrationOptions): Promise<boolean> {
-    return binding.isProtocolRegistered(nativeProtocolOptions(options));
-  },
-});
-
-/** Keychain Services, Windows Credential Manager, or Secret Service. */
-export const SecureStorage = Object.freeze({
-  isSupported(): boolean {
-    return binding.isSecureStorageSupported();
-  },
-
-  async set(service: string, account: string, secret: Uint8Array): Promise<void> {
-    await binding.setSecureStorage(service, account, Buffer.from(secret));
-  },
-
-  async get(service: string, account: string): Promise<Uint8Array | undefined> {
-    const secret = await binding.getSecureStorage(service, account);
-    return secret === undefined ? undefined : new Uint8Array(secret);
-  },
-
-  async setText(service: string, account: string, value: string): Promise<void> {
-    await binding.setSecureStorage(service, account, Buffer.from(value, "utf8"));
-  },
-
-  async getText(service: string, account: string): Promise<string | undefined> {
-    const secret = await binding.getSecureStorage(service, account);
-    return secret?.toString("utf8");
-  },
-
-  delete(service: string, account: string): Promise<boolean> {
-    return binding.deleteSecureStorage(service, account);
-  },
-});
-
-/** Signed update discovery, staging, mandatory re-verification, and native installation. */
-export const Updater = Object.freeze({
-  defaultTarget(): string {
-    return binding.defaultUpdateTarget();
-  },
-
-  async check(
-    endpoint: string,
-    options: UpdateClientOptions,
-  ): Promise<AvailableUpdate | undefined> {
-    const update = await binding.checkForUpdate(endpoint, nativeUpdateOptions(options));
-    return update === undefined ? undefined : normalizeAvailableUpdate(update);
-  },
-
-  /**
-   * Download, stream-verify, and atomically stage an update artifact.
-   *
-   * Passing `onProgress` routes bounded native progress events onto the JavaScript thread through
-   * a threadsafe function; the download itself still runs off the main thread.
-   */
-  downloadAndStage(
+export class Updater {
+  static defaultTarget(): string {
+    return JSON.parse(callService("default-update-target", "")) as string;
+  }
+  static async check(endpoint: string, options: UpdateClientOptions): Promise<AvailableUpdate | undefined> {
+    const json = await sendInvoke("check-for-update", JSON.stringify({ endpoint, options }), undefined);
+    return isNullJson(json) ? undefined : (JSON.parse(json) as AvailableUpdate);
+  }
+  static async stage(
     update: AvailableUpdate,
     destinationDirectory: string,
     options: UpdateClientOptions,
-    stageOptions?: UpdateStageOptions,
+    onProgress?: (progress: UpdateProgress) => void,
   ): Promise<string> {
-    const onProgress = stageOptions?.onProgress;
-    if (onProgress) {
-      return binding.stageUpdateWithProgress(
-        nativeAvailableUpdate(update),
-        destinationDirectory,
-        nativeUpdateOptions(options),
-        (progress) => {
-          onProgress(normalizeUpdateProgress(progress));
-        },
-      );
-    }
-    return binding.stageUpdate(
-      nativeAvailableUpdate(update),
-      destinationDirectory,
-      nativeUpdateOptions(options),
+    const listener = onProgress === undefined
+      ? undefined
+      : (json: string): void => {
+          onProgress(JSON.parse(json) as UpdateProgress);
+        };
+    const json = await sendInvoke(
+      "stage-update",
+      JSON.stringify({ update, destinationDirectory, options, progress: onProgress !== undefined }),
+      listener,
     );
-  },
-
-  verify(
-    path: string,
-    signature: string,
-    options: UpdateClientOptions,
-  ): Promise<void> {
-    return binding.verifyUpdate(path, signature, nativeUpdateOptions(options));
-  },
-
-  async install(
+    return JSON.parse(json) as string;
+  }
+  static verify(path: string, signature: string, options: UpdateClientOptions): Promise<void> {
+    return invokeVoid("verify-update", JSON.stringify({ path, signature, options }));
+  }
+  static async install(
     update: AvailableUpdate,
     artifact: string,
-    installOptions: UpdateInstallOptions,
     options: UpdateClientOptions,
+    installOptions: UpdateInstallOptions = {},
   ): Promise<InstalledUpdate> {
-    const native: binding.NativeUpdateInstallOptions = {};
-    if (installOptions.targetExecutable !== undefined) {
-      native.targetExecutable = resolvePath(installOptions.targetExecutable);
-    }
-    if (installOptions.retainBackup !== undefined) {
-      native.retainBackup = installOptions.retainBackup;
-    }
-    if (installOptions.windowsMode !== undefined) native.windowsMode = installOptions.windowsMode;
-    if (installOptions.installerArguments !== undefined) {
-      native.installerArguments = [...installOptions.installerArguments];
-    }
-    const installed = await binding.installUpdate(
-      nativeAvailableUpdate(update),
-      resolvePath(artifact),
-      native,
-      nativeUpdateOptions(options),
-    );
-    return { ...installed } as InstalledUpdate;
-  },
-});
-
-function nativeAutoStartOptions(options: AutoStartOptions): binding.NativeAutoStartOptions {
-  const native: binding.NativeAutoStartOptions = { appName: options.appName };
-  if (options.executable !== undefined) native.executable = options.executable;
-  if (options.arguments !== undefined) native.arguments = [...options.arguments];
-  if (options.mode !== undefined) native.mode = options.mode;
-  if (options.bundleIdentifier !== undefined) {
-    native.bundleIdentifier = options.bundleIdentifier;
+    const json = await sendInvoke("install-update", JSON.stringify({ update, artifact, installOptions, options }), undefined);
+    return JSON.parse(json) as InstalledUpdate;
   }
-  return native;
 }
 
-function nativeProtocolOptions(
-  options: ProtocolRegistrationOptions,
-): binding.NativeProtocolRegistrationOptions {
-  const native: binding.NativeProtocolRegistrationOptions = {
-    scheme: options.scheme,
-    appName: options.appName,
-    appId: options.appId,
-  };
-  if (options.executable !== undefined) native.executable = options.executable;
-  if (options.arguments !== undefined) native.arguments = [...options.arguments];
-  return native;
-}
-
-function nativeUpdateOptions(options: UpdateClientOptions): binding.NativeUpdateClientOptions {
-  const native: binding.NativeUpdateClientOptions = {
-    currentVersion: options.currentVersion,
-    publicKey: options.publicKey,
-  };
-  if (options.target !== undefined) native.target = options.target;
-  if (options.maximumDownloadBytes !== undefined) {
-    native.maximumDownloadBytes = options.maximumDownloadBytes;
+export class CrashReporter {
+  static isStarted(): boolean {
+    return callService("is-crash-reporter-started", "") === "true";
   }
-  return native;
+  static async start(options: CrashReporterOptions): Promise<string> {
+    const json = await sendInvoke("start-crash-reporter", JSON.stringify(options), undefined);
+    return JSON.parse(json) as string;
+  }
+  static async getLastCrashReport(): Promise<CrashReport | undefined> {
+    const json = await sendInvoke("get-last-crash-report", "{}", undefined);
+    const reports = JSON.parse(json) as CrashReport[];
+    return reports.length > 0 ? reports[0] : undefined;
+  }
+  static async getPendingReports(): Promise<CrashReport[]> {
+    const json = await sendInvoke("get-pending-crash-reports", "{}", undefined);
+    return JSON.parse(json) as CrashReport[];
+  }
+  static addExtraParameter(key: string, value: string): Promise<boolean> {
+    return invokeBoolean("add-crash-extra-parameter", JSON.stringify({ key, value }));
+  }
+  static removeExtraParameter(key: string): Promise<boolean> {
+    return invokeBoolean("remove-crash-extra-parameter", JSON.stringify({ key }));
+  }
+  static deleteReport(id: string): Promise<boolean> {
+    return invokeBoolean("delete-crash-report", JSON.stringify({ id }));
+  }
+  static async uploadPending(endpoint?: string): Promise<CrashUploadSummary> {
+    const params = endpoint === undefined ? "{}" : JSON.stringify({ endpoint });
+    const json = await sendInvoke("upload-pending-crash-reports", params, undefined);
+    return JSON.parse(json) as CrashUploadSummary;
+  }
 }
 
-function nativeAvailableUpdate(update: AvailableUpdate): binding.NativeAvailableUpdate {
-  const native: binding.NativeAvailableUpdate = {
-    version: update.version,
-    currentVersion: update.currentVersion,
-    target: update.target,
-    url: update.url,
-    signature: update.signature,
-  };
-  if (update.notes !== undefined) native.notes = update.notes;
-  if (update.publishedAt !== undefined) native.publishedAt = update.publishedAt;
-  return native;
+/** Stateful CPU sampler. Each `sample()` reports usage since the previous call on this instance. */
+export class CpuSampler {
+  readonly id: number;
+
+  constructor() {
+    this.id = Number(callService("cpu-sampler-create", ""));
+  }
+
+  sample(): CpuUsage {
+    return JSON.parse(callService("cpu-sampler-sample", JSON.stringify({ id: this.id }))) as CpuUsage;
+  }
+
+  release(): void {
+    callService("cpu-sampler-release", JSON.stringify({ id: this.id }));
+  }
 }
 
-function normalizeAvailableUpdate(update: binding.NativeAvailableUpdate): AvailableUpdate {
-  const normalized: AvailableUpdate = {
-    version: update.version,
-    currentVersion: update.currentVersion,
-    target: update.target,
-    url: update.url,
-    signature: update.signature,
-  };
-  if (update.notes !== undefined) normalized.notes = update.notes;
-  if (update.publishedAt !== undefined) normalized.publishedAt = update.publishedAt;
-  return normalized;
+export class Metrics {
+  static async getProcessMetrics(): Promise<ProcessMetrics> {
+    const json = await sendInvoke("get-process-metrics", "{}", undefined);
+    return JSON.parse(json) as ProcessMetrics;
+  }
+  static async getSystemMemory(): Promise<SystemMemory> {
+    const json = await sendInvoke("get-system-memory", "{}", undefined);
+    return JSON.parse(json) as SystemMemory;
+  }
+}
+
+export interface FileWatchEvent {
+  paths: string[];
+  rescan: boolean;
+  error?: string | null;
+}
+
+const fileWatchers = new Map<number, FileWatcher>();
+
+/** Native recursive file notifications; registration and close complete asynchronously. */
+export class FileWatcher {
+  readonly id: number;
+  #listener: (event: FileWatchEvent) => void;
+  #closed = false;
+  private constructor(id: number, listener: (event: FileWatchEvent) => void) { this.id = id; this.#listener = listener; }
+
+  static async start(paths: string[], listener: (event: FileWatchEvent) => void): Promise<FileWatcher> {
+    const watcher = new FileWatcher(allocateRequest(), listener);
+    fileWatchers.set(watcher.id, watcher);
+    try {
+      await sendInvoke("watch-files", JSON.stringify({ id: watcher.id, paths }), undefined);
+      return watcher;
+    } catch (error) {
+      fileWatchers.delete(watcher.id);
+      throw error;
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    fileWatchers.delete(this.id);
+    await sendInvoke("unwatch-files", JSON.stringify({ id: this.id }), undefined);
+  }
+
+  /** @internal */
+  _dispatch(event: FileWatchEvent): void { if (!this.#closed) this.#listener(event); }
+}
+
+/** @internal */
+export function dispatchFileWatch(id: number, json: string | undefined): void {
+  const watcher = fileWatchers.get(id);
+  if (watcher === undefined || json === undefined) return;
+  const event: FileWatchEvent = JSON.parse(json);
+  watcher._dispatch(event);
 }

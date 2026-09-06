@@ -2,28 +2,28 @@
 
 ## 导入
 
-从 `@quickgui/solid/swift-ui` 导入 `Popover`。
+从 `@quickgui/ui/swift-ui` 导入 `Popover`。
 
 ```tsx
-import { Host, Popover } from "@quickgui/solid/swift-ui";
+import { Host, Popover } from "@quickgui/ui/swift-ui";
 ```
 
 ## 用法
 
 ```tsx
-<Popover
+<Popover.Root
   isPresented={open()}
   onIsPresentedChange={setOpen}
   attachmentAnchor="bottom"
   arrowEdge="top"
 >
-  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
   <Popover.Content>
     <QuickGUIHostView width={280} height={120}>
       <SettingsPanel />
     </QuickGUIHostView>
   </Popover.Content>
-</Popover>
+</Popover.Root>
 ```
 
 ## 结构
@@ -32,10 +32,10 @@ import { Host, Popover } from "@quickgui/solid/swift-ui";
 - `Popover.Content`
 
 ```tsx
-<Popover isPresented={open()} onIsPresentedChange={setOpen}>
-  <Popover.Trigger render={<Button label="Open" />} />
+<Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
+  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
   <Popover.Content>{/* SwiftUI-hosted content */}</Popover.Content>
-</Popover>
+</Popover.Root>
 ```
 
 ## 主要属性

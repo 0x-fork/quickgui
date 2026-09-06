@@ -1,0 +1,42 @@
+A bounded one-time-code editor made from individually styled input cells.
+
+## Import
+
+Import `OtpField` from `@quickgui/ui`.
+
+```tsx
+import { OtpField } from "@quickgui/ui/base-ui";
+```
+
+## Usage
+
+```tsx
+<OtpField.Root value={code()} length={6} onValueChange={setCode} onComplete={verify}>
+  <For each={[0, 1, 2, 3, 4, 5]}>{(index) =>
+    <OtpField.Input index={index} />
+  }</For>
+</OtpField.Root>
+```
+
+## Anatomy
+
+- `OtpField.Root`
+- `OtpField.Input`
+- `OtpField.Separator`
+
+```tsx
+<OtpField.Root>
+  <OtpField.Input />
+  <OtpField.Separator />
+</OtpField.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `length` | Number of one-time-code input slots, bounded to twelve. |
+| `onValueChange` | Reports the value accepted by the core. |
+| `disabled` | Prevents interaction and exposes the disabled state. |
+

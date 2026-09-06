@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 import { Window, app } from "@quickgui/native";
-import { View, createRenderer } from "@quickgui/solid";
+import { View, createRenderer } from "@quickgui/ui";
 
 import { AgentSheet } from "./components/agent-sheet.tsx";
 import { Sidebar } from "./components/sidebar.tsx";
@@ -59,7 +59,7 @@ function openMainWindow() {
   });
 }
 
-app.on("reopen", ({ hasVisibleWindows }) => {
+app.onReopen( ({ hasVisibleWindows }) => {
   if (!hasVisibleWindows) openMainWindow();
 });
 openMainWindow();

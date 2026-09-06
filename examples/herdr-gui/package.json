@@ -8,8 +8,7 @@
   },
   "dependencies": {
     "@quickgui/native": "workspace:*",
-    "@quickgui/solid": "workspace:*",
-    "solid-js": "2.0.0-rc.3"
+    "@quickgui/ui": "workspace:*"
   },
   "devDependencies": {
     "@quickgui/cli": "workspace:*"

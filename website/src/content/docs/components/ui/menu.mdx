@@ -1,0 +1,82 @@
+A fully composable menu with submenus, groups, links, checkbox items, and radio items.
+
+## Import
+
+Import `Menu` from `@quickgui/ui`.
+
+```tsx
+import { Menu } from "@quickgui/ui/menu";
+```
+
+## Usage
+
+```tsx
+<Menu.Root open={open()} onOpenChange={setOpen}>
+  <Menu.Trigger><Text>File</Text></Menu.Trigger>
+  <Menu.Portal>
+    <Menu.Positioner side="bottom">
+      <Menu.Popup>
+        <Menu.Item value="new"><Text>New</Text></Menu.Item>
+        <Menu.Separator />
+        <Menu.CheckboxItem value="sidebar" checked={sidebar()}><Text>Sidebar</Text></Menu.CheckboxItem>
+      </Menu.Popup>
+    </Menu.Positioner>
+  </Menu.Portal>
+</Menu.Root>
+```
+
+## Anatomy
+
+- `Menu.Root`
+- `Menu.Trigger`
+- `Menu.Portal`
+- `Menu.Backdrop`
+- `Menu.Positioner`
+- `Menu.Popup`
+- `Menu.Arrow`
+- `Menu.Item`
+- `Menu.LinkItem`
+- `Menu.SubmenuRoot`
+- `Menu.SubmenuTrigger`
+- `Menu.Group`
+- `Menu.GroupLabel`
+- `Menu.RadioGroup`
+- `Menu.RadioItem`
+- `Menu.RadioItemIndicator`
+- `Menu.CheckboxItem`
+- `Menu.CheckboxItemIndicator`
+- `Menu.Separator`
+
+```tsx
+<Menu.Root>
+  <Menu.Trigger />
+  <Menu.Portal />
+  <Menu.Backdrop />
+  <Menu.Positioner />
+  <Menu.Popup />
+  <Menu.Arrow />
+  <Menu.Item />
+  <Menu.LinkItem />
+  <Menu.SubmenuRoot />
+  <Menu.SubmenuTrigger />
+  <Menu.Group />
+  <Menu.GroupLabel />
+  <Menu.RadioGroup />
+  <Menu.RadioItem />
+  <Menu.RadioItemIndicator />
+  <Menu.CheckboxItem />
+  <Menu.CheckboxItemIndicator />
+  <Menu.Separator />
+</Menu.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `open` | Controlled open state. |
+| `defaultOpen` | Initial state when the component owns whether it is open. |
+| `onOpenChange` | Reports an open or close decision from the core. |
+| `orientation` | Horizontal or vertical layout and keyboard direction. |
+| `loopFocus` | Wraps keyboard highlight at the ends of the current menu level. |
+

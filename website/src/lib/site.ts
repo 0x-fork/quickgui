@@ -10,7 +10,7 @@ export const site = {
     github: 'https://github.com/egoist/quickgui',
     docs: '/docs',
     viewApi: 'https://github.com/egoist/quickgui/blob/main/docs/view-api.md',
-    solid: 'https://github.com/egoist/quickgui/blob/main/docs/solid.md',
+    ui: 'https://github.com/egoist/quickgui/blob/main/docs/ui.md',
     cli: 'https://github.com/egoist/quickgui/blob/main/docs/cli.md',
     status: 'https://github.com/egoist/quickgui/blob/main/docs/status.md',
     architecture:

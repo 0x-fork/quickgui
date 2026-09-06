@@ -1,6 +1,6 @@
 # Quick Git
 
-A native macOS git client built with QuickGUI and Solid 2. Unlike the other examples, this one is
+A native macOS git client built with QuickGUI and QuickGUI UI. Unlike the other examples, this one is
 built as a real product: correct git semantics, bounded resource use, and a polished, keyboard-first
 interface, with worktrees and local coding agents as first-class citizens.
 
@@ -11,7 +11,7 @@ bun run --filter quick-git dev
 
 The diff engine is a [native module](../../docs/native-modules.md) written in Zig
 (`modules/git/main.zig`), so a Zig 0.16 toolchain must be on `PATH`; `quickgui dev` compiles it,
-and `bun run --filter quick-git modules` does so on its own before `bun test`.
+and `bun run --filter quick-git modules` does so on its own. `bun run test` prepares the module and runs the test suite.
 
 Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise the last one opens.
 
@@ -44,7 +44,7 @@ Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise th
 - `git/` is a TypeScript git layer: a bounded process runner (concurrency, priority,
   cancellation, deadlines, output caps), parsers for porcelain v2 status, `for-each-ref`, `log`,
   `stash list`, and `worktree list`, plus patch formatting for partial staging. It has no UI
-  dependency and is covered by `bun test`, including an integration suite that runs real git in a
+  dependency and is covered by `bun run test`, including an integration suite that runs real git in a
   temporary repository.
 - `modules/git/main.zig` is the diff engine, a native module compiled by the CLI. `Diff.open`
   (`git/diff-handle.ts`) hands git's raw bytes to Zig on the native thread pool and keeps the
@@ -59,10 +59,14 @@ Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise th
   commit as an object is the point, and JavaScript builds those objects faster than a JSON hop.
 - `agent/` builds the commit-message prompt, bounds the diff by whole files, runs the CLI, and
   parses the answer; it is tested with a fake process runner.
-- `model/` owns application state (Solid signals created outside any component), a recursive
+- `model/` owns application state (QuickGUI UI signals created outside any component), a recursive
   filesystem watcher that classifies changes and coalesces bursts, and persisted preferences.
 - `ui/` renders everything with the core-virtualized `Table` (only visible rows cross the native
   boundary), native menus and alert sheets, and the sidebar vibrancy material.
 
 Everything shown is the core's answer: selection, keyboard navigation, hover, and the new
 `selected` state style come from the Rust core, never from a JavaScript round trip.
+
+The tests load the real Zig static library through a test-only C adapter. Async results are copied
+from Zig background threads and drained on the test thread. Production applications bind the same
+C functions directly through scriptc; Bun is only the test runner.

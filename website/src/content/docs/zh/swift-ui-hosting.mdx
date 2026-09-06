@@ -1,12 +1,12 @@
-SwiftUI 修饰器让 Solid 可以声明原生外观；反向托管则让 SwiftUI 内容包含一棵普通的 QuickGUI 子树。
+SwiftUI 修饰器让 QuickGUI UI 可以声明原生外观；反向托管则让 SwiftUI 内容包含一棵普通的 QuickGUI 子树。
 
 ## 修饰器
 
-从 `@quickgui/solid/swift-ui/modifiers` 导入修饰器工厂，并按顺序应用。
+从 `@quickgui/ui/swift-ui/modifiers` 导入修饰器工厂，并按顺序应用。
 
 ```tsx
-import { Button, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle, controlSize, tint } from "@quickgui/solid/swift-ui/modifiers";
+import { Button, Host } from "@quickgui/ui/swift-ui";
+import { buttonStyle, controlSize, tint } from "@quickgui/ui/swift-ui/modifiers";
 
 <Host matchContents>
   <Button
@@ -50,13 +50,13 @@ SwiftUI 的 `Popover` 会组合一个原生 SwiftUI 触发器。如果浮窗内�
 
 ```tsx
 <Host matchContents>
-  <Popover isPresented={open()} onIsPresentedChange={setOpen}>
-    <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
+    <Popover.Trigger><Button label="Open" /></Popover.Trigger>
     <Popover.Content>
       <QuickGUIHostView width={280} height={140}>
         <SettingsPanel />
       </QuickGUIHostView>
     </Popover.Content>
-  </Popover>
+  </Popover.Root>
 </Host>
 ```

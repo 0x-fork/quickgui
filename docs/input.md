@@ -622,7 +622,7 @@ There is no polling, animation loop, or deadline while the pointer is stationary
 
 ## JavaScript bindings
 
-The Solid renderer declares each of these listeners ahead of the core's decision:
+The QuickGUI UI renderer declares each of these listeners ahead of the core's decision:
 `onKeyDown`/`onKeyUp`, `onMouseDown`/`onMouseUp`/`onMouseMove`, `onDoubleClick` (the second press of
 one exact native multi-click sequence), `onWheel`, `onContextMenu`, `onPinch`, `onRotate`,
 `onSmartMagnify`, `onPressure`, `onFocus`/`onBlur`, and the drag/drop pair `draggable` + `dropKinds`
@@ -632,9 +632,9 @@ the declared binding id. Payloads are bounded asynchronous JSON, and a declared 
 ordinary container focusable. `onDragOver` is not bound because drag hovering is reported on the
 window rather than through a per-element listener, and physical key `code` values are not reported
 because the core normalizes keys to a layout-independent command identity. See
-[Solid 2 renderer](solid.md#keyboard-mouse-gesture-and-drag-events).
+[QuickGUI UI renderer](ui.md#keyboard-mouse-gesture-and-drag-events).
 
-## Solid: the tooltip compound
+## QuickGUI UI: the tooltip compound
 
 `Element::tooltip` is bound as the `tooltip` prop every native node accepts. The composable
 `TooltipProvider`/`TooltipState` compound is bound separately as `Tooltip`:
@@ -662,4 +662,4 @@ closes while the trigger stays focusable, Escape dismissal belongs to the core, 
 One shared provider makes an adjacent trigger open instantly while the group stays warm, and that
 warm window is itself one exact deadline, so a settled group owns no task or timer. Unlike Base UI's
 DOM-less provider, `Tooltip.Provider` is one ordinary element — which is also where the group's
-deadlines are declared. See [Solid 2 renderer](solid.md#tooltips).
+deadlines are declared. See [QuickGUI UI renderer](ui.md#tooltips).

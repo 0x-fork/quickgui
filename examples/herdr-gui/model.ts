@@ -6,7 +6,7 @@ import type {
   NativeNode,
   QuickGuiEvent,
 } from "@quickgui/native";
-import type { TerminalStatusEvent } from "@quickgui/solid";
+import type { TerminalStatusEvent } from "@quickgui/ui";
 
 import type { AppStyles, Theme } from "./theme.ts";
 
@@ -96,7 +96,7 @@ export interface HerdrModel {
   selectPane(pane: Pane): void;
   removeSpace(space: Space): void;
   addSpace(): Promise<void>;
-  newTerminal(space?: Space): void;
+  newTerminal(space: Space | undefined): void;
   splitTerminal(direction: SplitDirection): void;
   openAgentSheet(): void;
   closeAgentSheet(): void;
@@ -141,7 +141,7 @@ export function paneTitle(pane: Pane): string {
   const title = status.title.trim();
   if (
     title &&
-    !genericTerminalTitle(title, status.workingDirectory, detected)
+    !genericTerminalTitle(title, status.workingDirectory ?? null, detected)
   ) {
     return title;
   }
@@ -175,8 +175,7 @@ function genericTerminalTitle(
       "fish",
       "xterm",
       "terminal",
-      agent?.toLowerCase(),
-    ].includes(normalized)
+    ].includes(normalized) || normalized === agent?.toLowerCase()
   ) {
     return true;
   }

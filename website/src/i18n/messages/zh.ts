@@ -72,7 +72,7 @@ export const zh: typeof en = {
   },
   swiftUi: {
     title: '在 QuickGUI 中使用原生 SwiftUI',
-    lead: '在 macOS 的 Solid 应用中直接嵌入真正的 SwiftUI 控件。',
+    lead: '在 macOS 的 QuickGUI UI 应用中直接嵌入真正的 SwiftUI 控件。',
   },
   quickstart: {
     title: '一分钟上手',
@@ -82,7 +82,7 @@ export const zh: typeof en = {
       writeBody: '上面的计数器就是完整的 main.rs——直接复制进来',
       run: '运行',
     },
-    solid: {
+    ui: {
       create: '创建应用',
       ship: '发布',
       note: '你会得到一个真实、已签名、自包含的应用, 连安装包都有',

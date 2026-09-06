@@ -1,5 +1,5 @@
-import { Button, Text, View } from "@quickgui/solid";
-import { Show } from "solid-js";
+import { Button, Text, View } from "@quickgui/ui";
+import { Show } from "@quickgui/ui";
 
 import type { AgentStatus } from "../model.ts";
 import type { Theme } from "../theme.ts";
@@ -36,23 +36,23 @@ export function SectionHeader(props: {
       </Text>
       <View style={{ flex: 1 }} />
       <Show when={props.trailing}>
-        {(trailing) => (
+        {(() => { const trailing = () => (props.trailing)!; return (
           <Text style={{ color: props.theme.textGhost, fontSize: 10.5 }}>
             {trailing()}
           </Text>
-        )}
+        ); })()}
       </Show>
       <Show when={props.action}>
-        {(action) => (
+        {(() => { const action = () => (props.action)!; return (
           <Button
             aria-label={props.actionLabel ?? props.label}
             focusOnPointer={false}
             style={headingActionStyle(props.theme)}
-            onClick={() => props.onAction?.()}
+            onClick={() => { const action = props.onAction; if (action !== undefined) action(); }}
           >
             <Icon name={action()} size={14} />
           </Button>
-        )}
+        ); })()}
       </Show>
     </View>
   );
@@ -102,7 +102,7 @@ export function StatusPill(props: {
 }) {
   return (
     <Show when={props.status}>
-      {(status) => (
+      {(() => { const status = () => (props.status)!; return (
         <View
           style={{
             display: "flex",
@@ -130,7 +130,7 @@ export function StatusPill(props: {
             {statusLabel(status())}
           </Text>
         </View>
-      )}
+      ); })()}
     </Show>
   );
 }

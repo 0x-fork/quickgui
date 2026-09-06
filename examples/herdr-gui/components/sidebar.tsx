@@ -1,5 +1,5 @@
-import { Button, Text, View } from "@quickgui/solid";
-import { For, Show } from "solid-js";
+import { Button, Text, View } from "@quickgui/ui";
+import { For, Show } from "@quickgui/ui";
 
 import {
   agentLabel,

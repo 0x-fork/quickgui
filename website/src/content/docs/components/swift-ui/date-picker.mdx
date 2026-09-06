@@ -2,15 +2,17 @@ A controlled native date or date-and-time picker.
 
 ## Import
 
-Import `DatePicker` from `@quickgui/solid/swift-ui`.
+Import `DatePicker` from `@quickgui/ui/swift-ui`.
 
 ```tsx
-import { Host, DatePicker } from "@quickgui/solid/swift-ui";
+import { Host, DatePicker } from "@quickgui/ui/swift-ui";
 ```
 
 ## Usage
 
 ```tsx
+const [scheduledAt, setScheduledAt] = createSignal(Date.now());
+
 <Host matchContents>
   <DatePicker
     label="Schedule"
@@ -26,10 +28,10 @@ import { Host, DatePicker } from "@quickgui/solid/swift-ui";
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `value` | Unix timestamp in milliseconds; `min` and `max` use the same unit. |
 | `min` | Minimum accepted value. |
 | `max` | Maximum accepted value. |
 | `displayedComponents` | Chooses date, time, or combined date-and-time fields. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `style` | `automatic`, `field`, `stepperField`, or `graphical`. |
 | `onValueChange` | Reports the value accepted by the core. |
 

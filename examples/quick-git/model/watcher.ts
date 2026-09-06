@@ -1,4 +1,4 @@
-import { watch, type FSWatcher } from "node:fs";
+import { FileWatcher } from "@quickgui/native";
 import { relative, sep } from "node:path";
 
 export type ChangeKind = "worktree" | "refs" | "index";
@@ -30,7 +30,7 @@ export function watchRepository(options: RepositoryWatcherOptions): () => void {
   const flush = () => {
     timer = undefined;
     if (closed || pending.size === 0) return;
-    const kinds = new Set(pending);
+    const kinds = new Set([...pending]);
     pending.clear();
     options.onChange(kinds);
   };
@@ -40,29 +40,37 @@ export function watchRepository(options: RepositoryWatcherOptions): () => void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(flush, debounceMs);
   };
-  const watchers: FSWatcher[] = [];
-  const start = (directory: string, classify: (path: string) => ChangeKind | undefined) => {
+  let watcher: FileWatcher | undefined;
+  const roots = [options.root];
+  if (!isInside(options.gitDir, options.root)) roots.push(options.gitDir);
+  if (options.commonDir !== options.gitDir && !isInside(options.commonDir, options.root)) roots.push(options.commonDir);
+  const start = async (): Promise<void> => {
     try {
-      const watcher = watch(directory, { recursive: true }, (_event, filename) => {
-        const kind = classify(typeof filename === "string" ? filename : "");
-        if (kind) note(kind);
+      const active = await FileWatcher.start(roots, (event) => {
+        if (event.rescan) { note("worktree"); note("refs"); note("index"); }
+        for (const path of event.paths) {
+          const kind = isInside(path, options.gitDir)
+            ? classifyGitPath(relative(options.gitDir, path))
+            : isInside(path, options.commonDir)
+              ? classifyGitPath(relative(options.commonDir, path))
+              : classifyWorktreePath(relative(options.root, path), relative(options.root, options.gitDir));
+          if (kind !== undefined) note(kind);
+        }
       });
-      watcher.on("error", () => {
-        // A vanished directory (a removed worktree) simply stops reporting.
-      });
-      watchers.push(watcher);
-    } catch {
-      // Watching is an optimization; the app still refreshes on focus and after its own commands.
+      if (closed) await active.close();
+      else watcher = active;
+    } catch (error) {
+      // Focus refresh and the refresh after each write remain available if watching fails.
+      console.error("Unable to watch repository", String(error));
     }
   };
-  start(options.root, (path) => classifyWorktreePath(path, relative(options.root, options.gitDir)));
-  if (!isInside(options.commonDir, options.root)) {
-    start(options.commonDir, classifyGitPath);
-  }
+  void start();
+
   return () => {
     closed = true;
     if (timer) clearTimeout(timer);
-    for (const watcher of watchers) watcher.close();
+    const active = watcher;
+    if (active !== undefined) void active.close();
   };
 }
 

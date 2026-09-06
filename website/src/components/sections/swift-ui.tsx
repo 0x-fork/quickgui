@@ -31,10 +31,10 @@ export function SwiftUi({
               <span className="font-mono text-xs">swift-ui.tsx</span>
               <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
                 <span
-                  className="i-simple-icons-solid size-3.5"
+                  className="i-simple-icons size-3.5"
                   aria-hidden
                 />
-                TypeScript · Solid
+                TypeScript · QuickGUI UI
               </span>
             </div>
             <CodeBlock html={highlighted.swiftUi} />

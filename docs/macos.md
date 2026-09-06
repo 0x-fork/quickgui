@@ -235,10 +235,10 @@ which would leave a light fringe on every anti-aliased edge over the material. A
 alpha-capable surface therefore renders into an intermediate texture and a final full-screen pass
 re-encodes each pixel for the compositor. Opaque windows keep presenting directly.
 
-The interactive Solid example exposes every material and effect state:
+The interactive QuickGUI UI example exposes every material and effect state:
 
 ```console
-cd examples/sidebar-vibrancy-solid
+cd examples/sidebar-vibrancy
 bun run dev
 ```
 
@@ -313,10 +313,10 @@ selects the neutral segmented-tabs role used for Xcode-style navigation on macOS
 `MacSwiftUiHost::new_with_control_events` reports button presses, controlled value changes,
 text-field submissions, and popover presentation without blocking the AppKit main thread.
 
-Solid applications adapt those same descriptors into typed reactive components:
+QuickGUI UI applications adapt those same descriptors into typed reactive components:
 
 ```tsx
-import { Host, Slider } from "@quickgui/solid/swift-ui";
+import { Host, Slider } from "@quickgui/ui/swift-ui";
 
 <Host matchContents>
   <Slider
@@ -330,7 +330,7 @@ import { Host, Slider } from "@quickgui/solid/swift-ui";
 </Host>;
 ```
 
-The Solid subpath also exports controlled `Toggle`, `ProgressView`, `Stepper`, `TextField`,
+The QuickGUI UI subpath also exports controlled `Toggle`, `ProgressView`, `Stepper`, `TextField`,
 `SecureField`, `Picker`, `SegmentedControl`, `DatePicker`, and `ColorPicker` components, plus
 `Gauge`, alongside the existing `Button`, `Popover`, and `QuickGUIHostView`.
 
@@ -360,7 +360,7 @@ then the trigger requests presentation unless that handler prevents the default 
 AppKit owns the popover window, it is natively above the owner QuickGUI scene; a `QuickGUIHostView`
 inside `Popover.Content` makes ordinary QuickGUI components interactive there.
 
-Run `cd examples/swift-ui-solid && bun run dev` for a sidebar gallery with one live page per exposed
+Run `cd examples/swift-ui && bun run dev` for a sidebar gallery with one live page per exposed
 native SwiftUI control. Its Popover page opens a native popover containing QuickGUI text, input,
 and button components.
 

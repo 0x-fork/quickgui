@@ -1,6 +1,10 @@
+import { runInTerminal } from "./sidebar.tsx";
 import { Dialog as NativeDialog } from "@quickgui/native";
-import { Checkbox, Dialog, Input, Select, Text, View, keyEventFromEvent } from "@quickgui/solid";
-import { Show, createMemo, createSignal } from "solid-js";
+import { Input, Text, View, type NativeNode, type Style, keyEventFromEvent } from "@quickgui/ui";
+import { Checkbox } from "@quickgui/ui/controls";
+import { Dialog } from "@quickgui/ui/dialog";
+import { Select } from "@quickgui/ui/select";
+import { Show, createMemo, createSignal } from "@quickgui/ui";
 
 import { branchNameProblem } from "../git/refs.ts";
 import { useApp } from "./context.tsx";
@@ -25,11 +29,12 @@ export function Dialogs() {
 }
 
 function DialogFrame(props: {
-  title: string;
-  description?: string;
-  children: unknown;
-  actions: unknown;
+  title: () => (string);
+  description?: () => (string);
+  children: () => NativeNode;
+  actions: () => NativeNode;
 }) {
+  const readdescription = () => { const source = props.description; return source === undefined ? undefined : source(); };
   const app = useApp();
   return (
     <Dialog.Root open onOpenChange={(open) => !open && app.closeDialog()} exitDuration={0}>
@@ -41,16 +46,16 @@ function DialogFrame(props: {
             if (keyEventFromEvent(event)?.key === "Escape") app.closeDialog();
           }}
         >
-          <Dialog.Title style={app.styles().dialogTitle}>{props.title}</Dialog.Title>
-          <Show when={props.description}>
-            <Dialog.Description style={app.styles().dialogDescription}>{props.description}</Dialog.Description>
+          <Dialog.Title style={app.styles().dialogTitle}>{props.title()}</Dialog.Title>
+          <Show when={readdescription()}>
+            <Dialog.Description style={app.styles().dialogDescription}>{readdescription()}</Dialog.Description>
           </Show>
-          <Dialog.Viewport style={{ display: "flex", flexDirection: "column", gap: 12, padding: 2 }}>{props.children as never}</Dialog.Viewport>
+          <Dialog.Viewport style={{ display: "flex", flexDirection: "column", gap: 12, padding: 2 }}>{props.children()}</Dialog.Viewport>
           <View style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
             <Dialog.Close style={app.styles().button("secondary")}>
               <Text>Cancel</Text>
             </Dialog.Close>
-            {props.actions as never}
+            {props.actions()}
           </View>
         </Dialog.Popup>
       </Dialog.Portal>
@@ -58,17 +63,19 @@ function DialogFrame(props: {
   );
 }
 
-function Field(props: { label: string; children: unknown; hint?: string | undefined; error?: string | undefined }) {
+function Field(props: { label: () => (string); children: () => NativeNode; hint?: () => (string | undefined); error?: () => (string | undefined) }) {
+  const readhint = () => { const source = props.hint; return source === undefined ? undefined : source(); };
+  const readerror = () => { const source = props.error; return source === undefined ? undefined : source(); };
   const app = useApp();
   return (
     <View style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-      <Text style={app.styles().fieldLabel}>{props.label}</Text>
-      {props.children as never}
-      <Show when={props.error}>
-        <Text style={{ fontSize: 11.5, color: app.theme().danger }}>{props.error}</Text>
+      <Text style={app.styles().fieldLabel}>{props.label()}</Text>
+      {props.children()}
+      <Show when={readerror()}>
+        <Text style={{ fontSize: 11.5, color: app.theme().danger }}>{readerror()}</Text>
       </Show>
-      <Show when={!props.error && props.hint}>
-        <Text style={{ fontSize: 11.5, color: app.theme().textTertiary }}>{props.hint}</Text>
+      <Show when={!readerror() && readhint()}>
+        <Text style={{ fontSize: 11.5, color: app.theme().textTertiary }}>{readhint()}</Text>
       </Show>
     </View>
   );
@@ -78,7 +85,7 @@ function NewBranchDialog() {
   const app = useApp();
   const store = app.store;
   const request = app.dialog();
-  const initialBase = (request?.kind === "new-branch" && request.from) || store.status()?.branch || "HEAD";
+  const initialBase = (request?.kind === "new-branch" ? request.from : undefined) || store.status()?.branch || "HEAD";
   const [name, setName] = createSignal("");
   const [base, setBase] = createSignal(initialBase);
   const [checkout, setCheckout] = createSignal(true);
@@ -116,7 +123,6 @@ function NewBranchDialog() {
       </Field>
       <Field label="Based on">
         <Select.Root
-          scope="new-branch-base"
           ariaLabel="Base branch"
           value={base()}
           items={baseOptions()}
@@ -173,7 +179,6 @@ function NewWorktreeDialog() {
     await store.selectWorktree(target);
     const agent = agents().find((candidate) => candidate.id === launch());
     if (agent) {
-      const { runInTerminal } = await import("./sidebar.tsx");
       await runInTerminal(target, agent.command);
     }
   }
@@ -201,7 +206,6 @@ function NewWorktreeDialog() {
         </Field>
         <Field label="Based on">
           <Select.Root
-            scope="new-worktree-base"
             ariaLabel="Base branch"
             value={base()}
             items={baseOptions()}
@@ -217,7 +221,6 @@ function NewWorktreeDialog() {
       <Show when={mode() === "existing"}>
         <Field label="Branch" hint={availableBranches().length === 0 ? "Every local branch is already checked out somewhere." : undefined}>
           <Select.Root
-            scope="new-worktree-existing"
             ariaLabel="Branch"
             value={existing()}
             items={availableBranches()}
@@ -281,30 +284,33 @@ function StashDialog() {
   );
 }
 
-function ModeButton(props: { label: string; active: boolean; onClick: () => void }) {
+function ModeButton(props: { label: () => (string); active: () => (boolean); onClick: () => void }) {
   const app = useApp();
   return (
     <PushButton
       ui={app}
-      label={props.label}
+      label={props.label()}
       onClick={props.onClick}
-      style={{
-        height: 26,
-        fontSize: 12,
-        ...(props.active
-          ? { backgroundColor: app.theme().accentWash, borderColor: app.theme().accent, color: app.theme().accent }
-          : {}),
+      style={() => {
+        const style: Style = { height: 26, fontSize: 12 };
+        if (props.active()) {
+          style.backgroundColor = app.theme().accentWash;
+          style.borderColor = app.theme().accent;
+          style.color = app.theme().accent;
+        }
+        return style;
       }}
     />
   );
 }
 
-export function CheckRow(props: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
+export function CheckRow(props: { label: () => (string); checked: () => (boolean); onChange: (value: boolean) => void; disabled?: () => (boolean) }) {
+  const readdisabled = () => { const source = props.disabled; return source === undefined ? undefined : source(); };
   const app = useApp();
   return (
     <Checkbox.Root
-      checked={props.checked}
-      disabled={props.disabled ?? false}
+      checked={props.checked()}
+      disabled={readdisabled() ?? false}
       onCheckedChange={(value) => props.onChange(value)}
       style={{
         display: "flex",
@@ -319,12 +325,12 @@ export function CheckRow(props: { label: string; checked: boolean; onChange: (va
         disabled: { opacity: 0.5 },
       }}
     >
-      <Checkbox.Indicator style={checkboxBox(app, props.checked)}>
-        <Show when={props.checked}>
+      <Checkbox.Indicator style={checkboxBox(app, props.checked())}>
+        <Show when={props.checked()}>
           <Icon name="check" size={11} color={app.theme().textOnAccent} />
         </Show>
       </Checkbox.Indicator>
-      <Text style={{ fontSize: 12.5, color: app.theme().text }}>{props.label}</Text>
+      <Text style={{ fontSize: 12.5, color: app.theme().text }}>{props.label()}</Text>
     </Checkbox.Root>
   );
 }
@@ -370,7 +376,7 @@ export async function confirm(
   options: { message: string; detail?: string; confirmLabel: string; destructive?: boolean },
 ): Promise<boolean> {
   // A destructive choice is never the Return key's default; Cancel keeps Escape.
-  const choice = await NativeDialog.showAlertDialog(app.window, {
+  const choice = await NativeDialog.showAlertDialog({
     level: options.destructive ? "warning" : "info",
     message: options.message,
     ...(options.detail ? { detail: options.detail } : {}),
@@ -378,6 +384,6 @@ export async function confirm(
       { label: options.confirmLabel, role: options.destructive ? "other" : "default" },
       { label: "Cancel", role: "cancel" },
     ],
-  });
+  }, app.window);
   return choice === 0;
 }

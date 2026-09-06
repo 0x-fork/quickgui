@@ -138,9 +138,9 @@ The gallery is one ordinary in-window view—no popover or native child surface.
 horizontal manual activation, vertical automatic activation, disabled-item skipping, looping,
 retained and unmounted panels, application-owned indicators, and wrapped content.
 
-## Solid
+## QuickGUI UI
 
-`@quickgui/solid` exposes this descriptor as `Tabs.Root`, `Tabs.List`, `Tabs.Tab`,
+`@quickgui/ui` exposes this descriptor as `Tabs.Root`, `Tabs.List`, `Tabs.Tab`,
 `Tabs.Indicator`, and `Tabs.Panel`. Every part repeats the controlled declaration on its own native
 node, so the Rust binding rebuilds `Tabs`/`Tab` and applies the derived list, tab, panel, and
 indicator identities without a JavaScript registry.
@@ -185,4 +185,4 @@ function Views() {
 `activationDirection` is Base UI's `data-activation-direction`, so a panel transition can run the
 right way without JavaScript comparing indices, and the indicator geometry is the core's own
 measurement rather than one taken in the hosted runtime. See the
-[Solid renderer guide](solid.md#selection-tab-disclosure-and-field-parts).
+[QuickGUI UI renderer guide](ui.md#selection-tab-disclosure-and-field-parts).

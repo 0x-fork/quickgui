@@ -112,4 +112,4 @@ menus travel back as one asynchronous `onOpenChange` or `onActiveChange` payload
 surface is an ordinary declared `PopoverMenu` anchored to the matching `Menubar.Item`, so the bar
 owns which menu is open and never the menu's own contents. A declared count past
 `MAX_MENUBAR_MENUS` is clamped exactly as the core clamps it. See the
-[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).

@@ -7,8 +7,8 @@
  * materialized only for the one file a patch is built from. A 32 MB diff therefore never becomes
  * hundreds of thousands of JavaScript objects; JavaScript holds a handle and a few kilobytes.
  *
- * Handles are released with `close()`. A `Diff` that is garbage-collected without being closed is
- * released by a finalizer, so a forgotten handle cannot leak the parsed diff for good.
+ * Handles are released explicitly with `close()`. The store owns them and closes them on cache
+ * eviction, repository changes, and window disposal; temporary parses use try/finally.
  */
 
 import { Buffer } from "node:buffer";
@@ -47,10 +47,6 @@ export interface SelectedLines {
   lines: Set<number>;
 }
 
-const finalizer = new FinalizationRegistry<number>((id) => {
-  closeDiff(id);
-});
-
 export class Diff {
   readonly id: number;
   readonly files: readonly DiffFileSummary[];
@@ -71,18 +67,17 @@ export class Diff {
     this.added = summary.added;
     this.removed = summary.removed;
     this.bytes = bytes;
-    finalizer.register(this, this.id, this);
   }
 
   /** Parse on the native thread pool; the event loop keeps running while a big diff is read. */
   static async open(output: string | Uint8Array, options: OpenDiffOptions = {}): Promise<Diff> {
-    const summary = await openDiffAsync(output, options.truncated ?? false, options.maxRows ?? MAX_DIFF_ROWS);
+    const summary = await openDiffAsync(typeof output === "string" ? output : new TextDecoder().decode(output), options.truncated ?? false, options.maxRows ?? MAX_DIFF_ROWS);
     return new Diff(summary, byteLength(output));
   }
 
   /** Parse on the calling thread, for tests and tiny diffs. */
   static openSync(output: string | Uint8Array, options: OpenDiffOptions = {}): Diff {
-    const summary = openDiff(output, options.truncated ?? false, options.maxRows ?? MAX_DIFF_ROWS);
+    const summary = openDiff(typeof output === "string" ? output : new TextDecoder().decode(output), options.truncated ?? false, options.maxRows ?? MAX_DIFF_ROWS);
     return new Diff(summary, byteLength(output));
   }
 
@@ -146,7 +141,6 @@ export class Diff {
       return;
     }
     this.#closed = true;
-    finalizer.unregister(this);
     closeDiff(this.id);
   }
 }

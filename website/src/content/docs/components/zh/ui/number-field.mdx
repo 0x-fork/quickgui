@@ -1,0 +1,55 @@
+数字编辑器，提供递增、递减和拖动调节部件。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `NumberField`。
+
+```tsx
+import { NumberField } from "@quickgui/ui/number-field";
+```
+
+## 用法
+
+```tsx
+<NumberField.Root value={copies()} min={1} max={20} onValueChange={setCopies}>
+  <NumberField.ScrubArea><Text>Copies</Text></NumberField.ScrubArea>
+  <NumberField.Group>
+    <NumberField.Decrement><Text>−</Text></NumberField.Decrement>
+    <NumberField.Input />
+    <NumberField.Increment><Text>+</Text></NumberField.Increment>
+  </NumberField.Group>
+</NumberField.Root>
+```
+
+## 结构
+
+- `NumberField.Root`
+- `NumberField.Group`
+- `NumberField.Input`
+- `NumberField.Increment`
+- `NumberField.Decrement`
+- `NumberField.ScrubArea`
+- `NumberField.ScrubAreaCursor`
+
+```tsx
+<NumberField.Root>
+  <NumberField.Group />
+  <NumberField.Input />
+  <NumberField.Increment />
+  <NumberField.Decrement />
+  <NumberField.ScrubArea />
+  <NumberField.ScrubAreaCursor />
+</NumberField.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `value` | 受控值，具体类型取决于该组件的约定。 |
+| `defaultValue` | 组件自行管理状态时的初始值。 |
+| `min` | 可接受的最小值。 |
+| `max` | 可接受的最大值。 |
+| `step` | 键盘、指针或原生控件输入使用的步长。 |
+| `onValueChange` | 报告核心接受的值。 |
+

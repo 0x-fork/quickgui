@@ -305,10 +305,21 @@ pub struct AppRunnerWaker {
 #[cfg(not(target_arch = "wasm32"))]
 impl AppRunnerWaker {
     /// Wake the application event loop, returning `false` after it has closed.
+    ///
+    /// A blocked [`AppRunner::pump`] returns promptly on every platform. On macOS the proxy
+    /// wake-up alone is dropped whenever the main run loop is not asleep, so the loop is also
+    /// stopped through the main dispatch queue; see `macos_application::interrupt_pump`.
     pub fn wake(&self) -> bool {
-        self.proxy
+        if self
+            .proxy
             .send_event(RuntimeEvent::ExternalCommandsReady)
-            .is_ok()
+            .is_err()
+        {
+            return false;
+        }
+        #[cfg(target_os = "macos")]
+        crate::macos_application::interrupt_pump();
+        true
     }
 }
 

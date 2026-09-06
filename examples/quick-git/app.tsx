@@ -1,8 +1,9 @@
+import { untrack as nativeUntrack, onCleanup as nativeOnCleanup } from "@quickgui/ui";
 import { join } from "node:path";
 
 import { Appearance, Dialog, Menu, Shell, Window, app, type AppearanceMode } from "@quickgui/native";
-import { createRenderer } from "@quickgui/solid";
-import { createEffect, createRoot, createSignal } from "solid-js";
+import { createRenderer } from "@quickgui/ui";
+import { createEffect, createRoot, createSignal } from "@quickgui/ui";
 
 import { GitRunner } from "./git/process.ts";
 import { canonicalPath } from "./model/paths.ts";
@@ -11,23 +12,27 @@ import { createStore, type Store } from "./model/store.ts";
 import { activateCommands, commands } from "./ui/commands.ts";
 import { App } from "./ui/shell.tsx";
 
+console.log("[startup probe] waiting for app");
 await app.whenReady();
+console.log("[startup probe] app ready");
 
 const paths = await app.getPaths();
+console.log("[startup probe] paths ready");
 const statePath = paths?.dataDir ? join(paths.dataDir, "quick-git-state.json") : undefined;
 const persistence = createPersistence(statePath, await loadPersistedState(statePath));
+console.log("[startup probe] persistence ready");
 const runner = new GitRunner({ concurrency: 4 });
 
 const [appearance, setAppearance] = createSignal<AppearanceMode>("light");
 
 // Every window shows one repository through its own store; the git runner and the persisted
 // state are shared, so a repository opened anywhere lands in every window's recent list.
-const sessions = new Map<Window, Store>();
+const sessions = new Map<number, { window: Window; store: Store }>();
 const [activeWindow, setActiveWindow] = createSignal<Window | undefined>(undefined);
 
 function activeStore(): Store | undefined {
   const window = activeWindow();
-  return window && !window.closed ? sessions.get(window) : undefined;
+  return window && !window.closed ? sessions.get(window.nativeId)?.store : undefined;
 }
 
 // The application menu itself (About, Hide, Quit) is the platform's; QuickGUI appends these.
@@ -37,7 +42,7 @@ function installMenu(recent: readonly string[], hasRepository: boolean): void {
     {
       label: "File",
       items: [
-        { label: "Open Repository…", accelerator: "CmdOrCtrl+O", click: () => commands()?.openRepository() },
+        { label: "Open Repository…", accelerator: "CmdOrCtrl+O", click: () => { commands()?.openRepository(); } },
         {
           type: "submenu",
           label: "Open Recent",
@@ -45,11 +50,11 @@ function installMenu(recent: readonly string[], hasRepository: boolean): void {
           items: recent.map((path) => ({ label: path, click: () => void openRepositoryPath(path, activeWindow()) })),
         },
         { type: "separator" },
-        { label: "New Branch…", accelerator: "CmdOrCtrl+Shift+N", click: () => commands()?.openDialog({ kind: "new-branch" }) },
-        { label: "New Worktree…", accelerator: "CmdOrCtrl+Alt+N", click: () => commands()?.openDialog({ kind: "new-worktree" }) },
-        { label: "Stash Changes…", accelerator: "CmdOrCtrl+Shift+T", click: () => commands()?.openDialog({ kind: "stash" }) },
+        { label: "New Branch…", accelerator: "CmdOrCtrl+Shift+N", click: () => { commands()?.openDialog({ kind: "new-branch" }); } },
+        { label: "New Worktree…", accelerator: "CmdOrCtrl+Alt+N", click: () => { commands()?.openDialog({ kind: "new-worktree" }); } },
+        { label: "Stash Changes…", accelerator: "CmdOrCtrl+Shift+T", click: () => { commands()?.openDialog({ kind: "stash" }); } },
         { type: "separator" },
-        { label: "Close Repository", accelerator: "CmdOrCtrl+Shift+W", click: () => activeStore()?.closeRepository() },
+        { label: "Close Repository", accelerator: "CmdOrCtrl+Shift+W", click: () => { activeStore()?.closeRepository(); } },
         { type: "role", label: "Close Window", role: "close-window", accelerator: "CmdOrCtrl+W" },
       ],
     },
@@ -68,11 +73,11 @@ function installMenu(recent: readonly string[], hasRepository: boolean): void {
     {
       label: "View",
       items: [
-        { label: "Changes", accelerator: "CmdOrCtrl+1", click: () => activeStore()?.setView("changes") },
-        { label: "History", accelerator: "CmdOrCtrl+2", click: () => activeStore()?.setView("history") },
-        { label: "Branches", accelerator: "CmdOrCtrl+3", click: () => activeStore()?.setView("branches") },
-        { label: "Worktrees", accelerator: "CmdOrCtrl+4", click: () => activeStore()?.setView("worktrees") },
-        { label: "Stashes", accelerator: "CmdOrCtrl+5", click: () => activeStore()?.setView("stashes") },
+        { label: "Changes", accelerator: "CmdOrCtrl+1", click: () => { activeStore()?.setView("changes"); } },
+        { label: "History", accelerator: "CmdOrCtrl+2", click: () => { activeStore()?.setView("history"); } },
+        { label: "Branches", accelerator: "CmdOrCtrl+3", click: () => { activeStore()?.setView("branches"); } },
+        { label: "Worktrees", accelerator: "CmdOrCtrl+4", click: () => { activeStore()?.setView("worktrees"); } },
+        { label: "Stashes", accelerator: "CmdOrCtrl+5", click: () => { activeStore()?.setView("stashes"); } },
         { type: "separator" },
         { label: "Refresh", accelerator: "CmdOrCtrl+R", click: () => void activeStore()?.refresh() },
         { type: "separator" },
@@ -83,7 +88,7 @@ function installMenu(recent: readonly string[], hasRepository: boolean): void {
       label: "Repository",
       items: [
         { label: "Commit", accelerator: "CmdOrCtrl+Enter", click: () => void activeStore()?.commit() },
-        { label: "Generate Commit Message", accelerator: "CmdOrCtrl+Shift+G", click: () => void activeStore()?.generateMessage() },
+        { label: "Generate Commit Message", accelerator: "CmdOrCtrl+Shift+G", click: () => void activeStore()?.generateMessage(undefined) },
         { type: "separator" },
         { label: "Stage All", accelerator: "CmdOrCtrl+Shift+A", click: () => void activeStore()?.stageAll() },
         { label: "Unstage All", accelerator: "CmdOrCtrl+Shift+U", click: () => void activeStore()?.unstageAll() },
@@ -142,11 +147,17 @@ function openWindow(initialRepository?: string): Window {
       />
     )),
   });
-  sessions.set(window, store);
+  sessions.set(window.nativeId, { window, store });
   setActiveWindow(window);
   activateCommands(window);
-  void Appearance.getCurrent(window).then(setAppearance).catch(() => {});
-  window.on("appearanceChange", ({ appearance: next }) => setAppearance(next));
+  window.on("readyToShow", () => { void adoptAppearance(); });
+  async function adoptAppearance(): Promise<void> {
+    try {
+      const state = await window.getState();
+      if (!window.closed) setAppearance(state.appearance === "dark" ? "dark" : "light");
+    } catch {}
+  }
+  window.on("appearanceChange", ({ appearance: next }) => { if (next === "dark" || next === "light") setAppearance(next); });
   window.on("focus", () => {
     setActiveWindow(window);
     activateCommands(window);
@@ -154,27 +165,26 @@ function openWindow(initialRepository?: string): Window {
   // The title and represented file follow this window's repository.
   const disposeEffects = createRoot((dispose) => {
     createEffect(
-      () => ({ name: store.repositoryName(), branch: store.status()?.branch, root: store.repository()?.root }),
-      ({ name, branch, root }) => {
+      () => { const value = (() => ({ name: store.repositoryName(), branch: store.status()?.branch, root: store.repository()?.root }))(); nativeUntrack(() => (({ name, branch, root }) => {
         if (window.closed) return;
         window.setTitle(name ? `${name}${branch ? ` — ${branch}` : ""}` : "Quick Git");
         window.setRepresentedFile(root);
-      },
+      })(value)); },
     );
     return dispose;
   });
   window.on("closed", () => {
     disposeEffects();
-    sessions.delete(window);
+    sessions.delete(window.nativeId);
     store.dispose();
-    if (activeWindow() === window) setActiveWindow([...sessions.keys()].at(-1));
+    if (activeWindow() === window) setActiveWindow([...sessions.values()].at(-1)?.window);
   });
   if (initialRepository) void store.openRepository(initialRepository);
   return window;
 }
 
 function windowShowing(root: string): Window | undefined {
-  for (const [window, store] of sessions) {
+  for (const { window, store } of sessions.values()) {
     if (window.closed) continue;
     if ((store.mainRepository()?.root ?? store.repository()?.root) === root) return window;
   }
@@ -192,7 +202,7 @@ async function openRepositoryPath(path: string, from?: Window): Promise<void> {
     existing.focus();
     return;
   }
-  const fromStore = from && !from.closed ? sessions.get(from) : undefined;
+  const fromStore = from && !from.closed ? sessions.get(from.nativeId)?.store : undefined;
   if (fromStore && !fromStore.repository() && !fromStore.opening()) {
     if (await fromStore.openRepository(target)) fromStore.setView("changes");
     return;
@@ -201,31 +211,34 @@ async function openRepositoryPath(path: string, from?: Window): Promise<void> {
 }
 
 async function openRepositoryDialog(from: Window): Promise<void> {
-  const result = await Dialog.showOpenDialog(from, {
+  const result = await Dialog.showOpenDialog({
     title: "Open Repository",
     buttonLabel: "Open",
     properties: ["openDirectory"],
-  });
-  const [path] = result.filePaths;
+  }, from);
+  const path = result.filePaths.at(0);
   if (!result.canceled && path) await openRepositoryPath(path, from);
 }
 
 // Module-level effects live in one root so they have an owner and dispose together.
 createRoot(() => {
   createEffect(
-    () => ({ recent: persistence.state().recentRepositories, hasRepository: activeStore()?.repository() !== undefined }),
-    ({ recent, hasRepository }) => installMenu(recent, hasRepository),
+    () => { const value = (() => ({ recent: persistence.state().recentRepositories, hasRepository: activeStore()?.repository() !== undefined }))(); nativeUntrack(() => (({ recent, hasRepository }) => installMenu(recent, hasRepository))(value)); },
   );
 });
 
-app.on("reopen", ({ hasVisibleWindows }) => {
+app.onReopen( ({ hasVisibleWindows }) => {
   if (!hasVisibleWindows) openWindow();
 });
 
-app.on("willQuit", () => {
-  void persistence.flush();
-});
+app.onBeforeQuit(() => { void flushAndQuit(); });
+async function flushAndQuit(): Promise<void> {
+  await persistence.flush();
+  await app.quit(true);
+}
 
 // `QUICK_GIT_OPEN=/path` opens a repository at launch, for scripted runs and screenshots.
 const initialRepository = process.env.QUICK_GIT_OPEN?.trim() || persistence.current().lastRepository;
+console.log("[startup probe] opening window");
 openWindow(initialRepository || undefined);
+console.log("[startup probe] window created");

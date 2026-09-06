@@ -68,23 +68,23 @@ export function Quickstart({
         <div className="space-y-9 bg-background p-8 sm:p-12">
           <div className="flex items-center gap-2.5">
             <span
-              className="i-simple-icons-solid size-5 text-foreground"
+              className="i-simple-icons size-5 text-foreground"
               aria-hidden
             />
             <h3 className="text-lg font-semibold tracking-tight">
-              TypeScript · Solid
+              TypeScript · QuickGUI UI
             </h3>
           </div>
 
-          <Step number="01" title={t('quickstart.solid.create')}>
+          <Step number="01" title={t('quickstart.ui.create')}>
             <Shell html={highlighted.cliInit} />
           </Step>
-          <Step number="02" title={t('quickstart.solid.ship')}>
+          <Step number="02" title={t('quickstart.ui.ship')}>
             <Shell html={highlighted.cliBuild} />
           </Step>
 
           <p className="text-[15px] leading-relaxed text-muted-foreground">
-            {t('quickstart.solid.note')}
+            {t('quickstart.ui.note')}
           </p>
         </div>
       </div>

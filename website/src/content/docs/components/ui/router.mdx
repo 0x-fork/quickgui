@@ -1,0 +1,46 @@
+A QuickGUI UI projection of QuickGUI core routing with nested layouts and bounded memory history.
+
+## Import
+
+Import `Router` from `@quickgui/ui/router`.
+
+```tsx
+import { Router } from "@quickgui/ui/router";
+```
+
+## Usage
+
+```tsx
+import { Router, route } from "@quickgui/ui/router";
+
+<Router initialPath="/" routes={[
+  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
+]} />;
+```
+
+## Anatomy
+
+- `Router`
+- `route` / `layout`
+- `Link`
+- `Outlet`
+
+```tsx
+import { Router, route } from "@quickgui/ui/router";
+
+<Router initialPath="/" routes={[
+  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
+]} />;
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `initialPath` | Initial destination for the bounded in-memory history. |
+| `fallback` | Content rendered when no route matches. |
+| `routes` | Static route declarations built with `route` and `layout`. |
+| `path` | Absolute or parent-relative route pattern. |
+| `component` | Component rendered when a route wins. |
+| `href` | Destination resolved by the QuickGUI router. |
+

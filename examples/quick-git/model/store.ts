@@ -1,3 +1,4 @@
+import { untrack as nativeUntrack, onCleanup as nativeOnCleanup } from "@quickgui/ui";
 /**
  * Application state and every action the UI can take.
  *
@@ -8,10 +9,7 @@
 
 import { basename, join, resolve } from "node:path";
 
-import { createEffect, createMemo, createRoot, createSignal, untrack } from "solid-js";
-
-/** Solid 2 batches synchronous writes on its own; this only groups them for readability. */
-const batch = <T,>(work: () => T): T => work();
+import { batch, createEffect, createMemo, createRoot, createSignal, untrack } from "@quickgui/ui";
 
 import {
   AGENT_TIMEOUT_MS,
@@ -30,7 +28,7 @@ import type { RefCollections, StashEntry } from "../git/refs.ts";
 import { stagedChanges, unstagedChanges, type ChangeItem, type RepositoryStatus } from "../git/status.ts";
 import type { Worktree } from "../git/worktree.ts";
 import { canonicalPath } from "./paths.ts";
-import { DEFAULT_STATE, rememberRepository, type Persistence, type PersistedState } from "./persistence.ts";
+import { DEFAULT_STATE, rememberRepository, type Persistence, type PersistedPatch } from "./persistence.ts";
 import { watchRepository, type ChangeKind } from "./watcher.ts";
 
 export type ViewId = "changes" | "history" | "branches" | "worktrees" | "stashes";
@@ -125,11 +123,11 @@ function buildStore(options: StoreOptions) {
   let stopWatching: (() => void) | undefined;
 
   // --- repository ------------------------------------------------------------------------------
-  const [repository, setRepository] = createSignal<Repository>();
-  const [mainRepository, setMainRepository] = createSignal<Repository>();
-  const [opening, setOpening] = createSignal<string>();
+  const [repository, setRepository] = createSignal<Repository | undefined>(undefined);
+  const [mainRepository, setMainRepository] = createSignal<Repository | undefined>(undefined);
+  const [opening, setOpening] = createSignal<string | undefined>(undefined);
   const [worktrees, setWorktrees] = createSignal<Worktree[]>([]);
-  const [status, setStatus] = createSignal<RepositoryStatus>();
+  const [status, setStatus] = createSignal<RepositoryStatus | undefined>(undefined);
   const [numstat, setNumstat] = createSignal<{ unstaged: Map<string, NumstatEntry>; staged: Map<string, NumstatEntry> }>({
     unstaged: new Map(),
     staged: new Map(),
@@ -139,7 +137,7 @@ function buildStore(options: StoreOptions) {
   const [stashes, setStashes] = createSignal<StashEntry[]>([]);
   const [remotes, setRemotes] = createSignal<string[]>([]);
   const recentRepositories = () => options.persistence.state().recentRepositories;
-  const [busy, setBusy] = createSignal<BusyState>();
+  const [busy, setBusy] = createSignal<BusyState | undefined>(undefined);
   const [view, setViewSignal] = createSignal<ViewId>("changes");
   const [sidebarWidth, setSidebarWidthSignal] = createSignal(persisted.sidebarWidth);
   const [changesSplit, setChangesSplitSignal] = createSignal(persisted.changesSplit);
@@ -161,13 +159,15 @@ function buildStore(options: StoreOptions) {
     unstaged: [],
     staged: [],
   });
-  const [activeCell, setActiveCell] = createSignal<{ list: ListId; row: number }>();
+  const [activeCell, setActiveCell] = createSignal<{ list: ListId; row: number } | undefined>(undefined);
   const [focusedList, setFocusedList] = createSignal<ListId>("unstaged");
 
   const selectedItems = (list: ListId): ChangeItem[] => {
     const items = list === "unstaged" ? unstaged() : staged();
     const rows = new Set<number>();
-    for (const [start, end] of selection()[list]) {
+    for (const range of selection()[list]) {
+      if (range.length < 2) continue;
+      const [start, end] = range;
       for (let row = start!; row <= end!; row += 1) rows.add(row);
     }
     return items.filter((_, index) => rows.has(index));
@@ -183,11 +183,12 @@ function buildStore(options: StoreOptions) {
       if (selected.length === 0) continue;
       const cell = activeCell();
       const items = list === "unstaged" ? unstaged() : staged();
-      if (cell && cell.list === list && items[cell.row] && selected.includes(items[cell.row]!)) return items[cell.row];
+      const item = cell && cell.list === list && cell.row >= 0 ? items.at(cell.row) : undefined;
+      if (item && selected.includes(item)) return item;
       return selected[0];
     }
     // Nothing chosen yet: show the first change so the diff pane is never empty needlessly.
-    return unstaged()[0] ?? staged()[0];
+    return unstaged().at(0) ?? staged().at(0);
   });
 
   // --- diff ------------------------------------------------------------------------------------
@@ -251,7 +252,7 @@ function buildStore(options: StoreOptions) {
   const selectedDiffLineCount = createMemo(() => selectedDiffLines().reduce((total, entry) => total + entry.lines.size, 0));
 
   async function loadDiff(target: DiffTarget | undefined): Promise<void> {
-    diffController?.abort();
+    if (diffController !== undefined) diffController.abort();
     diffController = undefined;
     if (!target) {
       setDiff({ loading: false });
@@ -267,11 +268,11 @@ function buildStore(options: StoreOptions) {
     if (!repo) return;
     const controller = new AbortController();
     diffController = controller;
-    setDiff((current) => ({
+    setDiff(((current: ReturnType<typeof diff>) => ({
       target,
       ...(current.target?.path === target.path && current.diff ? { diff: current.diff } : {}),
       loading: true,
-    }));
+    }))(nativeUntrack(diff)));
     try {
       let parsed: Diff;
       if (target.kind === "commit") parsed = await repo.diffCommit(target.sha!, target.path, { signal: controller.signal });
@@ -296,11 +297,11 @@ function buildStore(options: StoreOptions) {
   const [body, setBody] = createSignal("");
   const [amend, setAmendSignal] = createSignal(false);
   const [committing, setCommitting] = createSignal(false);
-  const [headMessage, setHeadMessage] = createSignal<{ subject: string; body: string }>();
+  const [headMessage, setHeadMessage] = createSignal<{ subject: string; body: string } | undefined>(undefined);
   const [agents, setAgents] = createSignal<AvailableAgent[]>([]);
   const [preferredAgent, setPreferredAgentSignal] = createSignal<AgentId | undefined>(persisted.preferredAgent);
-  const [generating, setGenerating] = createSignal<GenerationState>();
-  const [lastGenerated, setLastGenerated] = createSignal<GeneratedMessage>();
+  const [generating, setGenerating] = createSignal<GenerationState | undefined>(undefined);
+  const [lastGenerated, setLastGenerated] = createSignal<GeneratedMessage | undefined>(undefined);
 
   const canCommit = createMemo(() => {
     if (committing() || !repository()) return false;
@@ -311,8 +312,9 @@ function buildStore(options: StoreOptions) {
 
   void detectAgents().then((found) => {
     setAgents(found);
-    if (!found.some((agent) => agent.id === untrack(preferredAgent)) && found[0]) {
-      setPreferredAgentSignal(found[0].id);
+    const first = found.at(0);
+    if (!found.some((agent) => agent.id === untrack(preferredAgent)) && first) {
+      setPreferredAgentSignal(first.id);
     }
   });
 
@@ -330,16 +332,15 @@ function buildStore(options: StoreOptions) {
   let detailController: AbortController | undefined;
 
   const selectedCommit = createMemo<Commit | undefined>(() => {
-    const [range] = historySelection();
-    const row = range?.[0];
-    return row === undefined ? undefined : history().commits[row];
+    const row = historySelection().at(0)?.at(0);
+    return row === undefined || row < 0 ? undefined : history().commits.at(row);
   });
 
   const commitDiffTarget = createMemo<DiffTarget | undefined>(() => {
     const detail = commitDetail();
     const commit = selectedCommit();
     if (!commit || detail.sha !== commit.sha) return undefined;
-    const path = detail.selectedPath ?? detail.files[0]?.path;
+    const path = detail.selectedPath ?? detail.files.at(0)?.path;
     if (!path) return undefined;
     const file = detail.files.find((entry) => entry.path === path);
     return {
@@ -353,21 +354,19 @@ function buildStore(options: StoreOptions) {
   });
 
   createEffect(
-    () => selectedCommit()?.sha,
-    (sha) => {
+    () => { const value = (() => selectedCommit()?.sha)(); nativeUntrack(() => ((sha) => {
       queueMicrotask(() => void loadCommitDetail(sha));
-    },
+    })(value)); },
   );
 
   createEffect(
-    () => (view() === "changes" ? diffTarget() : commitDiffTarget()),
-    (target) => {
+    () => { const value = (() => (view() === "changes" ? diffTarget() : commitDiffTarget()))(); nativeUntrack(() => ((target) => {
       queueMicrotask(() => void loadDiff(target));
-    },
+    })(value)); },
   );
 
   async function loadCommitDetail(sha: string | undefined): Promise<void> {
-    detailController?.abort();
+    if (detailController !== undefined) detailController.abort();
     detailController = undefined;
     const repo = repository();
     if (!sha || !repo) {
@@ -393,10 +392,10 @@ function buildStore(options: StoreOptions) {
     if (!repo) return;
     const current = untrack(history);
     if (!reset && (current.loading || current.exhausted)) return;
-    historyController?.abort();
+    if (historyController !== undefined) historyController.abort();
     const controller = new AbortController();
     historyController = controller;
-    setHistory((state) => ({ ...state, loading: true, ...(reset ? { exhausted: false } : {}) }));
+    setHistory(((state: ReturnType<typeof history>): ReturnType<typeof history> => ({ ...state, loading: true, exhausted: reset ? false : state.exhausted }))(nativeUntrack(history)));
     try {
       const skip = reset ? 0 : current.commits.length;
       const page = await repo.log({
@@ -407,13 +406,13 @@ function buildStore(options: StoreOptions) {
       });
       if (controller.signal.aborted) return;
       const commits = reset ? page : [...current.commits, ...page];
-      setHistory((state) => ({
+      setHistory(((state: ReturnType<typeof history>): ReturnType<typeof history> => ({
         ...state,
         commits,
         graph: layoutGraph(commits),
         loading: false,
         exhausted: page.length < HISTORY_PAGE,
-      }));
+      }))(nativeUntrack(history)));
       if (reset) {
         const previous = untrack(selectedCommit)?.sha;
         const index = previous ? commits.findIndex((commit) => commit.sha === previous) : -1;
@@ -421,18 +420,18 @@ function buildStore(options: StoreOptions) {
       }
     } catch (error) {
       if (controller.signal.aborted) return;
-      setHistory((state) => ({ ...state, loading: false }));
+      setHistory(((state: ReturnType<typeof history>): ReturnType<typeof history> => ({ ...state, loading: false }))(nativeUntrack(history)));
       notify({ type: "error", title: "Unable to load history", description: describeError(error) });
     }
   }
 
   // --- refresh ---------------------------------------------------------------------------------
   let refreshing = false;
-  let refreshPending: Set<ChangeKind> | undefined;
+  let refreshPending = new Set<ChangeKind>();
 
-  async function refresh(kinds: ReadonlySet<ChangeKind> = new Set(["worktree", "index", "refs"])): Promise<void> {
+  async function refresh(kinds: ReadonlySet<ChangeKind>): Promise<void> {
     if (refreshing) {
-      refreshPending = new Set([...(refreshPending ?? []), ...kinds]);
+      refreshPending = new Set([...(refreshPending), ...kinds]);
       return;
     }
     refreshing = true;
@@ -440,20 +439,32 @@ function buildStore(options: StoreOptions) {
       const repo = repository();
       if (!repo) return;
       const wantsRefs = kinds.has("refs");
-      const [nextStatus, unstagedStats, stagedStats, nextRefs, nextStashes, nextWorktrees, nextRemotes, head] =
-        await Promise.all([
-          repo.status(),
-          repo.numstat(false),
-          repo.numstat(true),
-          wantsRefs ? repo.refs() : undefined,
-          wantsRefs ? repo.stashes() : undefined,
-          wantsRefs ? repo.worktrees() : undefined,
-          wantsRefs ? repo.remotes() : undefined,
-          repo.hasHead(),
-        ]);
+      let nextStatus: RepositoryStatus | undefined;
+      let unstagedStats: NumstatEntry[] = [];
+      let stagedStats: NumstatEntry[] = [];
+      let nextRefs: RefCollections | undefined;
+      let nextStashes: StashEntry[] | undefined;
+      let nextWorktrees: Worktree[] | undefined;
+      let nextRemotes: string[] | undefined;
+      let head = false;
+      const tasks: Promise<void>[] = [
+        repo.status().then((value) => { nextStatus = value; }),
+        repo.numstat(false).then((value) => { unstagedStats = value; }),
+        repo.numstat(true).then((value) => { stagedStats = value; }),
+        repo.hasHead().then((value) => { head = value; }),
+      ];
+      if (wantsRefs) {
+        tasks.push(repo.refs().then((value) => { nextRefs = value; }));
+        tasks.push(repo.stashes().then((value) => { nextStashes = value; }));
+        tasks.push(repo.worktrees().then((value) => { nextWorktrees = value; }));
+        tasks.push(repo.remotes().then((value) => { nextRemotes = value; }));
+      }
+      await Promise.all(tasks);
+      const statusSnapshot = nextStatus;
+      if (statusSnapshot === undefined) return;
       if (repository() !== repo) return;
       batch(() => {
-        setStatus(nextStatus);
+        setStatus(statusSnapshot);
         setNumstat({
           unstaged: new Map(unstagedStats.map((entry) => [entry.path, entry])),
           staged: new Map(stagedStats.map((entry) => [entry.path, entry])),
@@ -464,22 +475,22 @@ function buildStore(options: StoreOptions) {
         if (nextWorktrees) setWorktrees(nextWorktrees);
         if (nextRemotes) setRemotes(nextRemotes);
         clearDiffCache();
-        setGeneration((value) => value + 1);
-        reconcileSelection(nextStatus);
+        setGeneration(((value: ReturnType<typeof generation>) => value + 1)(nativeUntrack(generation)));
+        reconcileSelection(statusSnapshot);
       });
       if (wantsRefs) {
         void loadHistory(true);
         void loadHeadMessage(repo);
       }
     } catch (error) {
-      if (!(error instanceof GitError && error.aborted)) {
+      if (!(error instanceof Error && error.name === "AbortError")) {
         notify({ type: "error", title: "Unable to refresh", description: describeError(error) });
       }
     } finally {
       refreshing = false;
-      if (refreshPending) {
+      if (refreshPending.size > 0) {
         const pending = refreshPending;
-        refreshPending = undefined;
+        refreshPending = new Set<ChangeKind>();
         void refresh(pending);
       }
     }
@@ -498,13 +509,15 @@ function buildStore(options: StoreOptions) {
     const cell = activeCell();
     if (cell) {
       const items = cell.list === "unstaged" ? nextUnstaged : nextStaged;
-      if (!items[cell.row]) setActiveCell(items.length > 0 ? { list: cell.list, row: Math.min(cell.row, items.length - 1) } : undefined);
+      if (cell.row < 0 || cell.row >= items.length) {
+        setActiveCell(items.length > 0 ? { list: cell.list, row: Math.max(0, Math.min(cell.row, items.length - 1)) } : undefined);
+      }
     }
   }
 
   async function loadHeadMessage(repo: Repository): Promise<void> {
     try {
-      const [head] = await repo.log({ limit: 1 });
+      const head = (await repo.log({ limit: 1 })).at(0);
       setHeadMessage(head ? { subject: head.subject, body: head.body } : undefined);
     } catch {
       setHeadMessage(undefined);
@@ -534,8 +547,8 @@ function buildStore(options: StoreOptions) {
 
   async function activate(repo: Repository, main: Repository): Promise<void> {
     stopWatching?.();
-    diffController?.abort();
-    historyController?.abort();
+    if (diffController !== undefined) diffController.abort();
+    if (historyController !== undefined) historyController.abort();
     batch(() => {
       setRepository(repo);
       setMainRepository(main);
@@ -544,7 +557,7 @@ function buildStore(options: StoreOptions) {
       setActiveCell(undefined);
       setDiff({ loading: false });
       setDiffSelection([]);
-      setHistory((state) => ({ ...state, commits: [], graph: [], loading: false, exhausted: false }));
+      setHistory(((state: ReturnType<typeof history>): ReturnType<typeof history> => ({ ...state, commits: [], graph: [], loading: false, exhausted: false }))(nativeUntrack(history)));
       setHistorySelection([]);
       setCommitDetail({ files: [], loading: false });
       setSubject("");
@@ -558,17 +571,22 @@ function buildStore(options: StoreOptions) {
       commonDir: repo.info.commonDir,
       onChange: (kinds) => void refresh(kinds),
     });
-    void Promise.all([repo.config("user.name"), repo.config("user.email")]).then(([name, email]) =>
-      setIdentity({ ...(name ? { name } : {}), ...(email ? { email } : {}) }),
-    );
-    await refresh();
+    const readIdentity = async (): Promise<void> => {
+      const values: (string | undefined)[] = await Promise.all([repo.config("user.name"), repo.config("user.email")]);
+      if (repository() !== repo) return;
+      const name = values[0];
+      const email = values[1];
+      setIdentity({ ...(name ? { name } : {}), ...(email ? { email } : {}) });
+    };
+    void readIdentity();
+    await refresh(new Set<ChangeKind>(["worktree", "index", "refs"]));
   }
 
   function closeRepository(): void {
     stopWatching?.();
     stopWatching = undefined;
-    diffController?.abort();
-    historyController?.abort();
+    if (diffController !== undefined) diffController.abort();
+    if (historyController !== undefined) historyController.abort();
     batch(() => {
       setRepository(undefined);
       setMainRepository(undefined);
@@ -577,11 +595,11 @@ function buildStore(options: StoreOptions) {
       setRefs({ local: [], remote: [], tags: [] });
       setStashes([]);
       setDiff({ loading: false });
-      setHistory((state) => ({ ...state, commits: [], graph: [] }));
+      setHistory(((state: ReturnType<typeof history>): ReturnType<typeof history> => ({ ...state, commits: [], graph: [] }))(nativeUntrack(history)));
       setHistorySelection([]);
       setView("changes");
     });
-    persist({ lastRepository: undefined });
+    persist({ lastRepository: null });
   }
 
   async function selectWorktree(path: string): Promise<void> {
@@ -598,27 +616,27 @@ function buildStore(options: StoreOptions) {
   }
 
   // --- operations ------------------------------------------------------------------------------
-  async function operation<T>(
+  async function operation(
     label: string,
-    run: (repo: Repository, signal: AbortSignal) => Promise<T>,
-    after: { refs?: boolean; success?: Notice | ((result: T) => Notice | undefined) } = {},
-  ): Promise<T | undefined> {
+    run: (repo: Repository, signal: AbortSignal) => Promise<void>,
+    after: { refs?: boolean; success?: Notice },
+  ): Promise<boolean> {
     const repo = repository();
-    if (!repo) return undefined;
+    if (!repo) return false;
     const controller = new AbortController();
     setBusy({ label, cancel: () => controller.abort() });
     try {
-      const result = await run(repo, controller.signal);
-      const success = typeof after.success === "function" ? after.success(result) : after.success;
+      await run(repo, controller.signal);
+      const success = after.success;
       if (success) notify(success);
-      return result;
+      return true;
     } catch (error) {
-      if (error instanceof GitError && error.aborted) {
+      if (error instanceof Error && error.name === "AbortError") {
         notify({ type: "info", title: `${label} cancelled` });
       } else {
         notify({ type: "error", title: `${label} failed`, description: describeError(error), timeout: 9000 });
       }
-      return undefined;
+      return false;
     } finally {
       setBusy(undefined);
       void refresh(new Set<ChangeKind>(after.refs === false ? ["worktree", "index"] : ["worktree", "index", "refs"]));
@@ -649,7 +667,7 @@ function buildStore(options: StoreOptions) {
   function toggleStaging(list: ListId): Promise<void> {
     const items = selectedItems(list);
     const cell = activeCell();
-    const fallback = cell && cell.list === list ? (list === "unstaged" ? unstaged() : staged())[cell.row] : undefined;
+    const fallback = cell && cell.list === list && cell.row >= 0 ? (list === "unstaged" ? unstaged() : staged()).at(cell.row) : undefined;
     const targets = items.length > 0 ? items : fallback ? [fallback] : [];
     return list === "unstaged" ? stageItems(targets) : unstageItems(targets);
   }
@@ -687,7 +705,7 @@ function buildStore(options: StoreOptions) {
     const byFile = new Map<number, HunkSelection[]>();
     for (const group of groups) {
       const list = byFile.get(group.fileIndex) ?? [];
-      list.push({ hunkIndex: group.hunkIndex, lines: group.lines });
+      list.push({ hunkIndex: group.hunkIndex, lines: [...group.lines] });
       byFile.set(group.fileIndex, list);
     }
     for (const [fileIndex, selections] of byFile) {
@@ -707,7 +725,7 @@ function buildStore(options: StoreOptions) {
         (repo, signal) => repo.commit(message, { amend: amending, signal }),
         { success: { type: "success", title: amending ? "Commit amended" : `Committed “${truncate(subject().trim(), 60)}”` } },
       );
-      if (done !== undefined) {
+      if (done) {
         batch(() => {
           setSubject("");
           setBody("");
@@ -728,10 +746,10 @@ function buildStore(options: StoreOptions) {
     }
   }
 
-  async function generateMessage(agentId?: AgentId): Promise<void> {
+  async function generateMessage(agentId: AgentId | undefined): Promise<void> {
     const repo = repository();
     if (!repo) return;
-    const agent = agents().find((candidate) => candidate.id === (agentId ?? preferredAgent())) ?? agents()[0];
+    const agent = agents().find((candidate) => candidate.id === (agentId ?? preferredAgent())) ?? agents().at(0);
     if (!agent) {
       notify({
         type: "warning",
@@ -796,14 +814,14 @@ function buildStore(options: StoreOptions) {
         timeout: 3000,
       });
     } catch (error) {
-      if (controller.signal.aborted || (error instanceof AgentError && error.aborted)) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
         notify({ type: "info", title: "Generation cancelled", timeout: 2000 });
         return;
       }
       notify({ type: "error", title: "Unable to generate a message", description: describeError(error), timeout: 9000 });
     } finally {
       if (generating()?.cancel === (() => controller.abort())) setGenerating(undefined);
-      setGenerating((current) => (current?.agent === agent.id ? undefined : current));
+      setGenerating(((current: ReturnType<typeof generating>) => (current?.agent === agent.id ? undefined : current))(nativeUntrack(generating)));
     }
   }
 
@@ -825,7 +843,7 @@ function buildStore(options: StoreOptions) {
   const push = async () => {
     const current = status();
     const branch = current?.branch;
-    const setUpstream = branch && !current.upstream ? { remote: remotes()[0] ?? "origin", branch } : undefined;
+    const setUpstream = branch && !current.upstream ? { remote: remotes().at(0) ?? "origin", branch } : undefined;
     await operation("Push", (repo, signal) => repo.push(setUpstream ? { setUpstream } : {}, { signal }), {
       success: { type: "success", title: setUpstream ? `Pushed and set upstream to ${setUpstream.remote}/${branch}` : "Pushed", timeout: 2500 },
     });
@@ -852,9 +870,9 @@ function buildStore(options: StoreOptions) {
     operation("Stash", (repo, signal) => repo.stashPush(details, { signal }), {
       success: { type: "success", title: "Changes stashed", timeout: 2500 },
     });
-  const stashApply = (ref: string) => operation("Apply stash", (repo, signal) => repo.stashApply(ref, { signal }));
-  const stashPop = (ref: string) => operation("Pop stash", (repo, signal) => repo.stashPop(ref, { signal }));
-  const stashDrop = (ref: string) => operation("Drop stash", (repo, signal) => repo.stashDrop(ref, { signal }));
+  const stashApply = (ref: string) => operation("Apply stash", (repo, signal) => repo.stashApply(ref, { signal }), {});
+  const stashPop = (ref: string) => operation("Pop stash", (repo, signal) => repo.stashPop(ref, { signal }), {});
+  const stashDrop = (ref: string) => operation("Drop stash", (repo, signal) => repo.stashDrop(ref, { signal }), {});
 
   const addWorktree = async (details: { path: string; newBranch?: string; branch?: string; base?: string }) => {
     const main = mainRepository();
@@ -870,7 +888,7 @@ function buildStore(options: StoreOptions) {
       return undefined;
     } finally {
       setBusy(undefined);
-      void refresh();
+      void refresh(new Set<ChangeKind>(["worktree", "index", "refs"]));
     }
   };
   const removeWorktree = async (path: string, force: boolean) => {
@@ -886,7 +904,7 @@ function buildStore(options: StoreOptions) {
       notify({ type: "error", title: "Unable to remove worktree", description: describeError(error), timeout: 9000 });
     } finally {
       setBusy(undefined);
-      void refresh();
+      void refresh(new Set<ChangeKind>(["worktree", "index", "refs"]));
     }
   };
 
@@ -905,13 +923,13 @@ function buildStore(options: StoreOptions) {
   }
 
   function setHistoryAllBranches(all: boolean): void {
-    setHistory((state) => ({ ...state, allBranches: all }));
+    setHistory(((state: ReturnType<typeof history>): ReturnType<typeof history> => ({ ...state, allBranches: all }))(nativeUntrack(history)));
     persist({ historyAllBranches: all });
     void loadHistory(true);
   }
 
   function selectCommitFile(path: string): void {
-    setCommitDetail((state) => ({ ...state, selectedPath: path }));
+    setCommitDetail(((state: ReturnType<typeof commitDetail>) => ({ ...state, selectedPath: path }))(nativeUntrack(commitDetail)));
   }
 
   function setSidebarWidth(width: number): void {
@@ -927,7 +945,7 @@ function buildStore(options: StoreOptions) {
     persist({ historySplit: width });
   }
 
-  function persist(update: Partial<PersistedState>): void {
+  function persist(update: PersistedPatch): void {
     options.persistence.update(update);
   }
 
@@ -944,6 +962,10 @@ function buildStore(options: StoreOptions) {
   }
 
   function dispose(): void {
+    if (diffController !== undefined) diffController.abort();
+    if (historyController !== undefined) historyController.abort();
+    if (detailController !== undefined) detailController.abort();
+    clearDiffCache();
     stopWatching?.();
     stopWatching = undefined;
     generating()?.cancel();
@@ -1005,8 +1027,8 @@ function buildStore(options: StoreOptions) {
     openRepository,
     closeRepository,
     selectWorktree,
-    refresh: () => refresh(),
-    setSelection: (list: ListId, ranges: RowRanges) => setSelection((current) => ({ ...current, [list]: ranges })),
+    refresh: () => refresh(new Set<ChangeKind>(["worktree", "index", "refs"])),
+    setSelection: (list: ListId, ranges: RowRanges) => setSelection(((current: ReturnType<typeof selection>) => ({ unstaged: list === "unstaged" ? ranges : current.unstaged, staged: list === "staged" ? ranges : current.staged }))(nativeUntrack(selection))),
     setActiveCell,
     setFocusedList,
     setDiffSelection,
@@ -1054,7 +1076,7 @@ function buildStore(options: StoreOptions) {
     flushPersistence,
     dispose,
     notify,
-    cancelBusy: () => busy()?.cancel?.(),
+    cancelBusy: () => { busy()?.cancel?.(); },
   };
 }
 
@@ -1072,7 +1094,6 @@ function rangesFor(items: readonly ChangeItem[], paths: readonly string[]): RowR
 }
 
 export function describeError(error: unknown): string {
-  if (error instanceof GitError) return error.summary;
   if (error instanceof Error) return error.message;
   return String(error);
 }

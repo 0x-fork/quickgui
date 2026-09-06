@@ -1,0 +1,47 @@
+確定または不確定のタスク進捗を、組み合わせ可能なラベルとトラックで表します。
+
+## インポート
+
+`@quickgui/ui` から `Progress` をインポートします。
+
+```tsx
+import { Progress } from "@quickgui/ui/gauges";
+```
+
+## 使い方
+
+```tsx
+<Progress.Root value={completed()} max={total()} format="fraction">
+  <Progress.Label><Text>Exporting</Text></Progress.Label>
+  <Progress.Track><Progress.Indicator /></Progress.Track>
+  <Progress.Value />
+</Progress.Root>
+```
+
+## 構成
+
+- `Progress.Root`
+- `Progress.Track`
+- `Progress.Indicator`
+- `Progress.Label`
+- `Progress.Value`
+
+```tsx
+<Progress.Root>
+  <Progress.Track />
+  <Progress.Indicator />
+  <Progress.Label />
+  <Progress.Value />
+</Progress.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `max` | 受け入れる最大値です。 |
+| `indeterminate` | 完了量が不明な進捗を表します。 |
+| `valueText` | 支援技術向けの読みやすい値です。 |
+| `onStatusChange` | 導出された状態、整形済みの値、完了率を通知します。 |
+

@@ -1,8 +1,8 @@
 import { Menu } from "@quickgui/native";
-import { Text, View } from "@quickgui/solid";
-import { Button as SwiftButton, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle, disabled } from "@quickgui/solid/swift-ui/modifiers";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { Text, View } from "@quickgui/ui";
+import { Button as SwiftButton, Host } from "@quickgui/ui/swift-ui";
+import { buttonStyle, disabled } from "@quickgui/ui/swift-ui/modifiers";
+import { For, Show, createMemo, createSignal } from "@quickgui/ui";
 import { basename } from "node:path";
 
 import { relativeTime } from "../git/log.ts";
@@ -17,7 +17,7 @@ import { copyText } from "./sidebar.tsx";
 export function BranchesView() {
   const app = useApp();
   const store = app.store;
-  const [selected, setSelected] = createSignal<string>();
+  const [selected, setSelected] = createSignal<string | undefined>(undefined);
   const [showRemotes, setShowRemotes] = createSignal(false);
   const local = createMemo(() => store.refs().local);
   const remote = createMemo(() => store.refs().remote);
@@ -151,7 +151,9 @@ export function BranchesView() {
   );
 }
 
-export function Tag(props: { label: string; accent?: boolean; warn?: boolean }) {
+export function Tag(props: { label: () => (string); accent?: () => (boolean); warn?: () => (boolean) }) {
+  const readaccent = () => { const source = props.accent; return source === undefined ? undefined : source(); };
+  const readwarn = () => { const source = props.warn; return source === undefined ? undefined : source(); };
   const app = useApp();
   return (
     <View
@@ -163,10 +165,10 @@ export function Tag(props: { label: string; accent?: boolean; warn?: boolean }) 
         paddingLeft: 5,
         paddingRight: 5,
         borderRadius: 3,
-        backgroundColor: props.accent ? app.theme().accentWash : props.warn ? app.theme().warningWash : app.theme().hover,
+        backgroundColor: readaccent() ? app.theme().accentWash : readwarn() ? app.theme().warningWash : app.theme().hover,
       }}
     >
-      <Text style={{ fontSize: 10.5, fontWeight: 500, color: props.accent ? app.theme().accent : props.warn ? app.theme().warning : app.theme().textSecondary }}>{props.label}</Text>
+      <Text style={{ fontSize: 10.5, fontWeight: 500, color: readaccent() ? app.theme().accent : readwarn() ? app.theme().warning : app.theme().textSecondary }}>{props.label()}</Text>
     </View>
   );
 }

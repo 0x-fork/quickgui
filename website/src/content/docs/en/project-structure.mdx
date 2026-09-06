@@ -1,4 +1,4 @@
-A generated project stays intentionally small. Your TSX runs in a Bun worker while QuickGUI keeps the platform event loop on the native main thread.
+QuickGUI compiles TypeScript and TSX to native code with scriptc. TypeScript 7 lowers JSX; the Rust core owns layout, rendering, input, and the platform main thread. Bun runs the development tools.
 
 ## Generated files
 
@@ -15,7 +15,7 @@ Put application UI in `src/`. Add files and directories to production bundles th
 
 ## Application entry
 
-The entry module waits for the native app, creates windows, and passes a Solid root to `createRenderer`.
+The entry module waits for the native app, creates windows, and passes a QuickGUI UI root to `createRenderer`.
 
 ```tsx
 await app.whenReady();
@@ -26,7 +26,7 @@ new Window({
 });
 ```
 
-Source modules may use ordinary Bun APIs. Keep native application and window work asynchronous at the hosted boundary.
+Application modules use the subset of TypeScript and Node-compatible APIs supported by scriptc. Bun application APIs and packages that require a JavaScript engine are not supported. Native window operations and results remain asynchronous.
 
 ## Configuration
 
@@ -37,7 +37,7 @@ import { defineConfig } from "@quickgui/cli";
 
 export default defineConfig({
   entry: "src/app.tsx",
-  productName: "Notes",
+  name: "Notes",
   identifier: "dev.example.notes",
   resources: ["assets"],
 });
@@ -50,6 +50,6 @@ Release-only options cover icons, signing, notarization, the Mac App Store, and 
 | Package | Purpose |
 | --- | --- |
 | `@quickgui/native` | Application, windows, menus, dialogs, notifications, and native services |
-| `@quickgui/solid` | Solid renderer, primitives, components, and routing |
-| `@quickgui/solid/swift-ui` | Native SwiftUI controls hosted from Solid on macOS |
+| `@quickgui/ui` | QuickGUI UI renderer, primitives, components, and routing |
+| `@quickgui/ui/swift-ui` | Native SwiftUI controls hosted from QuickGUI UI on macOS |
 | `@quickgui/cli` | Project creation, development, and production packaging |

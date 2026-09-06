@@ -2,15 +2,17 @@
 
 ## インポート
 
-`@quickgui/solid/swift-ui` から `DatePicker` をインポートします。
+`@quickgui/ui/swift-ui` から `DatePicker` をインポートします。
 
 ```tsx
-import { Host, DatePicker } from "@quickgui/solid/swift-ui";
+import { Host, DatePicker } from "@quickgui/ui/swift-ui";
 ```
 
 ## 使い方
 
 ```tsx
+const [scheduledAt, setScheduledAt] = createSignal(Date.now());
+
 <Host matchContents>
   <DatePicker
     label="Schedule"

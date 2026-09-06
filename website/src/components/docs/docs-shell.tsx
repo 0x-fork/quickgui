@@ -70,7 +70,7 @@ const ui = {
     components: 'Components',
     swiftUi: 'SwiftUI',
     introduction: 'Introduction',
-    solid: 'Solid',
+    ui: 'QuickGUI UI',
     primitives: 'Primitives',
     forms: 'Forms & Controls',
     layout: 'Layout & Data',
@@ -104,7 +104,7 @@ const ui = {
     components: '组件',
     swiftUi: 'SwiftUI',
     introduction: '简介',
-    solid: 'Solid',
+    ui: 'QuickGUI UI',
     primitives: '基础组件',
     forms: '表单与控件',
     layout: '布局与数据',
@@ -138,7 +138,7 @@ const ui = {
     components: 'コンポーネント',
     swiftUi: 'SwiftUI',
     introduction: 'はじめに',
-    solid: 'Solid',
+    ui: 'QuickGUI UI',
     primitives: 'プリミティブ',
     forms: 'フォームとコントロール',
     layout: 'レイアウトとデータ',
@@ -213,8 +213,8 @@ function navGroups(locale: Locale): readonly NavGroup[] {
       ],
     },
     {
-      title: labels.solid,
-      items: [guideItem('solid', locale), guideItem('styling', locale)],
+      title: labels.ui,
+      items: [guideItem('ui', locale), guideItem('styling', locale)],
     },
     {
       title: labels.components,
@@ -469,7 +469,7 @@ function SearchDialog({
 
   function resultArea(hit: DocsSearchHit): string {
     if (hit.document.area === 'swift-ui') return labels.swiftUi
-    if (hit.document.area === 'solid') return labels.components
+    if (hit.document.area === 'ui') return labels.components
     return labels.guide
   }
 

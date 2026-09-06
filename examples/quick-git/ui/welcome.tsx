@@ -1,5 +1,5 @@
-import { Button, Text, View, dropEventFromEvent } from "@quickgui/solid";
-import { For, Show } from "solid-js";
+import { Button, Text, View, dropEventFromEvent } from "@quickgui/ui";
+import { For, Show } from "@quickgui/ui";
 import { basename, dirname } from "node:path";
 import { homedir } from "node:os";
 
@@ -28,7 +28,7 @@ export function WelcomeView(props: { openRepository: () => Promise<void> }) {
       <View
         dropKinds="files"
         onFilesDropped={(event) => {
-          const [path] = dropEventFromEvent(event)?.paths ?? [];
+          const path = dropEventFromEvent(event)?.paths?.at(0);
           if (path) void app.openRepositoryPath(path);
         }}
         style={{

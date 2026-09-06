@@ -1,7 +1,7 @@
 {
   "name": "@quickgui/native",
   "version": "0.1.3",
-  "description": "Low-overhead Bun and Node-API host for QuickGUI",
+  "description": "Application, window, and platform APIs for natively compiled QuickGUI applications",
   "repository": {
     "type": "git",
     "url": "https://github.com/egoist/quickgui.git",
@@ -12,50 +12,23 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
-    "./host": "./host.ts",
     "./protocol": "./protocol.ts",
+    "./native-tree": "./native-tree.ts",
+    "./ffi": "./ffi.ts",
+    "./ffi.json": "./ffi.json",
     "./modules": "./modules.ts"
   },
   "files": [
-    "index.ts",
-    "dialog.ts",
-    "integrations.ts",
-    "modules.ts",
-    "native-tree.ts",
-    "routing.ts",
-    "single-instance.ts",
-    "system.ts",
-    "tray.ts",
-    "host.ts",
-    "protocol.ts",
+    "*.ts",
+    "ffi.json",
+    "lib",
     "zig",
-    "scripts",
-    "binding.js",
-    "binding.d.ts",
-    "*.node",
-    "README.md"
+    "README.md",
+    "!**/*.test.ts"
   ],
   "scripts": {
-    "build": "bun ./scripts/build.ts",
-    "build:debug": "bun ./scripts/build.ts --debug",
+    "build": "bun ./build.ts",
     "test": "bun test"
-  },
-  "devDependencies": {
-    "@napi-rs/cli": "3.8.6"
-  },
-  "napi": {
-    "binaryName": "quickgui-native",
-    "targets": [
-      "aarch64-apple-darwin",
-      "x86_64-apple-darwin",
-      "aarch64-unknown-linux-gnu",
-      "x86_64-unknown-linux-gnu",
-      "aarch64-pc-windows-msvc",
-      "x86_64-pc-windows-msvc"
-    ]
-  },
-  "engines": {
-    "bun": ">=1.3.0"
   },
   "os": [
     "darwin"
@@ -63,5 +36,8 @@
   "publishConfig": {
     "access": "public"
   },
-  "license": "MIT OR Apache-2.0"
+  "license": "MIT OR Apache-2.0",
+  "dependencies": {
+    "@types/node": "^24.0.0"
+  }
 }

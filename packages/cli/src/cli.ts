@@ -10,6 +10,7 @@ import { runDev } from "./dev.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { initProject } from "./init.ts";
 import { buildNativeModules } from "./modules.ts";
+import { closeTypeScriptSessions } from "./native-compiler.ts";
 import { findMinisignTool } from "./packaging/pipeline.ts";
 import { minisignKeygenArguments } from "./packaging/updates.ts";
 import { hostTarget } from "./targets.ts";
@@ -141,9 +142,9 @@ function helpText(topic?: HelpTopic): string {
   if (topic === "modules") {
     return `Usage: quickgui modules [options]
 
-Compile every native module (modules/<name>/main.zig, written in Zig) into a Node-API addon and
+Compile every native module (modules/<name>/main.zig, written in Zig) into a static native library and
 write its typed modules/<name>/index.ts. \`quickgui dev\` and \`quickgui build\` do this
-automatically; run it directly before \`bun test\` or type-checking.
+automatically; run it directly to refresh bindings or prepare native tests.
 
 Options:
   --project <directory>      Project directory (default: .)
@@ -166,7 +167,7 @@ Options:
   if (topic === "init") {
     return `Usage: quickgui init [directory] [options]
 
-Create a Solid-powered QuickGUI project.
+Create a QuickGUI project compiled to native code.
 
 Options:
   --name <name>              Application display name
@@ -177,8 +178,8 @@ Options:
   if (topic === "dev") {
     return `Usage: quickgui dev [options]
 
-Package a native development host, run it, and restart it on source changes.
-On macOS the host is a signed .app; application TS/TSX stays outside the bundle.
+Compile the application to a native development app, run it, and rebuild and restart it on
+source changes. On macOS the app is a signed .app bundle.
 
 Options:
   --project <directory>      Project directory (default: .)
@@ -212,7 +213,7 @@ Options:
 Usage: quickgui <command> [options]
 
 Commands:
-  init [directory]           Create a Solid-powered project
+  init [directory]           Create a new project
   dev                        Run a native app with source reload
   build                      Package a production application
   modules                    Compile the project's Zig native modules
@@ -232,5 +233,8 @@ if (import.meta.main) {
   } catch (error) {
     console.error(`quickgui: ${errorMessage(error)}`);
     process.exitCode = error instanceof CliError ? error.exitCode : 1;
+  } finally {
+    // The TypeScript servers behind native builds would otherwise keep the process alive.
+    await closeTypeScriptSessions();
   }
 }

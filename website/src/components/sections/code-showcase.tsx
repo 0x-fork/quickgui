@@ -13,10 +13,10 @@ const PANES = [
     label: 'Rust',
   },
   {
-    key: 'solid',
+    key: 'ui',
     file: 'app.tsx',
-    icon: 'i-simple-icons-solid',
-    label: 'TypeScript · Solid',
+    icon: 'i-simple-icons',
+    label: 'TypeScript · QuickGUI UI',
   },
 ] as const
 

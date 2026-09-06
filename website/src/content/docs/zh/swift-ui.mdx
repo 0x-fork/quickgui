@@ -1,11 +1,11 @@
-SwiftUI 桥接层会在 macOS 上由 Solid 渲染的 QuickGUI 窗口中挂载真正的原生 SwiftUI 控件。
+SwiftUI 桥接层会在 macOS 上由 QuickGUI UI 渲染的 QuickGUI 窗口中挂载真正的原生 SwiftUI 控件。
 
 ## Host
 
 `Host` 是由 `NSHostingView` 支持的单个保留式 QuickGUI 布局叶节点。请把 SwiftUI 桥接组件放在它下面。
 
 ```tsx
-import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
+import { Host, Button, Toggle } from "@quickgui/ui/swift-ui";
 
 <Host matchContents>
   <Button label="Continue" onPress={continueFlow} />
@@ -18,7 +18,7 @@ import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
 
 ## 受控值
 
-值仍由 Solid 控制。原生更改通过对应的回调传入。
+值仍由 QuickGUI UI 控制。原生更改通过对应的回调传入。
 
 ```tsx
 <Host matchContents={{ vertical: true }} style={{ width: 340 }}>
@@ -46,5 +46,5 @@ import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
 ## 平台支持
 
 <Note title="仅限 macOS">
-  SwiftUI 托管是 macOS 桥接能力。跨平台界面请使用常规的 `@quickgui/solid` 组件。
+  SwiftUI 托管是 macOS 桥接能力。跨平台界面请使用常规的 `@quickgui/ui` 组件。
 </Note>

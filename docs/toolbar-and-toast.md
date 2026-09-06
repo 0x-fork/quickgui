@@ -249,7 +249,7 @@ title and description relationships, focused Escape dismissal, and the exact aut
 which the binding sleeps on with one `request_repaint_at` rather than a timer of its own. Every
 dismissal the core decided — including the timed ones — travels back as one asynchronous
 `onDismiss` payload naming the caller's own declared identifiers. See
-[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
 
 ## Menubar
 
@@ -264,7 +264,7 @@ its JavaScript binding. Native macOS menus remain the application menu; see
 registry, task, timer, observer, animation, GPU resource, or idle scheduler source. Navigation scans
 the caller's own item slice on an explicit keypress and at no other time.
 
-## Solid: the Base UI-aligned parts
+## QuickGUI UI: the Base UI-aligned parts
 
 `Toolbar` gained `Button`, `Link`, `Input`, `Group`, and `Separator`. All three item parts share the
 one roving Tab stop and differ only in the role the core projects; the group and separator are
@@ -319,4 +319,4 @@ function Notices() {
 because QuickGUI owns no future and the application drives both halves from the task it already
 spawned. The stack index, the `limited` and `expanded` flags, each toast's `offset`, and the live
 swipe displacement all come back from the core through `stack()`. See
-[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).

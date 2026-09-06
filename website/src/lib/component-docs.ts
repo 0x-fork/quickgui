@@ -1,6 +1,6 @@
 import type { DocsOutlineItem } from './docs'
 
-export type ComponentDocKind = 'solid' | 'swift-ui'
+export type ComponentDocKind = 'ui' | 'swift-ui'
 
 export type ComponentDocSection =
   | 'Primitives'
@@ -27,7 +27,7 @@ export interface ComponentNavGroup {
 
 export const ALL_COMPONENT_DOCS = [
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "view",
     "name": "View",
     "section": "Primitives",
@@ -41,7 +41,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "text",
     "name": "Text",
     "section": "Primitives",
@@ -55,7 +55,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "button",
     "name": "Button",
     "section": "Primitives",
@@ -69,7 +69,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "input",
     "name": "Input",
     "section": "Primitives",
@@ -84,7 +84,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "text-area",
     "name": "TextArea",
     "section": "Primitives",
@@ -99,7 +99,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "markdown",
     "name": "Markdown",
     "section": "Primitives",
@@ -113,7 +113,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "image",
     "name": "Image",
     "section": "Primitives",
@@ -127,7 +127,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "svg",
     "name": "Svg",
     "section": "Primitives",
@@ -139,7 +139,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "shader",
     "name": "Shader",
     "section": "Primitives",
@@ -152,7 +152,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "virtual-list",
     "name": "VirtualList",
     "section": "Primitives",
@@ -167,7 +167,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "terminal",
     "name": "Terminal",
     "section": "Primitives",
@@ -182,7 +182,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "checkbox",
     "name": "Checkbox",
     "section": "Forms & Controls",
@@ -200,7 +200,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "checkbox-group",
     "name": "CheckboxGroup",
     "section": "Forms & Controls",
@@ -217,7 +217,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "radio",
     "name": "Radio",
     "section": "Forms & Controls",
@@ -234,7 +234,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "radio-group",
     "name": "RadioGroup",
     "section": "Forms & Controls",
@@ -251,7 +251,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "switch",
     "name": "Switch",
     "section": "Forms & Controls",
@@ -268,7 +268,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "toggle",
     "name": "Toggle",
     "section": "Forms & Controls",
@@ -285,7 +285,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "toggle-group",
     "name": "ToggleGroup",
     "section": "Forms & Controls",
@@ -303,7 +303,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "slider",
     "name": "Slider",
     "section": "Forms & Controls",
@@ -328,7 +328,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "number-field",
     "name": "NumberField",
     "section": "Forms & Controls",
@@ -352,7 +352,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "select",
     "name": "Select",
     "section": "Forms & Controls",
@@ -388,7 +388,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "combobox",
     "name": "Combobox",
     "section": "Forms & Controls",
@@ -432,7 +432,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "autocomplete",
     "name": "Autocomplete",
     "section": "Forms & Controls",
@@ -469,7 +469,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "field",
     "name": "Field",
     "section": "Forms & Controls",
@@ -492,7 +492,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "fieldset",
     "name": "Fieldset",
     "section": "Forms & Controls",
@@ -510,7 +510,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "date-field",
     "name": "DateField",
     "section": "Forms & Controls",
@@ -528,7 +528,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "time-field",
     "name": "TimeField",
     "section": "Forms & Controls",
@@ -546,7 +546,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "calendar",
     "name": "Calendar",
     "section": "Forms & Controls",
@@ -566,7 +566,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "otp-field",
     "name": "OtpField",
     "section": "Forms & Controls",
@@ -584,7 +584,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "tabs",
     "name": "Tabs",
     "section": "Layout & Data",
@@ -605,7 +605,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "accordion",
     "name": "Accordion",
     "section": "Layout & Data",
@@ -626,7 +626,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "collapsible",
     "name": "Collapsible",
     "section": "Layout & Data",
@@ -644,7 +644,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "splitter",
     "name": "Splitter",
     "section": "Layout & Data",
@@ -663,7 +663,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "scroll-area",
     "name": "ScrollArea",
     "section": "Layout & Data",
@@ -684,7 +684,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "table",
     "name": "Table",
     "section": "Layout & Data",
@@ -704,7 +704,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "tree",
     "name": "Tree",
     "section": "Layout & Data",
@@ -722,7 +722,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "separator",
     "name": "Separator",
     "section": "Layout & Data",
@@ -736,7 +736,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "avatar",
     "name": "Avatar",
     "section": "Layout & Data",
@@ -754,7 +754,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "progress",
     "name": "Progress",
     "section": "Layout & Data",
@@ -775,7 +775,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "meter",
     "name": "Meter",
     "section": "Layout & Data",
@@ -797,7 +797,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "toolbar",
     "name": "Toolbar",
     "section": "Layout & Data",
@@ -820,7 +820,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "popover",
     "name": "Popover",
     "section": "Overlays",
@@ -849,7 +849,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "system-popover",
     "name": "SystemPopover",
     "section": "Overlays",
@@ -869,7 +869,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "dialog",
     "name": "Dialog",
     "section": "Overlays",
@@ -894,7 +894,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "alert-dialog",
     "name": "AlertDialog",
     "section": "Overlays",
@@ -919,34 +919,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
-    "slug": "drawer",
-    "name": "Drawer",
-    "section": "Overlays",
-    "description": "A modal or focus-trapping sheet with snap points and core-owned swipe dismissal.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Portal",
-      "Backdrop",
-      "Viewport",
-      "Popup",
-      "Content",
-      "Title",
-      "Description",
-      "Close",
-      "SwipeArea"
-    ],
-    "keyProps": [
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "snapPoints",
-      "swipeDirection"
-    ]
-  },
-  {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "tooltip",
     "name": "Tooltip",
     "section": "Overlays",
@@ -970,7 +943,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "preview-card",
     "name": "PreviewCard",
     "section": "Overlays",
@@ -993,7 +966,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "toast",
     "name": "Toast",
     "section": "Overlays",
@@ -1019,7 +992,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "menu",
     "name": "Menu",
     "section": "Menus & Navigation",
@@ -1054,7 +1027,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "popover-menu",
     "name": "PopoverMenu",
     "section": "Menus & Navigation",
@@ -1073,7 +1046,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "context-menu",
     "name": "ContextMenu",
     "section": "Menus & Navigation",
@@ -1090,7 +1063,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "menubar",
     "name": "Menubar",
     "section": "Menus & Navigation",
@@ -1108,7 +1081,7 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "navigation-menu",
     "name": "NavigationMenu",
     "section": "Menus & Navigation",
@@ -1137,20 +1110,22 @@ export const ALL_COMPONENT_DOCS = [
     ]
   },
   {
-    "kind": "solid",
+    "kind": "ui",
     "slug": "router",
     "name": "Router",
     "section": "Menus & Navigation",
-    "description": "A Solid projection of QuickGUI core routing with nested layouts and bounded memory history.",
+    "description": "A QuickGUI UI projection of QuickGUI core routing with nested layouts and bounded memory history.",
     "parts": [
       "Router",
-      "Route",
+      "route",
+      "layout",
       "Link",
       "Outlet"
     ],
     "keyProps": [
       "initialPath",
       "fallback",
+      "routes",
       "path",
       "component",
       "href"
@@ -1382,8 +1357,8 @@ export const ALL_COMPONENT_DOCS = [
   }
 ] as const satisfies readonly ComponentDoc[]
 
-export const SOLID_COMPONENTS: readonly ComponentDoc[] =
-  ALL_COMPONENT_DOCS.filter((component) => component.kind === 'solid')
+export const UI_COMPONENTS: readonly ComponentDoc[] =
+  ALL_COMPONENT_DOCS.filter((component) => component.kind === 'ui')
 
 export const SWIFT_UI_COMPONENTS: readonly ComponentDoc[] =
   ALL_COMPONENT_DOCS.filter((component) => component.kind === 'swift-ui')
@@ -1396,7 +1371,7 @@ export const COMPONENT_NAV_GROUPS: readonly ComponentNavGroup[] = [
   'Menus & Navigation',
 ].map((title) => ({
   title: title as ComponentDocSection,
-  items: SOLID_COMPONENTS.filter((component) => component.section === title),
+  items: UI_COMPONENTS.filter((component) => component.section === title),
 }))
 
 export const SWIFT_UI_NAV_GROUP: ComponentNavGroup = {

@@ -1,17 +1,11 @@
+import { KeyedFor } from "@quickgui/ui";
 import { Menu, Shell, type QuickGuiEvent } from "@quickgui/native";
-import {
-  Checkbox,
-  Input,
-  Table,
-  Text,
-  View,
-  actionFromEvent,
-  capturedPointerFromEvent,
-  type VisibleRange,
-} from "@quickgui/solid";
-import { Button as SwiftButton, Host, Picker, Toggle } from "@quickgui/solid/swift-ui";
-import { buttonStyle, controlSize, disabled } from "@quickgui/solid/swift-ui/modifiers";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { Input, Text, View, actionFromEvent, capturedPointerFromEvent, type Keymap, type VisibleRange } from "@quickgui/ui";
+import { Checkbox } from "@quickgui/ui/controls";
+import { Table } from "@quickgui/ui/collections";
+import { Button as SwiftButton, Host, Picker, Toggle } from "@quickgui/ui/swift-ui";
+import { buttonStyle, controlSize, disabled } from "@quickgui/ui/swift-ui/modifiers";
+import { For, Show, createMemo, createSignal } from "@quickgui/ui";
 import { basename, dirname, join } from "node:path";
 
 import type { ChangeItem } from "../git/status.ts";
@@ -32,6 +26,7 @@ export function ChangesView() {
   let splitDragStart = 0;
   function handleSplitPointer(event: QuickGuiEvent): void {
     const pointer = capturedPointerFromEvent(event);
+    if (pointer === undefined) return;
     if (pointer.button !== "left") return;
     if (pointer.phase === "down") {
       splitDragStart = store.changesSplit();
@@ -163,12 +158,11 @@ function FileList(props: { list: ListId }) {
       </View>
       <Show when={!empty()} fallback={<Text style={{ paddingLeft: 12, paddingBottom: 10, fontSize: 12, color: app.theme().textTertiary }}>{props.list === "unstaged" ? "No unstaged changes" : "Nothing staged yet"}</Text>}>
         <Table.Root
-          scope={`changes-${props.list}`}
           rowCount={items().length}
           rowHeight={ROW_HEIGHT}
           headerHeight={0}
           selectionMode="multiple"
-          selection={store.selection()[props.list]}
+          selection={store.selection()[props.list].map((range) => [...range])}
           columns={[
             { id: "toggle", track: "40px", align: "center" },
             { id: "status", track: "24px", align: "center" },
@@ -184,7 +178,7 @@ function FileList(props: { list: ListId }) {
           onFocus={() => store.setFocusedList(props.list)}
           style={{ flex: 1, minHeight: 0, overflowY: "scroll" }}
         >
-          <For each={visible()} keyed={(row) => row.index}>
+          <KeyedFor each={visible()} key={(row) => row.index}>
             {(row) => (
               <Table.Row
                 index={row().index}
@@ -212,23 +206,23 @@ function FileList(props: { list: ListId }) {
                 </Table.Cell>
               </Table.Row>
             )}
-          </For>
+          </KeyedFor>
         </Table.Root>
       </Show>
     </View>
   );
 }
 
-function StageToggle(props: { item: ChangeItem; list: ListId }) {
+function StageToggle(props: { item: () => (ChangeItem); list: ListId }) {
   const app = useApp();
   const store = app.store;
   const checked = () => props.list === "staged";
   return (
     <Checkbox.Root
       checked={checked()}
-      aria-label={checked() ? `Unstage ${props.item.path}` : `Stage ${props.item.path}`}
+      ariaLabel={checked() ? `Unstage ${props.item().path}` : `Stage ${props.item().path}`}
       focusOnPointer={false}
-      onCheckedChange={(next) => void (next ? store.stageItems([props.item]) : store.unstageItems([props.item]))}
+      onCheckedChange={(next) => void (next ? store.stageItems([props.item()]) : store.unstageItems([props.item()]))}
       style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: 4, cursor: "default" }}
     >
       <Checkbox.Indicator style={checkboxBox(app, checked())}>
@@ -240,11 +234,11 @@ function StageToggle(props: { item: ChangeItem; list: ListId }) {
   );
 }
 
-export function StatusGlyph(props: { code: string }) {
+export function StatusGlyph(props: { code: () => (string) }) {
   const app = useApp();
   return (
     <View
-      tooltip={describeStatusCode(props.code as never)}
+      tooltip={describeStatusCode(props.code() as never)}
       style={{
         display: "flex",
         width: 16,
@@ -252,32 +246,34 @@ export function StatusGlyph(props: { code: string }) {
         alignItems: "center",
         justifyContent: "center",
         borderRadius: 4,
-        backgroundColor: `${statusColor(app.theme(), props.code)}22`,
+        backgroundColor: `${statusColor(app.theme(), props.code())}22`,
       }}
     >
-      <Text style={{ fontSize: 10, fontWeight: 800, color: statusColor(app.theme(), props.code), fontFamily: "monospace" }}>
-        {props.code === "?" ? "U" : props.code}
+      <Text style={{ fontSize: 10, fontWeight: 800, color: statusColor(app.theme(), props.code()), fontFamily: "monospace" }}>
+        {props.code() === "?" ? "U" : props.code()}
       </Text>
     </View>
   );
 }
 
-export function FileName(props: { path: string; originalPath?: string | undefined; size?: number | undefined }) {
+export function FileName(props: { path: () => (string); originalPath?: () => (string | undefined); size?: () => (number | undefined) }) {
+  const readoriginalPath = () => { const source = props.originalPath; return source === undefined ? undefined : source(); };
+  const readsize = () => { const source = props.size; return source === undefined ? undefined : source(); };
   const app = useApp();
   const directory = () => {
-    const parent = dirname(props.path);
+    const parent = dirname(props.path());
     return parent === "." ? "" : `${parent}/`;
   };
   return (
     <View style={{ display: "flex", flex: 1, minWidth: 0, flexDirection: "row", alignItems: "baseline", gap: 5 }}>
-      <Show when={props.originalPath}>
-        <Text style={{ fontSize: props.size ?? LIST_FONT_SIZE, color: app.theme().textTertiary, lineClamp: 1, textOverflow: "ellipsis", flexShrink: 1 }}>
-          {`${basename(props.originalPath!)} →`}
+      <Show when={readoriginalPath()}>
+        <Text style={{ fontSize: readsize() ?? LIST_FONT_SIZE, color: app.theme().textTertiary, lineClamp: 1, textOverflow: "ellipsis", flexShrink: 1 }}>
+          {`${basename(readoriginalPath()!)} →`}
         </Text>
       </Show>
-      <Text style={{ fontSize: props.size ?? LIST_FONT_SIZE, fontWeight: 600, color: app.theme().text, flexShrink: 0 }}>{basename(props.path)}</Text>
+      <Text style={{ fontSize: readsize() ?? LIST_FONT_SIZE, fontWeight: 600, color: app.theme().text, flexShrink: 0 }}>{basename(props.path())}</Text>
       <Show when={directory()}>
-        <Text style={{ fontSize: (props.size ?? LIST_FONT_SIZE) - 1, color: app.theme().textTertiary, lineClamp: 1, textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>
+        <Text style={{ fontSize: (readsize() ?? LIST_FONT_SIZE) - 1, color: app.theme().textTertiary, lineClamp: 1, textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>
           {directory()}
         </Text>
       </Show>
@@ -285,16 +281,16 @@ export function FileName(props: { path: string; originalPath?: string | undefine
   );
 }
 
-function Counts(props: { entry: { added: number | null; removed: number | null } | undefined }) {
+function Counts(props: { entry: () => ({ added: number | null; removed: number | null } | undefined) }) {
   const app = useApp();
   return (
-    <Show when={props.entry && (props.entry.added || props.entry.removed)}>
+    <Show when={props.entry() !== undefined && ((props.entry()!.added ?? 0) > 0 || (props.entry()!.removed ?? 0) > 0)}>
       <View style={{ display: "flex", flexDirection: "row", gap: 4, flexShrink: 0 }}>
-        <Show when={props.entry!.added}>
-          <Text style={{ fontSize: 10.5, fontWeight: 700, color: app.theme().success, fontFamily: "monospace" }}>{`+${props.entry!.added}`}</Text>
+        <Show when={(props.entry()!.added ?? 0) > 0}>
+          <Text style={{ fontSize: 10.5, fontWeight: 700, color: app.theme().success, fontFamily: "monospace" }}>{`+${props.entry()!.added}`}</Text>
         </Show>
-        <Show when={props.entry!.removed}>
-          <Text style={{ fontSize: 10.5, fontWeight: 700, color: app.theme().danger, fontFamily: "monospace" }}>{`−${props.entry!.removed}`}</Text>
+        <Show when={(props.entry()!.removed ?? 0) > 0}>
+          <Text style={{ fontSize: 10.5, fontWeight: 700, color: app.theme().danger, fontFamily: "monospace" }}>{`−${props.entry()!.removed}`}</Text>
         </Show>
       </View>
     </Show>
@@ -307,11 +303,11 @@ function CommitComposer() {
   const branch = () => store.status()?.branch;
   const identityMissing = () => !store.identity().name || !store.identity().email;
   const agentOptions = () => store.agents().map((agent) => ({ value: agent.id, label: agent.label }));
-  const keymap = { "CmdOrCtrl+Enter": "commit", "CmdOrCtrl+Shift+G": "generate" } as const;
+  const keymap: Keymap = [{ keys: "CmdOrCtrl+Enter", action: "commit" }, { keys: "CmdOrCtrl+Shift+G", action: "generate" }];
   const onAction = (event: QuickGuiEvent) => {
     const action = actionFromEvent(event);
     if (action === "commit") void store.commit();
-    if (action === "generate") void store.generateMessage();
+    if (action === "generate") void store.generateMessage(undefined);
   };
 
   return (
@@ -357,7 +353,7 @@ function CommitComposer() {
                 label="Generate"
                 systemImage="sparkles"
                 modifiers={[buttonStyle("bordered"), disabled(store.changeCount() === 0)]}
-                onPress={() => void store.generateMessage()}
+                onPress={() => void store.generateMessage(undefined)}
               />
             </Show>
           </Host>
@@ -382,7 +378,7 @@ function CommitComposer() {
       <Show when={store.generating()}>
         <Text style={{ fontSize: 11.5, color: app.theme().textTertiary }}>{`${store.generating()!.agent === "codex" ? "Codex" : "Claude"} is reading the diff…`}</Text>
       </Show>
-      <Show when={!store.generating() && store.lastGenerated() && store.subject() === store.lastGenerated()!.subject}>
+      <Show when={!store.generating() && store.lastGenerated() !== undefined && store.subject() === store.lastGenerated()!.subject}>
         <Text style={{ fontSize: 11.5, color: app.theme().textTertiary }}>{`Drafted by ${store.lastGenerated()!.agent === "codex" ? "Codex" : "Claude"}. Edit freely before committing.`}</Text>
       </Show>
     </View>

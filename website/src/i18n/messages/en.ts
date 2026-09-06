@@ -70,7 +70,7 @@ export const en = {
   },
   swiftUi: {
     title: 'Use native SwiftUI in QuickGUI.',
-    lead: 'Embed real SwiftUI controls directly in your Solid app on macOS.',
+    lead: 'Embed real SwiftUI controls directly in your QuickGUI UI app on macOS.',
   },
   quickstart: {
     title: 'Start in a minute.',
@@ -80,7 +80,7 @@ export const en = {
       writeBody: 'The counter above is a complete main.rs — copy it in.',
       run: 'Run it',
     },
-    solid: {
+    ui: {
       create: 'Create an app',
       ship: 'Ship it',
       note: 'You get a real, signed, self-contained app — installer included.',

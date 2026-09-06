@@ -1,0 +1,63 @@
+专注确认操作的对话框变体，默认采用更严格的背景点击关闭策略。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `AlertDialog`。
+
+```tsx
+import { AlertDialog } from "@quickgui/ui/dialog";
+```
+
+## 用法
+
+```tsx
+<AlertDialog.Root open={open()} onOpenChange={setOpen}>
+  <AlertDialog.Trigger><Text>Delete project</Text></AlertDialog.Trigger>
+  <AlertDialog.Portal>
+    <AlertDialog.Backdrop />
+    <AlertDialog.Viewport>
+      <AlertDialog.Popup>
+        <AlertDialog.Title><Text>Delete this project?</Text></AlertDialog.Title>
+        <AlertDialog.Description><Text>This cannot be undone.</Text></AlertDialog.Description>
+        <AlertDialog.Close><Text>Cancel</Text></AlertDialog.Close>
+      </AlertDialog.Popup>
+    </AlertDialog.Viewport>
+  </AlertDialog.Portal>
+</AlertDialog.Root>
+```
+
+## 结构
+
+- `AlertDialog.Root`
+- `AlertDialog.Trigger`
+- `AlertDialog.Portal`
+- `AlertDialog.Backdrop`
+- `AlertDialog.Viewport`
+- `AlertDialog.Popup`
+- `AlertDialog.Title`
+- `AlertDialog.Description`
+- `AlertDialog.Close`
+
+```tsx
+<AlertDialog.Root>
+  <AlertDialog.Trigger />
+  <AlertDialog.Portal />
+  <AlertDialog.Backdrop />
+  <AlertDialog.Viewport />
+  <AlertDialog.Popup />
+  <AlertDialog.Title />
+  <AlertDialog.Description />
+  <AlertDialog.Close />
+</AlertDialog.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `open` | 受控的打开状态。 |
+| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `dismissOnEscape` | 允许按 Escape 键关闭界面。 |
+| `exitDuration` | 在精确的退出过渡时长内保持关闭中的内容已挂载。 |
+

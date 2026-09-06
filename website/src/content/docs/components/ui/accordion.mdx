@@ -1,0 +1,50 @@
+Coordinates one or more expandable sections and their keyboard focus.
+
+## Import
+
+Import `Accordion` from `@quickgui/ui`.
+
+```tsx
+import { Accordion } from "@quickgui/ui/disclosure";
+```
+
+## Usage
+
+```tsx
+<Accordion.Root value={open()} onValueChange={setOpen}>
+  <Accordion.Item value="shipping">
+    <Accordion.Header>
+      <Accordion.Trigger><Text>Shipping</Text></Accordion.Trigger>
+    </Accordion.Header>
+    <Accordion.Panel><Text>Ships in 2–3 days.</Text></Accordion.Panel>
+  </Accordion.Item>
+</Accordion.Root>
+```
+
+## Anatomy
+
+- `Accordion.Root`
+- `Accordion.Item`
+- `Accordion.Header`
+- `Accordion.Trigger`
+- `Accordion.Panel`
+
+```tsx
+<Accordion.Root>
+  <Accordion.Item />
+  <Accordion.Header />
+  <Accordion.Trigger />
+  <Accordion.Panel />
+</Accordion.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `defaultValue` | Initial value when the component owns its state. |
+| `onValueChange` | Reports the value accepted by the core. |
+| `multiple` | Allows more than one value to be selected or opened. |
+| `keepMounted` | Keeps inactive content mounted with display disabled. |
+

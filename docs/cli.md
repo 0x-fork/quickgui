@@ -1,6 +1,6 @@
 # Project CLI and application packaging
 
-`@quickgui/cli` creates Solid projects, runs a reloadable native development application, and
+`@quickgui/cli` creates QuickGUI UI projects, runs a reloadable native development application, and
 packages production applications for a target platform.
 
 ## Create a project
@@ -12,11 +12,11 @@ bun run dev
 ```
 
 The scaffold imports `app` and `Window` from `@quickgui/native`, then imports `View`, `Text`,
-`Button`, and `createRenderer` from `@quickgui/solid`. Both QuickGUI packages are direct
+`Button`, and `createRenderer` from `@quickgui/ui`. Both QuickGUI packages are direct
 dependencies. It awaits `app.whenReady()` before creating its first window; the CLI owns the
 native application loop, and application code never calls `app.run()`. When readiness resolves,
-new windows begin opening immediately. Solid reactivity such as `createSignal` comes directly from
-`solid-js`.
+new windows begin opening immediately. QuickGUI UI reactivity such as `createSignal` comes directly from
+`@quickgui/ui`.
 
 Initialization refuses to overwrite a non-empty directory. Use `--no-install` when dependency
 installation belongs to another workflow.
@@ -31,12 +31,12 @@ On macOS, development first creates and ad-hoc signs a real bundle at
 `.quickgui/dev/darwin-arm64/<executable>.app`. The CLI directly owns the process created from that
 bundle's `Contents/MacOS` executable, so the running GUI has normal bundle and `Info.plist` context.
 
-The development executable contains two compiled Bun entrypoints: a minimal native host and the
-configured TS/TSX application Worker. Ordinary source edits therefore follow this sequence:
+The development executable links scriptc-compiled application code and the Rust host. TypeScript 7
+lowers TSX into typed native UI operations. Ordinary source edits therefore follow this sequence:
 
 1. compile the edited source and package a candidate `.app`;
-2. start the candidate process with AppKit/Winit on its main thread and application code in a Bun
-   Worker;
+2. start the candidate process with AppKit/Winit on its main thread and compiled application code on its own
+   native thread;
 3. wait until QuickGUI completes the first native window event-loop turn;
 4. stop only the previous process owned by this CLI session.
 
@@ -46,8 +46,8 @@ self-contained and also works when launched directly; use `quickgui dev` when th
 watching and candidate-first process replacement. Quitting the active app also stops the watcher;
 an older app terminated as part of a successful reload does not.
 
-AppKit/Winit permanently owns the process main thread. Bun timers, fetch, streaming, and other
-application work run on the Worker's normal event loop. Bounded command/event queues and a Winit
+AppKit/Winit permanently owns the process main thread. Timers, fetch, streaming, and other
+application work run on scriptc's native event loop on the application thread. Bounded command/event queues and a Winit
 proxy wake join the two without periodic native pumping.
 
 Available development options:
@@ -60,25 +60,24 @@ quickgui dev --once
 quickgui dev --once --no-launch
 ```
 
-Development runs only the host architecture. Use `build --target` to cross-compile artifacts.
+Development and production application builds run on the matching macOS host architecture.
+Bun is tooling only; Node.js 24+ runs the scriptc compiler. TypeScript 7 is required for JSX lowering.
+The optional extra diagnostic pass is off by default; enable it with `native: { typeCheck: true }`.
 
 ## Production package
 
 ```console
 quickgui build
 quickgui build --target darwin-arm64
-quickgui build --target windows-x64 --out-dir artifacts
 quickgui build --sign "Developer ID Application: Example (TEAMID)" --notarize quickgui-notary
 quickgui build --update-manifest --update-base-url https://dl.example.com/demo
 quickgui build --mas
 ```
 
-Production compilation embeds the application, Solid runtime, Bun runtime, and selected N-API
-addon. macOS output includes both a signed `.app` and a versioned `.dmg` created with
-[`create-dmg`](https://github.com/sindresorhus/create-dmg); Linux and Windows output a native
-executable. Building the disk image requires Node.js 20 or later. Ad-hoc app signing is the macOS
-default, while a DMG built with a real signing identity is timestamped and signed with the same
-identity.
+Production compilation turns the application, the `@quickgui/ui` runtime, and the
+`@quickgui/native` host into one native executable. macOS output includes both a signed `.app` and
+a versioned `.dmg` created with `hdiutil`, holding the app next to an Applications link. Ad-hoc app signing is the macOS default, while a DMG built with
+a real signing identity is timestamped and signed with the same identity.
 
 Set `macos.notarization` or pass `--notarize <profile>` to submit the DMG with `notarytool --wait`,
 then staple and validate the accepted ticket. The profile must already exist in the Keychain:
@@ -93,10 +92,10 @@ Notarization requires a Developer ID signing identity; QuickGUI rejects an ad-ho
 attempt before compiling the application. Development builds remain `.app`-only and never create
 or notarize a DMG.
 
-Recognized targets are `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`,
-`windows-arm64`, and `windows-x64`. A build is available only when the installed
-`@quickgui/native` package contains the corresponding addon; target recognition is not a claim of
-native runtime acceptance.
+Application compilation currently supports `darwin-arm64` and `darwin-x64` on a matching Mac.
+The installed `@quickgui/native` package must contain that target's static host library and link
+recipe. Other target names remain reserved for the existing packaging utilities; Linux and Windows
+application compilation is not supported by this pipeline.
 
 ## Native modules
 
@@ -107,9 +106,9 @@ quickgui modules --target darwin-x64
 ```
 
 A directory `modules/<name>/` holding a `main.zig` is a native module: `quickgui dev` and
-`quickgui build` compile it into a Node-API addon with Zig 0.16 or newer, write the typed
-`modules/<name>/index.ts` the application imports, and embed the addon in the executable.
-`quickgui modules` runs only that step, for `bun test` and type-checking; `--release` uses the
+`quickgui build` compile it into a static library with Zig 0.16 or newer, write the typed
+`modules/<name>/index.ts` the application imports, and link the library into the executable.
+`quickgui modules` runs only that step, for generated bindings and native test builds; `--release` uses the
 production optimization mode. The [native modules guide](native-modules.md) covers the type
 mapping, the calling conventions, and the configuration.
 
@@ -159,7 +158,10 @@ documentTypes: [
 At most 64 document types, 64 extensions each; extensions are lowercased, stripped of leading
 dots, and may not repeat across types.
 
-## Linux packages
+## Linux packaging utilities
+
+These utilities are retained for future native target support; the application compiler currently
+rejects Linux targets.
 
 A production Linux build always writes `<name>.desktop` and, when any document type declares a
 MIME type, a `shared-mime-info` XML package. Beyond that:
@@ -184,7 +186,10 @@ linux: {
 },
 ```
 
-## Windows installer
+## Windows packaging utilities
+
+These utilities are retained for future native target support; the application compiler currently
+rejects Windows targets.
 
 A production Windows build writes an NSIS script next to the executable and runs `makensis` when
 it is on PATH; when it is not, the script is kept and the CLI prints the command that compiles it.
@@ -285,7 +290,7 @@ export default defineConfig({
   resources: ["assets"],
   macos: {
     icon: "assets/AppIcon.icns",
-    minimumSystemVersion: "13.0",
+    minimumSystemVersion: "14.0",
     category: "public.app-category.developer-tools",
     signingIdentity: "Developer ID Application: Example (TEAMID)",
     entitlements: "Entitlements.plist",

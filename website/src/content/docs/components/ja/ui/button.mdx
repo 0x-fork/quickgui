@@ -1,0 +1,30 @@
+テキストなどの内容を自由に組み合わせてスタイルできる、アクセシブルな押下ターゲットです。
+
+## インポート
+
+`@quickgui/ui` から `Button` をインポートします。
+
+```tsx
+import { Button } from "@quickgui/ui";
+```
+
+## 使い方
+
+```tsx
+<Button
+  onClick={save}
+  style={{ height: 40, paddingLeft: 16, paddingRight: 16 }}
+>
+  Save changes
+</Button>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `children` | コンポーネント内にマウントする内容です。 |
+| `onClick` | コアがアクティブ化を解決した後に実行します。 |
+| `disabled` | 操作を無効にし、無効状態を公開します。 |
+

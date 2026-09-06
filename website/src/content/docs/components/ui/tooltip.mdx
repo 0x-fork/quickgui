@@ -1,0 +1,55 @@
+Shows passive help after an exact core-owned delay and supports provider-level warm-up behavior.
+
+## Import
+
+Import `Tooltip` from `@quickgui/ui`.
+
+```tsx
+import { Tooltip } from "@quickgui/ui/tooltip";
+```
+
+## Usage
+
+```tsx
+<Tooltip.Provider delay={600} closeDelay={100}>
+  <Tooltip.Root>
+    <Tooltip.Trigger><Text>?</Text></Tooltip.Trigger>
+    <Tooltip.Portal>
+      <Tooltip.Positioner side="top"><Tooltip.Popup><Text>Keyboard shortcuts</Text></Tooltip.Popup></Tooltip.Positioner>
+    </Tooltip.Portal>
+  </Tooltip.Root>
+</Tooltip.Provider>
+```
+
+## Anatomy
+
+- `Tooltip.Provider`
+- `Tooltip.Root`
+- `Tooltip.Trigger`
+- `Tooltip.Portal`
+- `Tooltip.Positioner`
+- `Tooltip.Popup`
+- `Tooltip.Arrow`
+
+```tsx
+<Tooltip.Root>
+  <Tooltip.Provider />
+  <Tooltip.Trigger />
+  <Tooltip.Portal />
+  <Tooltip.Positioner />
+  <Tooltip.Popup />
+  <Tooltip.Arrow />
+</Tooltip.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `open` | Controlled open state. |
+| `defaultOpen` | Initial state when the component owns whether it is open. |
+| `delay` | Core-owned delay in milliseconds before opening. |
+| `closeDelay` | Core-owned delay in milliseconds before closing. |
+| `side` | Preferred placement side before collision handling. |
+| `hoverable` | Allows the pointer to cross into the tooltip without closing it. |
+

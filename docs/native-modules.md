@@ -1,10 +1,11 @@
 # Native modules in Zig
 
 A native module is a Zig source file that your application imports like any other TypeScript
-module. `@quickgui/cli` compiles `modules/<name>/main.zig` into a Node-API addon, generates a
-typed `modules/<name>/index.ts` from the functions the module exports, and embeds the addon in the
-packaged application. The generated module offers every function twice: a synchronous call and an
-`…Async` variant that runs on the host's native thread pool and resolves a promise.
+module. `@quickgui/cli` compiles `modules/<name>/main.zig` into a static library, generates a
+typed `modules/<name>/index.ts` from the functions the module exports, and links the library in the
+packaged application. The generated bindings are compiled by scriptc and cannot execute directly under Bun or Node.js.
+The generated module offers every function twice: a synchronous call and an
+`…Async` variant that runs on the native background threads and resolves a promise.
 
 ```
 my-app/
@@ -43,7 +44,7 @@ const later = await summarizeAsync(await file.text()); // off the JavaScript thr
 ```
 
 `quickgui dev` and `quickgui build` compile modules before the application; `quickgui modules`
-does only that, for `bun test` and type-checking. The compiler is found as `zig` on `PATH` or
+does only that, to refresh the generated bindings without building an application. The compiler is found as `zig` on `PATH` or
 through `QUICKGUI_ZIG`, and must be Zig 0.16 or newer.
 
 ## What a module exports
@@ -56,7 +57,7 @@ function is called with its arguments decoded from JavaScript, and its return va
 | ----------------------------------------------- | ---------------------------------------------- |
 | `bool`                                          | `boolean`                                      |
 | any integer or float type                       | `number` (integers within ±2^53)               |
-| `[]const u8`, `[]u8`, `[:0]const u8`, `[:0]u8`  | `string` (parameters also accept `Uint8Array`) |
+| `[]const u8`, `[]u8`, `[:0]const u8`, `[:0]u8`  | `string` |
 | `quickgui.Bytes`                                | `Uint8Array`                                   |
 | `void` (return only)                            | `undefined`                                    |
 | struct                                          | object with the same field names               |
@@ -120,15 +121,15 @@ import { parse, parseAsync, digest } from "./modules/stats";
 try {
   const lines = parse(text);
 } catch (error) {
-  if (error instanceof NativeModuleError && error.code === "EmptyLine") { /* … */ }
+  if (error instanceof Error) console.error(error.message);
 }
 ```
 
 - `parse(text)` runs on the calling thread and returns the decoded value.
-- `parseAsync(text)` copies the arguments, runs the function on the host's Node-API thread pool,
+- `parseAsync(text)` copies the arguments, runs the function on the native background threads,
   and resolves on the JavaScript thread. Use it for anything that takes more than a few
-  milliseconds, so the application's event loop keeps handling native events and Solid updates.
-- Arguments are validated before the call: a wrong type, a missing argument, or a value that
+  milliseconds, so the application's event loop keeps handling native events and QuickGUI UI updates.
+- Arguments are validated before the call: a wrong type, an invalid wire value, or a value that
   cannot be JSON-serialized throws a `TypeError` naming the argument position.
 - A Zig error becomes a `NativeModuleError` from `@quickgui/native/modules` whose `code` is the
   error name (`EmptyLine`), and whose `module` and `functionName` say where it came from. The
@@ -160,20 +161,17 @@ quickgui modules --target darwin-x64
 - Modules are compiled with `zig build-lib` in `ReleaseSafe` for development and `ReleaseFast`
   for production; `modules.optimize` in the config fixes one mode for both. `Debug` compiles
   fastest, `ReleaseSafe` keeps bounds checks.
-- The addon is written to `.quickgui/modules/<name>/<target>/<name>.node`, with Zig's cache in
-  `.quickgui/zig-cache`. A build is skipped when the hash of the module's `.zig` files, the
-  runtime, the Zig version, the target, and the optimization mode has not changed, so a
-  development reload that touched only TypeScript costs nothing.
-- `modules/<name>/index.ts` is rewritten only when its content changes. It `require`s the addon
-  by a literal relative path, which is what lets Bun embed the addon in the compiled executable;
-  the packaged application therefore needs no extra files, and macOS signing covers it. Whether
-  to commit the generated file is up to the project: committing it lets `tsc` and editors resolve
-  types before the first build.
+- The static library is written to `.quickgui/modules/<name>/<target>/lib<name>.a`, with Zig's
+  cache in `.quickgui/zig-cache`. The input hash includes the module sources, runtime, Zig
+  version, target, and optimization mode. macOS archives are repacked for Apple's linker.
+- `modules/<name>/index.ts` is rewritten only when its content changes. It declares the module's
+  C symbols and typed wrappers. The CLI adds those symbols and the static library to scriptc's
+  FFI manifest. Commit the generated file if editors should resolve types before the first build.
 - `quickgui dev` watches `.zig` files like any other source and ignores the generated
   `index.ts`, so editing a module rebuilds it and restarts the application; a compile error keeps
   the previous application running and prints Zig's diagnostics.
-- Cross-compiling follows `--target`: Zig needs no SDK for these libraries. Windows targets are
-  not supported yet, because a Windows addon has to link against the host's import library.
+- `quickgui modules --target` can generate a library for another supported Zig target. Building
+  the complete application still requires a matching macOS host.
 
 ```ts
 // quickgui.config.ts

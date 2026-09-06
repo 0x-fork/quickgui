@@ -1,0 +1,27 @@
+使用继承的排版、文本选择和无障碍属性来排版并绘制 Unicode 文本。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Text`。
+
+```tsx
+import { Text } from "@quickgui/ui";
+```
+
+## 用法
+
+```tsx
+<Text style={{ fontSize: 18, fontWeight: 600 }}>
+  Native, retained text
+</Text>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `children` | 挂载在组件内部的内容。 |
+| `role` | 保留节点暴露的无障碍角色。 |
+| `ref` | 接收保留式原生节点。 |
+

@@ -1,0 +1,46 @@
+将 QuickGUI 核心路由投影到 QuickGUI UI，支持嵌套布局和容量受限的内存历史。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Router`。
+
+```tsx
+import { Router } from "@quickgui/ui/router";
+```
+
+## 用法
+
+```tsx
+import { Router, route } from "@quickgui/ui/router";
+
+<Router initialPath="/" routes={[
+  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
+]} />;
+```
+
+## 结构
+
+- `Router`
+- `route` / `layout`
+- `Link`
+- `Outlet`
+
+```tsx
+import { Router, route } from "@quickgui/ui/router";
+
+<Router initialPath="/" routes={[
+  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
+]} />;
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `initialPath` | 有界内存历史的初始目标地址。 |
+| `fallback` | 没有路由匹配时渲染的内容。 |
+| `routes` | Static route declarations built with `route` and `layout`. |
+| `path` | 绝对路由模式或相对于父路由的模式。 |
+| `component` | 路由匹配时渲染的组件。 |
+| `href` | QuickGUI 路由器解析的目标地址。 |
+

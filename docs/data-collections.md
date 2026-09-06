@@ -305,4 +305,4 @@ an ordinary child node. Supplying a pending branch's children is a declaration t
 atomically by the core — an over-deep, oversized, or duplicate payload leaves the tree exactly as it
 was. Declarations are bounded before they reach the core: 2 MiB per column, node, selection, or
 toast source, 512 columns, 65,536 nodes, and a duplicate identifier keeps its first occurrence. See
-the [Solid 2 renderer](solid.md#virtual-tables-and-trees).
+the [QuickGUI UI renderer](ui.md#virtual-tables-and-trees).

@@ -123,7 +123,7 @@ export function parseStashes(output: string): StashEntry[] {
   for (const record of splitNul(output)) {
     const [ref, sha, time, message] = record.split("\x1f");
     if (!ref || !sha) continue;
-    const index = Number(/\{(\d+)\}/.exec(ref)?.[1] ?? stashes.length);
+    const index = Number(/\{(\d+)\}/.exec(ref)?.[1] ?? String(stashes.length));
     const named = /^(?:WIP on|On) ([^:]+): (.*)$/s.exec(message ?? "");
     stashes.push({
       ref,

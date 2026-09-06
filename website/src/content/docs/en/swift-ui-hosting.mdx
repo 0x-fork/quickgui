@@ -1,12 +1,12 @@
-SwiftUI modifiers let Solid declare native appearance while reverse hosting lets SwiftUI content contain an ordinary QuickGUI subtree.
+SwiftUI modifiers let QuickGUI UI declare native appearance while reverse hosting lets SwiftUI content contain an ordinary QuickGUI subtree.
 
 ## Modifiers
 
-Import modifier factories from `@quickgui/solid/swift-ui/modifiers` and apply them in order.
+Import modifier factories from `@quickgui/ui/swift-ui/modifiers` and apply them in order.
 
 ```tsx
-import { Button, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle, controlSize, tint } from "@quickgui/solid/swift-ui/modifiers";
+import { Button, Host } from "@quickgui/ui/swift-ui";
+import { buttonStyle, controlSize, tint } from "@quickgui/ui/swift-ui/modifiers";
 
 <Host matchContents>
   <Button
@@ -50,13 +50,13 @@ The SwiftUI `Popover` composes a native SwiftUI trigger. Its content can use `Qu
 
 ```tsx
 <Host matchContents>
-  <Popover isPresented={open()} onIsPresentedChange={setOpen}>
-    <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
+    <Popover.Trigger><Button label="Open" /></Popover.Trigger>
     <Popover.Content>
       <QuickGUIHostView width={280} height={140}>
         <SettingsPanel />
       </QuickGUIHostView>
     </Popover.Content>
-  </Popover>
+  </Popover.Root>
 </Host>
 ```

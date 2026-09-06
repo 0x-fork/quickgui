@@ -28,6 +28,17 @@ describe("persistence", () => {
     }
   });
 
+  test("keeps the fields a patch leaves out and forgets the last repository on null", async () => {
+    const persistence = createPersistence(undefined, { ...DEFAULT_STATE, lastRepository: "/a", preferredAgent: "codex" });
+    persistence.update({ sidebarWidth: 300 });
+    expect(persistence.current()).toEqual({ ...DEFAULT_STATE, lastRepository: "/a", preferredAgent: "codex", sidebarWidth: 300 });
+    persistence.update({ lastRepository: null });
+    expect(persistence.current().lastRepository).toBeUndefined();
+    expect(JSON.stringify(persistence.current())).not.toContain("lastRepository");
+    persistence.update({ lastRepository: "/b" });
+    expect(persistence.state()).toMatchObject({ lastRepository: "/b", sidebarWidth: 300 });
+  });
+
   test("keeps state in memory without a file", async () => {
     const persistence = createPersistence(undefined, DEFAULT_STATE);
     persistence.update({ sidebarWidth: 250 });

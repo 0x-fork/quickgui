@@ -1,0 +1,68 @@
+Presents timed, stacked notifications with action, close, and swipe behavior.
+
+## Import
+
+Import `Toast` from `@quickgui/ui`.
+
+```tsx
+import { Toast } from "@quickgui/ui/toast";
+```
+
+## Usage
+
+```tsx
+const toast = useToastManager();
+
+toast.add({ id: "saved", title: "Saved", description: "Your changes are live." });
+
+<Toast.Provider timeout={5000} limit={3}>
+  <Toast.Portal>
+    <Toast.Viewport toasts={toast.toasts()} onDismiss={toast.dismiss}>
+      <For each={toast.toasts()}>{(item) =>
+        <Toast.Root toastId={item.id}>
+          <Toast.Content><Toast.Title /><Toast.Description /></Toast.Content>
+          <Toast.Close><Text>Close</Text></Toast.Close>
+        </Toast.Root>
+      }</For>
+    </Toast.Viewport>
+  </Toast.Portal>
+</Toast.Provider>
+```
+
+## Anatomy
+
+- `Toast.Provider`
+- `Toast.Portal`
+- `Toast.Viewport`
+- `Toast.Positioner`
+- `Toast.Root`
+- `Toast.Content`
+- `Toast.Title`
+- `Toast.Description`
+- `Toast.Action`
+- `Toast.Close`
+
+```tsx
+<Toast.Root>
+  <Toast.Provider />
+  <Toast.Portal />
+  <Toast.Viewport />
+  <Toast.Positioner />
+  <Toast.Content />
+  <Toast.Title />
+  <Toast.Description />
+  <Toast.Action />
+  <Toast.Close />
+</Toast.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `toasts` | Complete declared toast queue rendered by the viewport. |
+| `toastId` | Stable queue identifier associated with one rendered toast. |
+| `timeout` | Inherited auto-dismiss duration or warm-provider timeout. |
+| `swipeDirection` | Edge toward which a swipe dismisses or moves the surface. |
+| `onDismiss` | Reports toast identifiers dismissed by the core. |
+

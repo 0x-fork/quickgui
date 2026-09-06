@@ -85,7 +85,7 @@ fn main() -> Result<(), quickgui::AppError> {
 Start at the [documentation index](docs/README.md).
 
 - [View API and layout](docs/view-api.md)
-- [Solid 2 renderer](docs/solid.md)
+- [QuickGUI UI renderer](docs/ui.md)
 - [Project CLI and application packaging](docs/cli.md)
 - [Native modules in Zig](docs/native-modules.md)
 - [Windows and shared state](docs/windows.md)
@@ -122,57 +122,57 @@ Start at the [documentation index](docs/README.md).
 
 ## Try it
 
-For the experimental Solid 2 host:
+For a natively compiled TypeScript application (macOS, Node.js 24+, Bun tooling, and Xcode Command Line Tools):
 
 ```console
 bun install
-cd examples/solid
+cd examples/counter
 bun run dev
 ```
 
-The routing example uses the Rust core for matching and memory history while Solid renders nested
+The routing example uses the Rust core for matching and memory history while QuickGUI UI renders nested
 layouts, links, dynamic parameters, queries, and fallback routes:
 
 ```console
-cd examples/routing-solid
+cd examples/routing
 bun run dev
 ```
 
 The complete DeepSeek streaming example uses QuickGUI core Markdown:
 
 ```console
-cd examples/ai-chat-solid
+cd examples/ai-chat
 bun run dev
 ```
 
-The Solid alert-dialog example presents native alerts with optional window ownership:
+The QuickGUI UI alert-dialog example presents native alerts with optional window ownership:
 
 ```console
-cd examples/alert-dialog-solid
+cd examples/alert-dialog
 bun run dev
 ```
 
 The separate file-dialog example uses native open and save panels with Electron-shaped results:
 
 ```console
-cd examples/file-dialog-solid
+cd examples/file-dialog
 bun run dev
 ```
 
-The Solid popover example compares the shared compound JSX API of a native `SystemPopover` and a
+The QuickGUI UI popover example compares the shared compound JSX API of a native `SystemPopover` and a
 retained in-window `Popover`:
 
 ```console
-cd examples/popover-solid
+cd examples/popover
 bun run dev
 ```
 
 The sidebar vibrancy example switches among every Electron-compatible macOS semantic material and
-all three visual-effect activity states while keeping a translucent Solid sidebar and opaque
+all three visual-effect activity states while keeping a translucent QuickGUI UI sidebar and opaque
 content pane:
 
 ```console
-cd examples/sidebar-vibrancy-solid
+cd examples/sidebar-vibrancy
 bun run dev
 ```
 
@@ -181,7 +181,7 @@ integrations, permissions, preferences, power, native menus, notifications, tray
 window controls, and updater metadata:
 
 ```console
-cd examples/system-api-solid
+cd examples/system-api
 bun run dev
 ```
 
@@ -190,16 +190,16 @@ dashed borders, outlines, filters, transforms with a hover variant, blend modes,
 right-to-left layout, sticky headers, and scroll snapping:
 
 ```console
-cd examples/styling-solid
+cd examples/styling
 bun run dev
 ```
 
-The components example puts every compound component the Solid package binds in one window: select,
+The components example puts every compound component the QuickGUI UI package binds in one window: select,
 combobox, autocomplete, virtual table and tree, slider, number field, splitter, toolbar, toggle
 group, date and time fields, calendar, menubar, popover and context menus, dialog, tabs, and toasts:
 
 ```console
-cd examples/components-solid
+cd examples/components
 bun run dev
 ```
 
@@ -212,8 +212,9 @@ cd examples/quick-git
 bun run dev
 ```
 
-This creates and runs the platform-native development host while loading `app.tsx` from disk (an
-`.app` bundle on macOS). Rust framework examples remain available directly through Cargo:
+The CLI lowers TSX with TypeScript 7 and compiles the application with scriptc, linking the Rust
+host into a native `.app`. Bun runs the development tools; the application contains no Bun runtime.
+Rust framework examples remain available directly through Cargo:
 
 ```console
 cargo run --release --example gesture_input

@@ -1,10 +1,11 @@
 //! QuickGUI native module runtime.
 //!
-//! A native module is an ordinary Zig source file whose public functions are called from
-//! JavaScript. The CLI compiles it into a Node-API addon with this file as the glue: at compile
+//! A native module is an ordinary Zig source file whose public functions are called from the
+//! application. The CLI compiles it into a static library with this file as the glue: at compile
 //! time it reflects over every `pub fn` of the module, derives a manifest describing each
 //! function's parameters and result, and generates the code that decodes arguments, calls the
-//! function, and encodes the result.
+//! function, and encodes the result. The application links the library and calls it through the
+//! scriptc FFI, so a module call is one native call with no JavaScript engine in between.
 //!
 //! Values cross the boundary in one binary encoding shared with `@quickgui/native/modules`:
 //!
@@ -14,24 +15,26 @@
 //! - `[]const u8`, `[]u8`, and their sentinel-terminated forms are strings.
 //! - `Bytes` is a `Uint8Array`.
 //! - Everything else (structs, slices, arrays, optionals, enums, tagged unions, tuples) travels
-//!   as JSON through `std.json`, so a function can return a struct and JavaScript receives an
-//!   object with the same field names.
-//! - A `std.mem.Allocator` parameter is not passed from JavaScript; the runtime injects an arena
-//!   that lives until the result has been encoded, so a function can allocate its result freely
-//!   and never free anything.
-//! - An error union return reports the error name to JavaScript, which throws it.
+//!   as JSON through `std.json`, so a function can return a struct and the application receives
+//!   an object with the same field names.
+//! - A `std.mem.Allocator` parameter is not passed from the application; the runtime injects an
+//!   arena that lives until the result has been encoded, so a function can allocate its result
+//!   freely and never free anything.
+//! - An error union return reports the error name to the application, which throws it.
 //!
-//! The addon exports three functions: `manifest()` returning the JSON manifest, `call(index,
-//! bytes)` for a synchronous call, and `callAsync(index, bytes)` which runs the function on the
-//! host's Node-API thread pool and resolves a promise. Functions invoked through `callAsync` may
-//! run concurrently on any thread, so shared module state needs its own synchronization.
+//! The library exports three C symbols under the prefix the CLI chooses for the module
+//! (`quickgui_module_<name>`): `_manifest()` returning the JSON manifest, `_call(index, args,
+//! len, reply, context)` for a synchronous call that hands the encoded result to `reply` before
+//! returning, and `_call_async(request, index, args, len)`, which runs the function on its own
+//! thread and reports the result to the QuickGUI host through `quickgui_module_complete`.
+//! Functions invoked asynchronously may run concurrently on any thread, so shared module state
+//! needs its own synchronization.
 
 const std = @import("std");
 const builtin = @import("builtin");
-pub const napi = @import("napi.zig");
 
 /// Encoding version shared with `@quickgui/native/modules`.
-pub const abi_version: u32 = 1;
+pub const abi_version: u32 = 2;
 
 /// A byte string that crosses the boundary as a `Uint8Array` instead of a JavaScript string.
 pub const Bytes = struct { data: []const u8 };
@@ -58,14 +61,24 @@ const status_ok: u8 = 0;
 const status_error: u8 = 1;
 const max_safe_integer: f64 = 9007199254740991.0;
 
-/// Export `M`'s public functions as a Node-API module. Called from the generated root:
+/// Provided by the QuickGUI host library the module is linked into: delivers the encoded result
+/// of an asynchronous call as an event carrying `request`.
+extern fn quickgui_module_complete(request: u32, data: [*]const u8, data_len: usize) callconv(.c) void;
+
+/// Receives the encoded result of a synchronous call, exactly once, before the call returns.
+const ReplyCallback = *const fn (data: [*]const u8, data_len: usize, context: ?*anyopaque) callconv(.c) void;
+
+/// Export `M`'s public functions under C symbols starting with `prefix`. Called from the
+/// generated root:
 ///
 /// ```zig
-/// comptime { @import("quickgui").exportModule(@import("module")); }
+/// comptime { @import("quickgui").exportModule(@import("module"), "quickgui_module_git"); }
 /// ```
-pub fn exportModule(comptime M: type) void {
+pub fn exportModule(comptime M: type, comptime prefix: []const u8) void {
     const Impl = ModuleImpl(M);
-    @export(&Impl.register, .{ .name = "napi_register_module_v1" });
+    @export(&Impl.manifest, .{ .name = prefix ++ "_manifest" });
+    @export(&Impl.call, .{ .name = prefix ++ "_call" });
+    @export(&Impl.callAsync, .{ .name = prefix ++ "_call_async" });
 }
 
 // --- reflection ----------------------------------------------------------------------------------
@@ -416,6 +429,7 @@ fn ModuleImpl(comptime M: type) type {
     return struct {
         const names = functionNames(M);
         const manifest_json = buildManifest(M, names);
+        const manifest_z = std.fmt.comptimePrint("{s}", .{manifest_json});
 
         fn dispatch(index: u32, args: []const u8, arena: std.mem.Allocator, out: *std.Io.Writer.Allocating) !void {
             inline for (names, 0..) |name, position| {
@@ -438,156 +452,81 @@ fn ModuleImpl(comptime M: type) type {
             return out.toOwnedSlice() catch return error.OutOfMemory;
         }
 
-        // --- Node-API surface ---
+        // --- C surface ---
 
-        fn register(env: napi.Env, exports: napi.Value) callconv(.c) napi.Value {
-            defineFunction(env, exports, "manifest", manifest);
-            defineFunction(env, exports, "call", call);
-            defineFunction(env, exports, "callAsync", callAsync);
-            return exports;
+        fn manifest() callconv(.c) [*:0]const u8 {
+            return manifest_z;
         }
 
-        fn manifest(env: napi.Env, _: napi.CallbackInfo) callconv(.c) ?napi.Value {
-            var value: napi.Value = undefined;
-            if (napi.napi_create_string_utf8(env, manifest_json.ptr, manifest_json.len, &value) != .ok) {
-                return throwError(env, "could not create the native module manifest");
-            }
-            return value;
-        }
-
-        fn call(env: napi.Env, info: napi.CallbackInfo) callconv(.c) ?napi.Value {
-            const request = readCallArguments(env, info) orelse return null;
-            const result = invoke(request.index, request.args) catch return throwError(env, "OutOfMemory");
-            defer backing_allocator.free(result);
-            return resultBuffer(env, result);
-        }
-
-        fn callAsync(env: napi.Env, info: napi.CallbackInfo) callconv(.c) ?napi.Value {
-            const request = readCallArguments(env, info) orelse return null;
-            const work = backing_allocator.create(Work) catch return throwError(env, "OutOfMemory");
-            work.* = .{
-                .index = request.index,
-                .args = backing_allocator.dupe(u8, request.args) catch {
-                    backing_allocator.destroy(work);
-                    return throwError(env, "OutOfMemory");
-                },
+        fn call(index: u32, args_ptr: ?[*]const u8, args_len: usize, reply: ReplyCallback, context: ?*anyopaque) callconv(.c) void {
+            const result = invoke(index, argumentSlice(args_ptr, args_len)) catch {
+                reply(&out_of_memory_result, out_of_memory_result.len, context);
+                return;
             };
-            var promise: napi.Value = undefined;
-            if (napi.napi_create_promise(env, &work.deferred, &promise) != .ok) {
+            defer backing_allocator.free(result);
+            reply(result.ptr, result.len, context);
+        }
+
+        fn callAsync(request: u32, index: u32, args_ptr: ?[*]const u8, args_len: usize) callconv(.c) void {
+            const work = backing_allocator.create(Work) catch {
+                quickgui_module_complete(request, &out_of_memory_result, out_of_memory_result.len);
+                return;
+            };
+            const args = backing_allocator.dupe(u8, argumentSlice(args_ptr, args_len)) catch {
+                backing_allocator.destroy(work);
+                quickgui_module_complete(request, &out_of_memory_result, out_of_memory_result.len);
+                return;
+            };
+            work.* = .{ .request = request, .index = index, .args = args };
+            const thread = std.Thread.spawn(.{}, execute, .{work}) catch {
                 work.destroy();
-                return throwError(env, "could not create a promise for the native module call");
-            }
-            var name: napi.Value = undefined;
-            const resource_name = "quickgui:native-module";
-            if (napi.napi_create_string_utf8(env, resource_name.ptr, resource_name.len, &name) != .ok or
-                napi.napi_create_async_work(env, null, name, execute, complete, work, &work.work) != .ok)
-            {
-                _ = napi.napi_reject_deferred(env, work.deferred, errorValue(env, "could not schedule the native module call"));
-                work.destroy();
-                return promise;
-            }
-            if (napi.napi_queue_async_work(env, work.work) != .ok) {
-                _ = napi.napi_reject_deferred(env, work.deferred, errorValue(env, "could not queue the native module call"));
-                _ = napi.napi_delete_async_work(env, work.work);
-                work.destroy();
-                return promise;
-            }
-            return promise;
+                quickgui_module_complete(request, &thread_failure_result, thread_failure_result.len);
+                return;
+            };
+            thread.detach();
         }
 
         const Work = struct {
+            request: u32,
             index: u32,
             args: []u8,
-            result: ?[]u8 = null,
-            deferred: napi.Deferred = undefined,
-            work: napi.AsyncWork = undefined,
 
             fn destroy(self: *Work) void {
                 backing_allocator.free(self.args);
-                if (self.result) |result| backing_allocator.free(result);
                 backing_allocator.destroy(self);
             }
         };
 
-        /// Runs on a thread-pool thread: no Node-API calls are allowed here.
-        fn execute(_: napi.Env, data: ?*anyopaque) callconv(.c) void {
-            const work: *Work = @ptrCast(@alignCast(data.?));
-            work.result = invoke(work.index, work.args) catch null;
-        }
-
-        fn complete(env: napi.Env, status: napi.Status, data: ?*anyopaque) callconv(.c) void {
-            const work: *Work = @ptrCast(@alignCast(data.?));
+        /// Runs on its own thread and reports the result through the host.
+        fn execute(work: *Work) void {
             defer work.destroy();
-            _ = napi.napi_delete_async_work(env, work.work);
-            if (status != .ok) {
-                _ = napi.napi_reject_deferred(env, work.deferred, errorValue(env, "the native module call was cancelled"));
-                return;
-            }
-            const result = work.result orelse {
-                _ = napi.napi_reject_deferred(env, work.deferred, errorValue(env, "OutOfMemory"));
+            const result = invoke(work.index, work.args) catch {
+                quickgui_module_complete(work.request, &out_of_memory_result, out_of_memory_result.len);
                 return;
             };
-            const buffer = resultBuffer(env, result) orelse {
-                _ = napi.napi_reject_deferred(env, work.deferred, errorValue(env, "could not copy the native module result"));
-                return;
-            };
-            _ = napi.napi_resolve_deferred(env, work.deferred, buffer);
+            defer backing_allocator.free(result);
+            quickgui_module_complete(work.request, result.ptr, result.len);
         }
     };
 }
 
-// --- Node-API helpers ----------------------------------------------------------------------------
+// --- C helpers -----------------------------------------------------------------------------------
 
-const CallRequest = struct { index: u32, args: []const u8 };
-
-fn readCallArguments(env: napi.Env, info: napi.CallbackInfo) ?CallRequest {
-    var argc: usize = 2;
-    var argv: [2]napi.Value = undefined;
-    if (napi.napi_get_cb_info(env, info, &argc, &argv, null, null) != .ok or argc < 2) {
-        return throwTypeError(env, "a native module call needs a function index and an argument buffer");
-    }
-    var index: u32 = 0;
-    if (napi.napi_get_value_uint32(env, argv[0], &index) != .ok) {
-        return throwTypeError(env, "the native module function index must be an unsigned integer");
-    }
-    var kind: napi.TypedArrayType = .uint8;
-    var length: usize = 0;
-    var data: ?*anyopaque = null;
-    if (napi.napi_get_typedarray_info(env, argv[1], &kind, &length, &data, null, null) != .ok or kind != .uint8) {
-        return throwTypeError(env, "native module arguments must be encoded in a Uint8Array");
-    }
-    const args: []const u8 = if (length == 0 or data == null) &.{} else @as([*]const u8, @ptrCast(data.?))[0..length];
-    return .{ .index = index, .args = args };
+fn argumentSlice(ptr: ?[*]const u8, len: usize) []const u8 {
+    if (len == 0) return &.{};
+    const base = ptr orelse return &.{};
+    return base[0..len];
 }
 
-fn resultBuffer(env: napi.Env, result: []const u8) ?napi.Value {
-    var value: napi.Value = undefined;
-    if (napi.napi_create_buffer_copy(env, result.len, result.ptr, null, &value) != .ok) {
-        return throwError(env, "could not copy the native module result");
-    }
-    return value;
+/// A result that reports `name` as the error, encoded at compile time so failures that cannot
+/// allocate still have something to report.
+fn encodedError(comptime name: []const u8) [5 + name.len]u8 {
+    var out: [5 + name.len]u8 = undefined;
+    out[0] = status_error;
+    std.mem.writeInt(u32, out[1..5], name.len, .little);
+    @memcpy(out[5..], name);
+    return out;
 }
 
-fn errorValue(env: napi.Env, message: []const u8) napi.Value {
-    var text: napi.Value = undefined;
-    _ = napi.napi_create_string_utf8(env, message.ptr, message.len, &text);
-    var value: napi.Value = undefined;
-    _ = napi.napi_create_error(env, null, text, &value);
-    return value;
-}
-
-fn throwError(env: napi.Env, message: [*:0]const u8) ?napi.Value {
-    _ = napi.napi_throw_error(env, null, message);
-    return null;
-}
-
-fn throwTypeError(env: napi.Env, message: [*:0]const u8) ?CallRequest {
-    _ = napi.napi_throw_type_error(env, null, message);
-    return null;
-}
-
-fn defineFunction(env: napi.Env, exports: napi.Value, comptime name: [:0]const u8, callback: napi.Callback) void {
-    var function: napi.Value = undefined;
-    if (napi.napi_create_function(env, name.ptr, name.len, callback, null, &function) != .ok) return;
-    _ = napi.napi_set_named_property(env, exports, name.ptr, function);
-}
+const out_of_memory_result = encodedError("OutOfMemory");
+const thread_failure_result = encodedError("ThreadSpawnFailed");

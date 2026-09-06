@@ -1,0 +1,43 @@
+在同一个图例和共享语义状态下组织相关字段。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Fieldset`。
+
+```tsx
+import { Fieldset } from "@quickgui/ui/field";
+```
+
+## 用法
+
+```tsx
+<Fieldset.Root disabled={saving()}>
+  <Fieldset.Legend><Text>Billing address</Text></Fieldset.Legend>
+  <Fieldset.Description><Text>Used for receipts.</Text></Fieldset.Description>
+  <Fieldset.Control element="input" value={address()} />
+</Fieldset.Root>
+```
+
+## 结构
+
+- `Fieldset.Root`
+- `Fieldset.Legend`
+- `Fieldset.Description`
+- `Fieldset.Control`
+
+```tsx
+<Fieldset.Root>
+  <Fieldset.Legend />
+  <Fieldset.Description />
+  <Fieldset.Control />
+</Fieldset.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `disabled` | 禁止交互，并暴露禁用状态。 |
+| `children` | 挂载在组件内部的内容。 |
+| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+

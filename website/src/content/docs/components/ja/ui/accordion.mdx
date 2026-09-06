@@ -1,0 +1,50 @@
+1 つ以上の展開セクションと、そのキーボードフォーカスを管理します。
+
+## インポート
+
+`@quickgui/ui` から `Accordion` をインポートします。
+
+```tsx
+import { Accordion } from "@quickgui/ui/disclosure";
+```
+
+## 使い方
+
+```tsx
+<Accordion.Root value={open()} onValueChange={setOpen}>
+  <Accordion.Item value="shipping">
+    <Accordion.Header>
+      <Accordion.Trigger><Text>Shipping</Text></Accordion.Trigger>
+    </Accordion.Header>
+    <Accordion.Panel><Text>Ships in 2–3 days.</Text></Accordion.Panel>
+  </Accordion.Item>
+</Accordion.Root>
+```
+
+## 構成
+
+- `Accordion.Root`
+- `Accordion.Item`
+- `Accordion.Header`
+- `Accordion.Trigger`
+- `Accordion.Panel`
+
+```tsx
+<Accordion.Root>
+  <Accordion.Item />
+  <Accordion.Header />
+  <Accordion.Trigger />
+  <Accordion.Panel />
+</Accordion.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+| `multiple` | 複数の値を選択または開けるようにします。 |
+| `keepMounted` | 非アクティブな内容をマウントしたまま、表示を無効にします。 |
+

@@ -1,8 +1,8 @@
 import { Menu, Shell } from "@quickgui/native";
-import { Text, View } from "@quickgui/solid";
-import { Button as SwiftButton, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle, disabled } from "@quickgui/solid/swift-ui/modifiers";
-import { For, Show } from "solid-js";
+import { Text, View } from "@quickgui/ui";
+import { Button as SwiftButton, Host } from "@quickgui/ui/swift-ui";
+import { buttonStyle, disabled } from "@quickgui/ui/swift-ui/modifiers";
+import { For, Show } from "@quickgui/ui";
 import { basename, dirname } from "node:path";
 import { homedir } from "node:os";
 

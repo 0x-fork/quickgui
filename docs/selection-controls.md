@@ -151,7 +151,7 @@ Run the caller-styled light/dark, mixed-state, disabled-state, mouse, Tab, and a
 cargo run --release --example selection_controls
 ```
 
-## Solid
+## QuickGUI UI
 
 `readOnly` is bound on `Checkbox.Root`, `Radio.Root`, `RadioGroup.Root`, and `Switch.Root`, and
 `RadioGroup.Root` also accepts `required`. It is the web's `readonly` rather than `disabled`: the
@@ -170,7 +170,7 @@ folds them into on, mixed, or off — a registry-free derivation, so no JavaScri
 ```
 
 
-`@quickgui/solid` exposes these descriptors as Base-UI-shaped compound parts: `Checkbox.Root` /
+`@quickgui/ui` exposes these descriptors as Base-UI-shaped compound parts: `Checkbox.Root` /
 `Checkbox.Indicator`, `Radio.Root` / `Radio.Indicator` inside `RadioGroup.Root`, and `Switch.Root` /
 `Switch.Thumb`. Each part is one native node that declares which core descriptor to rebuild, so the
 role, exact on/off/mixed toggle state, click and Space activation, focus, cursor, and window-drag
@@ -185,7 +185,7 @@ exclusion all come from this Rust layer rather than a JavaScript reimplementatio
 
 `checked` accepts `true`, `false`, or `"indeterminate"` and maps onto `ToggleState`.
 `onCheckedChange` receives the next value and the originating event. See the
-[Solid renderer guide](solid.md) for the full binding table.
+[QuickGUI UI renderer guide](ui.md) for the full binding table.
 
 ## Read-only controls and parent checkboxes
 

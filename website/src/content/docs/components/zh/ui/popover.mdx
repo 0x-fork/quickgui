@@ -1,0 +1,65 @@
+在当前窗口中，将调用方设置样式的内容放在锚点旁。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Popover`。
+
+```tsx
+import { Popover } from "@quickgui/ui/popover";
+```
+
+## 用法
+
+```tsx
+<Popover.Root open={open()} onOpenChange={setOpen}>
+  <Popover.Trigger><Text>Open</Text></Popover.Trigger>
+  <Popover.Portal>
+    <Popover.Positioner side="bottom" sideOffset={8}>
+      <Popover.Popup><Popover.Arrow /><Text>Popover content</Text></Popover.Popup>
+    </Popover.Positioner>
+  </Popover.Portal>
+</Popover.Root>
+```
+
+## 结构
+
+- `Popover.Root`
+- `Popover.Trigger`
+- `Popover.Content`
+- `Popover.Portal`
+- `Popover.Backdrop`
+- `Popover.Positioner`
+- `Popover.Popup`
+- `Popover.Arrow`
+- `Popover.Viewport`
+- `Popover.Title`
+- `Popover.Description`
+- `Popover.Close`
+
+```tsx
+<Popover.Root>
+  <Popover.Trigger />
+  <Popover.Content />
+  <Popover.Portal />
+  <Popover.Backdrop />
+  <Popover.Positioner />
+  <Popover.Popup />
+  <Popover.Arrow />
+  <Popover.Viewport />
+  <Popover.Title />
+  <Popover.Description />
+  <Popover.Close />
+</Popover.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `open` | 受控的打开状态。 |
+| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `side` | 碰撞处理前的首选放置方向。 |
+| `align` | 在放置交叉轴上的首选对齐方式。 |
+| `modal` | 将焦点限制在界面内，并阻止与后方内容交互。 |
+

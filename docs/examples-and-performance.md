@@ -2,13 +2,13 @@
 
 [Documentation index](README.md)
 
-The Solid system API example keeps desktop behavior in the Rust core while `@quickgui/native`
-projects it into JavaScript and `@quickgui/solid` renders the controls. It covers application
+The QuickGUI UI system API example keeps desktop behavior in the Rust core while `@quickgui/native`
+projects it into JavaScript and `@quickgui/ui` renders the controls. It covers application
 identity and paths, system information and preferences, permissions, power, rich clipboard data,
 notifications, menus, desktop integrations, global shortcuts, tray icons, and window controls:
 
 ```console
-cd examples/system-api-solid
+cd examples/system-api
 bun run dev
 ```
 
@@ -24,13 +24,13 @@ cd examples/quick-git
 bun run dev
 ```
 
-The Solid routing example declares nested layouts, dynamic and wildcard routes, query-only
+The QuickGUI UI routing example declares nested layouts, dynamic and wildcard routes, query-only
 navigation, active `Link` styling, and back/forward controls. Rust owns pattern matching,
-normalization, decoded values, and the bounded memory history; Solid owns only declaration
+normalization, decoded values, and the bounded memory history; QuickGUI UI owns only declaration
 collection and rendering:
 
 ```console
-cd examples/routing-solid
+cd examples/routing
 bun run dev
 ```
 

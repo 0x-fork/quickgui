@@ -429,9 +429,9 @@ first occurrence, and anything past 4,096 declared options is dropped. Because e
 that replaces a source, layout, or selection closes a live native popover — something a render pass
 has no `EventContext` for — the binding rebuilds the retained state only when the declaration
 itself changes and the popover is closed. See the
-[Solid 2 renderer](solid.md#option-sources-select-combobox-and-autocomplete).
+[QuickGUI UI renderer](ui.md#option-sources-select-combobox-and-autocomplete).
 
-### Base UI parts in Solid
+### Base UI parts in QuickGUI UI
 
 The compound is split exactly the way the core is. `Select.Label`, `Value`, `Icon`, and `Backdrop`,
 and `Combobox.Label`, `Value`, `Icon`, `InputGroup`, `Clear`, `Trigger`, `Chips`, `Chip`,
@@ -450,4 +450,4 @@ alongside the `items` prop, its `ItemText` supplies the label when none is decla
 decision. `useSelectState()` and `useComboboxState()` report the core's own `SelectPartState` and
 `ComboboxPartState` snapshots, including the combobox's derived `Status` text and `Empty` edge, and
 `useComboboxChips()` reports the chip set the core retained. See
-[Solid 2 renderer](solid.md#base-ui-select-and-combobox-parts).
+[QuickGUI UI renderer](ui.md#base-ui-select-and-combobox-parts).

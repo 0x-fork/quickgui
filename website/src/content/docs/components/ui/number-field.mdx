@@ -1,0 +1,55 @@
+A numeric editor with increment, decrement, and drag-to-scrub parts.
+
+## Import
+
+Import `NumberField` from `@quickgui/ui`.
+
+```tsx
+import { NumberField } from "@quickgui/ui/number-field";
+```
+
+## Usage
+
+```tsx
+<NumberField.Root value={copies()} min={1} max={20} onValueChange={setCopies}>
+  <NumberField.ScrubArea><Text>Copies</Text></NumberField.ScrubArea>
+  <NumberField.Group>
+    <NumberField.Decrement><Text>−</Text></NumberField.Decrement>
+    <NumberField.Input />
+    <NumberField.Increment><Text>+</Text></NumberField.Increment>
+  </NumberField.Group>
+</NumberField.Root>
+```
+
+## Anatomy
+
+- `NumberField.Root`
+- `NumberField.Group`
+- `NumberField.Input`
+- `NumberField.Increment`
+- `NumberField.Decrement`
+- `NumberField.ScrubArea`
+- `NumberField.ScrubAreaCursor`
+
+```tsx
+<NumberField.Root>
+  <NumberField.Group />
+  <NumberField.Input />
+  <NumberField.Increment />
+  <NumberField.Decrement />
+  <NumberField.ScrubArea />
+  <NumberField.ScrubAreaCursor />
+</NumberField.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `defaultValue` | Initial value when the component owns its state. |
+| `min` | Minimum accepted value. |
+| `max` | Maximum accepted value. |
+| `step` | Increment used by keyboard, pointer, or native control input. |
+| `onValueChange` | Reports the value accepted by the core. |
+

@@ -123,13 +123,13 @@ fi
 
 package_names=(
   '@quickgui/native'
-  '@quickgui/solid'
+  '@quickgui/ui'
   '@quickgui/cli'
 )
-registry_names=(native solid cli)
+registry_names=(native ui cli)
 archives=(
   "$archive_dir/quickgui-native-${npm_release_version}.tgz"
-  "$archive_dir/quickgui-solid-${npm_release_version}.tgz"
+  "$archive_dir/quickgui-ui-${npm_release_version}.tgz"
   "$archive_dir/quickgui-cli-${npm_release_version}.tgz"
 )
 

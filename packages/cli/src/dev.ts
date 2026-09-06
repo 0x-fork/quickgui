@@ -1,5 +1,6 @@
-import { watch, type FSWatcher } from "node:fs";
-import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { unlinkSync, watch, type FSWatcher } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { buildProject, type BuildResult } from "./build.ts";
 import { loadConfig, type ResolvedQuickGuiConfig } from "./config.ts";
@@ -16,6 +17,8 @@ export interface DevOptions {
 }
 
 type AppProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
+
+let nextReadySocket = 1;
 
 interface ExitingProcess {
   readonly exited: Promise<number>;
@@ -53,7 +56,7 @@ export async function runDev(options: DevOptions): Promise<number> {
   const host = hostTarget();
   if (target !== host) {
     throw new CliError(
-      `Development apps must run on the host target (${host}); use \`quickgui build --target ${target}\` for cross-compilation`,
+      `Development apps must run on the host target (${host}); build ${target} on a matching host`,
     );
   }
 
@@ -190,22 +193,33 @@ async function launchApplication(
     resolveReady = resolvePromise;
     rejectReady = rejectPromise;
   });
+  // The native host connects to this socket after its first ready event-loop turn.
+  const socketPath = join(tmpdir(), `quickgui-ready-${process.pid}-${nextReadySocket++}.sock`);
+  const server = Bun.listen({
+    unix: socketPath,
+    socket: {
+      data(socket) {
+        if (!ready) {
+          ready = true;
+          resolveReady();
+        }
+        socket.end();
+      },
+      open() {},
+      error() {},
+    },
+  });
   const child = Bun.spawn([build.executablePath], {
     cwd: config.projectRoot,
     env: {
       ...process.env,
       NODE_ENV: "development",
       QUICKGUI_DEV: "1",
+      QUICKGUI_READY_SOCKET: socketPath,
     },
     stdin: "ignore",
     stdout: "inherit",
     stderr: "inherit",
-    ipc(message) {
-      if (isReadyMessage(message) && !ready) {
-        ready = true;
-        resolveReady();
-      }
-    },
   });
   void child.exited.then((status) => {
     if (!ready) {
@@ -229,6 +243,12 @@ async function launchApplication(
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", abort);
+    server.stop(true);
+    try {
+      unlinkSync(socketPath);
+    } catch {
+      // The socket file was already removed.
+    }
   }
 }
 
@@ -284,19 +304,16 @@ export function shouldIgnoreChange(
     (!pathFromOutDir.startsWith("..") && !isAbsolute(pathFromOutDir));
 }
 
-function isReadyMessage(value: unknown): value is { type: "quickgui-ready" } {
-  return (
-    typeof value === "object" && value !== null && Reflect.get(value, "type") === "quickgui-ready"
-  );
-}
-
 async function waitForShutdown(abortController: AbortController): Promise<void> {
   if (abortController.signal.aborted) return;
   await new Promise<void>((resolvePromise) => {
     const requestShutdown = (): void => abortController.abort();
+    // Bun's process typings narrow `removeListener` to their own event names; the emitter view
+    // accepts the signal names that `once` registered.
+    const signals: NodeJS.EventEmitter = process;
     const finish = (): void => {
-      process.off("SIGINT", requestShutdown);
-      process.off("SIGTERM", requestShutdown);
+      signals.removeListener("SIGINT", requestShutdown);
+      signals.removeListener("SIGTERM", requestShutdown);
       resolvePromise();
     };
     process.once("SIGINT", requestShutdown);

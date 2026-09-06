@@ -8,7 +8,6 @@ import {
   macDmgFilename,
   macInfoPlist,
   macNotarytoolArguments,
-  nativeExports,
 } from "./build.ts";
 import { resolveConfig } from "./config.ts";
 import { ActiveProcessMonitor, shouldIgnoreChange } from "./dev.ts";
@@ -182,7 +181,7 @@ describe("project configuration", () => {
       join(root, "assets/JetBrainsMonoNerdFontMono-Regular.ttf"),
     ]);
     expect(config.protocols).toEqual(["quickgui", "quickgui+preview"]);
-    expect(config.macos.minimumSystemVersion).toBe("13.0");
+    expect(config.macos.minimumSystemVersion).toBe("14.0");
     expect(config.macos.dmgTitle).toBe("Great App");
     expect(config.macos.notarization).toEqual({
       keychainProfile: "quickgui-notary",
@@ -271,17 +270,7 @@ test("macOS metadata is escaped and complete", () => {
   expect(plist).toContain("<string>a+b</string>");
 });
 
-test("standalone native shim exports every generated native value", () => {
-  const declarations = readFileSync(join(import.meta.dir, "../../native/binding.d.ts"), "utf8");
-  const generated = [...declarations.matchAll(/export declare (?:function|class) (\w+)/g)]
-    .map((match) => match[1])
-    .filter((name): name is string => name !== undefined)
-    .sort();
-  const shimExports: string[] = [...nativeExports];
-  expect(shimExports.sort()).toEqual(generated);
-});
-
-test("project initialization renders a complete Solid scaffold", async () => {
+test("project initialization renders a complete native scaffold", async () => {
   const root = temporaryRoot();
   const project = join(root, "sample-app");
   await initProject({
@@ -296,7 +285,7 @@ test("project initialization renders a complete Solid scaffold", async () => {
     scripts: { dev: "quickgui dev", build: "quickgui build" },
     dependencies: {
       "@quickgui/native": "^0.1.3",
-      "@quickgui/solid": "^0.1.3",
+      "@quickgui/ui": "^0.1.3",
     },
   });
   expect(readFileSync(join(project, "quickgui.config.ts"), "utf8")).toContain(
@@ -304,10 +293,10 @@ test("project initialization renders a complete Solid scaffold", async () => {
   );
   const applicationSource = readFileSync(join(project, "src/app.tsx"), "utf8");
   expect(applicationSource).toContain('from "@quickgui/native"');
-  expect(applicationSource).toContain('from "@quickgui/solid"');
+  expect(applicationSource).toContain('from "@quickgui/ui"');
   expect(applicationSource).toContain("await app.whenReady()");
-  expect(applicationSource).toContain('app.on("reopen"');
-  expect(applicationSource).toContain("if (!hasVisibleWindows) openMainWindow()");
+  expect(applicationSource).toContain("app.onReopen(");
+  expect(applicationSource).toContain("if (!event.hasVisibleWindows) openMainWindow()");
   expect(applicationSource).toContain("renderer: createRenderer(");
   expect(applicationSource).not.toContain("quitMode");
   expect(applicationSource).not.toContain("app.run()");

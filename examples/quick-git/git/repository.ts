@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 /**
  * One opened repository (or one of its worktrees) and every git operation the app performs on
  * it. Reads return parsed snapshots; writes return nothing and let the caller refresh. Every
@@ -5,7 +6,7 @@
  * finishing work nobody will look at.
  */
 
-import { readFile, rm, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 import { Diff, formatPatch, looksBinary, syntheticDiffText, type DiffFile, type HunkSelection } from "./diff.ts";
@@ -18,6 +19,7 @@ import {
   decodeOutput,
   splitNul,
   type GitPriority,
+  type GitCommandOptions,
 } from "./process.ts";
 import { FOR_EACH_REF_FORMAT, STASH_FORMAT, parseRefs, parseStashes, type RefCollections, type StashEntry } from "./refs.ts";
 import { parseStatus, type RepositoryStatus } from "./status.ts";
@@ -34,7 +36,7 @@ export interface RepositoryInfo {
 }
 
 export interface CommandOptions {
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   priority?: GitPriority;
 }
 
@@ -84,7 +86,7 @@ export class Repository {
   ) {
     this.runner = runner;
     this.info = info;
-    this.trash = trash ?? ((path) => rm(path, { recursive: true, force: true }));
+    this.trash = trash ?? (async (path) => { rmSync(path, { recursive: true, force: true }); });
   }
 
   get root(): string {
@@ -111,7 +113,7 @@ export class Repository {
     }
     const output = await runner.text(
       ["rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir", "--is-bare-repository"],
-      { cwd, ...(options.signal ? { signal: options.signal } : {}) },
+      { cwd, signal: options.signal },
     );
     const [root, gitDir, commonDir, bare] = output.split("\n");
     if (!root || !gitDir) {
@@ -238,12 +240,13 @@ export class Repository {
     if (options.all) args.push("--all");
     if (options.ref) args.push(options.ref);
     args.push("--");
+    const spreadOptions0 = this.#options(options, "background");
     const result = await this.runner.run(args, {
-      ...this.#options(options, "background"),
+      ...spreadOptions0,
       // An empty repository has no HEAD to log; report no commits instead of failing.
       allowExitCodes: [128],
     });
-    if (result.exitCode !== 0) return [];
+    if (result.exitCode !== 0) { const empty: Commit[] = []; return empty; }
     return parseLog(decodeOutput(result.stdout));
   }
 
@@ -277,17 +280,19 @@ export class Repository {
 
   /** The most recent commit subjects, for a commit-message assistant to match the house style. */
   async recentSubjects(count: number, options: CommandOptions = {}): Promise<string[]> {
+    const spreadOptions1 = this.#options(options, "background");
     const result = await this.runner.run(["log", "-z", "--format=%s", "-n", String(count), "--"], {
-      ...this.#options(options, "background"),
+      ...spreadOptions1,
       allowExitCodes: [128],
     });
-    if (result.exitCode !== 0) return [];
+    if (result.exitCode !== 0) { const empty: string[] = []; return empty; }
     return splitNul(decodeOutput(result.stdout));
   }
 
   async config(key: string, options: CommandOptions = {}): Promise<string | undefined> {
+    const spreadOptions2 = this.#options(options, "background");
     const result = await this.runner.run(["config", "--get", key], {
-      ...this.#options(options, "background"),
+      ...spreadOptions2,
       allowExitCodes: [1],
     });
     if (result.exitCode !== 0) return undefined;
@@ -296,8 +301,9 @@ export class Repository {
 
   /** Whether HEAD names a commit, which an unborn branch's does not. */
   async hasHead(options: CommandOptions = {}): Promise<boolean> {
+    const spreadOptions3 = this.#options(options);
     const result = await this.runner.run(["rev-parse", "--verify", "--quiet", "HEAD"], {
-      ...this.#options(options),
+      ...spreadOptions3,
       allowExitCodes: [1],
     });
     return result.exitCode === 0;
@@ -305,8 +311,9 @@ export class Repository {
 
   /** The contents of `path` at `ref`, bounded. */
   async showFile(ref: string, path: string, options: CommandOptions = {}): Promise<Uint8Array> {
+    const spreadOptions4 = this.#options(options);
     const result = await this.runner.run(["show", `${ref}:${path}`], {
-      ...this.#options(options),
+      ...spreadOptions4,
       maxOutputBytes: MAX_DIFF_OUTPUT_BYTES,
     });
     return result.stdout;
@@ -380,7 +387,8 @@ export class Repository {
     if (options.signoff) args.push("--signoff");
     if (options.allowEmpty) args.push("--allow-empty");
     if (options.noVerify) args.push("--no-verify");
-    await this.runner.run(args, { ...this.#options(options), stdin: message, timeoutMs: NETWORK_GIT_TIMEOUT_MS });
+    const spreadOptions5 = this.#options(options);
+    await this.runner.run(args, { ...spreadOptions5, stdin: message, timeoutMs: NETWORK_GIT_TIMEOUT_MS });
   }
 
   /** Take one side of a conflicted path and mark it resolved. */
@@ -420,14 +428,16 @@ export class Repository {
   }
 
   async fetch(options: CommandOptions & { prune?: boolean } = {}): Promise<void> {
+    const spreadOptions6 = this.#options(options);
     await this.runner.run(["fetch", ...(options.prune ?? true ? ["--prune"] : []), "--no-write-fetch-head"], {
-      ...this.#options(options),
+      ...spreadOptions6,
       timeoutMs: NETWORK_GIT_TIMEOUT_MS,
     });
   }
 
   async pull(options: CommandOptions = {}): Promise<void> {
-    await this.runner.run(["pull", "--no-edit"], { ...this.#options(options), timeoutMs: NETWORK_GIT_TIMEOUT_MS });
+    const spreadOptions7 = this.#options(options);
+    await this.runner.run(["pull", "--no-edit"], { ...spreadOptions7, timeoutMs: NETWORK_GIT_TIMEOUT_MS });
   }
 
   async push(
@@ -437,7 +447,8 @@ export class Repository {
     const args = ["push", "--porcelain"];
     if (details.forceWithLease) args.push("--force-with-lease");
     if (details.setUpstream) args.push("--set-upstream", details.setUpstream.remote, details.setUpstream.branch);
-    await this.runner.run(args, { ...this.#options(options), timeoutMs: NETWORK_GIT_TIMEOUT_MS });
+    const spreadOptions8 = this.#options(options);
+    await this.runner.run(args, { ...spreadOptions8, timeoutMs: NETWORK_GIT_TIMEOUT_MS });
   }
 
   async remotes(options: CommandOptions = {}): Promise<string[]> {
@@ -498,6 +509,7 @@ export class Repository {
   // ---------------------------------------------------------------------------------------------
 
   async #diff(command: readonly string[], paths: readonly string[], options: CommandOptions): Promise<Diff> {
+    const spreadOptions9 = this.#options(options);
     const result = await this.runner.run(
       [
         "--no-optional-locks",
@@ -511,14 +523,15 @@ export class Repository {
         "--",
         ...paths,
       ],
-      { ...this.#options(options), maxOutputBytes: MAX_DIFF_OUTPUT_BYTES },
+      { ...spreadOptions9, maxOutputBytes: MAX_DIFF_OUTPUT_BYTES },
     );
     return Diff.open(result.stdout, { truncated: result.truncated });
   }
 
   async #apply(flags: readonly string[], patch: string, options: CommandOptions): Promise<void> {
+    const spreadOptions10 = this.#options(options);
     await this.runner.run(["apply", ...flags, "--whitespace=nowarn", "-"], {
-      ...this.#options(options),
+      ...spreadOptions10,
       stdin: patch,
     });
   }
@@ -526,16 +539,18 @@ export class Repository {
   async #pathspec(command: readonly string[], paths: readonly string[], options: CommandOptions): Promise<void> {
     // Any number of paths, with any bytes in them, through stdin rather than the argument list.
     const args = [...command.slice(0, -1), "--pathspec-from-file=-", "--pathspec-file-nul", ...command.slice(-1)];
-    await this.runner.run(args, { ...this.#options(options), stdin: `${paths.join("\0")}\0` });
+    const spreadOptions11 = this.#options(options);
+    await this.runner.run(args, { ...spreadOptions11, stdin: `${paths.join("\0")}\0` });
   }
 
-  #options(options: CommandOptions, priority: GitPriority = "interactive") {
+  #options(options: CommandOptions, priority: GitPriority = "interactive"): GitCommandOptions {
+    const env: Record<string, string> = { GIT_EDITOR: "true" };
     return {
       cwd: this.root,
       priority: options.priority ?? priority,
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: options.signal,
       maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
-      env: { GIT_EDITOR: "true" },
+      env,
     };
   }
 }

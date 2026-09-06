@@ -1,4 +1,4 @@
-import { Svg } from "@quickgui/solid";
+import { Svg } from "@quickgui/ui";
 
 export type IconName =
   | "alert"
@@ -33,15 +33,18 @@ export type IconName =
   | "worktree"
   | "x";
 
-export function Icon(props: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
+export function Icon(props: { name: () => (IconName); size?: () => (number); color?: () => (string); strokeWidth?: () => (number) }) {
+  const readsize = () => { const source = props.size; return source === undefined ? undefined : source(); };
+  const readcolor = () => { const source = props.color; return source === undefined ? undefined : source(); };
+  const readstrokeWidth = () => { const source = props.strokeWidth; return source === undefined ? undefined : source(); };
   return (
     <Svg
-      source={icons[props.name]}
+      source={icons[props.name()]}
       style={{
-        width: props.size ?? 16,
-        height: props.size ?? 16,
+        width: readsize() ?? 16,
+        height: readsize() ?? 16,
         flexShrink: 0,
-        ...(props.color ? { color: props.color } : {}),
+        ...(readcolor() ? { color: readcolor()! } : {}),
       }}
     />
   );

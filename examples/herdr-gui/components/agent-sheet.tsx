@@ -1,5 +1,5 @@
-import { Button, Text, TextArea, View } from "@quickgui/solid";
-import { For, Show } from "solid-js";
+import { Button, Text, TextArea, View } from "@quickgui/ui";
+import { For, Show } from "@quickgui/ui";
 
 import type { HerdrModel } from "../model.ts";
 import { launcherButton } from "../theme.ts";

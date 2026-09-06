@@ -138,7 +138,7 @@ export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
   const lanes: ({ sha: string; color: number } | null)[] = [];
   let nextColor = 0;
   const claimLane = (sha: string, color: number): number => {
-    const free = lanes.indexOf(null);
+    const free = lanes.findIndex((entry): boolean => entry === null);
     if (free >= 0) {
       lanes[free] = { sha, color };
       return free;
@@ -165,12 +165,11 @@ export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
         lanes[index] = null;
       }
     });
-    const passing = lanes
-      .map((entry, index) => (entry && index !== lane ? { lane: index, color: entry.color } : null))
-      .filter((entry): entry is { lane: number; color: number } => entry !== null);
+    const passing: { lane: number; color: number }[] = [];
+    lanes.forEach((entry, index) => { if (entry !== null && index !== lane) passing.push({ lane: index, color: entry.color }); });
     const laneCountBefore = lanes.length;
     const edges: GraphEdge[] = [];
-    const [first, ...others] = commit.parents;
+    const first = commit.parents.at(0);
     if (first === undefined) {
       lanes[lane] = null;
     } else {
@@ -179,7 +178,7 @@ export function layoutGraph(commits: readonly Commit[]): GraphRow[] {
       lanes[lane] = { sha: first, color };
       edges.push({ fromLane: lane, toLane: lane, color });
     }
-    for (const parent of others) {
+    for (const parent of commit.parents.slice(1)) {
       const existing = lanes.findIndex((entry) => entry?.sha === parent);
       if (existing >= 0) {
         edges.push({ fromLane: lane, toLane: existing, color: lanes[existing]!.color });
@@ -224,11 +223,7 @@ export function relativeTime(unixSeconds: number, now = Date.now()): string {
 /** Absolute local time such as `Sep 5, 2026, 14:03`. */
 export function absoluteTime(unixSeconds: number): string {
   const date = new Date(unixSeconds * 1000);
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return `${day} ${time}`;
 }

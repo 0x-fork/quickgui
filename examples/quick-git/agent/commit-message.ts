@@ -7,8 +7,9 @@
  * bounding, and answer parsing are pure so they can be tested without either CLI installed.
  */
 
-import { constants } from "node:fs";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { accessSync, constants, mkdtempSync, rmSync } from "node:fs";
+import { runProcess } from "../process.ts";
+import { readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -61,7 +62,7 @@ export async function findExecutable(
   for (const directory of new Set(directories)) {
     const candidate = join(directory, command);
     try {
-      await access(candidate, constants.X_OK);
+      accessSync(candidate, constants.X_OK);
       return candidate;
     } catch {
       // Keep looking.
@@ -189,7 +190,9 @@ export function parseMessage(raw: string): { subject: string; body: string } | u
   return { subject, body };
 }
 
-export interface ProcessRun {
+// A data record: an interface containing only child-process member names is treated as a
+// live child handle by scriptc. A type alias keeps this as the collected process result.
+export type ProcessRun = {
   stdout: string;
   stderr: string;
   exitCode: number;
@@ -197,7 +200,7 @@ export interface ProcessRun {
 
 export type ProcessRunner = (
   command: readonly string[],
-  options: { cwd: string; stdin: string; signal?: AbortSignal; timeoutMs: number },
+  options: { cwd: string; stdin: string; signal?: AbortSignal | undefined; timeoutMs: number },
 ) => Promise<ProcessRun>;
 
 export class AgentError extends Error {
@@ -205,7 +208,7 @@ export class AgentError extends Error {
   readonly aborted: boolean;
   constructor(message: string, agent: AgentId, aborted = false) {
     super(message);
-    this.name = "AgentError";
+    this.name = aborted ? "AbortError" : "AgentError";
     this.agent = agent;
     this.aborted = aborted;
   }
@@ -250,18 +253,18 @@ export async function generateCommitMessage(
   agent: AvailableAgent,
   request: CommitMessageRequest,
   cwd: string,
-  options: { signal?: AbortSignal; run?: ProcessRunner } = {},
+  options: { signal?: AbortSignal | undefined; run?: ProcessRunner } = {},
 ): Promise<GeneratedMessage> {
   const run = options.run ?? spawnProcess;
   const started = Date.now();
-  const scratch = await mkdtemp(join(tmpdir(), "quick-git-agent-"));
+  const scratch = mkdtempSync(join(tmpdir(), "quick-git-agent-"));
   const outputFile = join(scratch, "message.txt");
   try {
     const prompt = buildPrompt(request);
     const result = await run(agentCommand(agent, cwd, outputFile), {
       cwd,
       stdin: prompt,
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: options.signal,
       timeoutMs: AGENT_TIMEOUT_MS,
     });
     if (options.signal?.aborted) throw new AgentError("cancelled", agent.id, true);
@@ -280,7 +283,7 @@ export async function generateCommitMessage(
     if (!parsed) throw new AgentError(`${agent.label} returned an empty message`, agent.id);
     return { ...parsed, raw, agent: agent.id, durationMs: Date.now() - started };
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 
@@ -294,37 +297,16 @@ function summarizeFailure(agent: AvailableAgent, result: ProcessRun): string {
 }
 
 const spawnProcess: ProcessRunner = async (command, options) => {
-  const child = Bun.spawn([...command], {
+  const processOptions: import("../process.ts").ProcessOptions = {
     cwd: options.cwd,
-    env: { ...process.env, NO_COLOR: "1", TERM: "dumb" },
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const kill = () => {
-    try {
-      child.kill();
-    } catch {
-      // Already exited.
-    }
+    stdin: options.stdin,
+    env: { NO_COLOR: "1", TERM: "dumb" },
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+    maxOutputBytes: 4 * 1024 * 1024,
   };
-  options.signal?.addEventListener("abort", kill, { once: true });
-  const timer = setTimeout(kill, options.timeoutMs);
-  try {
-    child.stdin.write(options.stdin);
-    await child.stdin.end();
-  } catch {
-    // The process may exit before consuming its input.
-  }
-  try {
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { stdout, stderr, exitCode };
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener("abort", kill);
-  }
+  const result = await runProcess(command, processOptions);
+  if (result.timedOut) throw new Error("The coding agent timed out");
+  if (result.truncated) throw new Error("The coding agent exceeded the output limit");
+  return { stdout: new TextDecoder().decode(result.stdout), stderr: result.stderr, exitCode: result.exitCode };
 };

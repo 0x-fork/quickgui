@@ -4,8 +4,10 @@
     "allowJs": true,
     "exactOptionalPropertyTypes": true,
     "jsx": "preserve",
-    "jsxImportSource": "@quickgui/solid",
-    "lib": ["DOM", "ESNext"],
+    "jsxImportSource": "@quickgui/ui",
+    "lib": [
+      "ESNext"
+    ],
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "noEmit": true,
@@ -13,8 +15,18 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2023",
-    "types": ["bun"]
+    "types": [
+      "bun"
+    ]
   },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx", "examples/**/*.ts", "examples/**/*.tsx"],
-  "exclude": ["packages/cli/templates"]
+  "include": [
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "examples/**/*.ts",
+    "examples/**/*.tsx"
+  ],
+  "exclude": [
+    "packages/cli/templates",
+    "packages/cli/test-fixtures"
+  ]
 }

@@ -1,6 +1,8 @@
+import { KeyedFor } from "@quickgui/ui";
 import { Menu, type QuickGuiEvent } from "@quickgui/native";
-import { Button, Svg, Table, Text, View, capturedPointerFromEvent, type VisibleRange } from "@quickgui/solid";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { Button, Svg, Text, View, capturedPointerFromEvent, type VisibleRange } from "@quickgui/ui";
+import { Table } from "@quickgui/ui/collections";
+import { For, Show, createMemo, createSignal } from "@quickgui/ui";
 
 import { absoluteTime, relativeTime, type Commit, type GraphRow } from "../git/log.ts";
 import { useApp } from "./context.tsx";
@@ -33,12 +35,13 @@ export function HistoryView() {
     }
     return rows;
   });
-  const maxLanes = createMemo(() => Math.min(8, Math.max(1, ...history().graph.slice(range().start, range().end).map((row) => row.laneCount))));
+  const maxLanes = createMemo(() => Math.min(8, Math.max(1, Math.max(...history().graph.slice(range().start, range().end).map((row) => row.laneCount)))));
   const graphWidth = () => 12 + maxLanes() * LANE_WIDTH;
 
   let splitDragStart = 0;
   function handleSplitPointer(event: QuickGuiEvent): void {
     const pointer = capturedPointerFromEvent(event);
+    if (pointer === undefined) return;
     if (pointer.button !== "left") return;
     if (pointer.phase === "down") {
       splitDragStart = store.historySplit();
@@ -79,12 +82,11 @@ export function HistoryView() {
           }
         >
           <Table.Root
-            scope="history"
             rowCount={history().commits.length}
             rowHeight={HISTORY_ROW_HEIGHT}
             headerHeight={0}
             selectionMode="single"
-            selection={store.historySelection()}
+            selection={store.historySelection().map((range) => [...range])}
             columns={[
               { id: "graph", track: `${graphWidth()}px` },
               { id: "subject", track: "1fr", rowHeader: true },
@@ -95,7 +97,7 @@ export function HistoryView() {
             onSelectionChange={(ranges) => store.setHistorySelection(ranges)}
             style={{ flex: 1, minHeight: 0, overflowY: "scroll" }}
           >
-            <For each={visible()} keyed={(row) => row.index}>
+            <KeyedFor each={visible()} key={(row) => row.index}>
               {(row) => (
                 <Table.Row
                   index={row().index}
@@ -140,7 +142,7 @@ export function HistoryView() {
                   </Table.Cell>
                 </Table.Row>
               )}
-            </For>
+            </KeyedFor>
           </Table.Root>
         </Show>
       </View>
@@ -154,17 +156,17 @@ export function HistoryView() {
  * One row of the commit graph: one tinted SVG mask per lane color, so lines stay continuous
  * across rows and elbows are real quarter circles rather than stacked rectangles.
  */
-function Graph(props: { row: GraphRow | undefined; width: number; height: number }) {
+function Graph(props: { row: () => (GraphRow | undefined); width: () => (number); height: () => (number) }) {
   const app = useApp();
   const palette = () => app.theme().graph;
-  const layers = createMemo(() => (props.row ? paintGraphRow(props.row, props.width, props.height) : []));
+  const layers = createMemo(() => (props.row() ? paintGraphRow(props.row()!, props.width(), props.height()) : []));
   return (
-    <View style={{ position: "relative", width: "100%", height: props.height }}>
+    <View style={{ position: "relative", width: "100%", height: props.height() }}>
       <For each={layers()}>
         {(layer) => (
           <Svg
             source={layer.source}
-            style={{ position: "absolute", left: 0, top: 0, width: props.width, height: props.height, color: palette()[layer.color % palette().length]! }}
+            style={{ position: "absolute", left: 0, top: 0, width: props.width(), height: props.height(), color: palette()[layer.color % palette().length]! }}
           />
         )}
       </For>
@@ -177,12 +179,12 @@ function CommitDetail() {
   const store = app.store;
   const commit = () => store.selectedCommit();
   const detail = () => store.commitDetail();
-  const selectedPath = () => detail().selectedPath ?? detail().files[0]?.path;
+  const selectedPath = () => detail().selectedPath ?? detail().files.at(0)?.path;
 
   return (
     <View style={{ display: "flex", flex: 1, minWidth: 0, minHeight: 0, flexDirection: "column" }}>
       <Show when={commit()} fallback={<EmptyState ui={app} icon="commit" title="Select a commit" description="Its message and changed files appear here." />}>
-        {(current) => (
+        {(() => { const current = () => (commit())!; return (
           <>
             <View style={{ display: "flex", flexShrink: 0, flexDirection: "column", gap: 8, padding: 14, borderBottomWidth: 1, borderColor: app.theme().border }}>
               <Text style={{ fontSize: 14, fontWeight: 700, color: app.theme().text, lineHeight: 19 }}>{current().subject}</Text>
@@ -244,7 +246,7 @@ function CommitDetail() {
             <View style={app.styles().hairline} />
             <DiffPane />
           </>
-        )}
+        ); })()}
       </Show>
     </View>
   );

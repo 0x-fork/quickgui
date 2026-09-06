@@ -1,0 +1,31 @@
+保持型の Ghostty ターミナルサーフェスを埋め込み、プロセスのライフサイクルイベントを通知します。
+
+## インポート
+
+`@quickgui/ui` から `Terminal` をインポートします。
+
+```tsx
+import { Terminal } from "@quickgui/ui";
+```
+
+## 使い方
+
+```tsx
+<Terminal
+  program="/bin/zsh"
+  workingDirectory={projectPath}
+  scrollback={10_000}
+  onStatus={(event) => setTerminalStatus(event)}
+/>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `program` | ターミナルが起動する実行ファイルです。 |
+| `arguments` | ターミナルプロセスに渡す引数です。 |
+| `workingDirectory` | ターミナルプロセスの初期作業ディレクトリです。 |
+| `environment` | ターミナルプロセスに追加する環境変数です。 |
+| `onStatus` | ターミナルプロセスのライフサイクル変更を通知します。 |
+

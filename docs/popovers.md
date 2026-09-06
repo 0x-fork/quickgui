@@ -404,13 +404,13 @@ group in the same update, so a group can never retain two checked values.
 
 ## JavaScript bindings
 
-The Solid renderer exposes this model as `PopoverMenu.Root` / `Trigger` / `Popup`. Rows are declared
+The QuickGUI UI renderer exposes this model as `PopoverMenu.Root` / `Trigger` / `Popup`. Rows are declared
 as one bounded JSON model rather than JSX children, so the core still owns validation, highlighting,
 typeahead, toggle policy, submenu models, and every accessibility relationship, and no synchronous
 question crosses the hosted boundary while a menu is open. `popover_menu_key_bindings()` and
 `popover_menu_horizontal_key_bindings()` are installed once by the binding, so declared menus adopt
 the same contextual navigation as Rust applications. See
-[Solid 2 renderer](solid.md#declared-popover-and-context-menus).
+[QuickGUI UI renderer](ui.md#declared-popover-and-context-menus).
 
 `MenuState` is bound as the Base UI-shaped `Menu` compound, whose rows *are* JSX children:
 `Menu.Root` (logical) with `open`, `modal`, `orientation`, `loopFocus`, `closeParentOnEsc`, and
@@ -421,7 +421,7 @@ the same contextual navigation as Rust applications. See
 owns every pixel of a row; the core owns its derived identity, `menuitem` semantics, roving
 highlight, typeahead, toggle policy, activation, and closing policy, and publishes `MenuPartState`
 and `MenuItemPartState` through `useMenuState()` and `useMenuItemState()`. See
-[Solid 2 renderer](solid.md#base-ui-menu-parts).
+[QuickGUI UI renderer](ui.md#base-ui-menu-parts).
 
 ## Roles, placement, and nesting
 
@@ -468,9 +468,9 @@ cargo run --release --example popovers
 cargo run --release --example system_popover
 ```
 
-## Solid
+## QuickGUI UI
 
-The Solid renderer binds the whole compound. `Popover.Root` is a logical coordinator, and the
+The QuickGUI UI renderer binds the whole compound. `Popover.Root` is a logical coordinator, and the
 trigger is the one part the core keeps mounted whether the popover is open or closed, so the
 trigger node carries the declaration and every other part only repeats the compound scope:
 
@@ -500,4 +500,4 @@ performing, so an application sizes and styles from the core's own answer rather
 anything itself. `openOnHover` hands the open value to the core's exact hover deadlines and reports
 the result back with a `"hover"` reason. `Popover.Content` remains the one-element shorthand for a
 popover that needs no separate positioner. See
-[Solid 2 renderer](solid.md#base-ui-popover-parts).
+[QuickGUI UI renderer](ui.md#base-ui-popover-parts).

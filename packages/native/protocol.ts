@@ -1,409 +1,398 @@
-import { Buffer } from "node:buffer";
-
 export const PROTOCOL_VERSION = 31;
 export const ROOT_NODE_ID = 0;
 export const NO_ANCHOR = 0xffff_ffff;
 
-export const enum NativeNodeTag {
-  View = 1,
-  Button = 2,
-  Text = 3,
-  Sentinel = 4,
-  Input = 5,
-  Markdown = 6,
-  VirtualList = 7,
-  Terminal = 8,
-  Svg = 9,
-  SwiftUIHost = 10,
-  SwiftUIButton = 11,
-  SwiftUIQuickGUIHost = 12,
-  SwiftUIPopover = 13,
-  SwiftUIPopoverTrigger = 14,
-  SwiftUIPopoverContent = 15,
-  Image = 16,
-  Shader = 17,
-  SwiftUISlider = 18,
-  SwiftUIToggle = 19,
-  SwiftUIProgressView = 20,
-  SwiftUIStepper = 21,
-  SwiftUITextField = 22,
-  SwiftUIPicker = 23,
-  SwiftUIDatePicker = 24,
-  SwiftUIColorPicker = 25,
-  SwiftUIGauge = 26,
-}
+/** Retained node kinds the host decodes. */
+export const NativeNodeTag = {
+  View: 1,
+  Button: 2,
+  Text: 3,
+  Sentinel: 4,
+  Input: 5,
+  Markdown: 6,
+  VirtualList: 7,
+  Terminal: 8,
+  Svg: 9,
+  SwiftUIHost: 10,
+  SwiftUIButton: 11,
+  SwiftUIQuickGUIHost: 12,
+  SwiftUIPopover: 13,
+  SwiftUIPopoverTrigger: 14,
+  SwiftUIPopoverContent: 15,
+  Image: 16,
+  Shader: 17,
+  SwiftUISlider: 18,
+  SwiftUIToggle: 19,
+  SwiftUIProgressView: 20,
+  SwiftUIStepper: 21,
+  SwiftUITextField: 22,
+  SwiftUIPicker: 23,
+  SwiftUIDatePicker: 24,
+  SwiftUIColorPicker: 25,
+  SwiftUIGauge: 26,
+} as const;
 
-export const enum PropertyCode {
-  Display = 1,
-  FlexDirection = 2,
-  FlexWrap = 3,
-  FlexGrow = 4,
-  FlexShrink = 5,
-  FlexBasis = 6,
-  AlignItems = 7,
-  AlignSelf = 8,
-  JustifyContent = 9,
-  AlignContent = 10,
-  Gap = 11,
-  ColumnGap = 12,
-  RowGap = 13,
-  Width = 14,
-  Height = 15,
-  MinWidth = 16,
-  MinHeight = 17,
-  MaxWidth = 18,
-  MaxHeight = 19,
-  Padding = 20,
-  PaddingTop = 21,
-  PaddingRight = 22,
-  PaddingBottom = 23,
-  PaddingLeft = 24,
-  Margin = 25,
-  MarginTop = 26,
-  MarginRight = 27,
-  MarginBottom = 28,
-  MarginLeft = 29,
-  BackgroundColor = 30,
-  Color = 31,
-  Opacity = 32,
-  BorderWidth = 33,
-  BorderColor = 34,
-  BorderRadius = 35,
-  FontSize = 36,
-  FontWeight = 37,
-  LineHeight = 38,
-  TextAlign = 39,
-  WhiteSpace = 40,
-  TextOverflow = 41,
-  LineClamp = 42,
-  Overflow = 43,
-  OverflowX = 44,
-  OverflowY = 45,
-  Cursor = 46,
-  AppRegion = 47,
-  Disabled = 48,
-  AccessibilityLabel = 49,
-  Role = 50,
-  TabIndex = 51,
-  Position = 52,
-  Top = 53,
-  Right = 54,
-  Bottom = 55,
-  Left = 56,
-  UserSelect = 57,
-  ClickListener = 58,
-  HoverListener = 59,
-  Visibility = 60,
-  AspectRatio = 61,
-  Value = 62,
-  Placeholder = 63,
-  Multiline = 64,
-  InputListener = 65,
-  SubmitListener = 66,
-  Streaming = 67,
-  MarkdownCodeBackground = 68,
-  MarkdownBorderColor = 69,
-  MarkdownMutedColor = 70,
-  MarkdownLinkColor = 71,
-  MarkdownCodeTextColor = 72,
-  MarkdownBlockGap = 73,
-  MarkdownCodeFontSize = 74,
-  ScrollToEndRevision = 75,
-  Password = 76,
-  EstimatedItemHeight = 77,
-  Overscan = 78,
-  ListAlignment = 79,
-  FollowMode = 80,
-  AnchorTarget = 81,
-  AnchorPlacement = 82,
-  AnchorGap = 83,
-  ViewportMargin = 84,
-  DismissOnEscape = 85,
-  DismissOnPointerOutside = 86,
-  DismissListener = 87,
-  TerminalProgram = 88,
-  TerminalArguments = 89,
-  TerminalWorkingDirectory = 90,
-  TerminalEnvironment = 91,
-  TerminalScrollback = 92,
-  TerminalStatusListener = 93,
-  HoverBackgroundColor = 94,
-  HoverColor = 95,
-  ActiveBackgroundColor = 96,
-  ActiveColor = 97,
-  Transition = 98,
-  PointerListener = 99,
-  FocusOnPointer = 100,
-  FontFamily = 101,
-  TerminalPalette = 102,
-  TerminalCursorColor = 103,
-  HitSlop = 104,
-  HitSlopTop = 105,
-  HitSlopRight = 106,
-  HitSlopBottom = 107,
-  HitSlopLeft = 108,
-  Overlay = 109,
-  FocusTrap = 110,
-  RestorePreviousFocus = 111,
-  AutoFocus = 112,
-  AccessibilityModal = 113,
-  TerminalPaddingColor = 114,
-  TerminalFontThicken = 115,
-  SwiftUISystemImage = 116,
-  SwiftUIButtonStyle = 117,
-  SwiftUIControlSize = 118,
-  SwiftUIMatchContentsHorizontal = 119,
-  SwiftUIMatchContentsVertical = 120,
-  SwiftUITarget = 121,
-  SwiftUITestId = 122,
-  SwiftUIModifiers = 123,
-  SwiftUIEmbeddedWindow = 124,
-  SwiftUIIsPresented = 125,
-  SwiftUIAttachmentAnchor = 126,
-  SwiftUIArrowEdge = 127,
-  SwiftUIPresentationListener = 128,
-  BorderTopWidth = 129,
-  BorderRightWidth = 130,
-  BorderBottomWidth = 131,
-  BorderLeftWidth = 132,
-  BoxShadow = 133,
-  Part = 134,
-  Checked = 135,
-  Indeterminate = 136,
-  Scope = 137,
-  PartValue = 138,
-  ActiveValue = 139,
-  Orientation = 140,
-  ActivateOnFocus = 141,
-  LoopFocus = 142,
-  KeepMounted = 143,
-  Open = 144,
-  ItemIndex = 145,
-  HeadingLevel = 146,
-  Required = 147,
-  Invalid = 148,
-  ValidationMessage = 149,
-  Touched = 150,
-  Dirty = 151,
-  Filled = 152,
-  Tooltip = 153,
-  TooltipPlacement = 154,
-  TooltipDelay = 155,
-  TooltipGap = 156,
-  TooltipViewportMargin = 157,
-  Variant = 158,
-  Menu = 159,
-  SelectListener = 160,
-  Controls = 161,
-  GridTemplateColumns = 162,
-  GridTemplateRows = 163,
-  GridAutoFlow = 164,
-  GridColumnStart = 165,
-  GridColumnEnd = 166,
-  GridColumnSpan = 167,
-  GridRowStart = 168,
-  GridRowEnd = 169,
-  GridRowSpan = 170,
-  TransitionProperties = 171,
-  TransitionDuration = 172,
-  TransitionEasing = 173,
-  TransitionMaxFps = 174,
-  Minimum = 175,
-  Maximum = 176,
-  Low = 177,
-  High = 178,
-  Optimum = 179,
-  ValueText = 180,
-  Pressed = 181,
-  ObjectFit = 182,
-  ShaderParameters = 183,
-  KeyDownListener = 184,
-  KeyUpListener = 185,
-  MouseDownListener = 186,
-  MouseUpListener = 187,
-  MouseMoveListener = 188,
-  DoubleClickListener = 189,
-  ScrollListener = 190,
-  ContextMenuListener = 191,
-  PinchListener = 192,
-  RotationListener = 193,
-  SmartMagnifyListener = 194,
-  PressureListener = 195,
-  FocusListener = 196,
-  Keymap = 197,
-  ActionListener = 198,
-  Draggable = 199,
-  DropKinds = 200,
-  DragListener = 201,
-  DropListener = 202,
-  Values = 203,
-  Step = 204,
-  LargeStep = 205,
-  Items = 206,
-  ComponentChangeListener = 207,
-  Options = 208,
-  InputValue = 209,
-  FilterMode = 210,
-  Appearance = 211,
-  Columns = 212,
-  RowCount = 213,
-  SortColumn = 214,
-  SortDirection = 215,
-  SelectionMode = 216,
-  Selection = 217,
-  RowIndex = 218,
-  ColumnIndex = 219,
-  Nodes = 220,
-  Expanded = 221,
-  SelectedValue = 222,
-  SetChildren = 223,
-  Precision = 224,
-  Toasts = 225,
-  SegmentOrder = 226,
-  Segment = 227,
-  CivilValue = 228,
-  CivilMinimum = 229,
-  CivilMaximum = 230,
-  MenuCount = 231,
-  FirstWeekday = 232,
-  RowHeight = 233,
-  HeaderHeight = 234,
-  Group = 235,
-  Editing = 236,
-  Disclosure = 237,
-  LoadingLabel = 238,
-  CommitListener = 239,
-  LetterSpacing = 240,
-  WordSpacing = 241,
-  TextTransform = 242,
-  TextShadow = 243,
-  TextDecorationLine = 244,
-  TextDecorationColor = 245,
-  TextDecorationStyle = 246,
-  TextDecorationThickness = 247,
-  WordBreak = 248,
-  OverflowWrap = 249,
-  Hyphens = 250,
-  TextDirection = 251,
-  Direction = 252,
-  PaddingStart = 253,
-  PaddingEnd = 254,
-  MarginStart = 255,
-  MarginEnd = 256,
-  BorderStartWidth = 257,
-  BorderEndWidth = 258,
-  BackgroundGradient = 259,
-  BorderTopLeftRadius = 260,
-  BorderTopRightRadius = 261,
-  BorderBottomRightRadius = 262,
-  BorderBottomLeftRadius = 263,
-  BorderStyle = 264,
-  OutlineWidth = 265,
-  OutlineColor = 266,
-  OutlineOffset = 267,
-  OutlineStyle = 268,
-  BackgroundImage = 269,
-  BackgroundSize = 270,
-  BackgroundRepeat = 271,
-  BackgroundPosition = 272,
-  Filter = 273,
-  BackdropFilter = 274,
-  Transform = 275,
-  TransformOrigin = 276,
-  MixBlendMode = 277,
-  HoverBackgroundGradient = 278,
-  HoverOutline = 279,
-  HoverTransform = 280,
-  ActiveBackgroundGradient = 281,
-  ActiveOutline = 282,
-  ActiveTransform = 283,
-  FocusBackgroundColor = 284,
-  FocusColor = 285,
-  FocusBackgroundGradient = 286,
-  FocusOutline = 287,
-  FocusTransform = 288,
-  ScrollSnapType = 289,
-  ScrollSnapAlign = 290,
-  ScrollSnapStop = 291,
-  Delay = 292,
-  CloseDelay = 293,
-  Length = 294,
-  Mask = 295,
-  ReadOnly = 296,
-  AutoSubmit = 297,
-  SwipeDirection = 298,
-  ViewportSize = 299,
-  ContentSize = 300,
-  OverflowEdgeThreshold = 301,
-  DisablePointerDismissal = 302,
-  // Base UI-aligned popover, tooltip, range, toast, tab, toolbar, field, and dialog props. Every
-  // one is declared ahead of the core's decision, because a hosted renderer is never asked a
-  // synchronous question.
-  Side = 303,
-  Align = 304,
-  SideOffset = 305,
-  AlignOffset = 306,
-  CollisionPadding = 307,
-  Sticky = 308,
-  AnchorPoint = 309,
-  Modal = 310,
-  OpenOnHover = 311,
-  Provider = 312,
-  Timeout = 313,
-  Hoverable = 314,
-  TrackCursorAxis = 315,
-  CloseOnClick = 316,
-  MinStepsBetweenValues = 317,
-  ThumbAlignment = 318,
-  Format = 319,
-  SmallStep = 320,
-  AllowWheelScrub = 321,
-  SnapOnStep = 322,
-  Limit = 323,
-  Pitch = 324,
-  FocusableWhenDisabled = 325,
-  ValidationMode = 326,
-  ValidationDebounceTime = 327,
-  Parent = 328,
-  EnterDuration = 329,
-  ExitDuration = 330,
-  StackExpanded = 331,
-  // Base UI-aligned menu, select, and combobox props. Each one is declared ahead of the core's
-  // decision, because a hosted renderer is never asked a synchronous question.
-  CloseParentOnEsc = 332,
-  Href = 333,
-  Multiple = 334,
-  AlignItemWithTrigger = 335,
-  AutoHighlight = 336,
-  OpenOnInputClick = 337,
-  HighlightItemOnHover = 338,
-  SwiftUIPickerStyle = 339,
-  SwiftUIDatePickerComponents = 340,
-  SwiftUIDatePickerStyle = 341,
-  SwiftUIColorSupportsOpacity = 342,
-  SwiftUIGaugeStyle = 343,
-  SwiftUIGaugeMinimumValueLabel = 344,
-  SwiftUIGaugeMaximumValueLabel = 345,
-  /** Nested `hover` state style: one bounded JSON declaration of paint-only overrides. */
-  HoverStyle = 346,
-  ActiveStyle = 347,
-  FocusStyle = 348,
-  DisabledStyle = 349,
-  InvalidStyle = 350,
-  DraggingStyle = 351,
-  DragOverStyle = 352,
-  GroupHoverStyle = 353,
-  /** Marks the group whose hover and presses descendants' group styles follow. */
-  HoverGroup = 354,
-  /** Nested `groupActive` state: one entry or a list, each following its own group. */
-  GroupActiveStyle = 355,
-  /** Nested `focusWithin` state style. */
-  FocusWithinStyle = 356,
-  /** Nested `selected` state style, painted while the element's `selected` flag is set. */
-  SelectedStyle = 357,
-  /** Web-style `selected` flag: the native accessibility state and `style.selected` follow it. */
-  Selected = 358,
-}
+/** Property codes of the binary mutation protocol, shared with the Rust host. */
+export const PropertyCode = {
+  Display: 1,
+  FlexDirection: 2,
+  FlexWrap: 3,
+  FlexGrow: 4,
+  FlexShrink: 5,
+  FlexBasis: 6,
+  AlignItems: 7,
+  AlignSelf: 8,
+  JustifyContent: 9,
+  AlignContent: 10,
+  Gap: 11,
+  ColumnGap: 12,
+  RowGap: 13,
+  Width: 14,
+  Height: 15,
+  MinWidth: 16,
+  MinHeight: 17,
+  MaxWidth: 18,
+  MaxHeight: 19,
+  Padding: 20,
+  PaddingTop: 21,
+  PaddingRight: 22,
+  PaddingBottom: 23,
+  PaddingLeft: 24,
+  Margin: 25,
+  MarginTop: 26,
+  MarginRight: 27,
+  MarginBottom: 28,
+  MarginLeft: 29,
+  BackgroundColor: 30,
+  Color: 31,
+  Opacity: 32,
+  BorderWidth: 33,
+  BorderColor: 34,
+  BorderRadius: 35,
+  FontSize: 36,
+  FontWeight: 37,
+  LineHeight: 38,
+  TextAlign: 39,
+  WhiteSpace: 40,
+  TextOverflow: 41,
+  LineClamp: 42,
+  Overflow: 43,
+  OverflowX: 44,
+  OverflowY: 45,
+  Cursor: 46,
+  AppRegion: 47,
+  Disabled: 48,
+  AccessibilityLabel: 49,
+  Role: 50,
+  TabIndex: 51,
+  Position: 52,
+  Top: 53,
+  Right: 54,
+  Bottom: 55,
+  Left: 56,
+  UserSelect: 57,
+  ClickListener: 58,
+  HoverListener: 59,
+  Visibility: 60,
+  AspectRatio: 61,
+  Value: 62,
+  Placeholder: 63,
+  Multiline: 64,
+  InputListener: 65,
+  SubmitListener: 66,
+  Streaming: 67,
+  MarkdownCodeBackground: 68,
+  MarkdownBorderColor: 69,
+  MarkdownMutedColor: 70,
+  MarkdownLinkColor: 71,
+  MarkdownCodeTextColor: 72,
+  MarkdownBlockGap: 73,
+  MarkdownCodeFontSize: 74,
+  ScrollToEndRevision: 75,
+  Password: 76,
+  EstimatedItemHeight: 77,
+  Overscan: 78,
+  ListAlignment: 79,
+  FollowMode: 80,
+  AnchorTarget: 81,
+  AnchorPlacement: 82,
+  AnchorGap: 83,
+  ViewportMargin: 84,
+  DismissOnEscape: 85,
+  DismissOnPointerOutside: 86,
+  DismissListener: 87,
+  TerminalProgram: 88,
+  TerminalArguments: 89,
+  TerminalWorkingDirectory: 90,
+  TerminalEnvironment: 91,
+  TerminalScrollback: 92,
+  TerminalStatusListener: 93,
+  HoverBackgroundColor: 94,
+  HoverColor: 95,
+  ActiveBackgroundColor: 96,
+  ActiveColor: 97,
+  Transition: 98,
+  PointerListener: 99,
+  FocusOnPointer: 100,
+  FontFamily: 101,
+  TerminalPalette: 102,
+  TerminalCursorColor: 103,
+  HitSlop: 104,
+  HitSlopTop: 105,
+  HitSlopRight: 106,
+  HitSlopBottom: 107,
+  HitSlopLeft: 108,
+  Overlay: 109,
+  FocusTrap: 110,
+  RestorePreviousFocus: 111,
+  AutoFocus: 112,
+  AccessibilityModal: 113,
+  TerminalPaddingColor: 114,
+  TerminalFontThicken: 115,
+  SwiftUISystemImage: 116,
+  SwiftUIButtonStyle: 117,
+  SwiftUIControlSize: 118,
+  SwiftUIMatchContentsHorizontal: 119,
+  SwiftUIMatchContentsVertical: 120,
+  SwiftUITarget: 121,
+  SwiftUITestId: 122,
+  SwiftUIModifiers: 123,
+  SwiftUIEmbeddedWindow: 124,
+  SwiftUIIsPresented: 125,
+  SwiftUIAttachmentAnchor: 126,
+  SwiftUIArrowEdge: 127,
+  SwiftUIPresentationListener: 128,
+  BorderTopWidth: 129,
+  BorderRightWidth: 130,
+  BorderBottomWidth: 131,
+  BorderLeftWidth: 132,
+  BoxShadow: 133,
+  Part: 134,
+  Checked: 135,
+  Indeterminate: 136,
+  Scope: 137,
+  PartValue: 138,
+  ActiveValue: 139,
+  Orientation: 140,
+  ActivateOnFocus: 141,
+  LoopFocus: 142,
+  KeepMounted: 143,
+  Open: 144,
+  ItemIndex: 145,
+  HeadingLevel: 146,
+  Required: 147,
+  Invalid: 148,
+  ValidationMessage: 149,
+  Touched: 150,
+  Dirty: 151,
+  Filled: 152,
+  Tooltip: 153,
+  TooltipPlacement: 154,
+  TooltipDelay: 155,
+  TooltipGap: 156,
+  TooltipViewportMargin: 157,
+  Variant: 158,
+  Menu: 159,
+  SelectListener: 160,
+  Controls: 161,
+  GridTemplateColumns: 162,
+  GridTemplateRows: 163,
+  GridAutoFlow: 164,
+  GridColumnStart: 165,
+  GridColumnEnd: 166,
+  GridColumnSpan: 167,
+  GridRowStart: 168,
+  GridRowEnd: 169,
+  GridRowSpan: 170,
+  TransitionProperties: 171,
+  TransitionDuration: 172,
+  TransitionEasing: 173,
+  TransitionMaxFps: 174,
+  Minimum: 175,
+  Maximum: 176,
+  Low: 177,
+  High: 178,
+  Optimum: 179,
+  ValueText: 180,
+  Pressed: 181,
+  ObjectFit: 182,
+  ShaderParameters: 183,
+  KeyDownListener: 184,
+  KeyUpListener: 185,
+  MouseDownListener: 186,
+  MouseUpListener: 187,
+  MouseMoveListener: 188,
+  DoubleClickListener: 189,
+  ScrollListener: 190,
+  ContextMenuListener: 191,
+  PinchListener: 192,
+  RotationListener: 193,
+  SmartMagnifyListener: 194,
+  PressureListener: 195,
+  FocusListener: 196,
+  Keymap: 197,
+  ActionListener: 198,
+  Draggable: 199,
+  DropKinds: 200,
+  DragListener: 201,
+  DropListener: 202,
+  Values: 203,
+  Step: 204,
+  LargeStep: 205,
+  Items: 206,
+  ComponentChangeListener: 207,
+  Options: 208,
+  InputValue: 209,
+  FilterMode: 210,
+  Appearance: 211,
+  Columns: 212,
+  RowCount: 213,
+  SortColumn: 214,
+  SortDirection: 215,
+  SelectionMode: 216,
+  Selection: 217,
+  RowIndex: 218,
+  ColumnIndex: 219,
+  Nodes: 220,
+  Expanded: 221,
+  SelectedValue: 222,
+  SetChildren: 223,
+  Precision: 224,
+  Toasts: 225,
+  SegmentOrder: 226,
+  Segment: 227,
+  CivilValue: 228,
+  CivilMinimum: 229,
+  CivilMaximum: 230,
+  MenuCount: 231,
+  FirstWeekday: 232,
+  RowHeight: 233,
+  HeaderHeight: 234,
+  Group: 235,
+  Editing: 236,
+  Disclosure: 237,
+  LoadingLabel: 238,
+  CommitListener: 239,
+  LetterSpacing: 240,
+  WordSpacing: 241,
+  TextTransform: 242,
+  TextShadow: 243,
+  TextDecorationLine: 244,
+  TextDecorationColor: 245,
+  TextDecorationStyle: 246,
+  TextDecorationThickness: 247,
+  WordBreak: 248,
+  OverflowWrap: 249,
+  Hyphens: 250,
+  TextDirection: 251,
+  Direction: 252,
+  PaddingStart: 253,
+  PaddingEnd: 254,
+  MarginStart: 255,
+  MarginEnd: 256,
+  BorderStartWidth: 257,
+  BorderEndWidth: 258,
+  BackgroundGradient: 259,
+  BorderTopLeftRadius: 260,
+  BorderTopRightRadius: 261,
+  BorderBottomRightRadius: 262,
+  BorderBottomLeftRadius: 263,
+  BorderStyle: 264,
+  OutlineWidth: 265,
+  OutlineColor: 266,
+  OutlineOffset: 267,
+  OutlineStyle: 268,
+  BackgroundImage: 269,
+  BackgroundSize: 270,
+  BackgroundRepeat: 271,
+  BackgroundPosition: 272,
+  Filter: 273,
+  BackdropFilter: 274,
+  Transform: 275,
+  TransformOrigin: 276,
+  MixBlendMode: 277,
+  HoverBackgroundGradient: 278,
+  HoverOutline: 279,
+  HoverTransform: 280,
+  ActiveBackgroundGradient: 281,
+  ActiveOutline: 282,
+  ActiveTransform: 283,
+  FocusBackgroundColor: 284,
+  FocusColor: 285,
+  FocusBackgroundGradient: 286,
+  FocusOutline: 287,
+  FocusTransform: 288,
+  ScrollSnapType: 289,
+  ScrollSnapAlign: 290,
+  ScrollSnapStop: 291,
+  Delay: 292,
+  CloseDelay: 293,
+  Length: 294,
+  Mask: 295,
+  ReadOnly: 296,
+  AutoSubmit: 297,
+  SwipeDirection: 298,
+  ViewportSize: 299,
+  ContentSize: 300,
+  OverflowEdgeThreshold: 301,
+  DisablePointerDismissal: 302,
+  Side: 303,
+  Align: 304,
+  SideOffset: 305,
+  AlignOffset: 306,
+  CollisionPadding: 307,
+  Sticky: 308,
+  AnchorPoint: 309,
+  Modal: 310,
+  OpenOnHover: 311,
+  Provider: 312,
+  Timeout: 313,
+  Hoverable: 314,
+  TrackCursorAxis: 315,
+  CloseOnClick: 316,
+  MinStepsBetweenValues: 317,
+  ThumbAlignment: 318,
+  Format: 319,
+  SmallStep: 320,
+  AllowWheelScrub: 321,
+  SnapOnStep: 322,
+  Limit: 323,
+  Pitch: 324,
+  FocusableWhenDisabled: 325,
+  ValidationMode: 326,
+  ValidationDebounceTime: 327,
+  Parent: 328,
+  EnterDuration: 329,
+  ExitDuration: 330,
+  StackExpanded: 331,
+  CloseParentOnEsc: 332,
+  Href: 333,
+  Multiple: 334,
+  AlignItemWithTrigger: 335,
+  AutoHighlight: 336,
+  OpenOnInputClick: 337,
+  HighlightItemOnHover: 338,
+  SwiftUIPickerStyle: 339,
+  SwiftUIDatePickerComponents: 340,
+  SwiftUIDatePickerStyle: 341,
+  SwiftUIColorSupportsOpacity: 342,
+  SwiftUIGaugeStyle: 343,
+  SwiftUIGaugeMinimumValueLabel: 344,
+  SwiftUIGaugeMaximumValueLabel: 345,
+  HoverStyle: 346,
+  ActiveStyle: 347,
+  FocusStyle: 348,
+  DisabledStyle: 349,
+  InvalidStyle: 350,
+  DraggingStyle: 351,
+  DragOverStyle: 352,
+  GroupHoverStyle: 353,
+  HoverGroup: 354,
+  GroupActiveStyle: 355,
+  FocusWithinStyle: 356,
+  SelectedStyle: 357,
+  Selected: 358,
+} as const;
 
 /**
  * Compound part names adopted from the Rust core's unstyled part descriptors.
@@ -796,154 +785,197 @@ export const MAX_SELECT_VALUES = 256;
 /** Most chips one multiple combobox retains. */
 export const MAX_COMBOBOX_VALUES = 64;
 
+export type NativeNodeTagValue = number;
+export type PropertyCodeValue = number;
 export type NativePropertyValue = boolean | number | string | null;
 
-const encoder = new TextEncoder();
-
 export class MutationBatch {
-  #bytes = new Uint8Array(512);
-  #view = new DataView(this.#bytes.buffer);
-  #length = 10;
-  #count = 0;
+  _bytes = new Uint8Array(256);
+  _view = new DataView(this._bytes.buffer);
+  _length = 10;
+  _count = 0;
 
   get empty(): boolean {
-    return this.#count === 0;
+    return this._count === 0;
   }
 
   get mutationCount(): number {
-    return this.#count;
+    return this._count;
   }
 
-  createElement(id: number, tag: NativeNodeTag): void {
-    this.#op(1);
-    this.#u32(id);
-    this.#u8(tag);
+  createElement(id: number, tag: number): void {
+    this._op(1);
+    this._u32(id);
+    this._u8(tag);
   }
 
   createText(id: number, value: string): void {
-    this.#op(2);
-    this.#u32(id);
-    this.#string(value);
+    this._op(2);
+    this._u32(id);
+    this._string(value);
   }
 
   createSentinel(id: number): void {
-    this.#op(3);
-    this.#u32(id);
+    this._op(3);
+    this._u32(id);
   }
 
-  setProperty(
-    id: number,
-    property: PropertyCode,
-    value: NativePropertyValue,
-    color = false,
-  ): void {
-    this.#op(4);
-    this.#u32(id);
-    this.#u16(property);
+  clearProperty(id: number, property: number): void {
+    this._op(4);
+    this._u32(id);
+    this._u16(property);
+    this._u8(0);
+  }
+
+  setBoolean(id: number, property: number, value: boolean): void {
+    this._op(4);
+    this._u32(id);
+    this._u16(property);
+    this._u8(1);
+    this._u8(value ? 1 : 0);
+  }
+
+  setNumber(id: number, property: number, value: number): void {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("QuickGUI property " + String(property) + " must be finite");
+    }
+    this._op(4);
+    this._u32(id);
+    this._u16(property);
+    this._u8(2);
+    this._f32(value);
+  }
+
+  setColor(id: number, property: number, value: number): void {
+    this._op(4);
+    this._u32(id);
+    this._u16(property);
+    this._u8(3);
+    this._u32(value >>> 0);
+  }
+
+  setString(id: number, property: number, value: string): void {
+    this._op(4);
+    this._u32(id);
+    this._u16(property);
+    this._u8(4);
+    this._string(value);
+  }
+
+  /** Encode one typed value; `null` withdraws the property. */
+  setProperty(id: number, property: number, value: NativePropertyValue, color: boolean): void {
     if (value === null) {
-      this.#u8(0);
+      this.clearProperty(id, property);
     } else if (typeof value === "boolean") {
-      this.#u8(1);
-      this.#u8(value ? 1 : 0);
+      this.setBoolean(id, property, value);
     } else if (typeof value === "number") {
-      if (!Number.isFinite(value)) {
-        throw new TypeError(`QuickGUI property ${property} must be finite`);
-      }
-      if (color) {
-        this.#u8(3);
-        this.#u32(value);
-      } else {
-        this.#u8(2);
-        this.#f32(value);
-      }
+      if (color) this.setColor(id, property, value);
+      else this.setNumber(id, property, value);
     } else {
-      this.#u8(4);
-      this.#string(value);
+      this.setString(id, property, value);
     }
   }
 
   replaceText(id: number, value: string): void {
-    this.#op(5);
-    this.#u32(id);
-    this.#string(value);
+    this._op(5);
+    this._u32(id);
+    this._string(value);
   }
 
-  insert(parent: number, child: number, before?: number): void {
-    this.#op(6);
-    this.#u32(parent);
-    this.#u32(child);
-    this.#u32(before ?? NO_ANCHOR);
+  insert(parent: number, child: number, before: number): void {
+    this._op(6);
+    this._u32(parent);
+    this._u32(child);
+    this._u32(before);
   }
 
   remove(parent: number, child: number): void {
-    this.#op(7);
-    this.#u32(parent);
-    this.#u32(child);
+    this._op(7);
+    this._u32(parent);
+    this._u32(child);
   }
 
   cleanup(parent: number, children: readonly number[]): void {
-    this.#op(8);
-    this.#u32(parent);
-    this.#u32(children.length);
-    for (const child of children) this.#u32(child);
+    this._op(8);
+    this._u32(parent);
+    this._u32(children.length);
+    for (const child of children) this._u32(child);
   }
 
-  finish(): Buffer {
-    if (this.#count === 0) return Buffer.alloc(0);
-    this.#bytes.set([0x51, 0x47, 0x4d, 0x42], 0);
-    this.#view.setUint16(4, PROTOCOL_VERSION, true);
-    this.#view.setUint32(6, this.#count, true);
-    return Buffer.from(this.#bytes.buffer, 0, this.#length);
+  /** Append every mutation of a detached subtree's buffer, preserving its order. */
+  append(other: MutationBatch): void {
+    const bytes = other.body();
+    this._ensure(bytes.length);
+    this._bytes.set(bytes, this._length);
+    this._length += bytes.length;
+    this._count += other._count;
   }
 
-  #op(opcode: number): void {
-    this.#count++;
-    this.#u8(opcode);
+  /** The encoded mutations without the header. */
+  body(): Uint8Array {
+    return this._bytes.subarray(10, this._length);
   }
 
-  #ensure(additional: number): void {
-    const required = this.#length + additional;
-    if (required <= this.#bytes.length) return;
-    let capacity = this.#bytes.length;
+  /** The complete encoded batch, or an empty span when nothing was recorded. */
+  finish(): Uint8Array {
+    if (this._count === 0) return new Uint8Array(0);
+    this._bytes[0] = 0x51;
+    this._bytes[1] = 0x47;
+    this._bytes[2] = 0x4d;
+    this._bytes[3] = 0x42;
+    this._view.setUint16(4, PROTOCOL_VERSION, true);
+    this._view.setUint32(6, this._count, true);
+    return this._bytes.subarray(0, this._length);
+  }
+
+  _op(opcode: number): void {
+    this._count++;
+    this._u8(opcode);
+  }
+
+  _ensure(additional: number): void {
+    const required = this._length + additional;
+    if (required <= this._bytes.length) return;
+    let capacity = this._bytes.length;
     while (capacity < required) capacity *= 2;
     const next = new Uint8Array(capacity);
-    next.set(this.#bytes.subarray(0, this.#length));
-    this.#bytes = next;
-    this.#view = new DataView(next.buffer);
+    next.set(this._bytes.subarray(0, this._length));
+    this._bytes = next;
+    this._view = new DataView(next.buffer);
   }
 
-  #u8(value: number): void {
-    this.#ensure(1);
-    this.#view.setUint8(this.#length, value);
-    this.#length += 1;
+  _u8(value: number): void {
+    this._ensure(1);
+    this._view.setUint8(this._length, value);
+    this._length += 1;
   }
 
-  #u16(value: number): void {
-    this.#ensure(2);
-    this.#view.setUint16(this.#length, value, true);
-    this.#length += 2;
+  _u16(value: number): void {
+    this._ensure(2);
+    this._view.setUint16(this._length, value, true);
+    this._length += 2;
   }
 
-  #u32(value: number): void {
+  _u32(value: number): void {
     if (!Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
-      throw new RangeError(`QuickGUI protocol value ${value} is not a u32`);
+      throw new RangeError("QuickGUI protocol value " + String(value) + " is not a u32");
     }
-    this.#ensure(4);
-    this.#view.setUint32(this.#length, value, true);
-    this.#length += 4;
+    this._ensure(4);
+    this._view.setUint32(this._length, value, true);
+    this._length += 4;
   }
 
-  #f32(value: number): void {
-    this.#ensure(4);
-    this.#view.setFloat32(this.#length, value, true);
-    this.#length += 4;
+  _f32(value: number): void {
+    this._ensure(4);
+    this._view.setFloat32(this._length, value, true);
+    this._length += 4;
   }
 
-  #string(value: string): void {
-    const bytes = encoder.encode(value);
-    this.#u32(bytes.length);
-    this.#ensure(bytes.length);
-    this.#bytes.set(bytes, this.#length);
-    this.#length += bytes.length;
+  _string(value: string): void {
+    const bytes = new TextEncoder().encode(value);
+    this._u32(bytes.length);
+    this._ensure(bytes.length);
+    this._bytes.set(bytes, this._length);
+    this._length += bytes.length;
   }
 }

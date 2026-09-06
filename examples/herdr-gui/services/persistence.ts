@@ -16,7 +16,11 @@ export function normalizeSpaces(
   ];
   const seen = new Set<string>();
   return paths
-    .filter((path) => path.length > 0 && !seen.has(path) && seen.add(path))
+    .filter((path): boolean => {
+      if (path.length === 0 || seen.has(path)) return false;
+      seen.add(path);
+      return true;
+    })
     .map((path) => ({ id: path, name: spaceName(path), path }));
 }
 

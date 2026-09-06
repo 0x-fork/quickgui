@@ -1,0 +1,34 @@
+組み込みの見た目を持たない、セマンティックな水平または垂直区切り線です。
+
+## インポート
+
+`@quickgui/ui` から `Separator` をインポートします。
+
+```tsx
+import { Separator } from "@quickgui/ui/toolbar";
+```
+
+## 使い方
+
+```tsx
+<Separator.Root
+  orientation="horizontal"
+  style={{ height: 1, backgroundColor: "#e4e4e7" }}
+/>
+```
+
+## 構成
+
+- `Separator.Root`
+
+```tsx
+<Separator.Root>{/* content */}</Separator.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+

@@ -189,8 +189,8 @@ creates a fresh window when its Dock icon is clicked.
 `AppRunner::request_quit()` gives an embedding runtime the same preventable path that native
 Command-Q takes, while `AppRunner::exit()` keeps bypassing both phases for a forced shutdown. The
 JavaScript host builds `window.onCloseRequested`, `app.on("beforeQuit")`, and
-`app.on("willQuit")` on exactly these hooks; see [Solid and JavaScript
-bindings](solid.md#lifecycle-vetoes-in-javascript).
+`app.on("willQuit")` on exactly these hooks; see [QuickGUI UI and JavaScript
+bindings](ui.md#lifecycle-vetoes-in-javascript).
 
 `cx.relaunch()` adds one prepared replacement process to that same teardown. QuickGUI releases the
 single-instance guard and process integrations after the last close callback, then spawns exactly

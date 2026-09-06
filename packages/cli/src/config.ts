@@ -25,7 +25,7 @@ export interface MacOSConfig {
   icon?: string;
   signingIdentity?: string;
   entitlements?: string;
-  /** Mounted disk image title. `create-dmg` limits this to 27 characters. */
+  /** Mounted disk image title, up to 27 characters. */
   dmgTitle?: string;
   /** Submit the production DMG to Apple's notary service and staple its ticket. */
   notarization?: MacOSNotarizationConfig;
@@ -140,7 +140,7 @@ export interface MacAppStoreConfig {
 /** Zig optimization mode used for native modules. */
 export type ZigOptimizeMode = "Debug" | "ReleaseSafe" | "ReleaseFast" | "ReleaseSmall";
 
-/** Native modules: Zig sources compiled into Node-API addons the application imports. */
+/** Native modules: Zig sources compiled into static native libraries the application imports. */
 export interface NativeModulesConfig {
   /** Directory whose `<name>/main.zig` subdirectories are modules. Defaults to "modules". */
   directory?: string;
@@ -151,6 +151,20 @@ export interface NativeModulesConfig {
   optimize?: ZigOptimizeMode;
 }
 
+/** Native compilation options. */
+export interface NativeConfig {
+  /**
+   * Embed the scriptc dynamic engine for npm dependencies and `any`-typed code. Static builds
+   * are the default: they carry no JavaScript engine at all.
+   */
+  dynamic?: boolean;
+  /**
+   * Report TypeScript errors in the project's own sources before compiling. Off by default: the
+   * native compiler type-checks the program itself, and the editor already shows the errors.
+   */
+  typeCheck?: boolean;
+}
+
 export interface QuickGuiConfig {
   name: string;
   identifier: string;
@@ -159,6 +173,8 @@ export interface QuickGuiConfig {
   entry?: string;
   outDir?: string;
   target?: QuickGuiTarget;
+  /** Native compilation options. */
+  native?: NativeConfig;
   resources?: string[];
   /** OpenType font files embedded in the executable and registered before app startup. */
   fonts?: string[];
@@ -186,6 +202,7 @@ export interface ResolvedQuickGuiConfig {
   entry: string;
   outDir: string;
   target?: QuickGuiTarget;
+  native: Required<NativeConfig>;
   resources: string[];
   fonts: string[];
   protocols: string[];
@@ -255,6 +272,7 @@ export function resolveConfig(
   const documentTypes = resolveDocumentTypes(input.documentTypes);
   const updates = resolveUpdates(input.updates, projectRoot);
   const modules = resolveNativeModules(input.modules, projectRoot);
+  const native = objectOrEmpty(input.native, "native");
   const linuxIcon = optionalString(linux.icon, "linux.icon", 1_024);
   const linuxMaintainer = optionalString(linux.maintainer, "linux.maintainer", 255);
   const linuxComment = optionalString(linux.comment, "linux.comment", 512);
@@ -275,6 +293,10 @@ export function resolveConfig(
     entry,
     outDir,
     ...(target ? { target } : {}),
+    native: {
+      dynamic: optionalBoolean(native.dynamic, "native.dynamic") ?? false,
+      typeCheck: optionalBoolean(native.typeCheck, "native.typeCheck") ?? false,
+    },
     resources,
     fonts,
     protocols,
@@ -284,7 +306,7 @@ export function resolveConfig(
     modules,
     macos: {
       minimumSystemVersion:
-        optionalString(macos.minimumSystemVersion, "macos.minimumSystemVersion", 32) ?? "13.0",
+        optionalString(macos.minimumSystemVersion, "macos.minimumSystemVersion", 32) ?? "14.0",
       category:
         optionalString(macos.category, "macos.category", 255) ??
         "public.app-category.developer-tools",

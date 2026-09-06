@@ -1,3 +1,4 @@
+import "../testing/native-module.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -108,7 +109,7 @@ describe("Repository", () => {
     const lineOneAdded = hunk.lines.findIndex((line) => line.kind === "added" && line.text === "line one!");
     expect(lineOneRemoved).toBeGreaterThanOrEqual(0);
     expect(lineOneAdded).toBeGreaterThanOrEqual(0);
-    await repo.stagePatch(remaining, [{ hunkIndex: topIndex, lines: new Set([lineOneRemoved, lineOneAdded]) }]);
+    await repo.stagePatch(remaining, [{ hunkIndex: topIndex, lines: [lineOneRemoved, lineOneAdded] }]);
     staged = await repo.diffIndex("src/app.ts", undefined);
     const stagedText = staged.file(0)!.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.kind !== "context").map((line) => `${line.kind}:${line.text}`));
     expect(stagedText).toEqual(["removed:line 1", "added:line one!", "added:tail added"]);

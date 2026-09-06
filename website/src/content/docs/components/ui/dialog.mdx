@@ -1,0 +1,63 @@
+An in-window modal with focus containment, dismissal, and exact transition completion.
+
+## Import
+
+Import `Dialog` from `@quickgui/ui`.
+
+```tsx
+import { Dialog } from "@quickgui/ui/dialog";
+```
+
+## Usage
+
+```tsx
+<Dialog.Root open={open()} onOpenChange={setOpen}>
+  <Dialog.Trigger><Text>Edit profile</Text></Dialog.Trigger>
+  <Dialog.Portal>
+    <Dialog.Backdrop />
+    <Dialog.Viewport>
+      <Dialog.Popup>
+        <Dialog.Title><Text>Edit profile</Text></Dialog.Title>
+        <Dialog.Description><Text>Changes are saved immediately.</Text></Dialog.Description>
+        <Dialog.Close><Text>Done</Text></Dialog.Close>
+      </Dialog.Popup>
+    </Dialog.Viewport>
+  </Dialog.Portal>
+</Dialog.Root>
+```
+
+## Anatomy
+
+- `Dialog.Root`
+- `Dialog.Trigger`
+- `Dialog.Portal`
+- `Dialog.Backdrop`
+- `Dialog.Viewport`
+- `Dialog.Popup`
+- `Dialog.Title`
+- `Dialog.Description`
+- `Dialog.Close`
+
+```tsx
+<Dialog.Root>
+  <Dialog.Trigger />
+  <Dialog.Portal />
+  <Dialog.Backdrop />
+  <Dialog.Viewport />
+  <Dialog.Popup />
+  <Dialog.Title />
+  <Dialog.Description />
+  <Dialog.Close />
+</Dialog.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `open` | Controlled open state. |
+| `defaultOpen` | Initial state when the component owns whether it is open. |
+| `onOpenChange` | Reports an open or close decision from the core. |
+| `dismissOnEscape` | Allows Escape to dismiss the surface. |
+| `exitDuration` | Keeps closing content mounted for the exact exit transition duration. |
+

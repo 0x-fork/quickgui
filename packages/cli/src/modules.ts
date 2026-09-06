@@ -1,13 +1,13 @@
 /**
- * Native modules: Zig under `modules/<name>/main.zig`, compiled into Node-API addons and exposed to
- * the application as typed TypeScript modules.
+ * Native modules: Zig under `modules/<name>/main.zig`, compiled into static libraries the
+ * application links, and exposed to it as typed TypeScript modules.
  *
  * `buildNativeModules` is the whole pipeline. For every module directory it hashes the Zig
  * sources, compiles them with `zig build-lib` against the runtime shipped in `@quickgui/native`
- * when the hash changed, reads the manifest the addon reports, and writes
- * `modules/<name>/index.ts`: typed wrappers that `bindNativeModule` turns into calls. The addon
- * lives under `.quickgui/modules/<name>/<target>/`, and because the generated file `require`s it
- * by a literal relative path, Bun embeds it in the compiled application.
+ * when the hash changed, reads the manifest by linking a tiny probe program against the library,
+ * and writes `modules/<name>/index.ts`: typed wrappers around the module's two C entry points.
+ * The library lives under `.quickgui/modules/<name>/<target>/`; when the application is compiled,
+ * the CLI links it and binds the entry points through the scriptc FFI manifest.
  *
  * The pure pieces — argument lists, the generator, and the Zig signature scanner — are exported
  * so tests can cover them without a compiler.
@@ -16,29 +16,25 @@
 import { createHash } from "node:crypto";
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
-import {
-  NATIVE_MODULE_ABI,
-  nativeModuleBinding,
-  parseNativeModuleManifest,
-  type NativeFunctionSpec,
-  type NativeModuleBinding,
-  type NativeModuleManifest,
-  type NativeTypeDescriptor,
-  type NativeWire,
-} from "@quickgui/native/modules";
+import { NATIVE_MODULE_ABI, type NativeWire } from "@quickgui/native/modules";
 
 import type { ResolvedQuickGuiConfig, ZigOptimizeMode } from "./config.ts";
 import { CliError } from "./error.ts";
-import { targetInfo, type QuickGuiTarget } from "./targets.ts";
+import type { FfiFunction } from "./native-build.ts";
+import { hostTarget, targetInfo, type QuickGuiTarget } from "./targets.ts";
 
 /** The file that makes a directory under `modules/` a native module. */
 export const NATIVE_MODULE_ENTRY = "main.zig";
@@ -48,6 +44,119 @@ export const MINIMUM_ZIG_VERSION = { major: 0, minor: 16 } as const;
 export const MAX_NATIVE_MODULES = 64;
 /** Most exported functions one native module may declare. */
 export const MAX_NATIVE_MODULE_FUNCTIONS = 1_024;
+
+// --- manifest ------------------------------------------------------------------------------------
+
+/** Description of one Zig type, as emitted by the module runtime's manifest. */
+export type NativeTypeDescriptor =
+  | { kind: "void" }
+  | { kind: "boolean" }
+  | { kind: "number" }
+  | { kind: "string" }
+  | { kind: "bytes" }
+  | { kind: "any" }
+  | { kind: "optional"; inner: NativeTypeDescriptor }
+  | { kind: "array"; element: NativeTypeDescriptor }
+  | { kind: "tuple"; elements: NativeTypeDescriptor[] }
+  | { kind: "struct"; name: string; fields: NativeStructField[] }
+  | { kind: "enum"; name: string; values: string[] }
+  | { kind: "union"; name: string; variants: NativeUnionVariant[] }
+  | { kind: "ref"; name: string };
+
+export interface NativeStructField {
+  name: string;
+  type: NativeTypeDescriptor;
+  /** Whether the Zig field has a default value, so the application may omit it. */
+  hasDefault: boolean;
+}
+
+export interface NativeUnionVariant {
+  name: string;
+  type: NativeTypeDescriptor;
+}
+
+export interface NativeValueSpec {
+  wire: NativeWire;
+  type: NativeTypeDescriptor;
+}
+
+/** A parameter the runtime supplies itself instead of reading from the application. */
+export interface NativeInjectedParameter {
+  injected: "allocator";
+}
+
+export type NativeParameterSpec = NativeValueSpec | NativeInjectedParameter;
+
+export interface NativeFunctionSpec {
+  name: string;
+  params: NativeParameterSpec[];
+  result: NativeValueSpec;
+}
+
+/** The manifest a compiled module reports from its `_manifest` entry point. */
+export interface NativeModuleManifest {
+  abi: number;
+  /** Version of the Zig compiler that built the module. */
+  zig: string;
+  functions: NativeFunctionSpec[];
+}
+
+const wireNames: readonly string[] = ["void", "boolean", "number", "string", "bytes", "json"];
+
+/** Parse and validate the JSON a module reports from its manifest entry point. */
+export function parseNativeModuleManifest(text: string): NativeModuleManifest {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error("The native module manifest is not valid JSON", { cause: error });
+  }
+  if (!isRecord(parsed) || typeof parsed.abi !== "number" || !Array.isArray(parsed.functions)) {
+    throw new Error("The native module manifest does not have the expected shape");
+  }
+  if (parsed.abi !== NATIVE_MODULE_ABI) {
+    throw new Error(
+      `The native module was built for ABI ${parsed.abi}, but this @quickgui/native expects ABI ${NATIVE_MODULE_ABI}`,
+    );
+  }
+  const functions = parsed.functions.map((entry, index): NativeFunctionSpec => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.name !== "string" ||
+      !Array.isArray(entry.params) ||
+      !isValueSpec(entry.result)
+    ) {
+      throw new Error(`Native module function ${index} has an invalid manifest entry`);
+    }
+    const params = entry.params.map((parameter): NativeParameterSpec => {
+      if (isRecord(parameter) && parameter.injected === "allocator") return { injected: "allocator" };
+      if (isValueSpec(parameter)) return parameter;
+      throw new Error(`Native module function ${entry.name} has an invalid parameter entry`);
+    });
+    return { name: entry.name, params, result: entry.result };
+  });
+  return {
+    abi: parsed.abi,
+    zig: typeof parsed.zig === "string" ? parsed.zig : "",
+    functions,
+  };
+}
+
+function isValueSpec(value: unknown): value is NativeValueSpec {
+  return (
+    isRecord(value) &&
+    typeof value.wire === "string" &&
+    wireNames.includes(value.wire) &&
+    isRecord(value.type) &&
+    typeof value.type.kind === "string"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+// --- module identity -----------------------------------------------------------------------------
 
 export interface NativeModuleSource {
   /** Directory name, which is also the addon name and the generated module's identity. */
@@ -71,21 +180,75 @@ export interface BuildNativeModulesOptions {
 
 export interface BuiltNativeModule {
   name: string;
-  /** The compiled addon, under `.quickgui/modules/<name>/<target>/`. */
-  addonPath: string;
+  /** The static library the application links, under `.quickgui/modules/<name>/<target>/`. */
+  archivePath: string;
   /** The generated `modules/<name>/index.ts`. */
   indexPath: string;
   manifest: NativeModuleManifest;
-  /** Whether Zig ran, as opposed to the previous addon being reused. */
+  /** Whether Zig ran, as opposed to the previous library being reused. */
   rebuilt: boolean;
+  /** The prefix of the module's C entry points, `quickgui_module_<name>`. */
+  symbolPrefix: string;
+  /** scriptc FFI manifest entries that bind the generated wrappers to the library. */
+  ffiFunctions: FfiFunction[];
 }
 
-/** Root the CLI compiles: the module's public functions become the addon's exports. */
-export const NATIVE_MODULE_ROOT_SOURCE = `// Generated by @quickgui/cli. Do not edit.
+/** The C symbol prefix of a module's entry points. */
+export function moduleSymbolPrefix(name: string): string {
+  return `quickgui_module_${name.replaceAll("-", "_")}`;
+}
+
+/** Root the CLI compiles: the module's public functions become the library's entry points. */
+export function nativeModuleRootSource(symbolPrefix: string): string {
+  return `// Generated by @quickgui/cli. Do not edit.
 comptime {
-    @import("quickgui").exportModule(@import("module"));
+    @import("quickgui").exportModule(@import("module"), "${symbolPrefix}");
 }
 `;
+}
+
+/**
+ * The scriptc FFI entries for one module: the synchronous call hands its result to a
+ * call-scoped callback, the asynchronous one reports through the host as a `module-result` event.
+ */
+export function nativeModuleFfiFunctions(symbolPrefix: string): FfiFunction[] {
+  return [
+    {
+      name: `${symbolPrefix}_call`,
+      symbol: `${symbolPrefix}_call`,
+      params: [
+        "u32",
+        "bytes",
+        { callback: { id: "reply", params: ["bytes", { context: "reply" }], returns: "void", lifetime: "call" } },
+        { context: "reply" },
+      ],
+      returns: "void",
+    },
+    {
+      name: `${symbolPrefix}_call_async`,
+      symbol: `${symbolPrefix}_call_async`,
+      params: ["u32", "u32", "bytes"],
+      returns: "void",
+    },
+  ];
+}
+
+/** A C program that prints the module's manifest, linked against the module library. */
+export function manifestProbeSource(symbolPrefix: string): string {
+  return `#include <stddef.h>
+#include <stdio.h>
+const char *${symbolPrefix}_manifest(void);
+void quickgui_module_complete(unsigned int request, const unsigned char *data, size_t length) {
+    (void)request;
+    (void)data;
+    (void)length;
+}
+int main(void) {
+    fputs(${symbolPrefix}_manifest(), stdout);
+    return 0;
+}
+`;
+}
 
 // --- discovery -----------------------------------------------------------------------------------
 
@@ -157,7 +320,7 @@ export function zigTarget(target: QuickGuiTarget): string {
   const info = targetInfo(target);
   if (info.platform === "windows") {
     throw new CliError(
-      `Native modules are not supported for ${target} yet: a Windows addon has to link against the host's import library`,
+      `Native modules are not supported for ${target} yet: native applications target macOS first`,
     );
   }
   const architecture = info.architecture === "arm64" ? "aarch64" : "x86_64";
@@ -175,7 +338,7 @@ export interface ZigBuildInput {
   entry: string;
   /** `quickgui.zig` from `@quickgui/native/zig`. */
   runtime: string;
-  /** Where the `.node` addon is written. */
+  /** Where the static library is written. */
   output: string;
   cacheDirectory: string;
 }
@@ -183,18 +346,18 @@ export interface ZigBuildInput {
 /**
  * The `zig build-lib` invocation for one module.
  *
- * The addon references Node-API symbols the host process provides, so undefined symbols are
- * allowed; the compiler otherwise needs neither a libc nor an SDK for these libraries.
+ * The library links libc because the runtime runs asynchronous calls on threads; the host
+ * symbol it reports results through stays undefined until the application is linked.
  */
 export function zigBuildArguments(input: ZigBuildInput): string[] {
   return [
     input.zig,
     "build-lib",
-    "-dynamic",
+    "-static",
     `-O${input.optimize}`,
     "-target",
     zigTarget(input.target),
-    "-fallow-shlib-undefined",
+    "-lc",
     "--name",
     input.name,
     `-femit-bin=${input.output}`,
@@ -212,7 +375,28 @@ export function zigBuildArguments(input: ZigBuildInput): string[] {
   ];
 }
 
+/** The `zig cc` invocation that links the manifest probe against a module library. */
+export function probeBuildArguments(zig: string, source: string, archive: string, output: string): string[] {
+  return [zig, "cc", "-o", output, source, archive];
+}
+
 // --- build ---------------------------------------------------------------------------------------
+
+interface BuildContext {
+  zig: ZigToolchain;
+  optimize: ZigOptimizeMode;
+  runtimeDirectory: string;
+  cacheDirectory: string;
+  projectRoot: string;
+}
+
+interface ArchiveBuild {
+  archivePath: string;
+  statePath: string;
+  hash: string;
+  /** The manifest recorded by an earlier build of the same inputs, when the library is current. */
+  manifest: NativeModuleManifest | undefined;
+}
 
 /** Compile every native module of a project and refresh its generated `index.ts`. */
 export async function buildNativeModules(
@@ -222,76 +406,129 @@ export async function buildNativeModules(
   const modules = discoverNativeModules(config.modules.directory);
   if (modules.length === 0) return [];
   zigTarget(options.target);
-  const zig = findZig();
-  const optimize =
-    config.modules.optimize ?? (options.mode === "production" ? "ReleaseFast" : "ReleaseSafe");
-  const runtimeDirectory = nativeRuntimeDirectory();
-  const cacheDirectory = resolve(config.projectRoot, ".quickgui", "zig-cache");
+  const context: BuildContext = {
+    zig: findZig(),
+    optimize: config.modules.optimize ?? (options.mode === "production" ? "ReleaseFast" : "ReleaseSafe"),
+    runtimeDirectory: nativeRuntimeDirectory(),
+    cacheDirectory: resolve(config.projectRoot, ".quickgui", "zig-cache"),
+    projectRoot: config.projectRoot,
+  };
+  const host = hostTarget();
+  const prefixes = new Map<string, string>();
   const results: BuiltNativeModule[] = [];
   for (const module of modules) {
-    const outputDirectory = resolve(
-      config.projectRoot,
-      ".quickgui",
-      "modules",
-      module.name,
-      options.target,
-    );
-    mkdirSync(outputDirectory, { recursive: true });
-    const addonPath = resolve(outputDirectory, `${module.name}.node`);
-    const statePath = resolve(outputDirectory, "build.json");
-    const hash = nativeModuleInputsHash(module, {
-      zigVersion: zig.version,
-      target: options.target,
-      optimize,
-      runtimeDirectory,
-    });
-    let manifest = readBuildState(statePath, hash, addonPath);
-    let rebuilt = false;
-    if (!manifest) {
-      const started = performance.now();
-      const rootPath = resolve(outputDirectory, "root.zig");
-      writeFileSync(rootPath, NATIVE_MODULE_ROOT_SOURCE);
-      await runZig(
-        zigBuildArguments({
-          zig: zig.path,
-          name: module.name,
-          optimize,
-          target: options.target,
-          root: rootPath,
-          entry: module.entry,
-          runtime: resolve(runtimeDirectory, "quickgui.zig"),
-          output: addonPath,
-          cacheDirectory,
-        }),
-        config.projectRoot,
-        module.name,
+    const symbolPrefix = moduleSymbolPrefix(module.name);
+    const clash = prefixes.get(symbolPrefix);
+    if (clash !== undefined) {
+      throw new CliError(
+        `Native modules ${clash} and ${module.name} would export the same C symbols; rename one of them`,
       );
-      manifest = await readAddonManifest(addonPath, module.name);
+    }
+    prefixes.set(symbolPrefix, module.name);
+    const started = performance.now();
+    const archive = await ensureArchive(module, symbolPrefix, options.target, context);
+    let manifest = archive.manifest;
+    let rebuilt = false;
+    if (manifest === undefined) {
+      // The manifest comes from running a probe, so a cross-compiled module also gets a host build.
+      const probe = options.target === host ? archive : await ensureArchive(module, symbolPrefix, host, context);
+      manifest =
+        probe.manifest ??
+        (await readArchiveManifest(context, probe.archivePath, symbolPrefix, dirname(probe.archivePath), module.name));
       if (manifest.functions.length > MAX_NATIVE_MODULE_FUNCTIONS) {
         throw new CliError(
           `Native module ${module.name} exports ${manifest.functions.length} functions; the limit is ${MAX_NATIVE_MODULE_FUNCTIONS}`,
         );
       }
-      writeFileSync(statePath, `${JSON.stringify({ hash, manifest }, null, 2)}\n`);
+      writeFileSync(archive.statePath, `${JSON.stringify({ hash: archive.hash, manifest }, null, 2)}\n`);
+      if (probe !== archive && probe.manifest === undefined) {
+        writeFileSync(probe.statePath, `${JSON.stringify({ hash: probe.hash, manifest }, null, 2)}\n`);
+      }
       rebuilt = true;
       options.log?.(
-        `Built native module ${module.name} with Zig ${zig.version} (${optimize}) in ${Math.round(performance.now() - started)} ms`,
+        `Built native module ${module.name} with Zig ${context.zig.version} (${context.optimize}) in ${Math.round(performance.now() - started)} ms`,
       );
     }
     const indexPath = resolve(module.directory, "index.ts");
     const source = generateNativeModuleSource({
       name: module.name,
       manifest,
-      addonImportPath: importPath(relative(dirname(indexPath), addonPath)),
       entryDisplayPath: relative(config.projectRoot, module.entry).split(sep).join("/"),
       zigSource: readFileSync(module.entry, "utf8"),
     });
     if (!existsSync(indexPath) || readFileSync(indexPath, "utf8") !== source) {
       writeFileSync(indexPath, source);
     }
-    results.push({ name: module.name, addonPath, indexPath, manifest, rebuilt });
+    results.push({
+      name: module.name,
+      archivePath: archive.archivePath,
+      indexPath,
+      manifest,
+      rebuilt,
+      symbolPrefix,
+      ffiFunctions: nativeModuleFfiFunctions(symbolPrefix),
+    });
   }
   return results;
+}
+
+/** Compile the module's library for `target` unless the recorded build already matches its inputs. */
+async function ensureArchive(
+  module: NativeModuleSource,
+  symbolPrefix: string,
+  target: QuickGuiTarget,
+  context: BuildContext,
+): Promise<ArchiveBuild> {
+  const outputDirectory = resolve(context.projectRoot, ".quickgui", "modules", module.name, target);
+  mkdirSync(outputDirectory, { recursive: true });
+  const archivePath = resolve(outputDirectory, `lib${module.name}.a`);
+  const statePath = resolve(outputDirectory, "build.json");
+  const hash = nativeModuleInputsHash(module, {
+    zigVersion: context.zig.version,
+    target,
+    optimize: context.optimize,
+    runtimeDirectory: context.runtimeDirectory,
+    symbolPrefix,
+  });
+  const manifest = readBuildState(statePath, hash, archivePath);
+  if (manifest !== undefined) return { archivePath, statePath, hash, manifest };
+  const rootPath = resolve(outputDirectory, "root.zig");
+  writeFileSync(rootPath, nativeModuleRootSource(symbolPrefix));
+  rmSync(archivePath, { force: true });
+  await runZig(
+    zigBuildArguments({
+      zig: context.zig.path,
+      name: module.name,
+      optimize: context.optimize,
+      target,
+      root: rootPath,
+      entry: module.entry,
+      runtime: resolve(context.runtimeDirectory, "quickgui.zig"),
+      output: archivePath,
+      cacheDirectory: context.cacheDirectory,
+    }),
+    context.projectRoot,
+    module.name,
+  );
+  if (process.platform === "darwin" && targetInfo(target).platform === "darwin") {
+    // Zig's archive writer can leave Mach-O members only two-byte aligned. Apple's linker
+    // requires eight-byte alignment; libtool rewrites the archive and its symbol index.
+    const objectsDirectory = mkdtempSync(join(outputDirectory, "objects-"));
+    try {
+      // libtool skips misaligned archive members, so give it extracted object files.
+      await runZig([context.zig.path, "ar", "x", archivePath], objectsDirectory, module.name);
+      const objects = readdirSync(objectsDirectory).filter((name) => name.endsWith(".o")).map((name) => join(objectsDirectory, name));
+      if (objects.length === 0) throw new CliError(`Native module ${module.name} produced an empty archive`);
+      // Zig's deterministic archive headers use mode 000, which extraction preserves.
+      for (const object of objects) chmodSync(object, 0o644);
+      const alignedPath = resolve(outputDirectory, `lib${module.name}.aligned.a`);
+      await runZig(["xcrun", "libtool", "-static", "-o", alignedPath, ...objects], context.projectRoot, module.name);
+      renameSync(alignedPath, archivePath);
+    } finally {
+      rmSync(objectsDirectory, { recursive: true, force: true });
+    }
+  }
+  return { archivePath, statePath, hash, manifest: undefined };
 }
 
 function nativeRuntimeDirectory(): string {
@@ -329,12 +566,12 @@ export function zigSourceFiles(directory: string): string[] {
 
 function nativeModuleInputsHash(
   module: NativeModuleSource,
-  inputs: { zigVersion: string; target: string; optimize: string; runtimeDirectory: string },
+  inputs: { zigVersion: string; target: string; optimize: string; runtimeDirectory: string; symbolPrefix: string },
 ): string {
   const hash = createHash("sha256");
   hash.update(`quickgui-native-module:${NATIVE_MODULE_ABI}\0`);
-  hash.update(`${inputs.zigVersion}\0${inputs.target}\0${inputs.optimize}\0`);
-  hash.update(NATIVE_MODULE_ROOT_SOURCE);
+  hash.update(`mach-o-alignment-v2\0${inputs.zigVersion}\0${inputs.target}\0${inputs.optimize}\0`);
+  hash.update(nativeModuleRootSource(inputs.symbolPrefix));
   for (const file of zigSourceFiles(inputs.runtimeDirectory)) {
     hash.update(`runtime:${file}\0`);
     hash.update(readFileSync(join(inputs.runtimeDirectory, file)));
@@ -379,27 +616,48 @@ async function runZig(command: string[], cwd: string, moduleName: string): Promi
 }
 
 /**
- * Load the compiled addon in a child process and return its manifest.
+ * Link a tiny C program against the module library, run it, and return the manifest it prints.
  *
- * A child keeps the CLI's own process free of the addon: `dlopen` caches by path, so a module
- * rebuilt during `quickgui dev` could otherwise report the manifest of the previous build.
+ * The probe stubs the host symbol the library reports asynchronous results through, so it links
+ * without the QuickGUI host; the manifest itself is computed at Zig compile time.
  */
-async function readAddonManifest(addonPath: string, moduleName: string): Promise<NativeModuleManifest> {
-  const script = "process.stdout.write(require(process.env.QUICKGUI_MODULE_ADDON).manifest());";
-  const child = Bun.spawn([process.execPath, "-e", script], {
-    env: { ...process.env, QUICKGUI_MODULE_ADDON: addonPath },
+async function readArchiveManifest(
+  context: BuildContext,
+  archivePath: string,
+  symbolPrefix: string,
+  outputDirectory: string,
+  moduleName: string,
+): Promise<NativeModuleManifest> {
+  const probeSource = resolve(outputDirectory, "manifest-probe.c");
+  const probeBinary = resolve(outputDirectory, "manifest-probe");
+  writeFileSync(probeSource, manifestProbeSource(symbolPrefix));
+  const link = Bun.spawn(probeBuildArguments(context.zig.path, probeSource, archivePath, probeBinary), {
+    cwd: outputDirectory,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    env: { ...process.env, ZIG_LOCAL_CACHE_DIR: context.cacheDirectory },
   });
+  const [linkStatus, linkStdout, linkStderr] = await Promise.all([
+    link.exited,
+    new Response(link.stdout).text(),
+    new Response(link.stderr).text(),
+  ]);
+  if (linkStatus !== 0) {
+    const detail = (linkStderr.trim() || linkStdout.trim()).replaceAll(context.projectRoot + sep, "");
+    throw new CliError(
+      `Could not link the manifest probe of native module ${moduleName}${detail ? `\n${detail}` : ""}`,
+    );
+  }
+  const run = Bun.spawn([probeBinary], { cwd: outputDirectory, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   const [status, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
+    run.exited,
+    new Response(run.stdout).text(),
+    new Response(run.stderr).text(),
   ]);
   if (status !== 0) {
     throw new CliError(
-      `The compiled native module ${moduleName} could not be loaded${stderr.trim() ? `\n${stderr.trim()}` : ""}`,
+      `The manifest probe of native module ${moduleName} failed${stderr.trim() ? `\n${stderr.trim()}` : ""}`,
     );
   }
   try {
@@ -407,11 +665,6 @@ async function readAddonManifest(addonPath: string, moduleName: string): Promise
   } catch (error) {
     throw new CliError(`Native module ${moduleName} reported an invalid manifest`, { cause: error });
   }
-}
-
-function importPath(path: string): string {
-  const normalized = path.split(sep).join("/");
-  return normalized.startsWith(".") ? normalized : `./${normalized}`;
 }
 
 // --- Zig source scanning -------------------------------------------------------------------------
@@ -574,8 +827,6 @@ function splitTopLevel(text: string): string[] {
 export interface GenerateNativeModuleSourceInput {
   name: string;
   manifest: NativeModuleManifest;
-  /** The addon relative to the generated file, using forward slashes. */
-  addonImportPath: string;
   /** `main.zig` relative to the project root, for the header comment. */
   entryDisplayPath: string;
   /** Contents of `main.zig`, for parameter names and doc comments. */
@@ -589,7 +840,10 @@ const reservedIdentifiers = new Set([
   "null", "package", "private", "protected", "public", "return", "static", "super", "switch",
   "this", "throw", "true", "try", "typeof", "undefined", "var", "void", "while", "with", "yield",
   // Identifiers the generated file uses itself.
-  "binding", "bindNativeModule", "loadAddon", "native", "require", "NativeModuleBinding",
+  "args", "call", "callAsync", "request", "result", "bytes", "JSON", "Promise", "Uint8Array",
+  "NativeArguments", "allocateNativeModuleRequest", "awaitNativeModuleResult", "decodeNativeVoid",
+  "decodeNativeBoolean", "decodeNativeNumber", "decodeNativeString", "decodeNativeBytes",
+  "decodeNativeJson",
 ]);
 
 const identifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -602,9 +856,19 @@ interface HoistedType {
   shape: string;
 }
 
+const decoderNames: Record<NativeWire, string> = {
+  void: "decodeNativeVoid",
+  boolean: "decodeNativeBoolean",
+  number: "decodeNativeNumber",
+  string: "decodeNativeString",
+  bytes: "decodeNativeBytes",
+  json: "decodeNativeJson",
+};
+
 /** Write the typed TypeScript module for one compiled native module. */
 export function generateNativeModuleSource(input: GenerateNativeModuleSourceInput): string {
   const { name, manifest } = input;
+  const symbolPrefix = moduleSymbolPrefix(name);
   const signatures = input.zigSource ? extractZigFunctionSignatures(input.zigSource) : new Map();
   const hoisted = new Map<string, HoistedType>();
   const hoistedByShape = new Map<string, HoistedType>();
@@ -681,7 +945,7 @@ export function generateNativeModuleSource(input: GenerateNativeModuleSourceInpu
     validateFunctionName(name, spec.name, manifest.functions);
     const signature = signatures.get(spec.name) as ZigFunctionSignature | undefined;
     const sourceNames = signature && signature.params.length === spec.params.length ? signature.params : undefined;
-    const parameters: { name: string; type: string }[] = [];
+    const parameters: { name: string; type: string; wire: NativeWire }[] = [];
     let position = 0;
     spec.params.forEach((parameter, index) => {
       if ("injected" in parameter) return;
@@ -691,34 +955,47 @@ export function generateNativeModuleSource(input: GenerateNativeModuleSourceInpu
         identifierPattern.test(candidate) && !reservedIdentifiers.has(candidate) && candidate !== "_"
           ? candidate
           : `${candidate.replace(/[^A-Za-z0-9_$]+/g, "_") || "arg"}_`;
-      parameters.push({ name: parameterName, type: parameterType(parameter.wire, parameter.type, tsType) });
+      parameters.push({
+        name: parameterName,
+        type: parameterType(parameter.wire, parameter.type, tsType),
+        wire: parameter.wire,
+      });
     });
     const result = resultType(spec.result.wire, spec.result.type, tsType);
     return { spec, parameters, result, signature };
   });
 
-  const binding = nativeModuleBinding(manifest);
+  const imports = new Set(["NativeArguments", "allocateNativeModuleRequest", "awaitNativeModuleResult"]);
+  for (const { spec } of functions) imports.add(decoderNames[spec.result.wire]);
+
   const lines: string[] = [];
   lines.push(
     `// Generated by @quickgui/cli from ${input.entryDisplayPath}. Do not edit: \`quickgui dev\`,`,
     "// `quickgui build`, and `quickgui modules` rewrite this file whenever the Zig source changes.",
     "/* eslint-disable */",
-    'import { bindNativeModule, type NativeModuleBinding } from "@quickgui/native/modules";',
+    "import {",
+    ...[...imports].sort().map((identifier) => `  ${identifier},`),
+    '} from "@quickgui/native/modules";',
     "",
-    `const binding: NativeModuleBinding = ${JSON.stringify(binding)};`,
+    "// The module's C entry points. `@quickgui/cli` binds them through the scriptc FFI manifest when",
+    "// it compiles the application; they are not callable under Bun or Node.",
+    `declare function ${symbolPrefix}_call(index: number, args: Uint8Array, reply: (result: Uint8Array) => void): void;`,
+    `declare function ${symbolPrefix}_call_async(request: number, index: number, args: Uint8Array): void;`,
     "",
-    "function loadAddon(): unknown {",
-    "  try {",
-    "    // A literal relative path lets Bun embed the addon in the compiled application.",
-    `    return require(${JSON.stringify(input.addonImportPath)});`,
-    "  } catch (error) {",
-    `    throw new Error(${JSON.stringify(
-      `The native module "${name}" is not built for this host. Run \`quickgui modules\` (or \`quickgui dev\`).`,
-    )}, { cause: error });`,
-    "  }",
+    "function call(index: number, args: Uint8Array): Uint8Array {",
+    "  let result: Uint8Array = new Uint8Array(0);",
+    `  ${symbolPrefix}_call(index, args, (bytes: Uint8Array): void => {`,
+    "    result = bytes;",
+    "  });",
+    "  return result;",
     "}",
     "",
-    `const native = bindNativeModule(${JSON.stringify(name)}, loadAddon(), binding);`,
+    "function callAsync(index: number, args: Uint8Array): Promise<Uint8Array> {",
+    "  const request = allocateNativeModuleRequest();",
+    "  const result = awaitNativeModuleResult(request);",
+    `  ${symbolPrefix}_call_async(request, index, args);`,
+    "  return result;",
+    "}",
   );
 
   for (const entry of declarationOrder) {
@@ -727,23 +1004,40 @@ export function generateNativeModuleSource(input: GenerateNativeModuleSourceInpu
 
   functions.forEach(({ spec, parameters, result, signature }, index) => {
     const parameterList = parameters.map((parameter) => `${parameter.name}: ${parameter.type}`).join(", ");
-    const argumentList = parameters.map((parameter) => parameter.name).join(", ");
+    const encode = [
+      `  const args = new NativeArguments(${parameters.length});`,
+      ...parameters.map((parameter) => `  ${encodeStatement(parameter.wire, parameter.name)}`),
+    ];
+    const decoder = decoderNames[spec.result.wire];
+    const decoded = (bytes: string): string => `${decoder}(${JSON.stringify(name)}, ${JSON.stringify(spec.name)}, ${bytes})`;
+    const finish = (bytes: string): string => {
+      switch (spec.result.wire) {
+        case "void":
+          return `  ${decoded(bytes)};`;
+        case "json":
+          return `  return JSON.parse(${decoded(bytes)}) as ${result};`;
+        default:
+          return `  return ${decoded(bytes)};`;
+      }
+    };
     const doc = signature?.doc ?? [];
     const zigLine = signature ? `Zig: \`${signature.text}\`` : undefined;
     lines.push("", ...jsDoc([...doc, ...(doc.length > 0 && zigLine ? [""] : []), ...(zigLine ? [zigLine] : [])]));
     lines.push(
       `export function ${spec.name}(${parameterList}): ${result} {`,
-      `  return native.call(${index}, [${argumentList}]) as ${result};`,
+      ...encode,
+      finish(`call(${index}, args.finish())`),
       "}",
     );
     lines.push(
       "",
       ...jsDoc([
-        `Like \`${spec.name}\`, but runs on the native thread pool and resolves when it finishes.`,
+        `Like \`${spec.name}\`, but runs on its own thread and resolves when it finishes.`,
         ...(zigLine ? ["", zigLine] : []),
       ]),
-      `export function ${spec.name}Async(${parameterList}): Promise<${result}> {`,
-      `  return native.callAsync(${index}, [${argumentList}]) as Promise<${result}>;`,
+      `export async function ${spec.name}Async(${parameterList}): Promise<${result}> {`,
+      ...encode,
+      finish(`await callAsync(${index}, args.finish())`),
       "}",
     );
   });
@@ -751,8 +1045,29 @@ export function generateNativeModuleSource(input: GenerateNativeModuleSourceInpu
   return lines.join("\n");
 }
 
+function encodeStatement(wire: NativeWire, parameterName: string): string {
+  switch (wire) {
+    case "void":
+      return "args.nothing();";
+    case "boolean":
+      return `args.boolean(${parameterName});`;
+    case "number":
+      return `args.number(${parameterName});`;
+    case "string":
+      return `args.string(${parameterName});`;
+    case "bytes":
+      return `args.bytes(${parameterName});`;
+    case "json":
+      return `args.json(JSON.stringify(${parameterName}));`;
+  }
+}
+
 function validateFunctionName(module: string, functionName: string, all: readonly NativeFunctionSpec[]): void {
-  if (!identifierPattern.test(functionName) || reservedIdentifiers.has(functionName)) {
+  if (
+    !identifierPattern.test(functionName) ||
+    reservedIdentifiers.has(functionName) ||
+    functionName.startsWith("quickgui_module_")
+  ) {
     throw new CliError(
       `Native module ${module} exports \`${functionName}\`, which is not a usable JavaScript export name; rename it in ${NATIVE_MODULE_ENTRY}`,
     );
@@ -789,7 +1104,7 @@ function parameterType(
     case "number":
       return "number";
     case "string":
-      return "string | Uint8Array";
+      return "string";
     case "bytes":
       return "Uint8Array";
     case "json":
@@ -853,13 +1168,18 @@ function enumLiteral(values: readonly string[]): string {
   return values.length === 0 ? "never" : values.map((value) => JSON.stringify(value)).join(" | ");
 }
 
+/**
+ * A tagged union travels as `{ "<variant>": payload }`. It is typed as one record with an optional
+ * field per variant rather than a union of records, which is what the static compiler can
+ * represent for JSON values.
+ */
 function unionLiteral(
   variants: readonly { name: string; type: NativeTypeDescriptor }[],
   tsType: (descriptor: NativeTypeDescriptor) => string,
 ): string {
   return variants.length === 0
     ? "never"
-    : variants.map((variant) => `{ ${propertyName(variant.name)}: ${tsType(variant.type)} }`).join(" | ");
+    : `{ ${variants.map((variant) => `${propertyName(variant.name)}?: ${tsType(variant.type)};`).join(" ")} }`;
 }
 
 function propertyName(name: string): string {

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { createRoot, createSignal, type Accessor } from "solid-js";
+import { createRoot, createSignal, type Accessor } from "@quickgui/ui";
 
 import { canonicalPath } from "./paths.ts";
 
@@ -15,6 +15,35 @@ export interface PersistedState {
   historySplit: number;
   preferredAgent?: AgentId;
   historyAllBranches: boolean;
+}
+
+/** A change to the persisted state: a field left out keeps its value; `lastRepository: null` forgets it. */
+export interface PersistedPatch {
+  recentRepositories?: string[];
+  lastRepository?: string | null;
+  sidebarWidth?: number;
+  changesSplit?: number;
+  historySplit?: number;
+  preferredAgent?: AgentId;
+  historyAllBranches?: boolean;
+}
+
+/**
+ * `{ ...current, ...patch }` spelled out. scriptc copies every field of a spread `Partial` and
+ * narrows it to the target type, so a field the patch leaves out throws at runtime instead of
+ * keeping the current value.
+ */
+export function applyPatch(current: PersistedState, patch: PersistedPatch): PersistedState {
+  const next: PersistedState = { ...current };
+  if (patch.recentRepositories !== undefined) next.recentRepositories = patch.recentRepositories;
+  if (patch.lastRepository === null) next.lastRepository = undefined;
+  else if (patch.lastRepository !== undefined) next.lastRepository = patch.lastRepository;
+  if (patch.sidebarWidth !== undefined) next.sidebarWidth = patch.sidebarWidth;
+  if (patch.changesSplit !== undefined) next.changesSplit = patch.changesSplit;
+  if (patch.historySplit !== undefined) next.historySplit = patch.historySplit;
+  if (patch.preferredAgent !== undefined) next.preferredAgent = patch.preferredAgent;
+  if (patch.historyAllBranches !== undefined) next.historyAllBranches = patch.historyAllBranches;
+  return next;
 }
 
 const STATE_VERSION = 1;
@@ -67,11 +96,11 @@ export async function loadPersistedState(path: string | undefined): Promise<Pers
 export async function savePersistedState(path: string, state: PersistedState): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify({ version: STATE_VERSION, ...state }, null, 2)}\n`, "utf8");
+  await writeFile(temporary, `${JSON.stringify({ ...state, version: STATE_VERSION }, null, 2)}\n`, "utf8");
   try {
     await rename(temporary, path);
   } catch (error) {
-    await rm(temporary, { force: true });
+    try { await rm(temporary); } catch {}
     throw error;
   }
 }
@@ -88,10 +117,11 @@ export interface Persistence {
   current(): PersistedState;
   /**
    * The same state as a reactive accessor, so one window follows what another window changed.
-   * Solid may apply the write on its next turn, so read `current()` inside an update's own flow.
+   * Read `current()` inside an update to avoid subscribing the caller to unrelated state.
    */
   state: Accessor<PersistedState>;
-  update(patch: Partial<PersistedState>): void;
+  /** Apply a change; fields the patch leaves out keep their value, `lastRepository: null` forgets it. */
+  update(patch: PersistedPatch): void;
   /** Write a pending update now, for quitting. */
   flush(): Promise<void>;
 }
@@ -102,13 +132,13 @@ export function createPersistence(path: string | undefined, initial: PersistedSt
   let timer: ReturnType<typeof setTimeout> | undefined;
   const save = async (): Promise<void> => {
     if (!path) return;
-    await savePersistedState(path, current).catch((error) => console.error("Unable to save Quick Git state", error));
+    try { await savePersistedState(path, current); } catch (error) { console.error("Unable to save Quick Git state", String(error)); }
   };
   return {
     current: () => current,
     state,
     update(patch) {
-      current = { ...current, ...patch };
+      current = applyPatch(current, patch);
       setState(current);
       if (!path) return;
       if (timer) clearTimeout(timer);

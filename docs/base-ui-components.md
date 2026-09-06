@@ -339,17 +339,20 @@ Keyboard movement deliberately does **not** swap which panel is open: unmounting
 restores focus to its own trigger, which would immediately undo the move the user just made. Pointer
 hover and click switch panels; the keyboard moves focus and opens with Enter or Space.
 
-## Solid
+## QuickGUI UI
 
-The [Solid renderer](solid.md) binds all eight through the same declared-part scheme every other
+The [QuickGUI UI renderer](ui.md) binds seven of these through the same declared-part scheme every other
 component uses, with Base UI's own compound and prop names: `Separator`, `Avatar`, `CheckboxGroup`,
-`PreviewCard`, `ScrollArea`, `OtpField`, `Drawer`, and `NavigationMenu`. Each root allocates one
+`PreviewCard`, `ScrollArea`, `OtpField`, and `NavigationMenu`. Each root allocates one
 bounded scope internally, so the parts of an instance resolve to the same core identity with no
 registry and nothing to repeat.
 
 ```tsx
-import { Avatar, CheckboxGroup, Checkbox, Drawer, NavigationMenu, OtpField,
-  PreviewCard, ScrollArea, Separator, Text } from "@quickgui/solid";
+import { Avatar, NavigationMenu, OtpField, ScrollArea } from "@quickgui/ui/base-ui";
+import { CheckboxGroup, Checkbox } from "@quickgui/ui/controls";
+import { Text } from "@quickgui/ui";
+import { PreviewCard } from "@quickgui/ui/tooltip";
+import { Separator } from "@quickgui/ui/toolbar";
 
 <Avatar.Root ariaLabel="Ada Lovelace" onLoadingStatusChange={setStatus}>
   <Avatar.Image src="./ada.png" />
@@ -364,8 +367,7 @@ import { Avatar, CheckboxGroup, Checkbox, Drawer, NavigationMenu, OtpField,
 
 The hosted boundary never waits: every result the core decides — the avatar load status, the
 checked value set, a preview card's open value, a scroll area's clamped offset and derived
-overflow flags, the OTP code and its completion edge, a drawer's open value, snap point, and live
-swipe, and a navigation menu's open item and activation direction — travels back as one
+overflow flags, the OTP code and its completion edge, and a navigation menu's open item and activation direction — travels back as one
 asynchronous `componentchange` event and reaches the application through the matching
 `on*Change` prop. Nothing the core must decide synchronously is asked of JavaScript: bounds,
 values, deadlines, snap points, and the scroll area's laid-out extents are all declared ahead
@@ -379,17 +381,16 @@ Two things follow from that boundary and differ from the Rust API:
   core, and a splitter's sizes rescale to the extent flex layout actually gave its panes.
 - **A part whose edge the core owns ignores a declared listener for that same edge.** A checkbox
   inside a group, a navigation-menu trigger, an OTP slot's input, a scroll area's scrollbar, thumb
-  and wheel, a drawer's swipe area, and every popup's dismissal register exactly one listener each,
+  and wheel, and every popup's dismissal register exactly one listener each,
   which is the core's.
 
-`useScrollAreaState()` and `useDrawerSwipe()` read the same reported state anywhere inside their
-subtree, so an application styles a fade, a shadow, or a dragged sheet without an observer, a
-timer, or a measurement of its own.
+`useScrollAreaState()` reads the reported state inside its subtree. The TypeScript UI package
+does not expose the Rust Drawer component.
 
-Run the Solid gallery, which includes all eight, with:
+Run the QuickGUI UI gallery, which includes these bindings, with:
 
 ```console
-bun run --cwd examples/components-solid dev
+bun run --cwd examples/components dev
 ```
 
 ## Bounds

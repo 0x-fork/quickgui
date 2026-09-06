@@ -15,14 +15,14 @@ export interface Commands {
   focusCommitMessage(): void;
 }
 
-const registry = new Map<Window, Commands>();
+const registry = new Map<number, Commands>();
 let active: Window | undefined;
 
 export function registerCommands(window: Window, commands: Commands): () => void {
-  registry.set(window, commands);
+  registry.set(window.nativeId, commands);
   if (!active || active.closed) active = window;
   return () => {
-    if (registry.get(window) === commands) registry.delete(window);
+    if (registry.get(window.nativeId) === commands) registry.delete(window.nativeId);
     if (active === window) active = undefined;
   };
 }
@@ -34,7 +34,7 @@ export function activateCommands(window: Window): void {
 
 export function commands(): Commands | undefined {
   if (active && !active.closed) {
-    const current = registry.get(active);
+    const current = registry.get(active.nativeId);
     if (current) return current;
   }
   return [...registry.values()].at(-1);

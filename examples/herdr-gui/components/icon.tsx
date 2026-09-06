@@ -1,4 +1,4 @@
-import { Svg } from "@quickgui/solid";
+import { Svg } from "@quickgui/ui";
 
 export type IconName =
   | "check-circle"

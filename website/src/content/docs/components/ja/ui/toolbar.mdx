@@ -1,0 +1,55 @@
+1 つのロービングフォーカスモデルの下に操作と入力をまとめます。
+
+## インポート
+
+`@quickgui/ui` から `Toolbar` をインポートします。
+
+```tsx
+import { Toolbar } from "@quickgui/ui/toolbar";
+```
+
+## 使い方
+
+```tsx
+<Toolbar.Root
+  items={[{ value: "back" }, { value: "forward" }, { value: "search" }]}
+  active={active()}
+  onActiveChange={setActive}
+>
+  <Toolbar.Button partValue="back"><Text>Back</Text></Toolbar.Button>
+  <Toolbar.Button partValue="forward"><Text>Forward</Text></Toolbar.Button>
+  <Toolbar.Input partValue="search" placeholder="Search" />
+</Toolbar.Root>
+```
+
+## 構成
+
+- `Toolbar.Root`
+- `Toolbar.Item`
+- `Toolbar.Button`
+- `Toolbar.Link`
+- `Toolbar.Input`
+- `Toolbar.Group`
+- `Toolbar.Separator`
+
+```tsx
+<Toolbar.Root>
+  <Toolbar.Item />
+  <Toolbar.Button />
+  <Toolbar.Link />
+  <Toolbar.Input />
+  <Toolbar.Group />
+  <Toolbar.Separator />
+</Toolbar.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `active` | アクティブ状態またはロービングフォーカス状態を持つ、制御された項目です。 |
+| `defaultActive` | 非制御コンポーネントの初期アクティブ項目です。 |
+| `orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
+| `onActiveChange` | ロービングフォーカス状態を現在持つ項目を通知します。 |
+

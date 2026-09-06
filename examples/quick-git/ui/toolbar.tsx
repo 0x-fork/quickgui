@@ -1,7 +1,7 @@
-import { Text, View } from "@quickgui/solid";
-import { Button as SwiftButton, Host, ProgressView } from "@quickgui/solid/swift-ui";
-import { buttonStyle, controlSize, disabled } from "@quickgui/solid/swift-ui/modifiers";
-import { Show } from "solid-js";
+import { Text, View } from "@quickgui/ui";
+import { Button as SwiftButton, Host, ProgressView } from "@quickgui/ui/swift-ui";
+import { buttonStyle, controlSize, disabled } from "@quickgui/ui/swift-ui/modifiers";
+import { Show } from "@quickgui/ui";
 
 import { useApp } from "./context.tsx";
 import { Icon } from "./icons.tsx";
@@ -47,7 +47,7 @@ export function Toolbar() {
       </View>
       <View style={{ flex: 1, appRegion: "drag" }} />
       <Show when={store.busy()}>
-        {(state) => (
+        {(() => { const state = () => (store.busy())!; return (
           <View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, marginRight: 8, appRegion: "no-drag" }}>
             <Host matchContents>
               <ProgressView modifiers={[controlSize("small")]} />
@@ -59,7 +59,7 @@ export function Toolbar() {
               </Host>
             </Show>
           </View>
-        )}
+        ); })()}
       </Show>
       <View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6, appRegion: "no-drag" }}>
         <Host matchContents>
@@ -79,11 +79,11 @@ export function Toolbar() {
   );
 }
 
-function Counter(props: { icon: "arrow-up" | "arrow-down"; value: number }) {
+function Counter(props: { icon: () => ("arrow-up" | "arrow-down"); value: number }) {
   const app = useApp();
   return (
     <View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 2, height: 18, paddingLeft: 4, paddingRight: 6, borderRadius: 4, backgroundColor: app.theme().hover, color: app.theme().textSecondary }}>
-      <Icon name={props.icon} size={11} />
+      <Icon name={props.icon()} size={11} />
       <Text style={{ fontSize: 11, fontWeight: 600 }}>{String(props.value)}</Text>
     </View>
   );

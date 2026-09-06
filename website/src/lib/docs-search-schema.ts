@@ -8,7 +8,7 @@ export const DOCS_SEARCH_SCHEMA = {
   area: 'string',
 } as const
 
-export type DocsSearchArea = 'guide' | 'solid' | 'swift-ui'
+export type DocsSearchArea = 'guide' | 'ui' | 'swift-ui'
 
 export interface DocsSearchDocument {
   id: string

@@ -1,464 +1,82 @@
-import * as binding from "./binding.js";
-import { Buffer } from "node:buffer";
-import {
-  type AlertDialogOptions,
-  type OpenDialogOptions,
-  type OpenDialogResult,
-  type SaveDialogOptions,
-  type SaveDialogResult,
-  normalizeAlertDialogOptions,
-  normalizeOpenDialogOptions,
-  normalizeSaveDialogOptions,
-} from "./dialog.ts";
-import {
-  MutationBatch,
-  NativeNodeTag,
-  PropertyCode,
-  PROTOCOL_VERSION,
-  ROOT_NODE_ID,
-  type NativePropertyValue,
-} from "./protocol.ts";
-import {
-  NativeNode,
-  QuickGuiEvent,
-  cleanupNativeNodes,
-  createNativeElement,
-  createNativeSentinel,
-  createNativeText,
-  getNativeFirstChild,
-  getNativeNextSibling,
-  getNativeParent,
-  insertNativeNode,
-  isNativeText,
-  parseColor,
-  removeNativeNode,
-  replaceNativeText,
-  setNativeEventListener,
-  setNativeProperty,
-  type ColorValue,
-  type NativeElementName,
-  type NativeEventListener,
-  type NativeEventType,
-} from "./native-tree.ts";
-import {
-  activateNativeApplication,
-  cancelNativeDockAttention,
-  configureSystemContext,
-  Desktop,
-  dispatchSystemEvent,
-  exitNativeAppWithCode,
-  getNativeApplicationsFolderSupport,
-  getNativeWindowRestoreState,
-  getNativeWindowState,
-  hideNativeApplication,
-  moveNativeApplicationToApplicationsFolder,
-  nativeApplicationPackaged,
-  nativeDockVisible,
-  nativeImageSource,
-  nativeWindowRestoreState,
-  onNativeWindowStateChange,
-  performNativeWindowAction,
-  performNativeWindowImageAction,
-  rejectPendingSystemRequests,
-  releaseNativeWindowMenu,
-  removeNativeWindowStateListeners,
-  requestNativeDockAttention,
-  requestNativeQuit,
-  serializeNativeMenu,
-  setNativeActivationPolicy,
-  setNativeDockVisible,
-  setNativeQuitInterception,
-  setNativeSecureKeyboardEntry,
-  setNativeWindowMenu,
-  unhideNativeApplication,
-  type ActivationPolicy,
-  type DockAttentionType,
-  type WindowRestoreState,
-} from "./system.ts";
-import {
-  type SecondInstanceEvent,
-  urlsFromArguments,
-} from "./single-instance.ts";
-
-export { NativeNodeTag, PropertyCode } from "./protocol.ts";
-export {
-  MAX_COLLECTION_JSON_BYTES,
-  MAX_COMPONENT_ITEMS,
-  MAX_COMPONENT_JSON_BYTES,
-  MAX_COMPONENT_VALUE_BYTES,
-  MAX_COMPONENT_VALUES,
-  MAX_DECLARED_OPTIONS,
-  MAX_DECLARED_TREE_NODES,
-  MAX_DRAG_JSON_BYTES,
-  MAX_FILTERS_PER_ELEMENT,
-  MAX_GRADIENT_STOPS,
-  MAX_KEYMAP_JSON_BYTES,
-  MAX_MENU_JSON_BYTES,
-  MAX_MENU_HOVER_DELAY_MS,
-  MAX_MENU_ITEMS,
-  MAX_MENU_LINK_BYTES,
-  MAX_AVATAR_FALLBACK_DELAY_MS,
-  MAX_CHECKBOX_GROUP_VALUES,
-  MAX_DRAWER_SNAP_POINTS,
-  MAX_MENUBAR_MENUS,
-  MAX_NAVIGATION_MENU_DELAY_MS,
-  MAX_NAVIGATION_MENU_ITEMS,
-  MAX_OPTIONS_JSON_BYTES,
-  MAX_OTP_LENGTH,
-  MAX_PREVIEW_CARD_DELAY_MS,
-  MAX_SCROLL_AREA_OVERFLOW_THRESHOLD,
-  MAX_SELECT_VALUES,
-  MAX_COMBOBOX_VALUES,
-  MAX_GROUP_STYLES_PER_ELEMENT,
-  MAX_HOVER_GROUP_NAME_BYTES,
-  MAX_STATE_STYLE_JSON_BYTES,
-  MAX_STYLE_DECLARATION_BYTES,
-  MAX_TABLE_COLUMNS,
-  MAX_TABLE_ROWS,
-  MAX_TOASTS,
-  MAX_TOOLTIP_TEXT_BYTES,
-  NativePart,
-  type NativePartName,
-} from "./protocol.ts";
-export {
-  NativeNode,
-  QuickGuiEvent,
-  cleanupNativeNodes,
-  createNativeElement,
-  createNativeSentinel,
-  createNativeText,
-  getNativeFirstChild,
-  getNativeNextSibling,
-  getNativeParent,
-  insertNativeNode,
-  isNativeText,
-  parseColor,
-  removeNativeNode,
-  replaceNativeText,
-  setNativeEventListener,
-  setNativeProperty,
-} from "./native-tree.ts";
-export type {
-  ColorValue,
-  NativeElementName,
-  NativeEventListener,
-  NativeEventType,
-} from "./native-tree.ts";
-export type {
-  AlertDialogButton,
-  AlertDialogButtonRole,
-  AlertDialogLevel,
-  AlertDialogOptions,
-  FileDialogFilter,
-  OpenDialogOptions,
-  OpenDialogProperty,
-  OpenDialogResult,
-  SaveDialogOptions,
-  SaveDialogResult,
-} from "./dialog.ts";
-export {
-  Appearance,
-  Clipboard,
-  Desktop,
-  GlobalShortcut,
-  Keyboard,
-  Menu,
-  Notifications,
-  Permissions,
-  PowerMonitor,
-  PowerAssertion,
-  Screen,
-  SpellChecker,
-  SystemPreferences,
-  Shell,
-  Tray,
-  TrayIcon,
-} from "./system.ts";
-export { AutoStart, SecureStorage, Updater } from "./integrations.ts";
-export { CrashReporter, Metrics } from "./integrations.ts";
-export type { CrashBacktracePolicy, CrashKind, CrashLocation, CrashReport, CrashReporterOptions, CrashUploadSummary, CpuSampler, CpuUsage, ProcessMetrics, SystemMemory, UpdateProgress, UpdateProgressPhase, UpdateStageOptions } from "./integrations.ts";
-export { DeepLink } from "./single-instance.ts";
-export type { SecondInstanceEvent } from "./single-instance.ts";
-export { Router } from "./routing.ts";
-export type {
-  RouteDefinition,
-  RouteLocation,
-  RouteMatch,
-  RouteValue,
-  RouterState,
-} from "./routing.ts";
-export type {
-  AutoStartMode,
-  AutoStartOptions,
-  AvailableUpdate,
-  InstalledUpdate,
-  ProtocolRegistrationOptions,
-  UpdateClientOptions,
-  UpdateInstallOptions,
-} from "./integrations.ts";
-export type {
-  AppearanceMode,
-  AppearancePreference,
-  ClipboardEntry,
-  ClipboardBookmarkEntry,
-  ClipboardDataEntry,
-  ClipboardFilesEntry,
-  ClipboardImageEntry,
-  ClipboardItem,
-  ClipboardTextEntry,
-  Display,
-  DesktopIntegrationSupport,
-  AboutPanelOptions,
-  UserTask,
-  NativeImage,
-  GlobalShortcutListener,
-  KeyboardLayout,
-  MenuActionItem,
-  MenuDefinition,
-  MenuItem,
-  MenuRole,
-  MenuItemMark,
-  MenuRoleItem,
-  MenuSystemItem,
-  MenuSeparatorItem,
-  MenuServicesItem,
-  MenuSubmenuItem,
-  NotificationAction,
-  NotificationOptions,
-  NotificationAttachment,
-  NotificationPermissionStatus,
-  NotificationResponse,
-  PermissionKind,
-  PermissionStatus,
-  PowerEvent,
-  PowerEventType,
-  PowerAssertionKind,
-  PowerSource,
-  PowerState,
-  BatteryStatus,
-  ThermalState,
-  SessionState,
-  IdleState,
-  SystemColor,
-  SystemPreferencesSnapshot,
-  Rectangle,
-  TrayEvent,
-  TrayEventType,
-  TrayIconOptions,
-  TrayIconSource,
-  TrayMenuActionItem,
-  TrayMenuItem,
-  TrayMenuSeparatorItem,
-  TrayMenuSubmenuItem,
-  WindowState,
-  WindowRestoreState,
-  WindowBackgroundAppearance,
-  ElectronWindowLevel,
-  ActivationPolicy,
-  DockAttentionType,
-  PopupMenuOptions,
-  MacOSVibrancy,
-  MacOSVisualEffectState,
-  WindowKind,
-  WindowLevel,
-  CursorGrabMode,
-  TaskbarProgressState,
-  ImageSource,
-} from "./system.ts";
-import type {
-  AppearancePreference,
-  CursorGrabMode,
-  ElectronWindowLevel,
-  ImageSource,
-  KeyboardLayout,
-  MenuDefinition,
-  NotificationResponse,
-  TaskbarProgressState,
-  WindowBackgroundAppearance,
-  MacOSVibrancy,
-  MacOSVisualEffectState,
-  WindowKind,
-  WindowLevel,
-  WindowState,
-} from "./system.ts";
-
-export type WindowCloseListener = (window: Window) => void;
-export type WindowCloseRequestListener = (event: { window: Window }) => void;
-
-export interface WindowEventMap {
-  /** The window has closed and released its retained tree. */
-  closed: { window: Window };
-  /**
-   * A native close was requested and held.
-   *
-   * Complete it with `window.close()` or `window.destroy()`, or ignore it to keep the window.
-   */
-  closeRequested: { window: Window };
-  /** The window was minimized to the Dock or taskbar. */
-  minimize: { window: Window };
-  /** The window returned from the Dock or taskbar. */
-  restore: { window: Window };
-  /** The window entered the platform's maximized/zoomed state. */
-  maximize: { window: Window };
-  /** The window left the platform's maximized/zoomed state. */
-  unmaximize: { window: Window };
-  enterFullScreen: { window: Window };
-  leaveFullScreen: { window: Window };
-  /**
-   * The first frame reached the screen.
-   *
-   * A window created with `visible: false` can be shown here without a flash of empty chrome.
-   */
-  readyToShow: { window: Window };
-  /** The compositor started or stopped hiding this window's contents. */
-  occlusionChange: { window: Window; occluded: boolean };
-  /** The effective native stacking level changed. */
-  levelChange: { window: Window; level: WindowLevel };
-  /**
-   * The window manager proposed a new inner size.
-   *
-   * This is a notification: the narrowing itself is declared ahead with
-   * `window.setResizePolicy()`, because the core must answer the platform synchronously.
-   */
-  willResize: { window: Window; size: Size };
-  /** The window manager proposed a new position. See `window.setMovePolicy()`. */
-  willMove: { window: Window; position: Point };
-  resize: { window: Window; size: Size };
-  move: { window: Window; position: Point };
-  focus: { window: Window };
-  blur: { window: Window };
-  appearanceChange: { window: Window; appearance: "light" | "dark" };
-}
-export type WindowRenderer = (window: Window) => () => void;
-export type PopoverPlacement =
-  | "top-start"
-  | "top"
-  | "top-end"
-  | "bottom-start"
-  | "bottom"
-  | "bottom-end"
-  | "left-start"
-  | "left"
-  | "left-end"
-  | "right-start"
-  | "right"
-  | "right-end";
-
-export type PerformanceProfile = "low-power" | "balanced" | "high-performance";
-export type InitialWindowState = "normal" | "maximized" | "fullscreen";
-
+import { dispatchFileWatch } from "./integrations.ts";
 /**
- * The narrowing applied when the window manager proposes a new inner size.
+ * Application, window, dialog, and event plumbing for natively compiled QuickGUI applications.
  *
- * The constraint is declared ahead because the core answers the platform synchronously; the
- * `willResize` event is only a notification of what was proposed.
+ * The compiled program runs on its own thread while the Rust host owns the platform loop. Every
+ * call here enqueues a bounded command and returns; outcomes arrive as host events on this thread
+ * and settle Promises or dispatch to listeners. Nothing waits on the native main thread.
  */
-export interface WindowResizePolicy {
-  /** Content `width / height` the resize is snapped to. */
-  aspectRatio?: number;
-  minimum?: Size;
-  maximum?: Size;
-  /** Grid step applied to the proposed inner size before the ratio and bounds. */
-  snap?: Size;
-}
 
-/** The narrowing applied when the window manager proposes a new position. */
-export interface WindowMovePolicy {
-  /** Keep the window's origin inside the work area of the display that contains it. */
-  keepOnScreen?: boolean;
-}
-export interface Size {
-  width: number;
-  height: number;
-}
-export interface Point {
-  x: number;
-  y: number;
-}
-export interface WindowBounds extends Point, Size {
-  state?: InitialWindowState;
-}
+import { statSync } from "node:fs";
+import { basename, dirname, resolve, sep } from "node:path";
+import {
+  hostAllocateWindow,
+  hostClearEventCallback,
+  hostCloseWindow,
+  hostCreateApp,
+  hostCreateEmbeddedView,
+  hostCreateSystemPopover,
+  hostCreateWindow,
+  hostDestroyApp,
+  hostPrepareApp,
+  hostProtocolVersion,
+  hostSetEventCallback,
+  hostShowDialog,
+  type HostEventCallback,
+} from "./ffi.ts";
+import {
+  NativeNode,
+  NodeHost,
+  createRootNode,
+  dispatchNativeEvent,
+  eventTypeFromKind,
+  parseColor,
+  type ColorValue,
+} from "./native-tree.ts";
+import { PROTOCOL_VERSION, ROOT_NODE_ID } from "./protocol.ts";
+import {
+  Listeners,
+  VoidListeners,
+  dispatchSystemEvent,
+  rejectPendingSystemRequests,
+  releaseMenuCallbacks,
+  serializeMenuDefinitions,
+} from "./system.ts";
+import type { HostEventExtra, ImageSource, MenuDefinition, WindowRestoreState } from "./system.ts";
+import { encodeBase64 } from "./base64.ts";
 
-export interface WindowOptions {
-  renderer: WindowRenderer;
-  title?: string;
-  width?: number;
-  height?: number;
-  position?: Point;
-  initialState?: InitialWindowState;
-  displayId?: string;
-  /** Pass `null` to remove the core's default minimum window size. */
-  minimumSize?: Size | null;
-  minimumWidth?: number;
-  minimumHeight?: number;
-  maximumSize?: Size;
-  maximumWidth?: number;
-  maximumHeight?: number;
-  representedFile?: string;
-  documentEdited?: boolean;
-  tabbingIdentifier?: string;
-  background?: ColorValue;
-  backgroundAppearance?: WindowBackgroundAppearance;
-  /** Electron-compatible macOS `NSVisualEffectView` semantic material. */
-  vibrancy?: MacOSVibrancy;
-  /** Defaults to `followWindow`. Used when `vibrancy` is enabled. */
-  visualEffectState?: MacOSVisualEffectState;
-  performanceProfile?: PerformanceProfile;
-  appearance?: AppearancePreference;
-  titleBarStyle?: "default" | "hidden" | "hiddenInset";
-  kind?: WindowKind;
-  focus?: boolean;
-  focusable?: boolean;
-  visible?: boolean;
-  movable?: boolean;
-  resizable?: boolean;
-  minimizable?: boolean;
-  maximizable?: boolean;
-  closable?: boolean;
-  decorated?: boolean;
-  shadow?: boolean;
-  contentProtected?: boolean;
-  windowLevel?: WindowLevel | "automatic";
-  skipTaskbar?: boolean;
-  visibleOnAllWorkspaces?: boolean;
-  opacity?: number;
-  icon?: ImageSource;
-  taskbarProgress?: { state: TaskbarProgressState; progress: number };
-  taskbarOverlay?: { icon: ImageSource; description: string };
-  cursorVisible?: boolean;
-  cursorGrab?: CursorGrabMode;
-  cursorHitTest?: boolean;
-  cursorPosition?: Point;
-  menu?: readonly MenuDefinition[];
-  /**
-   * Persisted geometry and display identity captured with `window.getRestoreState()`.
-   *
-   * The core re-validates every field, so a stale or hostile value can never place a window off
-   * every connected display.
-   */
-  restoreState?: WindowRestoreState;
-  lineScrollPixels?: number;
-  keySequenceTimeoutMs?: number;
-  reduceMotion?: boolean;
-  trafficLightPosition?: { x: number; y: number };
-  transparent?: boolean;
-  blur?: boolean;
-  /** Open this window as a system popover anchored to the mounted node. */
-  anchor?: NativeNode;
-  placement?: PopoverPlacement;
-  gap?: number;
-  offset?: { x: number; y: number };
-  viewportMargin?: number;
-  dismissOnEscape?: boolean;
-  dismissOnPointerOutside?: boolean;
-  grab?: boolean;
-  acceptsKeyFocus?: boolean;
-}
+export { NativeNodeTag, NativePart, PropertyCode, PROTOCOL_VERSION, ROOT_NODE_ID, MutationBatch } from "./protocol.ts";
+export type { NativePartName } from "./protocol.ts";
+export * from "./native-tree.ts";
+export * from "./system.ts";
+export * from "./integrations.ts";
+export * from "./router.ts";
+export { encodeBase64, decodeBase64 } from "./base64.ts";
 
-export interface RunOptions {
-  /** Pump interval used only when running a source file outside the QuickGUI CLI host. */
-  sliceMs?: number;
-}
+import {
+  allocateRequest,
+  assertAppReady,
+  awaitReply,
+  callService,
+  isNullJson,
+  jsonBoolean,
+  READY_REQUEST,
+  rejectAllReplies,
+  reportProgress,
+  sendCommand,
+  sendInvoke,
+  sendMutation,
+  sendRequest,
+  setAppContext,
+  settleDataReply,
+  settleReply,
+} from "./requests.ts";
+
+export { allocateRequest, callService, isNullJson, sendCommand, sendInvoke, sendMutation, sendRequest } from "./requests.ts";
+
+// ---------------------------------------------------------------------------
+// Application
+// ---------------------------------------------------------------------------
 
 export type QuitMode = "default" | "last-window-closed" | "explicit";
 
@@ -480,13 +98,14 @@ export interface AppOptions {
   paths?: AppPathOverrides;
   quitMode?: QuitMode;
   /** OpenType font files registered by the Rust core before the first window is created. */
-  fonts?: readonly Uint8Array[];
+  fonts?: string[];
 }
 
 export interface RelaunchOptions {
   executable?: string;
-  /** Omit to preserve current arguments; pass `null` to relaunch without arguments. */
-  arguments?: readonly string[] | null;
+  arguments?: string[];
+  /** Relaunch without the current arguments. */
+  clearArguments?: boolean;
   workingDirectory?: string;
 }
 
@@ -517,103 +136,103 @@ export interface AppPaths {
 }
 
 export interface SystemInfo {
-  operatingSystem:
-    | "macos"
-    | "windows"
-    | "linux"
-    | "freebsd"
-    | "dragonfly"
-    | "netbsd"
-    | "openbsd"
-    | "android"
-    | "ios"
-    | "wasm"
-    | "other";
-  family: "unix" | "windows" | "wasm" | "other";
+  operatingSystem: string;
+  family: string;
   name: string;
   version?: string;
   edition?: string;
   codename?: string;
   architecture: string;
-  bitness: "32" | "64" | "unknown";
+  bitness: string;
   hostname?: string;
   locale?: string;
-  preferredLanguages: readonly string[];
+  preferredLanguages: string[];
   languagesTruncated: boolean;
 }
 
 /** Why the operating system or application began an orderly shutdown. */
-export type QuitReason =
-  | "explicit"
-  | "relaunch"
-  | "last-window-closed"
-  | "operating-system";
+export type QuitReason = "explicit" | "relaunch" | "last-window-closed" | "operating-system";
 
-export interface AppEventMap {
-  ready: undefined;
-  quit: { exitCode: number };
-  /**
-   * The first preventable quit phase.
-   *
-   * Registering a listener declares quit interception, so the native shutdown is held and the
-   * application stays alive until JavaScript completes it with `app.quit({ force: true })` or
-   * `app.exit(code)`.
-   */
-  beforeQuit: { reason: QuitReason };
-  /** The final quit phase. Purely a notification; the shutdown already proceeds. */
-  willQuit: { reason: QuitReason };
-  openUrls: readonly string[];
-  reopen: { hasVisibleWindows: boolean };
-  /** The application became the frontmost one. */
-  activate: undefined;
-  /** Another application became frontmost. */
-  deactivate: undefined;
-  systemWake: undefined;
-  keyboardLayoutChange: KeyboardLayout;
-  notificationResponse: NotificationResponse;
-  secondInstance: SecondInstanceEvent;
+export interface QuitEvent {
+  exitCode: number;
 }
 
-type DialogEventKind = "alert-dialog" | "open-dialog" | "save-dialog";
+export interface QuitPhaseEvent {
+  reason: QuitReason;
+}
 
-type PendingDialog = {
-  kind: DialogEventKind;
-  window: Window | undefined;
-  complete: (event: binding.NativeEvent) => void;
-  reject: (reason: Error) => void;
-};
+export interface ReopenEvent {
+  hasVisibleWindows: boolean;
+}
 
-let activeApp: App | undefined;
-let currentWindow: Window | undefined;
-const hostedRuntime = process.env.QUICKGUI_APP_WORKER === "1";
+export interface KeyboardLayoutEvent {
+  id: string;
+  name: string;
+}
 
-function nativeAppOptions(options: AppOptions): binding.NativeAppOptions {
-  const native: binding.NativeAppOptions = {};
+export interface NotificationResponseEvent {
+  tag: string;
+  actionId?: string;
+  reply?: string;
+}
+
+export interface SecondInstanceEvent {
+  argv: string[];
+  cwd: string;
+}
+
+export interface OpenUrlsEvent {
+  urls: string[];
+}
+
+interface NativeAppOptions {
+  name?: string;
+  version?: string;
+  identifier?: string;
+  resourceDir?: string;
+  configDir?: string;
+  dataDir?: string;
+  localDataDir?: string;
+  cacheDir?: string;
+  logDir?: string;
+  runtimeDir?: string;
+  tempDir?: string;
+  quitMode?: string;
+  fonts?: string[];
+}
+
+function nativeAppOptions(options: AppOptions): NativeAppOptions {
+  const native: NativeAppOptions = {};
   if (options.name !== undefined) native.name = options.name;
   if (options.version !== undefined) native.version = options.version;
   if (options.identifier !== undefined) native.identifier = options.identifier;
   if (options.quitMode !== undefined) native.quitMode = options.quitMode;
-  if (options.fonts !== undefined) {
-    native.fontData = options.fonts.map((font) => Buffer.from(font));
-  }
+  if (options.fonts !== undefined) native.fonts = options.fonts;
   const paths = options.paths;
-  if (paths?.resourceDir !== undefined) native.resourceDir = paths.resourceDir;
-  if (paths?.configDir !== undefined) native.configDir = paths.configDir;
-  if (paths?.dataDir !== undefined) native.dataDir = paths.dataDir;
-  if (paths?.localDataDir !== undefined)
-    native.localDataDir = paths.localDataDir;
-  if (paths?.cacheDir !== undefined) native.cacheDir = paths.cacheDir;
-  if (paths?.logDir !== undefined) native.logDir = paths.logDir;
-  if (paths?.runtimeDir !== undefined) native.runtimeDir = paths.runtimeDir;
-  if (paths?.tempDir !== undefined) native.tempDir = paths.tempDir;
+  if (paths !== undefined) {
+    if (paths.resourceDir !== undefined) native.resourceDir = paths.resourceDir;
+    if (paths.configDir !== undefined) native.configDir = paths.configDir;
+    if (paths.dataDir !== undefined) native.dataDir = paths.dataDir;
+    if (paths.localDataDir !== undefined) native.localDataDir = paths.localDataDir;
+    if (paths.cacheDir !== undefined) native.cacheDir = paths.cacheDir;
+    if (paths.logDir !== undefined) native.logDir = paths.logDir;
+    if (paths.runtimeDir !== undefined) native.runtimeDir = paths.runtimeDir;
+    if (paths.tempDir !== undefined) native.tempDir = paths.tempDir;
+  }
   return native;
 }
 
-const embeddedAppOptions = (
-  globalThis as typeof globalThis & { __QUICKGUI_APP_OPTIONS__?: AppOptions }
-).__QUICKGUI_APP_OPTIONS__;
+let embeddedAppOptions: AppOptions | undefined = undefined;
 
-function withCurrentWindow<T>(window: Window, callback: () => T): T {
+/** @internal The CLI embeds the packaged identity and fonts before the application entry runs. */
+export function __embedApp(name: string, version: string, identifier: string, fonts: string[]): void {
+  embeddedAppOptions = { name, version, identifier, fonts };
+}
+
+let activeApp: App | undefined = undefined;
+let currentWindow: Window | undefined = undefined;
+
+export function withCurrentWindow<T>(window: Window, callback: () => T): T {
   const previous = currentWindow;
   currentWindow = window;
   try {
@@ -623,1771 +242,1129 @@ function withCurrentWindow<T>(window: Window, callback: () => T): T {
   }
 }
 
-configureSystemContext(
-  () => {
-    const app = activeApp;
-    if (!app)
-      throw new Error("create a QuickGUI App before using a native system API");
-    app._assertReady();
-    return { appId: app.nativeId, hosted: hostedRuntime };
-  },
-  (window) => {
-    const app = window?.app ?? activeApp;
-    if (!app)
-      throw new Error("create a QuickGUI App before using a native window API");
-    const resolved = window ?? app.windows.values().next().value;
-    if (
-      !resolved ||
-      resolved.closed ||
-      app.windows.get(resolved.nativeId) !== resolved
-    ) {
-      throw new Error("a native window API requires an open QuickGUI Window");
-    }
-    app._assertReady();
-    return {
-      context: { appId: app.nativeId, hosted: hostedRuntime },
-      window: resolved,
-    };
-  },
-);
-
-const nativeProtocolVersion = binding.protocolVersion();
-if (nativeProtocolVersion !== PROTOCOL_VERSION) {
-  throw new Error(
-    `QuickGUI native protocol mismatch: JavaScript uses ${PROTOCOL_VERSION}, binding uses ${nativeProtocolVersion}. Reinstall or rebuild @quickgui/native.`,
-  );
+function quitReason(value: string | undefined): QuitReason {
+  if (value === "relaunch" || value === "last-window-closed" || value === "operating-system") return value;
+  return "explicit";
 }
 
-class App {
-  readonly nativeId: number;
-  readonly windows = new Map<number, Window>();
-  #running = false;
-  #ready = false;
-  #destroyed = false;
-  readonly #readyPromise: Promise<void>;
-  #nextDialogRequest = 1;
-  readonly #pendingDialogs = new Map<number, PendingDialog>();
-  #singleInstanceIdentifier: string | undefined;
-  #quitIntercepting = false;
-  #requestedExitCode: number | undefined;
-  readonly #appEventListeners = new Map<
-    keyof AppEventMap,
-    Set<(payload: unknown) => unknown>
-  >();
+/** The host event callback. One function value, registered once and released on exit. */
+const onHostEvent: HostEventCallback = (
+  kind: string,
+  window: number,
+  target: number,
+  flags: number,
+  value: string,
+  extra: string,
+  data: Uint8Array,
+): void => {
+  const application = activeApp;
+  if (application === undefined) return;
+  application._dispatchHostEvent(
+    kind,
+    window,
+    target,
+    (flags & 1) !== 0 ? value : undefined,
+    (flags & 2) !== 0 ? (JSON.parse(extra) as HostEventExtra) : undefined,
+    (flags & 4) !== 0 ? data : undefined,
+  );
+};
 
-  constructor() {
-    if (activeApp) {
-      throw new Error(
-        "a QuickGUI App is already active in this JavaScript isolate",
-      );
-    }
-    const initialOptions = embeddedAppOptions
-      ? nativeAppOptions(embeddedAppOptions)
-      : undefined;
-    this.nativeId = hostedRuntime
-      ? binding.createHostedApp(initialOptions)
-      : binding.createApp(initialOptions);
-    activeApp = this;
-    this.#readyPromise = Promise.resolve().then(async () => {
-      this.#assertAlive();
-      if (hostedRuntime) await binding.prepareHostedApp(this.nativeId);
-      else binding.prepareApp(this.nativeId);
-      if (!hostedRuntime && !binding.isAppReady(this.nativeId)) {
-        throw new Error("the native QuickGUI application did not become ready");
-      }
-      this.#ready = true;
-      this.#syncQuitInterception();
-      this.#emitAppEvent("ready", undefined);
-    });
-  }
+export class App {
+  nativeId = 0;
+  readonly windows = new Map<number, Window>();
+  _ready = false;
+  _readyPromise: Promise<void> | undefined = undefined;
+  _resolveReady: (() => void) | undefined = undefined;
+  _rejectReady: ((error: Error) => void) | undefined = undefined;
+  _destroyed = false;
+  _exited = false;
+  _exitCode = 0;
+  _requestedExitCode: number | undefined = undefined;
+  _singleInstanceIdentifier: string | undefined = undefined;
+  _quitIntercepting = false;
+  _quitListeners = new Listeners<QuitEvent>();
+  _quitResolvers: (() => void)[] = [];
+  readonly _onReady = new VoidListeners();
+  readonly _onBeforeQuit = new Listeners<QuitPhaseEvent>();
+  readonly _onWillQuit = new Listeners<QuitPhaseEvent>();
+  readonly _onOpenUrls = new Listeners<OpenUrlsEvent>();
+  readonly _onReopen = new Listeners<ReopenEvent>();
+  readonly _onActivate = new VoidListeners();
+  readonly _onDeactivate = new VoidListeners();
+  readonly _onSystemWake = new VoidListeners();
+  readonly _onKeyboardLayoutChange = new Listeners<KeyboardLayoutEvent>();
+  readonly _onNotificationResponse = new Listeners<NotificationResponseEvent>();
+  readonly _onSecondInstance = new Listeners<SecondInstanceEvent>();
+  readonly _pendingDialogs = new Map<number, PendingDialog>();
 
   isReady(): boolean {
-    this.#assertAlive();
-    return this.#ready;
+    return this._ready;
   }
 
+  /** Create the native application on first use and resolve once its platform loop is ready. */
   whenReady(): Promise<void> {
-    return this.#readyPromise;
+    const existing = this._readyPromise;
+    if (existing !== undefined) return existing;
+    const promise = new Promise<void>((resolve, reject) => {
+      this._resolveReady = resolve;
+      this._rejectReady = reject;
+    });
+    this._readyPromise = promise;
+    const nativeProtocolVersion = hostProtocolVersion();
+    if (nativeProtocolVersion !== PROTOCOL_VERSION) {
+      const rejectReady = this._rejectReady;
+      if (rejectReady !== undefined) {
+        rejectReady(
+          new Error(
+            "QuickGUI native protocol mismatch: the application uses " +
+              String(PROTOCOL_VERSION) +
+              ", the host uses " +
+              String(nativeProtocolVersion),
+          ),
+        );
+      }
+      return promise;
+    }
+    const options = embeddedAppOptions === undefined ? {} : nativeAppOptions(embeddedAppOptions);
+    hostSetEventCallback(onHostEvent);
+    const id = hostCreateApp(JSON.stringify(options));
+    if (id === 0) {
+      const rejectReady = this._rejectReady;
+      if (rejectReady !== undefined) rejectReady(new Error("the QuickGUI host refused to create the application"));
+      return promise;
+    }
+    this.nativeId = id;
+    setAppContext(id, false);
+    hostPrepareApp(id, READY_REQUEST);
+    return promise;
   }
 
   /** Patch core-owned identity, paths, and quit policy before the first readiness turn. */
   async configure(options: AppOptions): Promise<void> {
-    this.#assertAlive();
-    const native = nativeAppOptions(options);
-    if (hostedRuntime) await binding.configureHostedApp(this.nativeId, native);
-    else binding.configureApp(this.nativeId, native);
+    this._assertAlive();
+    await sendCommand(JSON.stringify({ method: "configure-app", options: nativeAppOptions(options) }));
   }
 
   async getInfo(): Promise<AppInfo | undefined> {
-    this._assertReady();
-    const info = hostedRuntime
-      ? await binding.getHostedAppInfo(this.nativeId)
-      : binding.getAppInfo(this.nativeId);
-    return info ? { ...info } : undefined;
+    const json = await sendCommand('{"method":"get-app-info"}');
+    return isNullJson(json) ? undefined : (JSON.parse(json) as AppInfo);
   }
 
   async getPaths(): Promise<AppPaths | undefined> {
-    this._assertReady();
-    const paths = hostedRuntime
-      ? await binding.getHostedAppPaths(this.nativeId)
-      : binding.getAppPaths(this.nativeId);
-    if (!paths) return undefined;
-    const result: AppPaths = {
-      executable: paths.executable,
-      executableDir: paths.executableDir,
-      resourceDir: paths.resourceDir,
-      tempDir: paths.tempDir,
-    };
-    if (paths.homeDir !== undefined) result.homeDir = paths.homeDir;
-    if (paths.configDir !== undefined) result.configDir = paths.configDir;
-    if (paths.dataDir !== undefined) result.dataDir = paths.dataDir;
-    if (paths.localDataDir !== undefined)
-      result.localDataDir = paths.localDataDir;
-    if (paths.cacheDir !== undefined) result.cacheDir = paths.cacheDir;
-    if (paths.logDir !== undefined) result.logDir = paths.logDir;
-    if (paths.runtimeDir !== undefined) result.runtimeDir = paths.runtimeDir;
-    if (paths.audioDir !== undefined) result.audioDir = paths.audioDir;
-    if (paths.desktopDir !== undefined) result.desktopDir = paths.desktopDir;
-    if (paths.documentDir !== undefined) result.documentDir = paths.documentDir;
-    if (paths.downloadDir !== undefined) result.downloadDir = paths.downloadDir;
-    if (paths.pictureDir !== undefined) result.pictureDir = paths.pictureDir;
-    if (paths.videoDir !== undefined) result.videoDir = paths.videoDir;
-    return result;
+    const json = await sendCommand('{"method":"get-app-paths"}');
+    return isNullJson(json) ? undefined : (JSON.parse(json) as AppPaths);
   }
 
   async getSystemInfo(): Promise<SystemInfo> {
-    this._assertReady();
-    const info = hostedRuntime
-      ? await binding.getHostedSystemInfo(this.nativeId)
-      : binding.getSystemInfo(this.nativeId);
-    const result: SystemInfo = {
-      operatingSystem: info.operatingSystem as SystemInfo["operatingSystem"],
-      family: info.family as SystemInfo["family"],
-      name: info.name,
-      architecture: info.architecture,
-      bitness: info.bitness as SystemInfo["bitness"],
-      preferredLanguages: [...info.preferredLanguages],
-      languagesTruncated: info.languagesTruncated,
-    };
-    if (info.version !== undefined) result.version = info.version;
-    if (info.edition !== undefined) result.edition = info.edition;
-    if (info.codename !== undefined) result.codename = info.codename;
-    if (info.hostname !== undefined) result.hostname = info.hostname;
-    if (info.locale !== undefined) result.locale = info.locale;
-    return result;
+    const json = await sendCommand('{"method":"get-system-info"}');
+    return JSON.parse(json) as SystemInfo;
   }
 
-  getWindows(): readonly Window[] {
-    this._assertReady();
-    return [...this.windows.values()];
+  onReady(listener: () => void): () => void {
+    if (this._ready) listener();
+    return this._onReady.add(listener);
   }
 
-  async getActiveWindow(): Promise<Window | undefined> {
-    this._assertReady();
-    const registry = hostedRuntime
-      ? await binding.getHostedWindowRegistry(this.nativeId)
-      : binding.getWindowRegistry(this.nativeId);
-    return registry.activeWindow === undefined
-      ? undefined
-      : this.windows.get(registry.activeWindow);
-  }
-
-  flush(): void {
-    this.#assertAlive();
-    for (const window of this.windows.values()) window.flush();
-  }
-
-  pump(sliceMs = 16): number {
-    this._assertReady();
-    this.flush();
-    return this.#finishPump(binding.pumpApp(this.nativeId, sliceMs));
-  }
-
-  #finishPump(exitCode: number): number {
-    this.dispatchEvents();
-    this.flush();
-    return exitCode;
-  }
-
-  dispatchEvents(): void {
-    this.#dispatchNativeEvents(binding.takeEvents(this.nativeId));
-  }
-
-  #dispatchNativeEvents(events: binding.NativeEvent[]): void {
-    for (const event of events) {
-      if (
-        event.kind === "alert-dialog" ||
-        event.kind === "open-dialog" ||
-        event.kind === "save-dialog"
-      ) {
-        this.#dispatchDialog(event);
-        continue;
-      }
-      const systemEvent = dispatchSystemEvent(event, (id) =>
-        this.windows.get(id),
-      );
-      const appEvent = this.#dispatchAppEvent(event);
-      if (systemEvent || appEvent) continue;
-      const window = this.windows.get(event.window);
-      if (!window) continue;
-      if (event.kind === "close") {
-        this._didCloseWindow(window);
-      } else if (event.kind === "close-requested") {
-        window._didRequestClose();
-      } else if (event.kind.startsWith("window-")) {
-        window._didObserveLifecycle(event.kind, event.value);
-      } else {
-        window._dispatchEvent(
-          event.kind as NativeEventType,
-          event.target,
-          event.value,
-        );
-      }
-    }
-  }
-
-  on<K extends keyof AppEventMap>(
-    type: K,
-    listener: (payload: AppEventMap[K]) => void,
-  ): () => void {
-    this.#assertAlive();
-    const listeners = this.#appEventListeners.get(type) ?? new Set();
-    const wrapped = (payload: unknown) => listener(payload as AppEventMap[K]);
-    listeners.add(wrapped);
-    this.#appEventListeners.set(type, listeners);
-    this.#syncQuitInterception();
-    return () => {
-      listeners.delete(wrapped);
-      if (listeners.size === 0) this.#appEventListeners.delete(type);
-      this.#syncQuitInterception();
-    };
+  onQuit(listener: (event: QuitEvent) => void): () => void {
+    return this._quitListeners.add(listener);
   }
 
   /**
-   * Declare quit interception to the core whenever a `beforeQuit` listener exists.
+   * Hold the first preventable quit phase.
    *
-   * A JavaScript listener can never veto a native decision synchronously, so interception is
-   * declared ahead of time and the decision is completed later by an explicit quit or exit call.
+   * Registering a listener declares quit interception, so the native shutdown waits until the
+   * application completes it with `app.quit(true)` or `app.exit(code)`.
    */
-  #syncQuitInterception(): void {
-    if (this.#destroyed || !this.#ready) return;
-    const intercepting = (this.#appEventListeners.get("beforeQuit")?.size ?? 0) > 0;
-    if (intercepting === this.#quitIntercepting) return;
-    this.#quitIntercepting = intercepting;
-    try {
-      setNativeQuitInterception(intercepting);
-    } catch {
-      // The application is shutting down; the core no longer needs the declaration.
-      this.#quitIntercepting = false;
-    }
+  onBeforeQuit(listener: (event: QuitPhaseEvent) => void): () => void {
+    const remove = this._onBeforeQuit.add(listener);
+    this._syncQuitInterception();
+    return () => {
+      remove();
+      this._syncQuitInterception();
+    };
   }
 
-  async run(options: RunOptions = {}): Promise<number> {
-    if (this.#running) throw new Error("this QuickGUI app is already running");
-    this.#running = true;
-    let exitCode: number | undefined;
-    try {
-      await this.whenReady();
-      if (hostedRuntime) {
-        for (;;) {
-          const update = await binding.waitForHostedEvents(this.nativeId);
-          this.#dispatchNativeEvents(update.events);
-          this.flush();
-          if (update.exitCode !== undefined && update.exitCode !== null) {
-            exitCode = update.exitCode;
-            break;
-          }
-        }
-      } else {
-        const sliceMs = Math.max(0, Math.min(options.sliceMs ?? 16, 1_000));
-        for (;;) {
-          const nextExitCode = this.pump(sliceMs);
-          if (nextExitCode >= 0) {
-            exitCode = nextExitCode;
-            break;
-          }
-          await Bun.sleep(0);
-        }
-      }
-      if (exitCode === undefined)
-        throw new Error("the QuickGUI app exited without a status code");
-      if (this.#requestedExitCode !== undefined && exitCode === 0) {
-        exitCode = this.#requestedExitCode;
-      }
-      await this.#emitAppEventAndWait("quit", { exitCode });
-      return exitCode;
-    } finally {
-      this.#running = false;
-      await this.releaseSingleInstanceLock();
-    }
+  onWillQuit(listener: (event: QuitPhaseEvent) => void): () => void {
+    return this._onWillQuit.add(listener);
+  }
+
+  onOpenUrls(listener: (event: OpenUrlsEvent) => void): () => void {
+    return this._onOpenUrls.add(listener);
+  }
+
+  onReopen(listener: (event: ReopenEvent) => void): () => void {
+    return this._onReopen.add(listener);
+  }
+
+  onActivate(listener: () => void): () => void {
+    return this._onActivate.add(listener);
+  }
+
+  onDeactivate(listener: () => void): () => void {
+    return this._onDeactivate.add(listener);
+  }
+
+  onSystemWake(listener: () => void): () => void {
+    return this._onSystemWake.add(listener);
+  }
+
+  onKeyboardLayoutChange(listener: (event: KeyboardLayoutEvent) => void): () => void {
+    return this._onKeyboardLayoutChange.add(listener);
+  }
+
+  onNotificationResponse(listener: (event: NotificationResponseEvent) => void): () => void {
+    return this._onNotificationResponse.add(listener);
+  }
+
+  onSecondInstance(listener: (event: SecondInstanceEvent) => void): () => void {
+    return this._onSecondInstance.add(listener);
+  }
+
+  /** Resolve once the application has quit, with its exit code. */
+  run(): Promise<number> {
+    if (this._exited) return Promise.resolve(this._exitCode);
+    return new Promise<number>((resolve) => {
+      this._quitResolvers.push(() => resolve(this._exitCode));
+    });
+  }
+
+  _syncQuitInterception(): void {
+    if (this._destroyed || !this._ready) return;
+    const intercepting = this._onBeforeQuit.size > 0;
+    if (intercepting === this._quitIntercepting) return;
+    this._quitIntercepting = intercepting;
+    sendMutation(JSON.stringify({ method: "set-quit-interception", intercepting }));
   }
 
   async requestSingleInstanceLock(identifier: string): Promise<boolean> {
-    this.#assertAlive();
-    if (this.#singleInstanceIdentifier) {
-      if (this.#singleInstanceIdentifier !== identifier) {
-        throw new Error(
-          "this QuickGUI app already owns a different single-instance lock",
-        );
-      }
+    this._assertAlive();
+    const existing = this._singleInstanceIdentifier;
+    if (existing !== undefined) {
+      if (existing !== identifier) throw new Error("this QuickGUI app already owns a different single-instance lock");
       return true;
     }
-    this._assertReady();
-    const acquired = hostedRuntime
-      ? await binding.requestHostedSingleInstanceLock(this.nativeId, identifier)
-      : binding.requestSingleInstanceLock(this.nativeId, identifier);
-    if (acquired) this.#singleInstanceIdentifier = identifier;
+    const json = await sendCommand(JSON.stringify({ method: "request-single-instance-lock", identifier }));
+    const acquired = jsonBoolean(json);
+    if (acquired) this._singleInstanceIdentifier = identifier;
     return acquired;
   }
 
   async releaseSingleInstanceLock(): Promise<boolean> {
-    if (!this.#singleInstanceIdentifier || this.#destroyed) return false;
-    const released = hostedRuntime
-      ? await binding.releaseHostedSingleInstanceLock(this.nativeId)
-      : binding.releaseSingleInstanceLock(this.nativeId);
-    if (released) this.#singleInstanceIdentifier = undefined;
+    if (this._singleInstanceIdentifier === undefined || this._destroyed || this._exited) return false;
+    const json = await sendCommand('{"method":"release-single-instance-lock"}');
+    const released = jsonBoolean(json);
+    if (released) this._singleInstanceIdentifier = undefined;
     return released;
   }
 
   /**
-   * Request an orderly native shutdown. Returns false after shutdown already began.
+   * Request an orderly native shutdown. Resolves false after shutdown already began.
    *
    * The default runs the preventable `beforeQuit` and `willQuit` phases, so a registered
-   * `beforeQuit` listener holds the application open. Pass `{ force: true }` to complete a held
-   * quit, bypassing every interception.
+   * `onBeforeQuit` listener holds the application open. Pass `true` to complete a held quit,
+   * bypassing every interception.
    */
-  async quit(options: { force?: boolean } = {}): Promise<boolean> {
-    this.#assertAlive();
-    this._assertReady();
-    if (options.force !== true) return await requestNativeQuit();
-    return hostedRuntime
-      ? await binding.exitHostedApp(this.nativeId)
-      : binding.exitApp(this.nativeId);
+  async quit(force = false): Promise<boolean> {
+    this._assertAlive();
+    const json = await sendCommand(force ? '{"method":"exit"}' : '{"method":"request-quit"}');
+    return json === "true";
   }
 
-  /**
-   * Complete a held quit and report `code` from `app.run()` and the `quit` event.
-   *
-   * The core's native event loop does not carry an application-chosen exit status, so QuickGUI
-   * reports the requested code from the JavaScript host rather than inventing a native one.
-   */
+  /** Complete a held quit and report `code` from `app.run()` and the quit event. */
   async exit(code = 0): Promise<boolean> {
     if (!Number.isInteger(code) || code < 0 || code > 255) {
       throw new RangeError("an application exit code must be an integer between 0 and 255");
     }
-    this.#assertAlive();
-    this._assertReady();
-    this.#requestedExitCode = code;
-    // The core carries the status through its own teardown, so the process exits with `code`
-    // even when the host is embedded in another runtime.
-    return await exitNativeAppWithCode(code);
+    this._assertAlive();
+    this._requestedExitCode = code;
+    const json = await sendCommand(JSON.stringify({ method: "exit-with-code", code }));
+    return json === "true";
   }
 
   /** Whether this process is running from an installed application bundle. */
   get isPackaged(): boolean {
-    return nativeApplicationPackaged();
+    return callService("is-application-packaged", "") === "true";
   }
 
-  /**
-   * Change how the application appears in the Dock and application switcher.
-   *
-   * macOS applies `NSApplicationActivationPolicy`; other platforms reject with an unsupported
-   * platform error.
-   */
-  async setActivationPolicy(policy: ActivationPolicy): Promise<void> {
-    this.#assertAlive();
-    this._assertReady();
-    await setNativeActivationPolicy(policy);
+  /** Change how the application appears in the Dock and application switcher (macOS). */
+  async setActivationPolicy(policy: "regular" | "accessory" | "prohibited"): Promise<void> {
+    await appService("set-activation-policy", policy);
   }
 
-  /**
-   * Bring the application forward.
-   *
-   * `steal` uses AppKit's ignore-other-apps activation, which takes focus from the frontmost
-   * application. Prefer the default unless the user just asked for this application explicitly.
-   */
-  focus(options: { steal?: boolean } = {}): void {
-    this.#assertAlive();
-    this._assertReady();
-    activateNativeApplication(options.steal ?? false);
+  /** Bring the application forward; `steal` takes focus from the frontmost application. */
+  focus(steal = false): void {
+    sendMutation(JSON.stringify({ method: "app-mutation", action: "activate", value: steal ? "true" : "false" }));
   }
 
-  /** Hide every window of this application. */
   hide(): void {
-    this.#assertAlive();
-    this._assertReady();
-    hideNativeApplication();
+    sendMutation('{"method":"app-mutation","action":"hide"}');
   }
 
-  /** Reveal an application hidden by `app.hide()`. */
   show(): void {
-    this.#assertAlive();
-    this._assertReady();
-    unhideNativeApplication();
+    sendMutation('{"method":"app-mutation","action":"unhide"}');
   }
 
-  /** Route keystrokes straight to this process, bypassing input monitoring. */
   setSecureKeyboardEntryEnabled(enabled: boolean): void {
-    this.#assertAlive();
-    this._assertReady();
-    setNativeSecureKeyboardEntry(enabled);
+    sendMutation(
+      JSON.stringify({ method: "app-mutation", action: "set-secure-keyboard-entry", value: enabled ? "true" : "false" }),
+    );
   }
 
-  /** Whether the running bundle already lives in an `/Applications` directory. */
   async isInApplicationsFolder(): Promise<boolean> {
-    this.#assertAlive();
-    this._assertReady();
-    return (await getNativeApplicationsFolderSupport()).alreadyInstalled;
+    const json = await sendCommand('{"method":"get-applications-folder-support"}');
+    const support = JSON.parse(json) as { supported: boolean; alreadyInstalled: boolean };
+    return support.alreadyInstalled;
   }
 
-  /**
-   * Move the running application bundle into `/Applications`.
-   *
-   * Resolves to `false` when the bundle is already installed there. QuickGUI never restarts the
-   * process on its own; call `app.relaunch()` after a successful move.
-   */
   async moveToApplicationsFolder(): Promise<boolean> {
-    this.#assertAlive();
-    this._assertReady();
-    return await moveNativeApplicationToApplicationsFolder();
+    const value = await appService("move-to-applications-folder", undefined);
+    return value === "true";
   }
-
-  /** macOS Dock tile control, alongside the badge, icon, and menu on `Desktop`. */
-  readonly dock = Object.freeze({
-    setBadge: (value?: string): void => {
-      Desktop.setDockBadge(value);
-    },
-    setIcon: (icon?: ImageSource): void => {
-      Desktop.setDockIcon(icon);
-    },
-    setMenu: (menu?: MenuDefinition): void => {
-      Desktop.setDockMenu(menu);
-    },
-    /**
-     * Bounce the Dock tile and resolve with the identifier that cancels a critical bounce.
-     *
-     * `critical` keeps bouncing until the application is activated or the request is cancelled;
-     * `informational` bounces once.
-     */
-    bounce: (type: DockAttentionType = "informational"): Promise<number> =>
-      requestNativeDockAttention(type),
-    /** Stop an in-flight critical bounce. */
-    cancelBounce: (id: number): void => {
-      cancelNativeDockAttention(id);
-    },
-    hide: (): Promise<void> => setNativeDockVisible(false),
-    show: (): Promise<void> => setNativeDockVisible(true),
-    /** The last Dock visibility this process asked for; the platform exposes no query. */
-    isVisible: (): boolean => nativeDockVisible(),
-  });
 
   /** Schedule a replacement process after ordinary child-first native teardown. */
   async relaunch(options: RelaunchOptions = {}): Promise<boolean> {
-    this.#assertAlive();
-    this._assertReady();
-    const native: binding.NativeRelaunchOptions = {};
-    if (options.executable !== undefined)
-      native.executable = options.executable;
-    if (options.arguments === null) native.clearArguments = true;
-    else if (options.arguments !== undefined)
-      native.arguments = [...options.arguments];
-    if (options.workingDirectory !== undefined) {
-      native.workingDirectory = options.workingDirectory;
-    }
-    return hostedRuntime
-      ? await binding.relaunchHostedApp(this.nativeId, native)
-      : binding.relaunchApp(this.nativeId, native);
+    const json = await sendCommand(JSON.stringify({ method: "relaunch", options }));
+    return json === "true";
+  }
+
+  /** Bounce the Dock tile and resolve with the identifier that cancels a critical bounce. */
+  async dockBounce(critical = false): Promise<number> {
+    const value = await appService("request-dock-attention", critical ? "critical" : "informational");
+    return Number(value ?? "0");
+  }
+
+  dockCancelBounce(id: number): void {
+    sendMutation(JSON.stringify({ method: "app-mutation", action: "cancel-dock-attention", value: String(id) }));
+  }
+
+  async dockHide(): Promise<void> {
+    await appService("set-dock-visible", "false");
+  }
+
+  async dockShow(): Promise<void> {
+    await appService("set-dock-visible", "true");
   }
 
   destroy(): void {
-    if (this.#destroyed) return;
+    if (this._destroyed) return;
+    this._destroyed = true;
     const error = new Error("the QuickGUI app was destroyed");
-    this.#rejectDialogs(undefined, error);
+    this._rejectDialogs(error);
     rejectPendingSystemRequests(error);
-    void this.releaseSingleInstanceLock().catch(() => {});
-    if (hostedRuntime) binding.destroyHostedApp(this.nativeId);
-    else binding.destroyApp(this.nativeId);
-    this.#destroyed = true;
-    this.#appEventListeners.clear();
-    if (activeApp === this) activeApp = undefined;
+    rejectAllReplies(error);
+    if (this.nativeId !== 0) hostDestroyApp(this.nativeId);
     for (const window of this.windows.values()) window._didDestroy();
     this.windows.clear();
   }
 
-  #dispatchAppEvent(event: binding.NativeEvent): boolean {
-    let type: keyof AppEventMap;
-    let payload: AppEventMap[keyof AppEventMap];
-    if (event.kind === "open-urls") {
-      type = "openUrls";
-      try {
-        const parsed: unknown = JSON.parse(event.value ?? "[]");
-        payload =
-          Array.isArray(parsed) &&
-          parsed.every((url) => typeof url === "string")
-            ? parsed
-            : [];
-      } catch {
-        payload = [];
-      }
-    } else if (event.kind === "reopen") {
-      type = "reopen";
-      payload = { hasVisibleWindows: event.value === "true" };
-    } else if (event.kind === "system-wake") {
-      type = "systemWake";
-      payload = undefined;
-    } else if (event.kind === "app-activate" || event.kind === "app-deactivate") {
-      type = event.kind === "app-activate" ? "activate" : "deactivate";
-      payload = undefined;
-    } else if (event.kind === "before-quit" || event.kind === "will-quit") {
-      type = event.kind === "before-quit" ? "beforeQuit" : "willQuit";
-      payload = { reason: quitReason(event.value) };
-    } else if (event.kind === "keyboard-layout-change") {
-      const layout = hostedRuntime
-        ? binding.getHostedKeyboardLayout(this.nativeId)
-        : Promise.resolve(binding.getKeyboardLayout(this.nativeId));
-      void layout
-        .then((value) => {
-          if (this.#destroyed) return;
-          this.#emitAppEvent("keyboardLayoutChange", {
-            id: value.id,
-            name: value.name,
-          });
-        })
-        .catch(() => {});
-      return true;
-    } else if (event.kind === "notification-response") {
-      type = "notificationResponse";
-      try {
-        const parsed = JSON.parse(event.value ?? "{}") as {
-          tag?: unknown;
-          actionId?: unknown;
-          reply?: unknown;
-        };
-        if (typeof parsed.tag !== "string") return true;
-        const response: NotificationResponse = { tag: parsed.tag };
-        if (typeof parsed.actionId === "string")
-          response.actionId = parsed.actionId;
-        if (typeof parsed.reply === "string") response.reply = parsed.reply;
-        payload = response;
-      } catch {
-        return true;
-      }
-    } else if (event.kind === "second-instance") {
-      type = "secondInstance";
-      try {
-        const parsed = JSON.parse(event.value ?? "{}") as {
-          argv?: unknown;
-          cwd?: unknown;
-        };
-        if (
-          !Array.isArray(parsed.argv) ||
-          !parsed.argv.every((argument) => typeof argument === "string") ||
-          typeof parsed.cwd !== "string"
-        ) {
-          return true;
-        }
-        payload = { argv: parsed.argv, cwd: parsed.cwd };
-        const urls = urlsFromArguments(parsed.argv);
-        if (urls.length > 0) this.#emitAppEvent("openUrls", urls);
-      } catch {
-        return true;
-      }
-    } else {
-      return false;
-    }
-    this.#emitAppEvent(type, payload);
-    return true;
-  }
-
-  #emitAppEvent<K extends keyof AppEventMap>(
-    type: K,
-    payload: AppEventMap[K],
-  ): void {
-    for (const listener of this.#appEventListeners.get(type) ?? [])
-      listener(payload);
-  }
-
-  async #emitAppEventAndWait<K extends keyof AppEventMap>(
-    type: K,
-    payload: AppEventMap[K],
-  ): Promise<void> {
-    await Promise.all(
-      [...(this.#appEventListeners.get(type) ?? [])].map((listener) =>
-        listener(payload),
-      ),
-    );
-  }
-
-  _registerWindow(window: Window): void {
-    this.#assertAlive();
-    this.windows.set(window.nativeId, window);
+  _assertAlive(): void {
+    if (this._destroyed) throw new Error("the QuickGUI app was destroyed");
   }
 
   _assertReady(): void {
-    this.#assertAlive();
-    if (!this.isReady()) {
-      throw new Error(
-        "await app.whenReady() before using the native QuickGUI application",
-      );
-    }
+    this._assertAlive();
+    if (!this._ready) throw new Error("await app.whenReady() before using the native QuickGUI application");
+  }
+
+  _registerWindow(window: Window): void {
+    this._assertAlive();
+    this.windows.set(window.nativeId, window);
   }
 
   _closeWindow(window: Window): void {
-    if (this.#destroyed || window.closed) return;
-    if (hostedRuntime) {
-      binding.closeHostedWindow(this.nativeId, window.nativeId);
-    } else if (binding.closeWindow(this.nativeId, window.nativeId)) {
-      this._didCloseWindow(window);
-    }
+    if (this._destroyed || window.closed) return;
+    hostCloseWindow(this.nativeId, window.nativeId);
   }
 
   _didCloseWindow(window: Window): void {
-    if (this.windows.get(window.nativeId) !== window) return;
     this.windows.delete(window.nativeId);
-    this.#rejectDialogs(
-      window,
-      new Error("the native dialog's owner window closed"),
-    );
     window._didClose();
   }
 
-  _showAlertDialog(
-    window: Window | undefined,
-    options: AlertDialogOptions,
-  ): Promise<number> {
-    try {
-      const nativeOptions = normalizeAlertDialogOptions(options);
-      return this.#requestDialog(
-        window,
-        "alert-dialog",
-        (request) => {
-          if (hostedRuntime) {
-            binding.showHostedAlertDialog(
-              this.nativeId,
-              window?.nativeId,
-              request,
-              nativeOptions,
-            );
-          } else {
-            binding.showAlertDialog(
-              this.nativeId,
-              window?.nativeId,
-              request,
-              nativeOptions,
-            );
-          }
-        },
-        (event) => {
-          const response = Number(event.value);
-          if (!Number.isSafeInteger(response) || response < 0) {
-            throw new Error(
-              "the native dialog returned an invalid button index",
-            );
-          }
-          return response;
-        },
-      );
-    } catch (error) {
-      return Promise.reject(asError(error));
-    }
+  _showDialog(window: Window | undefined, kind: number, options: string, complete: (event: DialogEvent) => void, reject: (error: Error) => void): void {
+    this._assertReady();
+    const request = allocateRequest();
+    this._pendingDialogs.set(request, new PendingDialog(complete, reject));
+    hostShowDialog(this.nativeId, window === undefined ? 0 : window.nativeId, request, kind, options);
   }
 
-  _showOpenDialog(
-    window: Window | undefined,
-    options: OpenDialogOptions,
-  ): Promise<OpenDialogResult> {
-    try {
-      const nativeOptions = normalizeOpenDialogOptions(options);
-      return this.#requestDialog(
-        window,
-        "open-dialog",
-        (request) => {
-          if (hostedRuntime) {
-            binding.showHostedOpenDialog(
-              this.nativeId,
-              window?.nativeId,
-              request,
-              nativeOptions,
-            );
-          } else {
-            binding.showOpenDialog(
-              this.nativeId,
-              window?.nativeId,
-              request,
-              nativeOptions,
-            );
-          }
-        },
-        (event) => ({
-          canceled: event.paths === undefined,
-          filePaths: event.paths ?? [],
-        }),
-      );
-    } catch (error) {
-      return Promise.reject(asError(error));
-    }
-  }
-
-  _showSaveDialog(
-    window: Window | undefined,
-    options: SaveDialogOptions,
-  ): Promise<SaveDialogResult> {
-    try {
-      const nativeOptions = normalizeSaveDialogOptions(options);
-      return this.#requestDialog(
-        window,
-        "save-dialog",
-        (request) => {
-          if (hostedRuntime) {
-            binding.showHostedSaveDialog(
-              this.nativeId,
-              window?.nativeId,
-              request,
-              nativeOptions,
-            );
-          } else {
-            binding.showSaveDialog(
-              this.nativeId,
-              window?.nativeId,
-              request,
-              nativeOptions,
-            );
-          }
-        },
-        (event) =>
-          event.value === undefined
-            ? { canceled: true }
-            : { canceled: false, filePath: event.value },
-      );
-    } catch (error) {
-      return Promise.reject(asError(error));
-    }
-  }
-
-  #requestDialog<T>(
-    window: Window | undefined,
-    kind: DialogEventKind,
-    invoke: (request: number) => void | Promise<void>,
-    result: (event: binding.NativeEvent) => T,
-  ): Promise<T> {
-    this.#assertAlive();
-    if (
-      window &&
-      (window.closed || this.windows.get(window.nativeId) !== window)
-    ) {
-      return Promise.reject(
-        new Error("the native dialog parent must be an open window"),
-      );
-    }
-    const request = this.#allocateDialogRequest();
-    return new Promise<T>((resolve, reject) => {
-      this.#pendingDialogs.set(request, {
-        kind,
-        window,
-        complete: (event) => resolve(result(event)),
-        reject,
-      });
-      try {
-        void Promise.resolve(invoke(request)).catch((error) => {
-          if (!this.#pendingDialogs.delete(request)) return;
-          reject(asError(error));
-        });
-      } catch (error) {
-        this.#pendingDialogs.delete(request);
-        reject(asError(error));
-      }
-    });
-  }
-
-  #dispatchDialog(event: binding.NativeEvent): void {
-    const pending = this.#pendingDialogs.get(event.target);
-    if (!pending) return;
-    this.#pendingDialogs.delete(event.target);
-    if ((pending.window?.nativeId ?? 0) !== event.window) {
-      pending.reject(
-        new Error("the native dialog response had the wrong owner window"),
-      );
-      return;
-    }
-    if (pending.kind !== event.kind) {
-      pending.reject(
-        new Error("the native dialog response had the wrong response type"),
-      );
-      return;
-    }
-    if (event.error !== undefined) {
-      pending.reject(new Error(event.error));
-      return;
-    }
-    try {
-      pending.complete(event);
-    } catch (error) {
-      pending.reject(asError(error));
-    }
-  }
-
-  #allocateDialogRequest(): number {
-    for (let attempt = 0; attempt <= this.#pendingDialogs.size; attempt += 1) {
-      const request = this.#nextDialogRequest;
-      this.#nextDialogRequest = request >= 0xffff_ffff ? 1 : request + 1;
-      if (!this.#pendingDialogs.has(request)) return request;
-    }
-    throw new Error("the native dialog request id space is exhausted");
-  }
-
-  #rejectDialogs(window: Window | undefined, error: Error): void {
-    for (const [request, pending] of this.#pendingDialogs) {
-      if (window && pending.window !== window) continue;
-      this.#pendingDialogs.delete(request);
+  _rejectDialogs(error: Error): void {
+    for (const [request, pending] of this._pendingDialogs) {
+      this._pendingDialogs.delete(request);
       pending.reject(error);
     }
   }
 
-  #assertAlive(): void {
-    if (this.#destroyed)
-      throw new Error("this QuickGUI app has been destroyed");
+  _dispatchHostEvent(
+    kind: string,
+    window: number,
+    target: number,
+    value: string | undefined,
+    extra: HostEventExtra | undefined,
+    data: Uint8Array | undefined,
+  ): void {
+    const error = extra === undefined ? undefined : extra.error;
+    switch (kind) {
+      case "app-ready": {
+        if (error !== undefined) {
+          const rejectReady = this._rejectReady;
+          if (rejectReady !== undefined) rejectReady(new Error(error));
+          return;
+        }
+        this._ready = true;
+        setAppContext(this.nativeId, true);
+        this._syncQuitInterception();
+        const resolveReady = this._resolveReady;
+        if (resolveReady !== undefined) resolveReady();
+        this._onReady.emit();
+        return;
+      }
+      case "command":
+      case "invoke":
+        settleReply(target, value, error);
+        return;
+      case "module-result":
+        settleDataReply(target, data, error);
+        return;
+      case "file-watch":
+        dispatchFileWatch(target, value);
+        return;
+      case "update-progress":
+        if (value !== undefined) reportProgress(target, value);
+        return;
+      case "exit":
+        this._didExit(target);
+        return;
+      case "host-error":
+        console.error("quickgui: " + (error ?? "the native host failed"));
+        return;
+      case "alert-dialog":
+      case "open-dialog":
+      case "save-dialog": {
+        const pending = this._pendingDialogs.get(target);
+        if (pending === undefined) return;
+        this._pendingDialogs.delete(target);
+        if (error !== undefined) pending.reject(new Error(error));
+        else pending.complete(new DialogEvent(value, extra === undefined ? undefined : extra.paths));
+        return;
+      }
+      default:
+    }
+    if (dispatchSystemEvent(kind, target, value, extra === undefined ? undefined : extra.error, data, extra)) return;
+    if (this._dispatchAppEvent(kind, value)) return;
+    const owner = this.windows.get(window);
+    if (owner === undefined) return;
+    if (kind === "close") {
+      this._didCloseWindow(owner);
+    } else if (kind === "close-requested") {
+      owner._didRequestClose();
+    } else if (kind.startsWith("window-")) {
+      owner._didObserveLifecycle(kind, value);
+    } else {
+      const type = eventTypeFromKind(kind);
+      if (type === 0) return;
+      withCurrentWindow(owner, () => {
+        dispatchNativeEvent(owner, type, target, value);
+      });
+      owner.flush();
+    }
+  }
+
+  _dispatchAppEvent(kind: string, value: string | undefined): boolean {
+    switch (kind) {
+      case "open-urls": {
+        const urls = value === undefined ? [] : (JSON.parse(value) as string[]);
+        this._onOpenUrls.emit({ urls });
+        return true;
+      }
+      case "reopen":
+        this._onReopen.emit({ hasVisibleWindows: value === "true" });
+        return true;
+      case "system-wake":
+        this._onSystemWake.emit();
+        return true;
+      case "app-activate":
+        this._onActivate.emit();
+        return true;
+      case "app-deactivate":
+        this._onDeactivate.emit();
+        return true;
+      case "before-quit":
+        this._onBeforeQuit.emit({ reason: quitReason(value) });
+        return true;
+      case "will-quit":
+        this._onWillQuit.emit({ reason: quitReason(value) });
+        return true;
+      case "keyboard-layout-change": {
+        if (this._onKeyboardLayoutChange.size > 0) void this._emitKeyboardLayout();
+        return true;
+      }
+      case "notification-response": {
+        if (value === undefined) return true;
+        this._onNotificationResponse.emit(JSON.parse(value) as NotificationResponseEvent);
+        return true;
+      }
+      case "second-instance": {
+        if (value === undefined) return true;
+        const event = JSON.parse(value) as SecondInstanceEvent;
+        this._onSecondInstance.emit(event);
+        const urls: string[] = [];
+        for (const argument of event.argv) {
+          if (argument.includes("://") && !argument.startsWith("-")) urls.push(argument);
+        }
+        if (urls.length > 0) this._onOpenUrls.emit({ urls });
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  async _emitKeyboardLayout(): Promise<void> {
+    try {
+      const json = await sendCommand('{"method":"get-keyboard-layout"}');
+      this._onKeyboardLayoutChange.emit(JSON.parse(json) as KeyboardLayoutEvent);
+    } catch {
+      // The application is shutting down; the layout no longer matters.
+    }
+  }
+
+  _didExit(code: number): void {
+    if (this._exited) return;
+    this._exited = true;
+    const requested = this._requestedExitCode;
+    this._exitCode = requested !== undefined && code === 0 ? requested : code;
+    for (const window of this.windows.values()) window._didClose();
+    this.windows.clear();
+    const error = new Error("the QuickGUI application has exited");
+    this._rejectDialogs(error);
+    rejectPendingSystemRequests(error);
+    rejectAllReplies(error);
+    this._quitListeners.emit({ exitCode: this._exitCode });
+    const resolvers = [...this._quitResolvers];
+    this._quitResolvers.splice(0, this._quitResolvers.length);
+    for (const resolve of resolvers) resolve();
+    releaseMenuCallbacks();
+    // Releasing the callback lets the program's event loop drain and the process exit.
+    hostClearEventCallback(onHostEvent);
   }
 }
 
-export class Window {
+async function appService(action: string, value: string | undefined): Promise<string | undefined> {
+  const request = allocateRequest();
+  const json = value === undefined
+    ? JSON.stringify({ method: "app-service", request, action })
+    : JSON.stringify({ method: "app-service", request, action, value });
+  // The command itself completes immediately; the outcome arrives as an `app-service` event.
+  const result = await sendRequest(request, json);
+  return result === "null" ? undefined : result;
+}
+
+// ---------------------------------------------------------------------------
+// Windows
+// ---------------------------------------------------------------------------
+
+export type WindowRenderer = (window: Window) => () => void;
+export type PopoverPlacement =
+  | "top-start"
+  | "top"
+  | "top-end"
+  | "bottom-start"
+  | "bottom"
+  | "bottom-end"
+  | "left-start"
+  | "left"
+  | "left-end"
+  | "right-start"
+  | "right"
+  | "right-end";
+export type PerformanceProfile = "low-power" | "balanced" | "high-performance";
+export type InitialWindowState = "normal" | "maximized" | "fullscreen";
+export type WindowKind = "normal" | "popover" | "system-popover" | "floating" | "dialog";
+export type WindowLevel =
+  | "always-on-bottom"
+  | "normal"
+  | "always-on-top"
+  | "floating"
+  | "modal-panel"
+  | "main-menu"
+  | "status"
+  | "pop-up-menu"
+  | "screen-saver";
+export type ElectronWindowLevel = "floating" | "modalPanel" | "mainMenu" | "status" | "popUpMenu" | "screenSaver";
+export type CursorGrabMode = "none" | "confined" | "locked";
+export type TaskbarProgressState = "none" | "normal" | "indeterminate" | "paused" | "error";
+export type WindowBackgroundAppearance = "opaque" | "transparent" | "blurred";
+export type AppearanceMode = "light" | "dark";
+export type AppearancePreference = "light" | "dark" | "system";
+export type MacOSVibrancy =
+  | "appearance-based"
+  | "titlebar"
+  | "selection"
+  | "menu"
+  | "popover"
+  | "sidebar"
+  | "header"
+  | "sheet"
+  | "window"
+  | "hud"
+  | "fullscreen-ui"
+  | "tooltip"
+  | "content"
+  | "under-window"
+  | "under-page";
+export type MacOSVisualEffectState = "followWindow" | "active" | "inactive";
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  state?: InitialWindowState;
+}
+
+export interface WindowResizePolicy {
+  aspectRatio?: number;
+  minimum?: Size;
+  maximum?: Size;
+  snap?: Size;
+}
+
+export interface WindowMovePolicy {
+  keepOnScreen?: boolean;
+}
+
+export interface TaskbarProgress {
+  state: TaskbarProgressState;
+  progress: number;
+}
+
+export interface TaskbarOverlay {
+  icon: ImageSource;
+  description: string;
+}
+
+export interface WindowOptions {
+  renderer: WindowRenderer;
+  title?: string;
+  width?: number;
+  height?: number;
+  position?: Point;
+  initialState?: InitialWindowState;
+  displayId?: string;
+  /** Set `disableMinimumSize` to remove the core's default minimum window size. */
+  minimumSize?: Size;
+  disableMinimumSize?: boolean;
+  minimumWidth?: number;
+  minimumHeight?: number;
+  maximumSize?: Size;
+  maximumWidth?: number;
+  maximumHeight?: number;
+  representedFile?: string;
+  documentEdited?: boolean;
+  tabbingIdentifier?: string;
+  background?: ColorValue;
+  backgroundAppearance?: WindowBackgroundAppearance;
+  vibrancy?: MacOSVibrancy;
+  visualEffectState?: MacOSVisualEffectState;
+  performanceProfile?: PerformanceProfile;
+  appearance?: AppearancePreference;
+  titleBarStyle?: "default" | "hidden" | "hiddenInset";
+  kind?: WindowKind;
+  focus?: boolean;
+  focusable?: boolean;
+  visible?: boolean;
+  movable?: boolean;
+  resizable?: boolean;
+  minimizable?: boolean;
+  maximizable?: boolean;
+  closable?: boolean;
+  decorated?: boolean;
+  shadow?: boolean;
+  contentProtected?: boolean;
+  windowLevel?: WindowLevel | "automatic";
+  skipTaskbar?: boolean;
+  visibleOnAllWorkspaces?: boolean;
+  opacity?: number;
+  icon?: ImageSource;
+  taskbarProgress?: TaskbarProgress;
+  taskbarOverlay?: TaskbarOverlay;
+  cursorVisible?: boolean;
+  cursorGrab?: CursorGrabMode;
+  cursorHitTest?: boolean;
+  cursorPosition?: Point;
+  menu?: MenuDefinition[];
+  restoreState?: WindowRestoreState;
+  lineScrollPixels?: number;
+  keySequenceTimeoutMs?: number;
+  reduceMotion?: boolean;
+  trafficLightPosition?: Point;
+  transparent?: boolean;
+  blur?: boolean;
+  /** Open this window as a system popover anchored to the mounted node. */
+  anchor?: NativeNode;
+  placement?: PopoverPlacement;
+  gap?: number;
+  offset?: Point;
+  viewportMargin?: number;
+  dismissOnEscape?: boolean;
+  dismissOnPointerOutside?: boolean;
+  grab?: boolean;
+  acceptsKeyFocus?: boolean;
+}
+
+export interface NativeImageSource {
+  data?: string;
+  path?: string;
+  width?: number;
+  height?: number;
+}
+
+export function nativeImageSource(source: ImageSource): NativeImageSource {
+  if (typeof source === "string") return { path: source };
+  const native: NativeImageSource = { data: encodeBase64(source.data) };
+  if (source.width !== undefined) native.width = source.width;
+  if (source.height !== undefined) native.height = source.height;
+  return native;
+}
+
+interface NativeWindowOptions {
+  title?: string;
+  width?: number;
+  height?: number;
+  x?: number;
+  y?: number;
+  initialState?: string;
+  displayId?: string;
+  minimumSizeEnabled?: boolean;
+  minimumWidth?: number;
+  minimumHeight?: number;
+  maximumWidth?: number;
+  maximumHeight?: number;
+  representedFile?: string;
+  documentEdited?: boolean;
+  tabbingIdentifier?: string;
+  background?: number;
+  performanceProfile?: string;
+  appearance?: string;
+  vibrancy?: string;
+  visualEffectState?: string;
+  titleBarStyle?: string;
+  kind?: string;
+  focus?: boolean;
+  focusable?: boolean;
+  show?: boolean;
+  movable?: boolean;
+  resizable?: boolean;
+  minimizable?: boolean;
+  maximizable?: boolean;
+  closable?: boolean;
+  decorated?: boolean;
+  shadow?: boolean;
+  contentProtected?: boolean;
+  windowLevel?: string;
+  skipTaskbar?: boolean;
+  visibleOnAllWorkspaces?: boolean;
+  opacity?: number;
+  icon?: NativeImageSource;
+  taskbarProgressState?: string;
+  taskbarProgress?: number;
+  taskbarOverlayIcon?: NativeImageSource;
+  taskbarOverlayDescription?: string;
+  cursorVisible?: boolean;
+  cursorGrab?: string;
+  cursorHitTest?: boolean;
+  cursorX?: number;
+  cursorY?: number;
+  menu?: string;
+  restoreState?: WindowRestoreState;
+  lineScrollPixels?: number;
+  keySequenceTimeoutMs?: number;
+  reduceMotion?: boolean;
+  trafficLightX?: number;
+  trafficLightY?: number;
+  transparent?: boolean;
+  blur?: boolean;
+  popoverPlacement?: string;
+  popoverGap?: number;
+  popoverOffsetX?: number;
+  popoverOffsetY?: number;
+  popoverViewportMargin?: number;
+  popoverDismissOnEscape?: boolean;
+  popoverDismissOnPointerOutside?: boolean;
+  popoverGrab?: boolean;
+  popoverAcceptsKeyFocus?: boolean;
+}
+
+function nativeWindowOptions(options: WindowOptions, menu: string | undefined): NativeWindowOptions {
+  const native: NativeWindowOptions = {};
+  if (options.title !== undefined) native.title = options.title;
+  if (options.width !== undefined) native.width = options.width;
+  if (options.height !== undefined) native.height = options.height;
+  if (options.disableMinimumSize === true) {
+    native.minimumSizeEnabled = false;
+  } else if (options.minimumSize !== undefined) {
+    native.minimumWidth = options.minimumSize.width;
+    native.minimumHeight = options.minimumSize.height;
+  } else {
+    if (options.minimumWidth !== undefined) native.minimumWidth = options.minimumWidth;
+    if (options.minimumHeight !== undefined) native.minimumHeight = options.minimumHeight;
+  }
+  if (options.maximumSize !== undefined) {
+    native.maximumWidth = options.maximumSize.width;
+    native.maximumHeight = options.maximumSize.height;
+  } else {
+    if (options.maximumWidth !== undefined) native.maximumWidth = options.maximumWidth;
+    if (options.maximumHeight !== undefined) native.maximumHeight = options.maximumHeight;
+  }
+  if (options.position !== undefined) {
+    native.x = options.position.x;
+    native.y = options.position.y;
+  }
+  if (options.initialState !== undefined) native.initialState = options.initialState;
+  if (options.displayId !== undefined) native.displayId = options.displayId;
+  if (options.representedFile !== undefined) native.representedFile = options.representedFile;
+  if (options.documentEdited !== undefined) native.documentEdited = options.documentEdited;
+  if (options.tabbingIdentifier !== undefined) native.tabbingIdentifier = options.tabbingIdentifier;
+  if (options.background !== undefined) native.background = parseColor(options.background);
+  if (options.performanceProfile !== undefined) native.performanceProfile = options.performanceProfile;
+  if (options.appearance !== undefined) native.appearance = options.appearance;
+  if (options.vibrancy !== undefined) native.vibrancy = options.vibrancy;
+  if (options.visualEffectState !== undefined) native.visualEffectState = options.visualEffectState;
+  if (options.titleBarStyle !== undefined) native.titleBarStyle = options.titleBarStyle;
+  if (options.kind !== undefined) native.kind = options.kind;
+  if (options.focus !== undefined) native.focus = options.focus;
+  if (options.focusable !== undefined) native.focusable = options.focusable;
+  if (options.visible !== undefined) native.show = options.visible;
+  if (options.movable !== undefined) native.movable = options.movable;
+  if (options.resizable !== undefined) native.resizable = options.resizable;
+  if (options.minimizable !== undefined) native.minimizable = options.minimizable;
+  if (options.maximizable !== undefined) native.maximizable = options.maximizable;
+  if (options.closable !== undefined) native.closable = options.closable;
+  if (options.decorated !== undefined) native.decorated = options.decorated;
+  if (options.shadow !== undefined) native.shadow = options.shadow;
+  if (options.contentProtected !== undefined) native.contentProtected = options.contentProtected;
+  if (options.windowLevel !== undefined) native.windowLevel = options.windowLevel;
+  if (options.skipTaskbar !== undefined) native.skipTaskbar = options.skipTaskbar;
+  if (options.visibleOnAllWorkspaces !== undefined) native.visibleOnAllWorkspaces = options.visibleOnAllWorkspaces;
+  if (options.opacity !== undefined) native.opacity = options.opacity;
+  if (options.icon !== undefined) native.icon = nativeImageSource(options.icon);
+  if (options.taskbarProgress !== undefined) {
+    native.taskbarProgressState = options.taskbarProgress.state;
+    native.taskbarProgress = options.taskbarProgress.progress;
+  }
+  if (options.taskbarOverlay !== undefined) {
+    native.taskbarOverlayIcon = nativeImageSource(options.taskbarOverlay.icon);
+    native.taskbarOverlayDescription = options.taskbarOverlay.description;
+  }
+  if (options.cursorVisible !== undefined) native.cursorVisible = options.cursorVisible;
+  if (options.cursorGrab !== undefined) native.cursorGrab = options.cursorGrab;
+  if (options.cursorHitTest !== undefined) native.cursorHitTest = options.cursorHitTest;
+  if (options.cursorPosition !== undefined) {
+    native.cursorX = options.cursorPosition.x;
+    native.cursorY = options.cursorPosition.y;
+  }
+  if (menu !== undefined) native.menu = menu;
+  if (options.restoreState !== undefined) native.restoreState = options.restoreState;
+  if (options.lineScrollPixels !== undefined) native.lineScrollPixels = options.lineScrollPixels;
+  if (options.keySequenceTimeoutMs !== undefined) native.keySequenceTimeoutMs = options.keySequenceTimeoutMs;
+  if (options.reduceMotion !== undefined) native.reduceMotion = options.reduceMotion;
+  if (options.trafficLightPosition !== undefined) {
+    native.trafficLightX = options.trafficLightPosition.x;
+    native.trafficLightY = options.trafficLightPosition.y;
+  }
+  if (options.backgroundAppearance !== undefined) {
+    native.transparent = options.backgroundAppearance === "transparent";
+    native.blur = options.backgroundAppearance === "blurred";
+  } else {
+    if (options.transparent !== undefined) native.transparent = options.transparent;
+    if (options.blur !== undefined) native.blur = options.blur;
+  }
+  if (options.placement !== undefined) native.popoverPlacement = options.placement;
+  if (options.gap !== undefined) native.popoverGap = options.gap;
+  if (options.offset !== undefined) {
+    native.popoverOffsetX = options.offset.x;
+    native.popoverOffsetY = options.offset.y;
+  }
+  if (options.viewportMargin !== undefined) native.popoverViewportMargin = options.viewportMargin;
+  if (options.dismissOnEscape !== undefined) native.popoverDismissOnEscape = options.dismissOnEscape;
+  if (options.dismissOnPointerOutside !== undefined) native.popoverDismissOnPointerOutside = options.dismissOnPointerOutside;
+  if (options.grab !== undefined) native.popoverGrab = options.grab;
+  if (options.acceptsKeyFocus !== undefined) native.popoverAcceptsKeyFocus = options.acceptsKeyFocus;
+  return native;
+}
+
+export type WindowEventName =
+  | "closed"
+  | "closeRequested"
+  | "minimize"
+  | "restore"
+  | "maximize"
+  | "unmaximize"
+  | "enterFullScreen"
+  | "leaveFullScreen"
+  | "readyToShow"
+  | "occlusionChange"
+  | "levelChange"
+  | "willResize"
+  | "willMove"
+  | "resize"
+  | "move"
+  | "focus"
+  | "blur"
+  | "appearanceChange"
+  | "stateChange";
+
+/** One window lifecycle notification; only the fields the event carries are set. */
+export interface WindowEvent {
+  window: Window;
+  type: WindowEventName;
+  size?: Size;
+  position?: Point;
+  occluded?: boolean;
+  level?: string;
+  appearance?: string;
+}
+
+export type WindowEventListener = (event: WindowEvent) => void;
+
+class WindowListener {
+  readonly type: WindowEventName;
+  readonly listener: WindowEventListener;
+
+  constructor(type: WindowEventName, listener: WindowEventListener) {
+    this.type = type;
+    this.listener = listener;
+  }
+}
+
+interface EmbeddedOwner {
+  owner: Window;
+  matchHorizontal: boolean;
+  matchVertical: boolean;
+}
+
+export class Window extends NodeHost {
   readonly root: NativeNode;
-  readonly nativeId: number;
   readonly app: App;
-  readonly nodes = new Map<number, NativeNode>();
-  #batch = new MutationBatch();
-  #flushScheduled = false;
-  #nativeReady = false;
-  readonly #nativeReadyCallbacks = new Set<() => void>();
-  #closed = false;
-  readonly #closeListeners = new Set<WindowCloseListener>();
-  readonly #closeRequestListeners = new Set<WindowCloseRequestListener>();
-  #closeIntercepting = false;
-  readonly #mountDisposers = new Set<() => void>();
-  readonly #lifecycleListeners = new Map<
-    keyof WindowEventMap,
-    Set<(payload: unknown) => void>
-  >();
+  readonly _listeners: WindowListener[] = [];
+  readonly _mountDisposers: (() => void)[] = [];
+  _closeIntercepting = false;
+  _closeRequestListeners = 0;
+  _menuRelease: (() => void) | undefined = undefined;
 
   /** Return the Window whose renderer or native event callback is currently executing. */
   static getCurrentWindow(): Window {
-    if (!currentWindow) {
-      throw new Error(
-        "Window.getCurrentWindow() must be called while rendering or handling a window event",
-      );
+    const window = currentWindow;
+    if (window === undefined) {
+      throw new Error("Window.getCurrentWindow() must be called while rendering or handling a window event");
     }
-    return currentWindow;
+    return window;
   }
 
   /** @internal Create one retained renderer whose native view is owned by a SwiftUI host. */
-  static _createEmbedded(
-    owner: Window,
-    options: WindowOptions,
-    matchContents: { horizontal: boolean; vertical: boolean },
-  ): Window {
-    if (owner.closed) {
-      throw new Error(
-        "an embedded QuickGUI view requires an open owner Window",
-      );
-    }
+  static _createEmbedded(owner: Window, options: WindowOptions, matchHorizontal: boolean, matchVertical: boolean): Window {
+    if (owner.closed) throw new Error("an embedded QuickGUI view requires an open owner Window");
     owner.flush();
-    return new Window(options, { owner, matchContents });
+    return new Window(options, { owner, matchHorizontal, matchVertical });
   }
 
-  constructor(
-    options: WindowOptions,
-    embedded?: {
-      owner: Window;
-      matchContents: { horizontal: boolean; vertical: boolean };
-    },
-  ) {
-    const app = activeApp;
-    if (!app) throw new Error("the QuickGUI app is unavailable");
-    if (!app.isReady()) {
-      throw new Error(
-        "await app.whenReady() before creating a QuickGUI Window",
-      );
+  constructor(options: WindowOptions, embedded?: EmbeddedOwner) {
+    const application = activeApp;
+    if (application === undefined) throw new Error("the QuickGUI app is unavailable");
+    if (!application.isReady()) throw new Error("await app.whenReady() before creating a QuickGUI Window");
+    super(application.nativeId, hostAllocateWindow());
+    this.app = application;
+    this.root = createRootNode(this, ROOT_NODE_ID);
+    const anchor = options.anchor;
+    const parent = anchor === undefined ? undefined : anchor.host;
+    if (anchor !== undefined && (parent === undefined || parent.closed)) {
+      throw new Error("a system popover requires a mounted node in an open parent Window");
     }
-    const nativeOptions: binding.NativeWindowOptions = {};
-    const serializedMenu = options.menu
-      ? serializeNativeMenu(options.menu)
-      : undefined;
-    if (options.title !== undefined) nativeOptions.title = options.title;
-    if (options.width !== undefined) nativeOptions.width = options.width;
-    if (options.height !== undefined) nativeOptions.height = options.height;
-    if (
-      options.minimumSize !== undefined &&
-      (options.minimumWidth !== undefined ||
-        options.minimumHeight !== undefined)
-    ) {
-      throw new TypeError(
-        "minimumSize cannot be combined with minimumWidth or minimumHeight",
-      );
-    }
-    if (options.minimumSize === null) {
-      nativeOptions.minimumSizeEnabled = false;
-    } else if (options.minimumSize !== undefined) {
-      nativeOptions.minimumWidth = options.minimumSize.width;
-      nativeOptions.minimumHeight = options.minimumSize.height;
-    } else {
-      if (options.minimumWidth !== undefined)
-        nativeOptions.minimumWidth = options.minimumWidth;
-      if (options.minimumHeight !== undefined)
-        nativeOptions.minimumHeight = options.minimumHeight;
-    }
-    if (
-      options.maximumSize !== undefined &&
-      (options.maximumWidth !== undefined ||
-        options.maximumHeight !== undefined)
-    ) {
-      throw new TypeError(
-        "maximumSize cannot be combined with maximumWidth or maximumHeight",
-      );
-    }
-    if (options.maximumSize !== undefined) {
-      nativeOptions.maximumWidth = options.maximumSize.width;
-      nativeOptions.maximumHeight = options.maximumSize.height;
-    } else {
-      if (options.maximumWidth !== undefined)
-        nativeOptions.maximumWidth = options.maximumWidth;
-      if (options.maximumHeight !== undefined)
-        nativeOptions.maximumHeight = options.maximumHeight;
-    }
-    if (options.position !== undefined) {
-      nativeOptions.x = options.position.x;
-      nativeOptions.y = options.position.y;
-    }
-    if (options.initialState !== undefined)
-      nativeOptions.initialState = options.initialState;
-    if (options.displayId !== undefined)
-      nativeOptions.displayId = options.displayId;
-    if (options.representedFile !== undefined)
-      nativeOptions.representedFile = options.representedFile;
-    if (options.documentEdited !== undefined)
-      nativeOptions.documentEdited = options.documentEdited;
-    if (options.tabbingIdentifier !== undefined) {
-      nativeOptions.tabbingIdentifier = options.tabbingIdentifier;
-    }
-    if (options.background !== undefined)
-      nativeOptions.background = parseColor(options.background);
-    if (options.performanceProfile !== undefined) {
-      nativeOptions.performanceProfile = options.performanceProfile;
-    }
-    if (options.appearance !== undefined)
-      nativeOptions.appearance = options.appearance;
-    if (options.vibrancy !== undefined)
-      nativeOptions.vibrancy = options.vibrancy;
-    if (options.visualEffectState !== undefined)
-      nativeOptions.visualEffectState = options.visualEffectState;
-    if (options.titleBarStyle !== undefined)
-      nativeOptions.titleBarStyle = options.titleBarStyle;
-    if (options.kind !== undefined) nativeOptions.kind = options.kind;
-    if (options.focus !== undefined) nativeOptions.focus = options.focus;
-    if (options.focusable !== undefined)
-      nativeOptions.focusable = options.focusable;
-    if (options.visible !== undefined) nativeOptions.show = options.visible;
-    if (options.movable !== undefined) nativeOptions.movable = options.movable;
-    if (options.resizable !== undefined)
-      nativeOptions.resizable = options.resizable;
-    if (options.minimizable !== undefined)
-      nativeOptions.minimizable = options.minimizable;
-    if (options.maximizable !== undefined)
-      nativeOptions.maximizable = options.maximizable;
-    if (options.closable !== undefined)
-      nativeOptions.closable = options.closable;
-    if (options.decorated !== undefined)
-      nativeOptions.decorated = options.decorated;
-    if (options.shadow !== undefined) nativeOptions.shadow = options.shadow;
-    if (options.contentProtected !== undefined) {
-      nativeOptions.contentProtected = options.contentProtected;
-    }
-    if (options.windowLevel !== undefined)
-      nativeOptions.windowLevel = options.windowLevel;
-    if (options.skipTaskbar !== undefined)
-      nativeOptions.skipTaskbar = options.skipTaskbar;
-    if (options.visibleOnAllWorkspaces !== undefined) {
-      nativeOptions.visibleOnAllWorkspaces = options.visibleOnAllWorkspaces;
-    }
-    if (options.opacity !== undefined) nativeOptions.opacity = options.opacity;
-    if (options.icon !== undefined)
-      nativeOptions.icon = nativeImageSource(options.icon);
-    if (options.taskbarProgress !== undefined) {
-      nativeOptions.taskbarProgressState = options.taskbarProgress.state;
-      nativeOptions.taskbarProgress = options.taskbarProgress.progress;
-    }
-    if (options.taskbarOverlay !== undefined) {
-      nativeOptions.taskbarOverlayIcon = nativeImageSource(
-        options.taskbarOverlay.icon,
-      );
-      nativeOptions.taskbarOverlayDescription =
-        options.taskbarOverlay.description;
-    }
-    if (options.cursorVisible !== undefined)
-      nativeOptions.cursorVisible = options.cursorVisible;
-    if (options.cursorGrab !== undefined)
-      nativeOptions.cursorGrab = options.cursorGrab;
-    if (options.cursorHitTest !== undefined)
-      nativeOptions.cursorHitTest = options.cursorHitTest;
-    if (options.cursorPosition !== undefined) {
-      nativeOptions.cursorX = options.cursorPosition.x;
-      nativeOptions.cursorY = options.cursorPosition.y;
-    }
-    if (serializedMenu !== undefined) nativeOptions.menu = serializedMenu.json;
-    if (options.restoreState !== undefined) {
-      nativeOptions.restoreState = nativeWindowRestoreState(options.restoreState);
-    }
-    if (options.lineScrollPixels !== undefined) {
-      nativeOptions.lineScrollPixels = options.lineScrollPixels;
-    }
-    if (options.keySequenceTimeoutMs !== undefined) {
-      nativeOptions.keySequenceTimeoutMs = options.keySequenceTimeoutMs;
-    }
-    if (options.reduceMotion !== undefined)
-      nativeOptions.reduceMotion = options.reduceMotion;
-    if (options.trafficLightPosition !== undefined) {
-      nativeOptions.trafficLightX = options.trafficLightPosition.x;
-      nativeOptions.trafficLightY = options.trafficLightPosition.y;
-    }
-    if (options.backgroundAppearance !== undefined) {
-      nativeOptions.transparent =
-        options.backgroundAppearance === "transparent";
-      nativeOptions.blur = options.backgroundAppearance === "blurred";
-    } else {
-      if (options.transparent !== undefined)
-        nativeOptions.transparent = options.transparent;
-      if (options.blur !== undefined) nativeOptions.blur = options.blur;
-    }
-    if (options.placement !== undefined)
-      nativeOptions.popoverPlacement = options.placement;
-    if (options.gap !== undefined) nativeOptions.popoverGap = options.gap;
-    if (options.offset !== undefined) {
-      nativeOptions.popoverOffsetX = options.offset.x;
-      nativeOptions.popoverOffsetY = options.offset.y;
-    }
-    if (options.viewportMargin !== undefined) {
-      nativeOptions.popoverViewportMargin = options.viewportMargin;
-    }
-    if (options.dismissOnEscape !== undefined) {
-      nativeOptions.popoverDismissOnEscape = options.dismissOnEscape;
-    }
-    if (options.dismissOnPointerOutside !== undefined) {
-      nativeOptions.popoverDismissOnPointerOutside =
-        options.dismissOnPointerOutside;
-    }
-    if (options.grab !== undefined) nativeOptions.popoverGrab = options.grab;
-    if (options.acceptsKeyFocus !== undefined) {
-      nativeOptions.popoverAcceptsKeyFocus = options.acceptsKeyFocus;
-    }
-    const parent = options.anchor?.host;
-    if (
-      options.anchor &&
-      (!parent || parent.closed || !options.anchor.materialized)
-    ) {
-      throw new Error(
-        "a system popover requires a mounted node in an open parent Window",
-      );
-    }
-    parent?.flush();
-    this.app = app;
-    this.root = new NativeNode(NativeNodeTag.View, "", ROOT_NODE_ID);
-    this.root.host = this;
-    this.root.materialized = true;
-    this.nodes.set(ROOT_NODE_ID, this.root);
+    if (parent !== undefined) parent.flush();
+    const menuDefinitions = options.menu;
+    const menu = menuDefinitions === undefined ? undefined : serializeMenuDefinitions(menuDefinitions, this.nativeId);
+    const native = nativeWindowOptions(options, menu === undefined ? undefined : menu.json);
+    const json = JSON.stringify(native);
+    let dispose: (() => void) | undefined = undefined;
     try {
-      const dispose = withCurrentWindow(this, () => options.renderer(this));
-      if (typeof dispose !== "function") {
-        throw new TypeError(
-          "a QuickGUI Window renderer must return a dispose function",
-        );
-      }
-      this._trackMount(dispose);
-      const initialBatch = this.#takePendingBatch();
-      if (embedded) {
-        if (process.platform !== "darwin") {
-          throw new Error("embedded SwiftUI QuickGUI views require macOS");
-        }
-        this.nativeId = hostedRuntime
-          ? binding.createHostedEmbeddedView(
-              app.nativeId,
-              embedded.owner.nativeId,
-              embedded.matchContents.horizontal,
-              embedded.matchContents.vertical,
-              nativeOptions,
-              initialBatch,
-            )
-          : binding.createEmbeddedView(
-              app.nativeId,
-              embedded.owner.nativeId,
-              embedded.matchContents.horizontal,
-              embedded.matchContents.vertical,
-              nativeOptions,
-              initialBatch,
-            );
-      } else if (options.anchor) {
-        this.nativeId = hostedRuntime
-          ? binding.createHostedSystemPopover(
-              app.nativeId,
-              parent!.nativeId,
-              options.anchor.id,
-              nativeOptions,
-              initialBatch,
-            )
-          : binding.createSystemPopover(
-              app.nativeId,
-              parent!.nativeId,
-              options.anchor.id,
-              nativeOptions,
-              initialBatch,
-            );
-      } else {
-        this.nativeId = hostedRuntime
-          ? binding.createHostedWindow(
-              app.nativeId,
-              nativeOptions,
-              initialBatch,
-            )
-          : binding.createWindow(app.nativeId, nativeOptions, initialBatch);
-      }
-      this.#nativeReady = true;
-      app._registerWindow(this);
-      for (const callback of [...this.#nativeReadyCallbacks]) {
-        this.#nativeReadyCallbacks.delete(callback);
-        callback();
-      }
-      if (serializedMenu !== undefined)
-        this._trackMount(serializedMenu.install());
+      dispose = withCurrentWindow(this, () => options.renderer(this));
     } catch (error) {
       this._didClose();
       throw error;
     }
+    this._mountDisposers.push(dispose);
+    const initialBatch = this.takeBatch();
+    if (embedded !== undefined) {
+      hostCreateEmbeddedView(
+        this.appId,
+        this.nativeId,
+        embedded.owner.nativeId,
+        embedded.matchHorizontal,
+        embedded.matchVertical,
+        json,
+        initialBatch,
+      );
+    } else if (anchor !== undefined && parent !== undefined) {
+      hostCreateSystemPopover(this.appId, this.nativeId, parent.nativeId, anchor.id, json, initialBatch);
+    } else {
+      hostCreateWindow(this.appId, this.nativeId, json, initialBatch);
+    }
+    this.nativeReady = true;
+    application._registerWindow(this);
+    if (menu !== undefined) {
+      this._menuRelease = menu.release;
+    }
   }
 
-  get closed(): boolean {
-    return this.#closed;
+  /** Subscribe to one window lifecycle event. */
+  on(type: WindowEventName, listener: WindowEventListener): () => void {
+    if (this.closed) return () => undefined;
+    const entry = new WindowListener(type, listener);
+    this._listeners.push(entry);
+    if (type === "closeRequested") {
+      this._closeRequestListeners += 1;
+      this._syncCloseInterception();
+    }
+    return () => {
+      const index = this._listeners.indexOf(entry);
+      if (index >= 0) this._listeners.splice(index, 1);
+      if (type === "closeRequested") {
+        this._closeRequestListeners -= 1;
+        this._syncCloseInterception();
+      }
+    };
   }
 
-  onClose(listener: WindowCloseListener): () => void {
-    if (this.#closed) {
+  onClose(listener: (window: Window) => void): () => void {
+    if (this.closed) {
       listener(this);
-      return () => {};
+      return () => undefined;
     }
-    this.#closeListeners.add(listener);
-    return () => this.#closeListeners.delete(listener);
+    return this.on("closed", (event) => listener(event.window));
   }
 
-  /** @internal Run after this window has a native id, including during its initial construction. */
-  _afterNativeReady(callback: () => void): () => void {
-    if (this.#closed) return () => {};
-    if (this.#nativeReady) {
-      callback();
-      return () => {};
-    }
-    this.#nativeReadyCallbacks.add(callback);
-    return () => this.#nativeReadyCallbacks.delete(callback);
+  /** Hold native close requests for this window and decide in application code. */
+  onCloseRequested(listener: (window: Window) => void): () => void {
+    return this.on("closeRequested", (event) => listener(event.window));
   }
 
-  /**
-   * Complete a held close, or begin an ordinary one.
-   *
-   * Native close requests are intercepted only while `onCloseRequested` listeners exist; this
-   * call always completes the close.
-   */
+  _emit(type: WindowEventName, event: WindowEvent): void {
+    const snapshot = [...this._listeners];
+    withCurrentWindow(this, () => {
+      for (const entry of snapshot) {
+        if (entry.type === type) entry.listener(event);
+      }
+    });
+  }
+
+  /** Complete a held close, or begin an ordinary one. */
   close(): void {
     this.app._closeWindow(this);
   }
 
-  /** Close the window immediately, bypassing every registered `closeRequested` listener. */
+  /** Close the window immediately, bypassing every registered close-request listener. */
   destroy(): void {
-    this.#closeRequestListeners.clear();
-    this.#syncCloseInterception();
+    let index = this._listeners.length;
+    while (index > 0) {
+      index -= 1;
+      if (this._listeners[index]!.type === "closeRequested") this._listeners.splice(index, 1);
+    }
+    this._closeRequestListeners = 0;
+    this._syncCloseInterception();
     this.app._closeWindow(this);
   }
 
-  /**
-   * Hold native close requests for this window and decide in JavaScript.
-   *
-   * While at least one listener is registered the core prevents the native close and delivers a
-   * `closeRequested` event instead. Call `window.close()` (or `window.destroy()`) to complete it.
-   * With no listener left, closes proceed natively again.
-   */
-  onCloseRequested(listener: WindowCloseRequestListener): () => void {
-    if (this.#closed) return () => {};
-    this.#closeRequestListeners.add(listener);
-    this.#syncCloseInterception();
-    return () => {
-      this.#closeRequestListeners.delete(listener);
-      this.#syncCloseInterception();
-    };
+  _syncCloseInterception(): void {
+    const intercepting = this._closeRequestListeners > 0;
+    if (this.closed || intercepting === this._closeIntercepting) return;
+    this._closeIntercepting = intercepting;
+    this.action("set-close-interception", intercepting ? "true" : "false");
   }
 
-  /** Subscribe to one window lifecycle event. */
-  on<K extends keyof WindowEventMap>(
-    type: K,
-    listener: (payload: WindowEventMap[K]) => void,
-  ): () => void {
-    if (type === "closeRequested") {
-      return this.onCloseRequested(listener as WindowCloseRequestListener);
-    }
-    if (type === "closed") {
-      return this.onClose((window) =>
-        (listener as (payload: WindowEventMap["closed"]) => void)({ window }),
-      );
-    }
-    if (this.#closed) return () => {};
-    const listeners = this.#lifecycleListeners.get(type) ?? new Set();
-    const wrapped = (payload: unknown) =>
-      listener(payload as WindowEventMap[K]);
-    listeners.add(wrapped);
-    this.#lifecycleListeners.set(type, listeners);
-    return () => {
-      listeners.delete(wrapped);
-      if (listeners.size === 0) this.#lifecycleListeners.delete(type);
-    };
+  _didRequestClose(): void {
+    if (this.closed) return;
+    this._emit("closeRequested", { window: this, type: "closeRequested" });
   }
 
-  #emitLifecycle<K extends keyof WindowEventMap>(
-    type: K,
-    payload: WindowEventMap[K],
-  ): void {
-    const listeners = this.#lifecycleListeners.get(type);
-    if (!listeners?.size) return;
-    withCurrentWindow(this, () => {
-      for (const listener of [...listeners]) listener(payload);
-    });
-  }
-
-  /** @internal One core window lifecycle notification reached JavaScript. */
   _didObserveLifecycle(kind: string, value: string | undefined): void {
-    if (this.#closed) return;
+    if (this.closed) return;
     switch (kind) {
       case "window-minimize":
-        this.#emitLifecycle(value === "true" ? "minimize" : "restore", {
-          window: this,
-        });
+        this._emit(value === "true" ? "minimize" : "restore", { window: this, type: value === "true" ? "minimize" : "restore" });
         return;
       case "window-maximize":
-        this.#emitLifecycle(value === "true" ? "maximize" : "unmaximize", {
-          window: this,
-        });
+        this._emit(value === "true" ? "maximize" : "unmaximize", { window: this, type: value === "true" ? "maximize" : "unmaximize" });
         return;
       case "window-fullscreen":
-        this.#emitLifecycle(
-          value === "true" ? "enterFullScreen" : "leaveFullScreen",
-          { window: this },
-        );
+        this._emit(value === "true" ? "enterFullScreen" : "leaveFullScreen", {
+          window: this,
+          type: value === "true" ? "enterFullScreen" : "leaveFullScreen",
+        });
         return;
       case "window-ready-to-show":
-        this.#emitLifecycle("readyToShow", { window: this });
+        this._emit("readyToShow", { window: this, type: "readyToShow" });
         return;
       case "window-occlusion":
-        this.#emitLifecycle("occlusionChange", {
-          window: this,
-          occluded: value === "true",
-        });
+        this._emit("occlusionChange", { window: this, type: "occlusionChange", occluded: value === "true" });
         return;
       case "window-level":
-        this.#emitLifecycle("levelChange", {
-          window: this,
-          level: (value ?? "normal") as WindowLevel,
-        });
+        this._emit("levelChange", { window: this, type: "levelChange", level: value ?? "normal" });
         return;
       case "window-focus":
-        this.#emitLifecycle(value === "true" ? "focus" : "blur", {
-          window: this,
-        });
+        this._emit(value === "true" ? "focus" : "blur", { window: this, type: value === "true" ? "focus" : "blur" });
         return;
       case "window-appearance":
-        this.#emitLifecycle("appearanceChange", {
-          window: this,
-          appearance: value === "dark" ? "dark" : "light",
-        });
+        this._emit("appearanceChange", { window: this, type: "appearanceChange", appearance: value === "dark" ? "dark" : "light" });
+        return;
+      case "window-state-change":
+        this._emit("stateChange", { window: this, type: "stateChange" });
         return;
       case "window-will-resize":
       case "window-resize": {
-        const size = parseWindowSize(value);
-        if (!size) return;
-        this.#emitLifecycle(kind === "window-resize" ? "resize" : "willResize", {
-          window: this,
-          size,
-        });
+        if (value === undefined) return;
+        const size = JSON.parse(value) as Size;
+        const type: WindowEventName = kind === "window-resize" ? "resize" : "willResize";
+        this._emit(type, { window: this, type, size });
         return;
       }
       case "window-will-move":
       case "window-move": {
-        const position = parseWindowPoint(value);
-        if (!position) return;
-        this.#emitLifecycle(kind === "window-move" ? "move" : "willMove", {
-          window: this,
-          position,
-        });
+        if (value === undefined) return;
+        const position = JSON.parse(value) as Point;
+        const type: WindowEventName = kind === "window-move" ? "move" : "willMove";
+        this._emit(type, { window: this, type, position });
         return;
       }
       default:
     }
   }
 
-  #syncCloseInterception(): void {
-    const intercepting = this.#closeRequestListeners.size > 0;
-    if (this.#closed || intercepting === this.#closeIntercepting) return;
-    this.#closeIntercepting = intercepting;
-    this._afterNativeReady(() => {
-      try {
-        performNativeWindowAction(
-          this,
-          "set-close-interception",
-          String(intercepting),
-        );
-      } catch {
-        // The window is already gone; the core drops its interception with it.
-      }
-    });
-  }
-
-  /** @internal A held native close request reached JavaScript. */
-  _didRequestClose(): void {
-    if (this.#closed) return;
-    withCurrentWindow(this, () => {
-      for (const listener of [...this.#closeRequestListeners]) {
-        listener({ window: this });
-      }
-    });
-  }
-
-  getState(): Promise<WindowState> {
-    return getNativeWindowState(this);
-  }
-
-  onStateChange(listener: (state: WindowState) => void): () => void {
-    if (this.#closed) return () => {};
-    return onNativeWindowStateChange(this, listener);
-  }
-
-  setTitle(title: string): void {
-    performNativeWindowAction(this, "set-title", title);
-  }
-
-  setBounds(bounds: WindowBounds): void {
-    performNativeWindowAction(this, "set-bounds", JSON.stringify(bounds));
-  }
-
-  setPosition(position: Point): void {
-    performNativeWindowAction(this, "move", JSON.stringify(position));
-  }
-
-  setSize(size: Size): void {
-    performNativeWindowAction(this, "resize", JSON.stringify(size));
-  }
-
-  minimize(): void {
-    performNativeWindowAction(this, "minimize");
-  }
-
-  maximize(): void {
-    performNativeWindowAction(this, "maximize");
-  }
-
-  restore(): void {
-    performNativeWindowAction(this, "restore");
-  }
-
-  setFullscreen(fullscreen: boolean): void {
-    performNativeWindowAction(this, "set-fullscreen", String(fullscreen));
-  }
-
-  setResizable(resizable: boolean): void {
-    performNativeWindowAction(this, "set-resizable", String(resizable));
-  }
-
-  setMovable(movable: boolean): void {
-    performNativeWindowAction(this, "set-movable", String(movable));
-  }
-
-  setMinimumSize(size?: Size): void {
-    performNativeWindowAction(
-      this,
-      "set-minimum-size",
-      size === undefined ? undefined : JSON.stringify(size),
-    );
-  }
-
-  setMaximumSize(size?: Size): void {
-    performNativeWindowAction(
-      this,
-      "set-maximum-size",
-      size === undefined ? undefined : JSON.stringify(size),
-    );
-  }
-
-  setMinimizable(minimizable: boolean): void {
-    performNativeWindowAction(this, "set-minimizable", String(minimizable));
-  }
-
-  setMaximizable(maximizable: boolean): void {
-    performNativeWindowAction(this, "set-maximizable", String(maximizable));
-  }
-
-  setClosable(closable: boolean): void {
-    performNativeWindowAction(this, "set-closable", String(closable));
-  }
-
-  setDecorated(decorated: boolean): void {
-    performNativeWindowAction(this, "set-decorated", String(decorated));
-  }
-
-  setShadow(shadow: boolean): void {
-    performNativeWindowAction(this, "set-shadow", String(shadow));
-  }
-
-  setContentProtected(protected_: boolean): void {
-    performNativeWindowAction(
-      this,
-      "set-content-protected",
-      String(protected_),
-    );
-  }
-
-  setWindowLevel(level: WindowLevel | "automatic"): void {
-    performNativeWindowAction(this, "set-window-level", level);
-  }
-
-  setFocusable(focusable: boolean): void {
-    performNativeWindowAction(this, "set-focusable", String(focusable));
-  }
-
-  setSkipTaskbar(skip: boolean): void {
-    performNativeWindowAction(this, "set-skip-taskbar", String(skip));
-  }
-
-  setVisibleOnAllWorkspaces(visible: boolean): void {
-    performNativeWindowAction(
-      this,
-      "set-visible-on-all-workspaces",
-      String(visible),
-    );
-  }
-
-  setOpacity(opacity: number): void {
-    performNativeWindowAction(this, "set-opacity", String(opacity));
-  }
-
-  setIcon(icon: ImageSource): void {
-    performNativeWindowImageAction(this, "set-icon", icon);
-  }
-
-  clearIcon(): void {
-    performNativeWindowImageAction(this, "clear-icon");
-  }
-
-  setTaskbarProgress(state: TaskbarProgressState, progress: number): void {
-    performNativeWindowAction(
-      this,
-      "set-taskbar-progress",
-      JSON.stringify({ state, progress }),
-    );
-  }
-
-  setTaskbarOverlayIcon(icon: ImageSource, description: string): void {
-    performNativeWindowImageAction(
-      this,
-      "set-taskbar-overlay-icon",
-      icon,
-      description,
-    );
-  }
-
-  clearTaskbarOverlayIcon(): void {
-    performNativeWindowAction(this, "clear-taskbar-overlay-icon");
-  }
-
-  setCursorVisible(visible: boolean): void {
-    performNativeWindowAction(this, "set-cursor-visible", String(visible));
-  }
-
-  setCursorGrab(mode: CursorGrabMode): void {
-    performNativeWindowAction(this, "set-cursor-grab", mode);
-  }
-
-  setCursorHitTest(hitTest: boolean): void {
-    performNativeWindowAction(this, "set-cursor-hit-test", String(hitTest));
-  }
-
-  setCursorPosition(position: Point): void {
-    performNativeWindowAction(
-      this,
-      "set-cursor-position",
-      JSON.stringify(position),
-    );
-  }
-
-  show(): void {
-    performNativeWindowAction(this, "set-visible", "true");
-  }
-
-  hide(): void {
-    performNativeWindowAction(this, "set-visible", "false");
-  }
-
-  focus(): void {
-    performNativeWindowAction(this, "focus");
-  }
-
-  requestAttention(): void {
-    performNativeWindowAction(this, "request-attention");
-  }
-
-  setRepresentedFile(path?: string): void {
-    performNativeWindowAction(this, "set-represented-file", path ?? "");
-  }
-
-  setDocumentEdited(edited: boolean): void {
-    performNativeWindowAction(this, "set-document-edited", String(edited));
-  }
-
-  setAppearance(appearance: AppearancePreference): void {
-    performNativeWindowAction(this, "set-appearance", appearance);
-  }
-
-  setBackgroundAppearance(appearance: WindowBackgroundAppearance): void {
-    performNativeWindowAction(this, "set-background-appearance", appearance);
-  }
-
-  setVibrancy(vibrancy?: MacOSVibrancy): void {
-    performNativeWindowAction(this, "set-vibrancy", vibrancy);
-  }
-
-  setVisualEffectState(state: MacOSVisualEffectState): void {
-    performNativeWindowAction(this, "set-visual-effect-state", state);
-  }
-
-  /** Present AppKit's character palette above this window. */
-  showCharacterPalette(): void {
-    performNativeWindowAction(this, "show-character-palette");
-  }
-
-  /**
-   * Raise or restore this window's stacking level.
-   *
-   * `level` names the level applied while `flag` is true and accepts the Electron names
-   * (`floating`, `modalPanel`, `mainMenu`, `status`, `popUpMenu`, `screenSaver`) as well as their
-   * kebab-case forms. Turning it off returns the window to `normal`.
-   */
-  setAlwaysOnTop(flag: boolean, level?: WindowLevel | ElectronWindowLevel): void {
-    performNativeWindowAction(
-      this,
-      "set-always-on-top",
-      JSON.stringify(level === undefined ? { flag } : { flag, level }),
-    );
-  }
-
-  /** Raise this window to the front of its stacking level without activating the app. */
-  moveTop(): void {
-    performNativeWindowAction(this, "move-top");
-  }
-
-  /** Order this window immediately above another open window. */
-  moveAbove(other: Window): void {
-    if (other === this) {
-      throw new RangeError("a window cannot be ordered above itself");
-    }
-    performNativeWindowAction(this, "move-above", String(other.nativeId));
-  }
-
-  /**
-   * Let clicks pass through this window to whatever is behind it.
-   *
-   * `forward` keeps pointer motion and hover events flowing to this window; it is ignored when
-   * `ignore` is false.
-   */
-  setIgnoreMouseEvents(
-    ignore: boolean,
-    options: { forward?: boolean } = {},
-  ): void {
-    performNativeWindowAction(
-      this,
-      "set-ignore-mouse-events",
-      JSON.stringify({ ignore, forward: options.forward ?? false }),
-    );
-  }
-
-  /**
-   * Block or restore every native input event for this window.
-   *
-   * A disabled window stays visible and keeps rendering; it simply stops receiving pointer and
-   * keyboard input, which is the native way to express an application-modal owner.
-   */
-  setEnabled(enabled: boolean): void {
-    performNativeWindowAction(this, "set-enabled", String(enabled));
-  }
-
-  /** Constrain live native resizing to one `width:height` content ratio, or pass null to clear. */
-  setAspectRatio(ratio: Size | null): void {
-    performNativeWindowAction(
-      this,
-      "set-aspect-ratio",
-      ratio === null ? undefined : JSON.stringify(ratio),
-    );
-  }
-
-  /** Show or hide the macOS close/minimize/zoom buttons. */
-  setWindowButtonVisibility(visible: boolean): void {
-    performNativeWindowAction(
-      this,
-      "set-window-button-visibility",
-      String(visible),
-    );
-  }
-
-  /** Electron-compatible alias for `setShadow`. */
-  setHasShadow(shadow: boolean): void {
-    this.setShadow(shadow);
-  }
-
-  /**
-   * Declare how the core narrows a window-manager resize.
-   *
-   * The core answers the platform synchronously, so the constraint is declared ahead instead of
-   * being asked of JavaScript inside the `willResize` event. Pass `null` to withdraw it.
-   */
-  setResizePolicy(policy: WindowResizePolicy | null): void {
-    performNativeWindowAction(
-      this,
-      "set-resize-policy",
-      policy === null ? undefined : JSON.stringify(policy),
-    );
-  }
-
-  /** Declare how the core narrows a window-manager move. Pass `null` to withdraw it. */
-  setMovePolicy(policy: WindowMovePolicy | null): void {
-    performNativeWindowAction(
-      this,
-      "set-move-policy",
-      policy === null ? undefined : JSON.stringify(policy),
-    );
-  }
-
-  /**
-   * Replace this window's native menu declaration, or pass `null` to inherit the app menu.
-   *
-   * On macOS the declaration becomes the process menu bar while this window is active.
-   */
-  setMenu(definitions: readonly MenuDefinition[] | null): void {
-    setNativeWindowMenu(this, definitions);
-  }
-
-  /**
-   * Capture this window's persistable geometry and display identity.
-   *
-   * Store the result and hand it back as `WindowOptions.restoreState` on the next launch. The
-   * rectangle is the windowed restore geometry, so a maximized or fullscreen window still
-   * persists the size it returns to.
-   */
-  getRestoreState(): Promise<WindowRestoreState> {
-    return getNativeWindowRestoreState(this);
-  }
-
-  /** Join a named native system-tab group, or leave it by passing no identifier. */
-  setTabbingIdentifier(identifier?: string): void {
-    performNativeWindowAction(this, "set-tabbing-identifier", identifier ?? "");
-  }
-
-  selectNextTab(): void {
-    performNativeWindowAction(this, "select-next-tab");
-  }
-
-  selectPreviousTab(): void {
-    performNativeWindowAction(this, "select-previous-tab");
-  }
-
-  selectTab(index: number): void {
-    if (!Number.isInteger(index) || index < 0) {
-      throw new RangeError("a native tab index must be a non-negative integer");
-    }
-    performNativeWindowAction(this, "select-tab", String(index));
-  }
-
-  mergeAllWindows(): void {
-    performNativeWindowAction(this, "merge-all-windows");
-  }
-
-  moveTabToNewWindow(): void {
-    performNativeWindowAction(this, "move-tab-to-new-window");
-  }
-
-  toggleTabBar(): void {
-    performNativeWindowAction(this, "toggle-tab-bar");
-  }
-
-  toggleTabOverview(): void {
-    performNativeWindowAction(this, "toggle-tab-overview");
-  }
-
-  _focusNode(node: NativeNode): boolean {
-    if (this.#closed || node.host !== this) return false;
-    this.flush();
-    if (hostedRuntime) {
-      binding.focusHostedNode(this.app.nativeId, this.nativeId, node.id);
-      return true;
-    }
-    return binding.focusNode(this.app.nativeId, this.nativeId, node.id);
-  }
-
-  flush(): number | undefined {
-    if (this.#closed || !this.#nativeReady) return undefined;
-    this.#flushScheduled = false;
-    if (this.#batch.empty) return undefined;
-    const batch = this.#batch;
-    this.#batch = new MutationBatch();
-    const bytes = batch.finish();
-    return hostedRuntime
-      ? binding.applyHostedBatch(this.app.nativeId, this.nativeId, bytes)
-      : binding.applyBatch(this.app.nativeId, this.nativeId, bytes);
-  }
-
-  #takePendingBatch() {
-    this.#flushScheduled = false;
-    const batch = this.#batch;
-    this.#batch = new MutationBatch();
-    return batch.finish();
-  }
-
-  _dispatchEvent(
-    type: NativeEventType,
-    targetId: number,
-    value?: string,
-  ): void {
-    withCurrentWindow(this, () => {
-      const target = this.nodes.get(targetId);
-      if (!target) return;
-      const quickGuiEvent = new QuickGuiEvent(type, target, value);
-      if (type === "mouseenter" || type === "mouseleave") {
-        target.listeners.get(type)?.(quickGuiEvent);
-        return;
-      }
-      let current: NativeNode | undefined = target;
-      while (current) {
-        quickGuiEvent.currentTarget = current;
-        current.listeners.get(type)?.(quickGuiEvent);
-        if (quickGuiEvent.propagationStopped) break;
-        current = current.parent;
-      }
-    });
-  }
-
   _didClose(): void {
-    if (this.#closed) return;
-    this.#closed = true;
-    this.#flushScheduled = false;
-    this.#nativeReadyCallbacks.clear();
-    const disposers = [...this.#mountDisposers];
-    this.#mountDisposers.clear();
+    if (this.closed) return;
+    this.closed = true;
+    this.flushScheduled = false;
+    const disposers = [...this._mountDisposers];
+    this._mountDisposers.splice(0, this._mountDisposers.length);
     for (const dispose of disposers) dispose();
-    this.#batch = new MutationBatch();
-    removeNativeWindowStateListeners(this);
-    releaseNativeWindowMenu(this.nativeId);
-    this.#lifecycleListeners.clear();
-    this.#closeRequestListeners.clear();
-    this.#closeIntercepting = false;
-    for (const listener of this.#closeListeners) listener(this);
-    this.#closeListeners.clear();
+    const release = this._menuRelease;
+    if (release !== undefined) {
+      this._menuRelease = undefined;
+      release();
+    }
+    this._closeIntercepting = false;
+    this._emit("closed", { window: this, type: "closed" });
+    this._listeners.splice(0, this._listeners.length);
     this.nodes.clear();
   }
 
@@ -2395,192 +1372,769 @@ export class Window {
     this._didClose();
   }
 
-  _trackMount(dispose: () => void): () => void {
-    if (this.#closed) {
+  /** Register a disposer that runs when the window closes. */
+  trackMount(dispose: () => void): () => void {
+    if (this.closed) {
       dispose();
-      return () => {};
+      return () => undefined;
     }
-    this.#mountDisposers.add(dispose);
-    return () => this.#mountDisposers.delete(dispose);
+    this._mountDisposers.push(dispose);
+    return () => {
+      const index = this._mountDisposers.indexOf(dispose);
+      if (index >= 0) this._mountDisposers.splice(index, 1);
+    };
   }
 
-  _enqueueCreate(node: NativeNode): void {
-    switch (node.tag) {
-      case NativeNodeTag.Text:
-        this.#batch.createText(node.id, node.text);
-        break;
-      case NativeNodeTag.Sentinel:
-        this.#batch.createSentinel(node.id);
-        break;
-      default:
-        this.#batch.createElement(node.id, node.tag);
+  /** Queue one native window action. */
+  action(action: string, value: string | undefined): void {
+    if (this.closed) return;
+    const json = value === undefined
+      ? JSON.stringify({ method: "window-action", window: this.nativeId, action })
+      : JSON.stringify({ method: "window-action", window: this.nativeId, action, value });
+    sendMutation(json);
+  }
+
+  imageAction(action: string, image: ImageSource | undefined, description: string | undefined): void {
+    if (this.closed) return;
+    const request: { method: string; window: number; action: string; image?: NativeImageSource; description?: string } = {
+      method: "window-image-action",
+      window: this.nativeId,
+      action,
+    };
+    if (image !== undefined) request.image = nativeImageSource(image);
+    if (description !== undefined) request.description = description;
+    sendMutation(JSON.stringify(request));
+  }
+
+  async getState(): Promise<WindowState> {
+    const json = await sendCommand(JSON.stringify({ method: "get-window-state", window: this.nativeId }));
+    return windowStateFromNative(JSON.parse(json) as NativeWindowState);
+  }
+
+  async getRestoreState(): Promise<WindowRestoreState> {
+    const json = await sendCommand(JSON.stringify({ method: "get-window-restore-state", window: this.nativeId }));
+    return JSON.parse(json) as WindowRestoreState;
+  }
+
+  setTitle(title: string): void {
+    this.action("set-title", title);
+  }
+
+  setBounds(bounds: WindowBounds): void {
+    this.action("set-bounds", JSON.stringify(bounds));
+  }
+
+  setPosition(position: Point): void {
+    this.action("move", JSON.stringify(position));
+  }
+
+  setSize(size: Size): void {
+    this.action("resize", JSON.stringify(size));
+  }
+
+  minimize(): void {
+    this.action("minimize", undefined);
+  }
+
+  maximize(): void {
+    this.action("maximize", undefined);
+  }
+
+  restore(): void {
+    this.action("restore", undefined);
+  }
+
+  setFullscreen(fullscreen: boolean): void {
+    this.action("set-fullscreen", fullscreen ? "true" : "false");
+  }
+
+  setResizable(resizable: boolean): void {
+    this.action("set-resizable", resizable ? "true" : "false");
+  }
+
+  setMovable(movable: boolean): void {
+    this.action("set-movable", movable ? "true" : "false");
+  }
+
+  setMinimumSize(size: Size | undefined): void {
+    this.action("set-minimum-size", size === undefined ? undefined : JSON.stringify(size));
+  }
+
+  setMaximumSize(size: Size | undefined): void {
+    this.action("set-maximum-size", size === undefined ? undefined : JSON.stringify(size));
+  }
+
+  setMinimizable(minimizable: boolean): void {
+    this.action("set-minimizable", minimizable ? "true" : "false");
+  }
+
+  setMaximizable(maximizable: boolean): void {
+    this.action("set-maximizable", maximizable ? "true" : "false");
+  }
+
+  setClosable(closable: boolean): void {
+    this.action("set-closable", closable ? "true" : "false");
+  }
+
+  setDecorated(decorated: boolean): void {
+    this.action("set-decorated", decorated ? "true" : "false");
+  }
+
+  setShadow(shadow: boolean): void {
+    this.action("set-shadow", shadow ? "true" : "false");
+  }
+
+  setHasShadow(shadow: boolean): void {
+    this.setShadow(shadow);
+  }
+
+  setContentProtected(contentProtected: boolean): void {
+    this.action("set-content-protected", contentProtected ? "true" : "false");
+  }
+
+  setWindowLevel(level: WindowLevel | "automatic"): void {
+    this.action("set-window-level", level);
+  }
+
+  setFocusable(focusable: boolean): void {
+    this.action("set-focusable", focusable ? "true" : "false");
+  }
+
+  setSkipTaskbar(skip: boolean): void {
+    this.action("set-skip-taskbar", skip ? "true" : "false");
+  }
+
+  setVisibleOnAllWorkspaces(visible: boolean): void {
+    this.action("set-visible-on-all-workspaces", visible ? "true" : "false");
+  }
+
+  setOpacity(opacity: number): void {
+    this.action("set-opacity", String(opacity));
+  }
+
+  setIcon(icon: ImageSource): void {
+    this.imageAction("set-icon", icon, undefined);
+  }
+
+  clearIcon(): void {
+    this.imageAction("clear-icon", undefined, undefined);
+  }
+
+  setTaskbarProgress(state: TaskbarProgressState, progress: number): void {
+    this.action("set-taskbar-progress", JSON.stringify({ state, progress }));
+  }
+
+  setTaskbarOverlayIcon(icon: ImageSource, description: string): void {
+    this.imageAction("set-taskbar-overlay-icon", icon, description);
+  }
+
+  clearTaskbarOverlayIcon(): void {
+    this.action("clear-taskbar-overlay-icon", undefined);
+  }
+
+  setCursorVisible(visible: boolean): void {
+    this.action("set-cursor-visible", visible ? "true" : "false");
+  }
+
+  setCursorGrab(mode: CursorGrabMode): void {
+    this.action("set-cursor-grab", mode);
+  }
+
+  setCursorHitTest(hitTest: boolean): void {
+    this.action("set-cursor-hit-test", hitTest ? "true" : "false");
+  }
+
+  setCursorPosition(position: Point): void {
+    this.action("set-cursor-position", JSON.stringify(position));
+  }
+
+  show(): void {
+    this.action("set-visible", "true");
+  }
+
+  hide(): void {
+    this.action("set-visible", "false");
+  }
+
+  focus(): void {
+    this.action("focus", undefined);
+  }
+
+  requestAttention(): void {
+    this.action("request-attention", undefined);
+  }
+
+  setRepresentedFile(path: string | undefined): void {
+    this.action("set-represented-file", path ?? "");
+  }
+
+  setDocumentEdited(edited: boolean): void {
+    this.action("set-document-edited", edited ? "true" : "false");
+  }
+
+  setAppearance(appearance: AppearancePreference): void {
+    this.action("set-appearance", appearance);
+  }
+
+  setBackgroundAppearance(appearance: WindowBackgroundAppearance): void {
+    this.action("set-background-appearance", appearance);
+  }
+
+  setVibrancy(vibrancy: MacOSVibrancy | undefined): void {
+    this.action("set-vibrancy", vibrancy ?? "");
+  }
+
+  setVisualEffectState(state: MacOSVisualEffectState): void {
+    this.action("set-visual-effect-state", state);
+  }
+
+  showCharacterPalette(): void {
+    this.action("show-character-palette", undefined);
+  }
+
+  setAlwaysOnTop(flag: boolean, level?: WindowLevel | ElectronWindowLevel): void {
+    this.action("set-always-on-top", level === undefined ? JSON.stringify({ flag }) : JSON.stringify({ flag, level }));
+  }
+
+  moveTop(): void {
+    this.action("move-top", undefined);
+  }
+
+  moveAbove(other: Window): void {
+    if (other === this) throw new RangeError("a window cannot be ordered above itself");
+    this.action("move-above", String(other.nativeId));
+  }
+
+  setIgnoreMouseEvents(ignore: boolean, forward = false): void {
+    this.action("set-ignore-mouse-events", JSON.stringify({ ignore, forward }));
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.action("set-enabled", enabled ? "true" : "false");
+  }
+
+  setAspectRatio(ratio: Size | undefined): void {
+    this.action("set-aspect-ratio", ratio === undefined ? undefined : JSON.stringify(ratio));
+  }
+
+  setWindowButtonVisibility(visible: boolean): void {
+    this.action("set-window-button-visibility", visible ? "true" : "false");
+  }
+
+  setResizePolicy(policy: WindowResizePolicy | undefined): void {
+    this.action("set-resize-policy", policy === undefined ? undefined : JSON.stringify(policy));
+  }
+
+  setMovePolicy(policy: WindowMovePolicy | undefined): void {
+    this.action("set-move-policy", policy === undefined ? undefined : JSON.stringify(policy));
+  }
+
+  /** Replace this window's native menu declaration, or pass `undefined` to inherit the app menu. */
+  setMenu(definitions: MenuDefinition[] | undefined): void {
+    const release = this._menuRelease;
+    if (release !== undefined) {
+      this._menuRelease = undefined;
+      release();
+    }
+    if (definitions === undefined) {
+      this.action("set-menu", undefined);
+      return;
+    }
+    const menu = serializeMenuDefinitions(definitions, this.nativeId);
+    this._menuRelease = menu.release;
+    this.action("set-menu", menu.json);
+  }
+
+  setTabbingIdentifier(identifier: string | undefined): void {
+    this.action("set-tabbing-identifier", identifier ?? "");
+  }
+
+  selectNextTab(): void {
+    this.action("select-next-tab", undefined);
+  }
+
+  selectPreviousTab(): void {
+    this.action("select-previous-tab", undefined);
+  }
+
+  selectTab(index: number): void {
+    if (!Number.isInteger(index) || index < 0) throw new RangeError("a native tab index must be a non-negative integer");
+    this.action("select-tab", String(index));
+  }
+
+  mergeAllWindows(): void {
+    this.action("merge-all-windows", undefined);
+  }
+
+  moveTabToNewWindow(): void {
+    this.action("move-tab-to-new-window", undefined);
+  }
+
+  toggleTabBar(): void {
+    this.action("toggle-tab-bar", undefined);
+  }
+
+  toggleTabOverview(): void {
+    this.action("toggle-tab-overview", undefined);
+  }
+
+  /** Present a native popup menu at `position`, or at the cursor; resolves once it closes. */
+  popupMenu(items: MenuDefinition, position: Point | undefined): Promise<void> {
+    return popupWindowMenu(this, items, position);
+  }
+}
+
+interface NativeWindowState {
+  displayId?: string;
+  kind: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  minimumWidth?: number;
+  minimumHeight?: number;
+  maximumWidth?: number;
+  maximumHeight?: number;
+  scaleFactor: number;
+  appearance: string;
+  backgroundAppearance: string;
+  vibrancy?: string;
+  visualEffectState: string;
+  focused: boolean;
+  focusable: boolean;
+  visible: boolean;
+  minimized: boolean;
+  maximized: boolean;
+  fullscreen: boolean;
+  occluded: boolean;
+  movable: boolean;
+  resizable: boolean;
+  minimizable: boolean;
+  maximizable: boolean;
+  closable: boolean;
+  decorated: boolean;
+  shadow: boolean;
+  contentProtected: boolean;
+  windowLevel: string;
+  skipTaskbar: boolean;
+  visibleOnAllWorkspaces: boolean;
+  opacity: number;
+  hasIcon: boolean;
+  taskbarProgressState: string;
+  taskbarProgress: number;
+  hasTaskbarOverlayIcon: boolean;
+  cursorVisible: boolean;
+  cursorGrab: string;
+  cursorHitTest: boolean;
+  cursorX?: number;
+  cursorY?: number;
+  representedFile: boolean;
+  documentEdited: boolean;
+  nativeTabbing: boolean;
+  nativeTabCount: number;
+  nativeSelectedTab?: number;
+  nativeTabBarVisible: boolean;
+  nativeTabOverviewVisible: boolean;
+  nativeTabsTruncated: boolean;
+}
+
+export interface Rectangle {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface WindowNativeTabs {
+  count: number;
+  selectedIndex?: number;
+  tabBarVisible: boolean;
+  overviewVisible: boolean;
+  truncated: boolean;
+}
+
+/** A complete snapshot of one window, as the host sees it. */
+export interface WindowState {
+  displayId?: string;
+  kind: string;
+  bounds: Rectangle;
+  viewportSize: Size;
+  minimumSize?: Size;
+  maximumSize?: Size;
+  scaleFactor: number;
+  appearance: string;
+  backgroundAppearance: string;
+  vibrancy?: string;
+  visualEffectState: string;
+  focused: boolean;
+  focusable: boolean;
+  visible: boolean;
+  minimized: boolean;
+  maximized: boolean;
+  fullscreen: boolean;
+  occluded: boolean;
+  movable: boolean;
+  resizable: boolean;
+  minimizable: boolean;
+  maximizable: boolean;
+  closable: boolean;
+  decorated: boolean;
+  shadow: boolean;
+  contentProtected: boolean;
+  windowLevel: string;
+  skipTaskbar: boolean;
+  visibleOnAllWorkspaces: boolean;
+  opacity: number;
+  hasIcon: boolean;
+  taskbarProgressState: string;
+  taskbarProgress: number;
+  hasTaskbarOverlayIcon: boolean;
+  cursorVisible: boolean;
+  cursorGrab: string;
+  cursorHitTest: boolean;
+  cursorPosition?: Point;
+  representedFile: boolean;
+  documentEdited: boolean;
+  nativeTabbing: boolean;
+  nativeTabs: WindowNativeTabs;
+}
+
+function windowStateFromNative(native: NativeWindowState): WindowState {
+  const state: WindowState = {
+    kind: native.kind,
+    bounds: { x: native.x, y: native.y, width: native.width, height: native.height },
+    viewportSize: { width: native.viewportWidth, height: native.viewportHeight },
+    scaleFactor: native.scaleFactor,
+    appearance: native.appearance,
+    backgroundAppearance: native.backgroundAppearance,
+    visualEffectState: native.visualEffectState,
+    focused: native.focused,
+    focusable: native.focusable,
+    visible: native.visible,
+    minimized: native.minimized,
+    maximized: native.maximized,
+    fullscreen: native.fullscreen,
+    occluded: native.occluded,
+    movable: native.movable,
+    resizable: native.resizable,
+    minimizable: native.minimizable,
+    maximizable: native.maximizable,
+    closable: native.closable,
+    decorated: native.decorated,
+    shadow: native.shadow,
+    contentProtected: native.contentProtected,
+    windowLevel: native.windowLevel,
+    skipTaskbar: native.skipTaskbar,
+    visibleOnAllWorkspaces: native.visibleOnAllWorkspaces,
+    opacity: native.opacity,
+    hasIcon: native.hasIcon,
+    taskbarProgressState: native.taskbarProgressState,
+    taskbarProgress: native.taskbarProgress,
+    hasTaskbarOverlayIcon: native.hasTaskbarOverlayIcon,
+    cursorVisible: native.cursorVisible,
+    cursorGrab: native.cursorGrab,
+    cursorHitTest: native.cursorHitTest,
+    representedFile: native.representedFile,
+    documentEdited: native.documentEdited,
+    nativeTabbing: native.nativeTabbing,
+    nativeTabs: {
+      count: native.nativeTabCount,
+      tabBarVisible: native.nativeTabBarVisible,
+      overviewVisible: native.nativeTabOverviewVisible,
+      truncated: native.nativeTabsTruncated,
+    },
+  };
+  if (native.displayId !== undefined) state.displayId = native.displayId;
+  if (native.minimumWidth !== undefined && native.minimumHeight !== undefined) {
+    state.minimumSize = { width: native.minimumWidth, height: native.minimumHeight };
+  }
+  if (native.maximumWidth !== undefined && native.maximumHeight !== undefined) {
+    state.maximumSize = { width: native.maximumWidth, height: native.maximumHeight };
+  }
+  if (native.vibrancy !== undefined) state.vibrancy = native.vibrancy;
+  if (native.cursorX !== undefined && native.cursorY !== undefined) {
+    state.cursorPosition = { x: native.cursorX, y: native.cursorY };
+  }
+  if (native.nativeSelectedTab !== undefined) state.nativeTabs.selectedIndex = native.nativeSelectedTab;
+  return state;
+}
+
+/** Present one native popup menu owned by a window; resolves when it closes. */
+export async function popupWindowMenu(window: Window, items: MenuDefinition, position: Point | undefined): Promise<void> {
+  const menu = serializeMenuDefinitions([items], window.nativeId);
+  const request = allocateRequest();
+  const json = position === undefined
+    ? JSON.stringify({ method: "window-popup-menu", request, window: window.nativeId, menu: menu.json })
+    : JSON.stringify({ method: "window-popup-menu", request, window: window.nativeId, menu: menu.json, x: position.x, y: position.y });
+  try {
+    await sendRequest(request, json);
+  } finally {
+    menu.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dialogs
+// ---------------------------------------------------------------------------
+
+class DialogEvent {
+  readonly value: string | undefined;
+  readonly paths: string[] | undefined;
+
+  constructor(value: string | undefined, paths: string[] | undefined) {
+    this.value = value;
+    this.paths = paths;
+  }
+}
+
+class PendingDialog {
+  readonly complete: (event: DialogEvent) => void;
+  readonly reject: (error: Error) => void;
+
+  constructor(complete: (event: DialogEvent) => void, reject: (error: Error) => void) {
+    this.complete = complete;
+    this.reject = reject;
+  }
+}
+
+export type AlertDialogLevel = "info" | "warning" | "critical";
+export type AlertDialogButtonRole = "default" | "cancel" | "other";
+
+export interface AlertDialogButton {
+  label: string;
+  role?: AlertDialogButtonRole;
+}
+
+export interface AlertDialogOptions {
+  level?: AlertDialogLevel;
+  message: string;
+  detail?: string;
+  /**
+   * Defaults to one system-styled OK button. macOS accepts up to 16 buttons; the portable
+   * Windows/Linux/BSD backend accepts up to three uniquely labelled buttons.
+   */
+  buttons?: (string | AlertDialogButton)[];
+}
+
+export interface FileDialogFilter {
+  name: string;
+  /** File extensions without a leading dot. Use `*` to match every file. */
+  extensions: string[];
+}
+
+export type OpenDialogProperty = "openFile" | "openDirectory" | "multiSelections" | "showHiddenFiles";
+
+export interface OpenDialogOptions {
+  title?: string;
+  /** Initial file or directory. */
+  defaultPath?: string;
+  filters?: FileDialogFilter[];
+  /** Custom open-button text. Currently supported by the macOS backend. */
+  buttonLabel?: string;
+  /**
+   * Defaults to `["openFile"]`. `showHiddenFiles` can currently be forced only on macOS;
+   * Windows/Linux otherwise follow the user's file-picker preference.
+   */
+  properties?: OpenDialogProperty[];
+}
+
+export interface OpenDialogResult {
+  canceled: boolean;
+  filePaths: string[];
+}
+
+export interface SaveDialogOptions {
+  title?: string;
+  /** Initial directory or complete suggested file path. */
+  defaultPath?: string;
+  filters?: FileDialogFilter[];
+  /** Custom save-button text. Currently supported by the macOS backend. */
+  buttonLabel?: string;
+  /** Currently supported by the macOS backend. */
+  showHiddenFiles?: boolean;
+}
+
+export interface SaveDialogResult {
+  canceled: boolean;
+  filePath?: string;
+}
+
+interface NativeDialogOptions {
+  level?: string;
+  message: string;
+  detail?: string;
+  buttons: AlertDialogButton[];
+}
+
+interface NativeOpenDialogOptions {
+  files: boolean;
+  directories: boolean;
+  multiple: boolean;
+  title?: string;
+  prompt?: string;
+  directory?: string;
+  suggestedName?: string;
+  filters: FileDialogFilter[];
+  showsHiddenFiles: boolean;
+}
+
+interface NativeSaveDialogOptions {
+  directory: string;
+  title?: string;
+  suggestedName?: string;
+  prompt?: string;
+  filters: FileDialogFilter[];
+  showsHiddenFiles: boolean;
+}
+
+function validateFilters(filters: FileDialogFilter[] | undefined): FileDialogFilter[] {
+  if (filters === undefined) return [];
+  for (const filter of filters) {
+    if (filter.name.length === 0 || filter.extensions.length === 0) {
+      throw new TypeError("file dialog filters require a name and at least one extension");
+    }
+    for (const extension of filter.extensions) {
+      if (extension.length === 0 || extension.startsWith(".") || extension.includes("/") || extension.includes("\\")) {
+        throw new TypeError("file dialog filter extensions must be nonempty and omit dots and path separators");
+      }
     }
   }
+  return filters;
+}
 
-  _enqueueProperty(
-    node: NativeNode,
-    property: PropertyCode,
-    value: NativePropertyValue,
-    color: boolean,
-  ): void {
-    this.#batch.setProperty(node.id, property, value, color);
-    this._scheduleFlush();
+function requireApp(): App {
+  const application = activeApp;
+  if (application === undefined) throw new Error("create a QuickGUI App before showing a dialog");
+  return application;
+}
+
+/** Present a native alert; resolves with the zero-based index of the chosen button. */
+export function showAlertDialog(options: AlertDialogOptions, window?: Window): Promise<number> {
+  const buttons: AlertDialogButton[] = [];
+  if (options.buttons === undefined) buttons.push({ label: "OK", role: "default" });
+  else {
+    for (const button of options.buttons) {
+      if (typeof button === "string") buttons.push({ label: button });
+      else buttons.push(button);
+    }
   }
-
-  _enqueueText(node: NativeNode): void {
-    this.#batch.replaceText(node.id, node.text);
-    this._scheduleFlush();
-  }
-
-  _enqueueInsert(
-    parent: NativeNode,
-    child: NativeNode,
-    before?: NativeNode,
-  ): void {
-    this.#batch.insert(parent.id, child.id, before?.id);
-    this._scheduleFlush();
-  }
-
-  _enqueueRemove(parent: NativeNode, child: NativeNode): void {
-    this.#batch.remove(parent.id, child.id);
-    this._scheduleFlush();
-  }
-
-  _enqueueCleanup(parent: NativeNode, children: readonly NativeNode[]): void {
-    this.#batch.cleanup(
-      parent.id,
-      children.map((child) => child.id),
+  const native: NativeDialogOptions = { message: options.message, buttons };
+  if (options.level !== undefined) native.level = options.level;
+  if (options.detail !== undefined) native.detail = options.detail;
+  const json = JSON.stringify(native);
+  return new Promise<number>((resolve, reject) => {
+    requireApp()._showDialog(
+      window,
+      0,
+      json,
+      (event) => {
+        resolve(Number(event.value ?? "0"));
+      },
+      reject,
     );
-    this._scheduleFlush();
-  }
+  });
+}
 
-  _scheduleFlush(): void {
-    if (this.#flushScheduled || this.#closed) return;
-    this.#flushScheduled = true;
-    queueMicrotask(() => {
-      if (!this.#closed) this.flush();
+/** Present a native open panel with Electron-shaped results. */
+/** Split an initial path into the directory to open and, for a file path, the name to suggest. */
+function applyDefaultPath(defaultPath: string, apply: (directory: string, suggestedName: string | undefined) => void): void {
+  const resolved = resolve(defaultPath);
+  if (defaultPath.endsWith(sep) || isExistingDirectory(resolved)) apply(resolved, undefined);
+  else apply(dirname(resolved), basename(resolved));
+}
+
+function isExistingDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function showOpenDialog(options: OpenDialogOptions, window?: Window): Promise<OpenDialogResult> {
+  const properties = options.properties ?? ["openFile"];
+  const files = properties.includes("openFile");
+  const directories = properties.includes("openDirectory");
+  if (!files && !directories) throw new TypeError("showOpenDialog properties must include openFile or openDirectory");
+  if (files && directories && process.platform !== "darwin") {
+    throw new TypeError("showOpenDialog cannot combine openFile and openDirectory on this platform");
+  }
+  const native: NativeOpenDialogOptions = {
+    files,
+    directories,
+    multiple: properties.includes("multiSelections"),
+    filters: validateFilters(options.filters),
+    showsHiddenFiles: properties.includes("showHiddenFiles"),
+  };
+  if (options.title !== undefined) native.title = options.title;
+  if (options.buttonLabel !== undefined) native.prompt = options.buttonLabel;
+  if (options.defaultPath !== undefined) {
+    applyDefaultPath(options.defaultPath, (directory, suggestedName) => {
+      native.directory = directory;
+      if (suggestedName !== undefined) native.suggestedName = suggestedName;
     });
   }
-}
-
-function showAlertDialog(options: AlertDialogOptions): Promise<number>;
-function showAlertDialog(
-  window: Window,
-  options: AlertDialogOptions,
-): Promise<number>;
-function showAlertDialog(
-  windowOrOptions: Window | AlertDialogOptions,
-  maybeOptions?: AlertDialogOptions,
-): Promise<number> {
-  const hasWindow = windowOrOptions instanceof Window;
-  const window = hasWindow ? windowOrOptions : undefined;
-  const options = hasWindow
-    ? maybeOptions
-    : (windowOrOptions as AlertDialogOptions);
-  if (!options)
-    return Promise.reject(new TypeError("showAlertDialog requires options"));
-  const app = window?.app ?? activeApp;
-  if (!app)
-    return Promise.reject(
-      new Error("create a QuickGUI App before showing a dialog"),
+  const json = JSON.stringify(native);
+  return new Promise<OpenDialogResult>((resolve, reject) => {
+    requireApp()._showDialog(
+      window,
+      1,
+      json,
+      (event) => {
+        const paths = event.paths;
+        resolve(paths === undefined ? { canceled: true, filePaths: [] } : { canceled: false, filePaths: paths });
+      },
+      reject,
     );
-  return app._showAlertDialog(window, options);
+  });
 }
 
-function showOpenDialog(options?: OpenDialogOptions): Promise<OpenDialogResult>;
-function showOpenDialog(
-  window: Window,
-  options?: OpenDialogOptions,
-): Promise<OpenDialogResult>;
-function showOpenDialog(
-  windowOrOptions: Window | OpenDialogOptions = {},
-  maybeOptions: OpenDialogOptions = {},
-): Promise<OpenDialogResult> {
-  const hasWindow = windowOrOptions instanceof Window;
-  const window = hasWindow ? windowOrOptions : undefined;
-  const options = hasWindow
-    ? maybeOptions
-    : (windowOrOptions as OpenDialogOptions);
-  const app = window?.app ?? activeApp;
-  if (!app)
-    return Promise.reject(
-      new Error("create a QuickGUI App before showing a dialog"),
+/** Present a native save panel; choosing a destination never writes the file. */
+export function showSaveDialog(options: SaveDialogOptions, window?: Window): Promise<SaveDialogResult> {
+  const native: NativeSaveDialogOptions = {
+    directory: process.cwd(),
+    filters: validateFilters(options.filters),
+    showsHiddenFiles: options.showHiddenFiles ?? false,
+  };
+  if (options.title !== undefined) native.title = options.title;
+  if (options.buttonLabel !== undefined) native.prompt = options.buttonLabel;
+  if (options.defaultPath !== undefined) {
+    applyDefaultPath(options.defaultPath, (directory, suggestedName) => {
+      native.directory = directory;
+      if (suggestedName !== undefined) native.suggestedName = suggestedName;
+    });
+  }
+  const json = JSON.stringify(native);
+  return new Promise<SaveDialogResult>((resolve, reject) => {
+    requireApp()._showDialog(
+      window,
+      2,
+      json,
+      (event) => {
+        const path = event.value;
+        resolve(path === undefined ? { canceled: true } : { canceled: false, filePath: path });
+      },
+      reject,
     );
-  return app._showOpenDialog(window, options);
+  });
 }
 
-function showSaveDialog(options?: SaveDialogOptions): Promise<SaveDialogResult>;
-function showSaveDialog(
-  window: Window,
-  options?: SaveDialogOptions,
-): Promise<SaveDialogResult>;
-function showSaveDialog(
-  windowOrOptions: Window | SaveDialogOptions = {},
-  maybeOptions: SaveDialogOptions = {},
-): Promise<SaveDialogResult> {
-  const hasWindow = windowOrOptions instanceof Window;
-  const window = hasWindow ? windowOrOptions : undefined;
-  const options = hasWindow
-    ? maybeOptions
-    : (windowOrOptions as SaveDialogOptions);
-  const app = window?.app ?? activeApp;
-  if (!app)
-    return Promise.reject(
-      new Error("create a QuickGUI App before showing a dialog"),
-    );
-  return app._showSaveDialog(window, options);
-}
+/** Platform-native dialogs. Pass a Window second to attach the dialog; omit it for app-modal UI. */
+export class Dialog {
+  static showAlertDialog(options: AlertDialogOptions, window?: Window): Promise<number> {
+    return showAlertDialog(options, window);
+  }
 
-/** Platform-native dialogs. Pass a Window first to attach the dialog; omit it for app-modal UI. */
-export const Dialog = Object.freeze({
-  showAlertDialog,
-  showOpenDialog,
-  showSaveDialog,
-});
+  static showOpenDialog(options?: OpenDialogOptions, window?: Window): Promise<OpenDialogResult> {
+    return showOpenDialog(options ?? {}, window);
+  }
 
-function quitReason(value: string | undefined): QuitReason {
-  return value === "relaunch" ||
-    value === "last-window-closed" ||
-    value === "operating-system"
-    ? value
-    : "explicit";
-}
-
-function asError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
-}
-
-/** Parse one bounded native window-size notification, ignoring anything malformed. */
-function parseWindowSize(value: string | undefined): Size | undefined {
-  const parsed = parseWindowGeometry(value);
-  if (!parsed) return undefined;
-  const { width, height } = parsed;
-  return typeof width === "number" && typeof height === "number"
-    ? { width, height }
-    : undefined;
-}
-
-/** Parse one bounded native window-position notification, ignoring anything malformed. */
-function parseWindowPoint(value: string | undefined): Point | undefined {
-  const parsed = parseWindowGeometry(value);
-  if (!parsed) return undefined;
-  const { x, y } = parsed;
-  return typeof x === "number" && typeof y === "number" ? { x, y } : undefined;
-}
-
-function parseWindowGeometry(
-  value: string | undefined,
-): Record<string, unknown> | undefined {
-  if (value === undefined) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
+  static showSaveDialog(options?: SaveDialogOptions, window?: Window): Promise<SaveDialogResult> {
+    return showSaveDialog(options ?? {}, window);
   }
 }
 
-export type Application = App;
 export const app = new App();
+activeApp = app;

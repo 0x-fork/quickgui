@@ -30,9 +30,10 @@ mkdir "$npm_consumer"
   bun init -y >/dev/null
   bun add \
     "@quickgui/native@$release_version" \
-    "@quickgui/solid@$release_version" \
+    "@quickgui/ui@$release_version" \
     "@quickgui/cli@$release_version"
-  bun -e "await import('@quickgui/native'); await import('@quickgui/solid'); console.log('QuickGUI package imports passed')"
+  ./node_modules/.bin/quickgui init compiled-consumer --no-install
+  ./node_modules/.bin/quickgui dev --project compiled-consumer --once --no-launch
   ./node_modules/.bin/quickgui --help | grep -F "QuickGUI CLI $release_version"
 )
 

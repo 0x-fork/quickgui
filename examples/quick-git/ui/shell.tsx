@@ -1,13 +1,8 @@
-import { Window, type AppearanceMode, type QuickGuiEvent } from "@quickgui/native";
-import {
-  Button,
-  Text,
-  Toast,
-  View,
-  capturedPointerFromEvent,
-  useToastManager,
-} from "@quickgui/solid";
-import { For, Show, Switch, Match, createEffect, createMemo, createSignal } from "solid-js";
+import { untrack as nativeUntrack, onCleanup as nativeOnCleanup } from "@quickgui/ui";
+import { Window, type AppearanceMode, type NativeNode, type QuickGuiEvent } from "@quickgui/native";
+import { Button, Text, View, type Style, capturedPointerFromEvent } from "@quickgui/ui";
+import { Toast, useToastManager } from "@quickgui/ui/toast";
+import { For, Show, Switch, Match, createEffect, createMemo, createSignal } from "@quickgui/ui";
 
 import type { Store } from "../model/store.ts";
 import { BranchesView } from "./branches.tsx";
@@ -25,7 +20,7 @@ import { WelcomeView } from "./welcome.tsx";
 import { WorktreesView } from "./worktrees.tsx";
 
 export function App(props: {
-  store: Store;
+  store: () => (Store);
   appearance: () => AppearanceMode;
   openRepository: () => Promise<void>;
   openRepositoryPath: (path: string) => Promise<void>;
@@ -33,12 +28,12 @@ export function App(props: {
   const window = Window.getCurrentWindow();
   const theme = createMemo(() => themeFor(props.appearance()));
   const styles = createMemo(() => createStyles(theme()));
-  const [dialog, setDialog] = createSignal<DialogRequest | undefined>(undefined, { ownedWrite: true });
+  const [dialog, setDialog] = createSignal<DialogRequest | undefined>(undefined);
 
   return (
     <AppProvider
       value={{
-        store: props.store,
+        store: props.store(),
         window,
         theme,
         styles,
@@ -63,8 +58,7 @@ function Shell() {
 
   // Runs once after the shell mounts: the notifier, menu commands, and focus refresh.
   createEffect(
-    () => 0,
-    () => {
+    () => { const value = (() => 0)(); nativeOnCleanup(nativeUntrack(() => (() => {
     store.setNotifier((notice) => {
       toasts.add({
         title: notice.title,
@@ -86,12 +80,13 @@ function Shell() {
       unregister();
       unfocus();
     };
-    },
+    })())); },
   );
 
   let sidebarDragStart = 0;
   function handleSidebarPointer(event: QuickGuiEvent): void {
     const pointer = capturedPointerFromEvent(event);
+    if (pointer === undefined) return;
     if (pointer.button !== "left") return;
     if (pointer.phase === "down") {
       sidebarDragStart = store.sidebarWidth();
@@ -162,9 +157,10 @@ function Notices() {
               <Toast.Positioner toastId={entry.id}>
                 <Toast.Root
                   toastId={entry.id}
-                  style={[
-                    app.styles().popup,
-                    {
+                  style={(): Style | Style[] => {
+                    const popup = app.styles().popup;
+                    const result: Style = {
+                      ...popup,
                       flexDirection: "row",
                       alignItems: "flex-start",
                       gap: 10,
@@ -174,8 +170,9 @@ function Notices() {
                       paddingBottom: 10,
                       opacity: entry.limited ? 0.6 : 1,
                       transform: `translateX(${entry.swipeMovement}px)`,
-                    },
-                  ]}
+                    };
+                    return result;
+                  }}
                 >
                   <View style={{ width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: color(entry.type) }} />
                   <Toast.Content toastId={entry.id} style={{ display: "flex", flex: 1, minWidth: 0, flexDirection: "column", gap: 2 }}>
@@ -204,43 +201,45 @@ function Notices() {
 }
 
 /** A plain text label used as a section divider inside scroll lists. */
-export function ListHeading(props: { label: string; trailing?: unknown }) {
+export function ListHeading(props: { label: () => (string); trailing?: () => NativeNode }) {
   const app = useApp();
   return (
     <View style={{ display: "flex", flexDirection: "row", alignItems: "center", height: 28, paddingLeft: 12, paddingRight: 8, gap: 6 }}>
       <Text style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: app.theme().textTertiary }}>
-        {props.label}
+        {props.label()}
       </Text>
-      {props.trailing as never}
+      {props.trailing?.()}
     </View>
   );
 }
 
 export function RowButton(props: {
-  selected?: boolean;
+  selected?: () => (boolean);
   onClick: () => void;
   onDoubleClick?: () => void;
   onContextMenu?: (event: QuickGuiEvent) => void;
-  label: string;
-  children: unknown;
-  height?: number;
+  label: () => (string);
+  children: () => NativeNode;
+  height?: () => (number);
 }) {
+  const readselected = () => { const source = props.selected; return source === undefined ? undefined : source(); };
+  const readheight = () => { const source = props.height; return source === undefined ? undefined : source(); };
   const app = useApp();
   return (
     <Button
-      aria-label={props.label}
+      aria-label={props.label()}
       focusOnPointer={false}
       group
-      selected={props.selected ?? false}
+      selected={readselected() ?? false}
       onClick={props.onClick}
-      {...(props.onDoubleClick ? { onDoubleClick: props.onDoubleClick } : {})}
-      {...(props.onContextMenu ? { onContextMenu: props.onContextMenu } : {})}
+      onDoubleClick={() => { const handler = props.onDoubleClick; if (handler !== undefined) handler(); }}
+      onContextMenu={(event) => { const handler = props.onContextMenu; if (handler !== undefined) handler(event); }}
       style={{
         display: "flex",
         flexDirection: "row",
         width: "100%",
         minWidth: 0,
-        height: props.height ?? 28,
+        height: readheight() ?? 28,
         flexShrink: 0,
         alignItems: "center",
         gap: 8,
@@ -258,7 +257,7 @@ export function RowButton(props: {
         focus: { outline: `2px solid ${app.theme().focusRing}` },
       }}
     >
-      {props.children as never}
+      {props.children()}
     </Button>
   );
 }

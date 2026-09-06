@@ -1,0 +1,28 @@
+使用有限数量的数值着色器参数绘制经过验证的 WGSL。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Shader`。
+
+```tsx
+import { Shader } from "@quickgui/ui";
+```
+
+## 用法
+
+```tsx
+<Shader
+  source={gradientShader}
+  shaderParameters={[time(), intensity()]}
+  style={{ width: 320, height: 180 }}
+/>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `source` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
+| `shaderParameters` | 最多 16 个数值，打包到固定的着色器参数向量中。 |
+| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+

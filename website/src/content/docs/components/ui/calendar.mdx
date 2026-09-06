@@ -1,0 +1,46 @@
+A keyboard-navigable month grid for single-date selection.
+
+## Import
+
+Import `Calendar` from `@quickgui/ui`.
+
+```tsx
+import { Calendar } from "@quickgui/ui/date-time";
+```
+
+## Usage
+
+```tsx
+<Calendar.Root value={date()} onValueChange={setDate} onMonthChange={setMonth}>
+  <For each={weeks()}>{(week, weekIndex) =>
+    <Calendar.Week itemIndex={weekIndex()}>
+      <For each={week}>{(day) => <Calendar.Day day={day} />}</For>
+    </Calendar.Week>
+  }</For>
+</Calendar.Root>
+```
+
+## Anatomy
+
+- `Calendar.Root`
+- `Calendar.Week`
+- `Calendar.Day`
+
+```tsx
+<Calendar.Root>
+  <Calendar.Week />
+  <Calendar.Day />
+</Calendar.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `defaultValue` | Initial value when the component owns its state. |
+| `min` | Minimum accepted value. |
+| `max` | Maximum accepted value. |
+| `firstWeekday` | First weekday column, where Monday is 0 and Sunday is 6. |
+| `onValueChange` | Reports the value accepted by the core. |
+

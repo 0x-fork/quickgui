@@ -2,28 +2,28 @@ Presents a native SwiftUI popover from a composed SwiftUI trigger.
 
 ## Import
 
-Import `Popover` from `@quickgui/solid/swift-ui`.
+Import `Popover` from `@quickgui/ui/swift-ui`.
 
 ```tsx
-import { Host, Popover } from "@quickgui/solid/swift-ui";
+import { Host, Popover } from "@quickgui/ui/swift-ui";
 ```
 
 ## Usage
 
 ```tsx
-<Popover
+<Popover.Root
   isPresented={open()}
   onIsPresentedChange={setOpen}
   attachmentAnchor="bottom"
   arrowEdge="top"
 >
-  <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
   <Popover.Content>
     <QuickGUIHostView width={280} height={120}>
       <SettingsPanel />
     </QuickGUIHostView>
   </Popover.Content>
-</Popover>
+</Popover.Root>
 ```
 
 ## Anatomy
@@ -32,10 +32,10 @@ import { Host, Popover } from "@quickgui/solid/swift-ui";
 - `Popover.Content`
 
 ```tsx
-<Popover isPresented={open()} onIsPresentedChange={setOpen}>
-  <Popover.Trigger render={<Button label="Open" />} />
+<Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
+  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
   <Popover.Content>{/* SwiftUI-hosted content */}</Popover.Content>
-</Popover>
+</Popover.Root>
 ```
 
 ## Key props

@@ -1,0 +1,16 @@
+{
+  "name": "quickgui-counter-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "quickgui dev",
+    "build": "quickgui build"
+  },
+  "dependencies": {
+    "@quickgui/native": "workspace:*",
+    "@quickgui/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "workspace:*"
+  }
+}

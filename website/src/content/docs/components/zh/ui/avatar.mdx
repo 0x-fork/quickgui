@@ -1,0 +1,41 @@
+显示图像；图像不可用时显示后备内容。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Avatar`。
+
+```tsx
+import { Avatar } from "@quickgui/ui/base-ui";
+```
+
+## 用法
+
+```tsx
+<Avatar.Root ariaLabel="Ada Lovelace" onLoadingStatusChange={setStatus}>
+  <Avatar.Image src="assets/ada.png" fit="cover" />
+  <Avatar.Fallback delay={120}><Text>AL</Text></Avatar.Fallback>
+</Avatar.Root>
+```
+
+## 结构
+
+- `Avatar.Root`
+- `Avatar.Image`
+- `Avatar.Fallback`
+
+```tsx
+<Avatar.Root>
+  <Avatar.Image />
+  <Avatar.Fallback />
+</Avatar.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `ariaLabel` | 当组件的可见部件可能变化时使用的无障碍名称。 |
+| `src` | 头像图像的文件系统路径、文件 URL 或 base64 数据 URL。 |
+| `delay` | 打开前由核心管理的延迟（毫秒）。 |
+| `onLoadingStatusChange` | 报告头像图像每次加载状态变化。 |
+

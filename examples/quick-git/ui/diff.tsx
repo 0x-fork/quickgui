@@ -1,7 +1,9 @@
-import { Button, Table, Text, View, type VisibleRange } from "@quickgui/solid";
-import { Button as SwiftButton, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle, controlSize } from "@quickgui/solid/swift-ui/modifiers";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { KeyedFor } from "@quickgui/ui";
+import { Button, Text, View, type VisibleRange } from "@quickgui/ui";
+import { Table } from "@quickgui/ui/collections";
+import { Button as SwiftButton, Host } from "@quickgui/ui/swift-ui";
+import { buttonStyle, controlSize } from "@quickgui/ui/swift-ui/modifiers";
+import { For, Show, createMemo, createSignal } from "@quickgui/ui";
 import { basename } from "node:path";
 
 import type { DiffRow } from "../model/store.ts";
@@ -28,7 +30,7 @@ export function DiffPane() {
     const rows = store.diffRowsIn(start, Math.min(end, rowCount()));
     return rows.map((row, offset): { index: number; row: DiffRow } => ({ index: start + offset, row }));
   });
-  const primaryFile = () => diff().diff?.files[0];
+  const primaryFile = () => diff().diff?.files.at(0);
   const lineCount = () => store.selectedDiffLineCount();
   const hasLineSelection = () => lineCount() > 0;
   const activeItem = () => store.activeItem();
@@ -74,7 +76,7 @@ export function DiffPane() {
             <FileName path={target()!.path} originalPath={target()!.originalPath} size={13} />
           </View>
           <Show when={primaryFile()}>
-            {(file) => (
+            {(() => { const file = () => (primaryFile())!; return (
               <View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
                 <Show when={file().kind !== "modified"}>
                   <Text style={{ fontSize: 11, fontWeight: 700, color: app.theme().textTertiary, textTransform: "capitalize" }}>{file().kind}</Text>
@@ -89,7 +91,7 @@ export function DiffPane() {
                   <Text style={{ fontSize: 11, fontWeight: 700, color: app.theme().danger, fontFamily: "monospace" }}>{`−${store.diffStats().removed}`}</Text>
                 </Show>
               </View>
-            )}
+            ); })()}
           </Show>
           <View style={{ flex: 1 }} />
           <Show when={diff().loading}>
@@ -104,7 +106,7 @@ export function DiffPane() {
                     <SwiftButton label="Discard…" role="destructive" modifiers={[buttonStyle("bordered"), controlSize("small")]} onPress={() => void discardWholeFile()} />
                   </Host>
                   <Host matchContents>
-                    <SwiftButton label="Stage File" modifiers={[buttonStyle("borderedProminent"), controlSize("small")]} onPress={() => activeItem() && void store.stageItems([activeItem()!])} />
+                    <SwiftButton label="Stage File" modifiers={[buttonStyle("borderedProminent"), controlSize("small")]} onPress={() => { if (activeItem()) void store.stageItems([activeItem()!]); }} />
                   </Host>
                 </>
               }
@@ -122,7 +124,7 @@ export function DiffPane() {
               when={hasLineSelection()}
               fallback={
                 <Host matchContents>
-                  <SwiftButton label="Unstage File" modifiers={[buttonStyle("bordered"), controlSize("small")]} onPress={() => activeItem() && void store.unstageItems([activeItem()!])} />
+                  <SwiftButton label="Unstage File" modifiers={[buttonStyle("bordered"), controlSize("small")]} onPress={() => { if (activeItem()) void store.unstageItems([activeItem()!]); }} />
                 </Host>
               }
             >
@@ -152,12 +154,11 @@ export function DiffPane() {
           }
         >
           <Table.Root
-            scope="diff"
             rowCount={rowCount()}
             rowHeight={DIFF_ROW_HEIGHT}
             headerHeight={0}
             selectionMode="multiple"
-            selection={store.diffSelection()}
+            selection={store.diffSelection().map((range) => [...range])}
             columns={[
               { id: "old", track: "46px", align: "end" },
               { id: "new", track: "46px", align: "end" },
@@ -167,9 +168,9 @@ export function DiffPane() {
             onSelectionChange={(ranges) => store.setDiffSelection(ranges)}
             style={{ flex: 1, minHeight: 0, overflowY: "scroll" }}
           >
-            <For each={visible()} keyed={(entry) => entry.index}>
+            <KeyedFor each={visible()} key={(entry) => entry.index}>
               {(entry) => <DiffTableRow index={entry().index} row={entry().row} mode={mode()} />}
-            </For>
+            </KeyedFor>
           </Table.Root>
         </Show>
       </Show>
@@ -177,11 +178,11 @@ export function DiffPane() {
   );
 }
 
-function DiffTableRow(props: { index: number; row: DiffRow; mode: "unstaged" | "staged" | "commit" }) {
+function DiffTableRow(props: { index: () => number; row: () => DiffRow; mode: "unstaged" | "staged" | "commit" }) {
   const app = useApp();
   const store = app.store;
   const theme = app.theme;
-  const row = () => props.row;
+  const row = props.row;
 
   const background = () => {
     const current = row();
@@ -228,7 +229,7 @@ function DiffTableRow(props: { index: number; row: DiffRow; mode: "unstaged" | "
 
   return (
     <Table.Row
-      index={props.index}
+      index={props.index()}
       group
       style={{
         backgroundColor: background(),
@@ -306,11 +307,12 @@ async function discardHunk(app: ReturnType<typeof useApp>, fileIndex: number, hu
   if (ok) await app.store.discardHunk(fileIndex, hunkIndex);
 }
 
-function HunkButton(props: { label: string; danger?: boolean; onClick: () => void }) {
+function HunkButton(props: { label: () => (string); danger?: () => (boolean); onClick: () => void }) {
+  const readdanger = () => { const source = props.danger; return source === undefined ? undefined : source(); };
   const app = useApp();
   return (
     <Button
-      aria-label={props.label}
+      aria-label={props.label()}
       focusOnPointer={false}
       onClick={props.onClick}
       style={{
@@ -324,16 +326,16 @@ function HunkButton(props: { label: string; danger?: boolean; onClick: () => voi
         backgroundColor: app.theme().raised,
         borderWidth: 1,
         borderColor: app.theme().borderStrong,
-        color: props.danger ? app.theme().danger : app.theme().text,
+        color: readdanger() ? app.theme().danger : app.theme().text,
         fontSize: 10.5,
         fontWeight: 600,
         cursor: "default",
         userSelect: "none",
-        hover: { backgroundColor: props.danger ? app.theme().dangerWash : app.theme().accentWash },
+        hover: { backgroundColor: readdanger() ? app.theme().dangerWash : app.theme().accentWash },
         active: { opacity: 0.8 },
       }}
     >
-      <Text>{props.label}</Text>
+      <Text>{props.label()}</Text>
     </Button>
   );
 }

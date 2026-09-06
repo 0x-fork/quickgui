@@ -38,12 +38,12 @@ export interface ParseDiffOptions {
 
 /** Parse the complete output of `git diff` (text or the raw bytes git wrote) into files. */
 export function parseDiff(output: string | Uint8Array, options: ParseDiffOptions = {}): DiffFile[] {
-  return parseDiffNative(output, options.truncated ?? false);
+  return parseDiffNative(typeof output === "string" ? output : new TextDecoder().decode(output), options.truncated ?? false);
 }
 
 /** `parseDiff` on the native thread pool. */
 export function parseDiffAsync(output: string | Uint8Array, options: ParseDiffOptions = {}): Promise<DiffFile[]> {
-  return parseDiffNativeAsync(output, options.truncated ?? false);
+  return parseDiffNativeAsync(typeof output === "string" ? output : new TextDecoder().decode(output), options.truncated ?? false);
 }
 
 /**
@@ -109,7 +109,7 @@ export interface HunkSelection {
   /** Index of the hunk inside `file.hunks`. */
   hunkIndex: number;
   /** Indices of lines inside the hunk to include; omit to include every changed line. */
-  lines?: ReadonlySet<number>;
+  lines?: readonly number[];
 }
 
 export interface FormatPatchOptions {
@@ -146,7 +146,7 @@ export function formatPatch(
     let newCount = 0;
     let changed = false;
     hunk.lines.forEach((line, lineIndex) => {
-      const selected = selection.lines === undefined || selection.lines.has(lineIndex);
+      const selected = selection.lines === undefined || selection.lines.includes(lineIndex);
       let marker: " " | "+" | "-" | null;
       if (line.kind === "context") marker = " ";
       else if (selected) marker = line.kind === "added" ? "+" : "-";
@@ -216,8 +216,8 @@ function countSuffix(count: number): string {
 }
 
 /** Whether a line index set covers every changed line of the hunk. */
-export function selectsWholeHunk(hunk: DiffHunk, lines: ReadonlySet<number>): boolean {
-  return hunk.lines.every((line, index) => line.kind === "context" || lines.has(index));
+export function selectsWholeHunk(hunk: DiffHunk, lines: readonly number[]): boolean {
+  return hunk.lines.every((line, index) => line.kind === "context" || lines.includes(index));
 }
 
 /** Split a big diff into files whose total line count stays under `limit`, for rendering. */

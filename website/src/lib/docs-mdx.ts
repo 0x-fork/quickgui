@@ -29,7 +29,7 @@ export function componentMdx(
   slug: string,
   locale: Locale,
 ): DocsMdxComponent {
-  const family = kind === 'swift-ui' ? 'swift-ui' : 'solid'
+  const family = kind === 'swift-ui' ? 'swift-ui' : 'ui'
   const localized = contentAt(
     `../content/docs/components/${locale}/${family}/${slug}.mdx`,
   )

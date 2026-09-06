@@ -1,12 +1,12 @@
-SwiftUI モディファイアを使うと、Solid からネイティブの外観を宣言できます。リバースホスティングを使うと、SwiftUI の内容に通常の QuickGUI サブツリーを含められます。
+SwiftUI モディファイアを使うと、QuickGUI UI からネイティブの外観を宣言できます。リバースホスティングを使うと、SwiftUI の内容に通常の QuickGUI サブツリーを含められます。
 
 ## モディファイア
 
-`@quickgui/solid/swift-ui/modifiers` からモディファイアファクトリーを読み込み、順番に適用します。
+`@quickgui/ui/swift-ui/modifiers` からモディファイアファクトリーを読み込み、順番に適用します。
 
 ```tsx
-import { Button, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle, controlSize, tint } from "@quickgui/solid/swift-ui/modifiers";
+import { Button, Host } from "@quickgui/ui/swift-ui";
+import { buttonStyle, controlSize, tint } from "@quickgui/ui/swift-ui/modifiers";
 
 <Host matchContents>
   <Button
@@ -50,13 +50,13 @@ SwiftUI の `Popover` は、ネイティブ SwiftUI トリガーを組み合わ�
 
 ```tsx
 <Host matchContents>
-  <Popover isPresented={open()} onIsPresentedChange={setOpen}>
-    <Popover.Trigger render={<Button label="Open" />} />
+  <Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
+    <Popover.Trigger><Button label="Open" /></Popover.Trigger>
     <Popover.Content>
       <QuickGUIHostView width={280} height={140}>
         <SettingsPanel />
       </QuickGUIHostView>
     </Popover.Content>
-  </Popover>
+  </Popover.Root>
 </Host>
 ```

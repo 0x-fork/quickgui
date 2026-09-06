@@ -1,5 +1,6 @@
-import { constants } from "node:fs";
-import { access } from "node:fs/promises";
+import { Buffer } from "node:buffer";
+import { spawn, type ChildProcess } from "node:child_process";
+import { constants, accessSync } from "node:fs";
 import { join } from "node:path";
 
 import type { AgentLauncher } from "../model.ts";
@@ -41,33 +42,45 @@ export function loginShell(): string {
 export async function captureShellEnvironment(): Promise<
   Record<string, string>
 > {
-  const inherited = Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
+  const inherited: Record<string, string> = {};
+  for (const name of Object.keys(process.env)) {
+    const value = process.env[name];
+    if (value !== undefined) inherited[name] = value;
+  }
   const shell = inherited.SHELL || "/bin/zsh";
   try {
-    const child = Bun.spawn([shell, "-i", "-l", "-c", "/usr/bin/env -0"], {
+    const child: ChildProcess = spawn(shell, ["-i", "-l", "-c", "/usr/bin/env -0"], {
       env: {
         ...inherited,
         DISABLE_AUTO_UPDATE: "true",
         DISABLE_UPDATE_PROMPT: "true",
         ZSH_DISABLE_COMPFIX: "true",
       },
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
+      stdio: ["ignore", "pipe", "ignore"],
     });
-    const timeout = setTimeout(() => child.kill(), 4_000);
-    const [bytes, exitCode] = await Promise.all([
-      new Response(child.stdout).arrayBuffer(),
-      child.exited,
-    ]);
+    const timeout = setTimeout(() => { child.kill(); }, 4_000);
+    let output = "";
+    const stdout = child.stdout;
+    if (stdout !== null) {
+      stdout.on("data", (chunk: Buffer): void => { output += chunk.toString("utf8"); });
+    }
+    const exitCode = await new Promise<number>((resolve) => {
+      let code = -1;
+      let exited = false;
+      let drained = stdout === null;
+      const finish = (): void => { if (exited && drained) resolve(code); };
+      child.on("error", (): void => { resolve(-1); });
+      child.on("exit", (value: number | null, _signal: string | null): void => {
+        code = value ?? -1;
+        exited = true;
+        finish();
+      });
+      if (stdout !== null) stdout.on("end", (): void => { drained = true; finish(); });
+    });
     clearTimeout(timeout);
     if (exitCode !== 0) return inherited;
     const environment = { ...inherited };
-    for (const entry of new TextDecoder().decode(bytes).split("\0")) {
+    for (const entry of output.split("\0")) {
       const separator = entry.indexOf("=");
       if (separator <= 0) continue;
       environment[entry.slice(0, separator)] = entry.slice(separator + 1);
@@ -125,7 +138,7 @@ async function findExecutable(
   for (const directory of directories) {
     const candidate = join(directory, command);
     try {
-      await access(candidate, constants.X_OK);
+      accessSync(candidate, constants.X_OK);
       return candidate;
     } catch {
       // Continue through the bounded login-shell search path.

@@ -3,7 +3,10 @@ use std::{
     collections::HashMap,
     ffi::c_void,
     ptr::{NonNull, null_mut},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use block2::{Block, RcBlock};
@@ -28,15 +31,16 @@ use objc2::{
 use objc2_app_kit::{
     NSApplication, NSApplicationDidBecomeActiveNotification,
     NSApplicationDidChangeScreenParametersNotification, NSApplicationDidResignActiveNotification,
-    NSApplicationTerminateReply, NSMenu, NSWorkspace,
-    NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification, NSWorkspaceDidWakeNotification,
-    NSWorkspaceSessionDidBecomeActiveNotification, NSWorkspaceSessionDidResignActiveNotification,
-    NSWorkspaceWillPowerOffNotification, NSWorkspaceWillSleepNotification,
+    NSApplicationTerminateReply, NSEvent, NSEventModifierFlags, NSEventSubtype, NSEventType,
+    NSMenu, NSWorkspace, NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification,
+    NSWorkspaceDidWakeNotification, NSWorkspaceSessionDidBecomeActiveNotification,
+    NSWorkspaceSessionDidResignActiveNotification, NSWorkspaceWillPowerOffNotification,
+    NSWorkspaceWillSleepNotification,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSBundle, NSError, NSNotification, NSNotificationCenter, NSObject,
-    NSProcessInfoPowerStateDidChangeNotification, NSProcessInfoThermalStateDidChangeNotification,
-    NSSet, NSString, NSURL, NSUTF8StringEncoding,
+    NSPoint, NSProcessInfoPowerStateDidChangeNotification,
+    NSProcessInfoThermalStateDidChangeNotification, NSSet, NSString, NSURL, NSUTF8StringEncoding,
 };
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNMutableNotificationContent, UNNotification, UNNotificationAction,
@@ -70,6 +74,111 @@ unsafe extern "C" {
         callback: unsafe extern "C" fn(*mut c_void),
         context: *mut c_void,
     ) -> CFRunLoopSourceRef;
+}
+
+/// Opaque libdispatch queue; only the main queue's address is used.
+#[repr(C)]
+struct DispatchQueue {
+    _opaque: [u8; 0],
+}
+
+unsafe extern "C" {
+    static _dispatch_main_q: DispatchQueue;
+    fn dispatch_async_f(
+        queue: *const DispatchQueue,
+        context: *mut c_void,
+        work: unsafe extern "C" fn(*mut c_void),
+    );
+    fn dispatch_after_f(
+        when: u64,
+        queue: *const DispatchQueue,
+        context: *mut c_void,
+        work: unsafe extern "C" fn(*mut c_void),
+    );
+    fn dispatch_time(when: u64, delta: i64) -> u64;
+}
+
+const DISPATCH_TIME_NOW: u64 = 0;
+/// Retry period while a modal session or a tracking loop owns the main thread.
+const PUMP_INTERRUPT_RETRY_NANOS: i64 = 50_000_000;
+/// One interrupt block is in flight; later requests are served by the same block.
+static PUMP_INTERRUPT_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Make a blocking `AppRunner::pump` return, from any thread.
+///
+/// Winit's event-loop proxy signals a run-loop source and calls `CFRunLoopWakeUp`, but Core
+/// Foundation discards wake-ups while the main run loop is not sleeping, which is exactly the
+/// state between two pumps and during event dispatch. The signalled source alone never stops
+/// `[NSApp run]`: only the post-wait observer does, and a run-loop pass that merely services a
+/// source skips that observer. A wake-up lost that way leaves the pump blocked until the next
+/// OS event, so an embedding runtime's command would wait for a mouse move.
+///
+/// A main-queue block travels through the dispatch port, which the run loop services on its
+/// next pass whether or not it slept, and stopping the application from inside that block ends
+/// the current `[NSApp run]` the same way winit's own pump timeout does. When no pump is running
+/// the block waits for the next one, which then returns after one pass.
+pub(crate) fn interrupt_pump() {
+    if PUMP_INTERRUPT_PENDING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    // SAFETY: the main queue is a process-lifetime global and the work function takes no context.
+    unsafe {
+        dispatch_async_f(
+            &raw const _dispatch_main_q,
+            null_mut(),
+            stop_application_run,
+        )
+    }
+}
+
+unsafe extern "C" fn stop_application_run(_context: *mut c_void) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    // `stop:` ends whichever AppKit loop is innermost. A modal session (`runModal`) would return
+    // without an answer and a tracking loop (menus, live resize, drags) is not `run` either, so
+    // wait until the main run loop is back in its default mode before stopping it.
+    if !main_run_loop_in_default_mode() {
+        // SAFETY: same queue and context contract as `interrupt_pump`.
+        unsafe {
+            dispatch_after_f(
+                dispatch_time(DISPATCH_TIME_NOW, PUMP_INTERRUPT_RETRY_NANOS),
+                &raw const _dispatch_main_q,
+                null_mut(),
+                stop_application_run,
+            );
+        }
+        return;
+    }
+    PUMP_INTERRUPT_PENDING.store(false, Ordering::Release);
+    let app = NSApplication::sharedApplication(mtm);
+    // SAFETY: `stop:` only sets the flag `run` checks after the current event, and the posted
+    // application-defined event is the documented way to make `run` observe it promptly.
+    unsafe {
+        app.stop(None);
+        let event = NSEvent::otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_subtype_data1_data2(
+            NSEventType::ApplicationDefined,
+            NSPoint::new(0.0, 0.0),
+            NSEventModifierFlags(0),
+            0.0,
+            0,
+            None,
+            NSEventSubtype::WindowExposed.0,
+            0,
+            0,
+        );
+        if let Some(event) = event {
+            app.postEvent_atStart(&event, true);
+        }
+    }
+}
+
+/// Whether the innermost run-loop activity on the main thread is `[NSApp run]` itself.
+fn main_run_loop_in_default_mode() -> bool {
+    match CFRunLoop::get_main().current_mode() {
+        Some(mode) => mode == "kCFRunLoopDefaultMode",
+        None => true,
+    }
 }
 
 struct ApplicationStateIvars {

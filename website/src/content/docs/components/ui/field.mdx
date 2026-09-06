@@ -1,0 +1,52 @@
+Connects one control to its label, description, validation state, and error message.
+
+## Import
+
+Import `Field` from `@quickgui/ui`.
+
+```tsx
+import { Field } from "@quickgui/ui/field";
+```
+
+## Usage
+
+```tsx
+<Field.Root required invalid={name().length === 0} validationMessage="Enter a name">
+  <Field.Label><Text>Name</Text></Field.Label>
+  <Field.Control value={name()} onInput={(event) => setName(event.value ?? "")} />
+  <Field.Description><Text>Shown on your profile.</Text></Field.Description>
+  <Field.Error><Text>Enter a name.</Text></Field.Error>
+</Field.Root>
+```
+
+## Anatomy
+
+- `Field.Root`
+- `Field.Item`
+- `Field.Label`
+- `Field.Control`
+- `Field.Validity`
+- `Field.Description`
+- `Field.Error`
+
+```tsx
+<Field.Root>
+  <Field.Item />
+  <Field.Label />
+  <Field.Control />
+  <Field.Validity />
+  <Field.Description />
+  <Field.Error />
+</Field.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `invalid` | Projects invalid state to the field and its parts. |
+| `required` | Marks the value as required for validation and form submission. |
+| `validationMessage` | Bounded message exposed to error content and accessibility. |
+| `validationMode` | Selects which interaction boundary triggers validation. |
+| `onValidationChange` | Reports the validation trigger and timing selected by the core. |
+

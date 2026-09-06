@@ -1,0 +1,40 @@
+二态或不确定状态的选择控件，指示器可独立设置样式。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Checkbox`。
+
+```tsx
+import { Checkbox } from "@quickgui/ui/controls";
+```
+
+## 用法
+
+```tsx
+<Checkbox.Root checked={checked()} onCheckedChange={setChecked}>
+  <Checkbox.Indicator><Text>✓</Text></Checkbox.Indicator>
+  <Text>Remember this device</Text>
+</Checkbox.Root>
+```
+
+## 结构
+
+- `Checkbox.Root`
+- `Checkbox.Indicator`
+
+```tsx
+<Checkbox.Root>
+  <Checkbox.Indicator />
+</Checkbox.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `checked` | 受控的选中状态。 |
+| `defaultChecked` | 组件自行管理状态时的初始选中状态。 |
+| `onCheckedChange` | 报告核心接受的选中状态。 |
+| `readOnly` | 阻止值变化，但仍允许控件获得焦点。 |
+| `disabled` | 禁止交互，并暴露禁用状态。 |
+

@@ -635,3 +635,6 @@ pub fn run<V: View>(view: V) -> Result<(), AppError> {
         cx.open_window(WindowOptions::default(), view);
     })
 }
+
+#[cfg(feature = "file-watcher")]
+pub use quickgui_system::{FileWatchEvent, FileWatcher, MAX_WATCH_EVENT_PATHS, MAX_WATCH_ROOTS};

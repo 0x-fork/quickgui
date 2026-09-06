@@ -1,7 +1,7 @@
 # Herdr GUI
 
 A real, standalone GUI interpretation of [Herdr](https://herdr.dev/) built with QuickGUI and
-Solid 2. It does not call or embed the Herdr CLI.
+QuickGUI UI. It does not call or embed the Herdr CLI.
 
 From the repository root:
 

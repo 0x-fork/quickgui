@@ -72,7 +72,7 @@ export const ja: typeof en = {
   },
   swiftUi: {
     title: 'QuickGUI でネイティブ SwiftUI を使う',
-    lead: 'macOS の Solid アプリに、本物の SwiftUI コントロールをそのまま埋め込めます。',
+    lead: 'macOS の QuickGUI UI アプリに、本物の SwiftUI コントロールをそのまま埋め込めます。',
   },
   quickstart: {
     title: '1 分ではじめる',
@@ -82,7 +82,7 @@ export const ja: typeof en = {
       writeBody: '上のカウンターがそのまま完全な main.rs です——コピーするだけ',
       run: '実行',
     },
-    solid: {
+    ui: {
       create: 'アプリを作成',
       ship: '出荷する',
       note: '本物の署名済み・自己完結アプリが手に入ります。インストーラー付き',

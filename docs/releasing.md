@@ -56,7 +56,7 @@ that is not exactly `v<root-package-version>` or lacks a dated changelog section
 the native binding crate, and all three npm packages to match it. The job
 builds both macOS native architectures, runs the JavaScript tests and typecheck, verifies the npm
 tarballs, publishes both registries in dependency order, installs the public packages in fresh
-Rust and Bun consumers, and only then creates the GitHub Release.
+Rust and compiled TypeScript consumers, and only then creates the GitHub Release.
 
 ## macOS acceptance evidence
 
@@ -86,7 +86,7 @@ that can publish these six crates and store it as the `CARGO_REGISTRY_TOKEN` Git
 - `quickgui-system`
 - `quickgui`
 
-For each npm package (`@quickgui/native`, `@quickgui/solid`, and `@quickgui/cli`), add an
+For each npm package (`@quickgui/native`, `@quickgui/ui`, and `@quickgui/cli`), add an
 [npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) with GitHub owner `egoist`,
 repository `quickgui`, workflow filename `release.yml`, and no environment. Allow `npm publish`.
 npm requires Node 22.14 or newer and npm 11.5.1 or newer for OIDC; the workflow uses Node 24 and
@@ -128,7 +128,7 @@ The workflow publishes crates.io packages in this dependency order:
 5. `quickgui-system`
 6. `quickgui`
 
-It then publishes npm packages in the order `@quickgui/native`, `@quickgui/solid`, and
+It then publishes npm packages in the order `@quickgui/native`, `@quickgui/ui`, and
 `@quickgui/cli`. Each dependent waits until the previous package is anonymously resolvable from
 its public registry. A rerun skips an existing, non-yanked crate version and skips an existing npm
 version only when its registry integrity matches the locally verified tarball. This permits safe
@@ -158,6 +158,6 @@ Never rerun a successful manual publish; first inspect the public registry and c
 last completed package.
 
 Finally, run `scripts/release-registry-smoke.sh <version>` to compile a fresh Rust 1.90 consumer
-without patches, install all three packages at that same version in a fresh Bun project, import the
-native and Solid runtimes, and execute the installed CLI. Run the live macOS gates once more from
+without patches, install all three packages at that same version in a fresh project, and compile
+a scaffolded native application with the installed CLI. Run the live macOS gates once more from
 the tagged source if the published artifacts differ from the previously recorded candidates.

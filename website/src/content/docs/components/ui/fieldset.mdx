@@ -1,0 +1,43 @@
+Groups related fields under one legend and shared semantic state.
+
+## Import
+
+Import `Fieldset` from `@quickgui/ui`.
+
+```tsx
+import { Fieldset } from "@quickgui/ui/field";
+```
+
+## Usage
+
+```tsx
+<Fieldset.Root disabled={saving()}>
+  <Fieldset.Legend><Text>Billing address</Text></Fieldset.Legend>
+  <Fieldset.Description><Text>Used for receipts.</Text></Fieldset.Description>
+  <Fieldset.Control element="input" value={address()} />
+</Fieldset.Root>
+```
+
+## Anatomy
+
+- `Fieldset.Root`
+- `Fieldset.Legend`
+- `Fieldset.Description`
+- `Fieldset.Control`
+
+```tsx
+<Fieldset.Root>
+  <Fieldset.Legend />
+  <Fieldset.Description />
+  <Fieldset.Control />
+</Fieldset.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `disabled` | Prevents interaction and exposes the disabled state. |
+| `children` | Content mounted inside the component. |
+| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+

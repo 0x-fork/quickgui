@@ -360,7 +360,7 @@ takes the same `format` and `value_text`.
 ## JavaScript bindings
 
 `Progress.Root` / `Indicator` and `Meter.Root` / `Indicator` declare the value range, thresholds,
-and value text these descriptors own; the Solid renderer contributes no measurement logic.
+and value text these descriptors own; the QuickGUI UI renderer contributes no measurement logic.
 
 `Slider.Root` / `Track` / `Range` / `Thumb` and `Splitter.Root` / `Pane` / `Handle` declare bounds,
 values, step, and pane constraints; the hosted view reaches each declared instance's retained
@@ -379,7 +379,7 @@ timer of its own. Editing text and validity travel back as one asynchronous `onV
 Return that commits reports the clamped, reformatted value through `onCommit` on the input part.
 Because a control whose text does not parse into range refuses to submit, an invalid field reports
 `valid: false` and commits nothing. See
-[Solid 2 renderer](solid.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
 
 ## Resource contract
 
@@ -391,7 +391,7 @@ number field's stepper repeat, and it exists only while a stepper is held.
 State changes rebuild only when the caller's listener requests invalidation. Every component in this
 page returns a settled window to zero extra frames.
 
-## Solid: the Base UI-aligned parts
+## QuickGUI UI: the Base UI-aligned parts
 
 `Slider` gained `Label`, `Value`, `Control`, and `Indicator` (Base UI's name for the range fill)
 alongside the existing root, track, and thumb parts, plus `minStepsBetweenValues`,
@@ -427,4 +427,4 @@ change while the control stays focusable, unlike `disabled`.
 `Progress` and `Meter` gained `Track`, `Label`, and `Value` parts and the same bounded `format`.
 `useGaugeState()` reports the core's derived `status` — `"progressing"`, `"complete"`, or
 `"indeterminate"` — the formatted `displayValue`, and the `completion` fraction. See
-[Solid 2 renderer](solid.md#range-and-feedback-parts).
+[QuickGUI UI renderer](ui.md#range-and-feedback-parts).

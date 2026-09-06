@@ -1,0 +1,43 @@
+单个可选项，通常在 RadioGroup 中声明。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Radio`。
+
+```tsx
+import { Radio } from "@quickgui/ui/controls";
+```
+
+## 用法
+
+```tsx
+<Radio.Root
+  value="system"
+  checked={theme() === "system"}
+  onCheckedChange={() => setTheme("system")}
+>
+  <Radio.Indicator />
+  <Text>System</Text>
+</Radio.Root>
+```
+
+## 结构
+
+- `Radio.Root`
+- `Radio.Indicator`
+
+```tsx
+<Radio.Root>
+  <Radio.Indicator />
+</Radio.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `value` | 受控值，具体类型取决于该组件的约定。 |
+| `checked` | 受控的选中状态。 |
+| `onCheckedChange` | 报告核心接受的选中状态。 |
+| `disabled` | 禁止交互，并暴露禁用状态。 |
+

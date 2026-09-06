@@ -88,12 +88,12 @@ applies the popup semantics to the caller's `render_root` result.
 
 ## JavaScript bindings
 
-The Solid renderer exposes this adapter as `ContextMenu.Root` / `Trigger` with a bounded JSON item
+The QuickGUI UI renderer exposes this adapter as `ContextMenu.Root` / `Trigger` with a bounded JSON item
 model and an `onSelect` event carrying the declared item id. One window owns exactly one
 `ContextMenuState`, matching the native invariant that opening a menu replaces the one already open.
 The cursor-point surface is a separate native window, so its rows are rendered by the binding from
 the declaration's `appearance` values instead of from JavaScript. See
-[Solid 2 renderer](solid.md#declared-popover-and-context-menus).
+[QuickGUI UI renderer](ui.md#declared-popover-and-context-menus).
 
 `ContextMenu.Root` also accepts the Base UI-shaped row components — `Menu.Item`, `Menu.LinkItem`,
 `Menu.CheckboxItem`, `Menu.RadioGroup` with `Menu.RadioItem`, `Menu.GroupLabel`, and
@@ -102,7 +102,7 @@ window, so those rows contribute a bounded model rather than owner-window elemen
 nothing, the core owns their identity, checked state, radio-group exclusivity, and closing policy,
 and activation still reports through `onClick` and `onSelect`. Nested levels stay on the `items`
 model, because a submenu the core paints has no declared popup to gather rows from. See
-[Solid 2 renderer](solid.md#base-ui-menu-parts).
+[QuickGUI UI renderer](ui.md#base-ui-menu-parts).
 
 ## Submenu pointer behavior
 

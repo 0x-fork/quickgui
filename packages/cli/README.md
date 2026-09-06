@@ -1,55 +1,51 @@
 # @quickgui/cli
 
-Project scaffolding, development, and production packaging for QuickGUI applications written with
-Solid 2.
+Scaffold, compile, develop, and package native TypeScript applications with QuickGUI.
 
 ```console
 bunx @quickgui/cli init my-app
 cd my-app
 bun run dev
+bun run build
 ```
+
+## Requirements
+
+Use a matching macOS arm64 or x64 host, Bun for tooling, Node.js 24+ for scriptc, and Xcode Command
+Line Tools. TypeScript 7 lowers JSX. The resulting application contains compiled native code and
+the Rust host; it does not embed Bun or Node.js.
 
 ## Development
 
-`quickgui dev` creates a genuine native development application. On macOS this is an ad-hoc-signed
-`.app` under `.quickgui/dev/<target>/` and the CLI runs its `Contents/MacOS` executable.
+`quickgui dev` builds an ad-hoc-signed `.app` under `.quickgui/dev/<target>/`. Source changes compile
+a candidate process; the CLI replaces the previous app only after the candidate's first native
+window is ready. Compile or startup failures leave the previous app running.
 
-Each development build compiles two Bun entrypoints into the bundle's executable: a minimal native
-main-thread host and the current TS/TSX application Worker. Source edits create and sign a candidate
-`.app`; after its first native window completes an event-loop turn, the CLI stops the prior process.
-A compile or startup failure leaves the prior app running. The generated `.app` is self-contained
-and can also be launched directly from Finder or LaunchServices.
+AppKit/Winit owns the main thread and compiled application code runs on a separate native thread.
+Bounded queues wake the event loop as work arrives. `--once --no-launch` builds without opening a
+window. Enable the additional TypeScript diagnostic pass with `native: { typeCheck: true }`; it is
+off by default, while JSX lowering always uses the TypeScript 7 checker.
 
-AppKit/Winit stays permanently on the process main thread. Bun timers, fetch, streaming, and other
-application work stay on the Worker's supported event loop. Bounded native queues and an explicit
-Winit wake connect them without an idle polling interval.
+## Production
 
-QuickGUI uses candidate-first process restart instead of in-isolate hot replacement because
-AppKit/Winit application state is process-owned.
-
-## Production builds
-
-`quickgui build` compiles the application, Solid renderer, Bun runtime, and target N-API addon into
-a self-contained executable. A production macOS target emits a signed `.app` and a versioned `.dmg`
-created with `create-dmg` under `dist/<target>/`; disk-image creation requires Node.js 20 or later.
+`quickgui build` creates a signed `.app` and a versioned `.dmg` using `hdiutil`. Build on the target
+Mac architecture; cross-compiling applications is not supported. The native package must contain
+the matching static host library and link recipe.
 
 ```console
 bun run build --target darwin-arm64
-bun run build --target windows-x64
 bun run build --sign "Developer ID Application: Example (TEAMID)" --notarize quickgui-notary
 ```
 
-A target build requires the installed `@quickgui/native` package to contain that target's addon.
-`--notarize` names credentials previously stored with `xcrun notarytool store-credentials`; the CLI
-waits for acceptance, staples the DMG, and validates the ticket. The same profile can be configured
-as `macos.notarization.keychainProfile`.
+Notarization uses an existing `notarytool` Keychain profile, waits for acceptance, and staples and
+validates the DMG. Development builds do not create DMGs.
 
 ## Native modules
 
-Put a `main.zig` in `modules/<name>/` and import `./modules/<name>` from the application: the CLI
-compiles it into a Node-API addon (Zig 0.16 or newer), generates typed synchronous and
-thread-pool wrappers for every `pub fn`, and embeds the addon in the executable. `quickgui modules`
-runs that step on its own. See the [native modules guide](../../docs/native-modules.md).
+Put `main.zig` in `modules/<name>/`. Zig 0.16+ compiles each module to a static library, and the CLI
+generates typed synchronous and asynchronous wrappers in `index.ts`. The application links the
+library through scriptc's C ABI. `quickgui modules` generates bindings and libraries separately;
+the generated calls require a compiled application and cannot run directly under Bun.
 
 ## Configuration
 
@@ -63,17 +59,15 @@ export default defineConfig({
   version: "0.1.0",
   resources: ["assets"],
   protocols: ["my-app"],
+  native: { typeCheck: false },
   macos: {
     icon: "assets/AppIcon.icns",
-    minimumSystemVersion: "13.0",
+    minimumSystemVersion: "14.0",
     signingIdentity: "Developer ID Application: Example (TEAMID)",
     notarization: { keychainProfile: "quickgui-notary" },
   },
 });
 ```
 
-`protocols` is written into a signed macOS app's `CFBundleURLTypes`. On Windows and Linux, register
-the same scheme at runtime with `DeepLink.register(...)`; macOS registration is intentionally
-declarative because Launch Services reads it from the application bundle.
-
-See the [CLI guide](../../docs/cli.md) for every command and option.
+See the [CLI guide](../../docs/cli.md), [UI guide](../../docs/ui.md), and
+[native modules guide](../../docs/native-modules.md).

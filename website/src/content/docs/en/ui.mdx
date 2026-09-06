@@ -1,0 +1,75 @@
+QuickGUI compiles TypeScript and TSX to native code with scriptc. TypeScript 7 lowers JSX; the Rust core owns layout, rendering, input, and the platform main thread. Bun runs the development tools.
+
+Signals come from `@quickgui/ui`. Setters accept values: `setCount(count() + 1)`. Dynamic custom component props use `Accessor<T>` and are read with `props.value()`. `KeyedFor` keeps rows mounted during immutable updates and gives children an item accessor. There is no resource helper; use asynchronous functions with signals and cleanup.
+
+## Rendering model
+
+`createRenderer` mounts one QuickGUI UI root into a `Window`. JSX creates retained QuickGUI nodes rather than DOM elements.
+
+```tsx
+new Window({
+  title: "Tasks",
+  renderer: createRenderer(() => <Tasks />),
+});
+```
+
+Signals update only the affected retained properties. QuickGUI redraws damaged regions and stays idle when nothing changes.
+
+## Reactive state
+
+Use QuickGUI signals, memos, effects, and control flow.
+
+```tsx
+function Counter() {
+  const [count, setCount] = createSignal(0);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text>{count()}</Text>
+      <Button onClick={() => setCount(count() + 1)}>
+        <Text>Increment</Text>
+      </Button>
+    </View>
+  );
+}
+```
+
+Native callbacks enter QuickGUI UI asynchronously. A callback receives the result already decided by the core; JavaScript never synchronously asks the native main thread for a value.
+
+## Window lifecycle
+
+Create windows after `app.whenReady()`. Re-create the main window from the `reopen` event when macOS activates an app with no visible windows.
+
+```tsx
+app.onReopen( ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openMainWindow();
+});
+```
+
+## Current window
+
+Use `Window.getCurrentWindow()` from a component mounted by a QuickGUI window renderer when an action belongs to that window.
+
+```tsx
+function CloseButton() {
+  const window = Window.getCurrentWindow();
+  return <Button onClick={() => window.close()}><Text>Close</Text></Button>;
+}
+```
+
+## Routing
+
+The QuickGUI UI router projects QuickGUI's core-owned route table and bounded memory history.
+
+```tsx
+import { Router, route } from "@quickgui/ui/router";
+
+<Router initialPath="/" routes={[
+  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
+]} />;
+```
+
+Use `Link`, `Outlet`, `useLocation`, `useParams`, `useSearchParams`, `useNavigate`, and `useRouter` below `Router`.
+
+
+Route parameters and search parameters are `Map<string, string>` accessors: use `params().get("id")`. Routes are static declarations; layouts render their matched child with `Outlet`.

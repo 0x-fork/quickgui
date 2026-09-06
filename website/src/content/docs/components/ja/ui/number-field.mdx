@@ -1,0 +1,55 @@
+増加、減少、ドラッグ調整用のパーツを備えた数値エディターです。
+
+## インポート
+
+`@quickgui/ui` から `NumberField` をインポートします。
+
+```tsx
+import { NumberField } from "@quickgui/ui/number-field";
+```
+
+## 使い方
+
+```tsx
+<NumberField.Root value={copies()} min={1} max={20} onValueChange={setCopies}>
+  <NumberField.ScrubArea><Text>Copies</Text></NumberField.ScrubArea>
+  <NumberField.Group>
+    <NumberField.Decrement><Text>−</Text></NumberField.Decrement>
+    <NumberField.Input />
+    <NumberField.Increment><Text>+</Text></NumberField.Increment>
+  </NumberField.Group>
+</NumberField.Root>
+```
+
+## 構成
+
+- `NumberField.Root`
+- `NumberField.Group`
+- `NumberField.Input`
+- `NumberField.Increment`
+- `NumberField.Decrement`
+- `NumberField.ScrubArea`
+- `NumberField.ScrubAreaCursor`
+
+```tsx
+<NumberField.Root>
+  <NumberField.Group />
+  <NumberField.Input />
+  <NumberField.Increment />
+  <NumberField.Decrement />
+  <NumberField.ScrubArea />
+  <NumberField.ScrubAreaCursor />
+</NumberField.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `min` | 受け入れる最小値です。 |
+| `max` | 受け入れる最大値です。 |
+| `step` | キーボード、ポインター、またはネイティブコントロール入力で使う増分です。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+

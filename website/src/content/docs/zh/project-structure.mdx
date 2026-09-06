@@ -1,4 +1,4 @@
-生成的项目刻意保持精简。你的 TSX 在 Bun Worker 中运行，QuickGUI 则让平台事件循环留在原生主线程上。
+QuickGUI 使用 scriptc 将 TypeScript 和 TSX 编译为原生代码。TypeScript 7 负责转换 JSX，Rust 核心负责布局、渲染、输入和平台主线程。Bun 仅用于开发工具。
 
 ## 生成的文件
 
@@ -15,7 +15,7 @@ my-app/
 
 ## 应用入口
 
-入口模块先等待原生应用就绪，然后创建窗口，并将 Solid 根节点传给 `createRenderer`。
+入口模块先等待原生应用就绪，然后创建窗口，并将 QuickGUI UI 根节点传给 `createRenderer`。
 
 ```tsx
 await app.whenReady();
@@ -26,7 +26,7 @@ new Window({
 });
 ```
 
-源代码模块可以使用常规 Bun API。在托管边界上，原生应用与窗口操作应始终保持异步。
+应用模块可以使用 scriptc 支持的 TypeScript 和 Node 兼容 API 子集，不支持 Bun 应用 API 或依赖 JavaScript 引擎的包。原生窗口操作及其结果始终保持异步。
 
 ## 配置
 
@@ -37,7 +37,7 @@ import { defineConfig } from "@quickgui/cli";
 
 export default defineConfig({
   entry: "src/app.tsx",
-  productName: "Notes",
+  name: "Notes",
   identifier: "dev.example.notes",
   resources: ["assets"],
 });
@@ -50,6 +50,6 @@ export default defineConfig({
 | 软件包 | 用途 |
 | --- | --- |
 | `@quickgui/native` | 应用、窗口、菜单、对话框、通知和原生服务 |
-| `@quickgui/solid` | Solid 渲染器、基础组件、复合组件和路由 |
-| `@quickgui/solid/swift-ui` | 在 macOS 上从 Solid 托管原生 SwiftUI 控件 |
+| `@quickgui/ui` | QuickGUI UI 渲染器、基础组件、复合组件和路由 |
+| `@quickgui/ui/swift-ui` | 在 macOS 上从 QuickGUI UI 托管原生 SwiftUI 控件 |
 | `@quickgui/cli` | 创建项目、开发和生产打包 |

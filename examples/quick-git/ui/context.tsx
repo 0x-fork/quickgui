@@ -1,13 +1,14 @@
-import type { Window } from "@quickgui/native";
-import { createContext, useContext, type Accessor } from "solid-js";
+import type { Window, NativeNode } from "@quickgui/native";
+import { createContext, useContext, type Accessor } from "@quickgui/ui";
 
 import type { Store } from "../model/store.ts";
 import type { Styles, Theme } from "./theme.ts";
 
-export type DialogRequest =
-  | { kind: "new-branch"; from?: string }
-  | { kind: "new-worktree"; branch?: string }
-  | { kind: "stash" };
+export interface DialogRequest {
+  kind: "new-branch" | "new-worktree" | "stash";
+  from?: string;
+  branch?: string;
+}
 
 export interface AppContext {
   store: Store;
@@ -23,9 +24,11 @@ export interface AppContext {
   openRepositoryPath: (path: string) => Promise<void>;
 }
 
-const Context = createContext<AppContext>();
+const Context = createContext<AppContext | undefined>(undefined);
 
-export const AppProvider = Context;
+export function AppProvider(props: { value: AppContext; children: () => NativeNode }): NativeNode {
+  return Context.provide(props.value, props.children);
+}
 
 export function useApp(): AppContext {
   const value = useContext(Context);

@@ -55,13 +55,13 @@ work.
 The JavaScript mutation protocol has its own 1 MiB UTF-8 bound for any single string property;
 the 4 MiB source bound applies to the direct Rust API.
 
-## Solid 2
+## QuickGUI UI
 
-`@quickgui/solid` exposes the same retained core document through an unstyled `Markdown` host
+`@quickgui/ui` exposes the same retained core document through an unstyled `Markdown` host
 component:
 
 ```tsx
-import { Markdown } from "@quickgui/solid";
+import { Markdown } from "@quickgui/ui";
 
 <Markdown
   content={answer()}
@@ -78,10 +78,10 @@ import { Markdown } from "@quickgui/solid";
 ```
 
 Use `content` or `source`; Markdown children are intentionally not treated as source. The native
-bridge retains one Rust `Markdown` state per mounted Solid node, so a streamed append does not
+bridge retains one Rust `Markdown` state per mounted QuickGUI UI node, so a streamed append does not
 recreate the document parser.
 
 The complete streaming DeepSeek application is in
-[`examples/ai-chat-solid`](../examples/ai-chat-solid).
+[`examples/ai-chat`](../examples/ai-chat).
 
 Return to the [documentation index](README.md).

@@ -291,7 +291,7 @@ restore the corresponding styles. Run metadata and named-family bytes count towa
 existing 512 KiB history budget, the live table remains capped at 4,096 runs, and highlighting
 runs only after application value changes—never on idle frames.
 
-## Solid: Field and Fieldset
+## QuickGUI UI: Field and Fieldset
 
 `Field.Item` and `Field.Validity` are bound alongside the existing label, control, description, and
 error parts. `validationMode` — `"onSubmit"` (the default), `"onBlur"`, or `"onChange"` — and a
@@ -314,7 +314,7 @@ Nothing in the hosted runtime re-derives that contract: the mode is declared ahe
 answers travel back as one asynchronous payload.
 
 
-`@quickgui/solid` exposes the field layer as `Field.Root`, `Field.Label`, `Field.Control`,
+`@quickgui/ui` exposes the field layer as `Field.Root`, `Field.Label`, `Field.Control`,
 `Field.Description`, `Field.Error`, and `Fieldset.Root`, `Fieldset.Legend`,
 `Fieldset.Description`, `Fieldset.Control`.
 
@@ -337,7 +337,7 @@ control identities the core would have used. Because `control_part` owns the con
 element and defaults to `input`. `Field.Label` forwards clicks to the control unless `passive` is
 declared, a nested `Field.Root` inherits `Fieldset.Root`'s disabled state, and the six controlled
 booleans plus the bounded `validationMessage` pass straight through to `FieldState`. See the
-[Solid renderer guide](solid.md).
+[QuickGUI UI renderer guide](ui.md).
 
 ## Spelling, grammar, and text substitutions
 

@@ -5,6 +5,10 @@ mod app_environment;
 mod autostart;
 #[cfg(feature = "crash-reporter")]
 mod crash;
+#[cfg(feature = "file-watcher")]
+mod file_watcher;
+#[cfg(feature = "file-watcher")]
+pub use file_watcher::{FileWatchEvent, FileWatcher, MAX_WATCH_EVENT_PATHS, MAX_WATCH_ROOTS};
 mod metrics;
 mod power;
 mod preferences;

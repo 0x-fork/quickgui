@@ -22,9 +22,8 @@ include = [
 ]
 
 [workspace]
-members = ["crates/quickgui-system"]
+members = ["crates/quickgui-host", "crates/quickgui-system"]
 exclude = [
-  "packages/native",
   "vendor/accesskit_winit",
   "vendor/cosmic_text",
   "vendor/glyphon",
@@ -36,6 +35,7 @@ resolver = "3"
 default = ["crash-reporter", "updater"]
 crash-reporter = ["quickgui-system/crash-reporter"]
 inspector = []
+file-watcher = ["quickgui-system/file-watcher"]
 swift-ui = []
 test-support = []
 terminal = ["dep:libghostty-vt", "dep:portable-pty"]

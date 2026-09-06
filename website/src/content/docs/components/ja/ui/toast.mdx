@@ -1,0 +1,68 @@
+操作、閉じる、スワイプに対応した、時間制御される積み重ね通知を表示します。
+
+## インポート
+
+`@quickgui/ui` から `Toast` をインポートします。
+
+```tsx
+import { Toast } from "@quickgui/ui/toast";
+```
+
+## 使い方
+
+```tsx
+const toast = useToastManager();
+
+toast.add({ id: "saved", title: "Saved", description: "Your changes are live." });
+
+<Toast.Provider timeout={5000} limit={3}>
+  <Toast.Portal>
+    <Toast.Viewport toasts={toast.toasts()} onDismiss={toast.dismiss}>
+      <For each={toast.toasts()}>{(item) =>
+        <Toast.Root toastId={item.id}>
+          <Toast.Content><Toast.Title /><Toast.Description /></Toast.Content>
+          <Toast.Close><Text>Close</Text></Toast.Close>
+        </Toast.Root>
+      }</For>
+    </Toast.Viewport>
+  </Toast.Portal>
+</Toast.Provider>
+```
+
+## 構成
+
+- `Toast.Provider`
+- `Toast.Portal`
+- `Toast.Viewport`
+- `Toast.Positioner`
+- `Toast.Root`
+- `Toast.Content`
+- `Toast.Title`
+- `Toast.Description`
+- `Toast.Action`
+- `Toast.Close`
+
+```tsx
+<Toast.Root>
+  <Toast.Provider />
+  <Toast.Portal />
+  <Toast.Viewport />
+  <Toast.Positioner />
+  <Toast.Content />
+  <Toast.Title />
+  <Toast.Description />
+  <Toast.Action />
+  <Toast.Close />
+</Toast.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `toasts` | ビューポートが描画する、宣言済み Toast キュー全体です。 |
+| `toastId` | 描画された 1 つの Toast に対応する、安定したキュー ID です。 |
+| `timeout` | 継承する自動消去時間、またはウォームアップ済み Provider のタイムアウトです。 |
+| `swipeDirection` | スワイプでサーフェスを閉じる、または移動する方向の端です。 |
+| `onDismiss` | コアが閉じた Toast ID を通知します。 |
+

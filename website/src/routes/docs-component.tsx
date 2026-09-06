@@ -25,7 +25,7 @@ function localizedPath(locale: Locale, path: string): string {
 }
 
 function componentKind(family: string | undefined): ComponentDocKind | null {
-  if (family === 'components') return 'solid'
+  if (family === 'components') return 'ui'
   if (family === 'swift-ui') return 'swift-ui'
   return null
 }

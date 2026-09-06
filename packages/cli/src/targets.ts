@@ -15,8 +15,6 @@ export interface TargetInfo {
   target: QuickGuiTarget;
   platform: "darwin" | "linux" | "windows";
   architecture: "arm64" | "x64";
-  bunTarget: Bun.Build.CompileTarget;
-  nativeAddon: string;
 }
 
 const targets: Record<QuickGuiTarget, TargetInfo> = {
@@ -24,43 +22,31 @@ const targets: Record<QuickGuiTarget, TargetInfo> = {
     target: "darwin-arm64",
     platform: "darwin",
     architecture: "arm64",
-    bunTarget: "bun-darwin-arm64",
-    nativeAddon: "quickgui-native.darwin-arm64.node",
   },
   "darwin-x64": {
     target: "darwin-x64",
     platform: "darwin",
     architecture: "x64",
-    bunTarget: "bun-darwin-x64",
-    nativeAddon: "quickgui-native.darwin-x64.node",
   },
   "linux-arm64": {
     target: "linux-arm64",
     platform: "linux",
     architecture: "arm64",
-    bunTarget: "bun-linux-arm64",
-    nativeAddon: "quickgui-native.linux-arm64-gnu.node",
   },
   "linux-x64": {
     target: "linux-x64",
     platform: "linux",
     architecture: "x64",
-    bunTarget: "bun-linux-x64",
-    nativeAddon: "quickgui-native.linux-x64-gnu.node",
   },
   "windows-arm64": {
     target: "windows-arm64",
     platform: "windows",
     architecture: "arm64",
-    bunTarget: "bun-windows-arm64",
-    nativeAddon: "quickgui-native.win32-arm64-msvc.node",
   },
   "windows-x64": {
     target: "windows-x64",
     platform: "windows",
     architecture: "x64",
-    bunTarget: "bun-windows-x64",
-    nativeAddon: "quickgui-native.win32-x64-msvc.node",
   },
 };
 

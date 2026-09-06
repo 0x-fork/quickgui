@@ -4,21 +4,18 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
-  realpathSync,
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
-import { quickguiSolidPlugin } from "@quickgui/solid/compiler";
-import type { BunPlugin } from "bun";
-
 import type { MacOSNotarizationConfig, ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
-import { buildNativeModules } from "./modules.ts";
+import { buildNativeModules, type BuiltNativeModule } from "./modules.ts";
+import { compileNativeApplication } from "./native-build.ts";
 import {
   macDocumentTypesPlist,
   macTypeDeclarationsPlist,
@@ -77,174 +74,6 @@ interface StagedBuild extends BuildResult {
   extraArtifacts?: string[];
 }
 
-export const nativeExports = [
-  "NativeCpuUsageSampler",
-  "NativePowerAssertion",
-  "NativeRouter",
-  "abortAppHost",
-  "addCrashExtraParameter",
-  "addHostedRecentDocument",
-  "addRecentDocument",
-  "applyBatch",
-  "applyHostedBatch",
-  "checkForUpdate",
-  "clearHostedRecentDocuments",
-  "clearRecentDocuments",
-  "closeWindow",
-  "exitAppWithCode",
-  "exitHostedAppWithCode",
-  "isApplicationPackaged",
-  "getApplicationsFolderSupport",
-  "getHostedApplicationsFolderSupport",
-  "getWindowRestoreState",
-  "getHostedWindowRestoreState",
-  "performAppService",
-  "performHostedAppService",
-  "performAppMutation",
-  "performHostedAppMutation",
-  "showWindowPopupMenu",
-  "showHostedWindowPopupMenu",
-  "closeHostedWindow",
-  "configureApp",
-  "configureHostedApp",
-  "createApp",
-  "createEmbeddedView",
-  "createHostedEmbeddedView",
-  "createSystemPopover",
-  "createHostedSystemPopover",
-  "createHostedApp",
-  "createHostedWindow",
-  "createWindow",
-  "destroyApp",
-  "destroyHostedApp",
-  "disableAutoStart",
-  "dismissHostedNotification",
-  "dismissNotification",
-  "defaultUpdateTarget",
-  "deleteCrashReport",
-  "deleteSecureStorage",
-  "enableAutoStart",
-  "exitApp",
-  "exitHostedApp",
-  "focusNode",
-  "focusHostedNode",
-  "getAppInfo",
-  "getAppPaths",
-  "getCursorScreenPosition",
-  "getDesktopIntegrationSupport",
-  "getDisplays",
-  "getHostedAppInfo",
-  "getHostedAppPaths",
-  "getHostedCursorScreenPosition",
-  "getHostedDesktopIntegrationSupport",
-  "getHostedDisplays",
-  "getHostedKeyboardLayout",
-  "getHostedSystemInfo",
-  "getHostedSystemPreferences",
-  "getHostedWindowRegistry",
-  "getHostedWindowState",
-  "getKeyboardLayout",
-  "getLastCrashReport",
-  "getPendingCrashReports",
-  "getPermissionStatus",
-  "getPowerState",
-  "getProcessMetrics",
-  "getSecureStorage",
-  "getSessionState",
-  "getSystemIdleState",
-  "getSystemIdleTime",
-  "getSystemInfo",
-  "getSystemMemory",
-  "getSystemPreferences",
-  "getWindowRegistry",
-  "getWindowState",
-  "installUpdate",
-  "isAutoStartEnabled",
-  "isAutoStartSupported",
-  "isAppReady",
-  "isCrashReporterStarted",
-  "isProtocolRegistered",
-  "isSecureStorageSupported",
-  "performGlobalShortcutAction",
-  "performHostedGlobalShortcutAction",
-  "performHostedNotificationPermissionRequest",
-  "performHostedShellAction",
-  "performHostedWindowAction",
-  "performHostedWindowImageAction",
-  "performNotificationPermissionRequest",
-  "performShellAction",
-  "performWindowAction",
-  "performWindowImageAction",
-  "protocolVersion",
-  "prepareApp",
-  "prepareHostedApp",
-  "pumpApp",
-  "readClipboard",
-  "readFindClipboard",
-  "readHostedClipboard",
-  "readHostedFindClipboard",
-  "registerProtocol",
-  "removeCrashExtraParameter",
-  "requestAppQuit",
-  "requestHostedAppQuit",
-  "relaunchApp",
-  "relaunchHostedApp",
-  "releaseHostedSingleInstanceLock",
-  "releaseSingleInstanceLock",
-  "removeHostedTrayIcon",
-  "removeTrayIcon",
-  "requestFileIcon",
-  "requestHostedFileIcon",
-  "requestHostedSingleInstanceLock",
-  "requestPermission",
-  "requestSingleInstanceLock",
-  "runAppHost",
-  "setApplicationMenu",
-  "setDockBadge",
-  "setDockIcon",
-  "setDockMenu",
-  "setHostedApplicationMenu",
-  "setHostedQuitInterception",
-  "setQuitInterception",
-  "setHostedDockBadge",
-  "setHostedDockIcon",
-  "setHostedDockMenu",
-  "setHostedTrayIcon",
-  "setHostedUserTasks",
-  "setSecureStorage",
-  "setTrayIcon",
-  "setUserTasks",
-  "showAboutPanel",
-  "showAlertDialog",
-  "showHostedAboutPanel",
-  "showHostedAlertDialog",
-  "showHostedNotification",
-  "showHostedOpenDialog",
-  "showHostedSaveDialog",
-  "showHostedTrayMenu",
-  "showOpenDialog",
-  "showSaveDialog",
-  "showTrayMenu",
-  "showNotification",
-  "startApp",
-  "startHostedApp",
-  "stageUpdate",
-  "stageUpdateWithProgress",
-  "startCrashReporter",
-  "supportsDynamicProtocolRegistration",
-  "uploadPendingCrashReports",
-  "takeEvents",
-  "waitForHostedEvents",
-  "unregisterProtocol",
-  "verifyUpdate",
-  "writeClipboard",
-  "writeFindClipboard",
-  "writeHostedClipboard",
-  "writeHostedFindClipboard",
-] as const;
-
-const nativeBindingShimSuffix = ".quickgui-binding-shim.js";
-
 export async function buildProject(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
@@ -254,8 +83,8 @@ export async function buildProject(
   if (info.platform === "darwin" && options.mode === "production") {
     validateMacPackaging(config, options);
   }
-  // Native modules come first: the application bundle `require`s their addons.
-  await buildNativeModules(config, {
+  // Native modules come first: the application links their libraries.
+  const modules = await buildNativeModules(config, {
     target: options.target,
     mode: options.mode,
     log: (line) => console.log(`[quickgui] ${line}`),
@@ -272,8 +101,8 @@ export async function buildProject(
   try {
     const staged: StagedBuild =
       info.platform === "darwin"
-        ? await buildMacApp(config, options, stagingRoot)
-        : await buildExecutable(config, options, stagingRoot);
+        ? await buildMacApp(config, options, stagingRoot, modules)
+        : await buildExecutable(config, options, stagingRoot, modules);
     const finalPath = resolve(targetOutDir, basename(staged.artifactPath));
     const finalDmgPath = staged.dmgPath
       ? resolve(targetOutDir, basename(staged.dmgPath))
@@ -326,6 +155,7 @@ async function buildMacApp(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   stagingRoot: string,
+  modules: BuiltNativeModule[],
 ): Promise<StagedBuild> {
   if (process.platform !== "darwin") {
     throw new CliError("macOS .app bundles must currently be assembled and signed on macOS");
@@ -345,7 +175,8 @@ async function buildMacApp(
   mkdirSync(macos, { recursive: true });
   mkdirSync(resources, { recursive: true });
   const executablePath = resolve(macos, config.executableName);
-  await compileExecutable(config, options, executablePath, stagingRoot);
+  const fonts = stageFonts(config, resolve(resources, "fonts"));
+  await compileExecutable(config, options, executablePath, fonts, modules);
   chmodSync(executablePath, 0o755);
 
   let iconFile: string | undefined;
@@ -362,6 +193,7 @@ async function buildMacApp(
   }
   const reservedResources = new Set<string>([
     ...(iconFile ? [iconFile] : []),
+    ...(fonts.length > 0 ? ["fonts"] : []),
   ]);
   copyResources(config.resources, resources, reservedResources);
   if (config.macos.icon && iconFile) {
@@ -482,21 +314,17 @@ async function buildMacDmg(
 ): Promise<string> {
   const dmgPath = resolve(stagingRoot, macDmgFilename(config.name, config.version));
   const dmgTitle = config.macos.dmgTitle ?? config.name;
-  const createDmgCli = resolveCreateDmgCli();
-  await run(
-    [
-      resolveNodeExecutable(),
-      createDmgCli,
-      "--overwrite",
-      "--no-code-sign",
-      `--dmg-title=${dmgTitle}`,
-      appPath,
-      stagingRoot,
-    ],
-    config.projectRoot,
-  );
+  // The image holds the app and a link to /Applications for the usual drag-to-install layout.
+  const imageRoot = mkdtempSync(join(stagingRoot, ".dmg-"));
+  cpSync(appPath, join(imageRoot, basename(appPath)), { recursive: true, verbatimSymlinks: true });
+  symlinkSync("/Applications", join(imageRoot, "Applications"));
+  try {
+    await run(hdiutilCreateArguments(dmgTitle, imageRoot, dmgPath), config.projectRoot);
+  } finally {
+    rmSync(imageRoot, { recursive: true, force: true });
+  }
   if (!existsSync(dmgPath) || !statSync(dmgPath).isFile()) {
-    throw new CliError(`create-dmg did not produce the expected disk image: ${dmgPath}`);
+    throw new CliError(`hdiutil did not produce the expected disk image: ${dmgPath}`);
   }
 
   if (identity !== "-") {
@@ -517,20 +345,9 @@ async function buildMacDmg(
   return dmgPath;
 }
 
-function resolveCreateDmgCli(): string {
-  try {
-    return Bun.resolveSync("create-dmg/cli.js", import.meta.dir);
-  } catch (error) {
-    throw new CliError("Could not resolve the bundled create-dmg CLI", { cause: error });
-  }
-}
-
-function resolveNodeExecutable(): string {
-  const node = Bun.which("node");
-  if (!node) {
-    throw new CliError("create-dmg requires Node.js 20 or later to build a macOS disk image");
-  }
-  return node;
+/** The `hdiutil` invocation that packs `sourceFolder` into a compressed, read-only disk image. */
+export function hdiutilCreateArguments(volumeName: string, sourceFolder: string, dmgPath: string): string[] {
+  return ["hdiutil", "create", "-volname", volumeName, "-srcfolder", sourceFolder, "-ov", "-format", "UDZO", "-fs", "HFS+", "-quiet", dmgPath];
 }
 
 export function macDmgFilename(name: string, version: string): string {
@@ -561,11 +378,13 @@ async function buildExecutable(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   stagingRoot: string,
+  modules: BuiltNativeModule[],
 ): Promise<StagedBuild> {
   const info = targetInfo(options.target);
   const suffix = info.platform === "windows" ? ".exe" : "";
   const executablePath = resolve(stagingRoot, `${config.executableName}${suffix}`);
-  await compileExecutable(config, options, executablePath, stagingRoot);
+  const fonts = stageFonts(config, resolve(stagingRoot, "fonts"));
+  await compileExecutable(config, options, executablePath, fonts, modules);
   if (info.platform !== "windows") chmodSync(executablePath, 0o755);
   const result: StagedBuild = {
     artifactPath: executablePath,
@@ -604,162 +423,34 @@ async function compileExecutable(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   executablePath: string,
-  stagingRoot: string,
+  fonts: string[],
+  modules: BuiltNativeModule[],
 ): Promise<void> {
-  const info = targetInfo(options.target);
-  const windows =
-    info.platform === "windows"
-      ? {
-          hideConsole: config.windows.hideConsole,
-          title: config.name,
-          version: windowsVersion(config.version),
-          ...(config.windows.icon ? { icon: config.windows.icon } : {}),
-          ...(config.windows.publisher ? { publisher: config.windows.publisher } : {}),
-          ...(config.windows.description ? { description: config.windows.description } : {}),
-          ...(config.windows.copyright ? { copyright: config.windows.copyright } : {}),
-        }
-      : undefined;
-
-  let result: Bun.BuildOutput;
-  try {
-    const production = options.mode === "production";
-    const hostEntrypoint = resolve(stagingRoot, "quickgui-app-host.ts");
-    const workerEntrypoint = resolve(stagingRoot, "quickgui-app-worker.ts");
-    const nativeHostModule = Bun.resolveSync("@quickgui/native/host", import.meta.dir);
-    const nativeApplicationModule = Bun.resolveSync("@quickgui/native", import.meta.dir);
-    const embeddedFonts = config.fonts.map((font) =>
-      readFileSync(font).toString("base64"),
-    );
-    writeFileSync(
-      hostEntrypoint,
-      `import { runApplicationWorker } from ${JSON.stringify(nativeHostModule)};\n` +
-        `const exitCode = await runApplicationWorker("./quickgui-app-worker.ts");\n` +
-        `process.exit(exitCode);\n`,
-    );
-    writeFileSync(
-      workerEntrypoint,
-      `import { Buffer } from "node:buffer";\n` +
-        `postMessage("quickgui:worker-ready");\n` +
-        `import { reportWorkerFailure } from ${JSON.stringify(nativeHostModule)};\n` +
-        `(globalThis as any).__QUICKGUI_APP_OPTIONS__ = ${JSON.stringify({
-          name: config.name,
-          version: config.version,
-          identifier: config.identifier,
-        }).slice(0, -1)}${
-          embeddedFonts.length > 0
-            ? `,"fonts":[${embeddedFonts
-                .map((font) => `Buffer.from(${JSON.stringify(font)},"base64")`)
-                .join(",")}]}`
-            : "}"
-        };\n` +
-        `try {\n  await import(${JSON.stringify(config.entry)});\n` +
-        `  const { app } = await import(${JSON.stringify(nativeApplicationModule)});\n` +
-        `  await app.run();\n} catch (error) {\n` +
-        `  reportWorkerFailure(error);\n  throw error;\n}\n`,
-    );
-    result = await Bun.build({
-      entrypoints: [hostEntrypoint, workerEntrypoint],
-      throw: false,
-      target: "bun",
-      format: "esm",
-      conditions: ["browser"],
-      plugins: [
-        quickguiSolidPlugin({ development: !production, projectRoot: config.projectRoot }),
-        nativeBindingPlugin(info.nativeAddon, options.target),
-      ],
-      minify: production,
-      sourcemap: production ? "none" : "inline",
-      env: "disable",
-      define: {
-        "process.env.NODE_ENV": JSON.stringify(
-          options.mode === "development" ? "development" : "production",
-        ),
-      },
-      compile: {
-        target: info.bunTarget,
-        outfile: executablePath,
-        autoloadDotenv: false,
-        autoloadBunfig: false,
-        autoloadPackageJson: !production,
-        autoloadTsconfig: !production,
-        ...(windows ? { windows } : {}),
-      },
-    });
-  } catch (error) {
-    throw new CliError(`Application compilation failed\n${errorMessage(error)}`);
-  }
-  if (!result.success) {
-    throw new CliError(
-      `Application compilation failed\n${result.logs.map((log) => String(log)).join("\n")}`,
-    );
-  }
+  const started = performance.now();
+  await compileNativeApplication({
+    config,
+    mode: options.mode,
+    target: options.target,
+    executablePath,
+    fonts,
+    extraLibraries: modules.map((module) => module.archivePath),
+    extraFunctions: modules.flatMap((module) => module.ffiFunctions),
+  });
+  console.log(`[quickgui] Compiled ${basename(executablePath)} in ${Math.round(performance.now() - started)} ms`);
 }
 
-export function nativeBindingPlugin(
-  addonFile: string,
-  target: QuickGuiTarget,
-): BunPlugin {
-  const packageRoots = new Map<string, string | undefined>();
-  return {
-    name: "quickgui-native-binding",
-    setup(build) {
-      build.onResolve({ filter: /^\.\/binding\.js$/ }, (arguments_) => {
-        if (!arguments_.importer) return;
-        let importer: string;
-        try {
-          importer = realpathSync(arguments_.importer);
-        } catch {
-          return;
-        }
-        let packageRoot = packageRoots.get(importer);
-        if (!packageRoots.has(importer)) {
-          packageRoot = findPackageRoot(importer, "@quickgui/native");
-          packageRoots.set(importer, packageRoot);
-        }
-        if (!packageRoot) return;
-        const addonPath = resolve(packageRoot, addonFile);
-        if (!existsSync(addonPath)) {
-          throw new CliError(
-            `The installed @quickgui/native package does not contain ${addonFile}. ` +
-              `Install a native package that supports ${target} or choose an available target.`,
-          );
-        }
-        // Keep the generated JavaScript shim and the actual `.node` module at distinct module
-        // identities. Reusing `addonPath` for both makes Bun resolve the shim's own `require()`
-        // back to itself, producing a recursive initializer in the standalone executable.
-        return {
-          path: `${addonPath}${nativeBindingShimSuffix}`,
-          namespace: "quickgui-native",
-        };
-      });
-      build.onLoad({ filter: /.*/, namespace: "quickgui-native" }, ({ path }) => ({
-        // Bun embeds directly required Node-API addons in standalone executables. The literal
-        // target path must point at the real `.node` file, not this virtual shim.
-        contents:
-          `const nativeBinding = require(${JSON.stringify(path.slice(0, -nativeBindingShimSuffix.length))});\n` +
-          `export const { ${nativeExports.join(", ")} } = nativeBinding;\n`,
-        loader: "js",
-      }));
-    },
-  };
-}
-
-function findPackageRoot(importer: string, expectedName: string): string | undefined {
-  let directory = dirname(importer);
-  for (;;) {
-    const packageJson = resolve(directory, "package.json");
-    if (existsSync(packageJson)) {
-      try {
-        const metadata = JSON.parse(readFileSync(packageJson, "utf8")) as { name?: unknown };
-        if (metadata.name === expectedName) return directory;
-      } catch {
-        return undefined;
-      }
-    }
-    const parent = dirname(directory);
-    if (parent === directory) return undefined;
-    directory = parent;
+/** Copy the configured fonts beside the executable and return their resource-relative names. */
+function stageFonts(config: ResolvedQuickGuiConfig, destination: string): string[] {
+  if (config.fonts.length === 0) return [];
+  mkdirSync(destination, { recursive: true });
+  const names: string[] = [];
+  for (const font of config.fonts) {
+    const name = basename(font);
+    if (names.includes(`fonts/${name}`)) throw new CliError(`Duplicate font file name: ${name}`);
+    cpSync(font, resolve(destination, name));
+    names.push(`fonts/${name}`);
   }
+  return names;
 }
 
 function replaceArtifacts(
@@ -850,8 +541,6 @@ function validateMacPackaging(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
 ): void {
-  resolveNodeExecutable();
-  resolveCreateDmgCli();
   macDmgFilename(config.name, config.version);
   const dmgTitle = config.macos.dmgTitle ?? config.name;
   if (dmgTitle.length > 27) {

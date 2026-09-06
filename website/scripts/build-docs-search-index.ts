@@ -56,7 +56,7 @@ function guideSource(page: DocsPageMeta, locale: Locale): string {
 }
 
 function componentSource(component: ComponentDoc, locale: Locale): string {
-  const family = component.kind === 'swift-ui' ? 'swift-ui' : 'solid'
+  const family = component.kind === 'swift-ui' ? 'swift-ui' : 'ui'
   const localized = resolve(
     contentRoot,
     'components',
@@ -102,7 +102,7 @@ function pageDefinitions(locale: Locale): SearchPage[] {
           : page.slug === 'components' ||
               page.slug === 'forms-and-input' ||
               page.slug === 'overlays-and-dialogs'
-            ? 'solid'
+            ? 'ui'
             : 'guide',
       path: docsPath(page.slug),
       sourcePath: guideSource(page, locale),

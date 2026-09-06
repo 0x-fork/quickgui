@@ -1,11 +1,11 @@
-SwiftUI ブリッジは、macOS 上で Solid が描画する QuickGUI ウィンドウの中に、本物のネイティブ SwiftUI コントロールをマウントします。
+SwiftUI ブリッジは、macOS 上で QuickGUI UI が描画する QuickGUI ウィンドウの中に、本物のネイティブ SwiftUI コントロールをマウントします。
 
 ## Host
 
 `Host` は `NSHostingView` を基盤とする、保持型 QuickGUI レイアウトの 1 つのリーフです。その下に SwiftUI ブリッジコンポーネントを置きます。
 
 ```tsx
-import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
+import { Host, Button, Toggle } from "@quickgui/ui/swift-ui";
 
 <Host matchContents>
   <Button label="Continue" onPress={continueFlow} />
@@ -18,7 +18,7 @@ import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
 
 ## 制御値
 
-値は引き続き Solid が制御します。ネイティブ側の変更は対応するコールバックから届きます。
+値は引き続き QuickGUI UI が制御します。ネイティブ側の変更は対応するコールバックから届きます。
 
 ```tsx
 <Host matchContents={{ vertical: true }} style={{ width: 340 }}>
@@ -46,5 +46,5 @@ import { Host, Button, Toggle } from "@quickgui/solid/swift-ui";
 ## 対応プラットフォーム
 
 <Note title="macOS のみ">
-  SwiftUI ホスティングは macOS 向けのブリッジです。クロスプラットフォーム UI には、通常の `@quickgui/solid` コンポーネントを使ってください。
+  SwiftUI ホスティングは macOS 向けのブリッジです。クロスプラットフォーム UI には、通常の `@quickgui/ui` コンポーネントを使ってください。
 </Note>

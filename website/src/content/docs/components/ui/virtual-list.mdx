@@ -1,0 +1,28 @@
+Mounts only the visible slice of a long or variable-height collection.
+
+## Import
+
+Import `VirtualList` from `@quickgui/ui`.
+
+```tsx
+import { VirtualList } from "@quickgui/ui";
+```
+
+## Usage
+
+```tsx
+<VirtualList estimatedItemHeight={36} overscan={6}>
+  <For each={rows()}>{(row) => <Row row={row} />}</For>
+</VirtualList>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `estimatedItemHeight` | Initial logical row-height estimate used by virtualization. |
+| `overscan` | Extra rows mounted before and after the visible range. |
+| `listAlignment` | Pins short list content to the top or bottom. |
+| `followMode` | Chooses ordinary scrolling or tail-following behavior. |
+| `children` | Content mounted inside the component. |
+

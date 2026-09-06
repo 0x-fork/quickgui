@@ -1,0 +1,31 @@
+Embeds the retained Ghostty terminal surface and reports process lifecycle events.
+
+## Import
+
+Import `Terminal` from `@quickgui/ui`.
+
+```tsx
+import { Terminal } from "@quickgui/ui";
+```
+
+## Usage
+
+```tsx
+<Terminal
+  program="/bin/zsh"
+  workingDirectory={projectPath}
+  scrollback={10_000}
+  onStatus={(event) => setTerminalStatus(event)}
+/>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `program` | Executable launched by the terminal. |
+| `arguments` | Arguments passed to the terminal process. |
+| `workingDirectory` | Initial working directory for the terminal process. |
+| `environment` | Environment entries added to the terminal process. |
+| `onStatus` | Reports terminal process lifecycle changes. |
+

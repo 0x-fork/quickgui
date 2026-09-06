@@ -1,7 +1,7 @@
 export type DocsSlug =
   | 'getting-started'
   | 'project-structure'
-  | 'solid'
+  | 'ui'
   | 'styling'
   | 'components'
   | 'forms-and-input'
@@ -32,7 +32,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
   {
     slug: 'getting-started',
     title: 'Getting Started',
-    description: 'Create and run a native QuickGUI app with Solid.',
+    description: 'Create and run a native QuickGUI app with QuickGUI UI.',
     outline: [
       { id: 'requirements', title: 'Requirements' },
       { id: 'create-a-project', title: 'Create a project' },
@@ -45,7 +45,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
   {
     slug: 'project-structure',
     title: 'Project Structure',
-    description: 'Understand the files in a generated Solid project.',
+    description: 'Understand the files in a generated QuickGUI UI project.',
     outline: [
       { id: 'generated-files', title: 'Generated files' },
       { id: 'application-entry', title: 'Application entry' },
@@ -55,9 +55,9 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['files', 'config', 'entry', 'package', 'quickgui.config'],
   },
   {
-    slug: 'solid',
-    title: 'Solid Usage',
-    description: 'Use Solid reactivity to render retained native UI.',
+    slug: 'ui',
+    title: 'QuickGUI UI Usage',
+    description: 'Use QuickGUI UI reactivity to render retained native UI.',
     outline: [
       { id: 'rendering-model', title: 'Rendering model' },
       { id: 'reactive-state', title: 'Reactive state' },
@@ -121,7 +121,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
   {
     slug: 'swift-ui',
     title: 'SwiftUI',
-    description: 'Mount real SwiftUI controls inside a Solid application.',
+    description: 'Mount real SwiftUI controls inside a QuickGUI UI application.',
     outline: [
       { id: 'host', title: 'Host' },
       { id: 'native-controls', title: 'Native controls' },
@@ -151,8 +151,8 @@ export const DOCS_NAV: readonly DocsNavGroup[] = [
     items: ['getting-started', 'project-structure'],
   },
   {
-    title: 'Solid',
-    items: ['solid', 'styling'],
+    title: 'QuickGUI UI',
+    items: ['ui', 'styling'],
   },
   {
     title: 'Components',

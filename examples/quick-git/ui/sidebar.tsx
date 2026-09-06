@@ -1,6 +1,11 @@
-import { Menu, Shell } from "@quickgui/native";
-import { Button, Text, View } from "@quickgui/solid";
-import { For, Show, createMemo } from "solid-js";
+import { runProcess } from "../process.ts";
+import { writeFile } from "node:fs/promises";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Clipboard, Menu, Shell } from "@quickgui/native";
+import { Button, Text, View } from "@quickgui/ui";
+import { For, Show, createMemo } from "@quickgui/ui";
 import { basename } from "node:path";
 
 import { relativeTime } from "../git/log.ts";
@@ -210,22 +215,26 @@ export function Sidebar() {
 }
 
 function NavRow(props: {
-  icon: IconName;
-  label: string;
-  detail?: string | undefined;
-  count?: number | undefined;
+  icon: () => (IconName);
+  label: () => (string);
+  detail?: () => (string | undefined);
+  count?: () => (number | undefined);
   trailing?: IconName | undefined;
-  selected: boolean;
-  muted?: boolean | undefined;
-  small?: boolean | undefined;
+  selected: () => (boolean);
+  muted?: () => (boolean | undefined);
+  small?: () => (boolean | undefined);
   onClick: () => void;
 }) {
+  const readdetail = () => { const source = props.detail; return source === undefined ? undefined : source(); };
+  const readcount = () => { const source = props.count; return source === undefined ? undefined : source(); };
+  const readmuted = () => { const source = props.muted; return source === undefined ? undefined : source(); };
+  const readsmall = () => { const source = props.small; return source === undefined ? undefined : source(); };
   const app = useApp();
   return (
     <Button
-      aria-label={props.label}
+      aria-label={props.label()}
       focusOnPointer={false}
-      selected={props.selected}
+      selected={props.selected()}
       onClick={props.onClick}
       style={{
         display: "flex",
@@ -238,7 +247,7 @@ function NavRow(props: {
         paddingRight: 8,
         borderRadius: 6,
         backgroundColor: "transparent",
-        color: props.muted ? app.theme().textSecondary : app.theme().text,
+        color: readmuted() ? app.theme().textSecondary : app.theme().text,
         cursor: "default",
         userSelect: "none",
         transition: "background-color 80ms",
@@ -248,7 +257,7 @@ function NavRow(props: {
         focus: { outline: `2px solid ${app.theme().focusRing}` },
       }}
     >
-      <Icon name={props.icon} size={16} color={props.selected ? app.theme().accent : app.theme().textSecondary} />
+      <Icon name={props.icon()} size={16} color={props.selected() ? app.theme().accent : app.theme().textSecondary} />
       <Text
         style={{
           flex: 1,
@@ -259,25 +268,25 @@ function NavRow(props: {
           textOverflow: "ellipsis",
         }}
       >
-        {props.label}
+        {props.label()}
       </Text>
-      <Show when={props.detail}>
+      <Show when={readdetail()}>
         <Text style={{ fontSize: 11, color: app.theme().textTertiary, lineClamp: 1, textOverflow: "ellipsis", maxWidth: 90 }}>
-          {props.detail}
+          {readdetail()}
         </Text>
       </Show>
-      <Show when={props.count !== undefined && props.count > 0}>
-        <Text style={{ fontSize: 12, color: app.theme().textTertiary }}>{String(props.count)}</Text>
+      <Show when={readcount() !== undefined && (readcount() ?? 0) > 0}>
+        <Text style={{ fontSize: 12, color: app.theme().textTertiary }}>{String(readcount())}</Text>
       </Show>
-      <Show when={props.trailing}>{(name) => <Icon name={name()} size={12} color={app.theme().textTertiary} />}</Show>
+      <Show when={props.trailing}>{(() => { const name = () => (props.trailing)!; return <Icon name={name()} size={12} color={app.theme().textTertiary} />; })()}</Show>
     </Button>
   );
 }
 
 function SectionRow(props: {
-  label: string;
-  count: number;
-  selected: boolean;
+  label: () => (string);
+  count: () => (number);
+  selected: () => (boolean);
   onClick: () => void;
   action: { icon: IconName; label: string; onClick: () => void; disabled?: boolean };
 }) {
@@ -285,7 +294,7 @@ function SectionRow(props: {
   return (
     <View group style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 4, marginTop: 14, paddingRight: 2 }}>
       <Button
-        aria-label={props.label}
+        aria-label={props.label()}
         focusOnPointer={false}
         onClick={props.onClick}
         style={{
@@ -312,13 +321,13 @@ function SectionRow(props: {
             minWidth: 0,
             fontSize: 11,
             fontWeight: 600,
-            color: props.selected ? app.theme().accent : app.theme().textTertiary,
+            color: props.selected() ? app.theme().accent : app.theme().textTertiary,
           }}
         >
-          {props.label}
+          {props.label()}
         </Text>
-        <Show when={props.count > 0}>
-          <Text style={{ fontSize: 11, fontWeight: 600, color: app.theme().textTertiary }}>{String(props.count)}</Text>
+        <Show when={props.count() > 0}>
+          <Text style={{ fontSize: 11, fontWeight: 600, color: app.theme().textTertiary }}>{String(props.count())}</Text>
         </Show>
       </Button>
       <IconButton
@@ -336,27 +345,28 @@ function SectionRow(props: {
 }
 
 export async function openInTerminal(path: string): Promise<void> {
-  const child = Bun.spawn(["open", "-a", "Terminal", path], { stdout: "ignore", stderr: "ignore" });
-  await child.exited;
+  const result = await runProcess(["/usr/bin/open", "-a", "Terminal", path], { cwd: path });
+  if (result.exitCode !== 0) throw new Error(result.stderr || "Unable to open Terminal");
 }
 
-/** Open Terminal at `path` and run `command` there, for launching an agent in a worktree. */
+/** Launch a coding agent in Terminal through a private, self-removing command file. */
 export async function runInTerminal(path: string, command: string): Promise<void> {
-  const escaped = `cd ${shellQuote(path)} && ${command}`;
-  const script = `tell application "Terminal"\nactivate\ndo script ${appleScriptString(escaped)}\nend tell`;
-  const child = Bun.spawn(["osascript", "-e", script], { stdout: "ignore", stderr: "ignore" });
-  await child.exited;
+  const scratch = mkdtempSync(join(tmpdir(), "quick-git-terminal-"));
+  const script = join(scratch, "launch.command");
+  try {
+    await writeFile(script, `#!/bin/sh\nrm -- "$0"\nrmdir -- ${shellQuote(scratch)}\ncd -- ${shellQuote(path)} || exit\nexec ${shellQuote(command)}\n`, { encoding: "utf8", mode: 0o700 });
+    const result = await runProcess(["/usr/bin/open", "-a", "Terminal", script], { cwd: path });
+    if (result.exitCode !== 0) throw new Error(result.stderr || "Unable to open Terminal");
+  } catch (error) {
+    rmSync(scratch, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function appleScriptString(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
 export async function copyText(text: string): Promise<void> {
-  const { Clipboard } = await import("@quickgui/native");
   await Clipboard.write({ entries: [{ type: "text", text }] });
 }

@@ -1,5 +1,5 @@
-import { Button, Terminal, Text, View } from "@quickgui/solid";
-import { For, Show } from "solid-js";
+import { Button, Terminal, Text, View } from "@quickgui/ui";
+import { For, Show } from "@quickgui/ui";
 
 import {
   spaceForPane,
@@ -29,7 +29,7 @@ export function Workspace(props: { model: HerdrModel }) {
           <View style={styles().emptyState}>
             <Icon name="terminal" size={24} color={theme().textGhost} />
             <Text style={styles().emptyCopy}>Open a tab to start working</Text>
-            <Button style={styles().smallButton} onClick={() => model.newTerminal()}>
+            <Button style={styles().smallButton} onClick={() => model.newTerminal(undefined)}>
               New Tab
             </Button>
           </View>
@@ -48,14 +48,14 @@ export function Workspace(props: { model: HerdrModel }) {
           </Text>
           <View style={{ flex: 1 }} />
           <Show when={model.activePane()}>
-            {(pane) => (
+            {(() => { const pane = () => (model.activePane())!; return (
               <Button
                 style={styles().errorAction}
                 onClick={() => model.restartPane(pane())}
               >
                 Restart
               </Button>
-            )}
+            ); })()}
           </Show>
         </View>
       </Show>
@@ -78,7 +78,7 @@ function TabBar(props: { model: HerdrModel }) {
             const active = () => tabId === model.activeTabId();
             return (
               <Show when={tab()}>
-                {(candidate) => (
+                {(() => { const candidate = () => (tab())!; return (
                   <View style={tabItem(active(), theme())}>
                     <Button
                       aria-label={"Open " + tabTitle(candidate(), model.panes())}
@@ -99,7 +99,7 @@ function TabBar(props: { model: HerdrModel }) {
                       </Button>
                     </Show>
                   </View>
-                )}
+                ); })()}
               </Show>
             );
           }}
@@ -107,7 +107,7 @@ function TabBar(props: { model: HerdrModel }) {
         <Button
           aria-label="New tab"
           style={styles().tabAdd}
-          onClick={() => model.newTerminal()}
+          onClick={() => model.newTerminal(undefined)}
         >
           <Icon name="plus" size={14} />
         </Button>
@@ -144,17 +144,20 @@ function TabBar(props: { model: HerdrModel }) {
 function TabSurface(props: { tabId: number; model: HerdrModel }) {
   const model = props.model;
   const tab = () => model.tabs().find((candidate) => candidate.id === props.tabId);
-  const paneList = () => {
+  const paneList = (): Pane[] => {
     const candidate = tab();
-    if (!candidate) return [];
-    return candidate.paneIds
-      .map((id) => model.panes().find((pane) => pane.id === id))
-      .filter((pane): pane is Pane => pane !== undefined);
+    const result: Pane[] = [];
+    if (candidate === undefined) return result;
+    for (const id of candidate.paneIds) {
+      const pane = model.panes().find((pane) => pane.id === id);
+      if (pane !== undefined) result.push(pane);
+    }
+    return result;
   };
 
   return (
     <Show when={tab()}>
-      {(candidate) => (
+      {(() => { const candidate = () => (tab())!; return (
         <View
           style={{
             ...model.styles().tabSurface,
@@ -168,7 +171,7 @@ function TabSurface(props: { tabId: number; model: HerdrModel }) {
             {(pane) => <TerminalPane pane={pane} model={model} />}
           </For>
         </View>
-      )}
+      ); })()}
     </Show>
   );
 }
@@ -186,9 +189,7 @@ function TerminalPane(props: { pane: Pane; model: HerdrModel }) {
           program={props.pane.program}
           arguments={props.pane.arguments}
           workingDirectory={space().path}
-          {...(props.pane.environment
-            ? { environment: props.pane.environment }
-            : {})}
+          environment={terminalEnvironment(props.pane.environment)}
           scrollback={50_000}
           terminalPalette={theme().terminalPalette}
           terminalCursorColor={theme().terminalCursor}
@@ -216,4 +217,12 @@ function TerminalPane(props: { pane: Pane; model: HerdrModel }) {
       </View>
     </View>
   );
+}
+
+function terminalEnvironment(environment: Readonly<Record<string, string>> | undefined): { name: string; value: string }[] {
+  const entries: { name: string; value: string }[] = [];
+  if (environment !== undefined) {
+    for (const key of Object.keys(environment)) entries.push({ name: key, value: environment[key]! });
+  }
+  return entries;
 }

@@ -1,5 +1,5 @@
-import { Button, Text, View, type JSX } from "@quickgui/solid";
-import { Show, type Element as SolidElement } from "solid-js";
+import { Button, Text, View, type Style, type NativeNode } from "@quickgui/ui";
+import { Show, type Keymap } from "@quickgui/ui";
 
 import { Icon, type IconName } from "./icons.tsx";
 import type { Styles, Theme } from "./theme.ts";
@@ -11,18 +11,22 @@ export interface UiContext {
 
 export function ToolbarButton(props: {
   ui: UiContext;
-  icon: IconName;
-  label?: string | undefined;
-  tooltip?: string | undefined;
-  disabled?: boolean | undefined;
+  icon: () => (IconName);
+  label?: () => (string | undefined);
+  tooltip?: () => (string | undefined);
+  disabled?: () => (boolean | undefined);
   onClick: () => void;
-  style?: JSX.StyleProp;
+  style?: () => (Style);
 }) {
+  const readlabel = () => { const source = props.label; return source === undefined ? undefined : source(); };
+  const readtooltip = () => { const source = props.tooltip; return source === undefined ? undefined : source(); };
+  const readdisabled = () => { const source = props.disabled; return source === undefined ? undefined : source(); };
+  const readstyle = () => { const source = props.style; return source === undefined ? undefined : source(); };
   return (
     <Button
-      aria-label={props.tooltip ?? props.label ?? props.icon}
-      {...(props.tooltip ? { tooltip: props.tooltip, tooltipPlacement: "bottom" as const, tooltipDelay: 500 } : {})}
-      disabled={props.disabled ?? false}
+      aria-label={readtooltip() ?? readlabel() ?? props.icon()}
+      tooltip={readtooltip() ?? ""} tooltipPlacement="bottom" tooltipDelay={500}
+      disabled={readdisabled() ?? false}
       focusOnPointer={false}
       onClick={props.onClick}
       style={[
@@ -33,9 +37,9 @@ export function ToolbarButton(props: {
           alignItems: "center",
           justifyContent: "center",
           gap: 6,
-          paddingLeft: props.label ? 9 : 0,
-          paddingRight: props.label ? 10 : 0,
-          ...(props.label ? {} : { width: 28 }),
+          paddingLeft: readlabel() ? 9 : 0,
+          paddingRight: readlabel() ? 10 : 0,
+          ...(readlabel() ? {} : { width: 28 }),
           borderRadius: 7,
           backgroundColor: "transparent",
           color: props.ui.theme().textSecondary,
@@ -50,12 +54,12 @@ export function ToolbarButton(props: {
           focus: { outline: `2px solid ${props.ui.theme().focusRing}` },
           disabled: { opacity: 0.4 },
         },
-        props.style,
+        readstyle() ?? {},
       ]}
     >
-      <Icon name={props.icon} size={15} />
-      <Show when={props.label}>
-        <Text>{props.label}</Text>
+      <Icon name={props.icon()} size={15} />
+      <Show when={readlabel()}>
+        <Text>{readlabel()}</Text>
       </Show>
     </Button>
   );
@@ -63,98 +67,110 @@ export function ToolbarButton(props: {
 
 export function IconButton(props: {
   ui: UiContext;
-  icon: IconName;
-  label: string;
-  size?: number;
-  iconSize?: number;
-  disabled?: boolean;
+  icon: () => (IconName);
+  label: () => (string);
+  size?: () => (number);
+  iconSize?: () => (number);
+  disabled?: () => (boolean);
   onClick: () => void;
-  style?: JSX.StyleProp;
+  style?: () => (Style);
 }) {
+  const readsize = () => { const source = props.size; return source === undefined ? undefined : source(); };
+  const readiconSize = () => { const source = props.iconSize; return source === undefined ? undefined : source(); };
+  const readdisabled = () => { const source = props.disabled; return source === undefined ? undefined : source(); };
+  const readstyle = () => { const source = props.style; return source === undefined ? undefined : source(); };
   return (
     <Button
-      aria-label={props.label}
-      tooltip={props.label}
+      aria-label={props.label()}
+      tooltip={props.label()}
       tooltipDelay={600}
-      disabled={props.disabled ?? false}
+      disabled={readdisabled() ?? false}
       focusOnPointer={false}
       onClick={props.onClick}
-      style={[props.ui.styles().iconButton(props.size ?? 24), props.style]}
+      style={[props.ui.styles().iconButton(readsize() ?? 24), readstyle() ?? {}]}
     >
-      <Icon name={props.icon} size={props.iconSize ?? 14} />
+      <Icon name={props.icon()} size={readiconSize() ?? 14} />
     </Button>
   );
 }
 
 export function PushButton(props: {
   ui: UiContext;
-  kind?: "primary" | "secondary" | "danger";
-  icon?: IconName;
-  label: string;
-  disabled?: boolean;
+  kind?: () => ("primary" | "secondary" | "danger");
+  icon?: () => (IconName);
+  label: () => (string);
+  disabled?: () => (boolean);
   onClick: () => void;
-  style?: JSX.StyleProp;
-  keymap?: Readonly<Record<string, string>>;
+  style?: () => (Style);
+  keymap?: Keymap;
 }) {
+  const readkind = () => { const source = props.kind; return source === undefined ? undefined : source(); };
+  const readicon = () => { const source = props.icon; return source === undefined ? undefined : source(); };
+  const readdisabled = () => { const source = props.disabled; return source === undefined ? undefined : source(); };
+  const readstyle = () => { const source = props.style; return source === undefined ? undefined : source(); };
   return (
     <Button
-      aria-label={props.label}
-      disabled={props.disabled ?? false}
+      aria-label={props.label()}
+      disabled={readdisabled() ?? false}
       onClick={props.onClick}
-      style={[props.ui.styles().button(props.kind ?? "secondary"), props.style]}
+      style={[props.ui.styles().button(readkind() ?? "secondary"), readstyle() ?? {}]}
     >
-      <Show when={props.icon}>{(icon) => <Icon name={icon()} size={14} />}</Show>
-      <Text>{props.label}</Text>
+      <Show when={readicon()}>{(() => { const icon = () => (readicon())!; return <Icon name={icon()} size={14} />; })()}</Show>
+      <Text>{props.label()}</Text>
     </Button>
   );
 }
 
-export function Badge(props: { ui: UiContext; children: SolidElement; color?: string; background?: string }) {
+export function Badge(props: { ui: UiContext; children: () => NativeNode; color?: () => (string); background?: () => (string) }) {
+  const readcolor = () => { const source = props.color; return source === undefined ? undefined : source(); };
+  const readbackground = () => { const source = props.background; return source === undefined ? undefined : source(); };
   return (
     <View
       style={[
         props.ui.styles().badge,
-        props.color ? { color: props.color } : null,
-        props.background ? { backgroundColor: props.background } : null,
+        readcolor() ? { color: readcolor()! } : {},
+        readbackground() ? { backgroundColor: readbackground()! } : {},
       ]}
     >
-      <Text>{props.children}</Text>
+      <Text>{props.children?.()}</Text>
     </View>
   );
 }
 
 export function EmptyState(props: {
   ui: UiContext;
-  icon: IconName;
-  title: string;
-  description?: string | undefined;
-  children?: SolidElement;
+  icon: () => (IconName);
+  title: () => (string);
+  description?: () => (string | undefined);
+  children?: () => NativeNode;
 }) {
+  const readdescription = () => { const source = props.description; return source === undefined ? undefined : source(); };
   return (
     <View style={props.ui.styles().emptyState}>
-      <Text style={props.ui.styles().emptyTitle}>{props.title}</Text>
-      <Show when={props.description}>
-        <Text style={props.ui.styles().emptyCopy}>{props.description}</Text>
+      <Text style={props.ui.styles().emptyTitle}>{props.title()}</Text>
+      <Show when={readdescription()}>
+        <Text style={props.ui.styles().emptyCopy}>{readdescription()}</Text>
       </Show>
-      {props.children}
+      {props.children?.()}
     </View>
   );
 }
 
 export function SectionHeader(props: {
   ui: UiContext;
-  label: string;
-  count?: number;
+  label: () => (string);
+  count?: () => (number);
   action?: { icon: IconName; label: string; onClick: () => void; disabled?: boolean };
 }) {
+  const readcount = () => { const source = props.count; return source === undefined ? undefined : source(); };
   return (
     <View style={props.ui.styles().sectionLabel}>
-      <Text style={props.ui.styles().sectionLabelText}>{props.label}</Text>
-      <Show when={props.count !== undefined && props.count > 0}>
-        <Text style={{ color: props.ui.theme().textTertiary, fontSize: 11, fontWeight: 600 }}>{props.count}</Text>
+      <Text style={props.ui.styles().sectionLabelText}>{props.label()}</Text>
+      <Show when={readcount() !== undefined && (readcount() ?? 0) > 0}>
+        <Text style={{ color: props.ui.theme().textTertiary, fontSize: 11, fontWeight: 600 }}>{readcount()}</Text>
       </Show>
       <Show when={props.action}>
-        {(action) => (
+        {(() => { const action = () => (props.action)!; return (
           <IconButton
             ui={props.ui}
             icon={action().icon}
@@ -164,14 +180,14 @@ export function SectionHeader(props: {
             disabled={action().disabled ?? false}
             onClick={action().onClick}
           />
-        )}
+        ); })()}
       </Show>
     </View>
   );
 }
 
 /** A tiny inline spinner substitute: three dots that the core animates through opacity. */
-export function Working(props: { ui: UiContext; label: string }) {
+export function Working(props: { ui: UiContext; label: () => (string) }) {
   return (
     <View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6 }}>
       <View
@@ -182,7 +198,7 @@ export function Working(props: { ui: UiContext; label: string }) {
           backgroundColor: props.ui.theme().accent,
         }}
       />
-      <Text style={{ fontSize: 12, color: props.ui.theme().textSecondary }}>{props.label}</Text>
+      <Text style={{ fontSize: 12, color: props.ui.theme().textSecondary }}>{props.label()}</Text>
     </View>
   );
 }

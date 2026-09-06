@@ -1,0 +1,82 @@
+筛选自由输入文本的建议项，无需选中某个值。
+
+## 导入
+
+从 `@quickgui/ui` 导入 `Autocomplete`。
+
+```tsx
+import { Autocomplete } from "@quickgui/ui/select";
+```
+
+## 用法
+
+```tsx
+<Autocomplete.Root
+  ariaLabel="Search commands"
+  items={commands}
+  inputValue={query()}
+  filterMode="fuzzy"
+  onInputValueChange={setQuery}
+  onCommit={(details) => run(details.inputValue ?? "")}
+/>
+```
+
+## 结构
+
+- `Autocomplete.Root`
+- `Autocomplete.Input`
+- `Autocomplete.Option`
+- `Autocomplete.Label`
+- `Autocomplete.Value`
+- `Autocomplete.Icon`
+- `Autocomplete.InputGroup`
+- `Autocomplete.Clear`
+- `Autocomplete.Portal`
+- `Autocomplete.Positioner`
+- `Autocomplete.Popup`
+- `Autocomplete.Arrow`
+- `Autocomplete.Status`
+- `Autocomplete.Empty`
+- `Autocomplete.List`
+- `Autocomplete.Item`
+- `Autocomplete.ItemIndicator`
+- `Autocomplete.Group`
+- `Autocomplete.GroupLabel`
+- `Autocomplete.Collection`
+- `Autocomplete.Separator`
+
+```tsx
+<Autocomplete.Root>
+  <Autocomplete.Input />
+  <Autocomplete.Option />
+  <Autocomplete.Label />
+  <Autocomplete.Value />
+  <Autocomplete.Icon />
+  <Autocomplete.InputGroup />
+  <Autocomplete.Clear />
+  <Autocomplete.Portal />
+  <Autocomplete.Positioner />
+  <Autocomplete.Popup />
+  <Autocomplete.Arrow />
+  <Autocomplete.Status />
+  <Autocomplete.Empty />
+  <Autocomplete.List />
+  <Autocomplete.Item />
+  <Autocomplete.ItemIndicator />
+  <Autocomplete.Group />
+  <Autocomplete.GroupLabel />
+  <Autocomplete.Collection />
+  <Autocomplete.Separator />
+</Autocomplete.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `items` | 用于选项或键盘导航的有限声明模型。 |
+| `inputValue` | Combobox 或 Autocomplete 使用的可编辑查询文本。 |
+| `filterMode` | 由核心管理的包含、前缀、模糊或禁用筛选模式。 |
+| `onInputValueChange` | 报告核心保留的可编辑查询文本。 |
+| `onCommit` | 报告一次明确的提交边界及最终值详情。 |
+

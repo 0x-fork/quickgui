@@ -38,7 +38,7 @@ impl View for Counter {
     }
 }`,
   },
-  solid: {
+  ui: {
     lang: 'tsx',
     code: `function Counter() {
   const [count, setCount] = createSignal(0);
@@ -56,7 +56,7 @@ impl View for Counter {
       }}
     >
       <Text>Count: {count()}</Text>
-      <Button onClick={() => setCount((value) => value + 1)}>
+      <Button onClick={() => setCount(count() + 1)}>
         Increment
       </Button>
     </View>
@@ -65,8 +65,8 @@ impl View for Counter {
   },
   swiftUi: {
     lang: 'tsx',
-    code: `import { Button, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle } from "@quickgui/solid/swift-ui/modifiers";
+    code: `import { Button, Host } from "@quickgui/ui/swift-ui";
+import { buttonStyle } from "@quickgui/ui/swift-ui/modifiers";
 
 <Host matchContents>
   <Button

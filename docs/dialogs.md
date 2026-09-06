@@ -126,7 +126,7 @@ Live VoiceOver wording, pointer backdrop behavior, embedded-native-view occlusio
 multi-monitor behavior remain release-candidate acceptance items until recorded on the intended
 macOS build.
 
-## Solid
+## QuickGUI UI
 
 `Dialog.Viewport` is bound as the scrollable dialog body, so a long dialog scrolls inside the popup
 rather than growing past the window. `enterDuration` and `exitDuration` declare the transitions the
@@ -152,7 +152,7 @@ A dialog whose open value changes outside its own trigger and close controls sti
 completion; with a zero exit transition — the default — the surface leaves on the frame it closed.
 
 
-`@quickgui/solid` exposes this descriptor as `Dialog.Root`, `Dialog.Trigger`, `Dialog.Portal`,
+`@quickgui/ui` exposes this descriptor as `Dialog.Root`, `Dialog.Trigger`, `Dialog.Portal`,
 `Dialog.Backdrop`, `Dialog.Popup`, `Dialog.Title`, `Dialog.Description`, and `Dialog.Close`, with
 `AlertDialog` providing the same parts for the consequential kind. `Dialog.Root` is a logical
 coordinator that creates no native element; `Dialog.Portal` is the viewport overlay root the Rust
@@ -181,7 +181,7 @@ by default. Escape and outside presses arrive as one asynchronous event and call
 `"close-press"`. The overlay plane, nested topmost focus containment, focus restoration, modal
 accessibility semantics, and part identities all stay in this Rust layer.
 
-`initial_focus(...)` and `restore_focus_to(...)` are not bridged yet, so a Solid dialog uses the
+`initial_focus(...)` and `restore_focus_to(...)` are not bridged yet, so a QuickGUI UI dialog uses the
 trap's first enabled Tab stop and the core's `restore_previous_focus` default. This is separate
 from the native alert and file panels in the `Dialog` namespace of `@quickgui/native`.
 

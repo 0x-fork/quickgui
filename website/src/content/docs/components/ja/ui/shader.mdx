@@ -1,0 +1,28 @@
+検証済みの WGSL を、数を制限した数値シェーダーパラメーターで描画します。
+
+## インポート
+
+`@quickgui/ui` から `Shader` をインポートします。
+
+```tsx
+import { Shader } from "@quickgui/ui";
+```
+
+## 使い方
+
+```tsx
+<Shader
+  source={gradientShader}
+  shaderParameters={[time(), intensity()]}
+  style={{ width: 320, height: 180 }}
+/>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `source` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
+| `shaderParameters` | 固定のシェーダーパラメーターベクトルへ格納する最大 16 個の数値です。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+

@@ -19,7 +19,7 @@ export interface InitProjectOptions {
   identifier?: string;
 }
 
-const templateRoot = fileURLToPath(new URL("../templates/solid/", import.meta.url));
+const templateRoot = fileURLToPath(new URL("../templates/native/", import.meta.url));
 const templateFiles = [
   ["package.json", "package.json"],
   ["quickgui.config.ts", "quickgui.config.ts"],

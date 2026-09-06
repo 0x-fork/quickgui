@@ -1,5 +1,5 @@
+import { untrack as nativeUntrack, onCleanup as nativeOnCleanup } from "@quickgui/ui";
 import {
-  Appearance,
   Dialog,
   Menu,
   type Window,
@@ -8,12 +8,8 @@ import {
   type NativeNode,
   type QuickGuiEvent,
 } from "@quickgui/native";
-import {
-  capturedPointerFromEvent,
-  terminalStatusFromEvent,
-  type TerminalStatusEvent,
-} from "@quickgui/solid";
-import { createMemo, createSignal, onCleanup } from "solid-js";
+import { capturedPointerFromEvent, terminalStatusFromEvent, type TerminalStatusEvent } from "@quickgui/ui";
+import { createMemo, createSignal, onCleanup } from "@quickgui/ui";
 
 import {
   clamp,
@@ -129,7 +125,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
   const [initialPrompt, setInitialPrompt] = createSignal("");
   const [catalogLoading, setCatalogLoading] = createSignal(true);
   const [launchEnvironment, setLaunchEnvironment] =
-    createSignal<Readonly<Record<string, string>>>();
+    createSignal<Readonly<Record<string, string>> | undefined>(undefined);
   const [launchers, setLaunchers] = createSignal<AgentLauncher[]>(
     launcherDefinitions.map((launcher) => ({ ...launcher, installed: false })),
   );
@@ -183,26 +179,31 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
       launchers()[0]!,
   );
 
-  const stopAppearance = Appearance.onChange((next) => setAppearance(next));
+  const stopAppearance = window.on("appearanceChange", (event) => {
+    if (event.appearance === "dark" || event.appearance === "light") setAppearance(event.appearance);
+  });
   const updateWindowMetrics = (state: Awaited<ReturnType<Window["getState"]>>) => {
     sectionDragHeight = Math.max(state.viewportSize.height - 40, 320);
   };
-  const stopWindowState = window.onStateChange(updateWindowMetrics);
+  const refreshWindowState = async (): Promise<void> => {
+    try {
+      const state = await window.getState();
+      if (!disposed && !window.closed) {
+        updateWindowMetrics(state);
+        setAppearance(state.appearance === "dark" ? "dark" : "light");
+      }
+    } catch {}
+  };
+  const stopWindowState = window.on("stateChange", () => { void refreshWindowState(); });
+  const stopReady = window.on("readyToShow", () => { void refreshWindowState(); });
   onCleanup(() => {
     disposed = true;
     stopAppearance();
     stopWindowState();
+    stopReady();
     if (persistenceTimer) clearTimeout(persistenceTimer);
   });
-  queueMicrotask(() => {
-    if (disposed || window.closed) return;
-    void Appearance.getCurrent(window)
-      .then((value) => {
-        if (!disposed && !window.closed) setAppearance(value);
-      })
-      .catch(() => {});
-    void window.getState().then(updateWindowMetrics).catch(() => {});
-  });
+
 
   void captureShellEnvironment().then(async (environment) => {
     const resolved = await resolveLaunchers(environment, homePath);
@@ -218,7 +219,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
     space: Space,
     tabId: number,
     options: PaneOptions,
-    existingId?: number,
+    existingId: number | undefined,
   ): Pane {
     const id = existingId ?? nextPaneId++;
     const [status, setStatus] = createSignal<TerminalStatusEvent>({
@@ -249,7 +250,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
       tabs()
         .filter((tab) => tab.spaceId === space.id)
         .reduce((maximum, tab) => Math.max(maximum, tab.number), 0) + 1;
-    const pane = createPane(space, id, options);
+    const pane = createPane(space, id, options, undefined);
     const tab: WorkspaceTab = {
       id,
       spaceId: space.id,
@@ -271,13 +272,14 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
 
   function addTab(space: Space, options: PaneOptions) {
     const created = createTabWithPane(space, options);
-    setPanes((current) => [...current, created.pane]);
-    setTabs((current) => [...current, created.tab]);
+    setPanes(((current: ReturnType<typeof panes>) => [...current, created.pane])(nativeUntrack(panes)));
+    setTabs(((current: ReturnType<typeof tabs>) => [...current, created.tab])(nativeUntrack(tabs)));
     activateTab(created.tab);
     schedulePersist();
   }
 
-  function newTerminal(space = activeSpace()) {
+  function newTerminal(candidate: Space | undefined) {
+    const space = candidate ?? activeSpace();
     const count = panes().filter((pane) => pane.spaceId === space.id).length + 1;
     const environment = launchEnvironment();
     addTab(space, {
@@ -292,7 +294,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
   function splitTerminal(direction: SplitDirection) {
     const tab = activeTab();
     if (!tab) {
-      newTerminal();
+      newTerminal(undefined);
       return;
     }
     const space = activeSpace();
@@ -304,21 +306,21 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
       arguments: ["-l"],
       ...(environment ? { environment } : {}),
       initialPrompt: "",
-    });
-    setPanes((current) => [...current, pane]);
-    setTabs((current) =>
+    }, undefined);
+    setPanes(((current: ReturnType<typeof panes>) => [...current, pane])(nativeUntrack(panes)));
+    setTabs(((current: ReturnType<typeof tabs>) =>
       current.map((candidate) => {
         if (candidate.id !== tab.id) return candidate;
         const activeIndex = candidate.paneIds.indexOf(candidate.activePaneId);
-        const paneIds = candidate.paneIds.slice();
-        paneIds.splice(activeIndex < 0 ? paneIds.length : activeIndex + 1, 0, pane.id);
+        const offset = activeIndex < 0 ? candidate.paneIds.length : activeIndex + 1;
+        const paneIds = [...candidate.paneIds.slice(0, offset), pane.id, ...candidate.paneIds.slice(offset)];
         return {
           ...candidate,
           paneIds,
           activePaneId: pane.id,
           splitDirection: direction,
         };
-      }),
+      }))(nativeUntrack(tabs)),
     );
     setActivePaneId(pane.id);
     focusPane(pane.id);
@@ -368,12 +370,12 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
   function selectPane(pane: Pane) {
     const tab = tabs().find((candidate) => candidate.id === pane.tabId);
     if (!tab) return;
-    setTabs((current) =>
+    setTabs(((current: ReturnType<typeof tabs>) =>
       current.map((candidate) =>
         candidate.id === tab.id
           ? { ...candidate, activePaneId: pane.id }
           : candidate,
-      ),
+      ))(nativeUntrack(tabs)),
     );
     setActiveSpaceId(pane.spaceId);
     setActiveTabId(tab.id);
@@ -398,13 +400,13 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
     const paneIds = tab.paneIds.filter((paneId) => paneId !== id);
     const closingIndex = tab.paneIds.indexOf(id);
     const nextPaneId = paneIds[Math.min(Math.max(closingIndex, 0), paneIds.length - 1)]!;
-    setPanes((current) => current.filter((pane) => pane.id !== id));
-    setTabs((current) =>
+    setPanes(((current: ReturnType<typeof panes>) => current.filter((pane) => pane.id !== id))(nativeUntrack(panes)));
+    setTabs(((current: ReturnType<typeof tabs>) =>
       current.map((candidate) =>
         candidate.id === tab.id
           ? { ...candidate, paneIds, activePaneId: nextPaneId }
           : candidate,
-      ),
+      ))(nativeUntrack(tabs)),
     );
     terminalRefs.delete(id);
     if (activePaneId() === id) {
@@ -419,8 +421,8 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
     const closingPaneIds = new Set(closing.paneIds);
     const remainingTabs = tabs().filter((tab) => tab.id !== id);
     setTabs(remainingTabs);
-    setPanes((current) =>
-      current.filter((pane) => !closingPaneIds.has(pane.id)),
+    setPanes(((current: ReturnType<typeof panes>) =>
+      current.filter((pane) => !closingPaneIds.has(pane.id)))(nativeUntrack(panes)),
     );
     for (const paneId of closingPaneIds) terminalRefs.delete(paneId);
     if (activeTabId() !== id) return;
@@ -469,23 +471,24 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
       pane.id,
     );
     terminalRefs.delete(pane.id);
-    setPanes((current) =>
+    setPanes(((current: ReturnType<typeof panes>) =>
       current.map((candidate) =>
         candidate.id === pane.id ? replacement : candidate,
-      ),
+      ))(nativeUntrack(panes)),
     );
     focusPane(replacement.id);
   }
 
   function handleTerminalStatus(pane: Pane, event: QuickGuiEvent) {
     try {
-      pane.setStatus(terminalStatusFromEvent(event));
+      const status = terminalStatusFromEvent(event);
+      if (status !== undefined) pane.setStatus(status);
     } catch (error) {
       pane.setStatus({
         status: "failed",
         title: "Terminal event error",
         workingDirectory:
-          spaces().find((space) => space.id === pane.spaceId)?.path ?? null,
+          spaces().find((space) => space.id === pane.spaceId)?.path ?? "",
         message: error instanceof Error ? error.message : String(error),
       });
     }
@@ -495,11 +498,11 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
     if (addingSpace) return;
     addingSpace = true;
     try {
-      const result = await Dialog.showOpenDialog(window, {
+      const result = await Dialog.showOpenDialog({
         title: "Add a space",
         defaultPath: activeSpace().path,
         properties: ["openDirectory"],
-      });
+      }, window);
       const path = result.filePaths[0];
       if (result.canceled || !path) return;
       const existing = spaces().find((space) => space.path === path);
@@ -508,7 +511,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
         return;
       }
       const space = { id: path, name: spaceName(path), path };
-      setSpaces((current) => [...current, space]);
+      setSpaces(((current: ReturnType<typeof spaces>) => [...current, space])(nativeUntrack(spaces)));
       newTerminal(space);
       schedulePersist();
     } finally {
@@ -532,9 +535,9 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
         .map((pane) => pane.id),
     );
     setSpaces(remainingSpaces);
-    setTabs((current) => current.filter((tab) => !closingTabIds.has(tab.id)));
-    setPanes((current) =>
-      current.filter((pane) => !closingPaneIds.has(pane.id)),
+    setTabs(((current: ReturnType<typeof tabs>) => current.filter((tab) => !closingTabIds.has(tab.id)))(nativeUntrack(tabs)));
+    setPanes(((current: ReturnType<typeof panes>) =>
+      current.filter((pane) => !closingPaneIds.has(pane.id)))(nativeUntrack(panes)),
     );
     for (const id of closingPaneIds) terminalRefs.delete(id);
     lastActiveTabBySpace.delete(space.id);
@@ -556,6 +559,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
 
   function handleSidebarPointer(event: QuickGuiEvent) {
     const pointer = capturedPointerFromEvent(event);
+    if (pointer === undefined) return;
     if (pointer.button !== "left") return;
     if (pointer.phase === "down") {
       sidebarDragStart = sidebarWidth();
@@ -576,6 +580,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
 
   function handleSidebarSectionPointer(event: QuickGuiEvent) {
     const pointer = capturedPointerFromEvent(event);
+    if (pointer === undefined) return;
     if (pointer.button !== "left") return;
     if (pointer.phase === "down") {
       sectionDragStart = sidebarSectionRatio();
@@ -625,7 +630,7 @@ export function createHerdrModel(options: CreateHerdrModelOptions): HerdrModel {
         label: "File",
         items: [
           { label: "New Agent…", click: openAgentSheet },
-          { label: "New Tab", click: () => newTerminal() },
+          { label: "New Tab", click: () => newTerminal(undefined) },
           { label: "Add Space…", click: () => void addSpace() },
           { type: "separator" },
           { label: "Split Right", click: () => splitTerminal("horizontal") },

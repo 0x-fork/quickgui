@@ -1,7 +1,7 @@
 {
   "name": "@quickgui/cli",
   "version": "0.1.3",
-  "description": "Project, development, and packaging CLI for QuickGUI",
+  "description": "Project, development, and packaging CLI for natively compiled QuickGUI applications",
   "repository": {
     "type": "git",
     "url": "https://github.com/egoist/quickgui.git",
@@ -17,6 +17,7 @@
     ".": "./src/index.ts"
   },
   "files": [
+    "README.md",
     "src/args.ts",
     "src/build.ts",
     "src/cli.ts",
@@ -25,21 +26,27 @@
     "src/error.ts",
     "src/index.ts",
     "src/init.ts",
+    "src/jsx-lowering.ts",
     "src/modules.ts",
+    "src/native-build.ts",
+    "src/native-compiler.ts",
     "src/targets.ts",
     "templates",
-    "README.md"
+    "src/packaging",
+    "!**/*.test.ts"
   ],
   "scripts": {
     "test": "bun test"
   },
   "dependencies": {
     "@quickgui/native": "workspace:*",
-    "@quickgui/solid": "workspace:*",
-    "create-dmg": "^8.1.0"
+    "@quickgui/ui": "workspace:*",
+    "scriptc": "0.0.36",
+    "typescript": "7.0.2"
   },
   "engines": {
-    "bun": ">=1.3.0"
+    "bun": ">=1.3.0",
+    "node": ">=24"
   },
   "os": [
     "darwin"

@@ -115,9 +115,9 @@ cargo run --release --example disclosures
 The gallery includes a standalone collapsible, single-value accordion, multiple-value accordion,
 retained closed panels, a disabled heading, and application-owned visuals.
 
-## Solid
+## QuickGUI UI
 
-`@quickgui/solid` exposes these descriptors as `Collapsible.Root` / `Collapsible.Trigger` /
+`@quickgui/ui` exposes these descriptors as `Collapsible.Root` / `Collapsible.Trigger` /
 `Collapsible.Panel` and `Accordion.Root` / `Accordion.Item` / `Accordion.Header` /
 `Accordion.Trigger` / `Accordion.Panel`.
 
@@ -135,4 +135,4 @@ retained closed panels, a disabled heading, and application-owned visuals.
 The renderer owns only the controlled open value; the button semantics, expanded state, panel
 relationship, heading level, and the decision to omit or retain (`keepMounted`) a closed panel come
 from this Rust layer. Single mode replaces the open value and multiple mode toggles within the
-bounded set. See the [Solid renderer guide](solid.md).
+bounded set. See the [QuickGUI UI renderer guide](ui.md).

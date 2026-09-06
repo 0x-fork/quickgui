@@ -1,10 +1,10 @@
 import type { AppearanceMode } from "@quickgui/native";
-import type { TerminalPalette } from "@quickgui/solid";
+import type { TerminalPalette } from "@quickgui/ui";
 
 const COLOR_TRANSITION =
   "background-color 70ms, border-color 70ms, color 70ms";
 
-export const GITHUB_LIGHT_TERMINAL = {
+export const GITHUB_LIGHT_TERMINAL: { background: string; foreground: string; cursor: string; palette: TerminalPalette } = {
   background: "#ffffff",
   foreground: "#1f2328",
   cursor: "#0969da",
@@ -25,10 +25,10 @@ export const GITHUB_LIGHT_TERMINAL = {
     "#a475f9",
     "#3192aa",
     "#8c959f",
-  ] as const satisfies TerminalPalette,
+  ],
 };
 
-export const GITHUB_DARK_TERMINAL = {
+export const GITHUB_DARK_TERMINAL: { background: string; foreground: string; cursor: string; palette: TerminalPalette } = {
   background: "#0d1117",
   foreground: "#e6edf3",
   cursor: "#2f81f7",
@@ -49,7 +49,7 @@ export const GITHUB_DARK_TERMINAL = {
     "#d2a8ff",
     "#56d4dd",
     "#ffffff",
-  ] as const satisfies TerminalPalette,
+  ],
 };
 
 export interface Theme {
@@ -155,6 +155,10 @@ export function themeFor(appearance: AppearanceMode): Theme {
 }
 
 export function createStyles(theme: Theme) {
+  const paneIcon = iconButton(theme, 24, 12);
+  const tabIcon = iconButton(theme, 24, 13);
+  const smallIcon = iconButton(theme, 20, 11);
+  const titlebarIcon = iconButton(theme, 24, 11);
   return {
     app: {
       position: "relative",
@@ -187,7 +191,7 @@ export function createStyles(theme: Theme) {
       appRegion: "drag",
     },
     titlebarIcon: {
-      ...iconButton(theme, 24, 11),
+      ...titlebarIcon,
       appRegion: "no-drag",
     },
     sidebarSection: {
@@ -277,7 +281,7 @@ export function createStyles(theme: Theme) {
       lineHeight: 15,
     },
     rowClose: {
-      ...iconButton(theme, 20, 11),
+      ...smallIcon,
       position: "absolute",
       top: 14,
       right: 5,
@@ -333,14 +337,14 @@ export function createStyles(theme: Theme) {
       textOverflow: "ellipsis",
     },
     tabClose: {
-      ...iconButton(theme, 20, 11),
+      ...smallIcon,
       position: "absolute",
       top: 4,
       right: 3,
       appRegion: "no-drag",
     },
     tabAdd: {
-      ...iconButton(theme, 24, 13),
+      ...tabIcon,
       appRegion: "no-drag",
     },
     agentAction: {
@@ -372,7 +376,7 @@ export function createStyles(theme: Theme) {
       backgroundColor: theme.borderStrong,
     },
     toolbarIcon: {
-      ...iconButton(theme, 24, 12),
+      ...paneIcon,
       appRegion: "no-drag",
     },
     hairline: { height: 1, flexShrink: 0, backgroundColor: theme.border },
@@ -587,7 +591,8 @@ function iconButton(theme: Theme, size: number, fontSize: number) {
 }
 
 export function headingActionStyle(theme: Theme) {
-  return { ...iconButton(theme, 20, 12), marginLeft: 5 };
+  const icon = iconButton(theme, 20, 12);
+  return { ...icon, marginLeft: 5 };
 }
 
 export function sidebarRow(selected: boolean, theme: Theme) {
@@ -612,8 +617,9 @@ export function sidebarRow(selected: boolean, theme: Theme) {
 }
 
 export function agentRow(selected: boolean, theme: Theme) {
+  const row = sidebarRow(selected, theme);
   return {
-    ...sidebarRow(selected, theme),
+    ...row,
     height: 48,
     paddingRight: 8,
   };
