@@ -10,13 +10,13 @@ const exampleRoot = resolve(import.meta.dir, "..");
 const hostStaged = existsSync(resolve(exampleRoot, "../../packages/native/lib", hostTarget(), "libquickgui_host.a"));
 
 test.skipIf(process.platform !== "darwin" || !hostStaged || Bun.which("node") === null)(
-  "the compiled Quick Git store starts empty and tolerates stale selections and root commits",
+  "the compiled Quick Git store starts empty, tolerates stale selections and root commits, and parses a diff",
   async () => {
     const testDir = join(exampleRoot, ".quickgui", "tests");
     mkdirSync(testDir, { recursive: true });
     const root = mkdtempSync(join(testDir, "store-native-"));
     try {
-      for (const directory of ["agent", "git", "model", "modules"]) {
+      for (const directory of ["agent", "git", "model"]) {
         cpSync(join(exampleRoot, directory), join(root, directory), { recursive: true });
       }
       cpSync(join(exampleRoot, "process.ts"), join(root, "process.ts"));
@@ -33,7 +33,7 @@ test.skipIf(process.platform !== "darwin" || !hostStaged || Bun.which("node") ==
           child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
         ]);
         expect({ status, stderr }).toEqual({ status: 0, stderr: "" });
-        expect(stdout.trim()).toBe("persistence=ok\nempty-store=ok");
+        expect(stdout.trim()).toBe("persistence=ok\nempty-store=ok\ndiff=ok");
       } finally {
         clearTimeout(timeout);
       }

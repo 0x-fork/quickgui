@@ -1,4 +1,3 @@
-import "../testing/native-module.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -10,7 +9,6 @@ import {
   selectsWholeHunk,
   syntheticAddedFile,
   syntheticDiffText,
-  type DiffFile,
 } from "./diff.ts";
 
 const SAMPLE = `diff --git a/src/app.ts b/src/app.ts
@@ -205,7 +203,7 @@ describe("patch formatting", () => {
 });
 
 describe("retained diffs", () => {
-  test("keeps the parsed diff native and answers the table with rows and counts", () => {
+  test("parses once and answers the table with rows and counts", () => {
     const before = Diff.openCount();
     const diff = Diff.openSync(SAMPLE);
     expect(Diff.openCount()).toBe(before + 1);
@@ -302,31 +300,60 @@ describe("retained diffs", () => {
     diff.close();
   });
 
-  test("opens on the native thread pool and renders asynchronously", async () => {
+  test("opens from the raw bytes git wrote", async () => {
     const diff = await Diff.open(new TextEncoder().encode(SAMPLE));
     expect(diff.rowCount).toBe(24);
-    const rendered = diff.renderAsync();
+    expect(diff.render().startsWith("diff --git a/src/app.ts b/src/app.ts")).toBe(true);
     diff.close();
-    expect(diff.closed).toBe(false);
-    expect((await rendered).startsWith("diff --git a/src/app.ts b/src/app.ts")).toBe(true);
-    expect(diff.closed).toBe(true);
+    expect(diff.render()).toBe("");
+  });
+
+  test("reads a big diff in chunks without changing what it sees", async () => {
+    // Nearly three megabytes: several scan chunks, with files straddling their boundaries.
+    const files: string[] = [];
+    for (let index = 0; index < 600; index += 1) {
+      const body = Array.from({ length: 60 }, (_, line) => ` context ${index}-${line} ${"x".repeat(60)}`).join("\n");
+      files.push(
+        `diff --git a/file-${index}.txt b/file-${index}.txt\n--- a/file-${index}.txt\n+++ b/file-${index}.txt\n` +
+          `@@ -1,61 +1,61 @@ fn ${index}\n-old ${index}\n+new ${index}\n${body}\n`,
+      );
+    }
+    const text = files.join("");
+    expect(text.length).toBeGreaterThan(2 * 1_000_000);
+
+    const chunked = await Diff.open(text);
+    const whole = Diff.openSync(text);
+    expect(chunked.rowCount).toBe(whole.rowCount);
+    expect([chunked.added, chunked.removed]).toEqual([600, 600]);
+    expect(chunked.files.length).toBe(600);
+    expect(chunked.files.at(-1)).toEqual(whole.files.at(-1)!);
+    // A window in the middle, where a chunk boundary falls, and the last rows.
+    expect(chunked.rows(15_000, 15_004)).toEqual(whole.rows(15_000, 15_004));
+    expect(chunked.rows(chunked.rowCount - 3, chunked.rowCount)).toEqual(whole.rows(whole.rowCount - 3, whole.rowCount));
+    expect(chunked.file(599)).toEqual(whole.file(599)!);
+    chunked.close();
+    whole.close();
+  });
+
+  test("abandons a scan whose selection moved on", async () => {
+    const text = `${"diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n one\n-two\n+2\n"}${" \n".repeat(1_000_000)}`;
+    const controller = new AbortController();
+    const before = Diff.openCount();
+    const opening = Diff.open(text, { signal: controller.signal });
+    controller.abort();
+    await expect(opening).rejects.toThrow("abandoned");
+    expect(Diff.openCount()).toBe(before);
   });
 
   test("renders an untracked file as the diff text of an addition", () => {
     const text = syntheticDiffText("notes.md", "a\nb");
     expect(text).toBe("diff --git a/notes.md b/notes.md\nnew file mode 100644\n@@ -0,0 +1,2 @@\n+a\n+b\n\\ No newline at end of file\n");
-    // The native parser spells absent optional fields as null; the synthetic builder omits them.
-    const parsed = (diffText: string): DiffFile[] =>
-      parseDiff(diffText).map(({ oldMode, newMode, similarity, ...file }) => ({
-        ...file,
-        ...(oldMode != null ? { oldMode } : {}),
-        ...(newMode != null ? { newMode } : {}),
-        ...(similarity != null ? { similarity } : {}),
-      }));
-    expect(parsed(text)).toEqual([syntheticAddedFile("notes.md", "a\nb")]);
-    expect(parsed(syntheticDiffText("notes.md", "a\nb\n"))).toEqual([syntheticAddedFile("notes.md", "a\nb\n")]);
-    expect(parsed(syntheticDiffText("empty.txt", ""))).toEqual([syntheticAddedFile("empty.txt", "")]);
-    expect(parsed(syntheticDiffText("blob.bin", "", { binary: true }))).toEqual([syntheticAddedFile("blob.bin", "", { binary: true })]);
+    expect(parseDiff(text)).toEqual([syntheticAddedFile("notes.md", "a\nb")]);
+    expect(parseDiff(syntheticDiffText("notes.md", "a\nb\n"))).toEqual([syntheticAddedFile("notes.md", "a\nb\n")]);
+    expect(parseDiff(syntheticDiffText("empty.txt", ""))).toEqual([syntheticAddedFile("empty.txt", "")]);
+    expect(parseDiff(syntheticDiffText("blob.bin", "", { binary: true }))).toEqual([
+      syntheticAddedFile("blob.bin", "", { binary: true }),
+    ]);
     const withSpace = Diff.openSync(syntheticDiffText("with space.md", "# Notes\n"));
     expect(withSpace.files[0]).toMatchObject({ kind: "added", path: "with space.md", oldPath: null, newPath: "with space.md" });
     withSpace.close();

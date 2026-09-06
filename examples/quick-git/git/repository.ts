@@ -525,7 +525,8 @@ export class Repository {
       ],
       { ...spreadOptions9, maxOutputBytes: MAX_DIFF_OUTPUT_BYTES },
     );
-    return Diff.open(result.stdout, { truncated: result.truncated });
+    // The signal that bounded git also abandons the scan: a selection can move on mid-diff.
+    return Diff.open(result.stdout, { truncated: result.truncated, signal: options.signal });
   }
 
   async #apply(flags: readonly string[], patch: string, options: CommandOptions): Promise<void> {

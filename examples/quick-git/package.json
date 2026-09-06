@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "quickgui dev",
     "build": "quickgui build",
-    "modules": "quickgui modules",
-    "test": "quickgui modules && bun test"
+    "test": "bun test"
   },
   "dependencies": {
     "@quickgui/native": "workspace:*",

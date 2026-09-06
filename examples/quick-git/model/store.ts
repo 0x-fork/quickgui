@@ -774,8 +774,8 @@ function buildStore(options: StoreOptions) {
                 ? await repo.diffIndex(item.path, item.originalPath, { signal: controller.signal })
                 : await repo.diffWorkingTree(item.path, { signal: controller.signal });
           try {
-            // The native module renders the prompt text; the parsed diff never reaches JavaScript.
-            return await parsed.renderAsync();
+            // The retained diff renders the prompt text; its files are never materialized here.
+            return parsed.render();
           } finally {
             parsed.close();
           }

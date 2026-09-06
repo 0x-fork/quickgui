@@ -203,8 +203,9 @@ else: a struct result is serialized by `std.json`, copied into a JavaScript buff
   a parser that returns a 32 MB diff as 700 000 line objects is slower in Zig plus JSON (about
   300 ms, two thirds of it serializing and parsing a 92 MB result) than in TypeScript (47 ms).
 
-The Quick Git example is the worked case of the second pattern. Its `modules/git/main.zig` parses
-`git diff` output off the JavaScript thread, keeps it native, and serves the virtualized diff
-table a window of rows at a time; its README has the measurements.
+Weigh the first rule against the fact that an application's own TypeScript is compiled to native
+code too: a module pays off for work Zig does fundamentally better, not for work that is merely
+hot. Quick Git parses `git diff` output behind exactly the handle of the second pattern, and
+does it in TypeScript (`examples/quick-git/git/diff.ts`) for that reason.
 
 Return to the [documentation index](README.md).

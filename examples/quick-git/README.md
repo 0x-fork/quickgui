@@ -9,10 +9,6 @@ bun install
 bun run --filter quick-git dev
 ```
 
-The diff engine is a [native module](../../docs/native-modules.md) written in Zig
-(`modules/git/main.zig`), so a Zig 0.16 toolchain must be on `PATH`; `quickgui dev` compiles it,
-and `bun run --filter quick-git modules` does so on its own. `bun run test` prepares the module and runs the test suite.
-
 Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise the last one opens.
 
 ## What it does
@@ -46,17 +42,16 @@ Pass `QUICK_GIT_OPEN=/path/to/repo` to open a repository at launch; otherwise th
   `stash list`, and `worktree list`, plus patch formatting for partial staging. It has no UI
   dependency and is covered by `bun run test`, including an integration suite that runs real git in a
   temporary repository.
-- `modules/git/main.zig` is the diff engine, a native module compiled by the CLI. `Diff.open`
-  (`git/diff-handle.ts`) hands git's raw bytes to Zig on the native thread pool and keeps the
-  parsed diff there behind a handle; the table asks for the rows it is about to paint, a
-  selection is resolved to changed lines natively, one file is materialized only when a patch is
-  formatted, and the agent prompt is rendered natively. On the app's 32 MB diff cap, the previous
-  TypeScript parser blocked the app for 76 ms and kept 150 MB of objects on the JavaScript heap;
-  the native diff opens in 35 ms with the event loop running, a 60-row window costs 0.03 ms,
-  resident memory grows 66 MB less, and closing the handle returns about 100 MB at once. Parsed
-  diffs are cached by target, bounded by count and by the bytes they came from, and closed on
-  eviction. Log parsing and the graph layout stay in TypeScript: for those, returning every
-  commit as an object is the point, and JavaScript builds those objects faster than a JSON hop.
+- `git/diff.ts` is the diff engine, TypeScript compiled to native code like the rest of the app.
+  `Diff.open` reads git's raw bytes in one scan that keeps the lines and records where each file
+  and hunk begins; lines become objects only where they are needed, so the table asks for the rows
+  it is about to paint, a selection is resolved to the changed lines inside it, and a whole file is
+  materialized only when a patch is formatted. The scan runs a megabyte at a time and yields to the
+  event loop between chunks, so the window keeps painting while a big diff is read and a diff whose
+  selection moved on is abandoned mid-scan. A 38 MB diff of 810,000 lines opens in 845 ms with no
+  stall longer than 250 ms (an object per line was 3.1 s of frozen window), and a 60-row window
+  costs 0.3 ms. Parsed diffs are cached by target, bounded by count and by the bytes they came
+  from, and closed on eviction; closing a handle drops the whole scan at once.
 - `agent/` builds the commit-message prompt, bounds the diff by whole files, runs the CLI, and
   parses the answer; it is tested with a fake process runner.
 - `model/` owns application state (QuickGUI UI signals created outside any component), a recursive
