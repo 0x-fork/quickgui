@@ -12,6 +12,22 @@ bun run dev
 
 The scaffold contains `main.go`, `go.mod`, `quickgui.config.ts`, and `package.json`. Pass your root component as `native.WindowOptions{Component: Counter}`. `native.Run` owns application startup. Initialization refuses to overwrite a non-empty directory; `--no-install` skips both dependency installations.
 
+## Create an extension
+
+```console
+quickgui init-extension my-components --type go
+quickgui init-extension my-service --type zig
+quickgui init-extension my-service --type rust --module github.com/acme/my-service --npm-package @acme/my-service-native
+```
+
+`go` is the default. It creates a reusable component library and a reactive demo. `zig` and `rust` create independent service libraries, Go wrappers, manifests, and publishable native artifact packages. Each project includes a `cmd/demo` application and `quickgui.toml`; run `bun run dev` inside it. All build scripts are TypeScript executed with Bun.
+
+Use `--name` to override the extension name, `--module` for the Go module path (default `example.com/<name>`), and `--npm-package` for a Zig or Rust artifact package (default `<name>-native`). `--no-install` skips both `bun install` and `go mod tidy`. Existing non-empty directories are preserved.
+
+The Zig template targets Zig 0.16.x; the Rust template uses stable Cargo/Rust. Native templates build for the current machine and stage their library in `artifacts/lib/<target>/`. The manifest controls the provider release and the generated native version constants. Go edits reuse the built library; restart `bun run dev` after native changes. Pure Go extensions need no native build toolchain or artifact package.
+
+In this unpublished checkout, run `bun packages/cli/src/cli.ts init-extension <directory> --type <type> --no-install`. Before running the demo, point the generated Go SDK requirement to this checkout with a `replace` directive, set `@quickgui/cli` to a local `file:` dependency, and run the two installation commands. The integration check `bun scripts/check-extension-templates.ts` exercises all three templates from a packed CLI using the local SDK and staged core library.
+
 ## Development
 
 ```console
@@ -44,11 +60,11 @@ bun packages/native/build.ts --extension terminal
 bun packages/cli/src/cli.ts dev --project examples/herdr-gui
 ```
 
-Core and extension releases and ABI versions must match. Packaged apps include their selected libraries and work without Bun, Go, Rust, or npm installed.
+The built-in terminal requires the matching core release. Third-party services can use their own names, release versions, and npm scopes with the public service ABI. Put a `quickgui.extension.json` manifest beside the imported Go package and call `host.RequireExtension("your-provider", "1.0.0")`; the CLI bundles it and the core registers it automatically. See the [authoring guide](../../website/src/content/docs/en/extensions.mdx) and [standalone C/Go example](../../examples/native-extension/). Packaged apps include their selected libraries and work without Bun, Go, Rust, or npm installed.
 
 ## Configuration
 
-Both `quickgui.toml` and `quickgui.config.ts` are supported. `dev` and `build` look for `quickgui.toml` first, then `quickgui.config.ts`. Pass `--config path/to/file.toml` (or a TypeScript file) to select one explicitly. Both formats use the same option names and validation; relative paths are resolved from the project directory. The generated scaffold continues to use TypeScript.
+Both `quickgui.toml` and `quickgui.config.ts` are supported. `dev` and `build` look for `quickgui.toml` first, then `quickgui.config.ts`. Pass `--config path/to/file.toml` (or a TypeScript file) to select one explicitly. Both formats use the same option names and validation; relative paths are resolved from the project directory. The application scaffold uses TypeScript configuration; extension demos use TOML.
 
 A `quickgui.toml` can contain:
 

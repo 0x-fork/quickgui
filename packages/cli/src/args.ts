@@ -1,12 +1,14 @@
 import { CliError } from "./error.ts";
+import { parseExtensionType, type InitExtensionOptions } from "./init-extension.ts";
 import { parseTarget, type QuickGuiTarget } from "./targets.ts";
 
-export type HelpTopic = "init" | "dev" | "build" | "keygen" | "fmt";
+export type HelpTopic = "init" | "init-extension" | "dev" | "build" | "keygen" | "fmt";
 
 export type ParsedCliCommand =
   | { command: "help"; topic?: HelpTopic }
   | { command: "version" }
   | { command: "fmt"; project: string; check: boolean }
+  | ({ command: "init-extension" } & InitExtensionOptions)
   | {
       command: "init";
       directory: string;
@@ -61,10 +63,10 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
 
   const command = argv[0];
   const rest = argv.slice(1);
-  const helpTopics: readonly string[] = ["init", "dev", "build", "keygen", "fmt"];
+  const helpTopics: readonly string[] = ["init", "init-extension", "dev", "build", "keygen", "fmt"];
   if (command === "help") {
     if (rest.length > 1 || (rest[0] && !helpTopics.includes(rest[0]))) {
-      throw new CliError("Usage: quickgui help [init|dev|build|keygen|fmt]");
+      throw new CliError("Usage: quickgui help [init|init-extension|dev|build|keygen|fmt]");
     }
     return rest[0] ? { command: "help", topic: rest[0] as HelpTopic } : { command: "help" };
   }
@@ -84,6 +86,33 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       command: "fmt",
       project: stringOption(parsed, "project") ?? ".",
       check: parsed.values.has("check"),
+    };
+  }
+
+  if (command === "init-extension") {
+    const parsed = parseOptions(rest, {
+      "--type": { key: "type", value: true },
+      "--name": { key: "name", value: true },
+      "--module": { key: "module", value: true },
+      "--npm-package": { key: "npmPackage", value: true },
+      "--no-install": { key: "noInstall", value: false },
+    });
+    if (parsed.positionals.length > 1)
+      throw new CliError("Usage: quickgui init-extension [directory] [--type go|zig|rust]");
+    const type = parseExtensionType(stringOption(parsed, "type") ?? "go");
+    const name = stringOption(parsed, "name");
+    const module = stringOption(parsed, "module");
+    const npmPackage = stringOption(parsed, "npmPackage");
+    if (type === "go" && npmPackage !== undefined)
+      throw new CliError("--npm-package is only used by Zig and Rust extensions");
+    return {
+      command: "init-extension",
+      directory: parsed.positionals[0] ?? "quickgui-extension",
+      type,
+      install: !parsed.values.has("noInstall"),
+      ...(name ? { name } : {}),
+      ...(module ? { module } : {}),
+      ...(npmPackage ? { npmPackage } : {}),
     };
   }
 

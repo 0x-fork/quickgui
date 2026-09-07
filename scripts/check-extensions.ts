@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 /** Headless integration proof against the real staged core and optional backend images. */
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -14,6 +15,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { compileNativeApplication, resolveHostLibrary } from "../packages/cli/src/native-build.ts";
 import { resolveConfig } from "../packages/cli/src/config.ts";
 import { hostTarget } from "../packages/cli/src/targets.ts";
+import { buildExtension } from "../examples/native-extension/build-extension.ts";
 
 const root = resolve(import.meta.dir, "..");
 const target = hostTarget();
@@ -144,6 +146,80 @@ func main() { if err := host.Load(); err != nil { panic(err) } }
       `[extensions] ${extensions.join(" + ") || "Core-only"}: ${actual.join(", ")} — loaded through purego`,
     );
   }
+
+  // An independently versioned provider, built against only the public C header.
+  // Copy its Go module and npm artifact into an isolated consumer so neither
+  // dependency discovery nor artifact lookup can rely on checkout integration.
+  const independent = join(directory, "independent");
+  const provider = join(independent, "provider");
+  cpSync(join(root, "examples/native-extension/echo"), provider, { recursive: true });
+  writeFileSync(
+    join(provider, "go.mod"),
+    `module example.test/echo\n\ngo 1.23\n\nrequire github.com/egoist/quickgui/go v${version}\n`,
+  );
+  const artifactPackage = join(independent, "node_modules/@acme/quickgui-echo");
+  const service = await buildExtension(join(artifactPackage, "lib", target));
+  cpSync(
+    join(root, "examples/native-extension/backend/package.json"),
+    join(artifactPackage, "package.json"),
+  );
+  await run(
+    [
+      "go",
+      "test",
+      "./internal/ffi",
+      "-run",
+      "TestIndependentServiceLibrarySmoke",
+      "-count=1",
+      "-v",
+    ],
+    join(root, "go"),
+    {
+      QUICKGUI_TEST_CORE: core,
+      QUICKGUI_TEST_SERVICE: service,
+    },
+  );
+  writeFileSync(
+    join(independent, "go.mod"),
+    `module example.test/consumer\n\ngo 1.23\n\nrequire (\n github.com/egoist/quickgui/go v${version}\n example.test/echo v1.0.0\n)\nreplace github.com/egoist/quickgui/go => ${JSON.stringify(join(root, "go"))}\nreplace example.test/echo => ./provider\n`,
+  );
+  writeFileSync(
+    join(independent, "main.go"),
+    `package main\nimport (\n "github.com/egoist/quickgui/go/host"\n _ "example.test/echo"\n)\nfunc main() { if err := host.Load(); err != nil { panic(err) } }\n`,
+  );
+  await run(["go", "mod", "tidy"], independent, { GOWORK: "off" });
+  const executablePath =
+    process.platform === "darwin"
+      ? join(independent, "Consumer.app/Contents/MacOS/Consumer")
+      : join(independent, process.platform === "win32" ? "Consumer.exe" : "Consumer");
+  mkdirSync(dirname(executablePath), { recursive: true });
+  const libraries = await compileNativeApplication({
+    config: resolveConfig(
+      {
+        name: "Consumer",
+        identifier: "dev.quickgui.independent-extension-test",
+        native: { libraryPath: core },
+      },
+      independent,
+    ),
+    mode: "development",
+    target,
+    executablePath,
+    fonts: [],
+  });
+  if (libraries.length !== 2 || !libraries.some((path) => basename(path) === basename(service)))
+    throw new Error("Independent consumer did not bundle exactly its selected provider and core");
+  // Installed packages are a build-time input; the packaged app needs neither.
+  rmSync(join(independent, "node_modules"), { recursive: true });
+  rmSync(provider, { recursive: true });
+  await run([executablePath], directory, {
+    QUICKGUI_LIBRARY: undefined,
+    QUICKGUI_HOST_LIB: undefined,
+    QUICKGUI_EXTENSION_DIR: undefined,
+  });
+  console.log(
+    "[extensions] Independent @acme/quickgui-echo@1.0.0: bundled and loaded through purego; JSON replies and errors verified",
+  );
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }

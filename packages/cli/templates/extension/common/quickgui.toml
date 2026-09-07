@@ -1,0 +1,4 @@
+name = "{{NAME}} demo"
+identifier = "dev.quickgui.{{NAME}}.demo"
+version = "0.1.0"
+entry = "cmd/demo"

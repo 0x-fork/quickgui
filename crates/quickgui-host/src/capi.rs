@@ -170,6 +170,47 @@ pub unsafe extern "C" fn quickgui_register_extension(
     }
 }
 
+/// Register a provider whose release version is owned by its importing package.
+///
+/// # Safety
+/// The descriptor follows `quickgui_register_extension`'s lifetime contract.
+/// Both input spans must be readable for their declared lengths during this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quickgui_register_extension_versioned(
+    descriptor: *const quickgui::extension_api::Extension,
+    name: *const u8,
+    name_length: usize,
+    version: *const u8,
+    version_length: usize,
+) -> c_int {
+    let result = (|| {
+        if descriptor.is_null()
+            || name_length > quickgui::extension_api::MAX_EXTENSION_NAME
+            || version_length == 0
+            || version_length > 64
+        {
+            return Err("invalid extension registration".to_owned());
+        }
+        let name = unsafe { text(name, name_length) }?;
+        let version = unsafe { text(version, version_length) }?;
+        unsafe {
+            quickgui::extensions::register_extension_versioned(
+                descriptor,
+                name.as_bytes(),
+                version.as_bytes(),
+            )
+        }
+        .map_err(str::to_owned)
+    })();
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("quickgui: {error}");
+            -1
+        }
+    }
+}
+
 /// Register the application thread's event callback. Events published earlier are flushed to it.
 ///
 /// # Safety

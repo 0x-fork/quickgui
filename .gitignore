@@ -19,3 +19,4 @@ packages/native-*/lib/**/*.dll
 
 # Extension resources and installation helpers are generated native artifacts.
 packages/native-*/lib/
+examples/native-extension/backend/lib/

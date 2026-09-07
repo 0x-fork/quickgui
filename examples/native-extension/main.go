@@ -1,0 +1,45 @@
+package main
+
+import (
+	"log"
+	"quickgui.example/native-extension/echo"
+
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
+
+func main() {
+	if err := native.Run(func() {
+		native.NewWindow(native.WindowOptions{
+			Title:     "Native extension",
+			Width:     480,
+			Height:    260,
+			Component: App,
+		})
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func App() {
+	message, setMessage := ui.CreateSignal("Hello from an independent native library")
+	ui.View(
+		func() {
+			ui.Text(message)
+			ui.Button(
+				"Call extension",
+				ui.OnClick(func() {
+					echo.Send("The stock core loaded @acme/quickgui-echo 1.0.0", func(reply string, err error) {
+						if err != nil {
+							setMessage(err.Error())
+							return
+						}
+						setMessage(reply)
+					})
+				}),
+				ui.Style{Padding: 12, BackgroundColor: "#2563eb", Color: "white", BorderRadius: 8},
+			)
+		},
+		ui.Style{Display: "flex", FlexDirection: "column", Padding: 24, Gap: 16},
+	)
+}

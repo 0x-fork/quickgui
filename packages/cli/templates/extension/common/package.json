@@ -1,0 +1,13 @@
+{
+  "name": "{{NAME}}-development",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "dev": "{{DEV_SCRIPT}}",
+    "fmt": "quickgui fmt"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "^{{SDK_VERSION}}"
+  }
+}

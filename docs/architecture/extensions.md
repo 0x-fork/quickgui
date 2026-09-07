@@ -1,8 +1,8 @@
 # Native extensions
 
-For the authoring walkthrough, see the [website guide](../../website/src/content/docs/en/extensions.mdx). It covers reusable Go packages, native provider integration, packaging, and the current core-registration and npm-namespace requirements.
+For the authoring walkthrough, see the [website guide](../../website/src/content/docs/en/extensions.mdx). It covers reusable Go packages, independently authored native services, packaging, and automatic registration.
 
-Go applications load one QuickGUI core shared library through purego. Optional backends ship as separate libraries with the same release version. The terminal extension separates rendering from its backend: the core keeps its retained terminal view while `quickgui-terminal` owns Ghostty, the PTY, and terminal workers. The updater extension uses Sparkle on macOS and a compatible signed-appcast backend on Windows/Linux. Its network and installer code is absent from the default core.
+Go applications load one QuickGUI core shared library through purego. Optional backends ship as separate libraries. Third-party services own their names, versions, and npm scopes; they do not need a provider-specific core or CLI change. The terminal extension separates rendering from its backend: the core keeps its retained terminal view while `quickgui-terminal` owns Ghostty, the PTY, and terminal workers. The updater extension uses Sparkle on macOS and a compatible signed-appcast backend on Windows/Linux. Its network and installer code is absent from the default core.
 
 ## Application usage
 
@@ -27,15 +27,23 @@ func Console() {
 
 ## Resolution and packaging
 
-Each optional Go package contains a `quickgui.extension.json` manifest and calls `host.RequireExtension` during package initialization. Initialization only records the requirement. Before running the application, the Go loader opens the selected extension image, obtains `quickgui_extension_v1`, and registers its descriptor with the core.
+Each optional Go package contains a `quickgui.extension.json` manifest and calls `host.RequireExtension("provider-name", "1.0.0")` during package initialization. The manifest's exact version, npm artifact package, native descriptor, and Go requirement must agree. Omitting the version retains the built-in core-release requirement. Initialization only records the requirement. Before running the application, the Go loader opens the selected extension image, obtains `quickgui_extension_v1`, and registers its descriptor with the core.
 
 The CLI runs `go list -deps` with the same entry, target, environment, and build tags as `go build`. A transitive import opts in too; excluded target/tag files do not. The resolver deduplicates requirements, rejects conflicting versions, and supports at most 32 extensions. No feature list is duplicated in application config.
 
-Artifacts are resolved from an explicit `QUICKGUI_EXTENSION_DIR`, an installed matching npm package, source-checkout staging, or an exact-version npm download. Downloaded tarballs require SHA-512 integrity; only declared target libraries and resources are extracted, with bounded input and decompressed sizes. Cached libraries have checked digests and a 512 MiB eviction budget. The extension loader only loads local files. An updater session starts update networking only after the application explicitly initializes it.
+Artifacts are resolved from an explicit `QUICKGUI_EXTENSION_DIR`, an installed matching npm package, or an exact-version npm download. Source-checkout staging is also available for built-in `@quickgui/native-*` packages. Any valid npm scope or unscoped name is accepted, and cache identities include the publisher's package name. Downloaded tarballs require SHA-512 integrity; only declared target libraries and resources are extracted, with bounded input and decompressed sizes. Cached libraries have checked digests and a 512 MiB eviction budget. The extension loader only loads local files. An updater session starts update networking only after the application explicitly initializes it.
 
-Manifests may declare bounded per-platform `resources`: installer helpers or `.qgr` resource bundles. Framework bundles validate every path and byte budget before writing files, then create confined symlinks. macOS preserves Sparkle framework links and signs its nested code with the app identity.
+Manifests may declare bounded per-platform `resources`: installer helpers or `.qgr` resource bundles. All native images are staged before resources so extraction cannot overwrite another provider's library. Framework bundles validate every path and byte budget before writing files, then create confined symlinks. macOS preserves Sparkle framework links and signs its nested code with the app identity.
 
 macOS bundles place core and extension images in `Contents/Frameworks`. Linux and Windows payloads place them beside the executable, including AppDir, Debian, and NSIS payloads. Removing a Go import removes the extension from the next fresh bundle. End users need only the packaged application.
+
+## Generic services
+
+Every request/reply/event provider uses `SERVICE_EXTENSION` (kind 2) and the same `ServiceApi`, keyed by its declared name. Registration copies metadata and function tables into a registry bounded to 32 providers, rejects conflicting identities, and accepts identical repeated registration. Function pointers are copied out before invocation or shutdown, so foreign code never runs under the registry lock. `UPDATER_EXTENSION` remains an alias for binary/source compatibility.
+
+`native.InvokeExtension(name, method, value, done)` supports one-shot operations. `native.OpenExtension` creates a persistent session; `session.Request` returns a JSON result and `session.Command` exposes only an error. Replies and events preserve arbitrary JSON, including explicit null fields, and reach the UI goroutine through the existing queue. Method names and 64 KiB request/reply limits are validated before calling providers. Closing a session removes its Go subscription; the provider owns cancellation and exactly-once release of every sink.
+
+The standalone [C SDK header](../../include/quickgui_extension.h) is vendorable and has no host, renderer, or language runtime dependency. The [native-extension example](../../examples/native-extension/) implements `acme-echo` version `1.0.0` with a third-party npm scope, compiled independently of the core. Visual features can expose native data through reactive Go components using existing primitives. The generic service ABI does not register new renderer node kinds.
 
 ## Updater service
 
@@ -45,7 +53,7 @@ The signed installer handoff uses a helper only after payload verification, allo
 
 ## Native contract
 
-`src/extension_api.rs` defines ABI version 1 using C layouts, fixed-width fields, borrowed spans, function pointers, and opaque session handles. The core checks the descriptor header before reading its layout, then validates the requested extension, function table size, ABI version, and exact release version. Rust-owned allocations, traits, objects, and allocator ownership never cross libraries.
+`src/extension_api.rs` and `include/quickgui_extension.h` define ABI version 1 using C layouts, fixed-width fields, borrowed spans, function pointers, and opaque session handles. The core checks the descriptor header before reading its layout, then validates the requested extension, function table size, non-null callbacks, ABI version, and exact provider release. Generic service versions are independent of the core; terminal's typed frame adapter still requires the matching core release. Rust-owned allocations, traits, objects, and allocator ownership never cross libraries. Preserve published service layouts and semantics across core releases; an incompatible contract requires a new ABI rather than silently changing version 1.
 
 A terminal creation call owns its wake callback context even on failure. The final worker releases that context exactly once. Destroying a session triggers the existing PTY shutdown path. Images remain loaded for process lifetime because worker callbacks retain function pointers; session resources do not remain alive just because the image does.
 
@@ -66,4 +74,4 @@ The native build commands rebuild framework artifacts after native changes. Go a
 
 Version synchronization covers the backend crate, npm package, and Go manifest. The release workflow builds and validates the two core images, two terminal images, and two updater images with Sparkle resources, packages four independent npm archives, then publishes them in dependency order. `@quickgui/cli` depends on `@quickgui/native`; `@quickgui/native-terminal` and `@quickgui/native-updater` remain optional.
 
-For future extensions, add a Go manifest/registration, a separately built backend, and a versioned typed provider contract consumed by a core adapter. Extend the core registry and release build list; do not generate bundles for combinations of extensions or link another renderer into a backend.
+Third-party service authors ship a Go manifest/requirement, a library implementing the public service ABI, and an optional npm artifact package under their own release workflow. They do not extend the core registry or built-in release list. `scripts/check-extensions.ts` builds the standalone C provider, checks real request/reply behavior through purego, and packages an isolated consumer with a separately copied Go module and npm package. It then removes those build inputs before running the bundled executable.

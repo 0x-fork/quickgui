@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "{{NAME}}",
+  "abi": 1,
+  "package": "{{NPM_PACKAGE}}",
+  "version": "0.1.0",
+  "library": "{{LIBRARY}}"
+}

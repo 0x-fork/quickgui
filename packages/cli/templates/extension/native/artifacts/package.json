@@ -1,0 +1,10 @@
+{
+  "name": "{{NPM_PACKAGE}}",
+  "version": "0.1.0",
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    "./package.json": "./package.json"
+  }
+}

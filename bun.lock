@@ -47,6 +47,12 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/native-extension": {
+      "name": "quickgui-native-extension-example",
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/popover": {
       "name": "quickgui-popover-example",
       "devDependencies": {
@@ -1093,6 +1099,8 @@
     "quickgui-counter-example": ["quickgui-counter-example@workspace:examples/counter"],
 
     "quickgui-file-dialog-example": ["quickgui-file-dialog-example@workspace:examples/file-dialog"],
+
+    "quickgui-native-extension-example": ["quickgui-native-extension-example@workspace:examples/native-extension"],
 
     "quickgui-popover-example": ["quickgui-popover-example@workspace:examples/popover"],
 

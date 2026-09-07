@@ -69,8 +69,21 @@ for (const pkg of packages) {
   if (binaries.length !== expected.length || expected.some((entry) => !binaries.includes(entry))) {
     throw new Error(`Incorrect native library set in ${filename}: ${binaries.join(", ")}`);
   }
-  if (pkg.name === "cli" && !entries.includes("package/src/extensions.ts"))
-    throw new Error("CLI archive is missing the extension resolver");
+  if (pkg.name === "cli") {
+    for (const required of [
+      "src/extensions.ts",
+      "src/extension-resources.ts",
+      "src/init-extension.ts",
+      "templates/extension/common/go.mod",
+      "templates/extension/go/extension.go",
+      "templates/extension/native/scripts/build.ts",
+      "templates/extension/zig/native/quickgui_extension.h",
+      "templates/extension/zig/native/extension.zig",
+      "templates/extension/rust/native/src/lib.rs",
+    ])
+      if (!entries.includes(`package/${required}`))
+        throw new Error(`CLI archive is missing ${required}`);
+  }
   checksums.push(
     `${createHash("sha256").update(readFileSync(archive)).digest("hex")}  ${filename}`,
   );

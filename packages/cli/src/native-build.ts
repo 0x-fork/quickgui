@@ -105,7 +105,12 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
   const library = resolveHostLibrary(target, config.projectRoot, config.native.libraryPath);
   const plan = goBuildPlan(options);
   const extensions = await discoverExtensions(config, plan.argv.at(-1)!, plan.env);
-  if (extensions.some((extension) => extension.name === "updater")) {
+  if (
+    extensions.some(
+      (extension) =>
+        extension.name === "updater" && extension.package === "@quickgui/native-updater",
+    )
+  ) {
     if (options.mode === "production" && !config.updates?.publicKey)
       throw new CliError(
         "The updater extension requires [updates] with baseUrl and publicKey for production builds",
@@ -128,6 +133,10 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
     const path = join(destination, extensionLibraryName(extension, target));
     copyFileSync(source, path, constants.COPYFILE_FICLONE);
     libraries.push(path);
+  }
+  // Stage all images first so resource extraction cannot claim another
+  // extension's (or the core's) library path before that image is copied.
+  for (const extension of extensions) {
     for (const resource of extension.resources?.[targetInfo(target).platform] ?? []) {
       const input = await resolveExtension(extension, target, config.projectRoot, resource);
       if (resource.endsWith(".qgr")) libraries.push(unpackResources(input, destination));

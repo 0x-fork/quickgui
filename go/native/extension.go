@@ -3,11 +3,26 @@ package native
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/egoist/quickgui/go/host"
 )
 
 var extensionListeners = map[uint32]func(string){}
+var extensionServiceName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+var extensionMethodName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,63}$`)
+
+// InvokeExtension calls an imported provider without creating a session. The
+// successful reply is JSON, and the callback runs on the UI goroutine.
+func InvokeExtension(name, method string, value any, done func(string, error)) {
+	if !extensionServiceName.MatchString(name) || !extensionMethodName.MatchString(method) {
+		if done != nil {
+			done("", fmt.Errorf("invalid extension name or method"))
+		}
+		return
+	}
+	Invoke("extension/"+name+"/"+method, value, done)
+}
 
 // ExtensionSession is an application-owned native service. Its callbacks run on
 // the UI goroutine. Close it on that goroutine when the service is no longer used.
@@ -31,6 +46,10 @@ func OpenExtension(name string, options any, changed func(string), ready func(er
 	}
 	if !appReady {
 		fail(fmt.Errorf("call native.Run before starting an extension"))
+		return s
+	}
+	if !extensionServiceName.MatchString(name) {
+		fail(fmt.Errorf("invalid extension name"))
 		return s
 	}
 	encoded, err := json.Marshal(options)
@@ -63,11 +82,24 @@ func (s *ExtensionSession) Command(method string, value any, done func(error)) {
 	if done == nil {
 		done = func(error) {}
 	}
+	s.Request(method, value, func(_ string, err error) { done(err) })
+}
+
+// Request sends a session command and returns its JSON result. It does not
+// replace the event subscription established by OpenExtension.
+func (s *ExtensionSession) Request(method string, value any, done func(string, error)) {
+	if done == nil {
+		done = func(string, error) {}
+	}
 	if s == nil || s.closed || !s.ready {
-		done(fmt.Errorf("extension is not ready or has been closed"))
+		done("", fmt.Errorf("extension is not ready or has been closed"))
 		return
 	}
-	Invoke("extension/"+s.name+"/"+method, map[string]any{"session": s.id, "value": value}, func(_ string, err error) { done(err) })
+	if method == "start" || method == "stop" {
+		done("", fmt.Errorf("use OpenExtension and Close for session lifecycle"))
+		return
+	}
+	InvokeExtension(s.name, method, map[string]any{"session": s.id, "value": value}, done)
 }
 
 func (s *ExtensionSession) stop() {

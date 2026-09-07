@@ -1,0 +1,16 @@
+[package]
+name = "{{NAME}}-native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "{{LIBRARY}}"
+crate-type = ["cdylib"]
+
+[profile.release]
+panic = "abort"
+strip = "symbols"
+
+# This provider is independent of any parent Cargo workspace.
+[workspace]

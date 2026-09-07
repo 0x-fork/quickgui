@@ -9,6 +9,7 @@ import { loadConfig } from "./config.ts";
 import { runDev } from "./dev.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { initProject } from "./init.ts";
+import { initExtension } from "./init-extension.ts";
 import { findMinisignTool } from "./packaging/pipeline.ts";
 import { generateUpdaterKeys } from "./packaging/appcast.ts";
 import { minisignKeygenArguments } from "./packaging/updates.ts";
@@ -30,6 +31,20 @@ export async function runCli(argv: string[]): Promise<number> {
       console.log(`\nCreated QuickGUI project at ${destination}`);
       console.log(`\n  cd ${relativeDisplayPath(destination)}`);
       if (!command.install) console.log("  bun install");
+      console.log("  bun run dev");
+      return 0;
+    }
+    case "init-extension": {
+      const destination = await initExtension(command);
+      console.log(
+        `\nCreated ${command.type === "go" ? "pure Go" : command.type} extension at ${destination}`,
+      );
+      const path = relativeDisplayPath(destination).replaceAll("'", "'\"'\"'");
+      console.log(`\n  cd '${path}'`);
+      if (!command.install) {
+        console.log("  bun install");
+        console.log("  go mod tidy");
+      }
       console.log("  bun run dev");
       return 0;
     }
@@ -140,6 +155,20 @@ async function runBuild(command: Extract<ParsedCliCommand, { command: "build" }>
 }
 
 function helpText(topic?: HelpTopic): string {
+  if (topic === "init-extension") {
+    return `Usage: quickgui init-extension [directory] [options]
+
+Create an extension with a runnable Go demo. Zig and Rust templates include a
+standalone native service library, a Go wrapper, and Bun build scripts.
+
+Options:
+  --type <go|zig|rust>        Extension language (default: go)
+  --name <name>              Extension name (default: directory name)
+  --module <path>            Go module path (default: example.com/<name>)
+  --npm-package <name>       Native artifact package (default: <name>-native)
+  --no-install               Skip bun install and go mod tidy
+  -h, --help                 Show this help`;
+  }
   if (topic === "keygen") {
     return `Usage: quickgui keygen [options]
 
@@ -214,6 +243,7 @@ Usage: quickgui <command> [options]
 
 Commands:
   init [directory]           Create a new project
+  init-extension [directory] Create a Go, Zig, or Rust extension
   dev                        Run a native app with source reload
   build                      Package a production application
   fmt                        Format Go UI declarations

@@ -1,0 +1,13 @@
+{
+  "name": "quickgui-native-extension-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun build-extension.ts dev",
+    "build": "bun build-extension.ts build",
+    "build:extension": "bun build-extension.ts"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "workspace:*"
+  }
+}

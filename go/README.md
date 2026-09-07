@@ -216,6 +216,8 @@ Go 1.23 or newer and Bun are required for development. On macOS, packaging also 
 
 Optional terminal support is imported from `github.com/egoist/quickgui/go/terminal` and rendered with `terminal.View(terminal.Props{…})`. The CLI bundles its separate prebuilt native extension only when the app imports that package. See the [extension guide](https://github.com/egoist/quickgui/blob/main/docs/architecture/extensions.md) for offline builds and source development.
 
+Third-party native services register by name without core changes. Their Go package calls `host.RequireExtension("acme-echo", "1.0.0")` and ships a matching `quickgui.extension.json`; the native image implements the public service ABI and may have its own release cycle and npm scope. Use `native.InvokeExtension` for one-shot JSON requests or `native.OpenExtension` for sessions with events. `ExtensionSession.Request` returns a JSON result; `Command` exposes only an error. See the [standalone example](../examples/native-extension/) and [authoring guide](../website/src/content/docs/en/extensions.mdx).
+
 From a source checkout, build the Rust library once:
 
 ```console

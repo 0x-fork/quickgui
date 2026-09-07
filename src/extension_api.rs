@@ -5,8 +5,13 @@ use std::ffi::c_void;
 
 pub const ABI_VERSION: u32 = 1;
 pub const TERMINAL_EXTENSION: u32 = 1;
-pub const UPDATER_EXTENSION: u32 = 2;
+/// Generic request/reply/event provider. Names and release versions belong to
+/// the extension author; no per-provider kind or core registration is needed.
+pub const SERVICE_EXTENSION: u32 = 2;
+/// Compatibility alias for providers built before services became extensible.
+pub const UPDATER_EXTENSION: u32 = SERVICE_EXTENSION;
 pub const MAX_EXTENSION_NAME: usize = 64;
+pub const MAX_EXTENSIONS: usize = 32;
 pub const MAX_FRAME_TEXT: usize = 16 * 1024 * 1024;
 pub const MAX_FRAME_HIGHLIGHTS: usize = 4096;
 pub const MAX_FRAME_CELLS: usize = 512 * 256;
@@ -28,7 +33,8 @@ impl Bytes {
 }
 
 /// The descriptor and its function table remain valid until process exit. A consumer checks
-/// the header before reading the table. Release versions additionally match the Go SDK version.
+/// the header before reading the table. The release version matches the importing
+/// Go package's requirement, independently of the core version for generic services.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Extension {
@@ -153,8 +159,9 @@ pub struct TerminalApi {
 }
 
 /// A service owns this context until its last callback, including rejection paths. Kind 0 is
-/// one successful command reply, kind 1 an error, and kind 2 a session event. Spans are borrowed
-/// only during emit. Events may follow the start reply until stop; release is called exactly once.
+/// one successful JSON reply, kind 1 a UTF-8 error, and kind 2 a JSON session event. Payloads
+/// are bounded to 64 KiB and borrowed only during emit. Events may follow the start reply until
+/// stop; release is called exactly once, after the final callback on any worker thread.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ServiceSink {
@@ -165,7 +172,8 @@ pub struct ServiceSink {
 
 /// Calls enqueue work and return immediately. Request IDs identify sessions started with
 /// "start"; subsequent commands carry that ID in their JSON. Shutdown cancels sessions without
-/// waiting for network or main-thread work. All borrowed input is copied before returning.
+/// waiting for network or main-thread work. Copy any borrowed input retained after returning.
+/// One-shot operations can reply and release their sink without opening a session.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ServiceApi {

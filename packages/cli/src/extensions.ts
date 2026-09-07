@@ -22,6 +22,14 @@ const maxExtensions = 32;
 const maxArchiveBytes = 128 * 1024 * 1024;
 const maxCacheBytes = 512 * 1024 * 1024;
 
+function validPackageName(name: unknown): name is string {
+  return (
+    typeof name === "string" &&
+    name.length <= 214 &&
+    /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(name)
+  );
+}
+
 export interface ExtensionManifest {
   schema: 1;
   name: string;
@@ -83,10 +91,12 @@ export function extensionManifests(packages: GoPackage[]): ExtensionManifest[] {
       value.abi !== 1 ||
       typeof value.name !== "string" ||
       !/^[a-z][a-z0-9-]{0,63}$/.test(value.name) ||
-      value.package !== `@quickgui/native-${value.name}` ||
+      value.name === "host" ||
+      !validPackageName(value.package) ||
       value.library !== `quickgui_${value.name.replaceAll("-", "_")}` ||
       typeof value.version !== "string" ||
-      !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value.version)
+      value.version.length > 64 ||
+      !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value.version)
     ) {
       throw new CliError(`Invalid QuickGUI extension manifest: ${path}`);
     }
@@ -242,7 +252,8 @@ export async function resolveExtension(
   } catch {
     /* optional package */
   }
-  candidates.push(resolve(import.meta.dir, "..", "..", `native-${manifest.name}`));
+  if (manifest.package === `@quickgui/native-${manifest.name}`)
+    candidates.push(resolve(import.meta.dir, "..", "..", `native-${manifest.name}`));
   for (const directory of candidates) {
     const metadata = join(directory, "package.json");
     const file = join(directory, "lib", target, filename);
@@ -265,8 +276,21 @@ async function downloadExtension(
   const cacheRoot = process.env.QUICKGUI_CACHE_DIR || join(homedir(), ".cache", "quickgui");
   const cache = join(cacheRoot, "extensions");
   mkdirSync(cache, { recursive: true });
-  const key = `${manifest.name}-${manifest.version}-${target}`;
-  const destination = join(cache, `${key}-${filename}`);
+  // Independent publishers can choose the same logical name and version.
+  // Namespace the cache by the full artifact identity, not just that name.
+  const identity = hash(
+    Buffer.from(
+      JSON.stringify([
+        manifest.package,
+        manifest.name,
+        manifest.version,
+        manifest.abi,
+        manifest.library,
+        target,
+      ]),
+    ),
+  );
+  const destination = join(cache, `${identity}-${filename}`);
   const checksum = `${destination}.sha256`;
   if (
     existsSync(destination) &&
@@ -280,7 +304,7 @@ async function downloadExtension(
     return destination;
   }
   console.log(`[quickgui] Downloading ${manifest.package}@${manifest.version} (${target})`);
-  const registry = `https://registry.npmjs.org/${encodeURIComponent(manifest.package)}/${manifest.version}`;
+  const registry = `https://registry.npmjs.org/${encodeURIComponent(manifest.package)}/${encodeURIComponent(manifest.version)}`;
   const pkg = JSON.parse(Buffer.from(await boundedFetch(registry, 1024 * 1024)).toString("utf8"));
   if (
     pkg.name !== manifest.package ||

@@ -8,7 +8,10 @@ import (
 
 // LoadExtension keeps the image loaded for process lifetime: its session workers
 // and the Rust core retain function pointers. Sessions release their own resources.
-func (library *Library) LoadExtension(name, path string) (err error) {
+func (library *Library) LoadExtension(name, path string, version ...string) (err error) {
+	if len(version) > 1 {
+		return fmt.Errorf("QuickGUI extension requires one exact version")
+	}
 	handle, err := openLibrary(path)
 	if err != nil {
 		return fmt.Errorf("load QuickGUI extension %s: %w", name, err)
@@ -25,8 +28,17 @@ func (library *Library) LoadExtension(name, path string) (err error) {
 		return fmt.Errorf("QuickGUI extension %s returned no descriptor", name)
 	}
 	bytes := []byte(name)
-	if library.RegisterExtension(value, bytes, uintptr(len(bytes))) != 0 {
-		return fmt.Errorf("QuickGUI extension %s does not match the core ABI or release version", name)
+	var status int32
+	if len(version) > 0 && version[0] != "" {
+		var register func(uintptr, []byte, uintptr, []byte, uintptr) int32
+		purego.RegisterLibFunc(&register, library.handle, "quickgui_register_extension_versioned")
+		expected := []byte(version[0])
+		status = register(value, bytes, uintptr(len(bytes)), expected, uintptr(len(expected)))
+	} else {
+		status = library.RegisterExtension(value, bytes, uintptr(len(bytes)))
+	}
+	if status != 0 {
+		return fmt.Errorf("QuickGUI extension %s failed name, version, ABI, or duplicate-provider validation", name)
 	}
 	return nil
 }

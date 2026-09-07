@@ -1,0 +1,11 @@
+{
+  "name": "@acme/quickgui-echo",
+  "version": "1.0.0",
+  "private": true,
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    "./package.json": "./package.json"
+  }
+}

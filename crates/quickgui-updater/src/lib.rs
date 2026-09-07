@@ -294,7 +294,7 @@ static API: abi::ServiceApi = abi::ServiceApi { invoke, shutdown };
 static EXTENSION: abi::Extension = abi::Extension {
     abi_version: abi::ABI_VERSION,
     descriptor_size: size_of::<abi::Extension>() as u32,
-    kind: abi::UPDATER_EXTENSION,
+    kind: abi::SERVICE_EXTENSION,
     api_size: size_of::<abi::ServiceApi>() as u32,
     name: Bytes::new(b"updater"),
     version: Bytes::new(env!("CARGO_PKG_VERSION").as_bytes()),

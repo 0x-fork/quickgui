@@ -38,15 +38,16 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     description: 'Share Go components and build optional native providers for QuickGUI.',
     outline: [
       { id: 'choose-an-extension-type', title: 'Choose an extension type' },
+      { id: 'create-an-extension-project', title: 'Create an extension project' },
       { id: 'share-a-go-component', title: 'Share a Go component' },
       { id: 'lay-out-a-native-extension', title: 'Lay out a native extension' },
       { id: 'declare-the-go-dependency', title: 'Declare the Go dependency' },
       { id: 'implement-the-native-contract', title: 'Implement the native contract' },
-      { id: 'register-with-the-core', title: 'Register with the core' },
+      { id: 'automatic-registration', title: 'Automatic registration' },
       { id: 'build-and-package-artifacts', title: 'Build and package artifacts' },
       { id: 'test-and-distribute', title: 'Test and distribute' },
     ],
-    searchTerms: ['extension', 'authoring', 'plugin', 'native provider', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'OpenExtension', 'npm'],
+    searchTerms: ['extension', 'authoring', 'init-extension', 'zig', 'rust', 'plugin', 'native provider', 'third-party', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'InvokeExtension', 'OpenExtension', 'npm'],
   },
   {
     slug: 'updater', title: 'Automatic Updates',
