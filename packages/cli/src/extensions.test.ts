@@ -141,11 +141,13 @@ test("exact-version downloads verify integrity and repair a corrupt cache", asyn
     name: "cache-test",
     package: "@quickgui/native-cache-test",
     library: "quickgui_cache_test",
+    resources: { darwin: ["Sparkle.framework.qgr"] },
   };
   const filename = extensionLibraryName(extension, "darwin-arm64");
   const payload = join(root, "package/lib/darwin-arm64");
   mkdirSync(payload, { recursive: true });
   writeFileSync(join(payload, filename), "verified extension payload");
+  writeFileSync(join(payload, "Sparkle.framework.qgr"), "verified extension resource");
   const archive = join(root, "extension.tgz");
   const tar = Bun.spawnSync(["tar", "-czf", archive, "package"], { cwd: root, stderr: "pipe" });
   expect(tar.exitCode).toBe(0);
@@ -184,6 +186,21 @@ test("exact-version downloads verify integrity and repair a corrupt cache", asyn
     await resolveExtension(extension, "darwin-arm64", root);
     expect(readFileSync(path, "utf8")).toBe("verified extension payload");
     expect(calls).toBe(4);
+    const resource = await resolveExtension(
+      extension,
+      "darwin-arm64",
+      root,
+      "Sparkle.framework.qgr",
+    );
+    expect(readFileSync(resource, "utf8")).toBe("verified extension resource");
+    expect(calls).toBe(6);
+    expect(await resolveExtension(extension, "darwin-arm64", root, "Sparkle.framework.qgr")).toBe(
+      resource,
+    );
+    expect(calls).toBe(6);
+    await expect(
+      resolveExtension(extension, "darwin-arm64", root, "undeclared.qgr"),
+    ).rejects.toThrow();
   } finally {
     fetchMock.mockRestore();
     if (originalCache === undefined) delete process.env.QUICKGUI_CACHE_DIR;

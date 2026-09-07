@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createPublicKey, verify } from "node:crypto";
+import { createPublicKey, sign, verify } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +16,15 @@ import { macInfoPlist } from "../build.ts";
 const secret = Buffer.alloc(32, 42).toString("base64"); // Test-only signing seed.
 const key = sparklePrivateKey(secret),
   publicKey = sparklePublicKey(key);
+
+test("signatures match the official Sparkle 2.9.4 sign_update tool", () => {
+  // Produced by sign_update --ed-key-file with the test-only 32-byte seed above.
+  const bytes = Buffer.from("QuickGUI Sparkle interoperability fixture\n");
+  expect(sign(null, bytes, key).toString("base64")).toBe(
+    "l6eLWtdZpa/jHx5TIueI982CxS7ApKYT6OrkBbP0tAcZSRraInQ6CbN1KJ4yYwDL9owrRJifMljQ9m6vlc4YBQ==",
+  );
+  expect(() => sparklePrivateKey(Buffer.alloc(64).toString("base64"))).toThrow("32-byte");
+});
 
 test("appcasts use Sparkle raw Ed25519 signatures on every platform", () => {
   const bytes = Buffer.from("test update payload");
@@ -54,6 +63,7 @@ test("keygen writes Sparkle-compatible key material without overwriting existing
   const dir = mkdtempSync(join(tmpdir(), "quickgui-keygen-"));
   try {
     const paths = generateUpdaterKeys(dir);
+    expect(Buffer.from(readFileSync(paths.secretKeyPath, "utf8").trim(), "base64").length).toBe(32);
     const privateKey = sparklePrivateKey(readFileSync(paths.secretKeyPath, "utf8"));
     expect(sparklePublicKey(privateKey)).toBe(readFileSync(paths.publicKeyPath, "utf8").trim());
     if (process.platform !== "win32")

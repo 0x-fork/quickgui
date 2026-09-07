@@ -47,19 +47,42 @@ try {
   await run(["go", "mod", "tidy"], app);
   await run(["bun", cli, "dev", "--project", app, "--once", "--no-launch"], npm);
   const target = process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
-  const bundles = new Bun.Glob(
-    `.quickgui/dev/${target}/*.app/Contents/Frameworks/libquickgui_terminal.dylib`,
-  );
-  if ([...bundles.scanSync({ cwd: app })].length !== 0)
-    throw new Error("Core-only registry app bundled terminal");
+  const bundled = (resource: string) =>
+    [
+      ...new Bun.Glob(`.quickgui/dev/${target}/*.app/Contents/Frameworks/${resource}`).scanSync({
+        cwd: app,
+      }),
+    ].length;
+  if (
+    ["libquickgui_terminal.dylib", "libquickgui_updater.dylib", "Sparkle.framework/Sparkle"].some(
+      (resource) => bundled(resource) !== 0,
+    )
+  )
+    throw new Error("Core-only registry app bundled an optional extension");
   writeFileSync(
     join(app, "terminal.go"),
     'package main\nimport _ "github.com/egoist/quickgui/go/terminal"\n',
   );
   await run(["go", "mod", "tidy"], app);
   await run(["bun", cli, "dev", "--project", app, "--once", "--no-launch"], npm);
-  if ([...bundles.scanSync({ cwd: app })].length !== 1)
+  if (bundled("libquickgui_terminal.dylib") !== 1)
     throw new Error("Terminal import did not resolve the optional registry artifact");
+  writeFileSync(
+    join(app, "updater.go"),
+    'package main\nimport _ "github.com/egoist/quickgui/go/updater"\n',
+  );
+  await run(["go", "mod", "tidy"], app);
+  await run(["bun", cli, "dev", "--project", app, "--once", "--no-launch"], npm);
+  if (
+    [
+      "libquickgui_terminal.dylib",
+      "libquickgui_updater.dylib",
+      "Sparkle.framework/Versions/B/Sparkle",
+    ].some((resource) => bundled(resource) !== 1)
+  )
+    throw new Error(
+      "Combined imports did not resolve the extension libraries and Sparkle resource bundle",
+    );
   if (!existsSync(join(scratch, "cache/extensions")))
     throw new Error("Registry extension download was not cached");
   const help = await run(["bun", cli, "--help"], npm);

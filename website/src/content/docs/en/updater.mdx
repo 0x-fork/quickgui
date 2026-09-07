@@ -56,7 +56,7 @@ func startUpdater() {
 
 Call `updates.Check(done)` from a Check for Updates menu item, `updates.Install(done)` from an available-update banner, and `updates.SetAutomaticChecks(enabled, done)` from settings. Callbacks always run on the Go UI goroutine. `State()` reads the latest cached event without calling native code or polling. Initialization and commands report errors through their completion callbacks.
 
-`Options` can override the feed URL, current version, identifier, and public key. On macOS the public key must still match the embedded `SUPublicEDKey`. Development builds are disabled by default, including when using a release-built native library. Use `AllowDevelopment: true` only with a deliberately configured test feed and disposable app bundle.
+`Options` can override the feed URL and public key. Windows/Linux also allow current version and identifier overrides; Sparkle reads those from the app bundle, and its public key must match the embedded `SUPublicEDKey`. Development builds are disabled by default, including when using a release-built native library. Use `AllowDevelopment: true` only with a deliberately configured test feed and disposable app bundle.
 
 ## Lifecycle
 
@@ -82,7 +82,7 @@ The portable backend supports HTTPS Sparkle RSS appcasts, raw Ed25519 enclosure 
 
 ## Publishing
 
-Place the private key in `QUICKGUI_UPDATER_PRIVATE_KEY` (or `SPARKLE_PRIVATE_KEY`), using your CI secret store. Alternatively, `updates.ed25519SecretKey` points to a local key file. Sparkle-compatible 32-byte seeds and 64-byte seed/public key pairs are accepted.
+Place the private key in `QUICKGUI_UPDATER_PRIVATE_KEY` (or `SPARKLE_PRIVATE_KEY`), using your CI secret store. Alternatively, `updates.ed25519SecretKey` points to a local key file. Keys use Sparkle's current base64-encoded 32-byte Ed25519 seed format and also work with Sparkle's `sign_update` tool.
 
 ```sh
 quickgui build --update-manifest

@@ -1,8 +1,9 @@
 package native
 
 import (
-	"github.com/egoist/quickgui/go/host"
 	"testing"
+
+	"github.com/egoist/quickgui/go/host"
 )
 
 func TestExtensionEventsSurviveStartAndCommandRepliesUntilClose(t *testing.T) {
@@ -35,6 +36,19 @@ func TestExtensionEventsSurviveStartAndCommandRepliesUntilClose(t *testing.T) {
 	App.dispatchHostEvent(hostEvent{kind: "invoke", target: fake.calls[2].request})
 	if len(extensionListeners) != 0 || len(pendingReplies) != 0 {
 		t.Fatal("extension callbacks leaked")
+	}
+}
+
+func TestClosingExtensionBeforeStartFailureReleasesCallbacks(t *testing.T) {
+	fake := &watchHost{}
+	defer host.Install(fake)()
+	setAppContext(1, true)
+	defer setAppContext(0, false)
+	session := OpenExtension("updater", nil, func(string) { t.Fatal("event after close") }, func(error) { t.Fatal("ready after close") })
+	session.Close()
+	App.dispatchHostEvent(hostEvent{kind: "invoke", target: fake.calls[0].request, flags: 2, extra: `{"error":"start failed"}`})
+	if len(fake.calls) != 1 || len(extensionListeners) != 0 || len(pendingReplies) != 0 {
+		t.Fatal("failed session retained callbacks or tried to stop an unregistered session")
 	}
 }
 

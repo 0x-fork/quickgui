@@ -18,20 +18,13 @@ import { targetInfo } from "../targets.ts";
 const privatePrefix = Buffer.from("302e020100300506032b657004220420", "hex");
 export function sparklePrivateKey(secret: string) {
   const bytes = Buffer.from(secret.trim(), "base64");
-  if ((bytes.length !== 32 && bytes.length !== 64) || bytes.toString("base64") !== secret.trim())
-    throw new CliError(
-      "Sparkle private key must be a base64 32-byte seed or 64-byte seed/public key pair",
-    );
+  if (bytes.length !== 32 || bytes.toString("base64") !== secret.trim())
+    throw new CliError("Sparkle private key must be a base64 32-byte Ed25519 seed");
   const key = createPrivateKey({
-    key: Buffer.concat([privatePrefix, bytes.subarray(0, 32)]),
+    key: Buffer.concat([privatePrefix, bytes]),
     format: "der",
     type: "pkcs8",
   });
-  if (
-    bytes.length === 64 &&
-    !bytes.subarray(32).equals(Buffer.from(sparklePublicKey(key), "base64"))
-  )
-    throw new CliError("Sparkle private/public key halves do not match");
   return key;
 }
 export function sparklePublicKey(key: ReturnType<typeof createPrivateKey>): string {
@@ -50,10 +43,7 @@ export function generateUpdaterKeys(
   const { privateKey } = generateKeyPairSync("ed25519");
   const jwk = privateKey.export({ format: "jwk" });
   const publicKey = sparklePublicKey(privateKey);
-  const secret = Buffer.concat([
-    Buffer.from(jwk.d!, "base64url"),
-    Buffer.from(publicKey, "base64"),
-  ]);
+  const secret = Buffer.from(jwk.d!, "base64url");
   mkdirSync(directory, { recursive: true });
   writeFileSync(secretKeyPath, secret.toString("base64") + "\n", {
     mode: 0o600,

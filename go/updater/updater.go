@@ -37,6 +37,7 @@ func init() {
 
 // Options override the updater defaults embedded by quickgui.toml. Development
 // builds stay disabled unless AllowDevelopment is explicitly set for update testing.
+// CurrentVersion and Identifier apply to Windows/Linux; Sparkle uses the app bundle.
 type Options struct {
 	FeedURL          string `json:"feedUrl,omitempty"`
 	PublicKey        string `json:"publicKey,omitempty"`

@@ -214,6 +214,12 @@ impl Session {
             *self.operation.lock().unwrap_or_else(|e| e.into_inner()) = Operation::Idle;
             return Err("no available update; check first".into());
         };
+        let stage_root = self
+            .preferences
+            .as_ref()
+            .and_then(|p| p.parent())
+            .ok_or("updater preferences unavailable")?
+            .join("updater-stages");
         let session = self.clone();
         let result = std::thread::Builder::new()
             .name("quickgui-updater-install".into())
@@ -242,9 +248,10 @@ impl Session {
                         return Err("update cancelled".into());
                     }
                     handoff::launch(
-                        &bytes,
+                        bytes,
                         &item,
                         &session.options.public_key,
+                        &stage_root,
                         || session.events.stopped(),
                         || {
                             session.events.update("state", |e| {

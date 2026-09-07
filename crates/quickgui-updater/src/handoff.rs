@@ -63,24 +63,23 @@ struct Plan {
 }
 
 pub(crate) fn launch(
-    bytes: &[u8],
+    bytes: Vec<u8>,
     item: &Item,
     key: &str,
+    stage_root: &Path,
     cancelled: impl Fn() -> bool,
     ready: impl FnOnce(),
 ) -> Result<()> {
     let target = install_target()?;
-    validate_format(bytes)?;
-    let stage = tempfile::Builder::new()
-        .prefix("quickgui-update-")
-        .tempdir()
-        .map_err(|e| e.to_string())?;
+    validate_format(&bytes)?;
+    let stage = create_stage(stage_root)?;
     let payload = stage.path().join(if cfg!(windows) {
         "update.exe"
     } else {
         "update.AppImage"
     });
-    write_new(&payload, bytes)?;
+    write_new(&payload, &bytes)?;
+    drop(bytes); // Do not retain the download while waiting for the app's quit lifecycle.
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     let name = if cfg!(windows) {
         "quickgui-updater-helper.exe"
@@ -219,19 +218,100 @@ pub fn run_helper() -> Result<()> {
     let bytes = read_payload(&payload)?;
     feed::verify(&bytes, &plan.item, &plan.public_key)?;
     validate_format(&bytes)?;
+    drop(bytes);
     // Hold a handle to this exact parent on Windows, so PID reuse can never delay/advance install.
     let parent = Parent::open(plan.parent)?;
+    fs::write(stage.join("owner"), std::process::id().to_string()).map_err(|e| e.to_string())?;
     println!("READY");
     std::io::stdout().flush().map_err(|e| e.to_string())?;
-    parent.wait()?;
-    let result = apply(&plan, &bytes, stage);
+    let result = (|| {
+        parent.wait()?;
+        // Validate again immediately before installation, including changes during the quit wait.
+        let bytes = read_payload(&payload)?;
+        feed::verify(&bytes, &plan.item, &plan.public_key)?;
+        apply(&plan, bytes, stage)
+    })();
+    // Windows cannot unlink the running helper or its log, but release the large payload
+    // on success and failure alike. The parent also removes the stage if it is still running.
+    let _ = fs::remove_file(&plan.payload);
+    let _ = fs::remove_file(&path);
     if result.is_ok() {
-        // Windows cannot unlink the running helper, but remove its large payload first.
-        let _ = fs::remove_file(&plan.payload);
-        let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(stage);
     }
     result
+}
+
+// Per-application stages are limited even across crashes. Never evict a live helper/parent.
+// Successful Windows helpers leave their own locked executable for the next launch to remove.
+fn create_stage(root: &Path) -> Result<tempfile::TempDir> {
+    fs::create_dir_all(root).map_err(|e| e.to_string())?;
+    let mut retained = 0;
+    for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry.file_name().to_string_lossy().starts_with("stage-")
+            || !entry.file_type().map_err(|e| e.to_string())?.is_dir()
+        {
+            continue;
+        }
+        let owner = fs::File::open(entry.path().join("owner"))
+            .ok()
+            .and_then(|f| {
+                let mut value = String::new();
+                f.take(16).read_to_string(&mut value).ok()?;
+                value.parse::<u32>().ok().filter(|id| *id > 0)
+            });
+        let abandoned = owner.map(|id| !process_alive(id)).unwrap_or_else(|| {
+            entry
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|age| age > Duration::from_secs(86400))
+        });
+        if abandoned && fs::remove_dir_all(entry.path()).is_ok() {
+            continue;
+        }
+        retained += 1;
+        if retained >= 4 {
+            return Err(format!(
+                "update staging limit reached; close other app instances or remove stale stages in {}",
+                root.display()
+            ));
+        }
+    }
+    let stage = tempfile::Builder::new()
+        .prefix("stage-")
+        .tempdir_in(root)
+        .map_err(|e| e.to_string())?;
+    write_new(
+        &stage.path().join("owner"),
+        std::process::id().to_string().as_bytes(),
+    )?;
+    Ok(stage)
+}
+
+fn process_alive(id: u32) -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{
+            Foundation::{CloseHandle, ERROR_ACCESS_DENIED, GetLastError},
+            System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+        };
+        let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, id) };
+        if handle.is_null() {
+            return unsafe { GetLastError() } == ERROR_ACCESS_DENIED;
+        }
+        let active = unsafe { WaitForSingleObject(handle, 0) } != 0;
+        unsafe { CloseHandle(handle) };
+        active
+    }
+    #[cfg(not(windows))]
+    {
+        unsafe {
+            libc::kill(id as i32, 0) == 0
+                || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        }
+    }
 }
 
 fn read_payload(path: &Path) -> Result<Vec<u8>> {
@@ -351,12 +431,13 @@ impl Parent {
     }
 }
 
-fn apply(plan: &Plan, bytes: &[u8], stage: &Path) -> Result<()> {
+fn apply(plan: &Plan, bytes: Vec<u8>, stage: &Path) -> Result<()> {
     #[cfg(windows)]
     {
         // Rewrite the verified bytes after waiting, rather than executing a file which could
         // have changed since verification. NSIS /D must be the final argument, without quotes.
-        fs::write(&plan.payload, bytes).map_err(|e| e.to_string())?;
+        fs::write(&plan.payload, &bytes).map_err(|e| e.to_string())?;
+        drop(bytes);
         run_windows_installer(
             &plan.payload,
             plan.target
@@ -375,7 +456,8 @@ fn apply(plan: &Plan, bytes: &[u8], stage: &Path) -> Result<()> {
             .keep();
         let previous = backup.join("previous.AppImage");
         let replacement = backup.join("new.AppImage");
-        write_new(&replacement, bytes)?;
+        write_new(&replacement, &bytes)?;
+        drop(bytes);
         fs::set_permissions(
             &replacement,
             fs::metadata(&plan.target)
@@ -533,6 +615,19 @@ fn run_windows_installer(installer: &Path, directory: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stages_have_a_fixed_limit_and_preserve_live_owners() {
+        let dir = tempfile::tempdir().unwrap();
+        let stages: Vec<_> = (0..4).map(|_| create_stage(dir.path()).unwrap()).collect();
+        assert!(
+            create_stage(dir.path())
+                .unwrap_err()
+                .contains("staging limit")
+        );
+        assert!(stages.iter().all(|stage| stage.path().exists()));
+        drop(stages);
+        assert!(create_stage(dir.path()).is_ok());
+    }
     #[test]
     fn failed_replacement_restores_original() {
         let dir = tempfile::tempdir().unwrap();
