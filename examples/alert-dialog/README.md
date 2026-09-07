@@ -1,6 +1,9 @@
 # alert-dialog
 
-Native alert sheets with asynchronous results.
+Native information and three-choice Save/Don't Save/Cancel sheets, plus an
+application-modal critical alert. Results and cancellation update the retained
+status text; pending dialogs disable repeat requests. The critical example does
+not delete anything.
 
 The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
 

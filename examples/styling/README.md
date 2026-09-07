@@ -1,6 +1,10 @@
 # styling
 
-Flex/Grid layout, typed style fields, retained hover styles, and reactive colors.
+Ten demos cover text alignment and decoration, RTL layout, gradients, corners and
+outlines, raster and subtree filters, transforms and blending, interaction states,
+sticky headers, and mandatory scroll snapping. Hover a row to reveal its actions;
+named group hints follow the whole list. The palette switch changes retained panel
+styles without remounting the gallery.
 
 The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
 

@@ -207,19 +207,20 @@ let options = WindowOptions::new("Workspace")
     .macos_visual_effect_state(MacOsVisualEffectState::FollowWindow);
 ```
 
-The JavaScript API follows Electron's names directly:
+The Go window API exposes the same vibrancy settings:
 
-```ts
-const window = new Window({
-  background: "transparent",
-  vibrancy: "sidebar",
-  visualEffectState: "followWindow",
-  renderer,
-});
-
-window.setVibrancy("under-window");
-window.setVisualEffectState("active");
-window.setVibrancy(); // remove the material
+```go
+func OpenVibrantWindow() {
+	window := native.NewWindow(native.WindowOptions{
+		Background:        "transparent",
+		Vibrancy:          "sidebar",
+		VisualEffectState: "followWindow",
+		Component:         func() { ui.Text("Native sidebar material") },
+	})
+	window.SetVibrancy("under-window")
+	window.SetVisualEffectState("active")
+	window.SetVibrancy("") // Remove the material.
+}
 ```
 
 Enabling vibrancy makes the existing Metal surface alpha-capable and places its stable Winit view
@@ -315,26 +316,30 @@ text-field submissions, and popover presentation without blocking the AppKit mai
 
 QuickGUI UI applications adapt those same descriptors into typed reactive components:
 
-```tsx
-import { Host, Slider } from "@quickgui/ui/swift-ui";
-
-<Host matchContents>
-  <Slider
-    label="Volume"
-    value={volume()}
-    min={0}
-    max={1}
-    step={0.05}
-    onValueChange={setVolume}
-  />
-</Host>;
+```go
+func NativeVolume() {
+	volume, setVolume := ui.CreateSignal(0.5)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Slider(ui.SwiftUISliderProps{
+				Label:         "Volume",
+				Value:         volume,
+				Min:           0,
+				Max:           1,
+				Step:          0.05,
+				OnValueChange: func(value float64, _ *native.Event) { setVolume(value) },
+			})
+		},
+	)
+}
 ```
 
-The QuickGUI UI subpath also exports controlled `Toggle`, `ProgressView`, `Stepper`, `TextField`,
+The `ui.SwiftUI` namespace also exposes controlled `Toggle`, `ProgressView`, `Stepper`, `TextField`,
 `SecureField`, `Picker`, `SegmentedControl`, `DatePicker`, and `ColorPicker` components, plus
 `Gauge`, alongside the existing `Button`, `Popover`, and `QuickGUIHostView`.
 
-`matchContents` sizes the host to the controls' own fitting size, so a hosted control lines up
+`MatchContents` sizes the host to the controls' own fitting size, so a hosted control lines up
 with QuickGUI elements at native density. The host keeps a few points of headroom around its
 content for bezels and focus rings, and more around content that draws well past its bounds, a
 `glass` or `glassProminent` button on macOS 26; that headroom is an outset of the AppKit frame
@@ -353,20 +358,20 @@ paths intact. The view can use a fixed `width`/`height` or max-content measureme
 Its hidden backing `NSWindow` is never presented and remains only as the stable Winit event
 identity; closing the owner tears down every embedded child.
 
-The SwiftUI `Popover` API uses controlled `isPresented` state plus compound `Trigger` and `Content`
+The `ui.SwiftUI.Popover` API uses controlled `IsPresented` state plus compound `Trigger` and `Content`
 parts. `Popover.Trigger` follows Base UI-style composition through
-`render={<Button label="Open" />}`: the rendered SwiftUI component keeps its own props and handler,
+`SwiftUIPopoverTriggerProps.Render: func() { ui.SwiftUI.Button(...) }`: the rendered SwiftUI component keeps its own props and handler,
 then the trigger requests presentation unless that handler prevents the default action. Because
 AppKit owns the popover window, it is natively above the owner QuickGUI scene; a `QuickGUIHostView`
 inside `Popover.Content` makes ordinary QuickGUI components interactive there.
 
-Run `cd examples/swift-ui && bun run dev` for a sidebar gallery with one live page per exposed
+Run `bun --cwd examples/swift-ui dev` for a sidebar gallery with one live page per exposed
 native SwiftUI control. Its Popover page opens a native popover containing QuickGUI text, input,
 and button components.
 
 See also `cargo run --release --example native_view` and
 `cargo run --release --example overlays`.
-\n
+
 ## Window and application shell
 
 QuickGUI keeps Winit's AppKit delegate intact and never swizzles it. The window lifecycle events in

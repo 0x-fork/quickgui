@@ -226,35 +226,35 @@ handling.
 
 Longer text is truncated on a character boundary instead of retained.
 
-## JavaScript bindings
+## Go components
 
 `Toggle.Root` / `Indicator` declares the controlled pressed state and adopts the core's toggle-button
 role.
 
 `Toolbar.Root` / `Item` and `ToggleGroup.Root` / `Item` declare the ordered navigation model as one
-bounded `items` list plus the controlled active or pressed values. The hosted view reaches each
+bounded `Items` list plus the controlled active or pressed values. The hosted view reaches each
 declared instance's retained `ToolbarState` or `ToggleGroupState` through a per-instance
 [`StateAccessor`](view-api.md), so several toolbars and groups in one window keep their own roving
 Tab stop. Wrapping arrow navigation, Home/End, disabled-item skipping, and single-versus-multiple
 selection policy stay in the core; the moved stop and the pressed set travel back as one
-asynchronous `onActiveChange` or `onValueChange` payload. Duplicate declared values keep the first
+asynchronous `OnActiveChange` or `OnValueChange` payload. Duplicate declared values keep the first
 occurrence and overflow past the core's own item bound is dropped, so a declaration can never panic
 the core.
 
 `Toast.Viewport` / `Root` / `Title` / `Description` / `Action` / `Close` declares the queue itself:
-pushing a toast is adding an entry with a new identifier to the bounded `toasts` list, and dropping
+pushing a toast is adding an entry with a new identifier to the bounded `Toasts` list, and dropping
 one dismisses it. The hosted view reaches each declared viewport's retained `ToastManager` through a
 per-instance [`StateAccessor`](view-api.md). The core owns the queue bound, live-region politeness,
 title and description relationships, focused Escape dismissal, and the exact auto-dismiss deadline,
 which the binding sleeps on with one `request_repaint_at` rather than a timer of its own. Every
 dismissal the core decided — including the timed ones — travels back as one asynchronous
-`onDismiss` payload naming the caller's own declared identifiers. See
-[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+`OnDismiss` payload naming the caller's own declared identifiers. See
+[Go components](go.md).
 
 ## Menubar
 
 The in-window menubar has its own guide: see [menubar](menubar.md) for the `MenubarState` model and
-its JavaScript binding. Native macOS menus remain the application menu; see
+its Go components. Native macOS menus remain the application menu; see
 [popovers and popover menus](popovers.md) for the in-window `PopoverMenu` model.
 
 ## Resource contract
@@ -264,59 +264,109 @@ its JavaScript binding. Native macOS menus remain the application menu; see
 registry, task, timer, observer, animation, GPU resource, or idle scheduler source. Navigation scans
 the caller's own item slice on an explicit keypress and at no other time.
 
-## QuickGUI UI: the Base UI-aligned parts
+## Additional Go parts
 
 `Toolbar` gained `Button`, `Link`, `Input`, `Group`, and `Separator`. All three item parts share the
 one roving Tab stop and differ only in the role the core projects; the group and separator are
-structural and take the toolbar's own axis. An item declared `focusableWhenDisabled` in the
-toolbar's `items` keeps its place in the Tab sequence while disabled, so a keyboard user can still
+structural and take the toolbar's own axis. The core makes a disabled toolbar item discoverable by default: it keeps its place in the Tab sequence while disabled, so a keyboard user can still
 discover the command; arrow navigation still skips it and it still refuses pointer focus.
 
-```tsx
-<Toolbar.Root scope="actions" items={[
-  { value: "cut" },
-  { value: "docs" },
-  { value: "paste", disabled: true, focusableWhenDisabled: true },
-]}>
-  <Toolbar.Group scope="actions">
-    <Toolbar.Button scope="actions" partValue="cut">Cut</Toolbar.Button>
-    <Toolbar.Link scope="actions" partValue="docs">Docs</Toolbar.Link>
-  </Toolbar.Group>
-  <Toolbar.Separator scope="actions" />
-  <Toolbar.Item scope="actions" partValue="paste">Paste</Toolbar.Item>
-</Toolbar.Root>
-```
-
-`Toast` gained `Provider`, `Portal`, `Positioner`, and `Content` parts and a Base UI-shaped manager.
-The provider owns the declared queue and the provider props — the inherited `timeout`, the visible
-stack `limit`, the `expanded` stack, the `swipeDirection`, and the stack `pitch` the core turns into
-each toast's own offset:
-
-```tsx
-function Notices() {
-  const toasts = useToastManager();
-  return (
-    <Toast.Viewport>
-      <For each={toasts.stack()}>
-        {(entry) => (
-          <Toast.Positioner toastId={entry.id} style={{ top: entry.offset }}>
-            <Toast.Root toastId={entry.id} style={{ opacity: entry.limited ? 0.6 : 1 }}>
-              <Toast.Content toastId={entry.id}>
-                <Toast.Title toastId={entry.id}><Text>{entry.type}</Text></Toast.Title>
-                <Toast.Close toastId={entry.id}><Text>×</Text></Toast.Close>
-              </Toast.Content>
-            </Toast.Root>
-          </Toast.Positioner>
-        )}
-      </For>
-    </Toast.Viewport>
-  );
+```go
+func ActionToolbar() {
+	ui.Toolbar.Root(
+		ui.ToolbarRootProps{Items: []ui.ComponentItem{
+			{Value: "cut"},
+			{Value: "docs"},
+			{Value: "paste", Disabled: true},
+		}},
+		func() {
+			ui.Toolbar.Group(
+				ui.PartProps{},
+				func() {
+					ui.Toolbar.Button(ui.ToolbarItemProps{Value: "cut"}, "Cut")
+					ui.Toolbar.Link(ui.ToolbarItemProps{Value: "docs"}, "Docs")
+				},
+			)
+			ui.Toolbar.Separator(ui.PartProps{})
+			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "paste"}, "Paste")
+		},
+	)
 }
 ```
 
-`add`, `update`, `close`, and `closeAll` change the declaration; `promise` queues a persistent
-`"loading"` toast and turns it into its result while keeping the same identity and stack position,
-because QuickGUI owns no future and the application drives both halves from the task it already
-spawned. The stack index, the `limited` and `expanded` flags, each toast's `offset`, and the live
-swipe displacement all come back from the core through `stack()`. See
-[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+`Toast` gained `Provider`, `Portal`, `Positioner`, and `Content` parts and a Base UI-shaped manager.
+The provider owns the declared queue and the provider props — the inherited `Timeout`, the visible
+stack `Limit`, the `Expanded` stack, the `SwipeDirection`, and the stack `Pitch` the core turns into
+each toast's own offset:
+
+```go
+func Notices() {
+	ui.Toast.Provider(
+		ui.ToastProviderProps{Timeout: 4000, Limit: 3},
+		func() {
+			toasts := ui.UseToastManager()
+			ui.Button(
+				"Notify",
+				ui.OnClick(func() {
+					toasts.Add(ui.ToastRequest{Title: "Saved", Type: ui.ToastSuccess})
+				}),
+			)
+			ui.Toast.Viewport(
+				ui.ToastViewportProps{},
+				func() {
+					ui.KeyedFor(
+						toasts.Stack,
+						func(entry ui.ToastStackEntry) any { return entry.ID },
+						func(entry func() ui.ToastStackEntry, _ func() int) {
+							id := entry().ID
+							ui.Toast.Positioner(
+								ui.ToastPartProps{
+									ToastID: id,
+									PartProps: ui.PartProps{Style: ui.Style{
+										Top: func() float64 { return entry().Offset },
+									}},
+								},
+								func() {
+									ui.Toast.Root(
+										ui.ToastPartProps{ToastID: id},
+										func() {
+											ui.Toast.Content(
+												ui.ToastPartProps{ToastID: id},
+												func() {
+													ui.Toast.Title(
+														ui.ToastPartProps{ToastID: id},
+														func() string {
+															for _, toast := range toasts.Toasts() {
+																if toast.ID == id {
+																	return toast.Title
+																}
+															}
+															return ""
+														},
+													)
+													ui.Toast.Close(
+														ui.ToastPartProps{ToastID: id},
+														"Dismiss",
+													)
+												},
+											)
+										},
+									)
+								},
+							)
+						},
+						nil,
+					)
+				},
+			)
+		},
+	)
+}
+```
+
+`Add`, `Update`, `Close`, and `CloseAll` change the declaration. For background work,
+add a `ToastLoading` toast with a zero duration, then update that ID from the task's
+completion callback. This preserves its identity and stack position; the application
+owns the task and decides how errors are presented. The stack index, the `Limited` and `Expanded` flags, each toast's `Offset`, and the live
+swipe displacement all come back from the core through `Stack()`. See
+[Go components](go.md).

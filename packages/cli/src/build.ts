@@ -481,7 +481,7 @@ function updateBaseUrl(
   if (!baseUrl) {
     throw new CliError(
       "Writing an update manifest needs a publication URL. Set `updates.baseUrl` in " +
-        "quickgui.config.ts or pass --update-base-url.",
+        "quickgui.toml or quickgui.config.ts, or pass --update-base-url.",
     );
   }
   return baseUrl;

@@ -53,10 +53,11 @@ A pushed `v*` tag starts the separate `Release` workflow, which invokes the reus
 and waits for its macOS, Windows, and Linux gates before publishing. The publish job rejects a tag
 that is not exactly `v<root-package-version>` or lacks a dated changelog section. The root
 `package.json` version is the source of truth; the release gate requires all six published crates,
-the native binding crate, and all three npm packages to match it. The job
-builds both macOS native architectures, runs the JavaScript tests and typecheck, verifies the npm
-tarballs, publishes both registries in dependency order, installs the public packages in fresh
-Rust and compiled TypeScript consumers, and only then creates the GitHub Release.
+the native host crate, and both npm packages to match it. The job builds both macOS
+native architectures, runs the CLI tests and TypeScript 7 checks, verifies the npm
+tarballs, and publishes in dependency order. The reusable CI also checks the Go SDK
+and every Go example with CGO disabled. Fresh Rust and Go consumers verify public
+installs before the workflow creates the GitHub Release.
 
 ## macOS acceptance evidence
 
@@ -162,6 +163,7 @@ Never rerun a successful manual publish; first inspect the public registry and c
 last completed package.
 
 Finally, run `scripts/release-registry-smoke.sh <version>` to compile a fresh Rust 1.90 consumer
-without patches, install all three packages at that same version in a fresh project, and compile
-a scaffolded native application with the installed CLI. Run the live macOS gates once more from
+without patches, install both npm packages at that same version in a fresh project,
+resolve the tagged Go SDK, and compile a scaffolded Go application with
+`CGO_ENABLED=0` using the installed CLI. Run the live macOS gates once more from
 the tagged source if the published artifacts differ from the previously recorded candidates.

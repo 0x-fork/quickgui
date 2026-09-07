@@ -17,8 +17,7 @@ func ShaderExample(source string, parameters func() []float64) {
 	ui.Shader(
 		ui.Value(source),
 		ui.ShaderParameters(parameters),
-		ui.Width(320),
-		ui.Height(180),
+		ui.Style{Width: 320, Height: 180},
 	)
 }
 ```
@@ -29,4 +28,4 @@ func ShaderExample(source string, parameters func() []float64) {
 | --- | --- |
 | `Value` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
 | `ShaderParameters` | 固定のシェーダーパラメーターベクトルへ格納する最大 16 個の数値です。 |
-| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

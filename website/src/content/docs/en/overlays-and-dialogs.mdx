@@ -98,6 +98,7 @@ Native dialogs use asynchronous callbacks. Capture the parent window while rende
 func OpenFolderButton() {
 	window := native.CurrentWindow()
 	ui.Button(
+		"Open folder",
 		ui.OnClick(func() {
 			native.ShowOpenDialog(
 				native.OpenDialogOptions{
@@ -112,7 +113,6 @@ func OpenFolderButton() {
 				},
 			)
 		}),
-		"Open folder",
 	)
 }
 ```

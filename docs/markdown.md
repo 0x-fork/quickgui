@@ -52,36 +52,35 @@ container nesting, 64 table columns, and the existing bounded rich-text highligh
 truncated only at a valid UTF-8 boundary. Settled documents add no timer, task, redraw loop, or idle
 work.
 
-The JavaScript mutation protocol has its own 1 MiB UTF-8 bound for any single string property;
+The Go mutation protocol has its own 1 MiB UTF-8 bound for any single string property;
 the 4 MiB source bound applies to the direct Rust API.
 
-## QuickGUI UI
+## Go component
 
-`@quickgui/ui` exposes the same retained core document through an unstyled `Markdown` host
-component:
+`ui.Markdown` retains the core document and parser across streamed appends. Supply
+the source with `ui.Value` and the streaming state with `ui.Streaming`:
 
-```tsx
-import { Markdown } from "@quickgui/ui";
-
-<Markdown
-  content={answer()}
-  streaming={isStreaming()}
-  style={{
-    color: "#e4e4e7",
-    fontSize: 15,
-    lineHeight: 23,
-    markdownLinkColor: "#60a5fa",
-    markdownCodeBackground: "#090b10",
-    markdownBorderColor: "#343843",
-  }}
-/>;
+```go
+func Answer() {
+	answer, _ := ui.CreateSignal("## Response\n\nWaiting for input.")
+	streaming, _ := ui.CreateSignal(false)
+	ui.Markdown(
+		ui.Value(answer),
+		ui.Streaming(streaming),
+		ui.Style{
+			Color:                  "#e4e4e7",
+			FontSize:               15,
+			LineHeight:             23,
+			MarkdownLinkColor:      "#60a5fa",
+			MarkdownCodeBackground: "#090b10",
+			MarkdownBorderColor:    "#343843",
+		},
+	)
+}
 ```
 
-Use `content` or `source`; Markdown children are intentionally not treated as source. The native
-bridge retains one Rust `Markdown` state per mounted QuickGUI UI node, so a streamed append does not
-recreate the document parser.
-
-The complete streaming DeepSeek application is in
-[`examples/ai-chat`](../examples/ai-chat).
+Markdown children are not treated as source. Numeric/string children belong to
+`ui.Text`; `ui.Markdown` consumes the complete document string in `Value`.
+The complete streaming example is [AI Chat](../examples/ai-chat).
 
 Return to the [documentation index](README.md).

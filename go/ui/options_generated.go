@@ -4,13 +4,197 @@ package ui
 
 import "github.com/egoist/quickgui/go/native"
 
+// WordWrap sets the corresponding style property.
+func WordWrap(value string) StyleOption {
+	return func(style *Style) { style.WordWrap = value }
+}
+
+// TransitionTimingFunction sets the corresponding style property.
+func TransitionTimingFunction(value any) StyleOption {
+	return func(style *Style) { style.TransitionTimingFunction = value }
+}
+
+// PaddingInlineStart sets the corresponding style property.
+func PaddingInlineStart(value any) StyleOption {
+	return func(style *Style) { style.PaddingInlineStart = value }
+}
+
+// PaddingInlineEnd sets the corresponding style property.
+func PaddingInlineEnd(value any) StyleOption {
+	return func(style *Style) { style.PaddingInlineEnd = value }
+}
+
+// MarginInlineStart sets the corresponding style property.
+func MarginInlineStart(value any) StyleOption {
+	return func(style *Style) { style.MarginInlineStart = value }
+}
+
+// MarginInlineEnd sets the corresponding style property.
+func MarginInlineEnd(value any) StyleOption {
+	return func(style *Style) { style.MarginInlineEnd = value }
+}
+
+// BorderInlineStartWidth sets the corresponding style property.
+func BorderInlineStartWidth(value any) StyleOption {
+	return func(style *Style) { style.BorderInlineStartWidth = value }
+}
+
+// BorderInlineEndWidth sets the corresponding style property.
+func BorderInlineEndWidth(value any) StyleOption {
+	return func(style *Style) { style.BorderInlineEndWidth = value }
+}
+
+// AspectRatio sets the corresponding style property.
+func AspectRatio(value any) StyleOption {
+	return func(style *Style) { style.AspectRatio = value }
+}
+
+// GridColumn sets the corresponding style property.
+func GridColumn(value any) StyleOption {
+	return func(style *Style) { style.GridColumn = value }
+}
+
+// GridRow sets the corresponding style property.
+func GridRow(value any) StyleOption {
+	return func(style *Style) { style.GridRow = value }
+}
+
+// BorderStartWidth sets the corresponding style property.
+func BorderStartWidth(value any) StyleOption {
+	return func(style *Style) { style.BorderStartWidth = value }
+}
+
+// BorderEndWidth sets the corresponding style property.
+func BorderEndWidth(value any) StyleOption {
+	return func(style *Style) { style.BorderEndWidth = value }
+}
+
+// Background sets the corresponding style property.
+func Background(value any) StyleOption {
+	return func(style *Style) { style.Background = value }
+}
+
+// BackgroundGradient sets the corresponding style property.
+func BackgroundGradient(value any) StyleOption {
+	return func(style *Style) { style.BackgroundGradient = value }
+}
+
+// TransitionProperty sets the corresponding style property.
+func TransitionProperty(value any) StyleOption {
+	return func(style *Style) { style.TransitionProperty = value }
+}
+
+// TransitionDuration sets the corresponding style property.
+func TransitionDuration(value any) StyleOption {
+	return func(style *Style) { style.TransitionDuration = value }
+}
+
+// TransitionEasing sets the corresponding style property.
+func TransitionEasing(value any) StyleOption {
+	return func(style *Style) { style.TransitionEasing = value }
+}
+
+// TransitionMaxFps sets the corresponding style property.
+func TransitionMaxFps(value any) StyleOption {
+	return func(style *Style) { style.TransitionMaxFps = value }
+}
+
+// MarkdownCodeBackground sets the corresponding style property.
+func MarkdownCodeBackground(value any) StyleOption {
+	return func(style *Style) { style.MarkdownCodeBackground = value }
+}
+
+// MarkdownBorderColor sets the corresponding style property.
+func MarkdownBorderColor(value any) StyleOption {
+	return func(style *Style) { style.MarkdownBorderColor = value }
+}
+
+// MarkdownMutedColor sets the corresponding style property.
+func MarkdownMutedColor(value any) StyleOption {
+	return func(style *Style) { style.MarkdownMutedColor = value }
+}
+
+// MarkdownLinkColor sets the corresponding style property.
+func MarkdownLinkColor(value any) StyleOption {
+	return func(style *Style) { style.MarkdownLinkColor = value }
+}
+
+// MarkdownCodeTextColor sets the corresponding style property.
+func MarkdownCodeTextColor(value any) StyleOption {
+	return func(style *Style) { style.MarkdownCodeTextColor = value }
+}
+
+// MarkdownBlockGap sets the corresponding style property.
+func MarkdownBlockGap(value any) StyleOption {
+	return func(style *Style) { style.MarkdownBlockGap = value }
+}
+
+// MarkdownCodeFontSize sets the corresponding style property.
+func MarkdownCodeFontSize(value any) StyleOption {
+	return func(style *Style) { style.MarkdownCodeFontSize = value }
+}
+
+// ScrollToEndRevision sets the corresponding style property.
+func ScrollToEndRevision(value any) StyleOption {
+	return func(style *Style) { style.ScrollToEndRevision = value }
+}
+
+// TextDecoration sets the corresponding style property.
+func TextDecoration(value string) StyleOption {
+	return func(style *Style) { style.TextDecoration = value }
+}
+
+// InvalidStyle configures the Invalid interaction style.
+func InvalidStyle(options ...StyleDeclaration) StyleOption {
+	return func(style *Style) {
+		nested := &Style{}
+		for _, option := range options {
+			option.applyStyle(nested)
+		}
+		style.Invalid = nested
+	}
+}
+
+// Dragging configures the Dragging interaction style.
+func Dragging(options ...StyleDeclaration) StyleOption {
+	return func(style *Style) {
+		nested := &Style{}
+		for _, option := range options {
+			option.applyStyle(nested)
+		}
+		style.Dragging = nested
+	}
+}
+
+// DragOver configures the DragOver interaction style.
+func DragOver(options ...StyleDeclaration) StyleOption {
+	return func(style *Style) {
+		nested := &Style{}
+		for _, option := range options {
+			option.applyStyle(nested)
+		}
+		style.DragOver = nested
+	}
+}
+
+// FocusWithin configures the FocusWithin interaction style.
+func FocusWithin(options ...StyleDeclaration) StyleOption {
+	return func(style *Style) {
+		nested := &Style{}
+		for _, option := range options {
+			option.applyStyle(nested)
+		}
+		style.FocusWithin = nested
+	}
+}
+
 // GridTemplateColumns sets the corresponding style property.
-func GridTemplateColumns(value string) StyleOption {
+func GridTemplateColumns(value any) StyleOption {
 	return func(style *Style) { style.GridTemplateColumns = value }
 }
 
 // GridTemplateRows sets the corresponding style property.
-func GridTemplateRows(value string) StyleOption {
+func GridTemplateRows(value any) StyleOption {
 	return func(style *Style) { style.GridTemplateRows = value }
 }
 
@@ -115,12 +299,12 @@ func BorderStyle(value string) StyleOption {
 }
 
 // BoxShadow sets the corresponding style property.
-func BoxShadow(value string) StyleOption {
+func BoxShadow(value any) StyleOption {
 	return func(style *Style) { style.BoxShadow = value }
 }
 
 // TextShadow sets the corresponding style property.
-func TextShadow(value string) StyleOption {
+func TextShadow(value any) StyleOption {
 	return func(style *Style) { style.TextShadow = value }
 }
 
@@ -195,12 +379,12 @@ func BackgroundPosition(value string) StyleOption {
 }
 
 // Filter sets the corresponding style property.
-func Filter(value string) StyleOption {
+func Filter(value any) StyleOption {
 	return func(style *Style) { style.Filter = value }
 }
 
 // BackdropFilter sets the corresponding style property.
-func BackdropFilter(value string) StyleOption {
+func BackdropFilter(value any) StyleOption {
 	return func(style *Style) { style.BackdropFilter = value }
 }
 
@@ -210,7 +394,7 @@ func MixBlendMode(value string) StyleOption {
 }
 
 // Transition sets the corresponding style property.
-func Transition(value string) StyleOption {
+func Transition(value any) StyleOption {
 	return func(style *Style) { style.Transition = value }
 }
 
@@ -520,7 +704,7 @@ func Left(value any) StyleOption {
 }
 
 // Outline sets the corresponding style property.
-func Outline(value string) StyleOption {
+func Outline(value any) StyleOption {
 	return func(style *Style) { style.Outline = value }
 }
 
@@ -545,7 +729,7 @@ func OutlineStyle(value string) StyleOption {
 }
 
 // Transform sets the corresponding style property.
-func Transform(value string) StyleOption {
+func Transform(value any) StyleOption {
 	return func(style *Style) { style.Transform = value }
 }
 
@@ -555,58 +739,68 @@ func TransformOrigin(value string) StyleOption {
 }
 
 // Hover configures the Hover interaction style.
-func Hover(options ...StyleOption) StyleOption {
+func Hover(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
 		nested := &Style{}
 		for _, option := range options {
-			option(nested)
+			option.applyStyle(nested)
 		}
 		style.Hover = nested
 	}
 }
 
 // Active configures the Active interaction style.
-func Active(options ...StyleOption) StyleOption {
+func Active(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
 		nested := &Style{}
 		for _, option := range options {
-			option(nested)
+			option.applyStyle(nested)
 		}
 		style.Active = nested
 	}
 }
 
 // Focus configures the Focus interaction style.
-func Focus(options ...StyleOption) StyleOption {
+func Focus(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
 		nested := &Style{}
 		for _, option := range options {
-			option(nested)
+			option.applyStyle(nested)
 		}
 		style.Focus = nested
 	}
 }
 
 // DisabledStyle configures the Disabled interaction style.
-func DisabledStyle(options ...StyleOption) StyleOption {
+func DisabledStyle(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
 		nested := &Style{}
 		for _, option := range options {
-			option(nested)
+			option.applyStyle(nested)
 		}
 		style.Disabled = nested
 	}
 }
 
 // SelectedStyle configures the Selected interaction style.
-func SelectedStyle(options ...StyleOption) StyleOption {
+func SelectedStyle(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
 		nested := &Style{}
 		for _, option := range options {
-			option(nested)
+			option.applyStyle(nested)
 		}
 		style.Selected = nested
 	}
+}
+
+// OnMouseEnter configures the corresponding node property.
+func OnMouseEnter(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnMouseEnter = value })
+}
+
+// OnMouseLeave configures the corresponding node property.
+func OnMouseLeave(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnMouseLeave = value })
 }
 
 // OnInput configures the corresponding node property.
@@ -619,9 +813,64 @@ func OnSubmit(value func(*native.Event)) Option {
 	return propertyOption(func(props *Props) { props.OnSubmit = value })
 }
 
+// OnDismiss configures the corresponding node property.
+func OnDismiss(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnDismiss = value })
+}
+
+// OnStatus configures the corresponding node property.
+func OnStatus(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnStatus = value })
+}
+
+// OnPointer configures the corresponding node property.
+func OnPointer(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnPointer = value })
+}
+
+// OnPresentationChange configures the corresponding node property.
+func OnPresentationChange(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnPresentationChange = value })
+}
+
+// OnSelect configures the corresponding node property.
+func OnSelect(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnSelect = value })
+}
+
+// OnKeyDown configures the corresponding node property.
+func OnKeyDown(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnKeyDown = value })
+}
+
+// OnKeyUp configures the corresponding node property.
+func OnKeyUp(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnKeyUp = value })
+}
+
+// OnMouseDown configures the corresponding node property.
+func OnMouseDown(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnMouseDown = value })
+}
+
+// OnMouseUp configures the corresponding node property.
+func OnMouseUp(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnMouseUp = value })
+}
+
+// OnMouseMove configures the corresponding node property.
+func OnMouseMove(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnMouseMove = value })
+}
+
 // OnDoubleClick configures the corresponding node property.
 func OnDoubleClick(value func(*native.Event)) Option {
 	return propertyOption(func(props *Props) { props.OnDoubleClick = value })
+}
+
+// OnWheel configures the corresponding node property.
+func OnWheel(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnWheel = value })
 }
 
 // OnContextMenu configures the corresponding node property.
@@ -629,9 +878,69 @@ func OnContextMenu(value func(*native.Event)) Option {
 	return propertyOption(func(props *Props) { props.OnContextMenu = value })
 }
 
-// OnPointer configures the corresponding node property.
-func OnPointer(value func(*native.Event)) Option {
-	return propertyOption(func(props *Props) { props.OnPointer = value })
+// OnPinch configures the corresponding node property.
+func OnPinch(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnPinch = value })
+}
+
+// OnRotate configures the corresponding node property.
+func OnRotate(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnRotate = value })
+}
+
+// OnSmartMagnify configures the corresponding node property.
+func OnSmartMagnify(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnSmartMagnify = value })
+}
+
+// OnPressure configures the corresponding node property.
+func OnPressure(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnPressure = value })
+}
+
+// OnFocus configures the corresponding node property.
+func OnFocus(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnFocus = value })
+}
+
+// OnBlur configures the corresponding node property.
+func OnBlur(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnBlur = value })
+}
+
+// OnAction configures the corresponding node property.
+func OnAction(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnAction = value })
+}
+
+// OnDragStart configures the corresponding node property.
+func OnDragStart(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnDragStart = value })
+}
+
+// OnDragEnd configures the corresponding node property.
+func OnDragEnd(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnDragEnd = value })
+}
+
+// OnDrop configures the corresponding node property.
+func OnDrop(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnDrop = value })
+}
+
+// OnFilesDropped configures the corresponding node property.
+func OnFilesDropped(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnFilesDropped = value })
+}
+
+// OnComponentChange configures the corresponding node property.
+func OnComponentChange(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnComponentChange = value })
+}
+
+// OnCommit configures the corresponding node property.
+func OnCommit(value func(*native.Event)) Option {
+	return propertyOption(func(props *Props) { props.OnCommit = value })
 }
 
 // Disabled configures the corresponding node property.
@@ -655,12 +964,12 @@ func Multiline(value bool) Option {
 }
 
 // AriaLabel configures the corresponding node property.
-func AriaLabel(value string) Option {
+func AriaLabel(value any) Option {
 	return propertyOption(func(props *Props) { props.AriaLabel = value })
 }
 
 // Selected configures the corresponding node property.
-func Selected(value bool) Option {
+func Selected(value any) Option {
 	return propertyOption(func(props *Props) { props.Selected = value })
 }
 
@@ -670,8 +979,13 @@ func Group(value any) Option {
 }
 
 // FocusOnPointer configures the corresponding node property.
-func FocusOnPointer(value *bool) Option {
+func FocusOnPointer(value any) Option {
 	return propertyOption(func(props *Props) { props.FocusOnPointer = value })
+}
+
+// FocusableWhenDisabled configures the corresponding node property.
+func FocusableWhenDisabled(value any) Option {
+	return propertyOption(func(props *Props) { props.FocusableWhenDisabled = value })
 }
 
 // HitSlop configures the corresponding node property.
@@ -742,4 +1056,114 @@ func ObjectFit(value string) Option {
 // ShaderParameters configures the corresponding node property.
 func ShaderParameters(value any) Option {
 	return propertyOption(func(props *Props) { props.ShaderParameters = value })
+}
+
+// Invalid configures the corresponding node property.
+func Invalid(value any) Option {
+	return propertyOption(func(props *Props) { props.Invalid = value })
+}
+
+// Role configures the corresponding node property.
+func Role(value any) Option {
+	return propertyOption(func(props *Props) { props.Role = value })
+}
+
+// TabIndex configures the corresponding node property.
+func TabIndex(value any) Option {
+	return propertyOption(func(props *Props) { props.TabIndex = value })
+}
+
+// Overlay configures the corresponding node property.
+func Overlay(value any) Option {
+	return propertyOption(func(props *Props) { props.Overlay = value })
+}
+
+// FocusTrap configures the corresponding node property.
+func FocusTrap(value any) Option {
+	return propertyOption(func(props *Props) { props.FocusTrap = value })
+}
+
+// RestorePreviousFocus configures the corresponding node property.
+func RestorePreviousFocus(value any) Option {
+	return propertyOption(func(props *Props) { props.RestorePreviousFocus = value })
+}
+
+// AutoFocus configures the corresponding node property.
+func AutoFocus(value any) Option {
+	return propertyOption(func(props *Props) { props.AutoFocus = value })
+}
+
+// AriaModal configures the corresponding node property.
+func AriaModal(value any) Option {
+	return propertyOption(func(props *Props) { props.AriaModal = value })
+}
+
+// DismissOnEscape configures the corresponding node property.
+func DismissOnEscape(value any) Option {
+	return propertyOption(func(props *Props) { props.DismissOnEscape = value })
+}
+
+// DismissOnPointerOutside configures the corresponding node property.
+func DismissOnPointerOutside(value any) Option {
+	return propertyOption(func(props *Props) { props.DismissOnPointerOutside = value })
+}
+
+// TooltipText configures the corresponding node property.
+func TooltipText(value any) Option {
+	return propertyOption(func(props *Props) { props.TooltipText = value })
+}
+
+// TooltipPlacement configures the corresponding node property.
+func TooltipPlacement(value any) Option {
+	return propertyOption(func(props *Props) { props.TooltipPlacement = value })
+}
+
+// TooltipDelay configures the corresponding node property.
+func TooltipDelay(value any) Option {
+	return propertyOption(func(props *Props) { props.TooltipDelay = value })
+}
+
+// TooltipGap configures the corresponding node property.
+func TooltipGap(value any) Option {
+	return propertyOption(func(props *Props) { props.TooltipGap = value })
+}
+
+// TooltipViewportMargin configures the corresponding node property.
+func TooltipViewportMargin(value any) Option {
+	return propertyOption(func(props *Props) { props.TooltipViewportMargin = value })
+}
+
+// AnchorTarget configures the corresponding node property.
+func AnchorTarget(value any) Option {
+	return propertyOption(func(props *Props) { props.AnchorTarget = value })
+}
+
+// AnchorPlacement configures the corresponding node property.
+func AnchorPlacement(value any) Option {
+	return propertyOption(func(props *Props) { props.AnchorPlacement = value })
+}
+
+// AnchorGap configures the corresponding node property.
+func AnchorGap(value any) Option {
+	return propertyOption(func(props *Props) { props.AnchorGap = value })
+}
+
+// ViewportMargin configures the corresponding node property.
+func ViewportMargin(value any) Option {
+	return propertyOption(func(props *Props) { props.ViewportMargin = value })
+}
+
+// Keymap configures the corresponding node property.
+func Keymap(value any) Option {
+	return propertyOption(func(props *Props) { props.Keymap = value })
+}
+
+// Draggable configures the corresponding node property.
+func Draggable(value any) Option {
+	return propertyOption(func(props *Props) { props.Draggable = value })
+}
+
+// DropKinds configures the corresponding node property.
+func DropKinds(value any) Option {
+	return propertyOption(func(props *Props) { props.DropKinds = value })
 }

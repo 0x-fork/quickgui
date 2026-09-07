@@ -15,9 +15,7 @@ import (
 ```go
 func SvgExample() {
 	ui.SVG(
-		ui.Width(20),
-		ui.Height(20),
-		ui.Color("#2563eb"),
+		ui.Style{Width: 20, Height: 20, Color: "#2563eb"},
 		ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg>`),
 	)
 }
@@ -28,4 +26,4 @@ func SvgExample() {
 | 属性 | 说明 |
 | --- | --- |
 | `Value` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
-| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.Style{}` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

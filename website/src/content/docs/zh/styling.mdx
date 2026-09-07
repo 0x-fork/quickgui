@@ -1,34 +1,49 @@
-基础组件直接接收样式选项和子节点。复合部件通过 `ui.PartProps` 接收 `ui.Style`。
+基础组件直接接收 `ui.Style{}` 样式记录、事件选项和子节点。复合部件通过 `ui.PartProps.Style` 接收相同的记录。
 
 ## `style` 属性
 
-简短声明可以使用函数式选项；复用样式记录时使用 `ui.WithStyle(style)`。数字长度以逻辑像素为单位，字符串也接受百分比。数值零具有明确含义，`nil` 表示省略。运行 `bun run fmt` 可统一较长组件调用的换行。
+多个样式记录按顺序逐字段合并。后面的记录只覆盖自己声明的字段，嵌套的 `Hover`、`Active` 等交互样式也会合并，共享记录不会被修改。数字长度以逻辑像素为单位，字符串也接受百分比。零是显式值，`nil` 表示省略。运行 `bun run fmt` 可统一较长调用的格式。
 
 ```go
 func Card() {
 	ui.View(
-		ui.Padding(20),
-		ui.BorderRadius(12),
-		ui.BackgroundColor("#111827"),
-		ui.Text(ui.Color("#e2e8f0"), "Hello"),
+		ui.Text(
+			"Hello",
+			ui.Style{Color: "#e2e8f0"},
+		),
+		ui.Style{Padding: 20, BorderRadius: 12, BackgroundColor: "#111827"},
+	)
+}
+```
+
+## 合并样式
+
+内边距保持 20，圆角变为 12，选中时只改变背景色。嵌套状态也按相同规则合并。
+
+```go
+func MergedCard() {
+	selected, _ := ui.CreateSignal(false)
+	ui.View(
+		"Merged styles",
+		ui.Style{Padding: 20, BorderRadius: 8, BackgroundColor: "#111827"},
+		ui.Style{BorderRadius: 12},
+		ui.When(selected, ui.Style{BackgroundColor: "#2563eb"}),
 	)
 }
 ```
 
 ## Flexbox
 
-设置 `Display("flex")`，再选择方向、尺寸与对齐方式。可滚动的 flex 子节点通常需要 `MinHeight(0)` 或 `MinWidth(0)` 才能收缩。
+设置 `Display: "flex"`，再选择方向、尺寸与对齐方式。可滚动的 flex 子节点通常需要 `MinHeight: 0` 或 `MinWidth: 0` 才能收缩。
 
 ```go
 func Row() {
 	ui.View(
-		ui.Display("flex"),
-		ui.Gap(12),
-		ui.AlignItems("center"),
 		func() {
-			ui.Text(ui.Flex(1), ui.MinWidth(0), "Flexible content")
-			ui.Button(ui.FlexShrink(0), "Action")
+			ui.Text("Flexible content", ui.Style{Flex: 1, MinWidth: 0})
+			ui.Button("Action", ui.Style{FlexShrink: 0})
 		},
+		ui.Style{Display: "flex", Gap: 12, AlignItems: "center"},
 	)
 }
 ```
@@ -40,13 +55,11 @@ func Row() {
 ```go
 func Grid() {
 	ui.View(
-		ui.Display("grid"),
-		ui.GridTemplateColumns("220px 1fr"),
-		ui.Gap(16),
 		func() {
 			ui.Text("Sidebar")
 			ui.Text("Content")
 		},
+		ui.Style{Display: "grid", GridTemplateColumns: "220px 1fr", Gap: 16},
 	)
 }
 ```
@@ -57,42 +70,59 @@ func Grid() {
 
 ## 交互状态
 
-`ui.Hover`、`ui.Active` 和 `ui.Focus` 描述交互样式。`ui.When` 在响应式条件为真时应用选项，条件变为假时恢复之前的值。禁用与选中状态的样式分别使用 `ui.DisabledStyle` 和 `ui.SelectedStyle`。子节点会保持挂载。
+在基础样式中添加 `Transition`，即可为绘制状态之间的变化添加动画。悬停效果、信号驱动的变化、时长和减少动态效果的用法见[过渡与动画](/zh/docs/animations)。
+
+使用 `Hover: &ui.Style{...}`、`Active`、`Focus`、`Disabled` 和 `Selected` 声明交互样式。`ui.When` 在条件为真时合并样式记录，变为假时恢复前面的字段。只更新受影响的绑定，子节点保持挂载。
 
 ```go
 func SelectableButton() {
 	selected, setSelected := ui.CreateSignal(false)
 	ui.Button(
-		ui.BackgroundColor("#e5e7eb"),
-		ui.When(selected, ui.BackgroundColor("#2563eb"), ui.Color("white")),
-		ui.Hover(ui.Opacity(0.85)),
-		ui.OnClick(func() { setSelected(!selected()) }),
 		"Toggle selection",
+		ui.Style{BackgroundColor: "#e5e7eb"},
+		ui.When(
+			selected,
+			ui.Style{
+				BackgroundColor: "#2563eb",
+				Color:           "white",
+			},
+		),
+		ui.Style{Hover: &ui.Style{Opacity: 0.85}},
+		ui.OnClick(func() { setSelected(!selected()) }),
 	)
 }
 ```
 
 ## 分组与具名分组悬停
 
-`ui.Group(true)` 声明匿名悬停分组，`ui.Group("card")` 声明具名分组。后代的 `ui.GroupHover(...)` 跟随最近的祖先分组，包括具名分组。`ui.GroupHoverNamed("card", ...)` 则跳过其他分组，跟随最近的同名祖先。
+`ui.Group(true)` 声明匿名悬停分组，`ui.Group("card")` 声明具名分组。后代的 `GroupHover: &ui.Style{...}` 跟随最近的祖先分组，包括具名分组。`ui.GroupHoverNamed("card", ...)` 则跳过其他分组，跟随最近的同名祖先。
 
 ```go
 func GroupExample() {
-	ui.View(ui.Group("card"), ui.Padding(20), func() {
-		ui.Text(
-			ui.Color("#64748b"),
-			ui.GroupHover(ui.Color("#2563eb")),
-			"Changes when the card is hovered",
-		)
-		ui.View(ui.Group("toolbar"), func() {
+	ui.View(
+		func() {
 			ui.Text(
-				ui.GroupHoverNamed("card", ui.Color("#2563eb")),
-				ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
-				"Follows the card and the nested toolbar",
+				"Changes when the card is hovered",
+				ui.Style{Color: "#64748b", GroupHover: &ui.Style{Color: "#2563eb"}},
 			)
-		})
-	})
+			ui.View(
+				func() {
+					ui.Text(
+						"Follows the card and the nested toolbar",
+						ui.GroupHoverNamed("card", ui.Style{Color: "#2563eb"}),
+						ui.GroupHoverNamed("toolbar", ui.Style{Opacity: 0.8}),
+					)
+				},
+				ui.Group("toolbar"),
+			)
+		},
+		ui.Group("card"),
+		ui.Style{Padding: 20},
+	)
 }
 ```
 
-鼠标悬停在分组的任意区域（包括内边距和后代）都会启用对应规则。嵌套分组会成为匿名规则的目标，具名规则仍可跟随外层分组。没有匹配的祖先时，规则不生效。多条分组规则按声明顺序叠加；属性冲突时，节点自身的 `ui.Hover(...)` 优先。请使用颜色、透明度、轮廓和变换等绘制属性。悬停由原生层处理，不会重新运行组件或更改布局。
+鼠标悬停在分组的任意区域（包括内边距和后代）都会启用对应规则。嵌套分组会成为匿名规则的目标，具名规则仍可跟随外层分组。没有匹配的祖先时，规则不生效。多条分组规则按声明顺序叠加；属性冲突时，节点自身的 `Hover` 优先。请使用颜色、透明度、轮廓和变换等绘制属性。悬停由原生层处理，不会重新运行组件或更改布局。
+
+
+`GroupActive: &ui.Style{...}` 和 `ui.GroupActiveNamed("card", ui.Style{...})` 跟随分组的按下状态。`FocusWithin: &ui.Style{...}` 跟随节点或后代的焦点状态。这些状态接受绘制样式，不能设置光标。

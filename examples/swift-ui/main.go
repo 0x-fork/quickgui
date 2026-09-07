@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/egoist/quickgui/go/native"
@@ -70,11 +70,6 @@ func Gallery() {
 		return &current
 	}
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("row"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.BackgroundColor("transparent"),
 		func() {
 			ui.Tabs.Root(
 				ui.TabsRootProps{
@@ -98,6 +93,13 @@ func Gallery() {
 					})
 				},
 			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "row",
+			Width:           "100%",
+			Height:          "100%",
+			BackgroundColor: "transparent",
 		},
 	)
 }
@@ -160,43 +162,34 @@ func (s *galleryState) current() demo {
 
 func sidebar(state *galleryState) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width(220),
-		ui.Height("100%"),
-		ui.FlexShrink(0),
-		ui.BackgroundColor("transparent"),
-		ui.BorderWidth(1),
-		ui.BorderColor("#c9cbd0"),
 		func() {
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("row"),
-				ui.AlignItems("center"),
-				ui.Height(54),
-				ui.FlexShrink(0),
-				ui.PaddingLeft(82),
-				ui.AppRegion("drag"),
 				func() {
-					ui.Text(ui.Color("#252a33"), ui.FontSize(13), ui.FontWeight(700), "SwiftUI")
+					ui.Text("SwiftUI", ui.Style{Color: "#252a33", FontSize: 13, FontWeight: 700})
+				},
+				ui.Style{
+					Display:       "flex",
+					FlexDirection: "row",
+					AlignItems:    "center",
+					Height:        54,
+					FlexShrink:    0,
+					PaddingLeft:   82,
+					AppRegion:     "drag",
 				},
 			)
 			ui.Text(
-				ui.FlexShrink(0),
-				ui.PaddingLeft(18),
-				ui.PaddingBottom(7),
-				ui.Color("#747b87"),
-				ui.FontSize(10),
-				ui.FontWeight(700),
-				ui.LetterSpacing(0.7),
 				"COMPONENTS",
+				ui.Style{
+					FlexShrink:    0,
+					PaddingLeft:   18,
+					PaddingBottom: 7,
+					Color:         "#747b87",
+					FontSize:      10,
+					FontWeight:    700,
+					LetterSpacing: 0.7,
+				},
 			)
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.MinHeight(0),
-				ui.OverflowY("scroll"),
 				func() {
 					ui.Tabs.List(
 						ui.PartProps{
@@ -222,8 +215,11 @@ func sidebar(state *galleryState) {
 											PartProps: ui.PartProps{
 												Style: func() ui.Style {
 													background, color, weight := "transparent", "#303641", any(400)
+													var hover *ui.Style
 													if state.page() == id {
 														background, color, weight = "#2878d4", "#ffffff", 600
+													} else {
+														hover = &ui.Style{BackgroundColor: "#ffffff66"}
 													}
 													return ui.Style{
 														Display:         "flex",
@@ -239,13 +235,13 @@ func sidebar(state *galleryState) {
 														BackgroundColor: background,
 														Color:           color,
 														FontWeight:      weight,
-														Hover:           &ui.Style{BackgroundColor: "#ffffff66"},
+														Hover:           hover,
 													}
 												},
 											},
 										},
 										func() {
-											ui.Text(ui.FontSize(12), item.Label)
+											ui.Text(item.Label, ui.Style{FontSize: 12})
 										},
 									)
 								},
@@ -255,138 +251,171 @@ func sidebar(state *galleryState) {
 						},
 					)
 				},
-			)
-			ui.View(
-				ui.FlexShrink(0),
-				ui.Padding(13),
-				ui.BorderWidth(1),
-				ui.BorderColor("#c9cbd0"),
-				func() {
-					ui.Text(
-						ui.Color("#747b87"),
-						ui.FontSize(11),
-						fmt.Sprintf("%d native components", len(demos)),
-					)
+				ui.Style{
+					Display:       "flex",
+					FlexDirection: "column",
+					Flex:          1,
+					MinHeight:     0,
+					OverflowY:     "scroll",
 				},
 			)
+			ui.View(
+				func() {
+					ui.Text(
+						strconv.Itoa(len(demos))+" native components",
+						ui.Style{Color: "#747b87", FontSize: 11},
+					)
+				},
+				ui.Style{FlexShrink: 0, Padding: 13, BorderWidth: 1, BorderColor: "#c9cbd0"},
+			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Width:           220,
+			Height:          "100%",
+			FlexShrink:      0,
+			BackgroundColor: "transparent",
+			BorderWidth:     1,
+			BorderColor:     "#c9cbd0",
 		},
 	)
 }
 
 func pane(state *galleryState, body func()) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Flex(1),
-		ui.MinWidth(0),
-		ui.Height("100%"),
-		ui.BackgroundColor("#f6f6f8"),
 		func() {
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("row"),
-				ui.AlignItems("center"),
-				ui.JustifyContent("space-between"),
-				ui.Height(54),
-				ui.FlexShrink(0),
-				ui.PaddingLeft(22),
-				ui.PaddingRight(22),
-				ui.BorderWidth(1),
-				ui.BorderColor("#d7d8dc"),
-				ui.AppRegion("drag"),
 				func() {
 					ui.Text(
-						ui.Color("#20242c"),
-						ui.FontSize(15),
-						ui.FontWeight(700),
 						func() string { return state.current().Label },
+						ui.Style{Color: "#20242c", FontSize: 15, FontWeight: 700},
 					)
-					ui.Text(ui.Color("#858b96"), ui.FontSize(11), "Native SwiftUI · QuickGUI state")
+					ui.Text(
+						"Native SwiftUI · QuickGUI state",
+						ui.Style{Color: "#858b96", FontSize: 11},
+					)
+				},
+				ui.Style{
+					Display:        "flex",
+					FlexDirection:  "row",
+					AlignItems:     "center",
+					JustifyContent: "space-between",
+					Height:         54,
+					FlexShrink:     0,
+					PaddingLeft:    22,
+					PaddingRight:   22,
+					BorderWidth:    1,
+					BorderColor:    "#d7d8dc",
+					AppRegion:      "drag",
 				},
 			)
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.MinHeight(0),
-				ui.AlignItems("center"),
-				ui.OverflowY("scroll"),
-				ui.Padding(30),
 				func() {
 					body()
 				},
+				ui.Style{
+					Display:       "flex",
+					FlexDirection: "column",
+					Flex:          1,
+					MinHeight:     0,
+					AlignItems:    "center",
+					OverflowY:     "scroll",
+					Padding:       30,
+				},
 			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Flex:            1,
+			MinWidth:        0,
+			Height:          "100%",
+			BackgroundColor: "#f6f6f8",
 		},
 	)
 }
 
 func renderDemo(state *galleryState) {
-	demoPage(state.current().Description, demoStatus(state), func() {
-		demoControl(state)
+	ui.Dynamic(func() ui.Component {
+		page := state.current()
+		return func() {
+			demoPage(page.Description, demoStatus(state), func() {
+				demoControl(state)
+			})
+		}
 	})
 }
 
 func demoPage(description string, status func() string, control ui.Component) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.MaxWidth(680),
-		ui.Gap(18),
 		func() {
-			ui.Text(ui.Color("#5f6672"), ui.FontSize(14), ui.LineHeight(21), description)
+			ui.Text(description, ui.Style{Color: "#5f6672", FontSize: 14, LineHeight: 21})
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Width("100%"),
-				ui.MinHeight(250),
-				ui.Padding(22),
-				ui.Gap(16),
-				ui.BorderWidth(1),
-				ui.BorderColor("#dedfe3"),
-				ui.BorderRadius(14),
-				ui.BackgroundColor("#ffffff"),
 				func() {
 					ui.Text(
-						ui.Color("#858b96"),
-						ui.FontSize(11),
-						ui.FontWeight(700),
-						ui.LetterSpacing(0.8),
 						"LIVE SWIFTUI DEMO",
+						ui.Style{
+							Color:         "#858b96",
+							FontSize:      11,
+							FontWeight:    700,
+							LetterSpacing: 0.8,
+						},
 					)
 					ui.View(
-						ui.Display("flex"),
-						ui.Flex(1),
-						ui.MinHeight(170),
-						ui.Width("100%"),
-						ui.AlignItems("center"),
-						ui.JustifyContent("center"),
 						control,
+						ui.Style{
+							Display:        "flex",
+							Flex:           1,
+							MinHeight:      170,
+							Width:          "100%",
+							AlignItems:     "center",
+							JustifyContent: "center",
+						},
 					)
+				},
+				ui.Style{
+					Display:         "flex",
+					FlexDirection:   "column",
+					Width:           "100%",
+					MinHeight:       250,
+					Padding:         22,
+					Gap:             16,
+					BorderWidth:     1,
+					BorderColor:     "#dedfe3",
+					BorderRadius:    14,
+					BackgroundColor: "#ffffff",
 				},
 			)
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("row"),
-				ui.AlignItems("center"),
-				ui.JustifyContent("space-between"),
-				ui.Gap(16),
-				ui.Width("100%"),
-				ui.MinHeight(42),
-				ui.PaddingLeft(14),
-				ui.PaddingRight(14),
-				ui.BorderRadius(10),
-				ui.BackgroundColor("#eceef2"),
 				func() {
 					ui.Text(
-						ui.Color("#727985"),
-						ui.FontSize(11),
-						ui.FontWeight(700),
 						"NATIVE STATE",
+						ui.Style{Color: "#727985", FontSize: 11, FontWeight: 700},
 					)
-					ui.Text(ui.Color("#252a33"), ui.FontSize(12), status)
+					ui.Text(status, ui.Style{Color: "#252a33", FontSize: 12})
+				},
+				ui.Style{
+					Display:         "flex",
+					FlexDirection:   "row",
+					AlignItems:      "center",
+					JustifyContent:  "space-between",
+					Gap:             16,
+					Width:           "100%",
+					MinHeight:       42,
+					PaddingLeft:     14,
+					PaddingRight:    14,
+					BorderRadius:    10,
+					BackgroundColor: "#eceef2",
 				},
 			)
+		},
+		ui.Style{
+			Display:       "flex",
+			FlexDirection: "column",
+			Width:         "100%",
+			MaxWidth:      680,
+			Gap:           18,
 		},
 	)
 }
@@ -399,16 +428,16 @@ func demoStatus(state *galleryState) func() string {
 			if state.presses() == 1 {
 				suffix = ""
 			}
-			return fmt.Sprintf("%d press%s", state.presses(), suffix)
+			return strconv.Itoa(state.presses()) + " press" + suffix
 		case "slider", "progress-view", "gauge":
-			return fmt.Sprintf("volume %d%%", int(state.volume()*100+0.5))
+			return "volume " + strconv.Itoa(int(state.volume()*100+0.5)) + "%"
 		case "toggle":
 			if state.notifications() {
 				return "notifications on"
 			}
 			return "notifications off"
 		case "stepper":
-			return fmt.Sprintf("%g copies", state.copies())
+			return strconv.FormatFloat(state.copies(), 'g', -1, 64) + " copies"
 		case "segmented-control":
 			return "layout " + state.layout()
 		case "picker":
@@ -418,9 +447,9 @@ func demoStatus(state *galleryState) func() string {
 		case "color-picker":
 			return "accent " + state.accent()
 		case "text-field":
-			return fmt.Sprintf("value “%s” · last submitted %s", state.name(), state.submitted())
+			return "value “" + state.name() + "” · last submitted " + state.submitted()
 		case "secure-field":
-			return fmt.Sprintf("%d characters · last submitted %s", len(state.password()), state.submitted())
+			return strconv.Itoa(len(state.password())) + " characters · last submitted " + state.submitted()
 		case "popover":
 			if state.open() {
 				return "popover presented"
@@ -459,7 +488,7 @@ func demoControl(state *galleryState) {
 
 	case "slider":
 		host(ui.SwiftUIMatchContents{Vertical: true}, wide, ui.SwiftUI.Slider(ui.SwiftUISliderProps{
-			Label:         func() string { return fmt.Sprintf("Volume %d%%", int(state.volume()*100+0.5)) },
+			Label:         func() string { return "Volume " + strconv.Itoa(int(state.volume()*100+0.5)) + "%" },
 			Value:         state.volume,
 			Min:           0,
 			Max:           1,
@@ -481,13 +510,13 @@ func demoControl(state *galleryState) {
 			Label:             "Setup progress",
 			Value:             state.volume,
 			Total:             1,
-			CurrentValueLabel: func() string { return fmt.Sprintf("%d%%", int(state.volume()*100+0.5)) },
+			CurrentValueLabel: func() string { return strconv.Itoa(int(state.volume()*100+0.5)) + "%" },
 		}))
 		return
 
 	case "stepper":
 		host(true, ui.Style{}, ui.SwiftUI.Stepper(ui.SwiftUIStepperProps{
-			Label:         func() string { return fmt.Sprintf("Copies: %g", state.copies()) },
+			Label:         func() string { return "Copies: " + strconv.FormatFloat(state.copies(), 'g', -1, 64) },
 			Value:         state.copies,
 			Min:           1,
 			Max:           10,
@@ -539,7 +568,7 @@ func demoControl(state *galleryState) {
 			Min:               0,
 			Max:               1,
 			Style:             "accessoryLinearCapacity",
-			CurrentValueLabel: func() string { return fmt.Sprintf("%d%%", int(state.volume()*100+0.5)) },
+			CurrentValueLabel: func() string { return strconv.Itoa(int(state.volume()*100+0.5)) + "%" },
 			MinimumValueLabel: "0%",
 			MaximumValueLabel: "100%",
 		}))
@@ -547,10 +576,6 @@ func demoControl(state *galleryState) {
 
 	case "text-field":
 		ui.View(
-			ui.Display("flex"),
-			ui.FlexDirection("column"),
-			ui.Gap(16),
-			ui.AlignItems("center"),
 			func() {
 				host(ui.SwiftUIMatchContents{Vertical: true}, field, ui.SwiftUI.TextField(ui.SwiftUITextFieldProps{
 					Value:         state.name,
@@ -566,22 +591,25 @@ func demoControl(state *galleryState) {
 							state.setName(text)
 						}
 					}),
-					ui.Width(360),
-					ui.Height(28),
-					ui.FlexShrink(0),
-					ui.PaddingLeft(8),
-					ui.PaddingRight(8),
-					ui.Color("#111827"),
-					ui.BackgroundColor("#ffffff"),
-					ui.BorderWidth(1),
-					ui.BorderColor("#d1d5db"),
-					ui.BorderRadius(6),
-					ui.Focus(
-						ui.BorderColor("#2563eb"),
-						ui.Outline("3px solid #2563eb55"),
-					),
+					ui.Style{
+						Width:           360,
+						Height:          28,
+						FlexShrink:      0,
+						PaddingLeft:     8,
+						PaddingRight:    8,
+						Color:           "#111827",
+						BackgroundColor: "#ffffff",
+						BorderWidth:     1,
+						BorderColor:     "#d1d5db",
+						BorderRadius:    6,
+						Focus: &ui.Style{
+							BorderColor: "#2563eb",
+							Outline:     "3px solid #2563eb55",
+						},
+					},
 				)
 			},
+			ui.Style{Display: "flex", FlexDirection: "column", Gap: 16, AlignItems: "center"},
 		)
 		return
 
@@ -621,20 +649,10 @@ func demoControl(state *galleryState) {
 							},
 							func() {
 								ui.View(
-									ui.Display("flex"),
-									ui.FlexDirection("column"),
-									ui.Width(300),
-									ui.Height("100%"),
-									ui.Padding(20),
-									ui.Gap(12),
-									ui.OverflowY("auto"),
-									ui.BackgroundColor("transparent"),
 									func() {
 										ui.Text(
-											ui.Color("#111827"),
-											ui.FontSize(15),
-											ui.FlexShrink(0),
 											"QuickGUI inside SwiftUI",
+											ui.Style{Color: "#111827", FontSize: 15, FlexShrink: 0},
 										)
 										ui.Input(
 											ui.Value(state.name),
@@ -643,28 +661,42 @@ func demoControl(state *galleryState) {
 													state.setName(text)
 												}
 											}),
-											ui.Width("100%"),
-											ui.Height(36),
-											ui.FlexShrink(0),
-											ui.Padding(8),
-											ui.Color("#111827"),
-											ui.BackgroundColor("#ffffff"),
-											ui.BorderWidth(1),
-											ui.BorderColor("#d1d5db"),
-											ui.BorderRadius(8),
+											ui.Style{
+												Width:           "100%",
+												Height:          36,
+												FlexShrink:      0,
+												Padding:         8,
+												Color:           "#111827",
+												BackgroundColor: "#ffffff",
+												BorderWidth:     1,
+												BorderColor:     "#d1d5db",
+												BorderRadius:    8,
+											},
 										)
 										ui.Button(
-											ui.OnClick(func() { state.setOpen(false) }),
-											ui.Width("100%"),
-											ui.Height(34),
-											ui.FlexShrink(0),
-											ui.Padding(8),
-											ui.Color("#ffffff"),
-											ui.BackgroundColor("#2563eb"),
-											ui.BorderRadius(8),
-											ui.JustifyContent("center"),
 											func() string { return "Save " + state.name() },
+											ui.OnClick(func() { state.setOpen(false) }),
+											ui.Style{
+												Width:           "100%",
+												Height:          34,
+												FlexShrink:      0,
+												Padding:         8,
+												Color:           "#ffffff",
+												BackgroundColor: "#2563eb",
+												BorderRadius:    8,
+												JustifyContent:  "center",
+											},
 										)
+									},
+									ui.Style{
+										Display:         "flex",
+										FlexDirection:   "column",
+										Width:           300,
+										Height:          "100%",
+										Padding:         20,
+										Gap:             12,
+										OverflowY:       "auto",
+										BackgroundColor: "transparent",
 									},
 								)
 							},

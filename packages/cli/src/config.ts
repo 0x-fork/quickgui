@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { extname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { CliError } from "./error.ts";
@@ -201,22 +201,34 @@ export function defineConfig(config: QuickGuiConfig): QuickGuiConfig {
 
 export async function loadConfig(
   projectRoot: string,
-  configFile = "quickgui.config.ts",
+  configFile?: string,
 ): Promise<ResolvedQuickGuiConfig> {
   const root = resolve(projectRoot);
-  const configPath = isAbsolute(configFile) ? configFile : resolve(root, configFile);
+  const selected = configFile ?? ["quickgui.toml", "quickgui.config.ts"].find((name) =>
+    existsSync(resolve(root, name)),
+  );
+  if (selected === undefined) {
+    throw new CliError(`QuickGUI config not found in ${root}: expected quickgui.toml or quickgui.config.ts`);
+  }
+  const configPath = isAbsolute(selected) ? selected : resolve(root, selected);
   if (!existsSync(configPath)) {
     throw new CliError(`QuickGUI config not found: ${configPath}`);
   }
-  const url = pathToFileURL(configPath);
-  url.searchParams.set("quickgui_reload", `${Date.now()}_${Math.random()}`);
-  let module: { default?: unknown };
+  let input: unknown;
   try {
-    module = (await import(url.href)) as { default?: unknown };
+    if (extname(configPath).toLowerCase() === ".toml") {
+      // Read on each reload rather than using Bun's cached TOML module imports.
+      input = Bun.TOML.parse(await Bun.file(configPath).text());
+    } else {
+      const url = pathToFileURL(configPath);
+      url.searchParams.set("quickgui_reload", `${Date.now()}_${Math.random()}`);
+      const module = (await import(url.href)) as { default?: unknown };
+      input = module.default;
+    }
   } catch (error) {
     throw new CliError(`Could not load ${configPath}`, { cause: error });
   }
-  return resolveConfig(module.default, root, configPath);
+  return resolveConfig(input, root, configPath);
 }
 
 export function resolveConfig(
@@ -224,7 +236,7 @@ export function resolveConfig(
   projectRoot: string,
   configPath = resolve(projectRoot, "quickgui.config.ts"),
 ): ResolvedQuickGuiConfig {
-  if (!isRecord(input)) throw new CliError("QuickGUI config must export an object");
+  if (!isRecord(input)) throw new CliError("QuickGUI config must be an object");
   const name = requiredString(input.name, "name", 128);
   const identifier = requiredString(input.identifier, "identifier", 255);
   if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(identifier)) {

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/ui"
@@ -35,9 +35,11 @@ func menuRow() ui.PartProps {
 func menuLabel(caption string) {
 	state := ui.UseMenuItemState()
 	ui.Text(
-		ui.Color(func() string { return choose(state().Highlighted, p().Accent, p().Ink) }),
-		ui.Flex(1),
 		caption,
+		ui.Style{
+			Color: func() string { return choose(state().Highlighted, p().Accent, p().Ink) },
+			Flex:  1,
+		},
 	)
 }
 func ContextMenuDemo() {
@@ -93,6 +95,80 @@ func ContextMenuDemo() {
 		note(func() string { return "rows → " + command() + " · parts → " + parts() })
 	})
 }
+func SystemContextMenuDemo() {
+	action, setAction := ui.CreateSignal("nothing yet")
+	status, setStatus := ui.CreateSignal("closed")
+	showHidden, setShowHidden := ui.CreateSignal(false)
+	sortBy, setSortBy := ui.CreateSignal("Name")
+	open := func() {
+		window := native.CurrentWindow()
+		sortItems := make([]native.MenuItem, 0, 3)
+		for _, name := range []string{"Name", "Date modified", "Size"} {
+			sortItems = append(sortItems, native.MenuItem{
+				Label:   name,
+				Checked: sortBy() == name,
+				Click: func() {
+					setSortBy(name)
+					setAction("Sort by " + name)
+				},
+			})
+		}
+		setStatus("open")
+		window.PopupMenu(
+			[]native.MenuItem{
+				{Label: "Open", Click: func() { setAction("Open") }},
+				{Label: "Rename", Click: func() { setAction("Rename") }},
+				{Type: "separator"},
+				{
+					Label:   "Show hidden files",
+					Checked: showHidden(),
+					Click: func() {
+						setShowHidden(!showHidden())
+						setAction("Show hidden files " + choose(showHidden(), "on", "off"))
+					},
+				},
+				{Label: "Sort by", Items: sortItems},
+				{Type: "separator"},
+				{Label: "Unavailable action", Enabled: ptr(false)},
+			},
+			nil,
+			func(err error) {
+				if err != nil {
+					setStatus("error: " + err.Error())
+					return
+				}
+				setStatus("closed")
+			},
+		)
+	}
+	panel("System context menu", "The operating system draws this menu. Actions update the readout below; reopen it to see the current checkmarks.", func() {
+		ui.View(
+			"Right-click here for the system menu",
+			ui.Style{
+				Display:         "flex",
+				Height:          96,
+				AlignItems:      "center",
+				JustifyContent:  "center",
+				BorderRadius:    10,
+				BorderWidth:     1,
+				BorderStyle:     "dashed",
+				BorderColor:     color(func(p palette) string { return p.Border }),
+				BackgroundColor: color(func(p palette) string { return p.PanelAlt }),
+				Color:           color(func(p palette) string { return p.Muted }),
+				AppRegion:       "no-drag",
+				UserSelect:      "none",
+			},
+			ui.OnContextMenu(func(event *native.Event) {
+				event.PreventDefault()
+				open()
+			}),
+		)
+		row(func() { button("Open system menu", open) })
+		note(func() string { return "menu " + status() + " · last action " + action() })
+		note(func() string { return "hidden files " + strconv.FormatBool(showHidden()) + " · sort by " + sortBy() })
+	})
+}
+
 func MenuDemo() {
 	open, setOpen := ui.CreateSignal(false)
 	wrap, setWrap := ui.CreateSignal(false)
@@ -231,7 +307,7 @@ func MenuDemo() {
 			},
 		)
 		note(func() string {
-			return fmt.Sprintf("open %t · activated %s · wrap %t · density %s", open(), activated(), wrap(), density())
+			return "open " + strconv.FormatBool(open()) + " · activated " + activated() + " · wrap " + strconv.FormatBool(wrap()) + " · density " + density()
 		})
 	})
 }
@@ -292,7 +368,7 @@ func MenubarDemo() {
 			},
 		)
 		note(func() string {
-			return fmt.Sprintf("open %s · tab stop %d · command %s", textValue(open()), active(), command())
+			return "open " + textValue(open()) + " · tab stop " + strconv.Itoa(active()) + " · command " + command()
 		})
 	})
 }
@@ -425,7 +501,9 @@ func PopoverDemo() {
 				)
 			},
 		)
-		note(func() string { return fmt.Sprintf("click %t · hover %t", open(), hover()) })
+		note(func() string {
+			return "click " + strconv.FormatBool(open()) + " · hover " + strconv.FormatBool(hover())
+		})
 	})
 }
 func PreviewCardDemo() {
@@ -468,7 +546,7 @@ func PreviewCardDemo() {
 				},
 			)
 		})
-		note(func() string { return fmt.Sprintf("open %t", open()) })
+		note(func() string { return "open " + strconv.FormatBool(open()) })
 	})
 }
 func ToastDemo() {
@@ -492,7 +570,7 @@ func toastDemoBody() {
 				button(string(kind), func() {
 					counter++
 					last = manager.Add(ui.ToastRequest{
-						Title:       fmt.Sprintf("Build %d · %s", counter, kind),
+						Title:       "Build " + strconv.Itoa(counter) + " · " + string(kind),
 						Description: "Auto-dismisses in 5 seconds",
 						Type:        kind,
 					})
@@ -536,7 +614,7 @@ func toastDemoBody() {
 											s := popupStyle()
 											s.Padding = 10
 											s.Opacity = choose(entry().Limited, 0.55, 1.0)
-											s.Transform = fmt.Sprintf("translateX(%gpx)", entry().SwipeMovement)
+											s.Transform = "translateX(" + strconv.FormatFloat(entry().SwipeMovement, 'g', -1, 64) + "px)"
 											s.BorderColor = choose(entry().Type == "error", p().Danger, choose(entry().Type == "success", p().Accent, p().Border))
 											return s
 										}},
@@ -552,7 +630,9 @@ func toastDemoBody() {
 															label(func() string { return current().Title })
 														},
 													)
-													muted(func() string { return fmt.Sprintf("#%d · +%gpx", entry().Index, entry().Offset) })
+													muted(func() string {
+														return "#" + strconv.Itoa(entry().Index) + " · +" + strconv.FormatFloat(entry().Offset, 'g', -1, 64) + "px"
+													})
 													ui.Toast.Close(
 														ui.ToastPartProps{
 															ToastID:   id,
@@ -585,7 +665,7 @@ func toastDemoBody() {
 					limited++
 				}
 			}
-			return fmt.Sprintf("queued %d · stack %d · limited %d", len(manager.Toasts()), len(manager.Stack()), limited)
+			return "queued " + strconv.Itoa(len(manager.Toasts())) + " · stack " + strconv.Itoa(len(manager.Stack())) + " · limited " + strconv.Itoa(limited)
 		})
 	})
 }
@@ -623,7 +703,16 @@ func TooltipDemo() {
 										s.FontSize = 11
 										ui.Tooltip.Popup(
 											ui.PartProps{Style: s},
-											choose(i == 0, "Shared hover delay", "Tracks the horizontal cursor"),
+											func() {
+												ui.Text(choose(i == 0, "Shared hover delay", "Tracks the horizontal cursor"))
+												if i == 0 {
+													ui.Tooltip.Arrow(ui.PartProps{Style: ui.Style{
+														Width:           8,
+														Height:          8,
+														BackgroundColor: color(func(p palette) string { return p.Ink }),
+													}})
+												}
+											},
 										)
 									},
 								)
@@ -633,6 +722,6 @@ func TooltipDemo() {
 				})
 			},
 		)
-		note(func() string { return fmt.Sprintf("open %t · resolved %s", open(), placement()) })
+		note(func() string { return "open " + strconv.FormatBool(open()) + " · resolved " + placement() })
 	})
 }

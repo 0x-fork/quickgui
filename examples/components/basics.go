@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/quickgui/go/native"
@@ -105,9 +106,8 @@ func AlertDialogDemo() {
 									ui.PartProps{},
 									func() {
 										ui.Text(
-											ui.FontSize(15),
-											ui.FontWeight(700),
 											"Delete “electron-parity”?",
+											ui.Style{FontSize: 15, FontWeight: 700},
 										)
 									},
 								)
@@ -119,7 +119,10 @@ func AlertDialogDemo() {
 								)
 								row(func() {
 									ui.AlertDialog.Close(control(), "Cancel")
-									button("Delete", func() { setOutcome("deleted"); setOpen(false) }, ui.BackgroundColor(color(func(p palette) string { return p.Danger })), ui.Color("white"))
+									button("Delete", func() { setOutcome("deleted"); setOpen(false) }, ui.Style{
+										BackgroundColor: color(func(p palette) string { return p.Danger }),
+										Color:           "white",
+									})
 								})
 							},
 						)
@@ -127,7 +130,9 @@ func AlertDialogDemo() {
 				)
 			},
 		)
-		note(func() string { return fmt.Sprintf("open %t · reason %s · outcome %s", open(), reason(), outcome()) })
+		note(func() string {
+			return "open " + strconv.FormatBool(open()) + " · reason " + reason() + " · outcome " + outcome()
+		})
 	})
 }
 
@@ -199,7 +204,7 @@ func ButtonDemo() {
 			button("Disabled", func() { setLast("never") }, ui.Disabled(true))
 			button("Double-click me", func() { setLast("single click") }, ui.OnDoubleClick(func(*native.Event) { setLast("double click") }))
 		})
-		note(func() string { return fmt.Sprintf("clicks %d · last %s", clicks(), last()) })
+		note(func() string { return "clicks " + strconv.Itoa(clicks()) + " · last " + last() })
 	})
 }
 
@@ -212,7 +217,26 @@ func CheckboxDemo() {
 			OnCheckedChange: func(v bool, _ *native.Event) { setNotify(v) },
 		}, "Email me about releases")
 		checkbox(ui.CheckboxProps{DefaultChecked: true, ReadOnly: true}, "Read-only: focusable, refuses changes")
-		checkbox(ui.CheckboxProps{Parent: true, ChildrenChecked: kids}, "Parent, derived from its children")
+		checkbox(ui.CheckboxProps{
+			Parent:          true,
+			ChildrenChecked: kids,
+			Checked: func() ui.CheckedState {
+				checked := 0
+				for _, value := range kids() {
+					if value {
+						checked++
+					}
+				}
+				return checkboxSelectionState(checked, len(kids()))
+			},
+			OnCheckedChange: func(value bool, _ *native.Event) {
+				next := make([]bool, len(kids()))
+				for i := range next {
+					next[i] = value
+				}
+				setKids(next)
+			},
+		}, "Parent, derived from its children")
 		row(func() {
 			for i, name := range []string{"Analytics", "Crash reports"} {
 				checkbox(ui.CheckboxProps{
@@ -236,9 +260,17 @@ func CheckboxGroupDemo() {
 				PartProps:     columnPart(),
 			},
 			func() {
-				checkbox(ui.CheckboxProps{Parent: true}, "All colours")
+				checkbox(ui.CheckboxProps{
+					Parent: true,
+					Checked: func() ui.CheckedState {
+						return checkboxSelectionState(len(colors()), len(all))
+					},
+				}, "All colours")
 				for _, value := range all {
-					checkbox(ui.CheckboxProps{Value: value}, value)
+					checkbox(ui.CheckboxProps{
+						Value:   value,
+						Checked: func() ui.CheckedState { return slices.Contains(colors(), value) },
+					}, value)
 				}
 			},
 		)
@@ -282,7 +314,9 @@ func CollapsibleDemo() {
 				ui.Collapsible.Panel(ui.PartProps{}, "Retained as display:none instead of omitted.")
 			},
 		)
-		note(func() string { return fmt.Sprintf("plain %t · keepMounted %t", open(), kept()) })
+		note(func() string {
+			return "plain " + strconv.FormatBool(open()) + " · keepMounted " + strconv.FormatBool(kept())
+		})
 	})
 }
 func DialogDemo() {
@@ -311,9 +345,8 @@ func DialogDemo() {
 									ui.PartProps{},
 									func() {
 										ui.Text(
-											ui.FontSize(15),
-											ui.FontWeight(700),
 											"Publish this build?",
+											ui.Style{FontSize: 15, FontWeight: 700},
 										)
 									},
 								)
@@ -332,7 +365,11 @@ func DialogDemo() {
 										Padding:       4,
 									}},
 									func() {
-										input(notes, setNotes, "Release notes", ui.Multiline(true), ui.Width("100%"), ui.Height(64), ui.PaddingTop(6))
+										input(notes, setNotes, "Release notes", ui.Multiline(true), ui.Style{
+											Width:      "100%",
+											Height:     64,
+											PaddingTop: 6,
+										})
 									},
 								)
 								row(func() { ui.Dialog.Close(control(), "Cancel"); primary("Publish", func() { setOpen(false) }) })
@@ -343,7 +380,7 @@ func DialogDemo() {
 			},
 		)
 		note(func() string {
-			return fmt.Sprintf("open %t · reason %s · transition %s · notes %d chars", open(), reason(), completed(), len(notes()))
+			return "open " + strconv.FormatBool(open()) + " · reason " + reason() + " · transition " + completed() + " · notes " + strconv.Itoa(len(notes())) + " chars"
 		})
 	})
 }

@@ -1,80 +1,57 @@
 package main
 
-import (
-	"log"
+import "github.com/egoist/quickgui/go/ui"
 
-	"github.com/egoist/quickgui/go/native"
-	"github.com/egoist/quickgui/go/ui"
-)
+type choice struct{ value, label string }
 
-func run(title string, width, height float64, component func()) {
-	if err := native.Run(func() {
-		open := func() {
-			native.NewWindow(native.WindowOptions{
-				Title:         title,
-				Width:         width,
-				Height:        height,
-				MinimumWidth:  500,
-				MinimumHeight: 380,
-				Background:    "#0b1020",
-				TitleBarStyle: "hiddenInset",
-				Component: func() {
-					ui.View(
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Width("100%"),
-						ui.Height("100%"),
-						ui.Gap(22),
-						ui.Padding(36),
-						ui.PaddingTop(52),
-						ui.BackgroundColor("#0b1020"),
-						ui.Color("#e2e8f0"),
-						func() {
-							ui.Text(ui.FontSize(22), ui.FontWeight(700), title)
-							component()
-						},
-					)
-				},
-			})
-		}
-		native.App.OnReopen(func(event native.ReopenEvent) {
-			if !event.HasVisibleWindows {
-				open()
-			}
-		})
-		open()
-	}); err != nil {
-		log.Fatal(err)
-	}
+var materials = []choice{
+	{"appearance-based", "Appearance based"},
+	{"titlebar", "Titlebar"},
+	{"selection", "Selection"},
+	{"menu", "Menu"},
+	{"popover", "Popover"},
+	{"sidebar", "Sidebar"},
+	{"header", "Header"},
+	{"sheet", "Sheet"},
+	{"window", "Window"},
+	{"hud", "HUD"},
+	{"fullscreen-ui", "Fullscreen UI"},
+	{"tooltip", "Tooltip"},
+	{"content", "Content"},
+	{"under-window", "Under window"},
+	{"under-page", "Under page"},
 }
 
-var buttonStyle = ui.Style{
-	Display:         "flex",
-	Padding:         12,
-	BorderRadius:    8,
-	BackgroundColor: "#2563eb",
-	Color:           "white",
-	Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-	UserSelect:      "none",
-	AppRegion:       "no-drag",
+var effectStates = []choice{
+	{"followWindow", "Auto"},
+	{"active", "Active"},
+	{"inactive", "Inactive"},
 }
 
-func button(label string, click func(), options ...any) {
-	args := []any{ui.WithStyle(buttonStyle), ui.OnClick(func() { click() }), label}
-	args = append(args, options...)
-
-	ui.Button(args...)
-
+func checkmark() {
+	ui.SVG(
+		ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>`),
+		ui.Style{Width: 14, Height: 14, FlexShrink: 0, Color: "#2563eb"},
+	)
 }
 
-func card(children ...any) {
+func readout(label string, value any) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Gap(16),
-		ui.Padding(24),
-		ui.BorderRadius(12),
-		ui.BackgroundColor("#151e30"),
-		children,
+		func() {
+			ui.Text(label, ui.Style{Color: "#8a94a6", FontSize: 11})
+			ui.Text(value, ui.Style{Color: "#354056", FontSize: 11, FontWeight: 700})
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Flex:            1,
+			MinWidth:        0,
+			Gap:             3,
+			Padding:         12,
+			BackgroundColor: "#f8fafc",
+			BorderColor:     "#e2e8f0",
+			BorderWidth:     1,
+			BorderRadius:    9,
+		},
 	)
 }

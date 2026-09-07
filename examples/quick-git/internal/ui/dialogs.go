@@ -86,10 +86,12 @@ func dialogFrame(title, description string, body *native.Node, actions *native.N
 								gui.PartProps{},
 								func() {
 									gui.Text(
-										gui.FontSize(15),
-										gui.FontWeight(700),
-										gui.Color(app.Theme().Text),
 										title,
+										gui.Style{
+											FontSize:   15,
+											FontWeight: 700,
+											Color:      app.Theme().Text,
+										},
 									)
 								},
 							)
@@ -100,10 +102,12 @@ func dialogFrame(title, description string, body *native.Node, actions *native.N
 										gui.PartProps{},
 										func() {
 											gui.Text(
-												gui.FontSize(12.5),
-												gui.LineHeight(18),
-												gui.Color(app.Theme().TextSecondary),
 												description,
+												gui.Style{
+													FontSize:   12.5,
+													LineHeight: 18,
+													Color:      app.Theme().TextSecondary,
+												},
 											)
 										},
 									)
@@ -121,11 +125,6 @@ func dialogFrame(title, description string, body *native.Node, actions *native.N
 								func() { gui.Child(body) },
 							)
 							gui.View(
-								gui.Display("flex"),
-								gui.FlexDirection("row"),
-								gui.JustifyContent("flex-end"),
-								gui.Gap(8),
-								gui.MarginTop(4),
 								func() {
 									gui.Dialog.Close(
 										gui.PartProps{
@@ -136,6 +135,13 @@ func dialogFrame(title, description string, body *native.Node, actions *native.N
 										},
 									)
 									gui.Child(actions)
+								},
+								gui.Style{
+									Display:        "flex",
+									FlexDirection:  "row",
+									JustifyContent: "flex-end",
+									Gap:            8,
+									MarginTop:      4,
 								},
 							)
 						},
@@ -179,7 +185,7 @@ func CheckRow(label string, checked func() bool, onChange func(bool)) {
 					)
 				},
 			)
-			gui.Text(gui.FontSize(12.5), gui.Color(app.Theme().Text), label)
+			gui.Text(label, gui.Style{FontSize: 12.5, Color: app.Theme().Text})
 		},
 	)
 }
@@ -263,22 +269,17 @@ func newBranchDialog() {
 		return items
 	}
 	dialogFrame("New Branch", "", gui.View(
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.Gap(10),
 		func() {
 			gui.Text(
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
 				"Name",
+				gui.Style{FontSize: 12, FontWeight: 600, Color: app.Theme().TextSecondary},
 			)
 			gui.Input(
 				gui.Placeholder("feature/great-idea"),
 				gui.Value(func() string { return name() }),
 				gui.OnInput(func(event *native.Event) { setName(event.Value) }),
 				gui.OnSubmit(func(*native.Event) { submit() }),
-				gui.WithStyle(app.Theme().InputStyle()),
+				app.Theme().InputStyle(),
 			)
 			gui.Show(
 				func() bool { return problem() != "" || exists() },
@@ -287,14 +288,12 @@ func newBranchDialog() {
 					if text == "" {
 						text = "A branch with this name already exists."
 					}
-					gui.Text(gui.FontSize(11.5), gui.Color(app.Theme().Danger), text)
+					gui.Text(text, gui.Style{FontSize: 11.5, Color: app.Theme().Danger})
 				},
 			)
 			gui.Text(
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
 				"Based on",
+				gui.Style{FontSize: 12, FontWeight: 600, Color: app.Theme().TextSecondary},
 			)
 			gui.Select.Root(
 				gui.SelectRootProps{
@@ -317,24 +316,28 @@ func newBranchDialog() {
 				},
 				func() {
 					gui.Text(
-						gui.FontSize(13),
-						gui.Color(app.Theme().Text),
 						func() string { return base() },
+						gui.Style{FontSize: 13, Color: app.Theme().Text},
 					)
 				},
 			)
 			CheckRow("Switch to the new branch", checkout, setCheckout)
 		},
+		gui.Style{
+			Display:       "flex",
+			FlexDirection: "column",
+			Gap:           10,
+		},
 	), gui.Button(
-		gui.Disabled(!valid()),
-		gui.OnClick(func() { submit() }),
-		gui.WithStyle(app.Theme().Button("primary")),
 		func() string {
 			if checkout() {
 				return "Create and Switch"
 			}
 			return "Create"
 		},
+		gui.Disabled(!valid()),
+		gui.OnClick(func() { submit() }),
+		app.Theme().Button("primary"),
 	))
 }
 
@@ -363,16 +366,11 @@ func newWorktreeDialog() {
 		store.AddWorktree(path(), "", branch(), "")
 	}
 	dialogFrame("New Worktree", "Adds a linked working tree beside this repository.", gui.View(
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.Gap(10),
 		func() {
 			CheckRow("Create a new branch", createNew, setCreateNew)
 			gui.Text(
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
 				"Branch",
+				gui.Style{FontSize: 12, FontWeight: 600, Color: app.Theme().TextSecondary},
 			)
 			gui.Input(
 				gui.Value(func() string { return branch() }),
@@ -380,30 +378,33 @@ func newWorktreeDialog() {
 					setBranch(event.Value)
 					setPath(store.SuggestWorktreePath(event.Value))
 				}),
-				gui.WithStyle(app.Theme().InputStyle()),
+				app.Theme().InputStyle(),
 			)
 			gui.Show(
 				func() bool { return problem() != "" },
 				func() {
-					gui.Text(gui.FontSize(11.5), gui.Color(app.Theme().Danger), problem())
+					gui.Text(gui.Style{FontSize: 11.5, Color: app.Theme().Danger}, problem())
 				},
 			)
 			gui.Text(
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
 				"Path",
+				gui.Style{FontSize: 12, FontWeight: 600, Color: app.Theme().TextSecondary},
 			)
 			gui.Input(
 				gui.Value(func() string { return path() }),
 				gui.OnInput(func(event *native.Event) { setPath(event.Value) }),
-				gui.WithStyle(app.Theme().InputStyle()),
+				app.Theme().InputStyle(),
 			)
 		},
+		gui.Style{
+			Display:       "flex",
+			FlexDirection: "column",
+			Gap:           10,
+		},
 	), gui.Button(
-		gui.OnClick(func() { submit() }),
-		gui.WithStyle(app.Theme().Button("primary")),
 		"Add Worktree",
+		gui.OnClick(func() { submit() }),
+		app.Theme().Button("primary"),
 	))
 }
 
@@ -417,22 +418,24 @@ func stashDialog() {
 		store.StashPush(message(), include())
 	}
 	dialogFrame("Stash Changes", "Saves local changes and returns the working tree to HEAD.", gui.View(
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.Gap(10),
 		func() {
 			gui.Input(
 				gui.Placeholder("Optional message"),
 				gui.Value(func() string { return message() }),
 				gui.OnInput(func(event *native.Event) { setMessage(event.Value) }),
 				gui.OnSubmit(func(*native.Event) { submit() }),
-				gui.WithStyle(app.Theme().InputStyle()),
+				app.Theme().InputStyle(),
 			)
 			CheckRow("Include untracked files", include, setInclude)
 		},
+		gui.Style{
+			Display:       "flex",
+			FlexDirection: "column",
+			Gap:           10,
+		},
 	), gui.Button(
-		gui.OnClick(func() { submit() }),
-		gui.WithStyle(app.Theme().Button("primary")),
 		"Stash",
+		gui.OnClick(func() { submit() }),
+		app.Theme().Button("primary"),
 	))
 }

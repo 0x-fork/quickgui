@@ -13,51 +13,86 @@ import (
 
 // Style is the host style record, including nested interaction states.
 type Style struct {
-	GridTemplateColumns     string
-	GridTemplateRows        string
-	GridAutoFlow            string
-	GridColumnStart         any
-	GridColumnEnd           any
-	GridColumnSpan          any
-	GridRowStart            any
-	GridRowEnd              any
-	GridRowSpan             any
-	PaddingStart            any
-	PaddingEnd              any
-	MarginStart             any
-	MarginEnd               any
-	BorderTopWidth          any
-	BorderRightWidth        any
-	BorderBottomWidth       any
-	BorderLeftWidth         any
-	BorderTopLeftRadius     any
-	BorderTopRightRadius    any
-	BorderBottomLeftRadius  any
-	BorderBottomRightRadius any
-	BorderStyle             string
-	BoxShadow               string
-	TextShadow              string
-	TextDecorationLine      string
-	TextDecorationColor     any
-	TextDecorationStyle     string
-	TextDecorationThickness any
-	WordSpacing             any
-	WordBreak               string
-	OverflowWrap            string
-	Hyphens                 string
-	TextDirection           string
-	Direction               string
-	BackgroundImage         string
-	BackgroundSize          string
-	BackgroundRepeat        string
-	BackgroundPosition      string
-	Filter                  string
-	BackdropFilter          string
-	MixBlendMode            string
-	Transition              string
-	ScrollSnapType          string
-	ScrollSnapAlign         string
-	ScrollSnapStop          string
+	ObjectFit                string
+	WordWrap                 string
+	TransitionTimingFunction any
+	PaddingInlineStart       any
+	PaddingInlineEnd         any
+	MarginInlineStart        any
+	MarginInlineEnd          any
+	BorderInlineStartWidth   any
+	BorderInlineEndWidth     any
+	AspectRatio              any
+	GridColumn               any
+	GridRow                  any
+	BorderStartWidth         any
+	BorderEndWidth           any
+	Background               any
+	BackgroundGradient       any
+	TransitionProperty       any
+	TransitionDuration       any
+	TransitionEasing         any
+	TransitionMaxFps         any
+	MarkdownCodeBackground   any
+	MarkdownBorderColor      any
+	MarkdownMutedColor       any
+	MarkdownLinkColor        any
+	MarkdownCodeTextColor    any
+	MarkdownBlockGap         any
+	MarkdownCodeFontSize     any
+	ScrollToEndRevision      any
+	TextDecoration           string
+	Invalid                  *Style
+	Dragging                 *Style
+	DragOver                 *Style
+	FocusWithin              *Style
+	GroupActive              *Style
+	groupActiveRules         []groupHoverRule
+	GridTemplateColumns      any
+	GridTemplateRows         any
+	GridAutoFlow             string
+	GridColumnStart          any
+	GridColumnEnd            any
+	GridColumnSpan           any
+	GridRowStart             any
+	GridRowEnd               any
+	GridRowSpan              any
+	PaddingStart             any
+	PaddingEnd               any
+	MarginStart              any
+	MarginEnd                any
+	BorderTopWidth           any
+	BorderRightWidth         any
+	BorderBottomWidth        any
+	BorderLeftWidth          any
+	BorderTopLeftRadius      any
+	BorderTopRightRadius     any
+	BorderBottomLeftRadius   any
+	BorderBottomRightRadius  any
+	BorderStyle              string
+	BoxShadow                any
+	TextShadow               any
+	TextDecorationLine       string
+	TextDecorationColor      any
+	TextDecorationStyle      string
+	TextDecorationThickness  any
+	WordSpacing              any
+	WordBreak                string
+	OverflowWrap             string
+	Hyphens                  string
+	TextDirection            string
+	Direction                string
+	BackgroundImage          string
+	BackgroundSize           string
+	BackgroundRepeat         string
+	BackgroundPosition       string
+	Filter                   any
+	BackdropFilter           any
+	MixBlendMode             string
+	Transition               any
+	ScrollSnapType           string
+	ScrollSnapAlign          string
+	ScrollSnapStop           string
 
 	Display         string
 	Flex            any
@@ -117,12 +152,12 @@ type Style struct {
 	Right           any
 	Bottom          any
 	Left            any
-	Outline         string
+	Outline         any
 	OutlineWidth    any
 	OutlineColor    any
 	OutlineOffset   any
 	OutlineStyle    string
-	Transform       string
+	Transform       any
 	TransformOrigin string
 	Hover           *Style
 	Active          *Style
@@ -235,11 +270,105 @@ func setFlex(node *native.Node, value any) {
 	}
 }
 
+// Copy before merging so reusable themes and their nested states are never
+// mutated by a node's later or conditional styles.
+func mergeStateStyles(base, override *Style) *Style {
+	merged := &Style{}
+	if base != nil {
+		mergeStyle(merged, *base)
+	}
+	if override != nil {
+		mergeStyle(merged, *override)
+	}
+	return merged
+}
+
 func mergeStyle(target *Style, source Style) {
-	if source.GridTemplateColumns != "" {
+	*target = normalizeStyleAliases(*target)
+	source = normalizeStyleAliases(source)
+	if source.ObjectFit != "" {
+		target.ObjectFit = source.ObjectFit
+	}
+	if source.AspectRatio != nil {
+		target.AspectRatio = source.AspectRatio
+	}
+	if source.GridColumn != nil {
+		target.GridColumn = source.GridColumn
+	}
+	if source.GridRow != nil {
+		target.GridRow = source.GridRow
+	}
+	if source.BorderStartWidth != nil {
+		target.BorderStartWidth = source.BorderStartWidth
+	}
+	if source.BorderEndWidth != nil {
+		target.BorderEndWidth = source.BorderEndWidth
+	}
+	if source.Background != nil {
+		target.Background = source.Background
+	}
+	if source.BackgroundGradient != nil {
+		target.BackgroundGradient = source.BackgroundGradient
+	}
+	if source.TransitionProperty != nil {
+		target.TransitionProperty = source.TransitionProperty
+	}
+	if source.TransitionDuration != nil {
+		target.TransitionDuration = source.TransitionDuration
+	}
+	if source.TransitionEasing != nil {
+		target.TransitionEasing = source.TransitionEasing
+	}
+	if source.TransitionMaxFps != nil {
+		target.TransitionMaxFps = source.TransitionMaxFps
+	}
+	if source.MarkdownCodeBackground != nil {
+		target.MarkdownCodeBackground = source.MarkdownCodeBackground
+	}
+	if source.MarkdownBorderColor != nil {
+		target.MarkdownBorderColor = source.MarkdownBorderColor
+	}
+	if source.MarkdownMutedColor != nil {
+		target.MarkdownMutedColor = source.MarkdownMutedColor
+	}
+	if source.MarkdownLinkColor != nil {
+		target.MarkdownLinkColor = source.MarkdownLinkColor
+	}
+	if source.MarkdownCodeTextColor != nil {
+		target.MarkdownCodeTextColor = source.MarkdownCodeTextColor
+	}
+	if source.MarkdownBlockGap != nil {
+		target.MarkdownBlockGap = source.MarkdownBlockGap
+	}
+	if source.MarkdownCodeFontSize != nil {
+		target.MarkdownCodeFontSize = source.MarkdownCodeFontSize
+	}
+	if source.ScrollToEndRevision != nil {
+		target.ScrollToEndRevision = source.ScrollToEndRevision
+	}
+	if source.TextDecoration != "" {
+		target.TextDecoration = source.TextDecoration
+	}
+	if source.Invalid != nil {
+		target.Invalid = mergeStateStyles(target.Invalid, source.Invalid)
+	}
+	if source.Dragging != nil {
+		target.Dragging = mergeStateStyles(target.Dragging, source.Dragging)
+	}
+	if source.DragOver != nil {
+		target.DragOver = mergeStateStyles(target.DragOver, source.DragOver)
+	}
+	if source.FocusWithin != nil {
+		target.FocusWithin = mergeStateStyles(target.FocusWithin, source.FocusWithin)
+	}
+	if rules := groupActiveRules(source); len(rules) != 0 {
+		target.groupActiveRules = append(groupActiveRules(*target), rules...)
+		target.GroupActive = nil
+	}
+	if source.GridTemplateColumns != nil {
 		target.GridTemplateColumns = source.GridTemplateColumns
 	}
-	if source.GridTemplateRows != "" {
+	if source.GridTemplateRows != nil {
 		target.GridTemplateRows = source.GridTemplateRows
 	}
 	if source.GridAutoFlow != "" {
@@ -302,10 +431,10 @@ func mergeStyle(target *Style, source Style) {
 	if source.BorderStyle != "" {
 		target.BorderStyle = source.BorderStyle
 	}
-	if source.BoxShadow != "" {
+	if source.BoxShadow != nil {
 		target.BoxShadow = source.BoxShadow
 	}
-	if source.TextShadow != "" {
+	if source.TextShadow != nil {
 		target.TextShadow = source.TextShadow
 	}
 	if source.TextDecorationLine != "" {
@@ -350,16 +479,16 @@ func mergeStyle(target *Style, source Style) {
 	if source.BackgroundPosition != "" {
 		target.BackgroundPosition = source.BackgroundPosition
 	}
-	if source.Filter != "" {
+	if source.Filter != nil {
 		target.Filter = source.Filter
 	}
-	if source.BackdropFilter != "" {
+	if source.BackdropFilter != nil {
 		target.BackdropFilter = source.BackdropFilter
 	}
 	if source.MixBlendMode != "" {
 		target.MixBlendMode = source.MixBlendMode
 	}
-	if source.Transition != "" {
+	if source.Transition != nil {
 		target.Transition = source.Transition
 	}
 	if source.ScrollSnapType != "" {
@@ -547,25 +676,25 @@ func mergeStyle(target *Style, source Style) {
 		target.Left = source.Left
 	}
 	if source.Hover != nil {
-		target.Hover = source.Hover
+		target.Hover = mergeStateStyles(target.Hover, source.Hover)
 	}
 	if source.Active != nil {
-		target.Active = source.Active
+		target.Active = mergeStateStyles(target.Active, source.Active)
 	}
 	if source.Focus != nil {
-		target.Focus = source.Focus
+		target.Focus = mergeStateStyles(target.Focus, source.Focus)
 	}
 	if source.Disabled != nil {
-		target.Disabled = source.Disabled
+		target.Disabled = mergeStateStyles(target.Disabled, source.Disabled)
 	}
 	if source.Selected != nil {
-		target.Selected = source.Selected
+		target.Selected = mergeStateStyles(target.Selected, source.Selected)
 	}
 	if rules := groupHoverRules(source); len(rules) != 0 {
 		target.groupHoverRules = append(groupHoverRules(*target), rules...)
 		target.GroupHover = nil
 	}
-	if source.Outline != "" {
+	if source.Outline != nil {
 		target.Outline = source.Outline
 	}
 	if source.OutlineWidth != nil {
@@ -580,7 +709,7 @@ func mergeStyle(target *Style, source Style) {
 	if source.OutlineStyle != "" {
 		target.OutlineStyle = source.OutlineStyle
 	}
-	if source.Transform != "" {
+	if source.Transform != nil {
 		target.Transform = source.Transform
 	}
 	if source.TransformOrigin != "" {
@@ -604,11 +733,78 @@ func bindStyleList(node *native.Node, styles func() []Style) {
 }
 
 func applyStyle(node *native.Node, style Style) {
-	if style.GridTemplateColumns != "" {
-		setString(node, protocol.GridTemplateColumns, style.GridTemplateColumns)
+	style = normalizeStyleAliases(style)
+	if style.ObjectFit != "" {
+		setString(node, protocol.ObjectFit, style.ObjectFit)
 	}
-	if style.GridTemplateRows != "" {
-		setString(node, protocol.GridTemplateRows, style.GridTemplateRows)
+	if style.AspectRatio != nil {
+		setNumber(node, protocol.AspectRatio, style.AspectRatio)
+	}
+	if style.BorderStartWidth != nil {
+		setLength(node, protocol.BorderStartWidth, style.BorderStartWidth)
+	}
+	if style.BorderEndWidth != nil {
+		setLength(node, protocol.BorderEndWidth, style.BorderEndWidth)
+	}
+	if style.MarkdownCodeBackground != nil {
+		setColor(node, protocol.MarkdownCodeBackground, style.MarkdownCodeBackground)
+	}
+	if style.MarkdownBorderColor != nil {
+		setColor(node, protocol.MarkdownBorderColor, style.MarkdownBorderColor)
+	}
+	if style.MarkdownMutedColor != nil {
+		setColor(node, protocol.MarkdownMutedColor, style.MarkdownMutedColor)
+	}
+	if style.MarkdownLinkColor != nil {
+		setColor(node, protocol.MarkdownLinkColor, style.MarkdownLinkColor)
+	}
+	if style.MarkdownCodeTextColor != nil {
+		setColor(node, protocol.MarkdownCodeTextColor, style.MarkdownCodeTextColor)
+	}
+	if style.MarkdownBlockGap != nil {
+		setNumber(node, protocol.MarkdownBlockGap, style.MarkdownBlockGap)
+	}
+	if style.MarkdownCodeFontSize != nil {
+		setNumber(node, protocol.MarkdownCodeFontSize, style.MarkdownCodeFontSize)
+	}
+	if style.ScrollToEndRevision != nil {
+		setNumber(node, protocol.ScrollToEndRevision, style.ScrollToEndRevision)
+	}
+	if style.Invalid != nil {
+		setStateStyle(node, protocol.InvalidStyle, "invalid", style.Invalid)
+	}
+	if style.Dragging != nil {
+		setStateStyle(node, protocol.DraggingStyle, "dragging", style.Dragging)
+	}
+	if style.DragOver != nil {
+		setStateStyle(node, protocol.DragOverStyle, "dragOver", style.DragOver)
+	}
+	if style.FocusWithin != nil {
+		setStateStyle(node, protocol.FocusWithinStyle, "focusWithin", style.FocusWithin)
+	}
+	if rules := groupActiveRules(style); len(rules) != 0 {
+		setGroupStyles(node, protocol.GroupActiveStyle, "groupActive", rules)
+	}
+	if style.Background != nil {
+		bindDeclaration(node, style.Background, func(value any) { setBackground(node, value) })
+	}
+	if style.BackgroundGradient != nil {
+		bindDeclaration(node, style.BackgroundGradient, func(value any) { setBackground(node, value) })
+	}
+	if style.GridColumn != nil {
+		bindDeclaration(node, style.GridColumn, func(value any) { setGridPlacement(node, true, value) })
+	}
+	if style.GridRow != nil {
+		bindDeclaration(node, style.GridRow, func(value any) { setGridPlacement(node, false, value) })
+	}
+	if style.TextDecoration != "" {
+		applyTextDecoration(node, style.TextDecoration)
+	}
+	if style.GridTemplateColumns != nil {
+		bindDeclaration(node, style.GridTemplateColumns, func(value any) { setGridTemplate(node, protocol.GridTemplateColumns, value) })
+	}
+	if style.GridTemplateRows != nil {
+		bindDeclaration(node, style.GridTemplateRows, func(value any) { setGridTemplate(node, protocol.GridTemplateRows, value) })
 	}
 	if style.GridAutoFlow != "" {
 		setString(node, protocol.GridAutoFlow, style.GridAutoFlow)
@@ -670,11 +866,11 @@ func applyStyle(node *native.Node, style Style) {
 	if style.BorderStyle != "" {
 		setString(node, protocol.BorderStyle, style.BorderStyle)
 	}
-	if style.BoxShadow != "" {
-		setString(node, protocol.BoxShadow, style.BoxShadow)
+	if style.BoxShadow != nil {
+		bindDeclaration(node, style.BoxShadow, func(value any) { setBoxShadow(node, value) })
 	}
-	if style.TextShadow != "" {
-		setString(node, protocol.TextShadow, style.TextShadow)
+	if style.TextShadow != nil {
+		bindDeclaration(node, style.TextShadow, func(value any) { setDeclaration(node, protocol.TextShadow, value) })
 	}
 	if style.TextDecorationLine != "" {
 		setString(node, protocol.TextDecorationLine, style.TextDecorationLine)
@@ -718,18 +914,31 @@ func applyStyle(node *native.Node, style Style) {
 	if style.BackgroundPosition != "" {
 		setString(node, protocol.BackgroundPosition, style.BackgroundPosition)
 	}
-	if style.Filter != "" {
-		setString(node, protocol.Filter, style.Filter)
+	if style.Filter != nil {
+		bindDeclaration(node, style.Filter, func(value any) { setDeclaration(node, protocol.Filter, value) })
 	}
-	if style.BackdropFilter != "" {
-		setString(node, protocol.BackdropFilter, style.BackdropFilter)
+	if style.BackdropFilter != nil {
+		bindDeclaration(node, style.BackdropFilter, func(value any) { setDeclaration(node, protocol.BackdropFilter, value) })
 	}
 	if style.MixBlendMode != "" {
 		setString(node, protocol.MixBlendMode, style.MixBlendMode)
 	}
-	if style.Transition != "" {
-		setString(node, protocol.Transition, style.Transition)
+	if style.Transition != nil {
+		bindDeclaration(node, style.Transition, func(value any) { setTransition(node, value) })
 	}
+	if style.TransitionProperty != nil {
+		bindDeclaration(node, style.TransitionProperty, func(value any) { setTransitionProperties(node, value) })
+	}
+	if style.TransitionDuration != nil {
+		bindDeclaration(node, style.TransitionDuration, func(value any) { setMilliseconds(node, protocol.TransitionDuration, value) })
+	}
+	if style.TransitionEasing != nil {
+		bindDeclaration(node, style.TransitionEasing, func(value any) { setTransitionEasing(node, value) })
+	}
+	if style.TransitionMaxFps != nil {
+		setNumber(node, protocol.TransitionMaxFps, style.TransitionMaxFps)
+	}
+
 	if style.ScrollSnapType != "" {
 		setString(node, protocol.ScrollSnapType, style.ScrollSnapType)
 	}
@@ -932,8 +1141,8 @@ func applyStyle(node *native.Node, style Style) {
 	if rules := groupHoverRules(style); len(rules) != 0 {
 		setGroupHoverStyles(node, rules)
 	}
-	if style.Outline != "" {
-		applyOutlineShorthand(node, style.Outline)
+	if style.Outline != nil {
+		bindDeclaration(node, style.Outline, func(value any) { setOutline(node, value) })
 	}
 	if style.OutlineWidth != nil {
 		setLength(node, protocol.OutlineWidth, style.OutlineWidth)
@@ -947,44 +1156,27 @@ func applyStyle(node *native.Node, style Style) {
 	if style.OutlineStyle != "" {
 		setString(node, protocol.OutlineStyle, style.OutlineStyle)
 	}
-	if style.Transform != "" {
-		setString(node, protocol.Transform, style.Transform)
+	if style.Transform != nil {
+		bindDeclaration(node, style.Transform, func(value any) { setDeclaration(node, protocol.Transform, value) })
 	}
 	if style.TransformOrigin != "" {
 		setString(node, protocol.TransformOrigin, style.TransformOrigin)
 	}
 }
 
-func applyOutlineShorthand(node *native.Node, value string) {
-	for _, token := range strings.Fields(value) {
-		switch token {
-		case "solid", "dashed", "dotted", "none":
-			setString(node, protocol.OutlineStyle, token)
-		default:
-			if strings.HasSuffix(token, "px") || token == "0" {
-				setLength(node, protocol.OutlineWidth, token)
-				continue
-			}
-			if _, err := strconv.ParseFloat(token, 64); err == nil {
-				setLength(node, protocol.OutlineWidth, token)
-				continue
-			}
-			setColor(node, protocol.OutlineColor, token)
-		}
-	}
-}
-
 type encodedStateStyle struct {
-	BackgroundColor *uint32  `json:"backgroundColor,omitempty"`
-	Color           *uint32  `json:"color,omitempty"`
-	BorderColor     *uint32  `json:"borderColor,omitempty"`
-	BorderWidth     *float64 `json:"borderWidth,omitempty"`
-	BorderRadius    *float64 `json:"borderRadius,omitempty"`
-	Opacity         *float64 `json:"opacity,omitempty"`
-	Cursor          string   `json:"cursor,omitempty"`
-	Outline         string   `json:"outline,omitempty"`
-	Transform       string   `json:"transform,omitempty"`
-	TransformOrigin string   `json:"transformOrigin,omitempty"`
+	Background      string              `json:"background,omitempty"`
+	BoxShadow       *[]encodedBoxShadow `json:"boxShadow,omitempty"`
+	BackgroundColor *uint32             `json:"backgroundColor,omitempty"`
+	Color           *uint32             `json:"color,omitempty"`
+	BorderColor     *uint32             `json:"borderColor,omitempty"`
+	BorderWidth     *float64            `json:"borderWidth,omitempty"`
+	BorderRadius    *float64            `json:"borderRadius,omitempty"`
+	Opacity         *float64            `json:"opacity,omitempty"`
+	Cursor          string              `json:"cursor,omitempty"`
+	Outline         string              `json:"outline,omitempty"`
+	Transform       string              `json:"transform,omitempty"`
+	TransformOrigin string              `json:"transformOrigin,omitempty"`
 }
 
 func setStateStyle(node *native.Node, code uint16, state string, style *Style) {
@@ -1009,56 +1201,79 @@ func setStateStyle(node *native.Node, code uint16, state string, style *Style) {
 func encodeStateStyle(state string, style *Style) (encodedStateStyle, bool) {
 	encoded := encodedStateStyle{}
 	anyField := false
-	if style.BackgroundColor != nil {
-		color := native.ParseColor(styleValue(style.BackgroundColor))
+	if style.Background != nil {
+		encoded.BackgroundColor, encoded.Background = encodeBackground(resolveDeclaration(style.Background))
+		anyField = encoded.BackgroundColor != nil || encoded.Background != ""
+	}
+	if style.BackgroundGradient != nil {
+		encoded.BackgroundColor, encoded.Background = encodeBackground(resolveDeclaration(style.BackgroundGradient))
+		anyField = encoded.BackgroundColor != nil || encoded.Background != ""
+	}
+	if value := resolveDeclaration(style.BoxShadow); value != nil {
+		shadows := encodeBoxShadows(value)
+		encoded.BoxShadow = &shadows
+		anyField = true
+	}
+	if value := resolveDeclaration(style.BackgroundColor); value != nil {
+		color := native.ParseColor(value)
 		encoded.BackgroundColor = &color
 		anyField = true
 	}
-	if style.Color != nil {
-		color := native.ParseColor(styleValue(style.Color))
+	if value := resolveDeclaration(style.Color); value != nil {
+		color := native.ParseColor(value)
 		encoded.Color = &color
 		anyField = true
 	}
-	if style.BorderColor != nil {
-		color := native.ParseColor(styleValue(style.BorderColor))
+	if value := resolveDeclaration(style.BorderColor); value != nil {
+		color := native.ParseColor(value)
 		encoded.BorderColor = &color
 		anyField = true
 	}
-	if style.BorderWidth != nil {
-		width := stateLength(state, "borderWidth", styleValue(style.BorderWidth))
+	if value := resolveDeclaration(style.BorderWidth); value != nil {
+		width := stateLength(state, "borderWidth", value)
 		encoded.BorderWidth = &width
 		anyField = true
 	}
-	if style.BorderRadius != nil {
-		radius := stateLength(state, "borderRadius", styleValue(style.BorderRadius))
+	if value := resolveDeclaration(style.BorderRadius); value != nil {
+		radius := stateLength(state, "borderRadius", value)
 		encoded.BorderRadius = &radius
 		anyField = true
 	}
-	if style.Opacity != nil {
-		opacity := toFloat(styleValue(style.Opacity))
+	if value := resolveDeclaration(style.Opacity); value != nil {
+		opacity := toFloat(value)
+		if !isFinite(opacity) {
+			panic("QuickGUI state opacity must be finite")
+		}
 		encoded.Opacity = &opacity
 		anyField = true
 	}
 	if style.Cursor != "" {
+		if state == "groupHover" || state == "groupActive" || state == "focusWithin" {
+			panic("QuickGUI " + state + " cannot declare a cursor because the pointer rests on another element")
+		}
 		encoded.Cursor = style.Cursor
 		anyField = true
 	}
-	encoded.Outline = style.Outline
+	if style.Outline != nil {
+		encoded.Outline = outlineText(resolveDeclaration(style.Outline))
+	}
 	if encoded.Outline == "" && (style.OutlineWidth != nil || style.OutlineColor != nil || style.OutlineStyle != "") {
 		parts := []string{}
-		if style.OutlineWidth != nil {
-			parts = append(parts, fmt.Sprintf("%gpx", stateLength(state, "outlineWidth", styleValue(style.OutlineWidth))))
+		if value := resolveDeclaration(style.OutlineWidth); value != nil {
+			parts = append(parts, fmt.Sprintf("%gpx", stateLength(state, "outlineWidth", value)))
 		}
 		if style.OutlineStyle != "" {
 			parts = append(parts, style.OutlineStyle)
 		}
-		if style.OutlineColor != nil {
-			color := native.ParseColor(styleValue(style.OutlineColor))
+		if value := resolveDeclaration(style.OutlineColor); value != nil {
+			color := native.ParseColor(value)
 			parts = append(parts, fmt.Sprintf("#%02x%02x%02x%02x", byte(color), byte(color>>8), byte(color>>16), byte(color>>24)))
 		}
 		encoded.Outline = strings.Join(parts, " ")
 	}
-	encoded.Transform = style.Transform
+	if style.Transform != nil {
+		encoded.Transform = declarationText(resolveDeclaration(style.Transform))
+	}
 	encoded.TransformOrigin = style.TransformOrigin
 	anyField = anyField || encoded.Outline != "" || encoded.Transform != "" || encoded.TransformOrigin != ""
 	return encoded, anyField
@@ -1156,4 +1371,57 @@ func toFloat(value any) float64 {
 
 func isFinite(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+// Normalize aliases before merging so later records override the same property.
+func normalizeStyleAliases(style Style) Style {
+	if style.WordWrap != "" {
+		if style.OverflowWrap == "" {
+			style.OverflowWrap = style.WordWrap
+		}
+		style.WordWrap = ""
+	}
+	if style.TransitionTimingFunction != nil {
+		if style.TransitionEasing == nil {
+			style.TransitionEasing = style.TransitionTimingFunction
+		}
+		style.TransitionTimingFunction = nil
+	}
+	if style.PaddingInlineStart != nil {
+		if style.PaddingStart == nil {
+			style.PaddingStart = style.PaddingInlineStart
+		}
+		style.PaddingInlineStart = nil
+	}
+	if style.PaddingInlineEnd != nil {
+		if style.PaddingEnd == nil {
+			style.PaddingEnd = style.PaddingInlineEnd
+		}
+		style.PaddingInlineEnd = nil
+	}
+	if style.MarginInlineStart != nil {
+		if style.MarginStart == nil {
+			style.MarginStart = style.MarginInlineStart
+		}
+		style.MarginInlineStart = nil
+	}
+	if style.MarginInlineEnd != nil {
+		if style.MarginEnd == nil {
+			style.MarginEnd = style.MarginInlineEnd
+		}
+		style.MarginInlineEnd = nil
+	}
+	if style.BorderInlineStartWidth != nil {
+		if style.BorderStartWidth == nil {
+			style.BorderStartWidth = style.BorderInlineStartWidth
+		}
+		style.BorderInlineStartWidth = nil
+	}
+	if style.BorderInlineEndWidth != nil {
+		if style.BorderEndWidth == nil {
+			style.BorderEndWidth = style.BorderInlineEndWidth
+		}
+		style.BorderInlineEndWidth = nil
+	}
+	return style
 }

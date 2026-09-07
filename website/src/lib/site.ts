@@ -2,7 +2,7 @@ export const site = {
   name: 'QuickGUI',
   tagline: 'Build native desktop apps with Go.',
   description:
-    'Build native desktop apps with Go. Fast builds, fine-grained reactivity, GPU rendering, familiar layouts, and accessible components. No CGO required.',
+    'Build native desktop apps with Go. Fast builds, fine-grained reactivity, GPU rendering, familiar layouts, and accessible components.',
   repo: 'egoist/quickgui',
   links: {
     github: 'https://github.com/egoist/quickgui',

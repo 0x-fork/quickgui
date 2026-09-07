@@ -115,24 +115,41 @@ cargo run --release --example disclosures
 The gallery includes a standalone collapsible, single-value accordion, multiple-value accordion,
 retained closed panels, a disabled heading, and application-owned visuals.
 
-## QuickGUI UI
+## Go components
 
-`@quickgui/ui` exposes these descriptors as `Collapsible.Root` / `Collapsible.Trigger` /
-`Collapsible.Panel` and `Accordion.Root` / `Accordion.Item` / `Accordion.Header` /
-`Accordion.Trigger` / `Accordion.Panel`.
+The `ui` package exposes `ui.Collapsible.Root`, `Trigger`, and `Panel`, plus
+`ui.Accordion.Root`, `Item`, `Header`, `Trigger`, and `Panel`. Components declare
+their children in callbacks so each part receives its enclosing component context.
 
-```tsx
-<Accordion.Root value={open()} onValueChange={setOpen} multiple headingLevel={4}>
-  <Accordion.Item value="shipping">
-    <Accordion.Header>
-      <Accordion.Trigger>Shipping</Accordion.Trigger>
-    </Accordion.Header>
-    <Accordion.Panel>…</Accordion.Panel>
-  </Accordion.Item>
-</Accordion.Root>
+```go
+func ShippingDetails() {
+	open, setOpen := ui.CreateSignal([]string{"shipping"})
+	ui.Accordion.Root(
+		ui.AccordionRootProps{
+			Value:         open,
+			OnValueChange: func(value []string, _ *native.Event) { setOpen(value) },
+			Multiple:      true,
+			HeadingLevel:  4,
+		},
+		func() {
+			ui.Accordion.Item(
+				ui.AccordionItemProps{Value: "shipping"},
+				func() {
+					ui.Accordion.Header(
+						ui.PartProps{},
+						func() {
+							ui.Accordion.Trigger(ui.PartProps{}, "Shipping")
+						},
+					)
+					ui.Accordion.Panel(ui.PartProps{}, "Orders ship within two business days.")
+				},
+			)
+		},
+	)
+}
 ```
 
-The renderer owns only the controlled open value; the button semantics, expanded state, panel
-relationship, heading level, and the decision to omit or retain (`keepMounted`) a closed panel come
-from this Rust layer. Single mode replaces the open value and multiple mode toggles within the
-bounded set. See the [QuickGUI UI renderer guide](ui.md).
+The signal owns the controlled value. Button semantics, expanded state, panel
+relationships, heading level, and the decision to omit or retain a closed panel
+with `KeepMounted` come from the core. Single mode replaces the open value;
+multiple mode toggles within the bounded set. See the [Go guide](go.md).

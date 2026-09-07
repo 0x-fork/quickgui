@@ -79,6 +79,9 @@ func (checkboxAPI) Root(props CheckboxProps, children ...any) *native.Node {
 		setExplicitBool(node, protocol.Indeterminate, state == CheckedIndeterminate)
 	})
 	setListener(node, protocol.EventClick, forwardClick(props.OnClick, func(event *native.Event) {
+		if props.ReadOnly {
+			return
+		}
 		next := checked() != true
 		if props.Checked == nil {
 			uncontrolled.Write(next)
@@ -182,6 +185,9 @@ func (state *radioGroupState) current() *string {
 }
 
 func (state *radioGroupState) selectValue(next string, event *native.Event) {
+	if state.props.ReadOnly {
+		return
+	}
 	if state.props.Value == nil {
 		value := next
 		state.value.Write(&value)
@@ -249,6 +255,9 @@ func (radioAPI) Root(props RadioProps, children ...any) *native.Node {
 		setExplicitBool(node, protocol.Checked, checked())
 	})
 	setListener(node, protocol.EventClick, forwardClick(props.OnClick, func(event *native.Event) {
+		if props.ReadOnly {
+			return
+		}
 		if group != nil {
 			if props.Value != "" {
 				group.selectValue(props.Value, event)
@@ -305,6 +314,9 @@ func (switchAPI) Root(props SwitchProps, children ...any) *native.Node {
 		setExplicitBool(node, protocol.Checked, checked())
 	})
 	setListener(node, protocol.EventClick, forwardClick(props.OnClick, func(event *native.Event) {
+		if props.ReadOnly {
+			return
+		}
 		next := !checked()
 		if props.Checked == nil {
 			uncontrolled.Write(next)

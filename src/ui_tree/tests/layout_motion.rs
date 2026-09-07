@@ -870,6 +870,73 @@ fn retained_scroll_accessibility_updates_only_the_container() {
 }
 
 #[test]
+fn retained_scroll_accessibility_includes_newly_visible_nested_children() {
+    let outer = ElementId::named("outer-accessibility-scroll");
+    let inner = ElementId::named("inner-accessibility-scroll");
+    let control = ElementId::named("nested-accessibility-button");
+    let root = div()
+        .id(outer)
+        .size(100.0, 100.0)
+        .flex_col()
+        .overflow_y_scroll()
+        .child(div().h(240.0).flex_none())
+        .child(
+            div()
+                .id(inner)
+                .size(100.0, 100.0)
+                .flex_none()
+                .overflow_y_scroll()
+                .child(
+                    div()
+                        .h(300.0)
+                        .flex_none()
+                        .child(button().id(control).size(80.0, 24.0).child("Nested button")),
+                ),
+        );
+    let mut tree = UiTree::new();
+    let mut renderer = TestTextLayout;
+    tree.set_root(root, Size::new(100.0, 100.0), 1.0, &mut renderer)
+        .unwrap();
+    let mut scene = Scene::new();
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    let mut published: HashMap<_, _> = tree
+        .accessibility_update("Nested scrolling")
+        .nodes
+        .into_iter()
+        .collect();
+    assert!(!published.contains_key(&accessibility_id(control)));
+
+    for offset in [240.0, 260.0, 0.0, 240.0] {
+        tree.scroll_offsets.insert(outer, Vector::new(0.0, offset));
+        scene.clear(Color::TRANSPARENT);
+        tree.paint(&mut scene, &mut renderer).unwrap();
+        let update = tree.accessibility_scroll_update();
+        published.extend(update.nodes);
+
+        // Match an accessibility client's retention: referenced children must exist,
+        // and removing a parent reference prunes that entire subtree.
+        let mut reachable = HashSet::new();
+        let mut pending = vec![ACCESSIBILITY_ROOT_ID];
+        while let Some(id) = pending.pop() {
+            assert!(reachable.insert(id), "duplicate accessible child {id:?}");
+            let node = published.get(&id).unwrap_or_else(|| {
+                panic!("scroll offset {offset} references unpublished child {id:?}")
+            });
+            pending.extend(node.children().iter().copied());
+        }
+        published.retain(|id, _| reachable.contains(id));
+        assert!(published.contains_key(&update.focus));
+        assert_eq!(
+            published.contains_key(&accessibility_id(control)),
+            offset > 0.0,
+        );
+        if let Some(label) = published[&ACCESSIBILITY_ROOT_ID].label() {
+            assert_eq!(label, "Nested scrolling");
+        }
+    }
+}
+
+#[test]
 fn clipped_offscreen_text_keeps_bounds_without_emitting_a_text_run() {
     let text_id = ElementId::named("offscreen-text");
     let root = div().relative().size(100.0, 100.0).overflow_hidden().child(

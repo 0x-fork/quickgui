@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/protocol"
 	"github.com/egoist/quickgui/go/reactive"
 )
 
@@ -25,7 +26,7 @@ func TestKeyedComponentsRetainMultipleRootsAndDisposeRemovedRows(t *testing.T) {
 				id := read().ID
 				OnCleanup(func() { cleanups++ })
 				Text(Ref(func(node *native.Node) { refs[id] = node }), func() string { return read().Label })
-				Text(func() string { return fmt.Sprint(index()) })
+				Text(index)
 			}, func() {
 				fallbackMounts++
 				OnCleanup(func() { fallbackCleanups++ })
@@ -205,4 +206,98 @@ func blockText(node *native.Node) []string {
 		values = append(values, blockText(child)...)
 	}
 	return values
+}
+
+func TestNumericChildrenRetainTextAndDisposeBindings(t *testing.T) {
+	reactive.CreateRoot(func(dispose func()) struct{} {
+		count, setCount := CreateSignal(1000)
+		reads := 0
+		node := Text("Count: ", func() int { reads++; return count() })
+		prefix, number := node.Children[0], node.Children[1]
+		before := node.Pending.MutationCount()
+		Batch(func() { setCount(2000); setCount(3000) })
+		if prefix.Text != "Count: " || number.Text != "3000" || node.Children[1] != number || reads != 2 {
+			t.Fatal("numeric update remounted a child or changed the static prefix")
+		}
+		if got := node.Pending.MutationCount() - before; got != 1 {
+			t.Fatalf("expected one numeric text mutation per batch, got %d", got)
+		}
+		setCount(3000)
+		if node.Pending.MutationCount() != before+1 {
+			t.Fatal("unchanged value emitted a mutation")
+		}
+		dispose()
+		setCount(4000)
+		if reads != 2 || number.Text != "3000" {
+			t.Fatal("disposed numeric binding still runs")
+		}
+		return struct{}{}
+	})
+}
+
+func checkScalarChild[T comparable](t *testing.T, initial, updated T, first, second string) {
+	t.Helper()
+	reactive.CreateRoot(func(dispose func()) struct{} {
+		defer dispose()
+		value, setValue := CreateSignal(initial)
+		node := Text(initial, value, func() T { return value() })
+		for _, child := range node.Children {
+			if child.Text != first {
+				t.Fatalf("%T: expected %q, got %q", initial, first, child.Text)
+			}
+		}
+		setValue(updated)
+		if node.Children[0].Text != first || node.Children[1].Text != second || node.Children[2].Text != second {
+			t.Fatalf("%T: scalar/accessor/function children diverged: %v", initial, blockText(node))
+		}
+		return struct{}{}
+	})
+}
+
+func TestNumericChildTypes(t *testing.T) {
+	checkScalarChild(t, int(-1), int(2), "-1", "2")
+	checkScalarChild(t, int8(-128), int8(127), "-128", "127")
+	checkScalarChild(t, int16(-32768), int16(32767), "-32768", "32767")
+	checkScalarChild(t, int32(-2147483648), int32(2147483647), "-2147483648", "2147483647")
+	checkScalarChild(t, int64(-9223372036854775808), int64(9223372036854775807), "-9223372036854775808", "9223372036854775807")
+	checkScalarChild(t, uint(0), uint(123), "0", "123")
+	checkScalarChild(t, uint8(0), uint8(255), "0", "255")
+	checkScalarChild(t, uint16(0), uint16(65535), "0", "65535")
+	checkScalarChild(t, uint32(0), uint32(4294967295), "0", "4294967295")
+	checkScalarChild(t, uint64(0), uint64(18446744073709551615), "0", "18446744073709551615")
+	checkScalarChild(t, uintptr(0), uintptr(123), "0", "123")
+	checkScalarChild(t, float32(1.2), float32(-1.25), "1.2", "-1.25")
+	checkScalarChild(t, float64(1.2), float64(-1.25), "1.2", "-1.25")
+	if len(Text(nil, false, true).Children) != 0 {
+		t.Fatal("boolean children must remain hidden")
+	}
+}
+
+func BenchmarkCounterChildren(b *testing.B) {
+	for _, formatted := range []bool{false, true} {
+		name := "numeric"
+		if formatted {
+			name = "sprintf"
+		}
+		b.Run(name, func(b *testing.B) {
+			reactive.CreateRoot(func(dispose func()) struct{} {
+				defer dispose()
+				count, setCount := CreateSignal(1000)
+				var node *native.Node
+				if formatted {
+					node = Text(func() string { return fmt.Sprintf("Count: %d", count()) })
+				} else {
+					node = Text("Count: ", count)
+				}
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					setCount(1000 + i%1000)
+					node.Pending = protocol.NewBatch()
+				}
+				b.StopTimer()
+				return struct{}{}
+			})
+		})
+	}
 }

@@ -1,80 +1,98 @@
 package main
 
-import (
-	"log"
-
-	"github.com/egoist/quickgui/go/native"
-	"github.com/egoist/quickgui/go/ui"
-)
-
-func run(title string, width, height float64, component func()) {
-	if err := native.Run(func() {
-		open := func() {
-			native.NewWindow(native.WindowOptions{
-				Title:         title,
-				Width:         width,
-				Height:        height,
-				MinimumWidth:  500,
-				MinimumHeight: 380,
-				Background:    "#0b1020",
-				TitleBarStyle: "hiddenInset",
-				Component: func() {
-					ui.View(
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Width("100%"),
-						ui.Height("100%"),
-						ui.Gap(22),
-						ui.Padding(36),
-						ui.PaddingTop(52),
-						ui.BackgroundColor("#0b1020"),
-						ui.Color("#e2e8f0"),
-						func() {
-							ui.Text(ui.FontSize(22), ui.FontWeight(700), title)
-							component()
-						},
-					)
-				},
-			})
-		}
-		native.App.OnReopen(func(event native.ReopenEvent) {
-			if !event.HasVisibleWindows {
-				open()
-			}
-		})
-		open()
-	}); err != nil {
-		log.Fatal(err)
-	}
-}
+import "github.com/egoist/quickgui/go/ui"
 
 var buttonStyle = ui.Style{
 	Display:         "flex",
-	Padding:         12,
-	BorderRadius:    8,
+	Width:           "100%",
+	Height:          42,
+	AlignItems:      "center",
+	JustifyContent:  "center",
+	PaddingLeft:     16,
+	PaddingRight:    16,
 	BackgroundColor: "#2563eb",
-	Color:           "white",
-	Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-	UserSelect:      "none",
+	Color:           "#ffffff",
+	BorderRadius:    9,
+	Cursor:          "default",
 	AppRegion:       "no-drag",
+	UserSelect:      "none",
+	Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
 }
 
-func button(label string, click func(), options ...any) {
-	args := []any{ui.WithStyle(buttonStyle), ui.OnClick(func() { click() }), label}
-	args = append(args, options...)
-
-	ui.Button(args...)
-
-}
-
-func card(children ...any) {
+func card(title, description string, children func()) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Gap(16),
-		ui.Padding(24),
-		ui.BorderRadius(12),
-		ui.BackgroundColor("#151e30"),
-		children,
+		func() {
+			ui.Text(title, ui.Style{FontSize: 17, FontWeight: 700})
+			ui.Text(description, ui.Style{Color: "#9ba8bc", FontSize: 13, LineHeight: 19})
+			children()
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Flex:            1,
+			MinWidth:        0,
+			Gap:             14,
+			Padding:         20,
+			BackgroundColor: "#151a23",
+			BorderColor:     "#30394a",
+			BorderWidth:     1,
+			BorderRadius:    12,
+		},
+	)
+}
+
+func content(kind, description string, close func()) {
+	count, setCount := ui.CreateSignal(0)
+	actionStyle := ui.Style{
+		BackgroundColor: "#30394a",
+		BorderColor:     "#465166",
+		BorderWidth:     1,
+		Flex:            1,
+		Width:           0,
+		Hover:           &ui.Style{BackgroundColor: "#465166"},
+	}
+	ui.View(
+		func() {
+			ui.View(
+				func() {
+					ui.Text(kind, ui.Style{Color: "#93c5fd", FontSize: 12, FontWeight: 700})
+					ui.Text(
+						"Interactive popover content",
+						ui.Style{
+							FontSize:   19,
+							LineHeight: 24,
+							FontWeight: 700,
+						},
+					)
+					ui.Text(description, ui.Style{Color: "#aeb8c9", FontSize: 13, LineHeight: 19})
+				},
+				ui.Style{Display: "flex", FlexDirection: "column", Gap: 6},
+			)
+			ui.View(
+				func() {
+					ui.Button(
+						func() { ui.Text("Count: ", count) },
+						buttonStyle,
+						actionStyle,
+						ui.OnClick(func() { setCount(count() + 1) }),
+					)
+					ui.Button("Close", buttonStyle, actionStyle, ui.OnClick(close))
+				},
+				ui.Style{Display: "flex", Gap: 10},
+			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Width:           "100%",
+			Height:          "100%",
+			Gap:             14,
+			Padding:         20,
+			BackgroundColor: "#151a23",
+			Color:           "#f5f7fb",
+			BorderColor:     "#3b4558",
+			BorderWidth:     1,
+			BorderRadius:    12,
+		},
 	)
 }

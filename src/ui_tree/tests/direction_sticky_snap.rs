@@ -360,6 +360,53 @@ fn sticky_hit_regions_follow_the_pinned_position() {
 }
 
 #[test]
+fn sticky_headers_paint_and_receive_input_above_later_rows() {
+    let mut tree = painted(
+        div()
+            .id("scroller")
+            .size(100.0, 100.0)
+            .overflow_y_scroll()
+            .flex_col()
+            .child(
+                div().h(300.0).flex_none().flex_col().children([
+                    button()
+                        .id("header")
+                        .size(100.0, 28.0)
+                        .flex_none()
+                        .bg(Color::rgb8(200, 0, 0))
+                        .sticky_top(0.0)
+                        .child("Header"),
+                    button()
+                        .id("row")
+                        .size(100.0, 60.0)
+                        .flex_none()
+                        .bg(Color::rgb8(0, 0, 200))
+                        .child("Row"),
+                ]),
+            ),
+        Size::new(100.0, 100.0),
+    );
+    tree.scroll_offsets
+        .insert("scroller".into(), Vector::new(0.0, 20.0));
+    let mut scene = Scene::new();
+    tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+    let layer_for = |color| {
+        scene
+            .paint_layers()
+            .iter()
+            .find(|layer| layer.edge_quads().iter().any(|quad| quad.fill == color))
+            .expect("colored element must be painted")
+            .key()
+    };
+    assert!(layer_for(Color::rgb8(200, 0, 0)) > layer_for(Color::rgb8(0, 0, 200)));
+    assert_eq!(
+        tree.interactive_region_at(Point::new(50.0, 12.0))
+            .map(|region| region.id),
+        Some("header".into()),
+    );
+}
+
+#[test]
 fn sticky_declarations_are_hard_bounded_per_window() {
     let mut root = div().size(100.0, 100.0);
     for _ in 0..=MAX_STICKY_ELEMENTS_PER_WINDOW {

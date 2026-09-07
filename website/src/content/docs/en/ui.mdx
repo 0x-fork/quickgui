@@ -7,12 +7,11 @@ Every component uses `func()`, including window roots, routes, conditional branc
 ```go
 func ViewExample() {
 	ui.View(
-		ui.Padding(20),
-		ui.Gap(12),
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button(ui.OnClick(func() {}), "Continue")
+			ui.Button("Continue", ui.OnClick(func() {}))
 		},
+		ui.Style{Padding: 20, Gap: 12},
 	)
 }
 ```
@@ -21,15 +20,18 @@ func ViewExample() {
 
 Pass an accessor for changing text or properties. Calling `count()` while constructing a string captures its current value; placing the call in `func() string` keeps it reactive. Event handlers batch writes automatically. Use `ui.Batch` for a group of writes elsewhere, and `ui.CreateMemo` for derived values.
 
+String and numeric signals can be children directly: `ui.Text("Count: ", count)`. The prefix stays retained while only the number updates. Numeric bindings use `strconv`; they do not parse a format string. For a combined string property, use `strconv.Itoa(count())` and concatenation inside an accessor.
+
 ```go
 func TextExample() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(func() {
 		ui.Text(
-			ui.FontSize(20),
-			func() string { return fmt.Sprintf("Count: %d", count()) },
+			"Count: ",
+			count,
+			ui.Style{FontSize: 20},
 		)
-		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }
 ```
@@ -45,7 +47,7 @@ Capture `native.CurrentWindow()` while the component is mounting, then use the c
 ```go
 func CloseButton() {
 	window := native.CurrentWindow()
-	ui.Button(ui.OnClick(func() { window.Close() }), "Close window")
+	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
 }
 ```
 

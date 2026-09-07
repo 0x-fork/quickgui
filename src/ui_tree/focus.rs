@@ -414,7 +414,7 @@ impl UiTree {
     pub fn accessibility_update(&self, window_title: &str) -> TreeUpdate {
         let mut accessible_ids = HashSet::with_capacity(self.visible_ids.len());
         if let Some(element) = &self.root {
-            collect_accessible_ids(element, &mut accessible_ids);
+            collect_accessible_ids(element, &self.element_bounds, &mut accessible_ids);
         }
         let mut nodes = Vec::with_capacity(
             accessible_ids.len() + usize::from(self.validation_announcement.is_some()),
@@ -456,15 +456,20 @@ impl UiTree {
         }
         root.set_children(root_children);
         nodes.insert(0, (ACCESSIBILITY_ROOT_ID, root));
+        let focus = self
+            .focused
+            .filter(|id| accessible_ids.contains(id))
+            .map(accessibility_id)
+            .unwrap_or(ACCESSIBILITY_ROOT_ID);
+        *self.accessibility_snapshot.borrow_mut() = Some(AccessibilitySnapshot {
+            window_title: window_title.to_owned(),
+            accessible_ids,
+        });
         TreeUpdate {
             nodes,
             tree: Some(Tree::new(ACCESSIBILITY_ROOT_ID)),
             tree_id: TreeId::ROOT,
-            focus: self
-                .focused
-                .filter(|id| accessible_ids.contains(id))
-                .map(accessibility_id)
-                .unwrap_or(ACCESSIBILITY_ROOT_ID),
+            focus,
         }
     }
 
@@ -474,7 +479,21 @@ impl UiTree {
     pub fn accessibility_scroll_update(&self) -> TreeUpdate {
         let mut accessible_ids = HashSet::with_capacity(self.visible_ids.len());
         if let Some(element) = &self.root {
-            collect_accessible_ids(element, &mut accessible_ids);
+            collect_accessible_ids(element, &self.element_bounds, &mut accessible_ids);
+        }
+        // Nested clips can gain or lose painted descendants during a retained scroll.
+        // A container-only update would then reference unpublished children, or retain
+        // children the client has pruned. Rebuild only when this membership changes.
+        let full_update_title = {
+            let snapshot = self.accessibility_snapshot.borrow();
+            match snapshot.as_ref() {
+                Some(previous) if previous.accessible_ids == accessible_ids => None,
+                Some(previous) => Some(previous.window_title.clone()),
+                None => Some(String::new()),
+            }
+        };
+        if let Some(title) = full_update_title {
+            return self.accessibility_update(&title);
         }
         let mut nodes = Vec::with_capacity(self.scroll_offsets.len());
         if let Some(element) = &self.root

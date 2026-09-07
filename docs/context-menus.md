@@ -86,23 +86,23 @@ decorator here: the menu surface is its own native child window, so QuickGUI res
 against the display work area rather than a parent stacking context, and the popover view already
 applies the popup semantics to the caller's `render_root` result.
 
-## JavaScript bindings
+## Go components
 
-The QuickGUI UI renderer exposes this adapter as `ContextMenu.Root` / `Trigger` with a bounded JSON item
-model and an `onSelect` event carrying the declared item id. One window owns exactly one
+The `ui` package exposes this adapter as `ContextMenu.Root` / `Trigger` with a bounded JSON item
+model and an `OnSelect` event carrying the declared item id. One window owns exactly one
 `ContextMenuState`, matching the native invariant that opening a menu replaces the one already open.
 The cursor-point surface is a separate native window, so its rows are rendered by the binding from
-the declaration's `appearance` values instead of from JavaScript. See
-[QuickGUI UI renderer](ui.md#declared-popover-and-context-menus).
+the declaration's `Appearance` values instead of from Go. See
+[Go components](go.md).
 
 `ContextMenu.Root` also accepts the Base UI-shaped row components — `Menu.Item`, `Menu.LinkItem`,
 `Menu.CheckboxItem`, `Menu.RadioGroup` with `Menu.RadioItem`, `Menu.GroupLabel`, and
 `Menu.Separator` — as children of its trigger. The core paints a cursor-point menu in its own
 window, so those rows contribute a bounded model rather than owner-window elements: they mount
 nothing, the core owns their identity, checked state, radio-group exclusivity, and closing policy,
-and activation still reports through `onClick` and `onSelect`. Nested levels stay on the `items`
+and activation still reports through `OnClick` and `OnSelect`. Nested levels stay on the `Items`
 model, because a submenu the core paints has no declared popup to gather rows from. See
-[QuickGUI UI renderer](ui.md#base-ui-menu-parts).
+[Go components](go.md).
 
 ## Submenu pointer behavior
 

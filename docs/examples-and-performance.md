@@ -2,8 +2,8 @@
 
 [Documentation index](README.md)
 
-The QuickGUI UI system API example keeps desktop behavior in the Rust core while `@quickgui/native`
-projects it into JavaScript and `@quickgui/ui` renders the controls. It covers application
+The Go system API example calls the core through the in-process `native` package
+and renders its controls with `ui` components. It covers application
 identity and paths, system information and preferences, permissions, power, rich clipboard data,
 notifications, menus, desktop integrations, global shortcuts, tray icons, and window controls:
 
@@ -12,9 +12,9 @@ cd examples/system-api
 bun run dev
 ```
 
-Quick Git is a native git client built as a product rather than a demo. Its pure-TypeScript git
+Quick Git is a native git client built as a product rather than a demo. Its Go git
 layer (a bounded process runner plus porcelain v2, unified diff, log, ref, stash, and worktree
-parsers with patch formatting for partial staging) is covered by `bun test`, including real git
+parsers with patch formatting for partial staging) is covered by `CGO_ENABLED=0 go test ./...`, including real git
 runs in a temporary repository; the UI declares only the visible rows of every list through the
 core-virtualized `Table`, drafts commit messages with the Codex or Claude CLI non-interactively,
 and treats worktrees as first-class:

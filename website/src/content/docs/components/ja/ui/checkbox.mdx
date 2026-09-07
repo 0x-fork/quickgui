@@ -21,10 +21,29 @@ func CheckboxExample() {
 			Checked:         func() ui.CheckedState { return checked() },
 			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
 		},
-		func() { ui.Checkbox.Indicator(ui.PartProps{}, "✓"); ui.Text("Remember me") },
+		func() {
+			ui.Checkbox.Indicator(
+				ui.PartProps{Style: ui.Style{
+					Width: 16, Height: 16, BorderWidth: 1, BorderRadius: 4,
+					BorderColor: "#2563eb", Display: "flex",
+					AlignItems: "center", JustifyContent: "center",
+				}},
+				func() {
+					ui.Show(checked, func() {
+						ui.SVG(
+							ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="M3 6l2 2 4-4" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`),
+							ui.Style{Width: 12, Height: 12},
+						)
+					})
+				},
+			)
+			ui.Text("Remember me")
+		},
 	)
 }
 ```
+
+インジケーターには既定のスタイルがありません。この例では枠を保持し、選択時だけ SVG を表示します。`ReadOnly: true` を設定すると、フォーカスを保ちながら、ポインターやキーボード操作による値の変更を防ぎます。
 
 ## 構成
 

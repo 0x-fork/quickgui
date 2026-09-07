@@ -21,10 +21,8 @@ func SwiftUiQuickguiHostViewExample() {
 				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
 				func() {
 					ui.View(
-						ui.Width("100%"),
-						ui.Height("100%"),
-						ui.Padding(16),
 						"QuickGUI inside SwiftUI",
+						ui.Style{Width: "100%", Height: "100%", Padding: 16},
 					)
 				},
 			)

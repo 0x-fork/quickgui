@@ -698,6 +698,7 @@ pub(crate) struct UiTree {
     static_text_gesture: Option<StaticTextGesture>,
     last_static_text_click: Option<StaticTextClick>,
     accessibility_text_ids: HashMap<ElementId, AccessibilityNodeId>,
+    accessibility_snapshot: std::cell::RefCell<Option<AccessibilitySnapshot>>,
     next_accessibility_text_id: u64,
     animations: HashMap<ElementId, AnimationPlayback>,
     animation_ids: HashSet<ElementId>,

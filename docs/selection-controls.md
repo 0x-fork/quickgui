@@ -151,41 +151,58 @@ Run the caller-styled light/dark, mixed-state, disabled-state, mouse, Tab, and a
 cargo run --release --example selection_controls
 ```
 
-## QuickGUI UI
+## Go components
 
-`readOnly` is bound on `Checkbox.Root`, `Radio.Root`, `RadioGroup.Root`, and `Switch.Root`, and
-`RadioGroup.Root` also accepts `required`. It is the web's `readonly` rather than `disabled`: the
-control keeps its place in the Tab sequence and its value in the accessible name while the core
-refuses every change.
+`ReadOnly` is supported by `ui.Checkbox.Root`, `ui.Radio.Root`,
+`ui.RadioGroup.Root`, and `ui.Switch.Root`; radio groups also accept `Required`.
+A read-only control stays in the Tab sequence while the core refuses changes.
 
-A `Checkbox.Root parent` inside a `CheckboxGroup.Root` is the group's derived parent checkbox and
-needs nothing else. Standalone, `childrenChecked` declares the children's booleans and the core
-folds them into on, mixed, or off — a registry-free derivation, so no JavaScript decides what
-"mixed" means:
+`ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, ...)` inside a checkbox group
+derives its state from that group's declared values. Standalone parent checkboxes
+use a `ChildrenChecked` accessor; the core folds the values into on, mixed, or off:
 
-```tsx
-<Checkbox.Root parent childrenChecked={[true, false, true]}>
-  <Checkbox.Indicator />
-</Checkbox.Root>
+```go
+func ParentCheckbox() {
+	ui.Checkbox.Root(
+		ui.CheckboxProps{
+			Parent:          true,
+			ChildrenChecked: func() []bool { return []bool{true, false, true} },
+		},
+		func() {
+			ui.Checkbox.Indicator(ui.PartProps{})
+		},
+	)
+}
 ```
 
+Each compound part is a native node: `Checkbox.Indicator`, `Radio.Indicator`, and
+`Switch.Thumb` supply identity and behavior while the application supplies visuals.
+The core owns roles, toggle semantics, click/Space activation, focus, cursor, and
+window-drag exclusion.
 
-`@quickgui/ui` exposes these descriptors as Base-UI-shaped compound parts: `Checkbox.Root` /
-`Checkbox.Indicator`, `Radio.Root` / `Radio.Indicator` inside `RadioGroup.Root`, and `Switch.Root` /
-`Switch.Thumb`. Each part is one native node that declares which core descriptor to rebuild, so the
-role, exact on/off/mixed toggle state, click and Space activation, focus, cursor, and window-drag
-exclusion all come from this Rust layer rather than a JavaScript reimplementation.
-
-```tsx
-<Checkbox.Root checked={notify()} onCheckedChange={setNotify}>
-  <Checkbox.Indicator>{notify() === true ? "✓" : "–"}</Checkbox.Indicator>
-  <Text>Email me about releases</Text>
-</Checkbox.Root>
+```go
+func ReleaseNotification() {
+	enabled, setEnabled := ui.CreateSignal(false)
+	ui.Checkbox.Root(
+		ui.CheckboxProps{
+			Checked:         func() ui.CheckedState { return enabled() },
+			OnCheckedChange: func(value bool, _ *native.Event) { setEnabled(value) },
+		},
+		func() {
+			ui.Checkbox.Indicator(ui.PartProps{Style: ui.Style{
+				Width:           12,
+				Height:          12,
+				BackgroundColor: "#2563eb",
+			}})
+			ui.Text("Email me about releases")
+		},
+	)
+}
 ```
 
-`checked` accepts `true`, `false`, or `"indeterminate"` and maps onto `ToggleState`.
-`onCheckedChange` receives the next value and the originating event. See the
-[QuickGUI UI renderer guide](ui.md) for the full binding table.
+`Checked` returns `true`, `false`, or `ui.CheckedIndeterminate`.
+`OnCheckedChange` receives the next boolean and the originating event. See the
+[Go guide](go.md) and [components example](../examples/components).
 
 ## Read-only controls and parent checkboxes
 

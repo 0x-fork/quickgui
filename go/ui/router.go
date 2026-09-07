@@ -59,6 +59,7 @@ func buildRouteTable(routes []*RouteDeclaration) routeTable {
 		definition := native.RouteDefinition{ID: id, ParentID: parentID}
 		if declaration.Path != nil {
 			definition.Path = *declaration.Path
+			definition.Index = *declaration.Path == ""
 		}
 		table.definitions = append(table.definitions, definition)
 		rendered := append(append([]renderedRoute{}, chain...), renderedRoute{id: id, component: declaration.Component})
@@ -186,34 +187,46 @@ func Router(props RouterProps) *native.Node {
 		return matched.RouteIDs[len(matched.RouteIDs)-1]
 	})
 	return reactive.Provide(routerContext, context, func() *native.Node {
-		return Dynamic(func() Component {
+		chain := func() []renderedRoute {
 			id := leaf()
 			if id == "" {
-				return props.Fallback
+				return nil
 			}
 			chain, ok := table.chains[id]
 			if !ok {
 				panic(fmt.Sprintf("QuickGUI core returned unknown route `%s`", id))
 			}
-			return func() {
-				renderRouteChain(chain, 0)
-			}
-		})
+			return chain
+		}
+		return renderRouteBranch(chain, 0, props.Fallback)
 	})
 }
 
-func renderRouteChain(chain []renderedRoute, index int) {
-	if index >= len(chain) {
-		return
-	}
-	entry := chain[index]
-	outlet := func() { renderRouteChain(chain, index+1) }
-	outletContext.Provide(outlet, func() {
-		if entry.component == nil {
-			outlet()
-			return
+func renderRouteBranch(chain func() []renderedRoute, index int, fallback Component) *native.Node {
+	// Each outlet tracks its own route ID. Changing a descendant only replaces
+	// that outlet; common layouts keep their nodes, local state, and owners.
+	id := reactive.CreateMemo(func() string {
+		entries := chain()
+		if index < len(entries) {
+			return entries[index].id
 		}
-		entry.component()
+		return ""
+	})
+	return Dynamic(func() Component {
+		if id() == "" {
+			return fallback
+		}
+		entry := reactive.Untrack(func() renderedRoute { return chain()[index] })
+		return func() {
+			outlet := func() { renderRouteBranch(chain, index+1, nil) }
+			outletContext.Provide(outlet, func() {
+				if entry.component == nil {
+					outlet()
+					return
+				}
+				entry.component()
+			})
+		}
 	})
 }
 

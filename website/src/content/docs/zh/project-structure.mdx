@@ -21,12 +21,11 @@ my-app/
 ```go
 func ViewExample() {
 	ui.View(
-		ui.Padding(20),
-		ui.Gap(12),
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button(ui.OnClick(func() {}), "Continue")
+			ui.Button("Continue", ui.OnClick(func() {}))
 		},
+		ui.Style{Padding: 20, Gap: 12},
 	)
 }
 ```
@@ -44,6 +43,19 @@ export default defineConfig({
   entry: ".",
 });
 ```
+
+也可以使用 `quickgui.toml`，配置项相同：
+
+```toml
+name = "My App"
+identifier = "com.example.my-app"
+entry = "."
+
+[native]
+tags = ["production"]
+```
+
+CLI 优先查找 `quickgui.toml`，再查找 `quickgui.config.ts`。使用 `quickgui dev --config configs/dev.toml` 或 `quickgui build --config configs/release.toml` 可明确指定配置文件。相对路径以项目目录为基准，`dev` 会重新加载配置修改。版本号需使用字符串，例如 `version = "0.1.0"`，应用级配置项应放在 `[native]` 表之前。
 
 ## 软件包
 

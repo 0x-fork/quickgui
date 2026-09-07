@@ -33,3 +33,17 @@ func TestStreamRejectsTruncationAndProviderErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestStreamAcceptsFinalDoneWithoutBlankLine(t *testing.T) {
+	if err := readStream(strings.NewReader("data: [DONE]"), func(string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStreamRejectsNullAndOversizedMultilineRecord(t *testing.T) {
+	for _, source := range []string{"data: null\n\n", strings.Repeat("data: "+strings.Repeat("x", 2048)+"\n", 513)} {
+		if err := readStream(strings.NewReader(source), func(string) error { return nil }); err == nil {
+			t.Fatal("invalid or oversized SSE record accepted")
+		}
+	}
+}

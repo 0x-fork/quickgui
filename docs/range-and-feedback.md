@@ -357,7 +357,7 @@ technology reads. An explicit `value_text(...)` — Base UI's `getAriaValueText`
 formatter for assistive technology while the visible value part keeps the formatted string. `Meter`
 takes the same `format` and `value_text`.
 
-## JavaScript bindings
+## Go components
 
 `Progress.Root` / `Indicator` and `Meter.Root` / `Indicator` declare the value range, thresholds,
 and value text these descriptors own; the QuickGUI UI renderer contributes no measurement logic.
@@ -367,7 +367,7 @@ values, step, and pane constraints; the hosted view reaches each declared instan
 `SliderState` or `SplitterState` through a per-instance [`StateAccessor`](view-api.md), so many
 sliders and splitters in one window stay independent. Keyboard stepping, snapping, thumb ordering,
 captured pointer arithmetic, and size conservation all run in the core, and the result reaches
-JavaScript as one asynchronous `onValueChange` or `onSizesChange` payload. `Slider.Track` uses the
+Go as one asynchronous `OnValueChange` or `OnSizesChange` payload. `Slider.Track` uses the
 track's own laid-out size, which the core now delivers on `PointerEvent::size`.
 
 `NumberField.Root` / `Input` / `Increment` / `Decrement` declares the controlled value, the range,
@@ -375,11 +375,11 @@ the step, and the formatting precision; the hosted view reaches each declared in
 `NumberFieldState` through a per-instance [`StateAccessor`](view-api.md). The core owns parsing,
 clamping, formatting, and the exact stepper repeat: the binding arms the repeat on press, releases
 it on lift, and asks the window for one repaint at the deadline the core reports, so it owns no
-timer of its own. Editing text and validity travel back as one asynchronous `onValueChange`, and a
-Return that commits reports the clamped, reformatted value through `onCommit` on the input part.
+timer of its own. Editing text and validity travel back as one asynchronous `OnValueChange`, and a
+Return that commits reports the clamped, reformatted value through `OnCommit` on the input part.
 Because a control whose text does not parse into range refuses to submit, an invalid field reports
 `valid: false` and commits nothing. See
-[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[Go components](go.md).
 
 ## Resource contract
 
@@ -391,40 +391,75 @@ number field's stepper repeat, and it exists only while a stepper is held.
 State changes rebuild only when the caller's listener requests invalidation. Every component in this
 page returns a settled window to zero extra frames.
 
-## QuickGUI UI: the Base UI-aligned parts
+## Additional Go parts
 
 `Slider` gained `Label`, `Value`, `Control`, and `Indicator` (Base UI's name for the range fill)
-alongside the existing root, track, and thumb parts, plus `minStepsBetweenValues`,
-`thumbAlignment`, and a bounded `format` of `"percent"` or `"fraction"`:
+alongside the existing root, track, and thumb parts, plus `MinStepsBetweenValues`,
+`ThumbAlignment`, and a bounded `Format` of `"percent"` or `"fraction"`:
 
-```tsx
-const slider = useSliderState();
-
-<Slider.Root scope="volume" value={volume()} min={0} max={100} step={5} format="percent"
-  onValueChange={setVolume} onValueCommitted={commit}>
-  <Slider.Label scope="volume"><Text>Volume</Text></Slider.Label>
-  <Slider.Value scope="volume"><Text>{slider().displayValue}</Text></Slider.Value>
-  <Slider.Control scope="volume">
-    <Slider.Track scope="volume">
-      <Slider.Indicator scope="volume" />
-    </Slider.Track>
-  </Slider.Control>
-  <Slider.Thumb scope="volume" index={0} style={{ opacity: slider().dragging ? 0.8 : 1 }} />
-</Slider.Root>
+```go
+func VolumeSlider() {
+	volume, setVolume := ui.CreateSignal([]float64{50})
+	thumb := 0
+	ui.Slider.Root(
+		ui.SliderRootProps{
+			Value:            volume,
+			Min:              0,
+			Max:              100,
+			Step:             5,
+			Format:           "percent",
+			OnValueChange:    func(values []float64, _ *native.Event) { setVolume(values) },
+			OnValueCommitted: func(values []float64, _ *native.Event) { log.Print(values) },
+		},
+		func() {
+			slider := ui.UseSliderState()
+			ui.Slider.Label(ui.PartProps{}, "Volume")
+			ui.Slider.Value(
+				ui.PartProps{},
+				func() string {
+					if value := slider().DisplayValue; value != nil {
+						return *value
+					}
+					return ""
+				},
+			)
+			ui.Slider.Control(
+				ui.PartProps{},
+				func() {
+					ui.Slider.Track(
+						ui.PartProps{},
+						func() {
+							ui.Slider.Indicator(ui.PartProps{})
+						},
+					)
+				},
+			)
+			ui.Slider.Thumb(ui.SliderThumbProps{
+				Index: &thumb,
+				PartProps: ui.PartProps{Style: ui.Style{Opacity: func() float64 {
+					if slider().Dragging {
+						return 0.8
+					}
+					return 1
+				}}},
+			})
+		},
+	)
+}
 ```
 
-`onValueCommitted` is the core's own captured-pointer boundary, and `useSliderState().dragging` is
-its `data-dragging` flag; neither is a debounce or a guess in JavaScript. A keyboard change reports
-through `onValueChange` alone, because the core exposes no keyboard commit.
+`OnValueCommitted` is the core's own captured-pointer boundary, and `UseSliderState().Dragging` is
+its `data-Dragging` flag; neither is a debounce or a guess in Go. A keyboard change reports
+through `OnValueChange` alone, because the core exposes no keyboard commit.
 
-`NumberField` gained `Group`, `ScrubArea`, and `ScrubAreaCursor`, plus `smallStep` (Alt),
-`largeStep` (Shift), `snapOnStep`, `allowWheelScrub`, `readOnly`, `required`, `scrubDirection`,
-`scrubSensitivity`, and `onValueCommitted`. The core turns a captured drag into whole steps at the
+`NumberField` gained `Group`, `ScrubArea`, and `ScrubAreaCursor`, plus `SmallStep` (Alt),
+`LargeStep` (Shift), `SnapOnStep`, `AllowWheelScrub`, `ReadOnly`, `Required`, `ScrubDirection`,
+`ScrubSensitivity`, and `OnValueCommitted`. The core turns a captured drag into whole steps at the
 declared sensitivity, keeping the unconverted remainder so a slow drag moves one step at a time, and
-`useNumberFieldState().scrubbing` is what a caller-drawn cursor styles from. `readOnly` refuses every
-change while the control stays focusable, unlike `disabled`.
+`UseNumberFieldState().Scrubbing` is what a caller-drawn cursor styles from. `ReadOnly` refuses every
+change while the control stays focusable, unlike `Disabled`.
 
-`Progress` and `Meter` gained `Track`, `Label`, and `Value` parts and the same bounded `format`.
-`useGaugeState()` reports the core's derived `status` — `"progressing"`, `"complete"`, or
-`"indeterminate"` — the formatted `displayValue`, and the `completion` fraction. See
-[QuickGUI UI renderer](ui.md#range-and-feedback-parts).
+`Progress` and `Meter` gained `Track`, `Label`, and `Value` parts and the same bounded `Format`.
+`UseGaugeState()` reports the core's derived `Status` — `"progressing"`, `"complete"`, or
+`"indeterminate"` — the formatted `DisplayValue`, and the `Completion` fraction. See
+[Go components](go.md).

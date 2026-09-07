@@ -4,7 +4,7 @@
 
 QuickGUI implements crash reporting and process/system metrics in the Rust core
 (`quickgui-system`), re-exported from `quickgui`, and adopts that behavior in the
-`@quickgui/native` JavaScript bindings. Nothing here runs in the background unless you explicitly
+`native` Go package. Nothing here runs in the background unless you explicitly
 start the opt-in watchdog.
 
 ## Crash reporting
@@ -127,30 +127,47 @@ watchdog.heartbeat();
 
 Dropping the `Watchdog` stops and joins its thread.
 
-### JavaScript
+### Go
 
-```ts
-import { CrashReporter } from "@quickgui/native";
+`native.CrashReporter` exposes the core report store through completion callbacks.
+This captures core reports; it does not install a Go `recover` handler or convert
+unhandled Go panics into Rust panic reports. Go owns its own signal handlers, so
+the example leaves native fatal-signal capture disabled.
 
-await CrashReporter.start({
-  appName: "Demo",
-  appVersion: "1.0.0",
-  appIdentifier: "com.example.demo",
-  maxReports: 16,
-  parameters: { channel: "beta" },
-  uploadEndpoint: "https://crash.example.com/report",
-});
-
-const previous = await CrashReporter.getLastCrashReport();
-if (previous) console.error(previous.message, previous.timestamp);
-
-await CrashReporter.addExtraParameter("session", sessionId);
-const summary = await CrashReporter.uploadPending();
+```go
+func StartCrashReporting() {
+	captureSignals := false
+	native.CrashReporter.Start(
+		native.CrashReporterOptions{
+			AppName:        "Demo",
+			AppVersion:     "1.0.0",
+			AppIdentifier:  "com.example.demo",
+			MaxReports:     16,
+			Parameters:     []native.CrashParameter{{Key: "channel", Value: "beta"}},
+			CaptureSignals: &captureSignals,
+		},
+		func(directory string, err error) {
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			native.CrashReporter.GetLastCrashReport(func(report *native.CrashReport, err error) {
+				if err != nil {
+					log.Print(err)
+				} else if report != nil {
+					log.Print(report.Message, report.Timestamp)
+				}
+			})
+		},
+	)
+}
 ```
 
-Every operation returns a Promise backed by an `AsyncTask`; nothing waits on the native main
-thread. `CrashReporter.isStarted()` is a synchronous flag read. The watchdog is not exposed to
-JavaScript yet.
+`AddExtraParameter`, `RemoveExtraParameter`, and `DeleteReport` return their result
+through a `func(bool, error)` callback. `UploadPending(endpoint, done)` uploads only
+when explicitly called; an empty endpoint uses the configured endpoint.
+`IsStarted()` is a synchronous flag query returning `(bool, error)`. Operations
+that perform I/O run asynchronously; the watchdog is not exposed by the Go SDK.
 
 ## Process and system metrics
 
@@ -187,19 +204,29 @@ reports `None` rather than a guess. `CpuUsage::percent` is `None` for the first 
 interval longer than `MAX_CPU_SAMPLE_INTERVAL` (24 hours). Values are percentages of **one** core,
 so a fully busy four-core process reports `400`.
 
-```ts
-import { Metrics } from "@quickgui/native";
-
-const metrics = await Metrics.getProcessMetrics();
-const memory = await Metrics.getSystemMemory();
-
-const sampler = Metrics.createCpuSampler();
-await sampler.sample();                   // primes the sampler
-const usage = await sampler.sample();     // usage.percent covers the elapsed interval
+```go
+func ReadProcessMetrics() {
+	native.Metrics.GetProcessMetrics(func(metrics native.ProcessMetrics, err error) {
+		if err != nil {
+			log.Print(err)
+			return
+		}
+		log.Print("Resident bytes: ", metrics.ResidentBytes)
+	})
+	native.Metrics.GetSystemMemory(func(memory native.SystemMemory, err error) {
+		if err != nil {
+			log.Print(err)
+			return
+		}
+		log.Print("Available bytes: ", memory.AvailableBytes)
+	})
+}
 ```
 
-JavaScript reports byte counts and durations as plain numbers (`residentBytes`,
-`cpuUserSeconds`, `uptimeSeconds`) rather than `BigInt`, and mirrors the core's `Option` fields as
-optional properties.
+`native.NewCPUSampler()` returns a retained sampler and an error. Call `Sample()`
+at application-chosen times on the application goroutine; the first sample has a
+nil `Percent`. Call `Release()` when finished. Sampling creates no polling loop.
+Go reports byte counts as `uint64`, duration seconds as `float64`, and optional
+platform fields as pointers, preserving absence separately from a zero value.
 
 Return to the [documentation index](README.md).

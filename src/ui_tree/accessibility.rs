@@ -1,5 +1,10 @@
 use super::*;
 
+pub(super) struct AccessibilitySnapshot {
+    pub(super) window_title: String,
+    pub(super) accessible_ids: HashSet<ElementId>,
+}
+
 pub(super) struct AccessibilityBuildContext<'a> {
     pub(super) element_bounds: &'a HashMap<ElementId, Rect>,
     pub(super) scroll_offsets: &'a HashMap<ElementId, Vector>,
@@ -562,13 +567,21 @@ pub(super) fn collect_visible_ids(element: &Element, ids: &mut HashSet<ElementId
     }
 }
 
-pub(super) fn collect_accessible_ids(element: &Element, ids: &mut HashSet<ElementId>) {
-    if element.is_display_none() || element.is_visibility_hidden() || element.accessibility.hidden {
+pub(super) fn collect_accessible_ids(
+    element: &Element,
+    bounds: &HashMap<ElementId, Rect>,
+    ids: &mut HashSet<ElementId>,
+) {
+    if element.is_display_none()
+        || element.is_visibility_hidden()
+        || element.accessibility.hidden
+        || !bounds.contains_key(&element.runtime_id)
+    {
         return;
     }
     ids.insert(element.runtime_id);
     for child in &element.children {
-        collect_accessible_ids(child, ids);
+        collect_accessible_ids(child, bounds, ids);
     }
 }
 

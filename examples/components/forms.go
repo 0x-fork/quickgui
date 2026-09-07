@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ func fieldInput(value func() string, set func(string), placeholder string) ui.Fi
 func FieldDemo() {
 	email, setEmail := ui.CreateSignal("")
 	triggers, setTriggers := ui.CreateSignal("waiting for validation state")
-	invalid := func() bool { return email() != "" && !strings.Contains(email(), "@") }
+	invalid := func() bool { return !strings.Contains(email(), "@") }
 	panel("Field", "A control, its label, description, error, and validity. Validation triggers and debounce are reported by the core.", func() {
 		ui.Field.Root(
 			ui.FieldRootProps{
@@ -30,7 +31,7 @@ func FieldDemo() {
 				Invalid:                invalid,
 				Filled:                 func() bool { return email() != "" },
 				ValidationMode:         "onChange",
-				ValidationDebounceTime: 250,
+				ValidationDebounceTime: 200,
 				ValidationMessage:      func() string { return "Enter an address containing @" },
 				OnValidationChange: func(v ui.FieldValidationDetails, _ *native.Event) {
 					setTriggers(fmt.Sprintf("triggers %+v · delays %+v", v.Triggers, v.Delay))
@@ -51,7 +52,9 @@ func FieldDemo() {
 				ui.Field.Validity(
 					ui.FieldValidityProps{},
 					func() {
-						note(func() string { return fmt.Sprintf("filled %t · invalid %t", email() != "", invalid()) })
+						note(func() string {
+							return "filled " + strconv.FormatBool(email() != "") + " · invalid " + strconv.FormatBool(invalid())
+						})
 					},
 				)
 			},
@@ -87,7 +90,7 @@ func FieldsetDemo() {
 				}
 			},
 		)
-		note(func() string { return fmt.Sprintf("disabled %t · %s · %s", saving(), name(), org()) })
+		note(func() string { return "disabled " + strconv.FormatBool(saving()) + " · " + name() + " · " + org() })
 	})
 }
 func FormDemo() {
@@ -164,9 +167,11 @@ func FormDemo() {
 					func() bool { return errors() && !terms() },
 					func() {
 						ui.Text(
-							ui.FontSize(12),
-							ui.Color(color(func(p palette) string { return p.Danger })),
 							"The terms must be accepted",
+							ui.Style{
+								FontSize: 12,
+								Color:    color(func(p palette) string { return p.Danger }),
+							},
 						)
 					},
 				)
@@ -185,7 +190,7 @@ func FormDemo() {
 				})
 			},
 		)
-		note(func() string { return fmt.Sprintf("attempts %d · %s", attempts(), result()) })
+		note(func() string { return "attempts " + strconv.Itoa(attempts()) + " · " + result() })
 	})
 }
 func InputDemo() {
@@ -194,11 +199,11 @@ func InputDemo() {
 	notes, setNotes := ui.CreateSignal("Two\nlines")
 	submits, setSubmits := ui.CreateSignal(0)
 	panel("Input", "Controlled native editors: single-line, password, and multiline. Return in the first field reports submission.", func() {
-		input(text, setText, "Type and press Return", ui.Width(300), ui.OnSubmit(func(*native.Event) { setSubmits(submits() + 1) }))
-		input(secret, setSecret, "Password", ui.Width(300), ui.Password(true))
-		input(notes, setNotes, "Notes", ui.Width(420), ui.Height(96), ui.Multiline(true))
+		input(text, setText, "Type and press Return", ui.Style{Width: 300}, ui.OnSubmit(func(*native.Event) { setSubmits(submits() + 1) }))
+		input(secret, setSecret, "Password", ui.Style{Width: 300}, ui.Password(true))
+		input(notes, setNotes, "Notes", ui.Style{Width: 420, Height: 96}, ui.Multiline(true))
 		note(func() string {
-			return fmt.Sprintf("text %q · password length %d · notes %q · submits %d", text(), len(secret()), notes(), submits())
+			return "text " + strconv.Quote(text()) + " · password length " + strconv.Itoa(len(secret())) + " · notes " + strconv.Quote(notes()) + " · submits " + strconv.Itoa(submits())
 		})
 	})
 }
@@ -250,7 +255,9 @@ func NumberFieldDemo() {
 						)
 					},
 				)
-				note(func() string { return fmt.Sprintf("scrubbing %t · required %t", state().Scrubbing, state().Required) })
+				note(func() string {
+					return "scrubbing " + strconv.FormatBool(state().Scrubbing) + " · required " + strconv.FormatBool(state().Required)
+				})
 			},
 		)
 		ui.NumberField.Root(
@@ -262,7 +269,7 @@ func NumberFieldDemo() {
 			func() { label("Read-only"); numberControls() },
 		)
 		note(func() string {
-			return fmt.Sprintf("quantity %s · valid %t · committed %s", textValue(quantity()), valid(), textValue(committed()))
+			return "quantity " + textValue(quantity()) + " · valid " + strconv.FormatBool(valid()) + " · committed " + textValue(committed())
 		})
 	})
 }
@@ -431,13 +438,12 @@ func CalendarDemo() {
 			},
 			func() {
 				ui.View(
-					ui.Display("flex"),
-					ui.Gap(3),
 					func() {
 						for _, name := range []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"} {
-							ui.Text(ui.Width(32), ui.TextAlign("center"), ui.FontSize(10), name)
+							ui.Text(name, ui.Style{Width: 32, TextAlign: "center", FontSize: 10})
 						}
 					},
+					ui.Style{Display: "flex", Gap: 3},
 				)
 				ui.For(
 					func() [][]string { return monthGrid(month()) },

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/quickgui/go/native"
@@ -51,7 +51,7 @@ func AutocompleteDemo() {
 			OnInputValueChange: change(setQuery),
 		}})
 		note(func() string {
-			return fmt.Sprintf("query %q · popup %t · committed %s", query(), open(), committed())
+			return "query " + strconv.Quote(query()) + " · popup " + strconv.FormatBool(open()) + " · committed " + committed()
 		})
 	})
 }
@@ -125,7 +125,9 @@ func ComboboxDemo() {
 						)
 					},
 				)
-				note(func() string { return fmt.Sprintf("open %t · results %d", state().PopupOpen, state().ResultCount) })
+				note(func() string {
+					return "open " + strconv.FormatBool(state().PopupOpen) + " · results " + strconv.Itoa(state().ResultCount)
+				})
 			},
 		)
 		note(func() string { return "fruit " + textValue(fruit()) + " · tags [" + strings.Join(tags(), ", ") + "]" })
@@ -187,7 +189,7 @@ func SelectDemo() {
 				)
 				state := ui.UseSelectState()
 				note(func() string {
-					return fmt.Sprintf("popup %t · side %s · filled %t · touched %t", state().PopupOpen, state().PopupSide, state().Filled, state().Touched)
+					return "popup " + strconv.FormatBool(state().PopupOpen) + " · side " + state().PopupSide + " · filled " + strconv.FormatBool(state().Filled) + " · touched " + strconv.FormatBool(state().Touched)
 				})
 			},
 		)

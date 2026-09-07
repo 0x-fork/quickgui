@@ -26,9 +26,13 @@ func TestDeferredCommandWaitsForFinalResult(t *testing.T) {
 			setAppContext(1, true)
 			defer setAppContext(0, false)
 			calls := 0
+			result := "result"
+			if method == "file-icon" {
+				result = mustString(NativeImage{Data: []byte{1, 2, 3, 255}, Width: 1, Height: 1})
+			}
 			SendCommand(`{"method":"`+method+`"}`, func(value string, err error) {
 				calls++
-				if value != "result" || err != nil {
+				if value != result || err != nil {
 					t.Fatalf("result = %q, %v", value, err)
 				}
 			})
@@ -40,7 +44,11 @@ func TestDeferredCommandWaitsForFinalResult(t *testing.T) {
 			if calls != 0 {
 				t.Fatal("acceptance completed a deferred request")
 			}
-			App.dispatchHostEvent(hostEvent{kind: deferredReplyKind(method), target: fake.request, flags: 1, value: "result"})
+			if method == "file-icon" {
+				App.dispatchHostEvent(hostEvent{kind: "file-icon", target: fake.request, flags: 6, data: []byte{1, 2, 3, 255}, extra: `{"width":1,"height":1}`})
+			} else {
+				App.dispatchHostEvent(hostEvent{kind: deferredReplyKind(method), target: fake.request, flags: 1, value: result})
+			}
 			App.dispatchHostEvent(hostEvent{kind: "command", target: fake.request})
 			if calls != 1 || replyKinds[fake.request] != "" {
 				t.Fatal("result must complete exactly once and release its tracking entry")

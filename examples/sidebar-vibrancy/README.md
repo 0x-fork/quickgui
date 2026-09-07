@@ -1,6 +1,8 @@
 # sidebar-vibrancy
 
-macOS materials and active/inactive visual effect states.
+Compare all 15 macOS vibrancy materials in a translucent sidebar alongside an
+opaque content pane. Selected rows, SVG checkmarks, and live readouts track the
+material and Auto/Active/Inactive visual effect state without rebuilding the window.
 
 The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
 

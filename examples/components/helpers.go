@@ -145,69 +145,83 @@ func overlay() ui.PartProps {
 }
 func panel(title, hint string, children func()) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Gap(14),
-		ui.Padding(20),
-		ui.BorderRadius(12),
-		ui.BorderWidth(1),
-		ui.BorderColor(color(func(p palette) string { return p.Border })),
-		ui.BackgroundColor(color(func(p palette) string { return p.Panel })),
-		ui.FlexShrink(0),
 		func() {
-			ui.Text(ui.FontSize(17), ui.FontWeight(700), title)
+			ui.Text(title, ui.Style{FontSize: 17, FontWeight: 700})
 			ui.Text(
-				ui.FontSize(12),
-				ui.LineHeight(18),
-				ui.Color(color(func(p palette) string { return p.Muted })),
 				hint,
+				ui.Style{
+					FontSize:   12,
+					LineHeight: 18,
+					Color:      color(func(p palette) string { return p.Muted }),
+				},
 			)
 			children()
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Gap:             14,
+			Padding:         20,
+			BorderRadius:    12,
+			BorderWidth:     1,
+			BorderColor:     color(func(p palette) string { return p.Border }),
+			BackgroundColor: color(func(p palette) string { return p.Panel }),
+			FlexShrink:      0,
 		},
 	)
 }
 func row(children func()) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("row"),
-		ui.AlignItems("center"),
-		ui.FlexWrap("wrap"),
-		ui.Gap(10),
 		children,
+		ui.Style{
+			Display:       "flex",
+			FlexDirection: "row",
+			AlignItems:    "center",
+			FlexWrap:      "wrap",
+			Gap:           10,
+		},
 	)
 }
 func col(children func()) {
-	ui.View(ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(8), children)
+	ui.View(children, ui.Style{Display: "flex", FlexDirection: "column", Gap: 8})
 }
 func note(value any) {
 	ui.Text(
-		ui.FontSize(12),
-		ui.LineHeight(18),
-		ui.FontFamily("monospace"),
-		ui.Color(color(func(p palette) string { return p.Muted })),
 		value,
+		ui.Style{
+			FontSize:   12,
+			LineHeight: 18,
+			FontFamily: "monospace",
+			Color:      color(func(p palette) string { return p.Muted }),
+		},
 	)
 }
-func label(value any) { ui.Text(ui.FontSize(12), value) }
+func label(value any) { ui.Text(value, ui.Style{FontSize: 12}) }
 func muted(value any) {
 	ui.Text(
-		ui.FontSize(12),
-		ui.LineHeight(17),
-		ui.Color(color(func(p palette) string { return p.Muted })),
 		value,
+		ui.Style{
+			FontSize:   12,
+			LineHeight: 17,
+			Color:      color(func(p palette) string { return p.Muted }),
+		},
 	)
 }
 func button(label any, click func(), options ...any) {
-	args := []any{ui.WithStyle(controlStyle()), ui.OnClick(click)}
+	args := []any{controlStyle(), ui.OnClick(click)}
 	args = append(args, options...)
 	args = append(args, label)
 	ui.Button(args...)
 }
 func primary(label any, click func()) {
-	button(label, click, ui.BackgroundColor(color(func(p palette) string { return p.Accent })), ui.Color(color(func(p palette) string { return p.OnAccent })), ui.Hover(ui.BackgroundColor(color(func(p palette) string { return p.AccentHover }))))
+	button(label, click, ui.Style{
+		BackgroundColor: color(func(p palette) string { return p.Accent }),
+		Color:           color(func(p palette) string { return p.OnAccent }),
+		Hover:           &ui.Style{BackgroundColor: color(func(p palette) string { return p.AccentHover })},
+	})
 }
 func input(value any, set func(string), placeholder string, options ...any) {
-	args := []any{ui.WithStyle(inputStyle()), ui.Value(value), ui.Placeholder(placeholder), ui.OnInput(func(e *native.Event) { set(e.Value) })}
+	args := []any{inputStyle(), ui.Value(value), ui.Placeholder(placeholder), ui.OnInput(func(e *native.Event) { set(e.Value) })}
 	args = append(args, options...)
 	ui.Input(args...)
 }
@@ -224,26 +238,72 @@ func checkbox(props ui.CheckboxProps, caption any) {
 	if props.Style == nil {
 		props.Style = checkboxStyle()
 	}
+	if props.Checked == nil {
+		initial := props.DefaultChecked
+		if initial == nil {
+			initial = false
+		}
+		checked, setChecked := ui.CreateSignal(initial)
+		onChange := props.OnCheckedChange
+		props.Checked = checked
+		props.OnCheckedChange = func(next bool, event *native.Event) {
+			setChecked(next)
+			if onChange != nil {
+				onChange(next, event)
+			}
+		}
+	}
 	ui.Checkbox.Root(
 		props,
 		func() {
 			ui.Checkbox.Indicator(
-				ui.PartProps{Style: ui.Style{
-					Width:           16,
-					Height:          16,
-					BorderRadius:    5,
-					BorderWidth:     1,
-					BorderColor:     color(func(p palette) string { return p.Accent }),
-					BackgroundColor: color(func(p palette) string { return p.Accent }),
-					Color:           color(func(p palette) string { return p.OnAccent }),
-					Display:         "flex",
-					AlignItems:      "center",
-					JustifyContent:  "center",
-					FontSize:        11,
+				ui.PartProps{Style: func() ui.Style {
+					border, background := p().Border, p().Control
+					if props.Checked() != false {
+						border, background = p().Accent, p().Accent
+					}
+					return ui.Style{
+						Width:           16,
+						Height:          16,
+						BorderRadius:    5,
+						BorderWidth:     1,
+						BorderColor:     border,
+						BackgroundColor: background,
+						Color:           p().OnAccent,
+						Display:         "flex",
+						AlignItems:      "center",
+						JustifyContent:  "center",
+					}
 				}},
-				"✓",
+				func() {
+					ui.Show(
+						func() bool { return props.Checked() != false },
+						func() {
+							ui.SVG(
+								ui.Value(func() string {
+									path := "M3 6l2 2 4-4"
+									if props.Checked() == ui.CheckedIndeterminate {
+										path = "M3 6h6"
+									}
+									return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="` + path + `" fill="none" stroke="` + p().OnAccent + `" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+								}),
+								ui.Style{Width: 12, Height: 12, FlexShrink: 0},
+							)
+						},
+					)
+				},
 			)
 			label(caption)
 		},
 	)
+}
+
+func checkboxSelectionState(checked, total int) ui.CheckedState {
+	if checked == 0 {
+		return false
+	}
+	if checked == total {
+		return true
+	}
+	return ui.CheckedIndeterminate
 }

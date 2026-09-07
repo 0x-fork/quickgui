@@ -34,7 +34,7 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A general-purpose retained container for layout, paint, pointer input, and accessibility.",
     "parts": [],
     "keyProps": [
-      "WithStyle",
+      "Style",
       "children",
       "OnClick",
       "Ref"
@@ -48,7 +48,7 @@ export const ALL_COMPONENT_DOCS = [
     "description": "Shapes and paints Unicode text with inherited typography, selection, and accessibility.",
     "parts": [],
     "keyProps": [
-      "WithStyle",
+      "Style",
       "children",
       "Ref"
     ]
@@ -61,7 +61,7 @@ export const ALL_COMPONENT_DOCS = [
     "description": "An accessible press target that you style and compose with text or other content.",
     "parts": [],
     "keyProps": [
-      "WithStyle",
+      "Style",
       "children",
       "OnClick",
       "Disabled"
@@ -92,7 +92,7 @@ export const ALL_COMPONENT_DOCS = [
       "Value",
       "Placeholder",
       "OnInput",
-      "WithStyle"
+      "Style"
     ]
   },
   {
@@ -105,7 +105,7 @@ export const ALL_COMPONENT_DOCS = [
     "keyProps": [
       "Value",
       "Streaming",
-      "WithStyle"
+      "Style"
     ]
   },
   {
@@ -118,7 +118,7 @@ export const ALL_COMPONENT_DOCS = [
     "keyProps": [
       "Value",
       "ObjectFit",
-      "WithStyle"
+      "Style"
     ]
   },
   {
@@ -130,7 +130,7 @@ export const ALL_COMPONENT_DOCS = [
     "parts": [],
     "keyProps": [
       "Value",
-      "WithStyle"
+      "Style"
     ]
   },
   {
@@ -143,7 +143,7 @@ export const ALL_COMPONENT_DOCS = [
     "keyProps": [
       "Value",
       "ShaderParameters",
-      "WithStyle"
+      "Style"
     ]
   },
   {

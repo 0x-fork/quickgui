@@ -89,28 +89,40 @@ orderly relaunch to execute the new image, while a launched Windows installer ne
 application to leave its files and locks. Downloading is synchronous and belongs in bounded
 background work; lifecycle calls such as `cx.relaunch()` remain on the application thread.
 
-### Download progress from JavaScript
+### Download progress from Go
 
-`Updater.downloadAndStage` accepts an optional `onProgress` callback. Progress is produced on the
-worker thread that performs the download and delivered to JavaScript through a napi threadsafe
-function, so the download itself still never runs on, or waits for, the native main thread:
+`native.Updater.Stage` downloads and verifies an artifact on a native worker.
+Progress and completion return through the in-process purego callback boundary;
+neither the download nor a Go callback blocks the native main thread.
 
-```ts
-import { Updater } from "@quickgui/native";
-
-const artifact = await Updater.downloadAndStage(update, cacheDirectory, clientOptions, {
-  onProgress(progress) {
-    if (progress.phase === "downloaded" && progress.totalBytes) {
-      setPercent((progress.downloadedBytes! / progress.totalBytes) * 100);
-    }
-  },
-});
+```go
+func StageUpdate(update native.AvailableUpdate, directory string, options native.UpdateClientOptions) {
+	native.Updater.Stage(
+		update,
+		directory,
+		options,
+		func(progress native.UpdateProgress) {
+			if progress.Phase == "downloaded" && progress.TotalBytes != nil && *progress.TotalBytes > 0 {
+				percent := float64(progress.DownloadedBytes) / float64(*progress.TotalBytes) * 100
+				log.Print("Downloaded percent: ", percent)
+			}
+		},
+		func(artifact string, err error) {
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			log.Print("Verified artifact: ", artifact)
+		},
+	)
+}
 ```
 
-`progress.phase` is `download-started`, `downloaded`, `download-finished`, `verification-started`,
-`verification-finished`, or `staged`. Byte counts are plain numbers. Installation milestones
-belong to `Updater.install` and are not delivered to this callback. Without `onProgress` the call
-routes to the original `stageUpdate` binding and allocates no callback machinery.
+`Phase` is `download-started`, `downloaded`, `download-finished`,
+`verification-started`, `verification-finished`, or `staged`. Byte counts are
+`uint64`; `TotalBytes` is nil when the server supplies no length. Installation is
+an explicit `native.Updater.Install` call and does not emit stage progress.
+Pass nil for the progress callback to allocate no progress listener.
 
 ## Publishing updates from the CLI
 

@@ -20,8 +20,10 @@ func TextAreaExample() {
 		ui.Value(value),
 		ui.Placeholder("Write here"),
 		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
-		ui.Width(320),
-		ui.Height(96),
+		ui.Style{
+			Width:  320,
+			Height: 96,
+		},
 	)
 }
 ```
@@ -33,4 +35,4 @@ func TextAreaExample() {
 | `Value` | Controlled value. The precise value type follows this component’s contract. |
 | `Placeholder` | Text shown while the editable value is empty. |
 | `OnInput` | Reports native editing input. |
-| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.Style{}` | QuickGUI layout, paint, typography, and interaction-state styles. |

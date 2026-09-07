@@ -4,35 +4,31 @@ export const snippets = {
     code: `package main
 
 import (
-	"fmt"
-
 	"github.com/egoist/quickgui/go/ui"
 )
 
 func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Height("100%"),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.Gap(12),
 		func() {
-			ui.Text(func() string {
-				return fmt.Sprintf("Count: %d", count())
-			})
+			ui.Text("Count: ", count)
 			ui.Button(
-				ui.Padding(12),
-				ui.BorderRadius(8),
-				ui.BackgroundColor("#18181b"),
-				ui.Color("white"),
-				ui.OnClick(func() { setCount(count() + 1) }),
 				"Increment",
+				ui.Style{Padding: 12, BorderRadius: 8, BackgroundColor: "#18181b", Color: "white"},
+				ui.OnClick(func() { setCount(count() + 1) }),
 			)
 		},
+		ui.Style{
+			Display:        "flex",
+			FlexDirection:  "column",
+			Height:         "100%",
+			AlignItems:     "center",
+			JustifyContent: "center",
+			Gap:            12,
+		},
 	)
-}`,
+}
+`,
   },
   window: {
     lang: 'go',
@@ -64,7 +60,8 @@ func openWindow() {
 		Height:    480,
 		Component: Counter,
 	})
-}`,
+}
+`,
   },
   swiftUi: {
     lang: 'go',
@@ -79,7 +76,8 @@ func openWindow() {
 			},
 		})
 	},
-)`,
+)
+`,
   },
   cliInit: {
     lang: 'bash',

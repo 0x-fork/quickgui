@@ -3,82 +3,135 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func main() { run("Native file dialogs", 760, 580, FileDialogs) }
+func main() {
+	run(native.WindowOptions{
+		Title:         "QuickGUI File Dialogs",
+		Width:         720,
+		Height:        520,
+		MinimumWidth:  560,
+		MinimumHeight: 440,
+	}, FileDialogs)
+}
 
 func FileDialogs() {
 	window := native.CurrentWindow()
-	status, setStatus := ui.CreateSignal("Choose files, a folder, or a save destination.")
+	status, setStatus := ui.CreateSignal("Choose an open or save dialog.")
 	pending, setPending := ui.CreateSignal(false)
-	complete := func(paths []string, err error) {
+	start := func() bool {
+		if pending() {
+			return false
+		}
+		setPending(true)
+		setStatus("Waiting for the native file dialog…")
+		return true
+	}
+	complete := func(message string, err error) {
 		if window.Closed {
 			return
 		}
 		setPending(false)
 		if err != nil {
-			setStatus(err.Error())
-		} else if len(paths) == 0 {
-			setStatus("Canceled")
+			setStatus("Dialog failed: " + err.Error())
 		} else {
-			setStatus(strings.Join(paths, "\n"))
+			setStatus(message)
 		}
 	}
-	open := func(folder bool) {
-		setPending(true)
-		properties := []string{"openFile", "multiSelections"}
-		if folder {
-			properties = []string{"openDirectory"}
+	directory := func() string {
+		path, err := os.Getwd()
+		if err != nil {
+			path, _ = os.UserHomeDir()
 		}
-		native.ShowOpenDialog(
-			native.OpenDialogOptions{
-				Window:     window,
-				Title:      "Choose a destination",
-				Properties: properties,
-			},
-			func(result native.OpenDialogResult, err error) { complete(result.FilePaths, err) },
-		)
+		return path
 	}
-	save := func() {
-		home, _ := os.UserHomeDir()
-		setPending(true)
-		native.ShowSaveDialog(
-			native.SaveDialogOptions{
-				Window:      window,
-				Title:       "Save destination",
-				DefaultPath: filepath.Join(home, "notes.txt"),
-			},
-			func(result native.SaveDialogResult, err error) {
-				var paths []string
-				if !result.Canceled {
-					paths = []string{result.FilePath}
-				}
-				complete(paths, err)
-			},
-		)
-	}
-	var buttons []any
-	for _, item := range []struct {
-		label string
-		click func()
-	}{{"Open files", func() { open(false) }}, {"Open folder", func() { open(true) }}, {"Save as…", save}} {
-		buttons = append(buttons, ui.Button(
-			ui.WithStyle(buttonStyle),
-			ui.Disabled(pending),
-			ui.OnClick(func() { item.click() }),
-			item.label,
-		))
-	}
-	card(
-		ui.View(ui.Display("flex"), ui.Gap(12), buttons),
-		ui.Text(
-			ui.Color("#94a3b8"),
-			"The save panel chooses a path. This example does not write a file.",
-		),
-		ui.Text(ui.UserSelect("text"), status),
+	ui.View(
+		func() {
+			ui.Text("Open and save", ui.Style{FontSize: 26, LineHeight: 32, FontWeight: 700})
+			ui.Text(
+				"Native file panels return selected paths and cancellation state. Choosing a save destination does not write a file.",
+				ui.Style{
+					Color:      "#9aa6b7",
+					FontSize:   14,
+					LineHeight: 21,
+				},
+			)
+			ui.View(
+				func() {
+					button("Open files", pending, func() {
+						if !start() {
+							return
+						}
+						native.ShowOpenDialog(
+							native.OpenDialogOptions{
+								Window:      window,
+								Title:       "Open text files",
+								DefaultPath: directory(),
+								Filters: []native.FileDialogFilter{
+									{Name: "Text", Extensions: []string{"txt", "md"}},
+									{Name: "All files", Extensions: []string{"*"}},
+								},
+								Properties: []string{"openFile", "multiSelections"},
+							},
+							func(result native.OpenDialogResult, err error) {
+								message := "Open dialog canceled."
+								if !result.Canceled && err == nil {
+									message = "Selected " + strconv.Itoa(len(result.FilePaths)) + ": " + strings.Join(result.FilePaths, ", ")
+								}
+								complete(message, err)
+							},
+						)
+					})
+					button("Open folder", pending, func() {
+						if !start() {
+							return
+						}
+						native.ShowOpenDialog(
+							native.OpenDialogOptions{
+								Title:       "Choose a folder",
+								DefaultPath: directory(),
+								Properties:  []string{"openDirectory"},
+							},
+							func(result native.OpenDialogResult, err error) {
+								message := "Folder dialog canceled."
+								if !result.Canceled && len(result.FilePaths) > 0 {
+									message = "Selected folder: " + result.FilePaths[0]
+								}
+								complete(message, err)
+							},
+						)
+					})
+					button("Save file", pending, func() {
+						if !start() {
+							return
+						}
+						native.ShowSaveDialog(
+							native.SaveDialogOptions{
+								Window:      window,
+								Title:       "Choose a save destination",
+								DefaultPath: filepath.Join(directory(), "quickgui-example.txt"),
+								Filters:     []native.FileDialogFilter{{Name: "Text", Extensions: []string{"txt"}}},
+							},
+							func(result native.SaveDialogResult, err error) {
+								message := "Save dialog canceled."
+								if !result.Canceled && err == nil {
+									message = "Save destination: " + result.FilePath + " (no file was written)"
+								}
+								complete(message, err)
+							},
+						)
+					})
+				},
+				ui.Style{Display: "flex", FlexWrap: "wrap", Gap: 10},
+			)
+			dialogStatus(status, pending)
+		},
+		panelStyle,
+		ui.Style{MaxWidth: 520},
 	)
 }

@@ -12,11 +12,13 @@ func resizeDivider(label string, width func() float64, setWidth func(float64)) {
 		gui.AriaLabel(label),
 		gui.HitSlopLeft(4),
 		gui.HitSlopRight(4),
-		gui.Width(1),
-		gui.FlexShrink(0),
-		gui.Cursor("col-resize"),
-		gui.AppRegion("no-drag"),
-		gui.BackgroundColor(UseApp().Theme().Border),
+		gui.Style{
+			Width:           1,
+			FlexShrink:      0,
+			Cursor:          "col-resize",
+			AppRegion:       "no-drag",
+			BackgroundColor: UseApp().Theme().Border,
+		},
 		gui.OnPointer(func(event *native.Event) {
 			pointer := gui.CapturedPointerFromEvent(event)
 			if pointer == nil || pointer.Button != "left" {

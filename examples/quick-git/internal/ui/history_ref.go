@@ -14,24 +14,28 @@ func commitRefBadge(ref git.CommitRef) {
 		background, color = theme.WarningWash, theme.Warning
 	}
 	gui.View(
-		gui.Display("flex"),
-		gui.Height(16),
-		gui.MinWidth(0),
-		gui.MaxWidth(140),
-		gui.AlignItems("center"),
-		gui.PaddingLeft(5),
-		gui.PaddingRight(5),
-		gui.BorderRadius(4),
-		gui.BackgroundColor(background),
 		func() {
 			gui.Text(
-				gui.FontSize(10.5),
-				gui.FontWeight(700),
-				gui.Color(color),
-				gui.LineClamp(1),
-				gui.TextOverflow("ellipsis"),
 				ref.Name,
+				gui.Style{
+					FontSize:     10.5,
+					FontWeight:   700,
+					Color:        color,
+					LineClamp:    1,
+					TextOverflow: "ellipsis",
+				},
 			)
+		},
+		gui.Style{
+			Display:         "flex",
+			Height:          16,
+			MinWidth:        0,
+			MaxWidth:        140,
+			AlignItems:      "center",
+			PaddingLeft:     5,
+			PaddingRight:    5,
+			BorderRadius:    4,
+			BackgroundColor: background,
 		},
 	)
 }
@@ -55,14 +59,6 @@ func commitRefs(read func() []git.CommitRef) {
 		func() bool { return len(visible()) > 0 },
 		func() {
 			gui.View(
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.MinWidth(0),
-				gui.MaxWidth("48%"),
-				gui.FlexShrink(1),
-				gui.Overflow("hidden"),
-				gui.Gap(4),
 				func() {
 					gui.For(
 						visible,
@@ -70,6 +66,16 @@ func commitRefs(read func() []git.CommitRef) {
 						func(ref git.CommitRef) any { return string(ref.Kind) + ":" + ref.Name },
 						nil,
 					)
+				},
+				gui.Style{
+					Display:       "flex",
+					FlexDirection: "row",
+					AlignItems:    "center",
+					MinWidth:      0,
+					MaxWidth:      "48%",
+					FlexShrink:    1,
+					Overflow:      "hidden",
+					Gap:           4,
 				},
 			)
 		},

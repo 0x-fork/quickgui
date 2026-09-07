@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/quickgui/go/native"
@@ -53,18 +54,20 @@ func ScrollAreaDemo() {
 									Display:       "flex",
 									FlexDirection: "column",
 									PaddingLeft:   10,
-									Transform:     fmt.Sprintf("translateY(%gpx)", -state().Offset.Y),
+									Transform:     "translateY(" + strconv.FormatFloat(-state().Offset.Y, 'g', -1, 64) + "px)",
 								}
 							}},
 							func() {
 								for i := range 40 {
 									ui.Text(
-										ui.FontSize(12),
-										ui.Height(22),
-										ui.FlexShrink(0),
-										ui.LineHeight(22),
-										ui.Color(color(func(p palette) string { return p.Muted })),
-										fmt.Sprintf("log line %d", i+1),
+										"log line "+strconv.Itoa(i+1),
+										ui.Style{
+											FontSize:   12,
+											Height:     22,
+											FlexShrink: 0,
+											LineHeight: 22,
+											Color:      color(func(p palette) string { return p.Muted }),
+										},
 									)
 								}
 							},
@@ -99,7 +102,7 @@ func ScrollAreaDemo() {
 		)
 		note(func() string {
 			s := state()
-			return fmt.Sprintf("offset %.0f · scrolling %t · overflow %t · start %t · end %t", s.Offset.Y, s.Scrolling, s.HasOverflowY, s.OverflowYStart, s.OverflowYEnd)
+			return "offset " + strconv.FormatFloat(s.Offset.Y, 'f', 0, 64) + " · scrolling " + strconv.FormatBool(s.Scrolling) + " · overflow " + strconv.FormatBool(s.HasOverflowY) + " · start " + strconv.FormatBool(s.OverflowYStart) + " · end " + strconv.FormatBool(s.OverflowYEnd)
 		})
 	})
 }
@@ -167,12 +170,12 @@ func TableDemo() {
 				OnColumnResize: func(next []ui.ColumnWidth, _ *native.Event) {
 					parts := []string{}
 					for _, entry := range next {
-						parts = append(parts, fmt.Sprintf("%s %.0f", entry.ID, entry.Width))
+						parts = append(parts, entry.ID+" "+strconv.FormatFloat(entry.Width, 'f', 0, 64))
 					}
 					setWidths(strings.Join(parts, ", "))
 				},
 				OnActivate: func(cell ui.TableCell, _ *native.Event) {
-					setActivated(fmt.Sprintf("row %d, column %d", cell.Row, cell.Column))
+					setActivated("row " + strconv.Itoa(cell.Row) + ", column " + strconv.Itoa(cell.Column))
 				},
 				PartProps: ui.PartProps{Style: ui.Style{
 					Height:          260,
@@ -233,7 +236,7 @@ func TableDemo() {
 										}},
 									},
 									func() {
-										muted(func() string { return fmt.Sprintf("%d KB", entry().Asset.Size) })
+										muted(func() string { return strconv.Itoa(entry().Asset.Size) + " KB" })
 									},
 								)
 							},
@@ -342,7 +345,7 @@ func TreeDemo() {
 			},
 		)
 		note(func() string {
-			return fmt.Sprintf("expanded [%s] · selected %s · activated %s · load requests %d", strings.Join(expanded(), ", "), textValue(selected()), activated(), asked())
+			return "expanded [" + strings.Join(expanded(), ", ") + "] · selected " + textValue(selected()) + " · activated " + activated() + " · load requests " + strconv.Itoa(asked())
 		})
 	})
 }

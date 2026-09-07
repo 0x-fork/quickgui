@@ -3,7 +3,7 @@
 [Documentation index](README.md)
 
 QuickGUI exposes native power services from `quickgui-system`; they do not depend on a renderer or
-JavaScript host. A `PowerAssertion` is an RAII process resource. Dropping or explicitly releasing it
+Go frontend. A Rust `PowerAssertion` is an RAII process resource. Dropping or explicitly releasing it
 removes the corresponding native assertion:
 
 ```rust

@@ -2,6 +2,7 @@ package native
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/egoist/quickgui/go/host"
@@ -33,6 +34,120 @@ func TestEncodeWindowOptionsSendsEmbeddedChrome(t *testing.T) {
 	}
 	if payload["transparent"] != true {
 		t.Fatalf("transparent %v", payload["transparent"])
+	}
+}
+
+func TestWindowOptionsPreserveExplicitZeroFalseAndCompoundDeclarations(t *testing.T) {
+	zero, no := 0.0, false
+	options := WindowOptions{
+		Position: &Point{}, DisableMinimumSize: true, MinimumSize: &Size{Width: 400, Height: 300},
+		MaximumSize: &Size{Width: 1000, Height: 800}, Focus: &no, Resizable: &no, Opacity: &zero,
+		BackgroundAppearance: "opaque", Blur: &no, CursorPosition: &Point{},
+		TaskbarProgress: &TaskbarProgress{State: "normal", Progress: 0},
+		TaskbarOverlay:  &TaskbarOverlay{Icon: ImageSource{Path: "/icon.png"}, Description: "Download"},
+		Offset:          &Point{X: 0, Y: 8}, AcceptsKeyFocus: &no,
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(mustString(encodeWindowOptions(options))), &payload); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]any{"x": 0.0, "y": 0.0, "minimumSizeEnabled": false, "maximumWidth": 1000.0, "focus": false, "resizable": false, "opacity": 0.0, "cursorX": 0.0, "taskbarProgress": 0.0, "transparent": false, "blur": false, "popoverOffsetX": 0.0, "popoverOffsetY": 8.0, "popoverAcceptsKeyFocus": false} {
+		if got, present := payload[key]; !present || got != want {
+			t.Fatalf("%s = %v (present %v), want %v", key, got, present, want)
+		}
+	}
+	if _, present := payload["minimumWidth"]; present {
+		t.Fatal("disabled minimum size retained a minimum")
+	}
+	if payload["taskbarOverlayDescription"] != "Download" {
+		t.Fatal("overlay description was lost")
+	}
+}
+
+func TestWindowStateIncludesGeometryCursorAndNativeTabs(t *testing.T) {
+	fake := installCommandHost(t)
+	window := &Window{NodeHost: NewNodeHost(1, 2)}
+	var state WindowState
+	window.GetState(func(value WindowState, err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		state = value
+	})
+	replyCommand(fake, "command", `{"x":-20,"y":0,"width":800,"height":600,"viewportWidth":800,"viewportHeight":572,"minimumWidth":200,"minimumHeight":100,"cursorX":0,"cursorY":0,"nativeTabCount":2,"nativeSelectedTab":0,"nativeTabBarVisible":true,"scaleFactor":2,"windowLevel":"floating","focusable":false}`, "")
+	if state.Bounds.X != -20 || state.ViewportSize.Height != 572 || state.MinimumSize == nil || state.MinimumSize.Width != 200 || state.CursorPosition == nil || *state.CursorPosition != (Point{}) || state.NativeTabs.Count != 2 || state.NativeTabs.SelectedIndex == nil || *state.NativeTabs.SelectedIndex != 0 || !state.NativeTabs.TabBarVisible || state.WindowLevel != "floating" {
+		t.Fatalf("incomplete snapshot: %+v", state)
+	}
+}
+
+func TestWindowInterceptionAndEventPayloadsHaveNativeParity(t *testing.T) {
+	fake := installCommandHost(t)
+	window := &Window{NodeHost: NewNodeHost(1, 2)}
+	window.NativeReady = true
+	var events []WindowEventName
+	stop := window.OnCloseRequested(func(w *Window) {
+		if CurrentWindow() != w {
+			t.Fatal("close lost window context")
+		}
+		events = append(events, WindowCloseRequested)
+	})
+	if !window.closeIntercepting {
+		t.Fatal("native close was not intercepted")
+	}
+	window.didRequestClose()
+	stop()
+	window.didRequestClose()
+	if window.closeIntercepting || !reflect.DeepEqual(events, []WindowEventName{WindowCloseRequested}) {
+		t.Fatal("close interception did not follow its subscriptions")
+	}
+	window.On(WindowResize, func(event WindowEvent) {
+		if event.Size == nil || event.Size.Width != 321 {
+			t.Fatal("resize dimensions lost")
+		}
+		events = append(events, event.Type)
+	})
+	window.On(WindowOcclusionChange, func(event WindowEvent) {
+		if event.Occluded == nil || *event.Occluded {
+			t.Fatal("false occlusion lost")
+		}
+		events = append(events, event.Type)
+	})
+	window.didObserveLifecycle("window-resize", `{"width":321,"height":123}`)
+	window.didObserveLifecycle("window-occlusion", "false")
+	window.SetTitle("")
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(fake.payload), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if value, present := payload["value"]; !present || value != "" {
+		t.Fatal("empty title was omitted")
+	}
+	if len(events) != 3 {
+		t.Fatal("missing window lifecycle event")
+	}
+}
+
+func TestFailedComponentConstructionDisposesOwnersAndMenus(t *testing.T) {
+	fake := &windowHost{}
+	defer host.Install(fake)()
+	previous := App
+	App = &Application{NativeID: 1, ready: true}
+	defer func() { App = previous; pendingFlush = nil }()
+	cleanups := 0
+	before := len(menuCallbacks)
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("component panic was swallowed")
+			}
+		}()
+		NewWindow(WindowOptions{
+			Menu:      []MenuDefinition{{Label: "File", Items: []MenuItem{{Label: "Action", Click: func() {}}}}},
+			Component: func() { reactive.OnCleanup(func() { cleanups++ }); CreateText("partial"); panic("mount failed") },
+		})
+	}()
+	if cleanups != 1 || len(menuCallbacks) != before || fake.created != 0 || len(App.Windows) != 0 {
+		t.Fatal("failed window creation leaked resources")
 	}
 }
 
@@ -78,5 +193,39 @@ func TestWindowOwnsComponentLifetime(t *testing.T) {
 	setValue("after close")
 	if effects != 2 || cleanups != 1 || window.Root != nil || len(App.Windows) != 0 || fake.closed != 0 {
 		t.Fatal("window closure did not dispose the component exactly once")
+	}
+}
+
+func TestDeferredBindingsKeepTheirOwningWindow(t *testing.T) {
+	fake := &windowHost{}
+	defer host.Install(fake)()
+	previous := App
+	App = &Application{NativeID: 1, ready: true}
+	defer func() { App = previous; pendingFlush = nil }()
+	value, setValue := reactive.CreateSignal(0)
+	var observed *Window
+	var events subscriptions[struct{}]
+	window := NewWindow(WindowOptions{Component: func() {
+		node := CreateText("")
+		node.Bind(func() {
+			value()
+			observed = CurrentWindow()
+			events.add(func(struct{}) { observed = CurrentWindow() })
+		})
+	}})
+	defer App.didCloseWindow(window)
+	setValue(1)
+	if observed != window {
+		t.Fatal("deferred binding lost its window")
+	}
+	other := &Window{NodeHost: NewNodeHost(1, 99)}
+	withCurrentWindow(other, func() { setValue(2) })
+	if observed != window {
+		t.Fatal("cross-window update adopted the event sender's window")
+	}
+	observed = nil
+	events.emit(struct{}{})
+	if observed != window || currentWindow != nil {
+		t.Fatal("callback lost or leaked its captured window")
 	}
 }

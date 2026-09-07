@@ -7,12 +7,11 @@ Go 组件创建保留式原生节点。信号让每个绑定订阅它所读取�
 ```go
 func ViewExample() {
 	ui.View(
-		ui.Padding(20),
-		ui.Gap(12),
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button(ui.OnClick(func() {}), "Continue")
+			ui.Button("Continue", ui.OnClick(func() {}))
 		},
+		ui.Style{Padding: 20, Gap: 12},
 	)
 }
 ```
@@ -21,15 +20,18 @@ func ViewExample() {
 
 动态文本或属性应传入访问器。在构造字符串时调用 `count()` 只会捕获当前值；放入 `func() string` 才会保持响应式。事件处理器会自动批处理写入；其他位置可用 `ui.Batch` 合并写入，用 `ui.CreateMemo` 创建派生值。
 
+字符串和数字信号可以直接作为子节点：`ui.Text("Count: ", count)`。前缀会保留，只有数字文本会更新。数字绑定使用 `strconv`，无需解析格式字符串。需要单个字符串的属性可以在访问器中使用 `strconv.Itoa(count())` 和字符串拼接。
+
 ```go
 func TextExample() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(func() {
 		ui.Text(
-			ui.FontSize(20),
-			func() string { return fmt.Sprintf("Count: %d", count()) },
+			"Count: ",
+			count,
+			ui.Style{FontSize: 20},
 		)
-		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }
 ```
@@ -45,7 +47,7 @@ func TextExample() {
 ```go
 func CloseButton() {
 	window := native.CurrentWindow()
-	ui.Button(ui.OnClick(func() { window.Close() }), "Close window")
+	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
 }
 ```
 

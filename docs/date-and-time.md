@@ -184,7 +184,7 @@ an item registry, allocation-sized event payload, task, timer, observer, animati
 idle scheduler source, and none can produce a deadline. State changes rebuild only when the caller's
 listener requests invalidation, so a settled window renders zero extra frames.
 
-## JavaScript bindings
+## Go components
 
 `DateField.Root` / `Segment`, `TimeField.Root` / `Segment`, and `Calendar.Root` / `Week` / `Day`
 declare the controlled civil value, the civil bounds, the segment order, the twelve-hour and
@@ -196,8 +196,8 @@ The hosted view reaches each declared instance's retained `DateFieldState`, `Tim
 `CalendarState` through a per-instance [`StateAccessor`](view-api.md). Segment arithmetic, digit
 entry, leap years, clamping into the declared range, day and week movement, month and year
 movement, and the single Tab stop all stay in the core; the value it decided travels back as one
-asynchronous `onValueChange`, and a month grid additionally reports the focused day and the
+asynchronous `OnValueChange`, and a month grid additionally reports the focused day and the
 displayed month. A time-field segment the core does not own — the seconds segment of a field
-without `showSeconds`, or the period segment of a twenty-four-hour field — contributes no layout,
+without `ShowSeconds`, or the period segment of a twenty-four-hour field — contributes no layout,
 paint, or accessibility node. See the
-[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[Go components](go.md).

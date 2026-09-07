@@ -557,7 +557,7 @@ func (swiftUIAPI) QuickGUIHostView(props SwiftUIQuickGUIHostViewProps, children 
 			horizontal,
 			vertical,
 		)
-		setNumber(node, protocol.SwiftUIEmbeddedWindow, embedded.NativeID)
+		setNumber(node, protocol.SwiftUIEmbeddedWindow, float64(embedded.NativeID))
 		parent.Flush()
 		embedded.OnClose(func(*native.Window) {
 			embedded = nil

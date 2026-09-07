@@ -620,46 +620,69 @@ There is no polling, animation loop, or deadline while the pointer is stationary
 `cargo run --release --example drag_drop` for public formats and
 `cargo run --release --example multi_window` for arbitrary cross-window values.
 
-## JavaScript bindings
+## Go components
 
-The QuickGUI UI renderer declares each of these listeners ahead of the core's decision:
-`onKeyDown`/`onKeyUp`, `onMouseDown`/`onMouseUp`/`onMouseMove`, `onDoubleClick` (the second press of
-one exact native multi-click sequence), `onWheel`, `onContextMenu`, `onPinch`, `onRotate`,
-`onSmartMagnify`, `onPressure`, `onFocus`/`onBlur`, and the drag/drop pair `draggable` + `dropKinds`
-with `onDragStart`/`onDragEnd`/`onDrop`/`onFilesDropped`. A bounded `keymap` prop resolves
-Electron-shaped accelerators through `Accelerator::parse` and dispatches one `onAction` event with
-the declared binding id. Payloads are bounded asynchronous JSON, and a declared `tabIndex` makes an
-ordinary container focusable. `onDragOver` is not bound because drag hovering is reported on the
+The `ui` package declares each of these listeners ahead of the core's decision:
+`OnKeyDown`/`OnKeyUp`, `OnMouseDown`/`OnMouseUp`/`OnMouseMove`, `OnDoubleClick` (the second press of
+one exact native multi-click sequence), `OnWheel`, `OnContextMenu`, `OnPinch`, `OnRotate`,
+`OnSmartMagnify`, `OnPressure`, `OnFocus`/`OnBlur`, and the drag/drop pair `Draggable` + `DropKinds`
+with `OnDragStart`/`OnDragEnd`/`OnDrop`/`OnFilesDropped`. A bounded `Keymap` prop resolves
+Electron-shaped accelerators through `Accelerator::parse` and dispatches one `OnAction` event with
+the declared binding id. Payloads are bounded asynchronous JSON, and a declared `TabIndex` makes an
+ordinary container focusable. `OnDragOver` is not bound because drag hovering is reported on the
 window rather than through a per-element listener, and physical key `code` values are not reported
 because the core normalizes keys to a layout-independent command identity. See
-[QuickGUI UI renderer](ui.md#keyboard-mouse-gesture-and-drag-events).
+[Go components](go.md).
 
-## QuickGUI UI: the tooltip compound
+## Go tooltip component
 
-`Element::tooltip` is bound as the `tooltip` prop every native node accepts. The composable
+`Element::Tooltip` is bound as the `Tooltip` prop every native node accepts. The composable
 `TooltipProvider`/`TooltipState` compound is bound separately as `Tooltip`:
 
-```tsx
-<Tooltip.Provider delay={600} closeDelay={200} timeout={400}>
-  <Tooltip.Root trackCursorAxis="x" hoverable>
-    <Tooltip.Trigger delay={120} closeOnClick={false}>Save</Tooltip.Trigger>
-    <Tooltip.Positioner side="top" sideOffset={7} collisionPadding={8}>
-      <Tooltip.Popup>
-        <Text>Save the current draft</Text>
-        <Tooltip.Arrow />
-      </Tooltip.Popup>
-    </Tooltip.Positioner>
-  </Tooltip.Root>
-</Tooltip.Provider>
+```go
+func SaveTooltip() {
+	hoverable, closeOnClick := true, false
+	gap, margin := 7.0, 8.0
+	ui.Tooltip.Provider(
+		ui.TooltipProviderProps{Delay: 600, CloseDelay: 200, Timeout: 400},
+		func() {
+			ui.Tooltip.Root(
+				ui.TooltipRootProps{TrackCursorAxis: "x", Hoverable: &hoverable},
+				func() {
+					ui.Tooltip.Trigger(
+						ui.TooltipTriggerProps{Delay: 120, CloseOnClick: &closeOnClick},
+						"Save",
+					)
+					ui.Tooltip.Positioner(
+						ui.TooltipPositionerProps{
+							Side:             "top",
+							SideOffset:       &gap,
+							CollisionPadding: &margin,
+						},
+						func() {
+							ui.Tooltip.Popup(
+								ui.PartProps{},
+								func() {
+									ui.Text("Save the current draft")
+									ui.Tooltip.Arrow(ui.PartProps{})
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 The trigger is the one part mounted whether the tooltip is open or closed, so `Tooltip.Root` and
 `Tooltip.Positioner` route their declarations onto it; the portal, positioner, popup, and arrow are
-mounted only while the core holds the tooltip open. `disabled` cancels any pending deadline and
+mounted only while the core holds the tooltip open. `Disabled` cancels any pending deadline and
 closes while the trigger stays focusable, Escape dismissal belongs to the core, and
-`useTooltipPlacement()` reports the side and alignment it really resolved to.
+`UseTooltipPlacement()` reports the side and alignment it really resolved to.
 
 One shared provider makes an adjacent trigger open instantly while the group stays warm, and that
 warm window is itself one exact deadline, so a settled group owns no task or timer. Unlike Base UI's
 DOM-less provider, `Tooltip.Provider` is one ordinary element — which is also where the group's
-deadlines are declared. See [QuickGUI UI renderer](ui.md#tooltips).
+deadlines are declared. See [Go components](go.md).

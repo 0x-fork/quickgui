@@ -335,6 +335,24 @@ pub(super) fn paint_selectable_text(
     }
 }
 
+fn element_paint_layer(element: &Element, parent: PaintLayerKey) -> PaintLayerKey {
+    let plane = element.plane.unwrap_or(parent.plane);
+    // A pinned header and its children must cover later in-flow siblings. Keep
+    // explicitly declared stacking orders, and use this same layer for hit testing.
+    let own_z_index = element
+        .z_index
+        .unwrap_or(if element.sticky.is_some() { 1 } else { 0 });
+    PaintLayerKey {
+        plane,
+        z_index: if plane == parent.plane {
+            parent.z_index.saturating_add(own_z_index)
+        } else {
+            own_z_index
+        },
+        group: parent.group,
+    }
+}
+
 #[cfg(feature = "inspector")]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn collect_inspector_nodes(
@@ -361,19 +379,7 @@ pub(super) fn collect_inspector_nodes(
         return;
     }
 
-    let plane = element.plane.unwrap_or(parent_layer.plane);
-    let z_index = if plane == parent_layer.plane {
-        parent_layer
-            .z_index
-            .saturating_add(element.z_index.unwrap_or(0))
-    } else {
-        element.z_index.unwrap_or(0)
-    };
-    let layer = PaintLayerKey {
-        plane,
-        z_index,
-        group: parent_layer.group,
-    };
+    let layer = element_paint_layer(element, parent_layer);
     let source = *source_order;
     *source_order = source.saturating_add(1);
     let clip = if element.portal {
@@ -391,8 +397,8 @@ pub(super) fn collect_inspector_nodes(
         kind: crate::inspector::InspectorElementKind::from_element(&element.kind),
         bounds,
         clip,
-        plane,
-        z_index,
+        plane: layer.plane,
+        z_index: layer.z_index,
         source_order: source,
         portal: element.portal,
         focused: focused == Some(element.runtime_id),
@@ -604,19 +610,7 @@ pub(super) fn collect_layout_hit_regions(
         return Ok(());
     }
 
-    let plane = element.plane.unwrap_or(parent_layer.plane);
-    let z_index = if plane == parent_layer.plane {
-        parent_layer
-            .z_index
-            .saturating_add(element.z_index.unwrap_or(0))
-    } else {
-        element.z_index.unwrap_or(0)
-    };
-    let layer = PaintLayerKey {
-        plane,
-        z_index,
-        group: parent_layer.group,
-    };
+    let layer = element_paint_layer(element, parent_layer);
     let order = PaintOrder {
         layer,
         source: *source_order,
@@ -834,19 +828,7 @@ pub(super) fn paint_element(
         return Ok(());
     }
 
-    let plane = element.plane.unwrap_or(parent_layer.plane);
-    let z_index = if plane == parent_layer.plane {
-        parent_layer
-            .z_index
-            .saturating_add(element.z_index.unwrap_or(0))
-    } else {
-        element.z_index.unwrap_or(0)
-    };
-    let layer = PaintLayerKey {
-        plane,
-        z_index,
-        group: parent_layer.group,
-    };
+    let layer = element_paint_layer(element, parent_layer);
     let order = PaintOrder {
         layer,
         source: *source_order,

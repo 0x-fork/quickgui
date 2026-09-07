@@ -1,52 +1,107 @@
 package main
 
 import (
+	"log"
+
 	"github.com/egoist/quickgui/go/native"
-	"github.com/egoist/quickgui/go/protocol"
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func main() { run("Native styling", 960, 720, Styling) }
+func main() {
+	if err := native.Run(func() {
+		open := func() {
+			native.NewWindow(native.WindowOptions{
+				Title:                "QuickGUI Styling",
+				Width:                960,
+				Height:               720,
+				MinimumWidth:         720,
+				MinimumHeight:        560,
+				Background:           "#0b0f17",
+				TitleBarStyle:        "hiddenInset",
+				TrafficLightPosition: &native.Point{X: 16, Y: 18},
+				Component:            Styling,
+			})
+		}
+		native.App.OnReopen(func(event native.ReopenEvent) {
+			if !event.HasVisibleWindows {
+				open()
+			}
+		})
+		open()
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func Styling() {
 	warm, setWarm := ui.CreateSignal(false)
-	var cards []any
-	for index, label := range []string{"Flex layout", "Retained hover styles", "Rounded surfaces", "Reactive properties"} {
-		node := ui.View(
-			ui.Display("flex"),
-			ui.FlexDirection("column"),
-			ui.Height(140),
-			ui.Gap(16),
-			ui.Padding(24),
-			ui.BorderRadius(12),
-			ui.Hover(ui.BackgroundColor("#1e40af")),
+	warmPalette.Provide(warm, func() {
+		ui.View(
 			func() {
-				ui.Text(ui.FontSize(22), label)
-				ui.Text("Layout and paint remain in the Rust core.")
+				ui.View(
+					func() {
+						ui.Text("Declared styling", ui.Style{FontSize: 14, FontWeight: 700})
+						ui.Button(
+							"Switch palette",
+							ui.Style{
+								Height:          28,
+								PaddingLeft:     12,
+								PaddingRight:    12,
+								BorderRadius:    7,
+								BackgroundColor: "#1b2434",
+								Color:           ink,
+								FontSize:        12,
+								AppRegion:       "no-drag",
+								UserSelect:      "none",
+								Hover:           &ui.Style{BackgroundColor: "#243047"},
+							},
+							ui.OnClick(func() { setWarm(!warm()) }),
+						)
+					},
+					ui.Style{
+						Display:        "flex",
+						Height:         52,
+						FlexShrink:     0,
+						AlignItems:     "center",
+						JustifyContent: "space-between",
+						PaddingLeft:    96,
+						PaddingRight:   20,
+						AppRegion:      "drag",
+					},
+				)
+				ui.View(
+					func() {
+						TextAlignment()
+						TextStyling()
+						Direction()
+						Gradients()
+						BordersAndOutlines()
+						Filters()
+						Transforms()
+						InteractionStates()
+						StickyHeaders()
+						ScrollSnap()
+					},
+					ui.Style{
+						Flex:                1,
+						MinHeight:           0,
+						OverflowY:           "scroll",
+						Padding:             20,
+						Display:             "grid",
+						GridTemplateColumns: "1fr 1fr",
+						Gap:                 16,
+					},
+				)
 			},
+			ui.Style{
+				Display:         "flex",
+				FlexDirection:   "column",
+				Width:           "100%",
+				Height:          "100%",
+				BackgroundColor: "#0b0f17",
+				Color:           ink,
+			},
+			ui.When(warm, ui.Style{BackgroundColor: "#251b13"}),
 		)
-		node.Bind(func() {
-			color := "#312e81"
-			if warm() {
-				color = "#713f12"
-			} else if index%2 == 0 {
-				color = "#1e3a5f"
-			}
-			native.SetColor(node, protocol.BackgroundColor, native.ParseColor(color))
-		})
-		cards = append(cards, node)
-	}
-	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Gap(24),
-		func() {
-			button("Switch palette", func() { setWarm(!warm()) })
-			ui.View(ui.Display("grid"), ui.GridTemplateColumns("1fr 1fr"), ui.Gap(20), cards)
-			ui.Text(
-				ui.Color("#94a3b8"),
-				"Numbers use logical pixels. Percentages and grid tracks use strings.",
-			)
-		},
-	)
+	})
 }

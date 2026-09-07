@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/ui"
@@ -25,6 +25,7 @@ var demos = []demo{
 	{"collapsible", "Collapsible", "", CollapsibleDemo},
 	{"combobox", "Combobox", "", ComboboxDemo},
 	{"context-menu", "Context Menu", "", ContextMenuDemo},
+	{"system-context-menu", "System Context Menu", "System", SystemContextMenuDemo},
 	{"date-field", "Date Field", "QuickGUI", DateFieldDemo},
 	{"dialog", "Dialog", "", DialogDemo},
 	{"field", "Field", "", FieldDemo},
@@ -131,36 +132,21 @@ func Gallery() {
 		},
 		func() {
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Width(214),
-				ui.FlexShrink(0),
-				ui.Height("100%"),
-				ui.BackgroundColor(color(func(p palette) string { return p.Sidebar })),
-				ui.BorderRightWidth(1),
-				ui.BorderColor(color(func(p palette) string { return p.Border })),
 				func() {
 					ui.View(
-						ui.Display("flex"),
-						ui.Height(52),
-						ui.FlexShrink(0),
-						ui.AlignItems("center"),
-						ui.PaddingLeft(82),
-						ui.AppRegion("drag"),
 						func() {
-							ui.Text(
-								ui.FontSize(13),
-								ui.FontWeight(700),
-								"Components",
-							)
+							ui.Text("Components", ui.Style{FontSize: 13, FontWeight: 700})
+						},
+						ui.Style{
+							Display:     "flex",
+							Height:      52,
+							FlexShrink:  0,
+							AlignItems:  "center",
+							PaddingLeft: 82,
+							AppRegion:   "drag",
 						},
 					)
 					ui.View(
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Flex(1),
-						ui.MinHeight(0),
-						ui.OverflowY("scroll"),
 						func() {
 							ui.Tabs.List(
 								ui.PartProps{Style: ui.Style{
@@ -208,61 +194,78 @@ func Gallery() {
 								},
 							)
 						},
+						ui.Style{
+							Display:       "flex",
+							FlexDirection: "column",
+							Flex:          1,
+							MinHeight:     0,
+							OverflowY:     "scroll",
+						},
 					)
+				},
+				ui.Style{
+					Display:          "flex",
+					FlexDirection:    "column",
+					Width:            214,
+					FlexShrink:       0,
+					Height:           "100%",
+					BackgroundColor:  color(func(p palette) string { return p.Sidebar }),
+					BorderRightWidth: 1,
+					BorderColor:      color(func(p palette) string { return p.Border }),
 				},
 			)
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.MinWidth(0),
-				ui.Height("100%"),
 				func() {
 					ui.View(
-						ui.Display("flex"),
-						ui.AlignItems("center"),
-						ui.JustifyContent("space-between"),
-						ui.Height(52),
-						ui.FlexShrink(0),
-						ui.PaddingLeft(20),
-						ui.PaddingRight(20),
-						ui.BorderBottomWidth(1),
-						ui.BorderColor(color(func(p palette) string { return p.Border })),
-						ui.AppRegion("drag"),
 						func() {
 							row(func() {
 								ui.Text(
-									ui.FontSize(15),
-									ui.FontWeight(700),
 									func() string { return current().Label },
+									ui.Style{FontSize: 15, FontWeight: 700},
 								)
 								ui.Text(
-									ui.FontSize(11),
-									ui.Color(color(func(p palette) string { return p.Faint })),
 									func() string {
-										return choose(current().Source == "QuickGUI", "QuickGUI component", "Base UI part set")
+										switch current().Source {
+										case "QuickGUI":
+											return "QuickGUI component"
+										case "System":
+											return "Native system menu"
+										default:
+											return "Base UI part set"
+										}
+									},
+									ui.Style{
+										FontSize: 11,
+										Color:    color(func(p palette) string { return p.Faint }),
 									},
 								)
 							})
 							ui.Text(
-								ui.FontSize(11),
-								ui.Color(color(func(p palette) string { return p.Faint })),
 								func() string {
 									theme := galleryContext.Use()
 									size := theme.Size()
-									return fmt.Sprintf("%d components · %s appearance · %.0f×%.0f", len(demos), theme.Appearance(), size.X, size.Y)
+									return strconv.Itoa(len(demos)) + " components · " + theme.Appearance() + " appearance · " + strconv.FormatFloat(size.X, 'f', 0, 64) + "×" + strconv.FormatFloat(size.Y, 'f', 0, 64)
+								},
+								ui.Style{
+									FontSize: 11,
+									Color:    color(func(p palette) string { return p.Faint }),
 								},
 							)
 						},
+						ui.Style{
+							Display:           "flex",
+							AlignItems:        "center",
+							JustifyContent:    "space-between",
+							Height:            52,
+							FlexShrink:        0,
+							PaddingLeft:       20,
+							PaddingRight:      20,
+							BorderBottomWidth: 1,
+							BorderColor:       color(func(p palette) string { return p.Border }),
+							AppRegion:         "drag",
+						},
 					)
 					ui.View(
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Flex(1),
-						ui.MinHeight(0),
-						ui.Padding(20),
-						ui.Gap(16),
-						ui.OverflowY("scroll"),
 						func() {
 							for _, entry := range demos {
 								ui.Tabs.Panel(
@@ -280,7 +283,23 @@ func Gallery() {
 								)
 							}
 						},
+						ui.Style{
+							Display:       "flex",
+							FlexDirection: "column",
+							Flex:          1,
+							MinHeight:     0,
+							Padding:       20,
+							Gap:           16,
+							OverflowY:     "scroll",
+						},
 					)
+				},
+				ui.Style{
+					Display:       "flex",
+					FlexDirection: "column",
+					Flex:          1,
+					MinWidth:      0,
+					Height:        "100%",
 				},
 			)
 		},

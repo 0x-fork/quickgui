@@ -6,7 +6,6 @@ Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
 ```go
 import (
-	"fmt"
 	"github.com/egoist/quickgui/go/ui"
 )
 ```
@@ -18,10 +17,11 @@ func TextExample() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(func() {
 		ui.Text(
-			ui.FontSize(20),
-			func() string { return fmt.Sprintf("Count: %d", count()) },
+			"Count: ",
+			count,
+			ui.Style{FontSize: 20},
 		)
-		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }
 ```
@@ -30,6 +30,6 @@ func TextExample() {
 
 | Prop | Purpose |
 | --- | --- |
-| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.Style{}` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
 | `Ref` | Receives the retained native node. |

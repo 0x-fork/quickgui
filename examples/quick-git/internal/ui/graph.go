@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	gui "github.com/egoist/quickgui/go/ui"
@@ -39,34 +40,34 @@ func paintGraphRow(row git.GraphRow, width, height float64) []graphLayer {
 	}
 	x := graphLaneX(row.Lane)
 	for _, lane := range row.Passing {
-		add(lane.Color, fmt.Sprintf("M%g 0V%g", graphLaneX(lane.Lane), height))
+		add(lane.Color, "M"+strconv.FormatFloat(graphLaneX(lane.Lane), 'g', -1, 64)+" 0V"+strconv.FormatFloat(height, 'g', -1, 64))
 	}
 	if row.Incoming {
-		add(row.Color, fmt.Sprintf("M%g 0V%g", x, middle))
+		add(row.Color, "M"+strconv.FormatFloat(x, 'g', -1, 64)+" 0V"+strconv.FormatFloat(middle, 'g', -1, 64))
 	}
 	for _, join := range row.Joins {
 		from := graphLaneX(join.FromLane)
 		if from == x {
-			add(join.Color, fmt.Sprintf("M%g 0V%g", x, middle))
+			add(join.Color, "M"+strconv.FormatFloat(x, 'g', -1, 64)+" 0V"+strconv.FormatFloat(middle, 'g', -1, 64))
 			continue
 		}
 		direction, sweep := 1.0, 0
 		if from > x {
 			direction, sweep = -1, 1
 		}
-		add(join.Color, fmt.Sprintf("M%g 0V%gA%g %g 0 0 %d %g %gH%g", from, middle-radius, radius, radius, sweep, from+direction*radius, middle, x))
+		add(join.Color, "M"+strconv.FormatFloat(from, 'g', -1, 64)+" 0V"+strconv.FormatFloat(middle-radius, 'g', -1, 64)+"A"+strconv.FormatFloat(radius, 'g', -1, 64)+" "+strconv.FormatFloat(radius, 'g', -1, 64)+" 0 0 "+strconv.Itoa(sweep)+" "+strconv.FormatFloat(from+direction*radius, 'g', -1, 64)+" "+strconv.FormatFloat(middle, 'g', -1, 64)+"H"+strconv.FormatFloat(x, 'g', -1, 64))
 	}
 	for _, edge := range row.Edges {
 		to := graphLaneX(edge.ToLane)
 		if to == x {
-			add(edge.Color, fmt.Sprintf("M%g %gV%g", x, middle, height))
+			add(edge.Color, "M"+strconv.FormatFloat(x, 'g', -1, 64)+" "+strconv.FormatFloat(middle, 'g', -1, 64)+"V"+strconv.FormatFloat(height, 'g', -1, 64))
 			continue
 		}
 		direction, sweep := -1.0, 0
 		if to > x {
 			direction, sweep = 1, 1
 		}
-		add(edge.Color, fmt.Sprintf("M%g %gH%gA%g %g 0 0 %d %g %gV%g", x, middle, to-direction*radius, radius, radius, sweep, to, middle+radius, height))
+		add(edge.Color, "M"+strconv.FormatFloat(x, 'g', -1, 64)+" "+strconv.FormatFloat(middle, 'g', -1, 64)+"H"+strconv.FormatFloat(to-direction*radius, 'g', -1, 64)+"A"+strconv.FormatFloat(radius, 'g', -1, 64)+" "+strconv.FormatFloat(radius, 'g', -1, 64)+" 0 0 "+strconv.Itoa(sweep)+" "+strconv.FormatFloat(to, 'g', -1, 64)+" "+strconv.FormatFloat(middle+radius, 'g', -1, 64)+"V"+strconv.FormatFloat(height, 'g', -1, 64))
 	}
 	if _, ok := segments[row.Color]; !ok {
 		add(row.Color, "")
@@ -80,7 +81,7 @@ func paintGraphRow(row git.GraphRow, width, height float64) []graphLayer {
 		if color == row.Color {
 			fmt.Fprintf(&body, `<circle cx="%g" cy="%g" r="4" fill="#000"/>`, x, middle)
 		}
-		layers = append(layers, graphLayer{Color: color, Source: fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g" viewBox="0 0 %g %g">%s</svg>`, width, height, width, height, body.String())})
+		layers = append(layers, graphLayer{Color: color, Source: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + strconv.FormatFloat(width, 'g', -1, 64) + "\" height=\"" + strconv.FormatFloat(height, 'g', -1, 64) + "\" viewBox=\"0 0 " + strconv.FormatFloat(width, 'g', -1, 64) + " " + strconv.FormatFloat(height, 'g', -1, 64) + "\">" + body.String() + "</svg>"})
 	}
 	return layers
 }
@@ -88,11 +89,6 @@ func paintGraphRow(row git.GraphRow, width, height float64) []graphLayer {
 func historyGraph(row func() *git.GraphRow, width func() float64) {
 	app := UseApp()
 	gui.View(
-		gui.Position("relative"),
-		gui.Width(width),
-		gui.Height(historyRowHeight),
-		gui.FlexShrink(0),
-		gui.Overflow("hidden"),
 		func() {
 			gui.KeyedFor(
 				func() []graphLayer {
@@ -104,20 +100,29 @@ func historyGraph(row func() *git.GraphRow, width func() float64) {
 				func(layer graphLayer) any { return layer.Color },
 				func(layer func() graphLayer, _ func() int) {
 					gui.SVG(
-						gui.Position("absolute"),
-						gui.Left(0),
-						gui.Top(0),
-						gui.Width(width),
-						gui.Height(historyRowHeight),
-						gui.Color(func() string {
-							palette := app.Theme().Graph
-							return palette[layer().Color%len(palette)]
-						}),
+						gui.Style{
+							Position: "absolute",
+							Left:     0,
+							Top:      0,
+							Width:    width,
+							Height:   historyRowHeight,
+							Color: func() string {
+								palette := app.Theme().Graph
+								return palette[layer().Color%len(palette)]
+							},
+						},
 						gui.Value(func() string { return layer().Source }),
 					)
 				},
 				nil,
 			)
+		},
+		gui.Style{
+			Position:   "relative",
+			Width:      width,
+			Height:     historyRowHeight,
+			FlexShrink: 0,
+			Overflow:   "hidden",
 		},
 	)
 }

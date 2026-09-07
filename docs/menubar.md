@@ -102,14 +102,14 @@ longer exists.
 timer, observer, animation, GPU resource, or idle scheduler source, and it cannot produce a
 deadline. A settled bar renders zero extra frames.
 
-## JavaScript bindings
+## Go components
 
 `Menubar.Root` / `Item` declares the menu count and the controlled open menu. The hosted view
 reaches each declared bar's retained `MenubarState` through a per-instance
 [`StateAccessor`](view-api.md). Wrapping arrow navigation, Home and End, click toggling, hover
 switching while the bar is open, and Escape closing stay in the core, and the open and focused
-menus travel back as one asynchronous `onOpenChange` or `onActiveChange` payload. Each menu's
+menus travel back as one asynchronous `OnOpenChange` or `OnActiveChange` payload. Each menu's
 surface is an ordinary declared `PopoverMenu` anchored to the matching `Menubar.Item`, so the bar
 owns which menu is open and never the menu's own contents. A declared count past
 `MAX_MENUBAR_MENUS` is clamped exactly as the core clamps it. See the
-[QuickGUI UI renderer](ui.md#number-fields-date-and-time-fields-month-grids-menubars-and-toasts).
+[Go components](go.md).

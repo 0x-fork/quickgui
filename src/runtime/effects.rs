@@ -1213,19 +1213,26 @@ impl Runtime {
             .as_ref()
             .and_then(|window| window.native_host.as_ref())
             .is_some_and(MacNativeHost::native_focus_active);
-        let close_match = self.keymap.bindings_for_input(
-            &[Keystroke::new(
-                Key::Character("w".to_owned()),
-                Modifiers::SUPER,
-            )],
-            &contexts,
+        let keymap_claims = |key: &str| {
+            let matched = self.keymap.bindings_for_input(
+                &[Keystroke::new(
+                    Key::Character(key.to_owned()),
+                    Modifiers::SUPER,
+                )],
+                &contexts,
+            );
+            matched.pending
+                || matched
+                    .bindings
+                    .iter()
+                    .any(|binding| self.action_available(binding.action()))
+        };
+        host.update(
+            &states,
+            native_focus_active,
+            keymap_claims("w"),
+            keymap_claims("m"),
         );
-        let keymap_claims_close = close_match.pending
-            || close_match
-                .bindings
-                .iter()
-                .any(|binding| self.action_available(binding.action()));
-        host.update(&states, native_focus_active, keymap_claims_close);
     }
 
     #[cfg(target_os = "macos")]

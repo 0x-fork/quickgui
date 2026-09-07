@@ -7,11 +7,40 @@ import (
 	"strings"
 )
 
-// RouteDefinition is one core route table entry. Omit Path for a pathless layout.
+// RouteDefinition is one core route table entry. Omit Path for a pathless layout,
+// or set Index to match an empty path at the parent's location.
 type RouteDefinition struct {
 	ID       string `json:"id"`
 	Path     string `json:"path,omitempty"`
 	ParentID string `json:"parentId,omitempty"`
+	Index    bool   `json:"-"`
+}
+
+type routeDefinitionJSON struct {
+	ID       string  `json:"id"`
+	Path     *string `json:"path,omitempty"`
+	ParentID string  `json:"parentId,omitempty"`
+}
+
+func (definition RouteDefinition) MarshalJSON() ([]byte, error) {
+	value := routeDefinitionJSON{ID: definition.ID, ParentID: definition.ParentID}
+	if definition.Path != "" || definition.Index {
+		value.Path = &definition.Path
+	}
+	return json.Marshal(value)
+}
+
+func (definition *RouteDefinition) UnmarshalJSON(data []byte) error {
+	var value routeDefinitionJSON
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*definition = RouteDefinition{ID: value.ID, ParentID: value.ParentID}
+	if value.Path != nil {
+		definition.Path = *value.Path
+		definition.Index = *value.Path == ""
+	}
+	return nil
 }
 
 // RouteValue is one decoded parameter or query pair.

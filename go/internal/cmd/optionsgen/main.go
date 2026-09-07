@@ -28,7 +28,7 @@ func main() {
 			}
 			for _, field := range spec.Type.(*ast.StructType).Fields.List {
 				name := field.Names[0].Name
-				if !ast.IsExported(name) || (source.record == "Style" && name == "GroupHover") {
+				if !ast.IsExported(name) || (source.record == "Style" && (name == "GroupHover" || name == "GroupActive" || name == "ObjectFit")) {
 					continue
 				}
 				if source.record == "Props" && (name == "Style" || name == "Children" || name == "OnClick") {
@@ -39,10 +39,10 @@ func main() {
 				if source.record == "Style" {
 					if fieldType.String() == "*Style" {
 						function := name
-						if name == "Disabled" || name == "Selected" {
+						if name == "Disabled" || name == "Selected" || name == "Invalid" {
 							function += "Style"
 						}
-						fmt.Fprintf(&output, "// %s configures the %s interaction style.\nfunc %s(options ...StyleOption) StyleOption {\nreturn func(style *Style) {\nnested := &Style{}\nfor _, option := range options { option(nested) }\nstyle.%s = nested\n}\n}\n\n", function, name, function, name)
+						fmt.Fprintf(&output, "// %s configures the %s interaction style.\nfunc %s(options ...StyleDeclaration) StyleOption {\nreturn func(style *Style) {\nnested := &Style{}\nfor _, option := range options { option.applyStyle(nested) }\nstyle.%s = nested\n}\n}\n\n", function, name, function, name)
 					} else {
 						fmt.Fprintf(&output, "// %s sets the corresponding style property.\nfunc %s(value %s) StyleOption {\nreturn func(style *Style) { style.%s = value }\n}\n\n", name, name, fieldType.String(), name)
 					}

@@ -1,6 +1,9 @@
 # routing
 
-Rust route matching and history exposed through Go components and reactive accessors.
+Route matching and history with active navigation links, back/forward controls,
+dynamic parameters, query updates, replacement navigation, nested settings routes,
+and a wildcard fallback. Shared layouts and their local state remain mounted while
+the outlet changes; parameter and query updates keep the current page mounted.
 
 The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
 

@@ -37,11 +37,11 @@ for binary in "$arm64_binary" "$x64_binary"; do
   fi
 done
 if [[ $(uname -s) == Darwin ]]; then
-  if ! lipo -verify_arch arm64 "$arm64_binary"; then
+  if ! lipo "$arm64_binary" -verify_arch arm64; then
     echo "package-npm-release: $arm64_binary is not a macOS arm64 binary" >&2
     exit 1
   fi
-  if ! lipo -verify_arch x86_64 "$x64_binary"; then
+  if ! lipo "$x64_binary" -verify_arch x86_64; then
     echo "package-npm-release: $x64_binary is not a macOS x64 binary" >&2
     exit 1
   fi

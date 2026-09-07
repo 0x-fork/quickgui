@@ -1,6 +1,6 @@
 # popover
 
-An in-window retained popover and an anchored native system popover.
+Compare a controlled in-window popover with an anchored native system popover. Both have independent counters, changing trigger labels, and open/close status. Escape, outside clicks, and Close dismiss the surfaces; reopening starts a fresh local counter. The in-window surface flips and shifts within its owner, while the system surface can cross the window edge.
 
 The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
 

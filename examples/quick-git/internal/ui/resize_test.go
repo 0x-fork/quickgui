@@ -21,7 +21,7 @@ func TestDividerDragsFromWindowCoordinatesAndRetainsPanel(t *testing.T) {
 		root := captureComponent(func() {
 			ProvideApp(AppContext{Theme: theme, Store: &model.Store{}}, func() {
 				gui.View(
-					gui.Width(width),
+					gui.Style{Width: width},
 					func() {
 						gui.Text("Retained selection")
 						divider = captureComponent(func() { resizeDivider("Resize history", width, func(next float64) { setWidth(next) }) })

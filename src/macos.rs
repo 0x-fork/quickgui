@@ -78,7 +78,7 @@ mod panels;
 mod quick_look;
 
 pub(crate) use file_dialog::{present_native_open_panel, present_native_save_panel};
-pub(crate) use image::{native_image_with_metadata, system_image};
+pub(crate) use image::{native_image_with_metadata, rasterize_native_image, system_image};
 pub(crate) use message_box::present_native_message_box;
 pub(crate) use panels::{
     authenticate_with_biometrics, close_color_panel, complete_biometric_authentication,

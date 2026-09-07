@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/egoist/quickgui/go/native"
@@ -46,33 +45,39 @@ func openDetailsWindow() {
 		Component: func() {
 			window := native.CurrentWindow()
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Width("100%"),
-				ui.Height("100%"),
-				ui.JustifyContent("center"),
-				ui.Gap(16),
-				ui.Padding(28),
-				ui.BackgroundColor("#111827"),
-				ui.Color("#e2e8f0"),
 				func() {
-					ui.Text(ui.FontSize(22), ui.FontWeight(700), "Created while the app is running")
 					ui.Text(
-						ui.Color("#94a3b8"),
-						ui.LineHeight(21),
+						"Created while the app is running",
+						ui.Style{FontSize: 22, FontWeight: 700},
+					)
+					ui.Text(
 						"This window has its own retained tree and native lifecycle.",
+						ui.Style{Color: "#94a3b8", LineHeight: 21},
 					)
 					ui.Button(
-						ui.OnClick(func() { window.Close() }),
-						ui.Display("flex"),
-						ui.Height(40),
-						ui.AlignItems("center"),
-						ui.JustifyContent("center"),
-						ui.BackgroundColor("#334155"),
-						ui.BorderRadius(9),
-						ui.Cursor("default"),
 						"Close window",
+						ui.OnClick(func() { window.Close() }),
+						ui.Style{
+							Display:         "flex",
+							Height:          40,
+							AlignItems:      "center",
+							JustifyContent:  "center",
+							BackgroundColor: "#334155",
+							BorderRadius:    9,
+							Cursor:          "default",
+						},
 					)
+				},
+				ui.Style{
+					Display:         "flex",
+					FlexDirection:   "column",
+					Width:           "100%",
+					Height:          "100%",
+					JustifyContent:  "center",
+					Gap:             16,
+					Padding:         28,
+					BackgroundColor: "#111827",
+					Color:           "#e2e8f0",
 				},
 			)
 		},
@@ -82,111 +87,118 @@ func openDetailsWindow() {
 func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.BackgroundColor("#090d16"),
-		ui.Color("#e2e8f0"),
 		func() {
 			ui.View(
-				ui.Display("flex"),
-				ui.Height(52),
-				ui.FlexShrink(0),
-				ui.AlignItems("center"),
-				ui.JustifyContent("center"),
-				ui.AppRegion("drag"),
-				ui.BorderColor("#1e293b"),
-				ui.BorderWidth(1),
 				func() {
-					ui.Text(ui.FontWeight(600), "QuickGUI · Go")
+					ui.Text("QuickGUI · Go", ui.Style{FontWeight: 600})
+				},
+				ui.Style{
+					Display:        "flex",
+					Height:         52,
+					FlexShrink:     0,
+					AlignItems:     "center",
+					JustifyContent: "center",
+					AppRegion:      "drag",
+					BorderColor:    "#1e293b",
+					BorderWidth:    1,
 				},
 			)
 			ui.View(
-				ui.Display("flex"),
-				ui.Flex(1),
-				ui.MinHeight(0),
-				ui.AlignItems("center"),
-				ui.JustifyContent("center"),
-				ui.Padding(32),
 				func() {
 					ui.View(
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Width(420),
-						ui.Gap(18),
-						ui.Padding(28),
-						ui.BackgroundColor("#111827"),
-						ui.BorderColor("#334155"),
-						ui.BorderWidth(1),
-						ui.BorderRadius(16),
 						func() {
 							ui.Text(
-								ui.FontSize(28),
-								ui.LineHeight(36),
-								ui.FontWeight(700),
 								"Fine-grained native UI",
+								ui.Style{FontSize: 28, LineHeight: 36, FontWeight: 700},
 							)
 							ui.Text(
-								ui.Color("#94a3b8"),
-								ui.FontSize(14),
-								ui.LineHeight(21),
 								"Signals update only the changed text node. The application is ordinary Go, "+
 									"and QuickGUI retains layout, sleeps while clean, and redraws once per mutation batch.",
+								ui.Style{Color: "#94a3b8", FontSize: 14, LineHeight: 21},
 							)
 							ui.Text(
-								ui.Color("#bfdbfe"),
+								"Count: ",
+								count,
+								ui.Style{Color: "#bfdbfe"},
 								ui.When(
 									func() bool { return count() >= 5 },
-									ui.Color("#fbbf24"),
+									ui.Style{Color: "#fbbf24"},
 								),
-								ui.FontSize(20),
-								ui.FontWeight(600),
-								func() string { return fmt.Sprintf("Count: %d", count()) },
+								ui.Style{FontSize: 20, FontWeight: 600},
 							)
 							ui.Show(
 								func() bool { return count() >= 5 },
 								func() {
 									ui.Text(
-										ui.Color("#fbbf24"),
-										ui.FontSize(14),
 										"Five or more clicks: the row above was created on demand.",
+										ui.Style{Color: "#fbbf24", FontSize: 14},
 									)
 								},
 							)
 							ui.Button(
-								ui.OnClick(func() { setCount(count() + 1) }),
-								ui.Display("flex"),
-								ui.Height(44),
-								ui.AlignItems("center"),
-								ui.JustifyContent("center"),
-								ui.BackgroundColor("#2563eb"),
-								ui.Color("white"),
-								ui.BorderRadius(9),
-								ui.Cursor("default"),
-								ui.AppRegion("no-drag"),
-								ui.UserSelect("none"),
-								ui.Hover(ui.BackgroundColor("#3b82f6")),
 								"Increment",
+								ui.OnClick(func() { setCount(count() + 1) }),
+								ui.Style{
+									Display:         "flex",
+									Height:          44,
+									AlignItems:      "center",
+									JustifyContent:  "center",
+									BackgroundColor: "#2563eb",
+									Color:           "white",
+									BorderRadius:    9,
+									Cursor:          "default",
+									AppRegion:       "no-drag",
+									UserSelect:      "none",
+									Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
+								},
 							)
 							ui.Button(
-								ui.OnClick(func() { openDetailsWindow() }),
-								ui.Display("flex"),
-								ui.Height(44),
-								ui.AlignItems("center"),
-								ui.JustifyContent("center"),
-								ui.BackgroundColor("#334155"),
-								ui.Color("white"),
-								ui.BorderRadius(9),
-								ui.Cursor("default"),
-								ui.AppRegion("no-drag"),
-								ui.UserSelect("none"),
 								"Open window",
+								ui.OnClick(func() { openDetailsWindow() }),
+								ui.Style{
+									Display:         "flex",
+									Height:          44,
+									AlignItems:      "center",
+									JustifyContent:  "center",
+									BackgroundColor: "#334155",
+									Color:           "white",
+									BorderRadius:    9,
+									Cursor:          "default",
+									AppRegion:       "no-drag",
+									UserSelect:      "none",
+								},
 							)
+						},
+						ui.Style{
+							Display:         "flex",
+							FlexDirection:   "column",
+							Width:           420,
+							Gap:             18,
+							Padding:         28,
+							BackgroundColor: "#111827",
+							BorderColor:     "#334155",
+							BorderWidth:     1,
+							BorderRadius:    16,
 						},
 					)
 				},
+				ui.Style{
+					Display:        "flex",
+					Flex:           1,
+					MinHeight:      0,
+					AlignItems:     "center",
+					JustifyContent: "center",
+					Padding:        32,
+				},
 			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Width:           "100%",
+			Height:          "100%",
+			BackgroundColor: "#090d16",
+			Color:           "#e2e8f0",
 		},
 	)
 }

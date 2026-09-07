@@ -36,6 +36,79 @@ func TestWhenRestoresBaseStyleWithoutRebuildingChildren(t *testing.T) {
 	})
 }
 
+func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
+	reactive.CreateRoot(func(dispose func()) struct{} {
+		defer dispose()
+		selected, setSelected := CreateSignal(false)
+		baseColor := reactive.NewSignal("#334455")
+		selectedColor := reactive.NewSignal("#ddeeff")
+		mounts := 0
+		node := View(
+			func() { mounts++; Text("retained") },
+			Style{BackgroundColor: baseColor.Read, Color: "white", Padding: 12},
+			Style{Padding: 0},
+			When(selected, Style{BackgroundColor: selectedColor.Read, Opacity: .5}),
+		)
+		child := node.Children[0]
+		expected := protocol.NewBatch()
+		expected.SetNumber(node.ID, protocol.Padding, 0)
+		if !bytes.Contains(node.Pending.Body(), expected.Body()) {
+			t.Fatal("later explicit zero did not override earlier padding")
+		}
+		if len(baseColor.Observers) != 1 || len(selectedColor.Observers) != 0 {
+			t.Fatal("inactive conditional style subscribed to its accessor")
+		}
+		setSelected(true)
+		if len(baseColor.Observers) != 0 || len(selectedColor.Observers) != 1 {
+			t.Fatal("conditional style did not replace the base binding")
+		}
+		baseColor.Write("#112233")
+		offset := len(node.Pending.Body())
+		setSelected(false)
+		expected = protocol.NewBatch()
+		expected.SetColor(node.ID, protocol.BackgroundColor, native.ParseColor("#112233"))
+		expected.ClearProperty(node.ID, protocol.Opacity)
+		if !bytes.Equal(node.Pending.Body()[offset:], expected.Body()) {
+			t.Fatalf("conditional style did not restore the latest base color: %v", node.Pending.Body()[offset:])
+		}
+		if len(baseColor.Observers) != 1 || len(selectedColor.Observers) != 0 || mounts != 1 || node.Children[0] != child {
+			t.Fatal("style composition remounted children or retained an inactive binding")
+		}
+		return struct{}{}
+	})
+}
+
+func TestStyleRecordsMergeNestedStatesWithoutMutatingSharedStyles(t *testing.T) {
+	base := Style{
+		BackgroundColor: "#111111",
+		Hover:           &Style{Color: "white", BackgroundColor: "#222222", Opacity: .8},
+		Focus:           &Style{OutlineWidth: 2, OutlineColor: "blue"},
+	}
+	props := resolveProps([]any{
+		base,
+		Style{Hover: &Style{BackgroundColor: "#333333", Opacity: 0}},
+		Style{Focus: &Style{OutlineColor: "red"}},
+	})
+	if props.Style.BackgroundColor != base.BackgroundColor || props.Style.Hover.Color != "white" ||
+		props.Style.Hover.BackgroundColor != "#333333" || props.Style.Hover.Opacity != 0 ||
+		props.Style.Focus.OutlineWidth != 2 || props.Style.Focus.OutlineColor != "red" {
+		t.Fatal("style records replaced a nested state instead of merging its fields")
+	}
+	if base.Hover.BackgroundColor != "#222222" || base.Hover.Opacity != .8 || base.Focus.OutlineColor != "blue" {
+		t.Fatal("style merging changed the shared base style")
+	}
+}
+
+func TestStyleAliasesMergeIntoTheSameProperty(t *testing.T) {
+	props := resolveProps([]any{
+		Style{PaddingStart: 12, OverflowWrap: "normal", TransitionEasing: "linear"},
+		Style{PaddingInlineStart: 0, WordWrap: "anywhere", TransitionTimingFunction: "ease-out"},
+	})
+	if props.Style.PaddingStart != 0 || props.Style.OverflowWrap != "anywhere" || props.Style.TransitionEasing != "ease-out" {
+		t.Fatal("an alias failed to override the previous declaration")
+	}
+}
+
 func TestWhenDisposesConditionalBindingsAndHandlers(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()

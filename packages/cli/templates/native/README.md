@@ -11,3 +11,5 @@ bun run dev
 `bun run dev` compiles `main.go` with CGO disabled, packages and launches the app, and rebuilds on source changes. `bun run build` produces a distributable application with its prebuilt Rust host shared library. Components are passed directly as `Component: Counter`; accessors create fine-grained bindings.
 
 Use Go 1.23+, Bun, and Xcode Command Line Tools on macOS. Application builds do not invoke Rust or a C compiler. The application uses purego to call Rust in process.
+
+Configuration can use `quickgui.toml` or `quickgui.config.ts`. The CLI looks for TOML first; `--config path/to/file` selects a file explicitly. Both formats use the same settings.

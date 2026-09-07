@@ -1,64 +1,196 @@
 package main
 
 import (
-	"encoding/json"
+	"log"
+	"strconv"
+	"strings"
 
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func main() { run("System APIs", 900, 680, SystemAPIs) }
+const identifier = "dev.quickgui.system-api-example"
+const appName = "QuickGUI System APIs"
+
+func main() {
+	if err := native.Run(func() {
+		native.App.RequestSingleInstanceLock(
+			identifier,
+			func(primary bool, err error) {
+				if err != nil {
+					log.Print(err)
+					native.App.Exit(1, nil)
+					return
+				}
+				if !primary {
+					native.App.Exit(0, nil)
+					return
+				}
+				open := func() {
+					native.NewWindow(native.WindowOptions{
+						Title:                appName,
+						Width:                760,
+						Height:               640,
+						MinimumWidth:         620,
+						MinimumHeight:        520,
+						Background:           "#0b0e14",
+						TitleBarStyle:        "hiddenInset",
+						TrafficLightPosition: &native.Point{X: 16, Y: 14},
+						Component:            SystemAPIs,
+					})
+				}
+				native.App.OnReopen(func(event native.ReopenEvent) {
+					if !event.HasVisibleWindows {
+						open()
+					}
+				})
+				open()
+			},
+		)
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func SystemAPIs() {
 	window := native.CurrentWindow()
-	result, setResult := ui.CreateSignal("Choose a native service.")
-	var buttons []any
-	for _, method := range []string{"get-app-info", "get-app-paths", "get-system-info", "get-displays", "get-system-preferences", "get-keyboard-layout", "read-clipboard"} {
-		buttons = append(buttons, func() {
-			button(method, func() {
-				payload, _ := json.Marshal(map[string]any{"method": method})
-				native.SendCommand(
-					string(payload),
-					func(raw string, err error) {
-						if window.Closed {
-							return
-						}
-						if err != nil {
-							setResult(err.Error())
-							return
-						}
-						var value any
-						if json.Unmarshal([]byte(raw), &value) == nil {
-							pretty, _ := json.MarshalIndent(value, "", "  ")
-							raw = string(pretty)
-						}
-						setResult(raw)
-					},
-				)
-			})
-		})
+	target, err := native.Updater.DefaultTarget()
+	initial := "Primary instance · updater target " + target
+	if err != nil {
+		initial = err.Error()
 	}
+	status, setStatus := ui.CreateSignal(initial)
+	busy, setBusy := ui.CreateSignal(false)
+	state := &systemState{window: window, status: setStatus, busy: busy, setBusy: setBusy}
+	ui.OnCleanup(state.dispose)
+	native.App.OnSecondInstance(func(event native.SecondInstanceEvent) {
+		state.showWindow()
+		setStatus("A second launch forwarded " + strconv.Itoa(len(event.Argv)) + " argument(s).")
+	})
+	native.App.OnOpenURLs(func(event native.OpenURLsEvent) {
+		setStatus("Deep link: " + strings.Join(event.URLs, ", "))
+	})
+	native.PowerMonitor.OnEvent(func(event native.PowerEvent) { setStatus("Power event: " + event.Type) })
+	native.SystemPreferences.OnChange(func(value native.SystemPreferencesSnapshot) {
+		setStatus("System preferences changed to " + value.ColorScheme + " appearance.")
+	})
+	native.App.OnNotificationResponse(func(event native.NotificationResponseEvent) {
+		message := "Notification " + event.Tag + " activated"
+		if event.Reply != nil {
+			message += ": " + *event.Reply
+		} else if event.ActionID != nil {
+			message += " via " + *event.ActionID
+		}
+		setStatus(message)
+	})
+	native.SetApplicationMenu([]native.MenuDefinition{
+		{Label: "App", Items: []native.MenuItem{
+			{Label: "Show window", Click: state.showWindow},
+			{Type: "separator"},
+			{Label: "Hide", Role: "hide-application"},
+			{Label: "Quit", Role: "quit"},
+		}},
+		{Label: "Edit", Items: []native.MenuItem{
+			{Label: "Copy", Role: "copy"}, {Label: "Paste", Role: "paste"}, {Label: "Select All", Role: "select-all"},
+		}},
+		{Label: "Window", Items: []native.MenuItem{
+			{Label: "Minimize", Role: "minimize-window"}, {Label: "Close", Role: "close-window"},
+		}},
+	})
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Flex(1),
-		ui.Gap(20),
 		func() {
-			ui.View(ui.Display("flex"), ui.FlexWrap("wrap"), ui.Gap(8), buttons)
 			ui.View(
-				ui.Flex(1),
-				ui.OverflowY("scroll"),
-				ui.Padding(20),
-				ui.BackgroundColor("#151e30"),
-				func() {
-					ui.Text(
-						ui.FontFamily("monospace"),
-						ui.FontSize(12),
-						ui.UserSelect("text"),
-						result,
-					)
+				"Native system APIs",
+				ui.Style{
+					Display:           "flex",
+					Height:            52,
+					FlexShrink:        0,
+					AlignItems:        "center",
+					JustifyContent:    "center",
+					FontSize:          14,
+					FontWeight:        600,
+					AppRegion:         "drag",
+					BorderColor:       "#1f2530",
+					BorderBottomWidth: 1,
 				},
 			)
+			ui.View(
+				func() {
+					ui.Text(
+						"Native integrations",
+						ui.Style{
+							FontSize:   26,
+							LineHeight: 32,
+							FontWeight: 700,
+						},
+					)
+					ui.Text(
+						"Typed Go APIs for application state, desktop services, notifications, and native resources.",
+						ui.Style{
+							Color:      "#9aa6b7",
+							FontSize:   14,
+							LineHeight: 21,
+						},
+					)
+					ui.View(
+						func() {
+							for _, item := range state.actions() {
+								ui.Button(
+									item.label,
+									buttonStyle,
+									ui.Disabled(busy),
+									ui.OnClick(func() { state.run(item) }),
+								)
+							}
+						},
+						ui.Style{Display: "flex", FlexWrap: "wrap", Gap: 10},
+					)
+					ui.View(
+						func() {
+							ui.Text(
+								status,
+								ui.Style{
+									FontSize:   13,
+									LineHeight: 19,
+									UserSelect: "text",
+									FontFamily: "monospace",
+									Color: func() string {
+										if busy() {
+											return "#c7d2fe"
+										}
+										return "#aeb9c9"
+									},
+								},
+							)
+						},
+						ui.Style{
+							MinHeight:       68,
+							Padding:         16,
+							BackgroundColor: "#111620",
+							BorderColor:     "#293242",
+							BorderWidth:     1,
+							BorderRadius:    10,
+						},
+					)
+				},
+				ui.Style{
+					Display:       "flex",
+					FlexDirection: "column",
+					Flex:          1,
+					MinHeight:     0,
+					Gap:           18,
+					Padding:       28,
+					OverflowY:     "auto",
+				},
+			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Width:           "100%",
+			Height:          "100%",
+			BackgroundColor: "#0b0e14",
+			Color:           "#f4f7fb",
 		},
 	)
 }

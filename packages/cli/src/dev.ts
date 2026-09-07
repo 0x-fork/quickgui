@@ -9,7 +9,7 @@ import { hostTarget, type QuickGuiTarget } from "./targets.ts";
 
 export interface DevOptions {
   project: string;
-  configFile: string;
+  configFile?: string;
   once: boolean;
   launch: boolean;
   target?: QuickGuiTarget;

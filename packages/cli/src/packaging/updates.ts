@@ -94,7 +94,7 @@ export function joinUrl(baseUrl: string, name: string): string {
 export function buildUpdateManifest(input: ManifestInput): UpdateManifest {
   if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$/.test(input.version)) {
     throw new CliError(
-      `An update manifest needs a semantic version, got \`${input.version}\`. Set \`version\` in quickgui.config.ts.`,
+      `An update manifest needs a semantic version, got \`${input.version}\`. Set \`version\` in your QuickGUI config.`,
     );
   }
   if (input.notes !== undefined && input.notes.length > MAX_UPDATE_NOTES_BYTES) {

@@ -27,6 +27,8 @@ func Flush() { reactive.Flush() }
 
 func OnCleanup(fn func()) { reactive.OnCleanup(fn) }
 
+// View declares children followed by style records and property options.
+// Multiple styles merge in order; callback children run once when mounted.
 func View(arguments ...any) *native.Node {
 	node := native.CreateElement(protocol.TagView)
 	applyArguments(node, arguments)

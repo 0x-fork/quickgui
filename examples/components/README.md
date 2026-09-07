@@ -1,8 +1,8 @@
 # components
 
-A gallery of all 42 component demos from the original example, now written in Go: forms, pickers, menus, overlays, layout controls, a 5,000-row virtual table, and a lazy tree.
+A gallery of 43 demos: all 42 from the original example, now written in Go, plus a native system context menu. It includes forms, pickers, menus, overlays, layout controls, a 5,000-row virtual table, and a lazy tree.
 
-The sidebar preserves the original demo list. Each demo includes interactive state readouts, keyboard behavior, and light/dark appearance.
+The sidebar preserves the original demos. Each demo includes interactive state readouts, keyboard behavior, and light/dark appearance. **System Context Menu**, next to Context Menu, uses `native.Window.PopupMenu` for operating-system menu rendering, checked items, a submenu, disabled actions, and close/error feedback. Right-click its target or activate **Open system menu** with the keyboard.
 
 The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The prebuilt native library is loaded in process using purego; application builds do not use CGO.
 

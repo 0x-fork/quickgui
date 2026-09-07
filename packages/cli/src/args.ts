@@ -17,7 +17,7 @@ export type ParsedCliCommand =
   | {
       command: "dev";
       project: string;
-      configFile: string;
+      configFile?: string;
       once: boolean;
       launch: boolean;
       target?: QuickGuiTarget;
@@ -26,7 +26,7 @@ export type ParsedCliCommand =
   | {
       command: "build";
       project: string;
-      configFile: string;
+      configFile?: string;
       target?: QuickGuiTarget;
       outDir?: string;
       signingIdentity?: string;
@@ -116,10 +116,11 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
     rejectPositionals(parsed, "quickgui dev");
     const target = stringOption(parsed, "target");
     const signingIdentity = stringOption(parsed, "signingIdentity");
+    const configFile = stringOption(parsed, "configFile");
     return {
       command: "dev",
       project: stringOption(parsed, "project") ?? ".",
-      configFile: stringOption(parsed, "configFile") ?? "quickgui.config.ts",
+      ...(configFile ? { configFile } : {}),
       once: parsed.values.has("once"),
       launch: !parsed.values.has("noLaunch"),
       ...(target ? { target: parseTarget(target) } : {}),
@@ -142,6 +143,7 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
     rejectPositionals(parsed, "quickgui build");
     const target = stringOption(parsed, "target");
     const outDir = stringOption(parsed, "outDir");
+    const configFile = stringOption(parsed, "configFile");
     const signingIdentity = stringOption(parsed, "signingIdentity");
     const notarizationProfile = stringOption(parsed, "notarizationProfile");
     const updateBaseUrl = stringOption(parsed, "updateBaseUrl");
@@ -151,7 +153,7 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
     return {
       command: "build",
       project: stringOption(parsed, "project") ?? ".",
-      configFile: stringOption(parsed, "configFile") ?? "quickgui.config.ts",
+      ...(configFile ? { configFile } : {}),
       updateManifest: parsed.values.has("updateManifest") || updateBaseUrl !== undefined,
       macAppStore: parsed.values.has("macAppStore"),
       ...(target ? { target: parseTarget(target) } : {}),

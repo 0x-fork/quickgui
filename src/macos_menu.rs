@@ -139,6 +139,7 @@ pub(crate) struct MacMenuHost {
     root_items: Vec<Retained<NSMenuItem>>,
     action_items: Vec<Retained<NSMenuItem>>,
     fallback_close_item: Retained<NSMenuItem>,
+    fallback_minimize_item: Retained<NSMenuItem>,
     target: Retained<QuickGuiMenuTarget>,
 }
 
@@ -155,10 +156,11 @@ impl MacMenuHost {
         let windows_menu = unsafe { app.windowsMenu() };
         let help_menu = unsafe { app.helpMenu() };
         let target = QuickGuiMenuTarget::new(mtm, proxy, MenuTargetScope::Application);
-        let mut root_items = Vec::with_capacity(menus.len() + 1);
+        let mut root_items = Vec::with_capacity(menus.len() + 2);
         let mut action_items = Vec::new();
         let mut next_action_id = 0;
         let mut file_menu = None;
+        let mut window_menu = None;
 
         for menu in menus {
             let submenu = build_menu(
@@ -177,7 +179,10 @@ impl MacMenuHost {
             main_menu.addItem(&root_item);
             root_items.push(root_item);
             if menu.name.eq_ignore_ascii_case("file") {
-                file_menu = Some(submenu);
+                file_menu = Some(submenu.clone());
+            }
+            if menu.name.eq_ignore_ascii_case("window") {
+                window_menu = Some(submenu);
             }
         }
 
@@ -202,11 +207,31 @@ impl MacMenuHost {
         unsafe { fallback_close_item.setEnabled(true) };
         file_menu.addItem(&fallback_close_item);
 
+        let window_menu = window_menu.unwrap_or_else(|| {
+            let submenu =
+                unsafe { NSMenu::initWithTitle(mtm.alloc(), &NSString::from_str("Window")) };
+            unsafe { submenu.setAutoenablesItems(false) };
+            let delegate = ProtocolObject::from_ref(&*target);
+            unsafe { submenu.setDelegate(Some(delegate)) };
+            let root = menu_item(mtm, "Window", None, "");
+            root.setSubmenu(Some(&submenu));
+            main_menu.addItem(&root);
+            root_items.push(root);
+            submenu
+        });
+        let fallback_minimize_item =
+            menu_item(mtm, "Minimize", Some(sel!(performMiniaturize:)), "m");
+        fallback_minimize_item
+            .setKeyEquivalentModifierMask(NSEventModifierFlags::NSEventModifierFlagCommand);
+        unsafe { fallback_minimize_item.setEnabled(true) };
+        window_menu.addItem(&fallback_minimize_item);
+
         Ok(Self {
             main_menu,
             root_items,
             action_items,
             fallback_close_item,
+            fallback_minimize_item,
             target,
         })
     }
@@ -216,6 +241,7 @@ impl MacMenuHost {
         states: &[MacMenuItemState],
         native_focus_active: bool,
         keymap_claims_close: bool,
+        keymap_claims_minimize: bool,
     ) {
         debug_assert_eq!(self.action_items.len(), states.len());
         self.target
@@ -227,6 +253,7 @@ impl MacMenuHost {
         let app = NSApplication::sharedApplication(mtm);
         let os_actions = self.target.ivars().os_actions.borrow();
         let mut application_claims_close = keymap_claims_close;
+        let mut application_claims_minimize = keymap_claims_minimize;
         for (index, (item, state)) in self.action_items.iter().zip(states).enumerate() {
             let os_action = os_actions.get(index).copied().flatten();
             let native_available = os_action.is_some_and(|action| {
@@ -252,7 +279,18 @@ impl MacMenuHost {
                 item.setKeyEquivalent(&NSString::from_str(&key));
             }
             item.setKeyEquivalentModifierMask(modifiers);
-            application_claims_close |= menu_item_claims_close(state, os_action, native_available);
+            application_claims_close |= menu_item_claims_window_action(
+                state,
+                os_action,
+                native_available,
+                OsAction::CloseWindow,
+            );
+            application_claims_minimize |= menu_item_claims_window_action(
+                state,
+                os_action,
+                native_available,
+                OsAction::MinimizeWindow,
+            );
         }
         unsafe {
             self.fallback_close_item.setHidden(application_claims_close);
@@ -263,6 +301,16 @@ impl MacMenuHost {
                     ""
                 } else {
                     "w"
+                }));
+            self.fallback_minimize_item
+                .setHidden(application_claims_minimize);
+            self.fallback_minimize_item
+                .setEnabled(!application_claims_minimize);
+            self.fallback_minimize_item
+                .setKeyEquivalent(&NSString::from_str(if application_claims_minimize {
+                    ""
+                } else {
+                    "m"
                 }));
         }
     }
@@ -308,21 +356,19 @@ fn default_os_action_key_equivalent(action: OsAction) -> Option<(String, NSEvent
     }
 }
 
-fn menu_item_claims_close(
+fn menu_item_claims_window_action(
     state: &MacMenuItemState,
     os_action: Option<OsAction>,
     native_available: bool,
+    fallback_action: OsAction,
 ) -> bool {
     !state.hidden
         && !state.disabled
         && (state.action_available || native_available)
-        && (os_action == Some(OsAction::CloseWindow)
-            || state.shortcut.as_ref().is_some_and(is_close_shortcut))
-}
-
-fn is_close_shortcut(stroke: &Keystroke) -> bool {
-    stroke.modifiers == Modifiers::SUPER
-        && matches!(&stroke.key, Key::Character(value) if value.eq_ignore_ascii_case("w"))
+        && (os_action == Some(fallback_action)
+            || state.shortcut.as_ref().is_some_and(|stroke| {
+                appkit_key_equivalent(stroke) == default_os_action_key_equivalent(fallback_action)
+            }))
 }
 
 impl Drop for MacMenuHost {
@@ -837,48 +883,74 @@ mod tests {
     }
 
     #[test]
-    fn native_close_fallback_yields_only_to_exact_cmd_w() {
-        assert!(is_close_shortcut(&Keystroke::parse("cmd-w").unwrap()));
-        assert!(!is_close_shortcut(
-            &Keystroke::parse("cmd-shift-w").unwrap()
-        ));
-        assert!(!is_close_shortcut(&Keystroke::parse("ctrl-w").unwrap()));
-
-        let available = MacMenuItemState {
-            disabled: false,
-            action_available: true,
-            checked: false,
-            shortcut: None,
-            hidden: false,
-        };
-        assert!(menu_item_claims_close(
-            &available,
-            Some(OsAction::CloseWindow),
-            false,
-        ));
-
-        let disabled = MacMenuItemState {
-            disabled: true,
-            ..available
-        };
-        assert!(!menu_item_claims_close(
-            &disabled,
-            Some(OsAction::CloseWindow),
-            true,
-        ));
-
-        let hidden = MacMenuItemState {
-            disabled: false,
-            action_available: true,
-            checked: false,
-            shortcut: None,
-            hidden: true,
-        };
-        assert!(!menu_item_claims_close(
-            &hidden,
-            Some(OsAction::CloseWindow),
-            true,
-        ));
+    fn window_fallbacks_yield_to_available_roles_and_exact_shortcuts() {
+        for (role, key) in [
+            (OsAction::CloseWindow, "w"),
+            (OsAction::MinimizeWindow, "m"),
+        ] {
+            let mut state = MacMenuItemState {
+                disabled: false,
+                action_available: true,
+                checked: false,
+                shortcut: None,
+                hidden: false,
+            };
+            assert!(menu_item_claims_window_action(
+                &state,
+                Some(role),
+                false,
+                role
+            ));
+            for shortcut in [format!("cmd-{key}"), format!("cmd-{}", key.to_uppercase())] {
+                state.shortcut = Some(Keystroke::parse(&shortcut).unwrap());
+                assert!(menu_item_claims_window_action(&state, None, false, role));
+            }
+            for shortcut in [
+                format!("cmd-shift-{key}"),
+                format!("ctrl-{key}"),
+                "cmd-x".into(),
+            ] {
+                state.shortcut = Some(Keystroke::parse(&shortcut).unwrap());
+                assert!(!menu_item_claims_window_action(&state, None, false, role));
+            }
+            // An explicitly rebound native role still owns its action; don't restore the
+            // default key behind the application's back.
+            assert!(menu_item_claims_window_action(
+                &state,
+                Some(role),
+                false,
+                role
+            ));
+            state.disabled = true;
+            assert!(!menu_item_claims_window_action(
+                &state,
+                Some(role),
+                true,
+                role
+            ));
+            state.disabled = false;
+            state.hidden = true;
+            assert!(!menu_item_claims_window_action(
+                &state,
+                Some(role),
+                true,
+                role
+            ));
+            state.hidden = false;
+            state.action_available = false;
+            assert!(!menu_item_claims_window_action(
+                &state,
+                Some(role),
+                false,
+                role
+            ));
+            assert!(menu_item_claims_window_action(
+                &state,
+                Some(role),
+                true,
+                role
+            ));
+        }
     }
 
     #[test]

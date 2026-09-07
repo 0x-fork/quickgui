@@ -6,7 +6,6 @@
 
 ```go
 import (
-	"fmt"
 	"github.com/egoist/quickgui/go/ui"
 )
 ```
@@ -18,10 +17,11 @@ func TextExample() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(func() {
 		ui.Text(
-			ui.FontSize(20),
-			func() string { return fmt.Sprintf("Count: %d", count()) },
+			"Count: ",
+			count,
+			ui.Style{FontSize: 20},
 		)
-		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }
 ```
@@ -30,6 +30,6 @@ func TextExample() {
 
 | プロパティ | 説明 |
 | --- | --- |
-| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
 | `Ref` | 保持されたネイティブノードを受け取ります。 |

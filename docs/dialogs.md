@@ -126,64 +126,77 @@ Live VoiceOver wording, pointer backdrop behavior, embedded-native-view occlusio
 multi-monitor behavior remain release-candidate acceptance items until recorded on the intended
 macOS build.
 
-## QuickGUI UI
+## Go components
 
-`Dialog.Viewport` is bound as the scrollable dialog body, so a long dialog scrolls inside the popup
-rather than growing past the window. `enterDuration` and `exitDuration` declare the transitions the
-core times, and `onOpenChangeComplete` reports the one it just finished — Base UI's own name for it.
-The core holds a closing dialog mounted for exactly the declared exit transition, so an
-application's own fade or slide can finish before the surface leaves the tree:
+`ui.Dialog` and `ui.AlertDialog` expose `Root`, `Trigger`, `Portal`, `Backdrop`,
+`Popup`, `Viewport`, `Title`, `Description`, and `Close` parts. A root coordinates
+controlled state without creating a visible element; its portal supplies the
+viewport overlay root. Give the popup its own size, colors, and spacing.
 
-```tsx
-<Dialog.Root open={open()} onOpenChange={setOpen} exitDuration={160}
-  onOpenChangeComplete={(finished) => finished || restoreScroll()}>
-  <Dialog.Portal>
-    <Dialog.Backdrop />
-    <Dialog.Popup>
-      <Dialog.Title>Delete workspace</Dialog.Title>
-      <Dialog.Viewport><LongExplanation /></Dialog.Viewport>
-      <Dialog.Close>Cancel</Dialog.Close>
-    </Dialog.Popup>
-  </Dialog.Portal>
-</Dialog.Root>
+```go
+func DeleteProject() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.AlertDialog.Root(
+		ui.DialogRootProps{
+			Open:         open,
+			OnOpenChange: func(value bool, _ ui.DialogOpenChangeDetails) { setOpen(value) },
+			ExitDuration: 160,
+			OnOpenChangeComplete: func(open bool, _ *native.Event) {
+				log.Print("Dialog transition finished; open: ", open)
+			},
+		},
+		func() {
+			ui.AlertDialog.Trigger(ui.PartProps{}, "Delete project")
+			ui.AlertDialog.Portal(
+				ui.PartProps{},
+				func() {
+					ui.AlertDialog.Backdrop(ui.PartProps{Style: ui.Style{
+						BackgroundColor: "#0f172a80",
+					}})
+					ui.AlertDialog.Popup(
+						ui.DialogPopupProps{PartProps: ui.PartProps{
+							Style: ui.Style{Width: 360, Padding: 24, BackgroundColor: "white"},
+						}},
+						func() {
+							ui.AlertDialog.Title(ui.PartProps{}, "Delete project?")
+							ui.AlertDialog.Viewport(
+								ui.PartProps{},
+								func() {
+									ui.AlertDialog.Description(
+										ui.PartProps{},
+										"This cannot be undone.",
+									)
+								},
+							)
+							ui.AlertDialog.Close(ui.PartProps{AriaLabel: "Cancel"}, "Cancel")
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
-A dialog whose open value changes outside its own trigger and close controls still reports the
-completion; with a zero exit transition — the default — the surface leaves on the frame it closed.
+`Viewport` supplies a scrollable region. `EnterDuration` and `ExitDuration` declare
+the transition deadlines in milliseconds; `OnOpenChangeComplete` reports the
+finished state. The core retains a closing dialog through its exit deadline so an
+application's animation can finish. With the default zero duration, completion
+and unmounting occur in the same update. External changes to `Open` also produce
+completion events.
 
+`DismissOnEscape` and `DismissOnBackdrop` are optional boolean pointers declared
+ahead of input. Ordinary dialogs allow both; alert dialogs allow Escape and reject
+backdrop dismissal by default. The native event calls `OnOpenChange` with a reason
+of `ui.DialogDismiss`, `ui.DialogTriggerPress`, or `ui.DialogClosePress`. The core
+owns overlay ordering, nested topmost focus containment, restoration, modal
+accessibility, and stable identities.
 
-`@quickgui/ui` exposes this descriptor as `Dialog.Root`, `Dialog.Trigger`, `Dialog.Portal`,
-`Dialog.Backdrop`, `Dialog.Popup`, `Dialog.Title`, `Dialog.Description`, and `Dialog.Close`, with
-`AlertDialog` providing the same parts for the consequential kind. `Dialog.Root` is a logical
-coordinator that creates no native element; `Dialog.Portal` is the viewport overlay root the Rust
-core mounts only while the dialog is open.
-
-```tsx
-const [open, setOpen] = createSignal(false);
-
-<AlertDialog.Root open={open()} onOpenChange={setOpen}>
-  <AlertDialog.Trigger>Delete project</AlertDialog.Trigger>
-  <AlertDialog.Portal>
-    <AlertDialog.Backdrop style={{ backgroundColor: "#0f172a80" }} />
-    <AlertDialog.Popup>
-      <AlertDialog.Title>Delete project?</AlertDialog.Title>
-      <AlertDialog.Description>This cannot be undone.</AlertDialog.Description>
-      <AlertDialog.Close aria-label="Cancel">Cancel</AlertDialog.Close>
-    </AlertDialog.Popup>
-  </AlertDialog.Portal>
-</AlertDialog.Root>
-```
-
-The dismissal policy is declared ahead of time through `dismissOnEscape` and `dismissOnBackdrop`,
-never answered by a JavaScript callback: `AlertDialog` keeps Escape and blocks backdrop dismissal
-by default. Escape and outside presses arrive as one asynchronous event and call
-`onOpenChange(false, { reason: "dismiss" })`; a trigger or close press reports `"trigger-press"` or
-`"close-press"`. The overlay plane, nested topmost focus containment, focus restoration, modal
-accessibility semantics, and part identities all stay in this Rust layer.
-
-`initial_focus(...)` and `restore_focus_to(...)` are not bridged yet, so a QuickGUI UI dialog uses the
-trap's first enabled Tab stop and the core's `restore_previous_focus` default. This is separate
-from the native alert and file panels in the `Dialog` namespace of `@quickgui/native`.
+The Go dialog parts currently use the trap's first enabled Tab stop and the core's
+previous-focus restoration. They do not expose the Rust descriptor's explicit
+initial/restore focus targets. Native alert and file panels use the separate
+`native.ShowAlertDialog`, `native.ShowOpenDialog`, and `native.ShowSaveDialog`
+functions; see [Go platform services](go.md#native-services).
 
 ## Viewport and transition completion
 

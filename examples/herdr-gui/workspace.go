@@ -7,44 +7,35 @@ import (
 
 func appView(m *model) {
 	ui.View(
-		ui.Position("relative"),
-		ui.Display("flex"),
-		ui.FlexDirection("row"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.MinWidth(0),
-		ui.MinHeight(0),
-		ui.BackgroundColor(m.color(func(t theme) string { return t.App })),
-		ui.Color(m.color(func(t theme) string { return t.Text })),
-		ui.FontWeight(500),
 		func() {
 			sidebar(m)
 			workspace(m)
 			agentSheet(m)
 		},
+		ui.Style{
+			Position:        "relative",
+			Display:         "flex",
+			FlexDirection:   "row",
+			Width:           "100%",
+			Height:          "100%",
+			MinWidth:        0,
+			MinHeight:       0,
+			BackgroundColor: m.color(func(t theme) string { return t.App }),
+			Color:           m.color(func(t theme) string { return t.Text }),
+			FontWeight:      500,
+		},
 	)
 }
 func workspace(m *model) {
 	ui.View(
-		ui.Display("flex"),
-		ui.Flex(1),
-		ui.MinWidth(0),
-		ui.MinHeight(0),
-		ui.FlexDirection("column"),
-		ui.BackgroundColor(m.color(func(t theme) string { return t.App })),
 		func() {
 			tabBar(m)
+			ui.View(ui.Style{
+				Height:          1,
+				FlexShrink:      0,
+				BackgroundColor: m.color(func(t theme) string { return t.Border }),
+			})
 			ui.View(
-				ui.Height(1),
-				ui.FlexShrink(0),
-				ui.BackgroundColor(m.color(func(t theme) string { return t.Border })),
-			)
-			ui.View(
-				ui.Position("relative"),
-				ui.Display("flex"),
-				ui.Flex(1),
-				ui.MinWidth(0),
-				ui.MinHeight(0),
 				func() {
 					// Hide inactive surfaces without unmounting them. Each native PTY, scrollback,
 					// selection and working directory survives tab and space navigation.
@@ -58,32 +49,37 @@ func workspace(m *model) {
 						func() bool { return m.activeTab() == nil },
 						func() {
 							ui.View(
-								ui.Display("flex"),
-								ui.Flex(1),
-								ui.MinWidth(0),
-								ui.MinHeight(0),
-								ui.FlexDirection("column"),
-								ui.AlignItems("center"),
-								ui.JustifyContent("center"),
-								ui.Gap(9),
-								ui.BackgroundColor(m.color(func(t theme) string { return t.Terminal })),
 								func() {
 									icon("terminal", 24, m.color(func(t theme) string { return t.TextGhost }))
 									ui.Text(
-										ui.Color(m.color(func(t theme) string { return t.TextTertiary })),
-										ui.FontSize(13.5),
 										"Open a tab to start working",
+										ui.Style{
+											Color:    m.color(func(t theme) string { return t.TextTertiary }),
+											FontSize: 13.5,
+										},
 									)
 									ui.Button(
-										ui.WithStyle(m.buttonStyle(false)),
-										ui.OnClick(func() { m.newTerminal(m.activeSpace()) }),
 										"New Tab",
+										m.buttonStyle(false),
+										ui.OnClick(func() { m.newTerminal(m.activeSpace()) }),
 									)
+								},
+								ui.Style{
+									Display:         "flex",
+									Flex:            1,
+									MinWidth:        0,
+									MinHeight:       0,
+									FlexDirection:   "column",
+									AlignItems:      "center",
+									JustifyContent:  "center",
+									Gap:             9,
+									BackgroundColor: m.color(func(t theme) string { return t.Terminal }),
 								},
 							)
 						},
 					)
 				},
+				ui.Style{Position: "relative", Display: "flex", Flex: 1, MinWidth: 0, MinHeight: 0},
 			)
 			errorMessage := func() string {
 				if err := m.Error.Read(); err != "" {
@@ -98,36 +94,29 @@ func workspace(m *model) {
 				func() bool { return errorMessage() != "" },
 				func() {
 					ui.View(
-						ui.Display("flex"),
-						ui.MinHeight(30),
-						ui.FlexShrink(0),
-						ui.AlignItems("center"),
-						ui.Gap(8),
-						ui.PaddingLeft(12),
-						ui.PaddingRight(8),
-						ui.BackgroundColor(m.color(func(t theme) string { return t.ErrorBackground })),
 						func() {
 							ui.Text(
-								ui.Color(m.color(func(t theme) string { return t.Danger })),
-								ui.FontSize(11.5),
 								errorMessage,
+								ui.Style{
+									Color:    m.color(func(t theme) string { return t.Danger }),
+									FontSize: 11.5,
+								},
 							)
-							ui.View(ui.Flex(1))
+							ui.View(ui.Style{Flex: 1})
 							ui.Show(
 								func() bool {
 									return m.Error.Read() == "" && m.activePane() != nil
 								},
 								func() {
 									ui.Button(
-										ui.WithStyle(m.buttonStyle(false)),
-										ui.Height(22),
-										ui.FontSize(10.5),
+										"Restart",
+										m.buttonStyle(false),
+										ui.Style{Height: 22, FontSize: 10.5},
 										ui.OnClick(func() {
 											if p := m.activePane(); p != nil {
 												m.restartPane(p)
 											}
 										}),
-										"Restart",
 									)
 								},
 								func() {
@@ -135,30 +124,34 @@ func workspace(m *model) {
 								},
 							)
 						},
+						ui.Style{
+							Display:         "flex",
+							MinHeight:       30,
+							FlexShrink:      0,
+							AlignItems:      "center",
+							Gap:             8,
+							PaddingLeft:     12,
+							PaddingRight:    8,
+							BackgroundColor: m.color(func(t theme) string { return t.ErrorBackground }),
+						},
 					)
 				},
 			)
+		},
+		ui.Style{
+			Display:         "flex",
+			Flex:            1,
+			MinWidth:        0,
+			MinHeight:       0,
+			FlexDirection:   "column",
+			BackgroundColor: m.color(func(t theme) string { return t.App }),
 		},
 	)
 }
 func tabBar(m *model) {
 	ui.View(
-		ui.Display("flex"),
-		ui.Height(40),
-		ui.FlexShrink(0),
-		ui.AlignItems("center"),
-		ui.Gap(4),
-		ui.PaddingLeft(8),
-		ui.PaddingRight(8),
-		ui.AppRegion("drag"),
 		func() {
 			ui.View(
-				ui.Display("flex"),
-				ui.MinWidth(0),
-				ui.AlignItems("center"),
-				ui.Gap(3),
-				ui.Overflow("hidden"),
-				ui.AppRegion("no-drag"),
 				func() {
 					ui.KeyedFor(
 						m.spaceTabs,
@@ -166,127 +159,139 @@ func tabBar(m *model) {
 						func(tab func() workspaceTab, _ func() int) {
 							active := func() bool { return tab().ID == m.ActiveTabID.Read() }
 							ui.View(
-								ui.Position("relative"),
-								ui.Display("flex"),
-								ui.MinWidth(74),
-								ui.MaxWidth(170),
-								ui.Height(28),
-								ui.FlexShrink(1),
-								ui.AlignItems("center"),
-								ui.BackgroundColor(func() string {
-									return choose(active(), m.theme().Selected, "transparent")
-								}),
-								ui.BorderRadius(6),
-								ui.Group("tab"),
 								func() {
 									ui.Button(
-										ui.AriaLabel("Select terminal tab"),
-										ui.Display("flex"),
-										ui.Width("100%"),
-										ui.MinWidth(0),
-										ui.Height(28),
-										ui.AlignItems("center"),
-										ui.PaddingLeft(10),
-										ui.PaddingRight(func() int { return choose(active(), 30, 10) }),
-										ui.BackgroundColor("transparent"),
-										ui.Color(func() string {
-											return choose(active(), m.theme().Text, m.theme().TextTertiary)
-										}),
-										ui.Hover(ui.BackgroundColor(func() string {
-											return choose(active(), m.theme().SelectedStrong, m.theme().Hover)
-										})),
-										ui.Active(ui.BackgroundColor(m.color(func(t theme) string { return t.Active }))),
-										ui.BorderRadius(6),
-										ui.Cursor("default"),
-										ui.AppRegion("no-drag"),
-										ui.OnClick(func() { m.selectTab(tab()) }),
 										func() {
 											ui.Text(
-												ui.FontSize(12.5),
-												ui.FontWeight(560),
-												ui.LineClamp(1),
-												ui.TextOverflow("ellipsis"),
 												func() string {
 													return tabTitle(tab(), m.Panes.Read())
 												},
+												ui.Style{
+													FontSize:     12.5,
+													FontWeight:   560,
+													LineClamp:    1,
+													TextOverflow: "ellipsis",
+												},
 											)
 										},
+										ui.AriaLabel("Select terminal tab"),
+										ui.Style{
+											Display:         "flex",
+											Width:           "100%",
+											MinWidth:        0,
+											Height:          28,
+											AlignItems:      "center",
+											PaddingLeft:     10,
+											PaddingRight:    func() int { return choose(active(), 30, 10) },
+											BackgroundColor: "transparent",
+											Color: func() string {
+												return choose(active(), m.theme().Text, m.theme().TextTertiary)
+											},
+											Hover: &ui.Style{BackgroundColor: func() string {
+												return choose(active(), m.theme().SelectedStrong, m.theme().Hover)
+											}},
+											Active:       &ui.Style{BackgroundColor: m.color(func(t theme) string { return t.Active })},
+											BorderRadius: 6,
+											Cursor:       "default",
+											AppRegion:    "no-drag",
+										},
+										ui.OnClick(func() { m.selectTab(tab()) }),
 									)
 									ui.Show(
 										active,
 										func() {
-											iconButton(m, "Close tab", "close", 20, func() { m.closeTab(tab().ID) }, ui.Position("absolute"), ui.Top(4), ui.Right(3))
+											iconButton(m, "Close tab", "close", 20, func() { m.closeTab(tab().ID) }, ui.Style{
+												Position: "absolute",
+												Top:      4,
+												Right:    3,
+											})
 										},
 									)
 								},
+								ui.Style{
+									Position:   "relative",
+									Display:    "flex",
+									MinWidth:   74,
+									MaxWidth:   170,
+									Height:     28,
+									FlexShrink: 1,
+									AlignItems: "center",
+									BackgroundColor: func() string {
+										return choose(active(), m.theme().Selected, "transparent")
+									},
+									BorderRadius: 6,
+								},
+								ui.Group("tab"),
 							)
 						},
 						nil,
 					)
 					iconButton(m, "New tab", "plus", 24, func() { m.newTerminal(m.activeSpace()) })
 				},
+				ui.Style{
+					Display:    "flex",
+					MinWidth:   0,
+					AlignItems: "center",
+					Gap:        3,
+					Overflow:   "hidden",
+					AppRegion:  "no-drag",
+				},
 			)
-			ui.View(ui.Flex(1), ui.AppRegion("drag"))
+			ui.View(ui.Style{Flex: 1, AppRegion: "drag"})
 			ui.Button(
-				ui.AriaLabel("New agent"),
-				ui.FocusOnPointer(ptr(false)),
-				ui.Display("flex"),
-				ui.Height(24),
-				ui.FlexShrink(0),
-				ui.AlignItems("center"),
-				ui.JustifyContent("center"),
-				ui.Gap(5),
-				ui.PaddingLeft(9),
-				ui.PaddingRight(9),
-				ui.Color(m.color(func(t theme) string { return t.TextSecondary })),
-				ui.BackgroundColor("transparent"),
-				ui.Hover(ui.BackgroundColor(m.color(func(t theme) string { return t.Hover }))),
-				ui.Active(ui.BackgroundColor(m.color(func(t theme) string { return t.Active }))),
-				ui.Transition(colorTransition),
-				ui.BorderRadius(5),
-				ui.FontSize(11.5),
-				ui.FontWeight(600),
-				ui.Cursor("default"),
-				ui.AppRegion("no-drag"),
-				ui.OnClick(m.openAgentSheet),
 				func() {
 					icon("plus", 13, m.color(func(t theme) string { return t.TextSecondary }))
 					ui.Text("Agent")
 				},
+				ui.AriaLabel("New agent"),
+				ui.FocusOnPointer(ptr(false)),
+				ui.Style{
+					Display:         "flex",
+					Height:          24,
+					FlexShrink:      0,
+					AlignItems:      "center",
+					JustifyContent:  "center",
+					Gap:             5,
+					PaddingLeft:     9,
+					PaddingRight:    9,
+					Color:           m.color(func(t theme) string { return t.TextSecondary }),
+					BackgroundColor: "transparent",
+					Hover:           &ui.Style{BackgroundColor: m.color(func(t theme) string { return t.Hover })},
+					Active:          &ui.Style{BackgroundColor: m.color(func(t theme) string { return t.Active })},
+					Transition:      colorTransition,
+					BorderRadius:    5,
+					FontSize:        11.5,
+					FontWeight:      600,
+					Cursor:          "default",
+					AppRegion:       "no-drag",
+				},
+				ui.OnClick(m.openAgentSheet),
 			)
-			ui.View(
-				ui.Width(1),
-				ui.Height(16),
-				ui.FlexShrink(0),
-				ui.MarginLeft(2),
-				ui.MarginRight(2),
-				ui.BackgroundColor(m.color(func(t theme) string { return t.BorderStrong })),
-			)
+			ui.View(ui.Style{
+				Width:           1,
+				Height:          16,
+				FlexShrink:      0,
+				MarginLeft:      2,
+				MarginRight:     2,
+				BackgroundColor: m.color(func(t theme) string { return t.BorderStrong }),
+			})
 			iconButton(m, "Split right", "columns", 24, func() { m.splitTerminal("horizontal") })
 			iconButton(m, "Split down", "rows", 24, func() { m.splitTerminal("vertical") })
+		},
+		ui.Style{
+			Display:      "flex",
+			Height:       40,
+			FlexShrink:   0,
+			AlignItems:   "center",
+			Gap:          4,
+			PaddingLeft:  8,
+			PaddingRight: 8,
+			AppRegion:    "drag",
 		},
 	)
 }
 func tabSurface(m *model, tab func() workspaceTab) {
 	ui.View(
-		ui.Position("absolute"),
-		ui.Display("flex"),
-		ui.Top(0),
-		ui.Right(0),
-		ui.Bottom(0),
-		ui.Left(0),
-		ui.MinWidth(0),
-		ui.MinHeight(0),
-		ui.Gap(5),
-		ui.FlexDirection("row"),
-		ui.When(
-			func() bool { return tab().Direction == "vertical" },
-			ui.FlexDirection("column"),
-		),
-		ui.When(
-			func() bool { return tab().ID != m.ActiveTabID.Read() },
-			ui.Visibility("hidden"),
-		),
 		func() {
 			// Restart replaces the pane object; other model updates preserve its identity.
 			ui.For(
@@ -296,6 +301,26 @@ func tabSurface(m *model, tab func() workspaceTab) {
 				nil,
 			)
 		},
+		ui.Style{
+			Position:      "absolute",
+			Display:       "flex",
+			Top:           0,
+			Right:         0,
+			Bottom:        0,
+			Left:          0,
+			MinWidth:      0,
+			MinHeight:     0,
+			Gap:           5,
+			FlexDirection: "row",
+		},
+		ui.When(
+			func() bool { return tab().Direction == "vertical" },
+			ui.Style{FlexDirection: "column"},
+		),
+		ui.When(
+			func() bool { return tab().ID != m.ActiveTabID.Read() },
+			ui.Style{Visibility: "hidden"},
+		),
 	)
 }
 func terminalPane(m *model, p *pane) {
@@ -306,20 +331,8 @@ func terminalPane(m *model, p *pane) {
 		}
 	}
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexGrow(1),
-		ui.FlexBasis(0),
-		ui.MinWidth(0),
-		ui.MinHeight(0),
-		ui.FlexDirection("column"),
-		ui.BackgroundColor(m.color(func(t theme) string { return t.Terminal })),
 		func() {
 			ui.View(
-				ui.Position("relative"),
-				ui.Display("flex"),
-				ui.Flex(1),
-				ui.MinWidth(0),
-				ui.MinHeight(0),
 				func() {
 					ui.Terminal(ui.TerminalProps{
 						Program:          p.Program,
@@ -359,7 +372,17 @@ func terminalPane(m *model, p *pane) {
 						},
 					})
 				},
+				ui.Style{Position: "relative", Display: "flex", Flex: 1, MinWidth: 0, MinHeight: 0},
 			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexGrow:        1,
+			FlexBasis:       0,
+			MinWidth:        0,
+			MinHeight:       0,
+			FlexDirection:   "column",
+			BackgroundColor: m.color(func(t theme) string { return t.Terminal }),
 		},
 	)
 }

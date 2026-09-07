@@ -233,6 +233,14 @@ func ParseDiff(output string, truncated bool) []DiffFile {
 }
 
 func parseGitHeaderPaths(pair string) [2]string {
+	// Unquoted paths can themselves contain " b/". An unchanged name occupies
+	// two equal halves; prefer that split before interpreting a rename.
+	if len(pair)%2 == 1 {
+		middle := len(pair) / 2
+		if pair[middle] == ' ' && strings.HasPrefix(pair, "a/") && strings.HasPrefix(pair[middle+1:], "b/") && pair[2:middle] == pair[middle+3:] {
+			return [2]string{pair[2:middle], pair[middle+3:]}
+		}
+	}
 	at := strings.Index(pair, " b/")
 	if at >= 0 && strings.HasPrefix(pair, "a/") {
 		return [2]string{strings.TrimPrefix(pair[:at], "a/"), strings.TrimPrefix(pair[at+1:], "b/")}
@@ -286,103 +294,129 @@ type HunkSelection struct {
 	Lines     map[int]struct{}
 }
 
+// FormatPatch keeps selected changes in their original direction. reverse prepares
+// the context for a target containing the new side; git apply --reverse inverts it.
 func FormatPatch(file DiffFile, selections []HunkSelection, reverse bool) string {
-	var body strings.Builder
-	anyLine := false
+	// Merge overlapping selections and emit hunks in source order.
+	chosen := make(map[int]HunkSelection, len(selections))
 	for _, selection := range selections {
 		if selection.HunkIndex < 0 || selection.HunkIndex >= len(file.Hunks) {
 			continue
 		}
-		hunk := file.Hunks[selection.HunkIndex]
-		var lines []string
-		oldCount, newCount := 0, 0
-		for i, line := range hunk.Lines {
-			_, selected := selection.Lines[i]
-			if len(selection.Lines) == 0 {
-				selected = true
+		existing, ok := chosen[selection.HunkIndex]
+		if ok && (existing.Lines == nil || selection.Lines == nil) {
+			existing.Lines = nil
+		} else {
+			if !ok {
+				existing = HunkSelection{HunkIndex: selection.HunkIndex}
 			}
-			switch line.Kind {
-			case LineContext:
-				lines = append(lines, " "+line.Text)
-				oldCount++
-				newCount++
-			case LineAdded:
-				if selected && !reverse {
-					lines = append(lines, "+"+line.Text)
-					newCount++
-					anyLine = true
-				} else if selected && reverse {
-					lines = append(lines, "-"+line.Text)
-					oldCount++
-					anyLine = true
-				} else if reverse {
-					lines = append(lines, " "+line.Text)
-					oldCount++
-					newCount++
+			if selection.Lines != nil {
+				if existing.Lines == nil {
+					existing.Lines = map[int]struct{}{}
 				}
-			case LineRemoved:
-				if selected && !reverse {
-					lines = append(lines, "-"+line.Text)
-					oldCount++
-					anyLine = true
-				} else if selected && reverse {
-					lines = append(lines, "+"+line.Text)
-					newCount++
-					anyLine = true
-				} else if !reverse {
-					lines = append(lines, " "+line.Text)
-					oldCount++
-					newCount++
+				for index := range selection.Lines {
+					existing.Lines[index] = struct{}{}
 				}
 			}
 		}
-		if len(lines) == 0 {
+		chosen[selection.HunkIndex] = existing
+	}
+	var body strings.Builder
+	delta := 0
+	wholeFile := true
+	for hunkIndex, hunk := range file.Hunks {
+		selection, included := chosen[hunkIndex]
+		if !included {
+			for _, line := range hunk.Lines {
+				if line.Kind != LineContext {
+					wholeFile = false
+				}
+			}
 			continue
 		}
-		oldStart := hunk.OldStart
+		var lines strings.Builder
+		oldCount, newCount := 0, 0
+		changed := false
+		for i, line := range hunk.Lines {
+			_, selected := selection.Lines[i]
+			selected = selection.Lines == nil || selected
+			marker := byte(' ')
+			if line.Kind != LineContext {
+				if selected {
+					changed = true
+					if line.Kind == LineAdded {
+						marker = '+'
+					} else {
+						marker = '-'
+					}
+				} else {
+					wholeFile = false
+					if (line.Kind == LineAdded && !reverse) || (line.Kind == LineRemoved && reverse) {
+						continue
+					}
+				}
+			}
+			if marker != '+' {
+				oldCount++
+			}
+			if marker != '-' {
+				newCount++
+			}
+			lines.WriteByte(marker)
+			lines.WriteString(line.Text)
+			lines.WriteByte('\n')
+			if line.NoNewline {
+				lines.WriteString("\\ No newline at end of file\n")
+			}
+		}
+		if !changed {
+			continue
+		}
+		oldStart, newStart := max(hunk.OldStart, 1), max(hunk.OldStart+delta, 1)
+		if reverse {
+			newStart = max(hunk.NewStart, 1)
+		}
 		if oldCount == 0 {
 			oldStart = 0
-		}
-		newStart := hunk.NewStart
-		if reverse {
-			newStart = hunk.NewStart
 		}
 		if newCount == 0 {
 			newStart = 0
 		}
-		fmt.Fprintf(&body, "@@ -%s +%s @@ %s\n", countSuffix(oldStart, oldCount), countSuffix(newStart, newCount), hunk.Heading)
-		for _, line := range lines {
-			body.WriteString(line)
-			body.WriteByte('\n')
+		fmt.Fprintf(&body, "@@ -%s +%s @@", countSuffix(oldStart, oldCount), countSuffix(newStart, newCount))
+		if hunk.Heading != "" {
+			body.WriteString(" " + hunk.Heading)
 		}
+		body.WriteByte('\n')
+		body.WriteString(lines.String())
+		delta += newCount - oldCount
 	}
-	if !anyLine {
+	if body.Len() == 0 {
 		return ""
 	}
 	var header strings.Builder
-	path := file.Path
-	oldPath, newPath := file.OldPath, file.NewPath
-	if oldPath == "" {
-		oldPath = "/dev/null"
-	} else {
-		oldPath = "a/" + oldPath
+	oldName := valueOr(file.OldPath, valueOr(file.NewPath, file.Path))
+	newName := valueOr(file.NewPath, valueOr(file.OldPath, file.Path))
+	fmt.Fprintf(&header, "diff --git a/%s b/%s\n", oldName, newName)
+	switch {
+	case file.Kind == FileAdded && (!reverse || wholeFile):
+		fmt.Fprintf(&header, "new file mode %s\n--- /dev/null\n+++ b/%s\n", valueOr(file.NewMode, "100644"), newName)
+	case file.Kind == FileDeleted && wholeFile:
+		fmt.Fprintf(&header, "deleted file mode %s\n--- a/%s\n+++ /dev/null\n", valueOr(file.OldMode, "100644"), oldName)
+	default:
+		if file.Kind == FileRenamed || file.Kind == FileCopied {
+			kind := "rename"
+			if file.Kind == FileCopied {
+				kind = "copy"
+			}
+			if file.Similarity != nil {
+				fmt.Fprintf(&header, "similarity index %d%%\n", *file.Similarity)
+			}
+			fmt.Fprintf(&header, "%s from %s\n%s to %s\n", kind, oldName, kind, newName)
+		} else if file.OldMode != "" && file.NewMode != "" && file.OldMode != file.NewMode {
+			fmt.Fprintf(&header, "old mode %s\nnew mode %s\n", file.OldMode, file.NewMode)
+		}
+		fmt.Fprintf(&header, "--- a/%s\n+++ b/%s\n", oldName, newName)
 	}
-	if newPath == "" {
-		newPath = "/dev/null"
-	} else {
-		newPath = "b/" + newPath
-	}
-	fmt.Fprintf(&header, "diff --git a/%s b/%s\n", path, path)
-	if file.Kind == FileAdded && !reverse {
-		fmt.Fprintf(&header, "new file mode %s\n", valueOr(file.NewMode, "100644"))
-	}
-	if file.Kind == FileDeleted && !reverse {
-		fmt.Fprintf(&header, "deleted file mode %s\n", valueOr(file.OldMode, "100644"))
-	}
-	if file.Kind == FileRenamed && file.Similarity != nil {
-		fmt.Fprintf(&header, "similarity index %d%%\nrename from %s\nrename to %s\n", *file.Similarity, file.OldPath, file.NewPath)
-	}
-	fmt.Fprintf(&header, "--- %s\n+++ %s\n", oldPath, newPath)
 	return header.String() + body.String()
 }
 

@@ -339,59 +339,60 @@ Keyboard movement deliberately does **not** swap which panel is open: unmounting
 restores focus to its own trigger, which would immediately undo the move the user just made. Pointer
 hover and click switch panels; the keyboard moves focus and opens with Enter or Space.
 
-## QuickGUI UI
+## Go components
 
-The [QuickGUI UI renderer](ui.md) binds seven of these through the same declared-part scheme every other
-component uses, with Base UI's own compound and prop names: `Separator`, `Avatar`, `CheckboxGroup`,
-`PreviewCard`, `ScrollArea`, `OtpField`, and `NavigationMenu`. Each root allocates one
-bounded scope internally, so the parts of an instance resolve to the same core identity with no
-registry and nothing to repeat.
+The `ui` package exposes `Separator`, `Avatar`, `CheckboxGroup`, `PreviewCard`,
+`ScrollArea`, `OtpField`, and `NavigationMenu` as compound components. Each root
+allocates one bounded scope; child callbacks run inside that scope.
 
-```tsx
-import { Avatar, NavigationMenu, OtpField, ScrollArea } from "@quickgui/ui/base-ui";
-import { CheckboxGroup, Checkbox } from "@quickgui/ui/controls";
-import { Text } from "@quickgui/ui";
-import { PreviewCard } from "@quickgui/ui/tooltip";
-import { Separator } from "@quickgui/ui/toolbar";
-
-<Avatar.Root ariaLabel="Ada Lovelace" onLoadingStatusChange={setStatus}>
-  <Avatar.Image src="./ada.png" />
-  <Avatar.Fallback delay={120}><Text>AL</Text></Avatar.Fallback>
-</Avatar.Root>
-
-<CheckboxGroup.Root allValues={["red", "green", "blue"]} value={colors()} onValueChange={setColors}>
-  <Checkbox.Root parent><Text>All colours</Text></Checkbox.Root>
-  <Checkbox.Root value="red"><Text>Red</Text></Checkbox.Root>
-</CheckboxGroup.Root>
+```go
+func ProfileControls() {
+	colors, setColors := ui.CreateSignal([]string{"red"})
+	ui.Avatar.Root(
+		ui.AvatarRootProps{
+			PartProps:             ui.PartProps{AriaLabel: "Ada Lovelace"},
+			OnLoadingStatusChange: func(status string, _ *native.Event) { log.Print(status) },
+		},
+		func() {
+			ui.Avatar.Image(ui.AvatarImageProps{Src: "./ada.png"})
+			ui.Avatar.Fallback(ui.AvatarFallbackProps{Delay: 120}, "AL")
+		},
+	)
+	ui.CheckboxGroup.Root(
+		ui.CheckboxGroupProps{
+			AllValues:     []string{"red", "green", "blue"},
+			Value:         colors,
+			OnValueChange: func(value []string, _ *native.Event) { setColors(value) },
+		},
+		func() {
+			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All colours")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "red"}, "Red")
+		},
+	)
+}
 ```
 
-The hosted boundary never waits: every result the core decides — the avatar load status, the
-checked value set, a preview card's open value, a scroll area's clamped offset and derived
-overflow flags, the OTP code and its completion edge, and a navigation menu's open item and activation direction — travels back as one
-asynchronous `componentchange` event and reaches the application through the matching
-`on*Change` prop. Nothing the core must decide synchronously is asked of JavaScript: bounds,
-values, deadlines, snap points, and the scroll area's laid-out extents are all declared ahead
-through bounded properties.
+The core delivers avatar load status, checked values, preview-card visibility,
+scroll offsets/overflow, OTP completion, and navigation-menu activation through
+asynchronous component events. Go callbacks update signals. Bounds, values,
+deadlines, snap points, and layout extents are declared ahead of those events;
+native input never waits synchronously for a Go decision.
 
-Two things follow from that boundary and differ from the Rust API:
+- A scroll area measures its viewport, content, and scrollbars through retained
+  layout handles. `ViewportSize` and `ContentSize` are optional overrides. Thumb
+  geometry belongs to the core; splitter sizes likewise follow the space flex
+  layout assigned to their panes.
+- A part whose input edge belongs to the core keeps exactly one listener for it:
+  grouped checkboxes, navigation triggers, OTP input, scrollbar dragging/wheel
+  input, and popup dismissal use their component callbacks instead of replacing
+  native behavior with a generic listener.
 
-- **A scroll area measures its own geometry.** The binding reports the painted bounds of the
-  viewport, the content, and each scrollbar through `LayoutBoundsHandle`s, so `viewportSize` and
-  `contentSize` are optional overrides rather than requirements, the thumb is positioned by the
-  core, and a splitter's sizes rescale to the extent flex layout actually gave its panes.
-- **A part whose edge the core owns ignores a declared listener for that same edge.** A checkbox
-  inside a group, a navigation-menu trigger, an OTP slot's input, a scroll area's scrollbar, thumb
-  and wheel, and every popup's dismissal register exactly one listener each,
-  which is the core's.
+`ui.UseScrollAreaState()` reads the reported state inside a scroll-area subtree.
+The Go SDK does not yet expose the Rust Drawer descriptor; it was also absent from
+the previous TypeScript UI API.
 
-`useScrollAreaState()` reads the reported state inside its subtree. The TypeScript UI package
-does not expose the Rust Drawer component.
-
-Run the QuickGUI UI gallery, which includes these bindings, with:
-
-```console
-bun run --cwd examples/components dev
-```
+Run the gallery with `bun --cwd examples/components dev`. See the
+[Go guide](go.md) for reactive components and shared styles.
 
 ## Bounds
 

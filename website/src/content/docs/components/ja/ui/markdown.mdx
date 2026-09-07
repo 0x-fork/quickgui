@@ -14,7 +14,7 @@ import (
 
 ```go
 func MarkdownExample(source func() string, streaming func() bool) {
-	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Width("100%"))
+	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Style{Width: "100%"})
 }
 ```
 
@@ -24,4 +24,4 @@ func MarkdownExample(source func() string, streaming func() bool) {
 | --- | --- |
 | `Value` | 組版・描画する Markdown ソースです。 |
 | `Streaming` | 追記された内容に Markdown の差分更新を使います。 |
-| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

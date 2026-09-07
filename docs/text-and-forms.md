@@ -291,53 +291,61 @@ restore the corresponding styles. Run metadata and named-family bytes count towa
 existing 512 KiB history budget, the live table remains capped at 4,096 runs, and highlighting
 runs only after application value changes—never on idle frames.
 
-## QuickGUI UI: Field and Fieldset
+## Go components: Field and Fieldset
 
-`Field.Item` and `Field.Validity` are bound alongside the existing label, control, description, and
-error parts. `validationMode` — `"onSubmit"` (the default), `"onBlur"`, or `"onChange"` — and a
-bounded `validationDebounceTime` are answered by the core, which reports which triggers validate
-and how long it waits before each one:
+The `ui` package exposes `Field.Root`, `Label`, `Control`, `Description`, `Error`,
+`Item`, and `Validity`, plus `Fieldset.Root`, `Legend`, `Description`, and `Control`.
+`ValidationMode` is `"onSubmit"` by default, or `"onBlur"` / `"onChange"`.
+`ValidationDebounceTime` declares a bounded delay in milliseconds; the core reports
+the accepted triggers and delay through `OnValidationChange`.
 
-```tsx
-<Field.Root validationMode="onChange" validationDebounceTime={250}
-  onValidationChange={({ triggers, delay }) => schedule(triggers, delay)}>
-  <Field.Item>
-    <Field.Label>Email</Field.Label>
-    <Field.Control />
-  </Field.Item>
-  <Field.Validity />
-  <Field.Error>Enter a work address</Field.Error>
-</Field.Root>
+```go
+func AccountForm() {
+	email, setEmail := ui.CreateSignal("")
+	saving, _ := ui.CreateSignal(false)
+	ui.Fieldset.Root(
+		ui.PartProps{Disabled: saving},
+		func() {
+			ui.Fieldset.Legend(ui.PartProps{}, "Account")
+			ui.Field.Root(
+				ui.FieldRootProps{
+					Required:               true,
+					Invalid:                func() bool { return email() == "" },
+					ValidationMessage:      func() string { return "Enter an address" },
+					ValidationMode:         "onChange",
+					ValidationDebounceTime: 250,
+					OnValidationChange: func(details ui.FieldValidationDetails, _ *native.Event) {
+						log.Print(details.Triggers, details.Delay)
+					},
+				},
+				func() {
+					ui.Field.Item(
+						ui.PartProps{},
+						func() {
+							ui.Field.Label(ui.FieldLabelProps{}, "Email")
+							ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+								Value:       email,
+								Placeholder: "you@example.com",
+								OnInput:     func(event *native.Event) { setEmail(ui.InputValue(event)) },
+							}})
+						},
+					)
+					ui.Field.Description(ui.PartProps{}, "We never share it.")
+					ui.Field.Validity(ui.FieldValidityProps{})
+					ui.Field.Error(ui.PartProps{}, "Enter an address")
+				},
+			)
+		},
+	)
+}
 ```
 
-Nothing in the hosted runtime re-derives that contract: the mode is declared ahead of time and the
-answers travel back as one asynchronous payload.
-
-
-`@quickgui/ui` exposes the field layer as `Field.Root`, `Field.Label`, `Field.Control`,
-`Field.Description`, `Field.Error`, and `Fieldset.Root`, `Fieldset.Legend`,
-`Fieldset.Description`, `Fieldset.Control`.
-
-```tsx
-<Fieldset.Root disabled={saving()}>
-  <Fieldset.Legend>Account</Fieldset.Legend>
-  <Field.Root invalid={!valid()} required validationMessage="Enter an address">
-    <Field.Label>Email</Field.Label>
-    <Field.Control value={email()} placeholder="you@example.com" onInput={update} />
-    <Field.Description>We never share it.</Field.Description>
-    <Field.Error>Enter an address</Field.Error>
-  </Field.Root>
-</Fieldset.Root>
-```
-
-Each `Field.Root` allocates one bounded scope key that every part repeats, so the Rust binding
-rebuilds the same `Field` descriptor and applies the derived root, label, description, error, and
-control identities the core would have used. Because `control_part` owns the control's identity,
-`Field.Control` *is* the control rather than a wrapper; its `element` prop selects the native
-element and defaults to `input`. `Field.Label` forwards clicks to the control unless `passive` is
-declared, a nested `Field.Root` inherits `Fieldset.Root`'s disabled state, and the six controlled
-booleans plus the bounded `validationMessage` pass straight through to `FieldState`. See the
-[QuickGUI UI renderer guide](ui.md).
+Each field retains one scope key that its parts repeat. The core derives the root,
+label, description, error, and control identities. `Field.Control` is the control
+itself; `Element` selects its native element and defaults to `input`. A label
+forwards clicks to that control unless `Passive` is set. Nested fields inherit the
+fieldset's disabled state. Controlled flags and the bounded validation message
+flow through to the same core `FieldState`. See the [Go guide](go.md).
 
 ## Spelling, grammar, and text substitutions
 

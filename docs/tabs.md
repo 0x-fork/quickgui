@@ -138,51 +138,80 @@ The gallery is one ordinary in-window view—no popover or native child surface.
 horizontal manual activation, vertical automatic activation, disabled-item skipping, looping,
 retained and unmounted panels, application-owned indicators, and wrapped content.
 
-## QuickGUI UI
+## Go components
 
-`@quickgui/ui` exposes this descriptor as `Tabs.Root`, `Tabs.List`, `Tabs.Tab`,
-`Tabs.Indicator`, and `Tabs.Panel`. Every part repeats the controlled declaration on its own native
-node, so the Rust binding rebuilds `Tabs`/`Tab` and applies the derived list, tab, panel, and
-indicator identities without a JavaScript registry.
+`ui.Tabs.Root`, `List`, `Tab`, `Indicator`, and `Panel` declare the same core tab
+identities. `Value` is a `func() *string`; `nil` means no selection. Leaving it
+unset uses the root's `DefaultValue` and internal signal.
 
-```tsx
-<Tabs.Root value={tab()} onValueChange={setTab} orientation="vertical" activation="automatic">
-  <Tabs.List>
-    <Tabs.Tab value="overview">Overview</Tabs.Tab>
-    <Tabs.Tab value="usage" disabled>Usage</Tabs.Tab>
-  </Tabs.List>
-  <Tabs.Panel value="overview">…</Tabs.Panel>
-</Tabs.Root>
-```
-
-`activation="automatic"` maps to `activate_on_focus`, `loop={false}` to `loop_focus(false)`, and
-`keepMounted` to `keep_mounted`. Roving Tab order, arrow/Home/End navigation, disabled-item
-skipping, and inactive-panel unmounting stay in this Rust layer. `Tabs.Indicator` mounts only for
-the active tab and takes its value from the enclosing `Tabs.Tab`, or from an explicit `value` prop
-when placed in the list.
-
-Declaring `index` on each `Tabs.Tab` is what lets the core record which way the selection
-travelled, and declaring `placement` on `Tabs.Indicator` asks it to keep the indicator anchored to
-the tab that is really active and to publish that tab's laid-out box during the paint QuickGUI was
-already performing. `useTabsState()` reports both:
-
-```tsx
-function Views() {
-  const tabs = useTabsState();
-  return (
-    <Tabs.Root value={tab()} onValueChange={setTab}>
-      <Tabs.List>
-        <Tabs.Tab value="list" index={0}>List</Tabs.Tab>
-        <Tabs.Tab value="grid" index={1}>Grid</Tabs.Tab>
-        <Tabs.Indicator placement="bottom" style={{ height: 2 }} />
-      </Tabs.List>
-      <Panel direction={tabs().activationDirection} width={tabs().indicator?.width} />
-    </Tabs.Root>
-  );
+```go
+func EditorTabs() {
+	initial := "overview"
+	tab, setTab := ui.CreateSignal(&initial)
+	ui.Tabs.Root(
+		ui.TabsRootProps{
+			Value:         tab,
+			OnValueChange: func(value string, _ *native.Event) { setTab(&value) },
+			Orientation:   "vertical",
+			Activation:    "automatic",
+		},
+		func() {
+			ui.Tabs.List(
+				ui.PartProps{},
+				func() {
+					ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview")
+					ui.Tabs.Tab(
+						ui.TabsTabProps{
+							PartProps: ui.PartProps{Disabled: true},
+							Value:     "usage",
+						},
+						"Usage",
+					)
+				},
+			)
+			ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Project overview")
+		},
+	)
 }
 ```
 
-`activationDirection` is Base UI's `data-activation-direction`, so a panel transition can run the
-right way without JavaScript comparing indices, and the indicator geometry is the core's own
-measurement rather than one taken in the hosted runtime. See the
-[QuickGUI UI renderer guide](ui.md#selection-tab-disclosure-and-field-parts).
+`Activation: "automatic"` maps to `activate_on_focus`; a false `Loop` pointer
+disables wrapping, and `KeepMounted` retains inactive panels. Roving Tab order,
+arrow/Home/End navigation, disabled-item skipping, and panel visibility belong to
+the core. An indicator uses its enclosing tab's value, or an explicit `Value` when
+placed in the list.
+
+`TabsTabProps.Index` declares each tab's order. The core reports the resulting
+`TabsState.ActivationDirection` and the active tab's measured `Indicator` geometry.
+Read them through `ui.UseTabsState()` inside the root's child callback; call the
+accessor inside a reactive text or style binding to follow changes:
+
+```go
+func MeasuredTabs() {
+	first, second := 0, 1
+	ui.Tabs.Root(
+		ui.TabsRootProps{DefaultValue: "list"},
+		func() {
+			state := ui.UseTabsState()
+			ui.Tabs.List(
+				ui.PartProps{},
+				func() {
+					ui.Tabs.Tab(ui.TabsTabProps{Value: "list", Index: &first}, "List")
+					ui.Tabs.Tab(ui.TabsTabProps{Value: "grid", Index: &second}, "Grid")
+					ui.Tabs.Indicator(ui.TabsIndicatorProps{
+						PartProps: ui.PartProps{Style: ui.Style{Height: 2}},
+						Placement: "bottom",
+					})
+				},
+			)
+			ui.Text(
+				"Direction: ",
+				func() string { return state().ActivationDirection },
+			)
+		},
+	)
+}
+```
+
+No Go-side geometry measurement or index comparison is needed. See the
+[Go guide](go.md) for components and fine-grained bindings.

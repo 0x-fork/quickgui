@@ -26,9 +26,7 @@ func icon(name string, size float64, color func() string) {
 }
 func dynamicIcon(name func() string, size float64, color func() string) {
 	ui.SVG(
-		ui.Width(size),
-		ui.Height(size),
-		ui.FlexShrink(0),
+		ui.Style{Width: size, Height: size, FlexShrink: 0},
 		ui.Value(func() string {
 			return strings.ReplaceAll(svgFrame+icons[name()]+"</svg>", "currentColor", color())
 		}),
@@ -37,12 +35,6 @@ func dynamicIcon(name func() string, size float64, color func() string) {
 func statusGlyph(m *model, status func() string, compact bool) {
 	size := choose(compact, 12.0, 14.0)
 	ui.View(
-		ui.Display("flex"),
-		ui.Width(size),
-		ui.Height(size),
-		ui.FlexShrink(0),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
 		func() {
 			dynamicIcon(func() string {
 				switch status() {
@@ -66,10 +58,18 @@ func statusGlyph(m *model, status func() string, compact bool) {
 				return m.theme().TextGhost
 			})
 		},
+		ui.Style{
+			Display:        "flex",
+			Width:          size,
+			Height:         size,
+			FlexShrink:     0,
+			AlignItems:     "center",
+			JustifyContent: "center",
+		},
 	)
 }
 func iconButton(m *model, label, name string, size float64, click func(), options ...any) {
-	args := []any{ui.AriaLabel(label), ui.FocusOnPointer(ptr(false)), ui.WithStyle(m.iconStyle(size)), ui.OnClick(click)}
+	args := []any{ui.AriaLabel(label), ui.FocusOnPointer(ptr(false)), m.iconStyle(size), ui.OnClick(click)}
 	args = append(args, options...)
 	args = append(args, func() { icon(name, 14, m.color(func(t theme) string { return t.TextTertiary })) })
 	ui.Button(args...)

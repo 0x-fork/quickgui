@@ -30,6 +30,35 @@ From this repository, run `bun run build:native` once to stage the Rust library.
 
 ## Configuration
 
+Both `quickgui.toml` and `quickgui.config.ts` are supported. `dev` and `build` look for `quickgui.toml` first, then `quickgui.config.ts`. Pass `--config path/to/file.toml` (or a TypeScript file) to select one explicitly. Both formats use the same option names and validation; relative paths are resolved from the project directory. The generated scaffold continues to use TypeScript.
+
+A `quickgui.toml` can contain:
+
+```toml
+name = "My App"
+identifier = "com.example.my-app"
+entry = "."
+version = "0.1.0"
+fonts = ["assets/Custom.ttf"]
+resources = ["assets"]
+protocols = ["my-app"]
+
+[native]
+tags = ["production"]
+
+[macos]
+icon = "assets/AppIcon.icns"
+minimumSystemVersion = "14.0"
+signingIdentity = "Developer ID Application: Example (TEAMID)"
+
+[macos.notarization]
+keychainProfile = "quickgui-notary"
+```
+
+Use quoted strings for `version` and `buildVersion`. Nested options use TOML tables; document types use `[[documentTypes]]` array entries. Config changes are reloaded during `dev`, and malformed TOML reports a parse error instead of falling back to another file.
+
+The equivalent TypeScript configuration is:
+
 ```ts
 import { defineConfig } from "@quickgui/cli";
 

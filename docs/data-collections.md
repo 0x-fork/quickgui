@@ -284,7 +284,7 @@ seven mounted rows, including overscan, with no measured-height entries created 
 Sorting and full source replacement are intentionally application events rather than per-frame
 work.
 
-## JavaScript bindings
+## Go components
 
 `Table.Root` / `Header` / `Row` / `Cell` and `Tree.Root` / `Row` declare the column list, the row
 count, the node source, the controlled selection, sort, expansion, and inline-edit position. The
@@ -292,7 +292,7 @@ hosted view reaches each declared instance's retained `TableState` or `TreeState
 per-instance [`StateAccessor`](view-api.md), so several collections in one window stay independent.
 
 Both are on-demand. The core owns the virtual window and reports the range it mounted through
-`onVisibleRangeChange`; JavaScript declares exactly those `Row` children, so a million-row table
+`OnVisibleRangeChange`; Go declares exactly those `Row` children, so a million-row table
 declares only the window on screen. Column resizing and reordering, keyboard navigation, selection
 policy, expansion, the lazy-children request, and Return activation stay in the core, and every
 result travels back as one asynchronous payload keyed by the caller's own declared identifiers
@@ -305,4 +305,4 @@ an ordinary child node. Supplying a pending branch's children is a declaration t
 atomically by the core — an over-deep, oversized, or duplicate payload leaves the tree exactly as it
 was. Declarations are bounded before they reach the core: 2 MiB per column, node, selection, or
 toast source, 512 columns, 65,536 nodes, and a duplicate identifier keeps its first occurrence. See
-the [QuickGUI UI renderer](ui.md#virtual-tables-and-trees).
+the [Go components](go.md).

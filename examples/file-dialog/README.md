@@ -1,6 +1,8 @@
 # file-dialog
 
-Native open, folder, and save panels with asynchronous results.
+Native multi-file open with text/all-file filters, an application-modal folder
+picker, and a save panel with a suggested filename and text filter. Results and
+cancellation update the retained status text; choosing a destination writes no file.
 
 The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
 

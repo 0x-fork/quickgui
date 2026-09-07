@@ -31,7 +31,7 @@ func TestBuildRouteTableAssignsIdsAndParents(t *testing.T) {
 	if table.definitions[0].ID != "route-1" || table.definitions[0].Path != "/" || table.definitions[0].ParentID != "" {
 		t.Fatalf("%+v", table.definitions[0])
 	}
-	if table.definitions[1].ID != "route-2" || table.definitions[1].Path != "" || table.definitions[1].ParentID != "route-1" {
+	if table.definitions[1].ID != "route-2" || table.definitions[1].Path != "" || !table.definitions[1].Index || table.definitions[1].ParentID != "route-1" {
 		t.Fatalf("%+v", table.definitions[1])
 	}
 	if table.definitions[2].ID != "route-3" || table.definitions[2].ParentID != "route-1" {
@@ -46,7 +46,7 @@ func TestLayoutOmitsPath(t *testing.T) {
 	table := buildRouteTable([]*RouteDeclaration{
 		Layout(nil, Route("inbox", nil)),
 	})
-	if table.definitions[0].Path != "" || table.definitions[1].ParentID != "route-1" {
+	if table.definitions[0].Path != "" || table.definitions[0].Index || table.definitions[1].ParentID != "route-1" {
 		t.Fatalf("%+v", table.definitions)
 	}
 }
@@ -136,6 +136,7 @@ func TestRouterMountsMatchedChainAndKeepsPageOnParamChange(t *testing.T) {
 
 	homeCreated := 0
 	projectCreated := 0
+	shellCreated := 0
 	var projectID func() string
 	var navigate func(string, ...NavigateOptions)
 
@@ -144,6 +145,7 @@ func TestRouterMountsMatchedChainAndKeepsPageOnParamChange(t *testing.T) {
 		node := Router(RouterProps{
 			Routes: []*RouteDeclaration{
 				Route("/", func() {
+					shellCreated++
 					View(Props{Children: []any{
 						Text(Props{Children: "shell"}),
 						Outlet(),
@@ -166,6 +168,9 @@ func TestRouterMountsMatchedChainAndKeepsPageOnParamChange(t *testing.T) {
 			t.Fatalf("home=%d project=%d", homeCreated, projectCreated)
 		}
 		navigate("/projects/12")
+		if shellCreated != 1 {
+			t.Fatalf("remounted shared shell when switching pages: %d", shellCreated)
+		}
 		if homeCreated != 1 || projectCreated != 1 {
 			t.Fatalf("after first project home=%d project=%d", homeCreated, projectCreated)
 		}
@@ -184,6 +189,106 @@ func TestRouterMountsMatchedChainAndKeepsPageOnParamChange(t *testing.T) {
 			t.Fatalf("fallback %+v", node.Group)
 		}
 		dispose()
+		return struct{}{}
+	})
+}
+
+func TestRouterRetainsNestedLayoutsAndDisposesOnlyReplacedBranches(t *testing.T) {
+	native.ResetTreeStateForTests()
+	script := &scriptedRouter{state: native.RouterState{
+		Location: native.RouteLocation{Href: "/settings", Pathname: "/settings"},
+		Matched:  &native.RouteMatch{RouteIDs: []string{"shell", "settings", "general"}},
+	}}
+	restore := script.install(t)
+	defer restore()
+	mounted, disposed := map[string]int{}, map[string]int{}
+	nodes := map[string]*native.Node{}
+	var controller *RouterController
+	var count func() int
+	var setCount func(int)
+	record := func(name string, children Component) Component {
+		return func() {
+			mounted[name]++
+			reactive.OnCleanup(func() { disposed[name]++ })
+			nodes[name] = View(func() {
+				Text(name)
+				if children != nil {
+					children()
+				}
+			})
+		}
+	}
+	declare := func(id, path string, component Component, children ...*RouteDeclaration) *RouteDeclaration {
+		route := Route(path, component, children...)
+		route.ID = id
+		return route
+	}
+	reactive.CreateRoot(func(dispose func()) struct{} {
+		Router(RouterProps{
+			Routes: []*RouteDeclaration{declare("shell", "/", record("shell", func() {
+				controller = UseRouter()
+				Outlet()
+			}),
+				declare("settings", "settings", record("settings", func() {
+					read, write := reactive.CreateSignal(0)
+					count = read
+					setCount = func(value int) { write(value) }
+					Text(read)
+					Outlet()
+				}),
+					declare("general", "", record("general", nil)),
+					declare("appearance", "appearance", record("appearance", nil)),
+				),
+				declare("home", "", record("home", nil)),
+			)},
+			Fallback: record("fallback", nil),
+		})
+		shell, settings := nodes["shell"], nodes["settings"]
+		setCount(42)
+		controller.commit(native.RouterState{
+			Location: native.RouteLocation{
+				Href:     "/settings/appearance",
+				Pathname: "/settings/appearance",
+			},
+			Matched: &native.RouteMatch{RouteIDs: []string{"shell", "settings", "appearance"}},
+		})
+		if nodes["shell"] != shell || nodes["settings"] != settings || count() != 42 {
+			t.Fatal("changing nested pages replaced the shared layout or its local state")
+		}
+		if mounted["appearance"] != 1 || disposed["general"] != 1 || disposed["settings"] != 0 || disposed["shell"] != 0 {
+			t.Fatalf("nested transition: mounted=%v disposed=%v", mounted, disposed)
+		}
+		controller.commit(native.RouterState{
+			Location: native.RouteLocation{
+				Href:     "/settings/appearance?theme=dark",
+				Pathname: "/settings/appearance",
+				Query:    []native.RouteValue{{Name: "theme", Value: "dark"}},
+			},
+			Matched: &native.RouteMatch{RouteIDs: []string{"shell", "settings", "appearance"}},
+		})
+		if mounted["appearance"] != 1 || count() != 42 {
+			t.Fatal("query-only navigation remounted the branch")
+		}
+		controller.commit(native.RouterState{
+			Location: native.RouteLocation{Href: "/", Pathname: "/"},
+			Matched:  &native.RouteMatch{RouteIDs: []string{"shell", "home"}},
+		})
+		if nodes["shell"] != shell || mounted["home"] != 1 || disposed["settings"] != 1 || disposed["appearance"] != 1 {
+			t.Fatalf("leaving settings: mounted=%v disposed=%v", mounted, disposed)
+		}
+		controller.commit(native.RouterState{Location: native.RouteLocation{
+			Href:     "/missing",
+			Pathname: "/missing",
+		}})
+		if mounted["fallback"] != 1 || disposed["shell"] != 1 || disposed["home"] != 1 {
+			t.Fatalf("unmatched route: mounted=%v disposed=%v", mounted, disposed)
+		}
+		dispose()
+		for name, created := range mounted {
+			if disposed[name] != created {
+				t.Fatalf("%s cleanup: created=%d disposed=%d", name, created, disposed[name])
+			}
+		}
 		return struct{}{}
 	})
 }

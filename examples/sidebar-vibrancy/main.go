@@ -4,21 +4,33 @@ import (
 	"log"
 
 	"github.com/egoist/quickgui/go/native"
-	"github.com/egoist/quickgui/go/protocol"
 	"github.com/egoist/quickgui/go/ui"
 )
 
 func main() {
 	if err := native.Run(func() {
-		native.NewWindow(native.WindowOptions{
-			Title:             "Sidebar vibrancy",
-			Width:             960,
-			Height:            720,
-			Vibrancy:          "sidebar",
-			VisualEffectState: "followWindow",
-			TitleBarStyle:     "hiddenInset",
-			Component:         Vibrancy,
+		open := func() {
+			native.NewWindow(native.WindowOptions{
+				Title:                "QuickGUI Sidebar Vibrancy",
+				Width:                860,
+				Height:               620,
+				MinimumWidth:         700,
+				MinimumHeight:        480,
+				Background:           "transparent",
+				Vibrancy:             "sidebar",
+				VisualEffectState:    "followWindow",
+				Appearance:           "light",
+				TitleBarStyle:        "hiddenInset",
+				TrafficLightPosition: &native.Point{X: 16, Y: 19},
+				Component:            Vibrancy,
+			})
+		}
+		native.App.OnReopen(func(event native.ReopenEvent) {
+			if !event.HasVisibleWindows {
+				open()
+			}
 		})
+		open()
 	}); err != nil {
 		log.Fatal(err)
 	}
@@ -28,59 +40,251 @@ func Vibrancy() {
 	window := native.CurrentWindow()
 	material, setMaterial := ui.CreateSignal("sidebar")
 	state, setState := ui.CreateSignal("followWindow")
-	var materials, states []any
-	materials = append(materials, ui.Text(ui.FontSize(18), "Materials"))
-	for _, value := range []string{"titlebar", "selection", "menu", "popover", "sidebar", "header", "sheet", "window", "hud", "fullscreen-ui", "tooltip", "content", "under-window", "under-page"} {
-		var node *native.Node
-		button(value, func() { setMaterial(value); window.Action("set-vibrancy", value) }, ui.Ref(func(ref *native.Node) {
-			node = ref
-		}))
-		node.Bind(func() {
-			color := uint32(0)
-			if material() == value {
-				color = native.ParseColor("#2563eb")
-			}
-			native.SetColor(node, protocol.BackgroundColor, color)
-		})
-		materials = append(materials, node)
-	}
-	for _, value := range []string{"followWindow", "active", "inactive"} {
-		states = append(states, func() {
-			button(value, func() { setState(value); window.Action("set-visual-effect-state", value) })
-		})
-	}
 	ui.View(
-		ui.Display("flex"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.Color("#e2e8f0"),
 		func() {
 			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Gap(5),
-				ui.Padding(20),
-				ui.PaddingTop(48),
-				ui.Width(240),
-				ui.Height("100%"),
-				ui.OverflowY("scroll"),
-				materials,
-			)
-			ui.View(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.Gap(20),
-				ui.Padding(36),
-				ui.PaddingTop(70),
-				ui.BackgroundColor("#0b1020"),
 				func() {
-					ui.Text(ui.FontSize(30), "Native vibrancy")
-					ui.Text(func() string { return material() + " · " + state() })
-					ui.View(ui.Display("flex"), ui.Gap(8), states)
-					ui.Text("Move the window over other content to inspect the macOS material.")
+					ui.View(
+						func() {
+							ui.Text("Vibrancy", ui.Style{FontSize: 13, FontWeight: 700})
+						},
+						ui.Style{
+							Display:      "flex",
+							Height:       52,
+							FlexShrink:   0,
+							AlignItems:   "center",
+							PaddingLeft:  90,
+							PaddingRight: 14,
+							AppRegion:    "drag",
+						},
+					)
+					ui.View(
+						func() {
+							for _, option := range materials {
+								selected := func() bool { return material() == option.value }
+								ui.Button(
+									func() {
+										ui.Text(
+											option.label,
+											ui.Style{
+												FontSize:   12,
+												FontWeight: 600,
+											},
+										)
+										ui.Show(selected, checkmark)
+									},
+									ui.Style{
+										Display:         "flex",
+										Width:           "100%",
+										Height:          31,
+										FlexShrink:      0,
+										AlignItems:      "center",
+										JustifyContent:  "space-between",
+										PaddingLeft:     11,
+										PaddingRight:    11,
+										BackgroundColor: "transparent",
+										BorderColor:     "transparent",
+										BorderWidth:     1,
+										BorderRadius:    7,
+										Color:           "#263247",
+										Cursor:          "default",
+										AppRegion:       "no-drag",
+										UserSelect:      "none",
+									},
+									ui.When(
+										selected,
+										ui.Style{
+											BackgroundColor: "#ffffff52",
+											BorderColor:     "#ffffff70",
+										},
+									),
+									ui.Selected(selected),
+									ui.OnClick(func() {
+										setMaterial(option.value)
+										window.SetVibrancy(option.value)
+									}),
+								)
+							}
+						},
+						ui.Style{
+							Display:       "flex",
+							FlexDirection: "column",
+							Flex:          1,
+							MinHeight:     0,
+							Gap:           3,
+							PaddingLeft:   10,
+							PaddingRight:  10,
+							PaddingBottom: 10,
+							OverflowY:     "auto",
+						},
+					)
+					ui.View(
+						func() {
+							ui.Text(
+								"EFFECT STATE",
+								ui.Style{
+									Color:      "#59667b",
+									FontSize:   11,
+									FontWeight: 700,
+								},
+							)
+							ui.View(
+								func() {
+									for _, option := range effectStates {
+										selected := func() bool { return state() == option.value }
+										ui.Button(
+											option.label,
+											ui.Style{
+												Display:         "flex",
+												Flex:            1,
+												Height:          27,
+												MinWidth:        0,
+												AlignItems:      "center",
+												JustifyContent:  "center",
+												BackgroundColor: "#ffffff24",
+												BorderColor:     "#ffffff3d",
+												BorderWidth:     1,
+												BorderRadius:    6,
+												Color:           "#445168",
+												FontSize:        10,
+												FontWeight:      600,
+												Cursor:          "default",
+												AppRegion:       "no-drag",
+												UserSelect:      "none",
+											},
+											ui.When(
+												selected,
+												ui.Style{
+													BackgroundColor: "#ffffff5c",
+													BorderColor:     "#ffffff7a",
+												},
+											),
+											ui.Selected(selected),
+											ui.OnClick(func() {
+												setState(option.value)
+												window.SetVisualEffectState(option.value)
+											}),
+										)
+									}
+								},
+								ui.Style{Display: "flex", Gap: 5},
+							)
+						},
+						ui.Style{
+							Display:        "flex",
+							FlexDirection:  "column",
+							FlexShrink:     0,
+							Gap:            7,
+							Padding:        12,
+							BorderColor:    "#c1c1c2",
+							BorderTopWidth: 1,
+						},
+					)
+				},
+				ui.Style{
+					Display:          "flex",
+					FlexDirection:    "column",
+					Width:            254,
+					Height:           "100%",
+					FlexShrink:       0,
+					BackgroundColor:  "transparent",
+					BorderColor:      "#cccccc",
+					BorderRightWidth: 1,
 				},
 			)
+			ui.View(
+				func() {
+					ui.View(
+						func() {
+							ui.Text(material, ui.Style{FontSize: 13, FontWeight: 700})
+						},
+						ui.Style{
+							Display:           "flex",
+							Height:            52,
+							FlexShrink:        0,
+							AlignItems:        "center",
+							JustifyContent:    "center",
+							BorderColor:       "#e2e8f0",
+							BorderBottomWidth: 1,
+							AppRegion:         "drag",
+						},
+					)
+					ui.View(
+						func() {
+							ui.View(
+								func() {
+									ui.Text(
+										"GO + QUICKGUI",
+										ui.Style{
+											Color:      "#2563eb",
+											FontSize:   12,
+											FontWeight: 700,
+										},
+									)
+									ui.Text(
+										"Every macOS vibrancy type",
+										ui.Style{
+											FontSize:   26,
+											LineHeight: 33,
+											FontWeight: 700,
+										},
+									)
+									ui.Text(
+										"Select any Electron-compatible semantic material. QuickGUI updates one native "+
+											"NSVisualEffectView while the retained QuickGUI tree and Metal surface stay mounted. "+
+											"This pane is opaque, so the selected material remains visually confined to the translucent sidebar.",
+										ui.Style{Color: "#667085", FontSize: 14, LineHeight: 21},
+									)
+									ui.View(
+										func() {
+											readout("Material", material)
+											readout("Effect state", state)
+											readout("Content", "Opaque")
+										},
+										ui.Style{Display: "flex", Gap: 10, PaddingTop: 4},
+									)
+								},
+								ui.Style{
+									Display:         "flex",
+									FlexDirection:   "column",
+									Width:           "100%",
+									MaxWidth:        480,
+									Gap:             16,
+									Padding:         28,
+									BackgroundColor: "#ffffff",
+									BorderColor:     "#dfe5ed",
+									BorderWidth:     1,
+									BorderRadius:    14,
+									BoxShadow:       "0 18px 45px -24px rgba(15, 23, 42, 0.35)",
+								},
+							)
+						},
+						ui.Style{
+							Display:        "flex",
+							Flex:           1,
+							MinHeight:      0,
+							AlignItems:     "center",
+							JustifyContent: "center",
+							Padding:        36,
+						},
+					)
+				},
+				ui.Style{
+					Display:         "flex",
+					FlexDirection:   "column",
+					Flex:            1,
+					MinWidth:        0,
+					Height:          "100%",
+					BackgroundColor: "#ffffff",
+				},
+			)
+		},
+		ui.Style{
+			Display:         "flex",
+			Width:           "100%",
+			Height:          "100%",
+			BackgroundColor: "transparent",
+			Color:           "#172033",
 		},
 	)
 }

@@ -3,6 +3,7 @@ export type DocsSlug =
   | 'project-structure'
   | 'ui'
   | 'styling'
+  | 'animations'
   | 'components'
   | 'forms-and-input'
   | 'overlays-and-dialogs'
@@ -72,13 +73,29 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     title: 'Styling & Layout',
     description: 'Lay out and style native nodes with familiar properties.',
     outline: [
-      { id: 'style-prop', title: 'The style prop' },
+      { id: 'the-style-prop', title: 'The style prop' },
+      { id: 'merging-styles', title: 'Merging styles' },
       { id: 'flexbox', title: 'Flexbox' },
       { id: 'grid', title: 'Grid' },
       { id: 'text-and-color', title: 'Text and color' },
       { id: 'interaction-states', title: 'Interaction states' },
+      { id: 'groups-and-named-group-hover', title: 'Groups and named group hover' },
     ],
     searchTerms: ['style', 'layout', 'flexbox', 'grid', 'color', 'hover'],
+  },
+  {
+    slug: 'animations',
+    title: 'Transitions & Animation',
+    description: 'Animate native style changes and images with retained Go components.',
+    outline: [
+      { id: 'hover-transitions', title: 'Hover transitions' },
+      { id: 'state-driven-animation', title: 'State-driven animation' },
+      { id: 'timing-and-frame-rate', title: 'Timing and frame rate' },
+      { id: 'supported-properties', title: 'Supported properties' },
+      { id: 'mounting-and-reduced-motion', title: 'Mounting and reduced motion' },
+      { id: 'animated-images', title: 'Animated images' },
+    ],
+    searchTerms: ['transition', 'animation', 'easing', 'duration', 'hover', 'opacity', 'reduced motion', 'gif', 'webp'],
   },
   {
     slug: 'components',
@@ -152,7 +169,7 @@ export const DOCS_NAV: readonly DocsNavGroup[] = [
   },
   {
     title: 'QuickGUI UI',
-    items: ['ui', 'styling'],
+    items: ['ui', 'styling', 'animations'],
   },
   {
     title: 'Components',

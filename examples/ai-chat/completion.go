@@ -23,16 +23,18 @@ func readStream(reader io.Reader, emit func(string) error) error {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
 	var data []string
+	dataBytes := 0
 	flush := func() error {
 		payload := strings.Join(data, "\n")
 		data = nil
+		dataBytes = 0
 		if payload == "" {
 			return nil
 		}
 		if payload == "[DONE]" {
 			return io.EOF
 		}
-		var chunk struct {
+		var chunk *struct {
 			Choices []struct {
 				Delta struct {
 					Content string `json:"content"`
@@ -44,6 +46,9 @@ func readStream(reader io.Reader, emit func(string) error) error {
 		}
 		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
 			return err
+		}
+		if chunk == nil {
+			return errors.New("invalid null stream record")
 		}
 		if chunk.Error != nil {
 			return errors.New(chunk.Error.Message)
@@ -63,13 +68,21 @@ func readStream(reader io.Reader, emit func(string) error) error {
 				return err
 			}
 		} else if strings.HasPrefix(line, "data:") {
-			data = append(data, strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
+			value := strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " ")
+			dataBytes += len(value) + 1
+			if dataBytes > 1024*1024 {
+				return errors.New("stream record exceeds 1 MiB")
+			}
+			data = append(data, value)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	if err := flush(); err != nil && !errors.Is(err, io.EOF) {
+	if err := flush(); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
 		return err
 	}
 	return io.ErrUnexpectedEOF
@@ -80,6 +93,7 @@ func complete(ctx context.Context, key string, messages []Message, update func(s
 	defer cancel()
 	body, err := json.Marshal(map[string]any{
 		"model": "deepseek-v4-flash", "messages": messages, "stream": true,
+		"thinking": map[string]string{"type": "disabled"},
 	})
 	if err != nil {
 		return "", err
@@ -99,12 +113,16 @@ func complete(ctx context.Context, key string, messages []Message, update func(s
 		return "", fmt.Errorf("DeepSeek returned HTTP %d", response.StatusCode)
 	}
 	var text strings.Builder
+	units := 0
 	last := time.Now()
 	err = readStream(io.LimitReader(response.Body, 32*1024*1024), func(delta string) error {
-		if text.Len()+len(delta) > 256000 {
-			return errors.New("response exceeded 256,000 bytes")
+		remaining := maxResponseCharacters - units
+		part := truncateText(delta, remaining)
+		text.WriteString(part)
+		units += textLength(part)
+		if len(part) != len(delta) {
+			return errors.New("response reached the 256,000-character limit")
 		}
-		text.WriteString(delta)
 		if time.Since(last) >= 24*time.Millisecond {
 			last = time.Now()
 			return update(text.String())

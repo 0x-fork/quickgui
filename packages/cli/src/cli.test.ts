@@ -33,7 +33,6 @@ describe("CLI arguments", () => {
     expect(parseCliArgs(["dev", "--target", hostTarget(), "--once", "--no-launch"])).toEqual({
       command: "dev",
       project: ".",
-      configFile: "quickgui.config.ts",
       target: hostTarget(),
       once: true,
       launch: false,
@@ -52,7 +51,6 @@ describe("CLI arguments", () => {
     ).toEqual({
       command: "build",
       project: "demo",
-      configFile: "quickgui.config.ts",
       outDir: "artifacts",
       signingIdentity: "Developer ID Application: Example",
       notarizationProfile: "quickgui-notary",
@@ -73,7 +71,6 @@ describe("CLI arguments", () => {
     ).toEqual({
       command: "build",
       project: ".",
-      configFile: "quickgui.config.ts",
       updateManifest: true,
       updateBaseUrl: "https://dl.example.com/demo",
       macAppStore: true,
@@ -88,6 +85,17 @@ describe("CLI arguments", () => {
     expect(() => parseCliArgs(["build", "--update-manifest=yes"])).toThrow(
       "does not take a value",
     );
+  });
+
+  test("preserves an explicit config path for dev and build", () => {
+    for (const command of ["dev", "build"]) {
+      expect(parseCliArgs([command, "--config", "configs/release.toml"])).toMatchObject({
+        command, configFile: "configs/release.toml",
+      });
+      expect(parseCliArgs([command, "--config=quickgui.config.ts"])).toMatchObject({
+        command, configFile: "quickgui.config.ts",
+      });
+    }
   });
 
   test("parses keygen options and help topics", () => {

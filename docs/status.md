@@ -156,8 +156,9 @@ Implemented now:
   deletion of stored reports, HTTPS upload of pending reports, and an opt-in main-thread hang
   watchdog that is disabled by default; plus explicit process metrics (CPU time, resident and
   macOS physical-footprint memory, virtual size, thread count, uptime), a stateful CPU-usage
-  sampler, and whole-system memory readings, all exposed to JavaScript through Promise-backed
-  `CrashReporter` and `Metrics` bindings;
+  sampler, and whole-system memory readings, exposed through asynchronous Go
+  `native.CrashReporter` and `native.Metrics` callbacks; the Go API reads core crash
+  reports and does not turn unhandled Go panics into Rust panic reports;
 - `@quickgui/cli` production packaging beyond the macOS DMG: declarative `documentTypes` file
   associations rendered into `Info.plist`, Linux desktop entries and `shared-mime-info`, and NSIS
   registry entries; pure-TypeScript `.icns`/`.ico`/`hicolor` icon generation from one square PNG;
@@ -222,38 +223,32 @@ Implemented now:
 - `AppRunner`-level character-palette, tabbing-identifier, tab selection/merge/detach/bar/overview
   commands and macOS Find-pasteboard access, so an externally pumped host reaches the same document
   window and search integrations as `EventContext`;
-- declared JavaScript lifecycle vetoes: `window.onCloseRequested`/`window.destroy()` and
-  `app.on("beforeQuit")`/`app.on("willQuit")` with `app.quit({ force })`/`app.exit(code)`, where
-  interception is declared to the core ahead of the native decision and completed later by an
-  explicit host command, never by a synchronous JavaScript veto;
-- JavaScript menu `accelerator`/`hidden` declarations, the new menu roles, a
-  `{ type: "system-menu", menu: "recent-documents" }` submenu, imperative window-tab and
-  character-palette commands, and Electron-shaped clipboard `availableFormats`/`has`/`readBuffer`/
-  `writeBuffer`/`readFindText`/`writeFindText` helpers over the core's typed entries;
-- JavaScript window lifecycle events — `window.on("minimize"|"restore"|"maximize"|"unmaximize"|
-  "enterFullScreen"|"leaveFullScreen"|"readyToShow"|"occlusionChange"|"levelChange"|"willResize"|
-  "willMove"|"resize"|"move"|"focus"|"blur"|"appearanceChange"|"closed")` and
-  `app.on("activate"|"deactivate")` — where `willResize`/`willMove` are notifications and the
-  narrowing itself is declared ahead as `window.setResizePolicy({ aspectRatio, minimum, maximum,
-  snap })` / `window.setMovePolicy({ keepOnScreen })`, answered synchronously by the core through
-  `constrain_resize`/`constrain_move`;
-- JavaScript window stacking, input, and state commands: `setAlwaysOnTop(flag, level)` over the
-  extended `WindowLevel` with Electron level names, `moveTop`, `moveAbove`, `setIgnoreMouseEvents`,
-  `setEnabled`, `setAspectRatio`, `setWindowButtonVisibility`, `setHasShadow`, and
-  `getRestoreState()` round-tripping into `WindowOptions.restoreState`;
-- JavaScript application shell: `app.setActivationPolicy`, `app.focus({ steal })`, `app.hide()`,
-  `app.show()`, `app.dock.bounce`/`cancelBounce`/`hide`/`show`/`isVisible` alongside the dock badge,
-  icon, and menu, `app.setSecureKeyboardEntryEnabled`, `Shell.beep()`,
-  `app.isInApplicationsFolder()`/`app.moveToApplicationsFolder()`, `app.isPackaged`, and
-  `app.exit(code)` mapped onto the core's `exit_with_code`, with fire-and-forget mutations kept
-  distinct from the operations whose native outcome resolves a Promise;
+- declared Go lifecycle interception through `Window.OnCloseRequested`,
+  `App.OnBeforeQuit`, and `App.OnWillQuit`, completed through `Window.Destroy`,
+  `App.Quit(true, done)`, or `App.Exit(code, done)`; subscription disposal removes
+  interception and native callbacks never synchronously wait for Go;
+- Go native-menu accelerator/hidden declarations, system recent-document menus,
+  window-tab and character-palette commands, and typed clipboard entries for
+  text, MIME data, images, bookmarks, file lists, and the macOS Find pasteboard;
+- Go `Window.On` lifecycle subscriptions for size, movement, focus, appearance,
+  minimization/maximization, fullscreen, occlusion, level, and close events;
+  `Window.SetResizePolicy` and `SetMovePolicy` declare constraints in advance so
+  the core can answer native resizing and movement synchronously;
+- Go window stacking/input commands including `SetAlwaysOnTop`, `MoveTop`,
+  `MoveAbove`, `SetIgnoreMouseEvents`, `SetEnabled`, `SetAspectRatio`,
+  `SetWindowButtonVisibility`, and `SetShadow`, plus asynchronous `GetRestoreState`
+  snapshots accepted by `WindowOptions.RestoreState`;
+- Go application activation, focus, hide/show, secure keyboard entry, Dock
+  attention and visibility, application-folder checks/moves, packaged-state
+  queries, explicit relaunch, and exit codes; mutations enqueue immediately and
+  operations with native results complete through callbacks;
 - `AppRunner`-level stacking, input-policy, restore-state, and application-shell commands, plus the
   deferred per-window-menu and native popup-menu requests an externally pumped host needs; both
   menu queues resolve inside the runtime's own window-scoped effect cycle and carry the public
   `MAX_PENDING_NATIVE_POPUP_MENUS` bound;
-- JavaScript `Menu.popup(items, { window, x, y })` resolving after the popup closes and
-  `window.setMenu(definitions | null)`, both reusing the application-menu item grammar, plus
-  application-level `SpellChecker.learnWord`/`ignoreWord` over the installed provider;
+- `Window.PopupMenu(items, position, done)` completes after the native popup closes,
+  and `Window.SetMenu` reuses the application-menu grammar; `native.SpellChecker`
+  exposes learned and ignored words through the installed provider;
 - bounded immutable active-display snapshots with global logical work areas, scale/refresh metadata, stable macOS UUIDs, declarative change observation, current-display window state, display-targeted centered placement/fullscreen, disconnect fallback, and deterministic no-polling tests;
 - display rotation, built-in-panel, and color-depth metadata read from Core Graphics and `NSScreen`, plus bounded deterministic `Displays::diff` snapshots projected as granular `DisplayEvent::{Added, Removed, MetricsChanged}` through `Application::on_display_event` at the existing screen-parameters boundary, with the coarse snapshot observation unchanged and no added polling;
 - native message boxes with a suppression checkbox, custom icon, separate message/detail text, and explicit default/cancel button indices, whose bounded response carries both the chosen button and the checkbox state, plus open-panel create-directory/alias/file-package/message options and save-panel name-field-label and tag-field options with an honest per-OS support table;

@@ -188,9 +188,12 @@ creates a fresh window when its Dock icon is clicked.
 `on_before_quit`/`on_will_quit` with `cx.prevent_quit()` hold the two preventable quit phases.
 `AppRunner::request_quit()` gives an embedding runtime the same preventable path that native
 Command-Q takes, while `AppRunner::exit()` keeps bypassing both phases for a forced shutdown. The
-JavaScript host builds `window.onCloseRequested`, `app.on("beforeQuit")`, and
-`app.on("willQuit")` on exactly these hooks; see [QuickGUI UI and JavaScript
-bindings](ui.md#lifecycle-vetoes-in-javascript).
+Go SDK builds `Window.OnCloseRequested`, `App.OnBeforeQuit`, and `App.OnWillQuit`
+on these hooks. Registering a callback declares interception before the native
+decision; the callback completes an accepted close with `Window.Destroy()` or a
+quit with `App.Quit(true, done)`. Disposing the final subscription removes the
+interception. No native main-thread callback waits for a Go veto. See the
+[Go guide](go.md#native-services).
 
 `cx.relaunch()` adds one prepared replacement process to that same teardown. QuickGUI releases the
 single-instance guard and process integrations after the last close callback, then spawns exactly

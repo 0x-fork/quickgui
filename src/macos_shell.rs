@@ -270,35 +270,15 @@ pub(crate) fn show_about_panel(options: &AboutPanelOptions) -> Result<(), Platfo
 }
 
 pub(crate) fn file_icon(path: &Path, size: FileIconSize) -> Result<Image, PlatformError> {
-    let _mtm = main_thread()?;
+    let mtm = main_thread()?;
     let url = crate::macos::native_file_url(path, path.is_dir())
         .map_err(|error| PlatformError::Platform(error.into()))?;
     let path = unsafe { url.path() }.ok_or_else(|| {
         PlatformError::Platform("Foundation could not represent the file path".into())
     })?;
     let native = unsafe { NSWorkspace::sharedWorkspace().iconForFile(&path) };
-    let encoded = unsafe { native.TIFFRepresentation() }.ok_or_else(|| {
-        PlatformError::Platform("AppKit could not encode the native file icon".into())
-    })?;
-    let decoded = Image::decode(encoded.bytes())
-        .map_err(|error| PlatformError::Platform(error.to_string().into()))?;
     let pixels = size.pixels();
-    if decoded.width() == pixels && decoded.height() == pixels {
-        return Ok(decoded);
-    }
-    let source = image_codecs::RgbaImage::from_raw(
-        decoded.width(),
-        decoded.height(),
-        decoded.rgba().to_vec(),
-    )
-    .ok_or_else(|| PlatformError::Platform("the native file icon was malformed".into()))?;
-    let resized = image_codecs::imageops::resize(
-        &source,
-        pixels,
-        pixels,
-        image_codecs::imageops::FilterType::Lanczos3,
-    );
-    Image::from_rgba(pixels, pixels, resized.into_raw())
+    crate::macos::rasterize_native_image(mtm, &native, pixels, pixels)
         .map_err(|error| PlatformError::Platform(error.to_string().into()))
 }
 

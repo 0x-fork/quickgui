@@ -19,8 +19,8 @@ func ToastExample() {
 		func() {
 			manager := ui.UseToastManager()
 			ui.Button(
-				ui.OnClick(func() { manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"}) }),
 				"Save",
+				ui.OnClick(func() { manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"}) }),
 			)
 			ui.Toast.Viewport(
 				ui.ToastViewportProps{},

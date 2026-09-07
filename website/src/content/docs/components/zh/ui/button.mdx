@@ -15,15 +15,17 @@ import (
 ```go
 func ButtonExample(save func()) {
 	ui.Button(
-		ui.Height(40),
-		ui.PaddingLeft(16),
-		ui.PaddingRight(16),
-		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
-		ui.BorderRadius(8),
-		ui.Hover(ui.BackgroundColor("#3b82f6")),
-		ui.OnClick(save),
 		"Save changes",
+		ui.Style{
+			Height:          40,
+			PaddingLeft:     16,
+			PaddingRight:    16,
+			BackgroundColor: "#2563eb",
+			Color:           "white",
+			BorderRadius:    8,
+			Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
+		},
+		ui.OnClick(save),
 	)
 }
 ```
@@ -32,7 +34,7 @@ func ButtonExample(save func()) {
 
 | 属性 | 说明 |
 | --- | --- |
-| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.Style{}` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
 | `children` | 挂载在组件内部的内容。 |
 | `OnClick` | 在核心完成激活判定后运行。 |
 | `Disabled` | 禁止交互，并暴露禁用状态。 |

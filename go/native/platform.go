@@ -22,60 +22,25 @@ type AppPaths struct {
 	DataDir       string `json:"dataDir,omitempty"`
 	LocalDataDir  string `json:"localDataDir,omitempty"`
 	CacheDir      string `json:"cacheDir,omitempty"`
+	LogDir        string `json:"logDir,omitempty"`
+	RuntimeDir    string `json:"runtimeDir,omitempty"`
+	AudioDir      string `json:"audioDir,omitempty"`
+	DesktopDir    string `json:"desktopDir,omitempty"`
+	DocumentDir   string `json:"documentDir,omitempty"`
+	DownloadDir   string `json:"downloadDir,omitempty"`
+	PictureDir    string `json:"pictureDir,omitempty"`
+	VideoDir      string `json:"videoDir,omitempty"`
 	TempDir       string `json:"tempDir"`
 }
 
 // GetPaths asks the host for well-known directories. done runs on the application goroutine.
 func (a *Application) GetPaths(done func(*AppPaths, error)) {
-	SendCommand(`{"method":"get-app-paths"}`, func(raw string, err error) {
-		if err != nil {
-			done(nil, err)
-			return
-		}
-		if isNullJSON(raw) {
-			done(nil, nil)
-			return
-		}
-		var paths AppPaths
-		if err := json.Unmarshal([]byte(raw), &paths); err != nil {
-			done(nil, err)
-			return
-		}
-		done(&paths, nil)
-	})
+	commandJSON(map[string]any{"method": "get-app-paths"}, done)
 }
 
 // GetWindowState asks the host for one window snapshot. done runs on the application goroutine.
 func (w *Window) GetState(done func(WindowState, error)) {
-	payload, _ := json.Marshal(map[string]any{"method": "get-window-state", "window": w.NativeID})
-	SendCommand(string(payload), func(raw string, err error) {
-		if err != nil {
-			done(WindowState{}, err)
-			return
-		}
-		var state WindowState
-		if err := json.Unmarshal([]byte(raw), &state); err != nil {
-			done(WindowState{}, err)
-			return
-		}
-		done(state, nil)
-	})
-}
-
-// WindowState is a host snapshot of one window.
-type WindowState struct {
-	X              float64 `json:"x"`
-	Y              float64 `json:"y"`
-	Width          float64 `json:"width"`
-	Height         float64 `json:"height"`
-	ViewportWidth  float64 `json:"viewportWidth"`
-	ViewportHeight float64 `json:"viewportHeight"`
-	Minimized      bool    `json:"minimized"`
-	Maximized      bool    `json:"maximized"`
-	Fullscreen     bool    `json:"fullscreen"`
-	Appearance     string  `json:"appearance"`
-	Focused        bool    `json:"focused"`
-	Visible        bool    `json:"visible"`
+	commandJSON(map[string]any{"method": "get-window-state", "window": w.NativeID}, done)
 }
 
 // AlertDialogOptions configure a native alert sheet.
@@ -95,6 +60,9 @@ type AlertDialogButton struct {
 
 // ShowAlertDialog presents a native alert. done receives the zero-based button index.
 func ShowAlertDialog(options AlertDialogOptions, done func(int, error)) {
+	if done == nil {
+		done = func(int, error) {}
+	}
 	buttons := options.Buttons
 	if len(buttons) == 0 {
 		buttons = []AlertDialogButton{{Label: "OK", Role: "default"}}
@@ -140,11 +108,12 @@ type OpenDialogResult struct {
 }
 
 type SaveDialogOptions struct {
-	Title       string
-	DefaultPath string
-	ButtonLabel string
-	Filters     []FileDialogFilter
-	Window      *Window
+	Title           string
+	DefaultPath     string
+	ButtonLabel     string
+	Filters         []FileDialogFilter
+	Window          *Window
+	ShowHiddenFiles bool
 }
 
 type SaveDialogResult struct {
@@ -154,10 +123,14 @@ type SaveDialogResult struct {
 
 // ShowSaveDialog asks for a destination without writing a file.
 func ShowSaveDialog(options SaveDialogOptions, done func(SaveDialogResult, error)) {
+	if done == nil {
+		done = func(SaveDialogResult, error) {}
+	}
 	native := encodeOpenDialogOptions(OpenDialogOptions{
 		Title: options.Title, DefaultPath: options.DefaultPath,
 		ButtonLabel: options.ButtonLabel, Filters: options.Filters,
 	})
+	native.ShowsHiddenFiles = options.ShowHiddenFiles
 	if native.Directory == "" {
 		native.Directory = "."
 	}
@@ -189,8 +162,8 @@ type nativeOpenDialogOptions struct {
 func encodeOpenDialogOptions(options OpenDialogOptions) nativeOpenDialogOptions {
 	files := contains(options.Properties, "openFile")
 	directories := contains(options.Properties, "openDirectory")
-	if !files && !directories {
-		directories = true
+	if options.Properties == nil {
+		files = true
 	}
 	filters := options.Filters
 	if filters == nil {
@@ -234,6 +207,13 @@ func pathEndsWithSeparator(path string) bool {
 
 // ShowOpenDialog presents a native open panel.
 func ShowOpenDialog(options OpenDialogOptions, done func(OpenDialogResult, error)) {
+	if done == nil {
+		done = func(OpenDialogResult, error) {}
+	}
+	if options.Properties != nil && !contains(options.Properties, "openFile") && !contains(options.Properties, "openDirectory") {
+		done(OpenDialogResult{}, fmt.Errorf("open dialog properties must include openFile or openDirectory"))
+		return
+	}
 	encoded, err := json.Marshal(encodeOpenDialogOptions(options))
 	if err != nil {
 		done(OpenDialogResult{}, err)
@@ -253,7 +233,14 @@ func ShowOpenDialog(options OpenDialogOptions, done func(OpenDialogResult, error
 }
 
 func showDialog(window *Window, kind uint32, options string, complete func(value string, paths []string, err error)) {
-	assertAppReady()
+	if appID == 0 || !appReady {
+		complete("", nil, fmt.Errorf("call native.Run before showing a dialog"))
+		return
+	}
+	if window != nil && window.Closed {
+		complete("", nil, fmt.Errorf("the dialog window is closed"))
+		return
+	}
 	request := allocateRequest()
 	pendingDialogs[request] = dialogReply{complete: complete}
 	windowID := uint32(0)
@@ -278,6 +265,10 @@ type MenuItem struct {
 	Label       string
 	Enabled     *bool
 	Checked     bool
+	Mark        string
+	Hidden      bool
+	Icon        *MenuIcon
+	Menu        string
 	Role        string
 	Accelerator string
 	Items       []MenuItem
@@ -297,6 +288,10 @@ type nativeMenuItem struct {
 	Label       string            `json:"label,omitempty"`
 	Enabled     bool              `json:"enabled"`
 	Checked     bool              `json:"checked,omitempty"`
+	Mark        string            `json:"mark,omitempty"`
+	Hidden      bool              `json:"hidden,omitempty"`
+	Icon        *MenuIcon         `json:"icon,omitempty"`
+	Menu        string            `json:"menu,omitempty"`
 	Role        string            `json:"role,omitempty"`
 	Accelerator string            `json:"accelerator,omitempty"`
 	Items       *[]nativeMenuItem `json:"items,omitempty"`
@@ -332,7 +327,7 @@ func encodeMenuItems(items []MenuItem, ids *[]uint32) []nativeMenuItem {
 	for _, item := range items {
 		kind := item.Type
 		if kind == "" {
-			if len(item.Items) > 0 {
+			if item.Items != nil {
 				kind = "submenu"
 			} else if item.Role != "" && item.Click == nil {
 				kind = "role"
@@ -353,9 +348,22 @@ func encodeMenuItems(items []MenuItem, ids *[]uint32) []nativeMenuItem {
 			})
 			continue
 		}
+		if kind == "system" || kind == "system-menu" {
+			menu := item.Menu
+			if menu == "" {
+				menu = "window"
+			}
+			native = append(native, nativeMenuItem{Type: "system-menu", Label: item.Label, Menu: menu})
+			continue
+		}
+		if kind == "services" {
+			native = append(native, nativeMenuItem{Type: "services", Label: item.Label})
+			continue
+		}
 		entry := nativeMenuItem{
 			Type: kind, Label: item.Label, Enabled: enabledOrTrue(item.Enabled),
 			Checked: item.Checked, Role: item.Role, Accelerator: item.Accelerator,
+			Mark: item.Mark, Hidden: item.Hidden, Icon: item.Icon,
 		}
 		if kind == "role" {
 			entry.Type = "role"
@@ -387,16 +395,20 @@ func releaseMenuIDs(ids []uint32) {
 
 func dispatchMenuAction(id uint32) {
 	if callback, ok := menuCallbacks[id]; ok {
-		if callback.window != nil && callback.window.Closed || callback.owner != nil && callback.owner.Disposed {
-			return
-		}
-		withCurrentWindow(callback.window, func() {
-			reactive.RunWithOwner(callback.owner, func() struct{} {
-				reactive.Batch(callback.click)
-				return struct{}{}
-			})
-		})
+		callback.run()
 	}
+}
+
+func (callback menuCallback) run() {
+	if callback.click == nil || callback.window != nil && callback.window.Closed || callback.owner != nil && callback.owner.Disposed {
+		return
+	}
+	withCurrentWindow(callback.window, func() {
+		reactive.RunWithOwner(callback.owner, func() struct{} {
+			reactive.Batch(callback.click)
+			return struct{}{}
+		})
+	})
 }
 
 // SetApplicationMenu replaces the application-wide native menu declaration.
@@ -460,9 +472,7 @@ func mustString(value any) string {
 
 // WriteClipboardText writes one text item to the system clipboard.
 func WriteClipboardText(text string) {
-	item := map[string]any{"entries": []map[string]any{{"kind": "text", "text": text}}}
-	payload, _ := json.Marshal(map[string]any{"method": "write-clipboard", "item": item})
-	SendCommand(string(payload), func(string, error) {})
+	Clipboard.WriteText(text, nil)
 }
 
 func shellAction(action, value string, done func(error)) {

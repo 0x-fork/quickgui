@@ -7,36 +7,51 @@ import (
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func run(title string, width, height float64, component func()) {
+func run(options native.WindowOptions, component func()) {
+	options.Background = "#0b0e14"
+	options.TitleBarStyle = "hiddenInset"
+	options.TrafficLightPosition = &native.Point{X: 16, Y: 14}
+	options.Component = func() {
+		ui.View(
+			func() {
+				ui.View(
+					func() { ui.Text(options.Title, ui.Style{FontSize: 14, FontWeight: 600}) },
+					ui.Style{
+						Display:           "flex",
+						Height:            52,
+						FlexShrink:        0,
+						AlignItems:        "center",
+						JustifyContent:    "center",
+						AppRegion:         "drag",
+						BorderColor:       "#1f2530",
+						BorderBottomWidth: 1,
+					},
+				)
+				ui.View(
+					component,
+					ui.Style{
+						Display:        "flex",
+						Flex:           1,
+						MinHeight:      0,
+						Padding:        36,
+						AlignItems:     "center",
+						JustifyContent: "center",
+						OverflowY:      "auto",
+					},
+				)
+			},
+			ui.Style{
+				Display:         "flex",
+				FlexDirection:   "column",
+				Width:           "100%",
+				Height:          "100%",
+				BackgroundColor: "#0b0e14",
+				Color:           "#f4f7fb",
+			},
+		)
+	}
 	if err := native.Run(func() {
-		open := func() {
-			native.NewWindow(native.WindowOptions{
-				Title:         title,
-				Width:         width,
-				Height:        height,
-				MinimumWidth:  500,
-				MinimumHeight: 380,
-				Background:    "#0b1020",
-				TitleBarStyle: "hiddenInset",
-				Component: func() {
-					ui.View(
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Width("100%"),
-						ui.Height("100%"),
-						ui.Gap(22),
-						ui.Padding(36),
-						ui.PaddingTop(52),
-						ui.BackgroundColor("#0b1020"),
-						ui.Color("#e2e8f0"),
-						func() {
-							ui.Text(ui.FontSize(22), ui.FontWeight(700), title)
-							component()
-						},
-					)
-				},
-			})
-		}
+		open := func() { native.NewWindow(options) }
 		native.App.OnReopen(func(event native.ReopenEvent) {
 			if !event.HasVisibleWindows {
 				open()
@@ -48,33 +63,71 @@ func run(title string, width, height float64, component func()) {
 	}
 }
 
+var panelStyle = ui.Style{
+	Display:         "flex",
+	FlexDirection:   "column",
+	Width:           "100%",
+	MaxWidth:        480,
+	FlexShrink:      0,
+	Gap:             20,
+	Padding:         28,
+	BackgroundColor: "#151922",
+	BorderColor:     "#2c3442",
+	BorderWidth:     1,
+	BorderRadius:    16,
+}
+
 var buttonStyle = ui.Style{
 	Display:         "flex",
-	Padding:         12,
-	BorderRadius:    8,
-	BackgroundColor: "#2563eb",
-	Color:           "white",
-	Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-	UserSelect:      "none",
+	Height:          42,
+	AlignItems:      "center",
+	JustifyContent:  "center",
+	PaddingLeft:     16,
+	PaddingRight:    16,
+	BackgroundColor: "#262c38",
+	Color:           "#f4f7fb",
+	BorderColor:     "#3a4353",
+	BorderWidth:     1,
+	BorderRadius:    9,
+	Cursor:          "default",
 	AppRegion:       "no-drag",
+	UserSelect:      "none",
+	Hover:           &ui.Style{BackgroundColor: "#30394a"},
 }
 
-func button(label string, click func(), options ...any) {
-	args := []any{ui.WithStyle(buttonStyle), ui.OnClick(func() { click() }), label}
-	args = append(args, options...)
-
-	ui.Button(args...)
-
+func button(label string, disabled func() bool, click func()) {
+	ui.Button(label, buttonStyle, ui.Disabled(disabled), ui.OnClick(click))
 }
 
-func card(children ...any) {
+func dialogStatus(status func() string, pending func() bool) {
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Gap(16),
-		ui.Padding(24),
-		ui.BorderRadius(12),
-		ui.BackgroundColor("#151e30"),
-		children,
+		func() {
+			ui.Text(
+				status,
+				ui.Style{
+					FontSize:   13,
+					LineHeight: 19,
+					TextAlign:  "center",
+					UserSelect: "text",
+					Color: func() string {
+						if pending() {
+							return "#c7d2fe"
+						}
+						return "#aeb9c9"
+					},
+				},
+			)
+		},
+		ui.Style{
+			Display:         "flex",
+			MinHeight:       64,
+			AlignItems:      "center",
+			JustifyContent:  "center",
+			Padding:         14,
+			BackgroundColor: "#0f131a",
+			BorderColor:     "#252c38",
+			BorderWidth:     1,
+			BorderRadius:    9,
+		},
 	)
 }

@@ -1,7 +1,7 @@
 export const en = {
   "meta": {
     "title": "QuickGUI — Build native desktop apps with Go.",
-    "description": "Build native desktop apps with Go. Fast builds, fine-grained reactivity, GPU rendering, familiar layouts, and accessible components. No CGO required."
+    "description": "Build native desktop apps with Go. Fast builds, fine-grained reactivity, GPU rendering, familiar layouts, and accessible components."
   },
   "common": {
     "skipToContent": "Skip to content",
@@ -17,10 +17,10 @@ export const en = {
     "docs": "Docs"
   },
   "hero": {
-    "badge": "Go · No CGO required",
+    "badge": "Go · Fast builds",
     "titleLine1": "Build native desktop apps.",
     "titleLine2": "With Go.",
-    "sub": "Write ordinary Go with fast builds and fine-grained reactivity. Compose GPU-rendered native interfaces with familiar layouts and accessible components. No CGO required."
+    "sub": "Write ordinary Go with fast builds and fine-grained reactivity. Compose GPU-rendered native interfaces with familiar layouts and accessible components."
   },
   "features": {
     "title": "Everything a desktop app needs.",
@@ -31,7 +31,7 @@ export const en = {
       },
       "fast": {
         "title": "Fast Go builds",
-        "body": "Edit your app and rebuild just the Go code. The native runtime is bundled, and your application builds with CGO disabled."
+        "body": "Rebuild only your Go code as you edit. Spend less time waiting for builds and more time refining your app."
       },
       "layout": {
         "title": "Layout you already know",

@@ -34,7 +34,7 @@ export default function OgCard() {
           Build native desktop apps. With Go.
         </h1>
         <p className="mt-8 font-mono text-xl text-muted-foreground">
-          Go · Fine-grained reactivity · No CGO
+          Go · Fast builds · Fine-grained reactivity
         </p>
       </div>
 

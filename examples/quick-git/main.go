@@ -16,6 +16,7 @@ import (
 type session struct {
 	window *native.Window
 	store  *model.Store
+	ui     appui.AppContext
 }
 
 func main() {
@@ -50,6 +51,14 @@ func startApp(statePath string) {
 			return session.store
 		}
 		return nil
+	}
+	openDialog := func(kind appui.DialogKind) {
+		if active == nil || active.Closed {
+			return
+		}
+		if session := sessions[active.NativeID]; session != nil && session.store.Repository() != nil {
+			session.ui.OpenDialog(appui.DialogRequest{Kind: kind})
+		}
 	}
 
 	var openWindow func(initial string) *native.Window
@@ -125,7 +134,6 @@ func startApp(statePath string) {
 				Click: func() { openRepositoryPath(p, active) },
 			})
 		}
-		enabled := true
 		native.SetApplicationMenu([]native.MenuDefinition{
 			{Label: "File", Items: []native.MenuItem{
 				{Label: "Open Repository…", Accelerator: "CmdOrCtrl+O", Click: func() {
@@ -135,7 +143,10 @@ func startApp(statePath string) {
 				}},
 				{Type: "submenu", Label: "Open Recent", Enabled: boolPtr(len(recent) > 0), Items: recentItems},
 				{Type: "separator"},
-				{Label: "New Branch…", Accelerator: "CmdOrCtrl+Shift+N", Click: func() {}},
+				{Label: "New Branch…", Accelerator: "CmdOrCtrl+Shift+N", Enabled: boolPtr(hasRepo), Click: func() { openDialog(appui.DialogNewBranch) }},
+				{Label: "New Worktree…", Accelerator: "CmdOrCtrl+Alt+N", Enabled: boolPtr(hasRepo), Click: func() { openDialog(appui.DialogNewWorktree) }},
+				{Label: "Stash Changes…", Accelerator: "CmdOrCtrl+Shift+T", Enabled: boolPtr(hasRepo), Click: func() { openDialog(appui.DialogStash) }},
+				{Type: "separator"},
 				{Label: "Close Repository", Accelerator: "CmdOrCtrl+Shift+W", Click: func() {
 					if store := activeStore(); store != nil {
 						store.CloseRepository()
@@ -184,6 +195,8 @@ func startApp(statePath string) {
 						s.Refresh()
 					}
 				}},
+				{Type: "separator"},
+				{Type: "role", Label: "Toggle Full Screen", Role: "toggle-fullscreen", Accelerator: "Ctrl+Cmd+F"},
 			}},
 			{Label: "Repository", Items: []native.MenuItem{
 				{Label: "Commit", Accelerator: "CmdOrCtrl+Enter", Click: func() {
@@ -236,6 +249,8 @@ func startApp(statePath string) {
 			{Label: "Window", Items: []native.MenuItem{
 				{Type: "role", Label: "Minimize", Role: "minimize-window", Accelerator: "CmdOrCtrl+M"},
 				{Type: "role", Label: "Zoom", Role: "zoom-window"},
+				{Type: "separator"},
+				{Type: "role", Label: "Bring All to Front", Role: "bring-all-to-front"},
 			}},
 			{Label: "Help", Items: []native.MenuItem{
 				{Label: "QuickGUI on GitHub", Click: func() {
@@ -246,7 +261,6 @@ func startApp(statePath string) {
 				}},
 			}},
 		})
-		_ = enabled
 	}
 
 	openWindow = func(initial string) *native.Window {
@@ -264,6 +278,7 @@ func startApp(statePath string) {
 			},
 		})
 		var window *native.Window
+		var context appui.AppContext
 		window = native.NewWindow(native.WindowOptions{
 			Title:                "Quick Git",
 			Width:                1240,
@@ -280,9 +295,9 @@ func startApp(statePath string) {
 				openRepositoryDialog(window)
 			}, func(path string) {
 				openRepositoryPath(path, window)
-			}),
+			}, func(mounted appui.AppContext) { context = mounted }),
 		})
-		sessions[window.NativeID] = &session{window: window, store: store}
+		sessions[window.NativeID] = &session{window: window, store: store, ui: context}
 		active = window
 		window.On(native.WindowReadyToShow, func(native.WindowEvent) {
 			window.Focus()

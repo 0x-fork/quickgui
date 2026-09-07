@@ -33,7 +33,7 @@ func ScrollAreaExample() {
 						ui.PartProps{Style: func() ui.Style { return ui.Style{Transform: fmt.Sprintf("translateY(%gpx)", -state().Offset.Y)} }},
 						func() {
 							for index := range 40 {
-								ui.Text(ui.Height(22), fmt.Sprintf("Row %d", index))
+								ui.Text("Row ", index, ui.Style{Height: 22})
 							}
 						},
 					)

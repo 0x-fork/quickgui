@@ -2,20 +2,32 @@ package ui
 
 import (
 	"github.com/egoist/quickgui/go/native"
-	"github.com/egoist/quickgui/go/protocol"
 )
 
 //go:generate go run ../internal/cmd/optionsgen
 
-// Option configures a primitive without an enclosing Props or Style record.
+// Option configures a primitive. Style records and When are both options.
 type Option interface {
 	apply(*Props)
 }
 
+// A Style can be passed directly to a primitive or When. Styles merge in order;
+// omitted fields preserve earlier declarations, including explicit zero values.
+func (style Style) apply(props *Props) { mergeStyle(&props.Style, style) }
+
+// StyleDeclaration is a reusable style record or a compatibility style option.
+// Group styles accept the same records as ordinary primitives.
+type StyleDeclaration interface {
+	applyStyle(*Style)
+}
+
+func (style Style) applyStyle(target *Style) { mergeStyle(target, style) }
+
 // StyleOption can also be nested inside Hover, Active, or Focus.
 type StyleOption func(*Style)
 
-func (option StyleOption) apply(props *Props) { option(&props.Style) }
+func (option StyleOption) apply(props *Props)      { option(&props.Style) }
+func (option StyleOption) applyStyle(style *Style) { option(style) }
 
 type propertyOption func(*Props)
 
@@ -70,14 +82,7 @@ func applyArguments(node *native.Node, arguments []any) {
 	node.BindProperties(func() {
 		props = resolveProps(arguments)
 		// Remove handlers that were declared only by an inactive condition.
-		for _, event := range []struct {
-			kind    int
-			handler func(*native.Event)
-		}{
-			{protocol.EventClick, props.OnClick}, {protocol.EventInput, props.OnInput},
-			{protocol.EventSubmit, props.OnSubmit}, {protocol.EventDoubleClick, props.OnDoubleClick},
-			{protocol.EventContextMenu, props.OnContextMenu}, {protocol.EventPointer, props.OnPointer},
-		} {
+		for _, event := range primitiveListeners(props) {
 			if event.handler == nil {
 				for _, listener := range node.Listeners {
 					if listener.Type == event.kind {

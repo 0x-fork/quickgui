@@ -20,12 +20,22 @@ var App = &Application{}
 
 // Application holds native app identity, windows, and lifecycle listeners.
 type Application struct {
-	NativeID uint32
-	Windows  map[uint32]*Window
-	ready    bool
-	exited   bool
-	onReady  []func()
-	onReopen []func(ReopenEvent)
+	NativeID         uint32
+	Windows          map[uint32]*Window
+	ready            bool
+	exited           bool
+	onReady          subscriptions[struct{}]
+	onReopen         subscriptions[ReopenEvent]
+	onQuit           subscriptions[QuitEvent]
+	onBeforeQuit     subscriptions[QuitPhaseEvent]
+	onWillQuit       subscriptions[QuitPhaseEvent]
+	onOpenURLs       subscriptions[OpenURLsEvent]
+	onActivate       subscriptions[struct{}]
+	onDeactivate     subscriptions[struct{}]
+	onSystemWake     subscriptions[struct{}]
+	onKeyboardLayout subscriptions[KeyboardLayout]
+	onSecondInstance subscriptions[SecondInstanceEvent]
+	quitIntercepting bool
 }
 
 // ReopenEvent is a macOS dock-click or equivalent reopen.
@@ -40,29 +50,40 @@ type AppOptions struct {
 	Identifier string
 	QuitMode   string
 	Fonts      []string
+	Paths      AppPathOverrides
 }
 
 type nativeAppOptions struct {
-	ResourceDir string   `json:"resourceDir,omitempty"`
-	Name        string   `json:"name,omitempty"`
-	Version     string   `json:"version,omitempty"`
-	Identifier  string   `json:"identifier,omitempty"`
-	QuitMode    string   `json:"quitMode,omitempty"`
-	Fonts       []string `json:"fonts,omitempty"`
+	ResourceDir  string   `json:"resourceDir,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	Version      string   `json:"version,omitempty"`
+	Identifier   string   `json:"identifier,omitempty"`
+	QuitMode     string   `json:"quitMode,omitempty"`
+	Fonts        []string `json:"fonts,omitempty"`
+	ConfigDir    string   `json:"configDir,omitempty"`
+	DataDir      string   `json:"dataDir,omitempty"`
+	LocalDataDir string   `json:"localDataDir,omitempty"`
+	CacheDir     string   `json:"cacheDir,omitempty"`
+	LogDir       string   `json:"logDir,omitempty"`
+	RuntimeDir   string   `json:"runtimeDir,omitempty"`
+	TempDir      string   `json:"tempDir,omitempty"`
 }
 
 func (a *Application) IsReady() bool { return a.ready }
 
-func (a *Application) OnReady(listener func()) {
+func (a *Application) OnReady(listener func()) func() {
+	if listener == nil {
+		return func() {}
+	}
 	if a.ready {
 		listener()
-		return
+		return func() {}
 	}
-	a.onReady = append(a.onReady, listener)
+	return a.onReady.add(func(struct{}) { listener() })
 }
 
-func (a *Application) OnReopen(listener func(ReopenEvent)) {
-	a.onReopen = append(a.onReopen, listener)
+func (a *Application) OnReopen(listener func(ReopenEvent)) func() {
+	return a.onReopen.add(listener)
 }
 
 func (a *Application) registerWindow(window *Window) {
@@ -86,8 +107,10 @@ func (a *Application) didCloseWindow(window *Window) {
 
 func (a *Application) dispatchHostEvent(ev hostEvent) {
 	var extra struct {
-		Error string   `json:"error"`
-		Paths []string `json:"paths"`
+		Error  string   `json:"error"`
+		Paths  []string `json:"paths"`
+		Width  uint32   `json:"width"`
+		Height uint32   `json:"height"`
 	}
 	hasValue := ev.flags&1 != 0
 	hasExtra := ev.flags&2 != 0
@@ -105,13 +128,24 @@ func (a *Application) dispatchHostEvent(ev hostEvent) {
 		}
 		a.ready = true
 		setAppContext(a.NativeID, true)
-		listeners := a.onReady
-		a.onReady = nil
-		for _, listener := range listeners {
-			listener()
-		}
+		a.syncQuitInterception()
+		a.onReady.emit(struct{}{})
+		a.onReady.clear()
 		return
-	case "command", "invoke", "shell", "popup-menu", "app-service", "file-icon",
+	case "file-icon":
+		var err error
+		if extra.Error != "" {
+			err = fmt.Errorf("%s", extra.Error)
+		} else if ev.flags&4 == 0 || extra.Width == 0 || extra.Height == 0 || uint64(len(ev.data)) != uint64(extra.Width)*uint64(extra.Height)*4 {
+			err = fmt.Errorf("native file icon response has invalid dimensions or pixel data")
+		}
+		encoded := ""
+		if err == nil {
+			encoded = mustString(NativeImage{Data: ev.data, Width: extra.Width, Height: extra.Height})
+		}
+		settleHostReply(ev.kind, ev.target, encoded, err)
+		return
+	case "command", "invoke", "shell", "popup-menu", "app-service",
 		"notification-permission", "global-shortcut-operation", "tray-operation", "user-tasks":
 		var err error
 		if extra.Error != "" {
@@ -129,11 +163,52 @@ func (a *Application) dispatchHostEvent(ev hostEvent) {
 	case "menu-action":
 		dispatchMenuAction(ev.target)
 		return
+	case "global-shortcut":
+		dispatchShortcut(ev.target)
+		return
+	case "tray-event":
+		dispatchTrayEvent(ev.target, value)
+		return
 	case "file-watch":
 		dispatchFileWatch(ev.target, value)
 		return
+	case "update-progress":
+		if progress := pendingProgress[ev.target]; progress != nil {
+			progress(value)
+		}
+		return
+	case "power-event":
+		var event PowerEvent
+		if json.Unmarshal([]byte(value), &event) == nil {
+			powerListeners.emit(event)
+		}
+		return
+	case "notification-response":
+		var event NotificationResponseEvent
+		if json.Unmarshal([]byte(value), &event) == nil {
+			notificationListeners.emit(event)
+		}
+		return
+	case "screen-change":
+		if len(screenListeners.order) != 0 {
+			Screen.GetAllDisplays(func(displays []Display, err error) {
+				if err == nil {
+					screenListeners.emit(displays)
+				}
+			})
+		}
+		return
+	case "system-preferences-change":
+		if len(preferencesListeners.order) != 0 {
+			SystemPreferences.GetCurrent(func(preferences SystemPreferencesSnapshot, err error) {
+				if err == nil {
+					preferencesListeners.emit(preferences)
+				}
+			})
+		}
+		return
 	case "exit":
-		a.exited = true
+		a.didExit(int(ev.target))
 		return
 	case "host-error":
 		msg := extra.Error
@@ -143,9 +218,10 @@ func (a *Application) dispatchHostEvent(ev hostEvent) {
 		panic(msg)
 	case "reopen":
 		event := ReopenEvent{HasVisibleWindows: value == "true"}
-		for _, listener := range a.onReopen {
-			listener(event)
-		}
+		a.onReopen.emit(event)
+		return
+	}
+	if a.dispatchAppLifecycle(ev.kind, value) {
 		return
 	}
 	owner := a.Windows[ev.window]
@@ -215,10 +291,22 @@ func Run(start func(), options ...AppOptions) error {
 				window.didClose()
 			}
 			App.Windows = nil
-			App.onReady = nil
-			App.onReopen = nil
+			App.clearListeners()
 			fileWatchers = map[uint32]func(FileWatchEvent){}
 			menuCallbacks = map[uint32]menuCallback{}
+			screenListeners.clear()
+			preferencesListeners.clear()
+			powerListeners.clear()
+			notificationListeners.clear()
+			for _, registration := range shortcutRegistrations {
+				registration.release()
+			}
+			for _, icon := range trayIcons {
+				icon.removed = true
+				icon.callbacks = nil
+				icon.listeners.clear()
+			}
+			trayIcons = map[uint32]*TrayIcon{}
 		}()
 		runApplication(start, options)
 	}()
@@ -265,9 +353,12 @@ func runApplication(start func(), options []AppOptions) {
 		if explicit.Fonts != nil {
 			config.Fonts = explicit.Fonts
 		}
+		config.applyPaths(explicit.Paths)
 	}
 	executable, _ := os.Executable()
-	config.ResourceDir = applicationResourceDirectory(executable)
+	if config.ResourceDir == "" {
+		config.ResourceDir = applicationResourceDirectory(executable)
+	}
 	encoded, err := json.Marshal(config)
 	if err != nil {
 		panic(err)
@@ -312,7 +403,7 @@ func waitTurn() {
 		processTurns()
 	case <-loopStopped:
 		processTurns() // Deliver lifecycle events queued before the native loop returned.
-		App.exited = true
+		App.didExit(0)
 	}
 }
 

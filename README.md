@@ -27,16 +27,18 @@ The current focus is production-quality macOS behavior with low idle CPU and bou
 
 ## Go components
 
-The Go frontend loads the Rust shared library through purego in the same process. Builds use `CGO_ENABLED=0`; ordinary app edits only recompile Go. The TypeScript CLI handles development and packaging.
+The Go frontend loads the Rust shared library through purego in the same process. Builds use `CGO_ENABLED=0`; ordinary app edits only recompile Go. The TypeScript CLI handles development and packaging, with `quickgui.toml` or `quickgui.config.ts` configuration.
 
 ```go
 native.NewWindow(native.WindowOptions{
-	Title: "Counter", Width: 760, Height: 520,
+	Title:     "Counter",
+	Width:     760,
+	Height:    520,
 	Component: Counter,
 })
 ```
 
-Components are ordinary `func()` declarations, the same as children blocks. Style and event options, children blocks, and signal accessors bind directly to retained native nodes: `ui.View(ui.Padding(20), func() { ui.Text("Hello") })`. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
+Components are ordinary `func()` declarations, the same as children blocks. Merged style records, event options, children blocks, and signal accessors bind directly to retained native nodes: `ui.View(func() { ui.Text("Hello") }, ui.Style{Padding: 20})`. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
 
 ## View API
 

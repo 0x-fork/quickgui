@@ -20,8 +20,10 @@ func TextAreaExample() {
 		ui.Value(value),
 		ui.Placeholder("Write here"),
 		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
-		ui.Width(320),
-		ui.Height(96),
+		ui.Style{
+			Width:  320,
+			Height: 96,
+		},
 	)
 }
 ```
@@ -33,4 +35,4 @@ func TextAreaExample() {
 | `Value` | 受控值，具体类型取决于该组件的约定。 |
 | `Placeholder` | 可编辑值为空时显示的文本。 |
 | `OnInput` | 报告原生编辑输入。 |
-| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.Style{}` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

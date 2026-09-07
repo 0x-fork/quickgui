@@ -152,7 +152,7 @@ source changes. On macOS the app is a signed .app bundle.
 
 Options:
   --project <directory>      Project directory (default: .)
-  --config <file>            Config file (default: quickgui.config.ts)
+  --config <file>            Config file (auto: quickgui.toml, then quickgui.config.ts)
   --target <target>          Host target override
   --sign <identity>          macOS signing identity (default: ad-hoc)
   --once                     Run without watching
@@ -166,7 +166,7 @@ Build a self-contained production application for a target platform.
 
 Options:
   --project <directory>      Project directory (default: .)
-  --config <file>            Config file (default: quickgui.config.ts)
+  --config <file>            Config file (auto: quickgui.toml, then quickgui.config.ts)
   --target <target>          darwin-arm64, darwin-x64, linux-arm64,
                             linux-x64, windows-arm64, or windows-x64
   --out-dir <directory>      Output directory override

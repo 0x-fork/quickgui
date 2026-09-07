@@ -527,12 +527,14 @@ frames and 64 MiB of unique decoded pixels, while delays faster than 60 Hz are c
 `cargo run --release --example animated_images` for direct, finite, and asynchronously loaded
 animations.
 
-## JavaScript bindings
+## Go components
 
-The QuickGUI UI renderer exposes retained `<Image>` and `<Shader>` nodes. `source` accepts a filesystem
-path, a `file://` URL, or a base64 `data:` URL; a path stays a lazy core `ImageResource` so decoding
-runs on the core's bounded worker pool, and an animated format keeps its frames and repeat policy
-inside the core decoder. `fit` selects the core's `ObjectFit`, and `shaderParameters` fills the
-core's four fixed parameter vectors. Explicit playback control and load-state fallbacks are not
-bound, because the core exposes no play/pause or load-state API. See
-[QuickGUI UI renderer](ui.md#css-grid-transitions-images-and-shaders).
+`ui.Image(ui.Value(path), ui.Style{ObjectFit: "contain"})` declares an image source.
+It accepts a filesystem path, a `file://` URL, or a base64 `data:` URL. A path stays a
+lazy core `ImageResource`; decoding runs on the bounded worker pool. Animated
+formats keep their frames and repeat policy inside the core decoder.
+
+`ui.Shader` accepts WGSL through `ui.Value` and four fixed parameter vectors through
+`ui.ShaderParameters`. `ui.Svg(ui.Value(source))` retains SVG source. Explicit image
+playback and load-state fallbacks are not exposed; the core has no play/pause API.
+See [Go components](go.md) and the [styling example](../examples/styling).

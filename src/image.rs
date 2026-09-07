@@ -877,6 +877,8 @@ pub enum ImageError {
     Decode(#[source] image_codecs::ImageError),
     #[error("could not encode image data: {0}")]
     Encode(#[source] image_codecs::ImageError),
+    #[error("could not rasterize the native image: {0}")]
+    NativeRasterize(&'static str),
     #[error("a data URL must be a base64 `data:` URL carrying a supported image format")]
     InvalidDataUrl,
     #[error("a crop rectangle must be non-empty, whole-pixel, and inside the source image")]

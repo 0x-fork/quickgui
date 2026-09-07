@@ -21,12 +21,11 @@ my-app/
 ```go
 func ViewExample() {
 	ui.View(
-		ui.Padding(20),
-		ui.Gap(12),
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button(ui.OnClick(func() {}), "Continue")
+			ui.Button("Continue", ui.OnClick(func() {}))
 		},
+		ui.Style{Padding: 20, Gap: 12},
 	)
 }
 ```
@@ -44,6 +43,19 @@ export default defineConfig({
   entry: ".",
 });
 ```
+
+同じ設定を `quickgui.toml` に書くこともできます。
+
+```toml
+name = "My App"
+identifier = "com.example.my-app"
+entry = "."
+
+[native]
+tags = ["production"]
+```
+
+CLI は `quickgui.toml`、`quickgui.config.ts` の順に探します。`quickgui dev --config configs/dev.toml` や `quickgui build --config configs/release.toml` でファイルを明示できます。相対パスはプロジェクトディレクトリが基準となり、`dev` は設定の変更も再読み込みします。バージョンは `version = "0.1.0"` のように文字列で指定し、アプリ全体の設定は `[native]` テーブルより前に置きます。
 
 ## パッケージ
 

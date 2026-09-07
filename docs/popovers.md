@@ -402,26 +402,26 @@ every other menu command and the application decides what opening the destinatio
 `Menu.RadioGroup` `value` and `onValueChange`: setting a value unchecks every other item in the
 group in the same update, so a group can never retain two checked values.
 
-## JavaScript bindings
+## Go components
 
-The QuickGUI UI renderer exposes this model as `PopoverMenu.Root` / `Trigger` / `Popup`. Rows are declared
-as one bounded JSON model rather than JSX children, so the core still owns validation, highlighting,
+The `ui` package exposes this model as `PopoverMenu.Root` / `Trigger` / `Popup`. Rows are declared
+as one bounded JSON model through `Items` instead of mounted child nodes, so the core still owns validation, highlighting,
 typeahead, toggle policy, submenu models, and every accessibility relationship, and no synchronous
 question crosses the hosted boundary while a menu is open. `popover_menu_key_bindings()` and
 `popover_menu_horizontal_key_bindings()` are installed once by the binding, so declared menus adopt
 the same contextual navigation as Rust applications. See
-[QuickGUI UI renderer](ui.md#declared-popover-and-context-menus).
+[Go components](go.md).
 
-`MenuState` is bound as the Base UI-shaped `Menu` compound, whose rows *are* JSX children:
-`Menu.Root` (logical) with `open`, `modal`, `orientation`, `loopFocus`, `closeParentOnEsc`, and
-`disabled`; `Menu.Trigger` with `openOnHover`, `delay`, and `closeDelay`; `Menu.Portal`,
+`MenuState` is bound as the Base UI-shaped `Menu` compound, whose rows are native nodes created in child callbacks:
+`Menu.Root` (logical) with `Open`, `Modal`, `Orientation`, `LoopFocus`, `CloseParentOnEsc`, and
+`Disabled`; `Menu.Trigger` with `OpenOnHover`, `Delay`, and `CloseDelay`; `Menu.Portal`,
 `Backdrop`, `Positioner`, `Popup`, and `Arrow`; and `Menu.Item`, `LinkItem`, `SubmenuRoot`,
 `SubmenuTrigger`, `Group`, `GroupLabel`, `RadioGroup`, `RadioItem`, `RadioItemIndicator`,
 `CheckboxItem`, `CheckboxItemIndicator`, and `Separator` as ordinary child nodes. The application
 owns every pixel of a row; the core owns its derived identity, `menuitem` semantics, roving
 highlight, typeahead, toggle policy, activation, and closing policy, and publishes `MenuPartState`
-and `MenuItemPartState` through `useMenuState()` and `useMenuItemState()`. See
-[QuickGUI UI renderer](ui.md#base-ui-menu-parts).
+and `MenuItemPartState` through `UseMenuState()` and `UseMenuItemState()`. See
+[Go components](go.md).
 
 ## Roles, placement, and nesting
 
@@ -468,36 +468,66 @@ cargo run --release --example popovers
 cargo run --release --example system_popover
 ```
 
-## QuickGUI UI
+## Go popover composition
 
-The QuickGUI UI renderer binds the whole compound. `Popover.Root` is a logical coordinator, and the
+The `ui` package binds the whole compound. `Popover.Root` is a logical coordinator, and the
 trigger is the one part the core keeps mounted whether the popover is open or closed, so the
 trigger node carries the declaration and every other part only repeats the compound scope:
 
-```tsx
-<Popover.Root open={open()} onOpenChange={setOpen} modal>
-  <Popover.Trigger openOnHover delay={300} closeDelay={100}>Account</Popover.Trigger>
-  <Popover.Positioner side="bottom" align="end" sideOffset={8} collisionPadding={12}>
-    <Popover.Popup>
-      <Popover.Arrow />
-      <Popover.Title>Account</Popover.Title>
-      <Popover.Viewport><AccountSettings /></Popover.Viewport>
-      <Popover.Close>Done</Popover.Close>
-    </Popover.Popup>
-  </Popover.Positioner>
-</Popover.Root>
+```go
+func AccountPopover() {
+	open, setOpen := ui.CreateSignal(false)
+	modal, hover := true, true
+	gap, margin := 8.0, 12.0
+	ui.Popover.Root(
+		ui.PopoverRootProps{
+			Open:         open,
+			Modal:        &modal,
+			OnOpenChange: func(value bool, _ ui.PopoverOpenChangeDetails) { setOpen(value) },
+		},
+		func() {
+			ui.Popover.Trigger(
+				ui.PopoverTriggerProps{
+					OpenOnHover: &hover,
+					Delay:       300,
+					CloseDelay:  100,
+				},
+				"Account",
+			)
+			ui.Popover.Positioner(
+				ui.PopoverPositionerProps{
+					Side:             "bottom",
+					Align:            "end",
+					SideOffset:       &gap,
+					CollisionPadding: &margin,
+				},
+				func() {
+					ui.Popover.Popup(
+						ui.PopoverPopupProps{},
+						func() {
+							ui.Popover.Arrow(ui.PartProps{})
+							ui.Popover.Title(ui.PartProps{}, "Account")
+							ui.Popover.Viewport(ui.PartProps{}, "Account settings")
+							ui.Popover.Close(ui.PartProps{}, "Done")
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
-`side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`, `sticky`, and `anchor` are
+`Side`, `Align`, `SideOffset`, `AlignOffset`, `CollisionPadding`, `Sticky`, and `Anchor` are
 declared on `Popover.Positioner` exactly as Base UI declares them, and `Popover.Root` accepts the
-same names as defaults. `anchor` takes another node or one `{ x, y }` logical point. A closed
+same names as defaults. `Anchor` takes another retained `*native.Node`. A closed
 popover mounts no positioner, popup, arrow, viewport, or backdrop at all.
 
-The declared side is a preference, not an outcome. `usePopoverPlacement()` and `onPlacementChange`
-report the placement the retained tree really used — `side`, `align`, `anchorHidden`, the measured
+The declared side is a preference, not an outcome. `UsePopoverPlacement()` and `OnPlacementChange`
+report the placement the retained tree really used — `Side`, `Align`, `AnchorHidden`, the measured
 anchor size, and the room the popup was given — published during the paint QuickGUI was already
 performing, so an application sizes and styles from the core's own answer rather than measuring
-anything itself. `openOnHover` hands the open value to the core's exact hover deadlines and reports
+anything itself. `OpenOnHover` hands the open value to the core's exact hover deadlines and reports
 the result back with a `"hover"` reason. `Popover.Content` remains the one-element shorthand for a
 popover that needs no separate positioner. See
-[QuickGUI UI renderer](ui.md#base-ui-popover-parts).
+[Go components](go.md).

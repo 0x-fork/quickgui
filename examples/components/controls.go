@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/quickgui/go/native"
@@ -15,7 +16,7 @@ func gaugeReadout() {
 	state := ui.UseGaugeState()
 	note(func() string {
 		s := state()
-		return fmt.Sprintf("status %s · display %s · completion %s", s.Status, textValue(s.DisplayValue), textValue(s.Completion))
+		return "status " + s.Status + " · display " + textValue(s.DisplayValue) + " · completion " + textValue(s.Completion)
 	})
 }
 func gaugeTrack() ui.PartProps {
@@ -62,7 +63,7 @@ func sliderParts(values func() []float64) {
 							BorderRadius:    2,
 							BackgroundColor: p().Accent,
 							MarginLeft:      left * gaugeWidth / 100,
-							Width:           fmt.Sprintf("%g%%", width),
+							Width:           strconv.FormatFloat(width, 'g', -1, 64) + "%",
 						}
 					}
 					if len(values()) > 1 {
@@ -118,7 +119,7 @@ func MeterDemo() {
 					ui.Meter.Value(
 						ui.PartProps{},
 						func() {
-							label(func() string { return fmt.Sprintf("%.0f%%", level()[0]) })
+							label(func() string { return strconv.FormatFloat(level()[0], 'f', 0, 64) + "%" })
 						},
 					)
 				})
@@ -130,7 +131,7 @@ func MeterDemo() {
 							return ui.Style{
 								Height:          8,
 								BorderRadius:    4,
-								Width:           fmt.Sprintf("%g%%", value),
+								Width:           strconv.FormatFloat(value, 'g', -1, 64) + "%",
 								BackgroundColor: choose(value < 25, p().Danger, choose(value > 80, "#c88a00", p().Accent)),
 							}
 						}})
@@ -165,7 +166,7 @@ func ProgressDemo() {
 				},
 				Max:           12,
 				Indeterminate: indeterminate,
-				ValueText:     func() *string { return ptr(fmt.Sprintf("%d of 12 files", done())) },
+				ValueText:     func() *string { return ptr(strconv.Itoa(done()) + " of 12 files") },
 				GaugeFormatProps: ui.GaugeFormatProps{
 					Format:    "fraction",
 					PartProps: columnPart(),
@@ -177,7 +178,7 @@ func ProgressDemo() {
 					ui.Progress.Value(
 						ui.PartProps{},
 						func() {
-							label(func() string { return choose(indeterminate(), "…", fmt.Sprintf("%d / 12", done())) })
+							label(func() string { return choose(indeterminate(), "…", strconv.Itoa(done())+" / 12") })
 						},
 					)
 				})
@@ -189,7 +190,7 @@ func ProgressDemo() {
 								Height:          8,
 								BorderRadius:    4,
 								BackgroundColor: p().Accent,
-								Width:           fmt.Sprintf("%g%%", choose(indeterminate(), 35.0, float64(done())/12*100)),
+								Width:           strconv.FormatFloat(choose(indeterminate(), 35.0, float64(done())/12*100), 'g', -1, 64) + "%",
 							}
 						}})
 					},
@@ -306,7 +307,7 @@ func SliderDemo() {
 					func() {
 						state := ui.UseSliderState()
 						label(func() string {
-							return fmt.Sprintf("%s · dragging %t", textValue(state().DisplayValue), state().Dragging)
+							return textValue(state().DisplayValue) + " · dragging " + strconv.FormatBool(state().Dragging)
 						})
 					},
 				)
@@ -376,7 +377,9 @@ func SplitterDemo() {
 							}},
 						},
 						func() {
-							muted(func() string { return fmt.Sprintf("pane %d · %.0fpx", i, sizes()[i]) })
+							muted(func() string {
+								return "pane " + strconv.Itoa(i) + " · " + strconv.FormatFloat(sizes()[i], 'f', 0, 64) + "px"
+							})
 						},
 					)
 				}
@@ -430,7 +433,9 @@ func SwitchDemo() {
 		switchControl(wifi, setWifi, false, "Wi-Fi")
 		switchControl(beta, setBeta, false, "Beta updates")
 		switchControl(managed, setManaged, true, "Managed by policy · read-only")
-		note(func() string { return fmt.Sprintf("wifi %t · beta %t · managed %t", wifi(), beta(), managed()) })
+		note(func() string {
+			return "wifi " + strconv.FormatBool(wifi()) + " · beta " + strconv.FormatBool(beta()) + " · managed " + strconv.FormatBool(managed())
+		})
 	})
 }
 func TabsDemo() {
@@ -530,7 +535,9 @@ func ToggleDemo() {
 				},
 			)
 		})
-		note(func() string { return fmt.Sprintf("bold %t · pinned %t", bold(), pinned()) })
+		note(func() string {
+			return "bold " + strconv.FormatBool(bold()) + " · pinned " + strconv.FormatBool(pinned())
+		})
 	})
 }
 func ToggleGroupDemo() {

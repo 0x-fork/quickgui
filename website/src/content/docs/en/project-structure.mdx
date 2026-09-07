@@ -21,12 +21,11 @@ my-app/
 ```go
 func ViewExample() {
 	ui.View(
-		ui.Padding(20),
-		ui.Gap(12),
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button(ui.OnClick(func() {}), "Continue")
+			ui.Button("Continue", ui.OnClick(func() {}))
 		},
+		ui.Style{Padding: 20, Gap: 12},
 	)
 }
 ```
@@ -44,6 +43,19 @@ export default defineConfig({
   entry: ".",
 });
 ```
+
+You can also use `quickgui.toml` with the same settings:
+
+```toml
+name = "My App"
+identifier = "com.example.my-app"
+entry = "."
+
+[native]
+tags = ["production"]
+```
+
+The CLI checks `quickgui.toml` before `quickgui.config.ts`. `quickgui dev --config configs/dev.toml` or `quickgui build --config configs/release.toml` selects a file explicitly. Relative paths are resolved from the project directory, and `dev` reloads config edits. Quote version values, for example `version = "0.1.0"`, and put application fields before the `[native]` table.
 
 ## Packages
 

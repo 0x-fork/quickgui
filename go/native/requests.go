@@ -15,6 +15,7 @@ var appReady bool
 
 var pendingReplies = map[uint32]func(string, error){}
 var replyKinds = map[uint32]string{}
+var pendingProgress = map[uint32]func(string){}
 
 func setAppContext(id uint32, ready bool) {
 	appID = id
@@ -43,6 +44,7 @@ func settleReply(request uint32, value string, err error) {
 	}
 	delete(pendingReplies, request)
 	delete(replyKinds, request)
+	delete(pendingProgress, request)
 	done(value, err)
 }
 
@@ -68,6 +70,7 @@ func rejectAllReplies(err error) {
 	for request, done := range pendingReplies {
 		delete(pendingReplies, request)
 		delete(replyKinds, request)
+		delete(pendingProgress, request)
 		done("", err)
 	}
 	for request, pending := range pendingDialogs {
@@ -140,7 +143,17 @@ func deferredReplyKind(method string) string {
 
 // Invoke queues a native service request. Its result runs on the UI goroutine.
 func Invoke(method string, params any, done func(json string, err error)) {
-	assertAppReady()
+	invokeWithProgress(method, params, nil, done)
+}
+
+func invokeWithProgress(method string, params any, progress func(string), done func(string, error)) {
+	if done == nil {
+		done = func(string, error) {}
+	}
+	if appID == 0 || !appReady {
+		done("", fmt.Errorf("call native.Run before using the native QuickGUI application"))
+		return
+	}
 	encoded, err := json.Marshal(params)
 	if err != nil {
 		done("", err)
@@ -148,6 +161,9 @@ func Invoke(method string, params any, done func(json string, err error)) {
 	}
 	request := allocateRequest()
 	pendingReplies[request] = done
+	if progress != nil {
+		pendingProgress[request] = progress
+	}
 	host.Current.Invoke(request, method, string(encoded))
 }
 

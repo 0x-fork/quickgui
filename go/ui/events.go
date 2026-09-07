@@ -253,15 +253,18 @@ type CommitDetails struct {
 }
 
 func decodeEventJSON[T any](event *native.Event) *T {
+	if event == nil {
+		return nil
+	}
 	value, ok := event.ValueOK()
 	if !ok {
 		return nil
 	}
-	var decoded T
+	var decoded *T
 	if err := json.Unmarshal([]byte(value), &decoded); err != nil {
 		return nil
 	}
-	return &decoded
+	return decoded
 }
 
 // InputValue is the composed text of an input event, or the empty string.

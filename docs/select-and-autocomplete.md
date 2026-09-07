@@ -412,16 +412,16 @@ cargo run --release --example comboboxes
 cargo run --release --example autocomplete
 ```
 
-## JavaScript bindings
+## Go components
 
 `Select.Root`, `Combobox.Root`, and `Autocomplete.Root` declare the option source, the controlled
 value, the controlled input text, and the filter mode; the core opens its own native popover window
-and paints every row from a bounded `appearance` block, so no row can ever wait on the hosted
-runtime while the core is deciding what a keystroke means. Options travel as one bounded `items`
+and paints every row from a bounded `Appearance` block, so no row can ever wait on the hosted
+runtime while the core is deciding what a keystroke means. Options travel as one bounded `Items`
 array or as child `Option` nodes, which contribute no element of their own. Filtering, highlight
 movement, typeahead, surface placement, dismissal, and commit policy all stay in the core; the
 committed value, the retained input text, and the surface's open state travel back as one
-asynchronous `onValueChange`, `onInputValueChange`, `onOpenChange`, or `onCommit` payload.
+asynchronous `OnValueChange`, `OnInputValueChange`, `OnOpenChange`, or `OnCommit` payload.
 
 A declaration is bounded before it reaches a core constructor: an option source past 512 KiB is
 refused at the boundary, malformed JSON declares no options at all, a duplicate value keeps its
@@ -429,9 +429,9 @@ first occurrence, and anything past 4,096 declared options is dropped. Because e
 that replaces a source, layout, or selection closes a live native popover — something a render pass
 has no `EventContext` for — the binding rebuilds the retained state only when the declaration
 itself changes and the popover is closed. See the
-[QuickGUI UI renderer](ui.md#option-sources-select-combobox-and-autocomplete).
+[Go components](go.md).
 
-### Base UI parts in QuickGUI UI
+### Additional Go parts
 
 The compound is split exactly the way the core is. `Select.Label`, `Value`, `Icon`, and `Backdrop`,
 and `Combobox.Label`, `Value`, `Icon`, `InputGroup`, `Clear`, `Trigger`, `Chips`, `Chip`,
@@ -439,15 +439,15 @@ and `Combobox.Label`, `Value`, `Icon`, `InputGroup`, `Clear`, `Trigger`, `Chips`
 the part descriptors documented above. The popup-side parts — `Portal`, `Positioner`, `Popup`,
 `Arrow`, `List`, `Row`, `Item`, `ItemText`, `ItemIndicator`, `Group`, `GroupLabel`, `Collection`,
 `Separator`, `ScrollUpArrow`, and `ScrollDownArrow` — are declarations: the option surface is a
-separate native child window the core paints from `appearance`, so they name what that surface
+separate native child window the core paints from `Appearance`, so they name what that surface
 holds instead of contributing owner-window elements. `Select.Item` is the child option declaration
-alongside the `items` prop, its `ItemText` supplies the label when none is declared, and a
+alongside the `Items` prop, its `ItemText` supplies the label when none is declared, and a
 `Select.Group` label becomes the searchable group name of the options inside it.
 
-`multiple` with a bounded value array, `required`, `readOnly`, `modal`, `alignItemWithTrigger`, the
-`items` map form, the `filter` policy (`contains`, `startsWith`, `fuzzy`, `none`), `autoHighlight`,
-`openOnInputClick`, `highlightItemOnHover`, and `loopFocus` are all declared ahead of the core's
-decision. `useSelectState()` and `useComboboxState()` report the core's own `SelectPartState` and
+`Multiple` with a bounded value array, `Required`, `ReadOnly`, `Modal`, `AlignItemWithTrigger`, the
+`Items` map form, the `Filter` policy (`contains`, `startsWith`, `fuzzy`, `none`), `AutoHighlight`,
+`OpenOnInputClick`, `HighlightItemOnHover`, and `LoopFocus` are all declared ahead of the core's
+decision. `UseSelectState()` and `UseComboboxState()` report the core's own `SelectPartState` and
 `ComboboxPartState` snapshots, including the combobox's derived `Status` text and `Empty` edge, and
-`useComboboxChips()` reports the chip set the core retained. See
-[QuickGUI UI renderer](ui.md#base-ui-select-and-combobox-parts).
+`UseComboboxChips()` reports the chip set the core retained. See
+[Go components](go.md).

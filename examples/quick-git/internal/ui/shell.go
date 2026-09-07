@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,17 +14,21 @@ import (
 	"quickgui.example/quick-git/internal/model"
 )
 
-func App(store *model.Store, appearance reactive.Accessor[string], openRepository, openPath func(string)) func() {
+func App(store *model.Store, appearance reactive.Accessor[string], openRepository, openPath func(string), onMount func(AppContext)) func() {
 	return func() {
 		window := native.CurrentWindow()
 		theme := gui.CreateMemo(func() Theme { return ThemeFor(appearance()) })
 		dialog, setDialog := gui.CreateSignal(DialogRequest{})
-		ProvideApp(AppContext{
+		context := AppContext{
 			Store: store, Window: window, Theme: theme,
 			Dialog: dialog, OpenDialog: setDialog, CloseDialog: func() { setDialog(DialogRequest{}) },
 			OpenRepository:     func() { openRepository("") },
 			OpenRepositoryPath: func(path string) { openPath(path) },
-		}, func() {
+		}
+		if onMount != nil {
+			onMount(context)
+		}
+		ProvideApp(context, func() {
 			gui.Toast.Provider(
 				gui.ToastProviderProps{
 					Timeout:        4500,
@@ -57,45 +61,39 @@ func shell() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Position("relative"),
-		gui.Display("flex"),
-		gui.FlexDirection("row"),
-		gui.Width("100%"),
-		gui.Height("100%"),
-		gui.MinWidth(0),
-		gui.MinHeight(0),
-		gui.BackgroundColor("transparent"),
-		gui.Color(app.Theme().Text),
-		gui.FontSize(UIFontSize),
 		func() {
 			gui.Show(
 				func() bool { return store.Repository() != nil },
 				func() {
 
 					gui.View(
-						gui.Display("flex"),
-						gui.FlexDirection("column"),
-						gui.Height("100%"),
-						gui.MinWidth(0),
-						gui.MinHeight(0),
-						gui.Width(store.SidebarWidth),
-						gui.FlexShrink(0),
-						gui.BackgroundColor(app.Theme().SidebarWash),
 						func() {
 							Sidebar()
+						},
+						gui.Style{
+							Display:         "flex",
+							FlexDirection:   "column",
+							Height:          "100%",
+							MinWidth:        0,
+							MinHeight:       0,
+							Width:           store.SidebarWidth,
+							FlexShrink:      0,
+							BackgroundColor: app.Theme().SidebarWash,
 						},
 					)
 					resizeDivider("Resize sidebar", store.SidebarWidth, store.SetSidebarWidth)
 					gui.View(
-						gui.Display("flex"),
-						gui.Flex(1),
-						gui.MinWidth(0),
-						gui.MinHeight(0),
-						gui.FlexDirection("column"),
-						gui.BackgroundColor(app.Theme().Content),
 						func() {
 							Toolbar()
 							mainView()
+						},
+						gui.Style{
+							Display:         "flex",
+							Flex:            1,
+							MinWidth:        0,
+							MinHeight:       0,
+							FlexDirection:   "column",
+							BackgroundColor: app.Theme().Content,
 						},
 					)
 
@@ -104,6 +102,18 @@ func shell() {
 			)
 			Dialogs()
 			notices()
+		},
+		gui.Style{
+			Position:        "relative",
+			Display:         "flex",
+			FlexDirection:   "row",
+			Width:           "100%",
+			Height:          "100%",
+			MinWidth:        0,
+			MinHeight:       0,
+			BackgroundColor: "transparent",
+			Color:           app.Theme().Text,
+			FontSize:        UIFontSize,
 		},
 	)
 }
@@ -206,12 +216,12 @@ func notices() {
 											},
 										},
 										func() {
-											gui.View(
-												gui.Width(3),
-												gui.AlignSelf("stretch"),
-												gui.BorderRadius(2),
-												gui.BackgroundColor(color),
-											)
+											gui.View(gui.Style{
+												Width:           3,
+												AlignSelf:       "stretch",
+												BorderRadius:    2,
+												BackgroundColor: color,
+											})
 											gui.Toast.Content(
 												gui.ToastPartProps{
 													ToastID: entry.ID,
@@ -237,11 +247,13 @@ func notices() {
 																title = current.Title
 															}
 															gui.Text(
-																gui.FontSize(12.5),
-																gui.FontWeight(700),
-																gui.Color(app.Theme().Text),
-																gui.LineClamp(2),
 																title,
+																gui.Style{
+																	FontSize:   12.5,
+																	FontWeight: 700,
+																	Color:      app.Theme().Text,
+																	LineClamp:  2,
+																},
 															)
 														},
 													)
@@ -262,11 +274,13 @@ func notices() {
 																		description = current.Description
 																	}
 																	gui.Text(
-																		gui.FontSize(12),
-																		gui.LineHeight(16),
-																		gui.Color(app.Theme().TextSecondary),
-																		gui.LineClamp(4),
 																		description,
+																		gui.Style{
+																			FontSize:   12,
+																			LineHeight: 16,
+																			Color:      app.Theme().TextSecondary,
+																			LineClamp:  4,
+																		},
 																	)
 																},
 															)
@@ -299,7 +313,7 @@ func notices() {
 }
 
 func formatSwipe(value float64) string {
-	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", value), "0"), ".")
+	return strings.TrimRight(strings.TrimRight(strconv.FormatFloat(value, 'f', 2, 64), "0"), ".")
 }
 
 func Welcome() {
@@ -313,75 +327,59 @@ func Welcome() {
 		return path
 	}
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinWidth(0),
-		gui.MinHeight(0),
-		gui.FlexDirection("column"),
-		gui.BackgroundColor(app.Theme().Content),
 		func() {
-			gui.View(gui.Height(TitlebarHeight), gui.FlexShrink(0), gui.AppRegion("drag"))
+			gui.View(gui.Style{Height: TitlebarHeight, FlexShrink: 0, AppRegion: "drag"})
 			gui.View(
-				gui.Display("flex"),
-				gui.Flex(1),
-				gui.MinHeight(0),
-				gui.FlexDirection("column"),
-				gui.AlignItems("center"),
-				gui.JustifyContent("center"),
-				gui.Gap(20),
-				gui.Padding(40),
 				func() {
 					gui.View(
-						gui.Display("flex"),
-						gui.Width(64),
-						gui.Height(64),
-						gui.AlignItems("center"),
-						gui.JustifyContent("center"),
-						gui.BorderRadius(18),
-						gui.BackgroundColor(app.Theme().Accent),
-						gui.Color(app.Theme().TextOnAccent),
 						func() {
 							icon(branchIcon, 32, func() string { return app.Theme().TextOnAccent })
 						},
+						gui.Style{
+							Display:         "flex",
+							Width:           64,
+							Height:          64,
+							AlignItems:      "center",
+							JustifyContent:  "center",
+							BorderRadius:    18,
+							BackgroundColor: app.Theme().Accent,
+							Color:           app.Theme().TextOnAccent,
+						},
 					)
 					gui.Text(
-						gui.FontSize(22),
-						gui.FontWeight(800),
-						gui.Color(app.Theme().Text),
 						"Quick Git",
+						gui.Style{FontSize: 22, FontWeight: 800, Color: app.Theme().Text},
 					)
 					gui.Text(
-						gui.FontSize(13),
-						gui.Color(app.Theme().TextSecondary),
-						gui.TextAlign("center"),
-						gui.LineHeight(19),
 						"Open a repository to review changes, history, and worktrees.",
+						gui.Style{
+							FontSize:   13,
+							Color:      app.Theme().TextSecondary,
+							TextAlign:  "center",
+							LineHeight: 19,
+						},
 					)
 					gui.Button(
-						gui.OnClick(func() { app.OpenRepository() }),
-						gui.WithStyle(app.Theme().Button("primary")),
 						"Open Repository…",
+						gui.OnClick(func() { app.OpenRepository() }),
+						app.Theme().Button("primary"),
 					)
 					gui.Show(
 						func() bool { return len(store.RecentRepositories()) > 0 },
 						func() {
 							gui.View(
-								gui.Display("flex"),
-								gui.FlexDirection("column"),
-								gui.Width(420),
-								gui.MaxWidth("100%"),
-								gui.Gap(2),
-								gui.MarginTop(8),
 								func() {
 									gui.Text(
-										gui.FontSize(11),
-										gui.FontWeight(700),
-										gui.LetterSpacing(0.4),
-										gui.TextTransform("uppercase"),
-										gui.Color(app.Theme().TextTertiary),
-										gui.PaddingLeft(10),
-										gui.MarginBottom(4),
 										"Recent",
+										gui.Style{
+											FontSize:      11,
+											FontWeight:    700,
+											LetterSpacing: 0.4,
+											TextTransform: "uppercase",
+											Color:         app.Theme().TextTertiary,
+											PaddingLeft:   10,
+											MarginBottom:  4,
+										},
 									)
 									gui.For(
 										func() []string {
@@ -393,40 +391,32 @@ func Welcome() {
 										},
 										func(path string, _ func() int) {
 											gui.Button(
-												gui.Disabled(store.Opening() != ""),
-												gui.OnClick(func() { app.OpenRepositoryPath(path) }),
-												gui.Display("flex"),
-												gui.FlexDirection("row"),
-												gui.AlignItems("center"),
-												gui.Gap(10),
-												gui.Height(40),
-												gui.PaddingLeft(10),
-												gui.PaddingRight(10),
-												gui.BorderRadius(8),
-												gui.BackgroundColor("transparent"),
-												gui.Cursor("default"),
-												gui.Hover(gui.BackgroundColor(app.Theme().Hover)),
-												gui.DisabledStyle(gui.Opacity(0.6)),
 												func() {
 													gui.View(
-														gui.Display("flex"),
-														gui.Flex(1),
-														gui.MinWidth(0),
-														gui.FlexDirection("column"),
 														func() {
 															gui.Text(
-																gui.FontSize(13),
-																gui.FontWeight(600),
-																gui.Color(app.Theme().Text),
-																gui.LineClamp(1),
+																gui.Style{
+																	FontSize:   13,
+																	FontWeight: 600,
+																	Color:      app.Theme().Text,
+																	LineClamp:  1,
+																},
 																filepath.Base(path),
 															)
 															gui.Text(
-																gui.FontSize(11),
-																gui.Color(app.Theme().TextTertiary),
-																gui.LineClamp(1),
+																gui.Style{
+																	FontSize:  11,
+																	Color:     app.Theme().TextTertiary,
+																	LineClamp: 1,
+																},
 																shorten(filepath.Dir(path)),
 															)
+														},
+														gui.Style{
+															Display:       "flex",
+															Flex:          1,
+															MinWidth:      0,
+															FlexDirection: "column",
 														},
 													)
 													gui.Show(
@@ -435,12 +425,30 @@ func Welcome() {
 														},
 														func() {
 															gui.Text(
-																gui.FontSize(11),
-																gui.Color(app.Theme().TextTertiary),
 																"Opening…",
+																gui.Style{
+																	FontSize: 11,
+																	Color:    app.Theme().TextTertiary,
+																},
 															)
 														},
 													)
+												},
+												gui.Disabled(store.Opening() != ""),
+												gui.OnClick(func() { app.OpenRepositoryPath(path) }),
+												gui.Style{
+													Display:         "flex",
+													FlexDirection:   "row",
+													AlignItems:      "center",
+													Gap:             10,
+													Height:          40,
+													PaddingLeft:     10,
+													PaddingRight:    10,
+													BorderRadius:    8,
+													BackgroundColor: "transparent",
+													Cursor:          "default",
+													Hover:           &gui.Style{BackgroundColor: app.Theme().Hover},
+													Disabled:        &gui.Style{Opacity: 0.6},
 												},
 											)
 										},
@@ -448,11 +456,37 @@ func Welcome() {
 										nil,
 									)
 								},
+								gui.Style{
+									Display:       "flex",
+									FlexDirection: "column",
+									Width:         420,
+									MaxWidth:      "100%",
+									Gap:           2,
+									MarginTop:     8,
+								},
 							)
 						},
 					)
 				},
+				gui.Style{
+					Display:        "flex",
+					Flex:           1,
+					MinHeight:      0,
+					FlexDirection:  "column",
+					AlignItems:     "center",
+					JustifyContent: "center",
+					Gap:            20,
+					Padding:        40,
+				},
 			)
+		},
+		gui.Style{
+			Display:         "flex",
+			Flex:            1,
+			MinWidth:        0,
+			MinHeight:       0,
+			FlexDirection:   "column",
+			BackgroundColor: app.Theme().Content,
 		},
 	)
 }
@@ -468,76 +502,47 @@ func Sidebar() {
 		{model.ViewHistory, "History"},
 	}
 
+	gui.View(gui.Style{
+		Display:      "flex",
+		Height:       TitlebarHeight,
+		FlexShrink:   0,
+		AlignItems:   "center",
+		PaddingLeft:  84,
+		PaddingRight: 10,
+		AppRegion:    "drag",
+	})
 	gui.View(
-		gui.Display("flex"),
-		gui.Height(TitlebarHeight),
-		gui.FlexShrink(0),
-		gui.AlignItems("center"),
-		gui.PaddingLeft(84),
-		gui.PaddingRight(10),
-		gui.AppRegion("drag"),
-	)
-	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinHeight(0),
-		gui.FlexDirection("column"),
-		gui.Gap(2),
-		gui.PaddingTop(4),
-		gui.PaddingLeft(10),
-		gui.PaddingRight(10),
-		gui.PaddingBottom(12),
-		gui.OverflowY("auto"),
 		func() {
 			gui.Button(
-				gui.AriaLabel("Repository actions"),
-				gui.OnClick(func() { repositoryMenu(app) }),
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.Gap(9),
-				gui.Height(44),
-				gui.FlexShrink(0),
-				gui.PaddingLeft(8),
-				gui.PaddingRight(8),
-				gui.MarginBottom(6),
-				gui.BorderRadius(8),
-				gui.BackgroundColor("transparent"),
-				gui.Cursor("default"),
-				gui.Hover(gui.BackgroundColor(app.Theme().Hover)),
 				func() {
 					gui.View(
-						gui.Display("flex"),
-						gui.Width(28),
-						gui.Height(28),
-						gui.FlexShrink(0),
-						gui.AlignItems("center"),
-						gui.JustifyContent("center"),
-						gui.BorderRadius(7),
-						gui.BackgroundColor(app.Theme().Accent),
-						gui.Color(app.Theme().TextOnAccent),
 						func() {
 							icon(branchIcon, 18, func() string { return app.Theme().TextOnAccent })
 						},
+						gui.Style{
+							Display:         "flex",
+							Width:           28,
+							Height:          28,
+							FlexShrink:      0,
+							AlignItems:      "center",
+							JustifyContent:  "center",
+							BorderRadius:    7,
+							BackgroundColor: app.Theme().Accent,
+							Color:           app.Theme().TextOnAccent,
+						},
 					)
 					gui.View(
-						gui.Display("flex"),
-						gui.Flex(1),
-						gui.MinWidth(0),
-						gui.FlexDirection("column"),
-						gui.Gap(1),
 						func() {
 							gui.Text(
-								gui.FontSize(13),
-								gui.FontWeight(700),
-								gui.Color(app.Theme().Text),
-								gui.LineClamp(1),
 								func() string { return store.RepositoryName() },
+								gui.Style{
+									FontSize:   13,
+									FontWeight: 700,
+									Color:      app.Theme().Text,
+									LineClamp:  1,
+								},
 							)
 							gui.Text(
-								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
-								gui.LineClamp(1),
 								func() string {
 									if status := store.Status(); status != nil {
 										if status.Branch != "" {
@@ -549,10 +554,39 @@ func Sidebar() {
 									}
 									return ""
 								},
+								gui.Style{
+									FontSize:  11,
+									Color:     app.Theme().TextTertiary,
+									LineClamp: 1,
+								},
 							)
+						},
+						gui.Style{
+							Display:       "flex",
+							Flex:          1,
+							MinWidth:      0,
+							FlexDirection: "column",
+							Gap:           1,
 						},
 					)
 					icon(chevronDownIcon, 14, func() string { return app.Theme().TextTertiary })
+				},
+				gui.AriaLabel("Repository actions"),
+				gui.OnClick(func() { repositoryMenu(app) }),
+				gui.Style{
+					Display:         "flex",
+					FlexDirection:   "row",
+					AlignItems:      "center",
+					Gap:             9,
+					Height:          44,
+					FlexShrink:      0,
+					PaddingLeft:     8,
+					PaddingRight:    8,
+					MarginBottom:    6,
+					BorderRadius:    8,
+					BackgroundColor: "transparent",
+					Cursor:          "default",
+					Hover:           &gui.Style{BackgroundColor: app.Theme().Hover},
 				},
 			)
 			gui.For(
@@ -568,7 +602,7 @@ func Sidebar() {
 				}, _ func() int) {
 					navRow(item.Label, func() bool { return store.View() == item.ID }, func() string {
 						if item.ID == model.ViewChanges && store.ChangeCount() > 0 {
-							return fmt.Sprintf("%d", store.ChangeCount())
+							return strconv.Itoa(store.ChangeCount())
 						}
 						return ""
 					}, func() { store.SetView(item.ID) })
@@ -640,6 +674,18 @@ func Sidebar() {
 				nil,
 			)
 		},
+		gui.Style{
+			Display:       "flex",
+			Flex:          1,
+			MinHeight:     0,
+			FlexDirection: "column",
+			Gap:           2,
+			PaddingTop:    4,
+			PaddingLeft:   10,
+			PaddingRight:  10,
+			PaddingBottom: 12,
+			OverflowY:     "auto",
+		},
 	)
 
 }
@@ -647,28 +693,30 @@ func Sidebar() {
 func navRow(label string, selected func() bool, trailing any, onClick func()) {
 	app := UseApp()
 	gui.Button(
-		gui.AriaLabel(label),
-		gui.When(selected, gui.Selected(true)),
-		gui.OnClick(func() { onClick() }),
-		gui.WithStyle(rowStyle(app.Theme(), false)),
-		gui.When(
-			selected,
-			gui.BackgroundColor(func() string { return app.Theme().Selection }),
-			gui.Hover(gui.BackgroundColor(app.Theme().Selection)),
-		),
 		func() {
-			gui.Text(gui.Flex(1), gui.MinWidth(0), gui.FontSize(13), gui.LineClamp(1), label)
+			gui.Text(label, gui.Style{Flex: 1, MinWidth: 0, FontSize: 13, LineClamp: 1})
 			if text, ok := trailing.(func() string); ok {
 				gui.Show(
 					func() bool { return text() != "" },
 					func() {
-						gui.Text(gui.FontSize(11), gui.Color(app.Theme().TextTertiary), text)
+						gui.Text(text, gui.Style{FontSize: 11, Color: app.Theme().TextTertiary})
 					},
 				)
 			} else {
 				gui.Child(trailing)
 			}
 		},
+		gui.AriaLabel(label),
+		gui.When(selected, gui.Selected(true)),
+		gui.OnClick(func() { onClick() }),
+		rowStyle(app.Theme(), false),
+		gui.When(
+			selected,
+			gui.Style{
+				BackgroundColor: func() string { return app.Theme().Selection },
+				Hover:           &gui.Style{BackgroundColor: app.Theme().Selection},
+			},
+		),
 	)
 }
 
@@ -681,57 +729,65 @@ func sectionRow(label string, count func() int, selected func() bool, onClick, a
 		return app.Theme().TextTertiary
 	}
 	gui.View(
-		gui.Group(true),
-		gui.Display("flex"),
-		gui.FlexDirection("row"),
-		gui.AlignItems("center"),
-		gui.Gap(4),
-		gui.MarginTop(14),
-		gui.PaddingRight(2),
 		func() {
 			gui.Button(
-				gui.OnClick(func() { onClick() }),
-				gui.Display("flex"),
-				gui.Flex(1),
-				gui.MinWidth(0),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.Gap(6),
-				gui.Height(22),
-				gui.PaddingLeft(9),
-				gui.PaddingRight(6),
-				gui.BorderRadius(6),
-				gui.BackgroundColor("transparent"),
-				gui.Cursor("default"),
-				gui.Hover(gui.BackgroundColor(app.Theme().Hover)),
 				func() {
 					gui.Text(
-						gui.Flex(1),
-						gui.MinWidth(0),
-						gui.FontSize(11),
-						gui.FontWeight(600),
-						gui.Color(color),
 						label,
+						gui.Style{
+							Flex:       1,
+							MinWidth:   0,
+							FontSize:   11,
+							FontWeight: 600,
+							Color:      color,
+						},
 					)
 					gui.Show(
 						func() bool { return count() > 0 },
 						func() {
 							gui.Text(
-								gui.FontSize(11),
-								gui.FontWeight(600),
-								gui.Color(app.Theme().TextTertiary),
-								func() string { return fmt.Sprintf("%d", count()) },
+								count,
+								gui.Style{
+									FontSize:   11,
+									FontWeight: 600,
+									Color:      app.Theme().TextTertiary,
+								},
 							)
 						},
 					)
 				},
+				gui.OnClick(func() { onClick() }),
+				gui.Style{
+					Display:         "flex",
+					Flex:            1,
+					MinWidth:        0,
+					FlexDirection:   "row",
+					AlignItems:      "center",
+					Gap:             6,
+					Height:          22,
+					PaddingLeft:     9,
+					PaddingRight:    6,
+					BorderRadius:    6,
+					BackgroundColor: "transparent",
+					Cursor:          "default",
+					Hover:           &gui.Style{BackgroundColor: app.Theme().Hover},
+				},
 			)
 			gui.Button(
+				func() { toolbarIcon(plusIcon) },
 				gui.AriaLabel("Add "+strings.ToLower(label)),
 				gui.OnClick(func() { action() }),
-				gui.WithStyle(app.Theme().IconButton()),
-				func() { toolbarIcon(plusIcon) },
+				app.Theme().IconButton(),
 			)
+		},
+		gui.Group(true),
+		gui.Style{
+			Display:       "flex",
+			FlexDirection: "row",
+			AlignItems:    "center",
+			Gap:           4,
+			MarginTop:     14,
+			PaddingRight:  2,
 		},
 	)
 }

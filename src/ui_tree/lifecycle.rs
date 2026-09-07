@@ -62,6 +62,7 @@ impl UiTree {
             static_text_gesture: None,
             last_static_text_click: None,
             accessibility_text_ids: HashMap::with_capacity(8),
+            accessibility_snapshot: std::cell::RefCell::new(None),
             next_accessibility_text_id: ACCESSIBILITY_ROOT_ID.0 - 1,
             animations: HashMap::with_capacity(8),
             animation_ids: HashSet::with_capacity(8),

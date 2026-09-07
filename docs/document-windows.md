@@ -94,30 +94,40 @@ The configuration remains portable Rust state on other targets. Native document 
 character palette, and system-tab actions are macOS capabilities; Windows and Linux projections
 belong to their later native-runtime milestones rather than being simulated as custom GPU chrome.
 
-## JavaScript
+## Go
 
-`AppRunner` exposes the same tab and character-palette commands to embedding runtimes, and
-`@quickgui/native` forwards them as fire-and-forget window commands:
-`window.setTabbingIdentifier(id?)`, `selectNextTab()`, `selectPreviousTab()`, `selectTab(index)`,
-`mergeAllWindows()`, `moveTabToNewWindow()`, `toggleTabBar()`, `toggleTabOverview()`, and
-`showCharacterPalette()`. Passing no identifier to `setTabbingIdentifier` leaves the group. The
-resulting group state is read back from `window.getState()` under `nativeTabs`, which already
-reports `count`, `selectedIndex`, `tabBarVisible`, `overviewVisible`, and `truncated`.
+Set `RepresentedFile`, `DocumentEdited`, and `TabbingIdentifier` in
+`native.WindowOptions` when opening a document. Window methods enqueue the same
+native commands without waiting for the main thread:
 
-Menus can drive the same commands without JavaScript callbacks through the
-`"select-next-tab"`, `"select-previous-tab"`, `"merge-all-windows"`, `"move-tab-to-new-window"`,
-`"toggle-tab-bar"`, and `"toggle-tab-overview"` menu roles, which follow the AppKit responder chain
-first and fall back to the retained window command.
-
-Run the interactive macOS sample with:
-
-```console
-cargo run --release --example document_window
+```go
+func ReadDocumentState(window *native.Window) {
+	window.SetRepresentedFile("/Users/me/Documents/notes.md")
+	window.SetDocumentEdited(true)
+	window.SetTabbingIdentifier("com.example.editor.workspace")
+	window.SelectNextTab()
+	window.GetState(func(state native.WindowState, err error) {
+		if err != nil {
+			log.Print(err)
+			return
+		}
+		log.Print(state.NativeTabs.Count, state.NativeTabs.SelectedIndex)
+	})
+}
 ```
 
-The sample exercises represented-file changes, edited state, tab grouping/navigation, detaching,
-tab-bar and overview commands, and the character palette. Automated tests verify validation,
-command retention, deterministic projection, and zero dependency on a native presentation loop.
-Native system-tab interaction is optional and deferred from the macOS-first 0.1 release gate; its
-real tab-bar acceptance belongs to a later milestone described in [Status and
-roadmap](status.md).
+`SelectPreviousTab`, `SelectTab(index)`, `MergeAllWindows`, `MoveTabToNewWindow`,
+`ToggleTabBar`, `ToggleTabOverview`, and `ShowCharacterPalette` expose the other
+actions. `SetTabbingIdentifier("")` leaves the group. `GetState` reports the retained
+snapshot asynchronously, including `NativeTabs.Count`, `SelectedIndex`,
+`TabBarVisible`, `OverviewVisible`, and `Truncated`.
+
+Native menu roles can drive the same actions without Go callbacks:
+`"select-next-tab"`, `"select-previous-tab"`, `"merge-all-windows"`,
+`"move-tab-to-new-window"`, `"toggle-tab-bar"`, and `"toggle-tab-overview"`.
+They follow the AppKit responder chain first and fall back to the window command.
+
+Run `cargo run --release --example document_window` for the core's document-window
+gallery. Automated tests cover validation, command retention, and deterministic
+projection. Real system-tab interaction remains outside the macOS-first 0.1
+acceptance gate; see [Status and roadmap](status.md).

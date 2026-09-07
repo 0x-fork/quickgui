@@ -15,12 +15,11 @@ import (
 ```go
 func ViewExample() {
 	ui.View(
-		ui.Padding(20),
-		ui.Gap(12),
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button(ui.OnClick(func() {}), "Continue")
+			ui.Button("Continue", ui.OnClick(func() {}))
 		},
+		ui.Style{Padding: 20, Gap: 12},
 	)
 }
 ```
@@ -29,7 +28,7 @@ func ViewExample() {
 
 | プロパティ | 説明 |
 | --- | --- |
-| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
 | `OnClick` | コアがアクティブ化を解決した後に実行します。 |
 | `Ref` | 保持されたネイティブノードを受け取ります。 |

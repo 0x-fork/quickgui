@@ -3,7 +3,7 @@ import type { en } from './en'
 export const zh: typeof en = {
   "meta": {
     "title": "QuickGUI — 用 Go 构建原生桌面应用",
-    "description": "用 Go 构建原生桌面应用。快速构建、细粒度响应式、GPU 渲染、熟悉的布局和无障碍组件，无需 CGO。"
+    "description": "用 Go 构建原生桌面应用。快速构建、细粒度响应式、GPU 渲染、熟悉的布局和无障碍组件。"
   },
   "common": {
     "skipToContent": "跳到正文",
@@ -19,10 +19,10 @@ export const zh: typeof en = {
     "docs": "文档"
   },
   "hero": {
-    "badge": "Go · 无需 CGO",
+    "badge": "Go · 快速构建",
     "titleLine1": "构建原生桌面应用，",
     "titleLine2": "用 Go。",
-    "sub": "用普通 Go 代码享受快速构建和细粒度响应式。通过熟悉的布局和无障碍组件，组合 GPU 渲染的原生界面，无需 CGO。"
+    "sub": "用普通 Go 代码享受快速构建和细粒度响应式。通过熟悉的布局和无障碍组件，组合 GPU 渲染的原生界面。"
   },
   "features": {
     "title": "桌面应用需要的, 都在这里",
@@ -33,7 +33,7 @@ export const zh: typeof en = {
       },
       "fast": {
         "title": "快速 Go 构建",
-        "body": "修改应用时，只需重新编译 Go 代码。原生运行时随应用打包，应用构建禁用 CGO。"
+        "body": "修改后只需重新编译 Go 代码。减少构建等待，把更多时间留给应用开发。"
       },
       "layout": {
         "title": "你已熟悉的布局",

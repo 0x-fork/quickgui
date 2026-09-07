@@ -214,7 +214,11 @@ function navGroups(locale: Locale): readonly NavGroup[] {
     },
     {
       title: labels.ui,
-      items: [guideItem('ui', locale), guideItem('styling', locale)],
+      items: [
+        guideItem('ui', locale),
+        guideItem('styling', locale),
+        guideItem('animations', locale),
+      ],
     },
     {
       title: labels.components,

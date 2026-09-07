@@ -15,15 +15,15 @@ import (
 ```go
 func VirtualListExample(rows []string) {
 	ui.VirtualList(
-		ui.Height(320),
+		func() {
+			for _, row := range rows {
+				ui.Text(row, ui.Style{Height: 36})
+			}
+		},
+		ui.Style{Height: 320},
 		ui.EstimatedItemHeight(36),
 		ui.Overscan(6),
 		ui.FollowMode("normal"),
-		func() {
-			for _, row := range rows {
-				ui.Text(ui.Height(36), row)
-			}
-		},
 	)
 }
 ```

@@ -10,7 +10,6 @@ Every component is a `func()` declaration, including window roots, routes, condi
 package main
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/egoist/quickgui/go/native"
@@ -41,53 +40,59 @@ func main() {
 func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.Gap(20),
-		ui.BackgroundColor("#090d16"),
-		ui.Color("#e2e8f0"),
 		func() {
-			ui.Text(ui.FontSize(28), ui.FontWeight(700), "Fine-grained native UI")
+			ui.Text("Fine-grained native UI", ui.Style{FontSize: 28, FontWeight: 700})
 
-			ui.Text(func() string {
-				return fmt.Sprintf("Count: %d", count())
-			})
+			ui.Text("Count: ", count)
 
 			ui.Button(
-				ui.Padding(12),
-				ui.BorderRadius(8),
-				ui.BackgroundColor("#2563eb"),
-				ui.Hover(ui.BackgroundColor("#3b82f6")),
-				ui.OnClick(func() { setCount(count() + 1) }),
 				"Increment",
+				ui.Style{
+					Padding:         12,
+					BorderRadius:    8,
+					BackgroundColor: "#2563eb",
+					Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
+				},
+				ui.OnClick(func() { setCount(count() + 1) }),
 			)
+		},
+		ui.Style{
+			Display:         "flex",
+			FlexDirection:   "column",
+			Width:           "100%",
+			Height:          "100%",
+			AlignItems:      "center",
+			JustifyContent:  "center",
+			Gap:             20,
+			BackgroundColor: "#090d16",
+			Color:           "#e2e8f0",
 		},
 	)
 }
 ```
 
-Components and `func() { ... }` children blocks run once when mounted. UI calls inside a block declare children in order; nested blocks keep their own parent. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. A getter called while constructing a static string captures its current value: pass `func() string { … }` as the text child for changing text.
+Components and `func() { ... }` children blocks run once when mounted. UI calls inside a block declare children in order; nested blocks keep their own parent. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. Calling `count()` while mounting captures its current value; pass the accessor itself or a `func() int` for derived values. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
 
-Primitives accept options and children directly: `ui.View(ui.Padding(20), ui.BackgroundColor("#ccc"), "Hello")`. Use `ui.OnClick(func() { ... })` for ordinary clicks, or `ui.OnClickEvent` when you need the native event. Reuse a style record with `ui.WithStyle(style)`; compound controls also accept `ui.Style` records. Numeric lengths are logical pixels; strings support percentages and CSS declarations such as grid tracks. `nil` means an omitted numeric field, so `Width: 0` remains meaningful. `ui.Hover`, `ui.Active`, and `ui.Focus` accept nested style options that the Rust core applies during interaction. `ui.DisabledStyle` and `ui.SelectedStyle` distinguish interaction styles from the node state options.
+Put children first, followed by `ui.Style{}` records and event options: `ui.View("Hello", ui.Style{Padding: 20, BackgroundColor: "#ccc"})`. Multiple records merge field by field in declaration order. Only a conflicting field is replaced; nested interaction styles merge too. Shared records are never mutated. Numeric zero is an explicit value and `nil` omits a field. Use `Hover: &ui.Style{...}`, `Active`, `Focus`, `Disabled`, or `Selected` for native interaction styles. `ui.OnClick(func() { ... })` handles ordinary clicks; `ui.OnClickEvent` receives the native event.
 
 ## Conditional options
 
-`ui.When` tracks a condition and applies one or more options while it is true. Later options override earlier ones. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
+`ui.When` tracks a condition and applies one or more options while it is true. Style records merge into the earlier styles; later values win only for conflicting fields. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
 
 ```go
 selected, setSelected := ui.CreateSignal(false)
 ui.Button(
-	ui.BackgroundColor("#ccc"),
-	ui.When(selected,
-		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+	"Toggle selection",
+	ui.Style{Padding: 12, BackgroundColor: "#ccc"},
+	ui.Style{BorderRadius: 8},
+	ui.When(
+		selected,
+		ui.Style{
+			BackgroundColor: "#2563eb",
+			Color:           "white",
+		},
 	),
 	ui.OnClick(func() { setSelected(!selected()) }),
-	"Toggle selection",
 )
 ```
 
@@ -99,35 +104,46 @@ Use `quickgui fmt --check` in CI or `quickgui fmt --project path/to/app` for ano
 
 ## Groups and named group hover
 
-`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `ui.GroupHover(...)` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
+`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `GroupHover: &ui.Style{...}` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
 
 ```go
 func GroupExample() {
-	ui.View(ui.Group("card"), ui.Padding(20), func() {
-		ui.Text(
-			ui.Color("#64748b"),
-			ui.GroupHover(ui.Color("#2563eb")),
-			"Changes when the card is hovered",
-		)
-		ui.View(ui.Group("toolbar"), func() {
+	ui.View(
+		func() {
 			ui.Text(
-				ui.GroupHoverNamed("card", ui.Color("#2563eb")),
-				ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
-				"Follows the card and the nested toolbar",
+				"Changes when the card is hovered",
+				ui.Style{Color: "#64748b", GroupHover: &ui.Style{Color: "#2563eb"}},
 			)
-		})
-	})
+			ui.View(
+				func() {
+					ui.Text(
+						"Follows the card and the nested toolbar",
+						ui.GroupHoverNamed("card", ui.Style{Color: "#2563eb"}),
+						ui.GroupHoverNamed("toolbar", ui.Style{Opacity: 0.8}),
+					)
+				},
+				ui.Group("toolbar"),
+			)
+		},
+		ui.Group("card"),
+		ui.Style{Padding: 20},
+	)
 }
 ```
 
-Hovering any part of the group, including its padding and descendants, activates its rules. A nested group becomes the target for unnamed rules; named rules can still follow an outer group. With no matching ancestor, the rule has no effect. Repeated group rules accumulate in declaration order; a node’s own `ui.Hover(...)` wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates are handled natively without rerunning components or changing layout.
+Hovering any part of the group, including its padding and descendants, activates its rules. A nested group becomes the target for unnamed rules; named rules can still follow an outer group. With no matching ancestor, the rule has no effect. Repeated group rules accumulate in declaration order; a node’s own `Hover` style wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates are handled natively without rerunning components or changing layout.
+
+`GroupActive: &ui.Style{...}` and `ui.GroupActiveNamed("card", ui.Style{...})` use the same group lookup while the group is pressed. `FocusWithin: &ui.Style{...}` follows focus in the node or its descendants. Group and focus-within states accept paint styles and cannot set the cursor.
 
 ## Conditional content and lists
 
 ```go
-ui.Show(func() bool { return count() >= 5 }, func() {
-	ui.Text("Five or more clicks")
-})
+ui.Show(
+	func() bool { return count() >= 5 },
+	func() {
+		ui.Text("Five or more clicks")
+	},
+)
 ```
 
 `Show` accepts component functions for its content and optional fallback. It creates children lazily and disposes them when hidden. `For` reuses unchanged rows by a comparable key; `KeyedFor` gives each retained row an item accessor so changing its data preserves local state. Keys must be unique. Removed rows release their effects and native listeners. Window closure disposes the entire component tree and outstanding component background work.
@@ -135,10 +151,15 @@ ui.Show(func() bool { return count() >= 5 }, func() {
 `ui.Dynamic(func() ui.Component { ... })` selects a component reactively. Only the selector reruns; bindings inside the selected component keep updating its retained nodes. Return `nil` from the selector to render nothing. List callbacks also declare their children directly:
 
 ```go
-ui.For(items, func(item Item, index func() int) {
-	ui.Text(item.Name)
-	ui.Text(func() string { return fmt.Sprint(index()) })
-}, func(item Item) any { return item.ID }, nil)
+ui.For(
+	items,
+	func(item Item, index func() int) {
+		ui.Text(item.Name)
+		ui.Text(index)
+	},
+	func(item Item) any { return item.ID },
+	nil,
+)
 ```
 
 Use `ui.Ref(func(node *native.Node) { ... })` when a component needs a node handle, such as a popover anchor. Framework constructors still expose node handles for low-level tree work; component callbacks always use `func()`.
@@ -161,6 +182,33 @@ Go and Rust exchange bounded binary mutation batches and copied event data throu
 Compound controls accept the same children blocks after their typed props, so descendants inherit their root context: `ui.Tabs.Root(props, func() { ... })`. Pass strings or string accessors directly as children to text and buttons. Primitives accept style and event options directly, without a props wrapper. `ui.Child(node)` inserts a previously constructed detached node in a block. The `Props.Children` form remains available for programmatic composition. Families include `Checkbox`, `Switch`, `Tabs`, `Dialog`, `Popover`, `SystemPopover`, `Slider`, `Select`, `Combobox`, `Menu`, `Table`, `Tree`, and `Toast`. Their native behavior remains in Rust. `ui.SwiftUI` provides the macOS SwiftUI control gallery and reverse-hosted QuickGUI views.
 
 See [counter](../examples/counter/main.go), [components](../examples/components/main.go), [routing](../examples/routing/main.go), [SwiftUI](../examples/swift-ui/main.go), and the full [Quick Git](../examples/quick-git/main.go) application.
+
+## Native services
+
+Import `github.com/egoist/quickgui/go/native` for application/window lifecycle and
+platform services. Call them after `native.Run` has initialized the application.
+Native mutations enqueue commands; operations with a result take a completion
+callback rather than synchronously waiting for the main thread. Completion and
+event callbacks run on the Go application goroutine.
+
+| API | Capability |
+| --- | --- |
+| `App`, `Window` | Identity, paths, windows, lifecycle, menus, activation, relaunch |
+| `ShowAlertDialog`, `ShowOpenDialog`, `ShowSaveDialog`, `Shell` | System dialogs, file panels, opening/revealing paths and URLs |
+| `Clipboard` | Typed text, binary MIME data, images, files, and Find pasteboard |
+| `Screen`, `SystemPreferences`, `Appearance`, `Keyboard` | Display and platform snapshots |
+| `Notifications`, `GlobalShortcut`, `Tray` | Native notification, shortcut, and tray lifecycles |
+| `PowerMonitor`, `PowerAssertion`, `Permissions` | Power/idle state, sleep assertions, and explicit permissions |
+| `AutoStart`, `Protocol`, `DeepLink` | Startup registration and application links |
+| `SecureStorage` | Native credential storage |
+| `Updater`, `CrashReporter`, `Metrics` | Signed updates, core crash reports, and explicit metrics |
+
+Check callback errors and retain/dispose subscription or resource handles for the
+duration they are needed. Capture the owning window during component creation if
+an asynchronous result needs to operate on it. Examples and platform limits are
+documented in [clipboard](clipboard.md#go), [document windows](document-windows.md#go),
+[updates](relaunch-and-updates.md#download-progress-from-go), and
+[crash reporting and metrics](crash-reporting-and-metrics.md#go).
 
 ## Build
 

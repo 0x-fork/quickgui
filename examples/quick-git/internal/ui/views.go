@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"fmt"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/egoist/quickgui/go/native"
@@ -38,18 +38,8 @@ func ChangesView() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinWidth(0),
-		gui.MinHeight(0),
-		gui.FlexDirection("row"),
 		func() {
 			gui.View(
-				gui.Display("flex"),
-				gui.Width(store.ChangesSplit),
-				gui.FlexShrink(0),
-				gui.MinHeight(0),
-				gui.FlexDirection("column"),
 				func() {
 					gui.Show(
 						func() bool { return store.ChangeCount() > 0 },
@@ -63,10 +53,18 @@ func ChangesView() {
 					)
 					commitComposer()
 				},
+				gui.Style{
+					Display:       "flex",
+					Width:         store.ChangesSplit,
+					FlexShrink:    0,
+					MinHeight:     0,
+					FlexDirection: "column",
+				},
 			)
 			resizeDivider("Resize file list", store.ChangesSplit, store.SetChangesSplit)
 			DiffPane()
 		},
+		gui.Style{Display: "flex", Flex: 1, MinWidth: 0, MinHeight: 0, FlexDirection: "row"},
 	)
 }
 
@@ -78,36 +76,18 @@ func fileList(list model.ListID) {
 		label = "Staged"
 	}
 	gui.View(
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.MinHeight(0),
-		gui.Flex(1),
-		gui.FlexBasis(0),
 		func() {
 			gui.View(
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.Height(32),
-				gui.FlexShrink(0),
-				gui.PaddingLeft(12),
-				gui.PaddingRight(8),
-				gui.Gap(6),
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.FontWeight(600),
-						gui.Color(app.Theme().TextTertiary),
 						label,
+						gui.Style{FontSize: 11, FontWeight: 600, Color: app.Theme().TextTertiary},
 					)
 					gui.Text(
-						gui.FontSize(11),
-						gui.Color(app.Theme().TextTertiary),
-						func() string {
-							return fmt.Sprintf("%d", len(store.ListItems(list)))
-						},
+						func() int { return len(store.ListItems(list)) },
+						gui.Style{FontSize: 11, Color: app.Theme().TextTertiary},
 					)
-					gui.View(gui.Flex(1))
+					gui.View(gui.Style{Flex: 1})
 					gui.Show(
 						func() bool { return len(store.ListItems(list)) > 0 },
 						func() {
@@ -116,6 +96,7 @@ func fileList(list model.ListID) {
 								text = "Unstage All"
 							}
 							gui.Button(
+								text,
 								gui.Disabled(store.Busy() != nil),
 								gui.OnClick(func() {
 									if list == model.ListUnstaged {
@@ -124,11 +105,20 @@ func fileList(list model.ListID) {
 										store.UnstageAll()
 									}
 								}),
-								gui.WithStyle(app.Theme().Button("secondary")),
-								text,
+								app.Theme().Button("secondary"),
 							)
 						},
 					)
+				},
+				gui.Style{
+					Display:       "flex",
+					FlexDirection: "row",
+					AlignItems:    "center",
+					Height:        32,
+					FlexShrink:    0,
+					PaddingLeft:   12,
+					PaddingRight:  8,
+					Gap:           6,
 				},
 			)
 			gui.Show(
@@ -142,14 +132,23 @@ func fileList(list model.ListID) {
 						empty = "Nothing staged yet"
 					}
 					gui.Text(
-						gui.PaddingLeft(12),
-						gui.PaddingBottom(10),
-						gui.FontSize(12),
-						gui.Color(app.Theme().TextTertiary),
 						empty,
+						gui.Style{
+							PaddingLeft:   12,
+							PaddingBottom: 10,
+							FontSize:      12,
+							Color:         app.Theme().TextTertiary,
+						},
 					)
 				},
 			)
+		},
+		gui.Style{
+			Display:       "flex",
+			FlexDirection: "column",
+			MinHeight:     0,
+			Flex:          1,
+			FlexBasis:     0,
 		},
 	)
 }
@@ -227,10 +226,12 @@ func changeTable(list model.ListID) {
 								},
 								func() {
 									gui.Text(
-										gui.Width(16),
-										gui.FontWeight(700),
-										gui.Color(StatusColor(app.Theme(), string(row().Item.Code))),
 										func() string { return string(row().Item.Code) },
+										gui.Style{
+											Width:      16,
+											FontWeight: 700,
+											Color:      StatusColor(app.Theme(), string(row().Item.Code)),
+										},
 									)
 								},
 							)
@@ -321,43 +322,44 @@ func changeName(list model.ListID, item func() git.ChangeItem) {
 		}
 		text := ""
 		if entry.Added != nil {
-			text += fmt.Sprintf("+%d", *entry.Added)
+			text += "+" + strconv.Itoa(*entry.Added)
 		}
 		if entry.Removed != nil {
 			if text != "" {
 				text += " "
 			}
-			text += fmt.Sprintf("-%d", *entry.Removed)
+			text += "-" + strconv.Itoa(*entry.Removed)
 		}
 		return text
 	}
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinWidth(0),
-		gui.FlexDirection("row"),
-		gui.AlignItems("center"),
-		gui.Gap(6),
-		gui.Height("100%"),
 		func() {
 			gui.Text(
-				gui.Flex(1),
-				gui.MinWidth(0),
-				gui.FontSize(13),
-				gui.LineClamp(1),
 				func() string { return item().Path },
+				gui.Style{Flex: 1, MinWidth: 0, FontSize: 13, LineClamp: 1},
 			)
 			gui.Show(
 				func() bool { return counts() != "" },
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.FontFamily("monospace"),
-						gui.Color(app.Theme().TextTertiary),
 						counts,
+						gui.Style{
+							FontSize:   11,
+							FontFamily: "monospace",
+							Color:      app.Theme().TextTertiary,
+						},
 					)
 				},
 			)
+		},
+		gui.Style{
+			Display:       "flex",
+			Flex:          1,
+			MinWidth:      0,
+			FlexDirection: "row",
+			AlignItems:    "center",
+			Gap:           6,
+			Height:        "100%",
 		},
 	)
 }
@@ -418,7 +420,7 @@ func indexOf(items []git.ChangeItem, id string) int {
 }
 
 func confirmDiscard(app AppContext, items []git.ChangeItem) {
-	message := fmt.Sprintf("Discard changes to %d files?", len(items))
+	message := "Discard changes to " + strconv.Itoa(len(items)) + " files?"
 	if len(items) == 1 {
 		message = "Discard changes to " + filepath.Base(items[0].Path) + "?"
 	}
@@ -442,71 +444,72 @@ func commitComposer() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.FlexShrink(0),
-		gui.Gap(8),
-		gui.Padding(12),
-		gui.BorderTopWidth(1),
-		gui.BorderColor(app.Theme().Border),
 		func() {
 			gui.Input(
 				gui.Placeholder("Commit summary"),
 				gui.Value(func() string { return store.Subject() }),
 				gui.OnInput(func(event *native.Event) { store.SetSubject(event.Value) }),
 				gui.OnSubmit(func(*native.Event) { store.Commit() }),
-				gui.WithStyle(app.Theme().InputStyle()),
+				app.Theme().InputStyle(),
 			)
 			gui.TextArea(
 				gui.Placeholder("Description"),
 				gui.Value(func() string { return store.Body() }),
 				gui.OnInput(func(event *native.Event) { store.SetBody(event.Value) }),
-				gui.Display("flex"),
-				gui.Width("100%"),
-				gui.MinHeight(72),
-				gui.PaddingLeft(7),
-				gui.PaddingRight(7),
-				gui.PaddingTop(4),
-				gui.PaddingBottom(4),
-				gui.BackgroundColor(app.Theme().Input),
-				gui.Color(app.Theme().Text),
-				gui.BorderWidth(1),
-				gui.BorderColor(app.Theme().InputBorder),
-				gui.BorderRadius(6),
-				gui.FontSize(UIFontSize),
+				gui.Style{
+					Display:         "flex",
+					Width:           "100%",
+					MinHeight:       72,
+					PaddingLeft:     7,
+					PaddingRight:    7,
+					PaddingTop:      4,
+					PaddingBottom:   4,
+					BackgroundColor: app.Theme().Input,
+					Color:           app.Theme().Text,
+					BorderWidth:     1,
+					BorderColor:     app.Theme().InputBorder,
+					BorderRadius:    6,
+					FontSize:        UIFontSize,
+				},
 			)
 			gui.View(
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.Gap(8),
 				func() {
 					CheckRow("Amend", store.Amend, store.SetAmend)
-					gui.View(gui.Flex(1))
+					gui.View(gui.Style{Flex: 1})
 					gui.Show(
 						func() bool { return len(store.Agents()) > 0 },
 						func() {
 							gui.Button(
-								gui.Disabled(store.Generating() != nil),
-								gui.OnClick(func() { store.GenerateMessage("") }),
-								gui.WithStyle(app.Theme().Button("secondary")),
 								func() string {
 									if store.Generating() != nil {
 										return "Generating…"
 									}
 									return "Generate"
 								},
+								gui.Disabled(store.Generating() != nil),
+								gui.OnClick(func() { store.GenerateMessage("") }),
+								app.Theme().Button("secondary"),
 							)
 						},
 					)
 					gui.Button(
+						"Commit",
 						gui.Disabled(!store.CanCommit()),
 						gui.OnClick(func() { store.Commit() }),
-						gui.WithStyle(app.Theme().Button("primary")),
-						"Commit",
+						app.Theme().Button("primary"),
 					)
 				},
+				gui.Style{Display: "flex", FlexDirection: "row", AlignItems: "center", Gap: 8},
 			)
+		},
+		gui.Style{
+			Display:        "flex",
+			FlexDirection:  "column",
+			FlexShrink:     0,
+			Gap:            8,
+			Padding:        12,
+			BorderTopWidth: 1,
+			BorderColor:    app.Theme().Border,
 		},
 	)
 }
@@ -515,51 +518,39 @@ func DiffPane() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinWidth(0),
-		gui.MinHeight(0),
-		gui.FlexDirection("column"),
-		gui.BackgroundColor(app.Theme().Content),
 		func() {
 			gui.Show(
 				func() bool { return store.Diff().Target != nil },
 				func() {
 
 					gui.View(
-						gui.Display("flex"),
-						gui.FlexDirection("row"),
-						gui.AlignItems("center"),
-						gui.Gap(8),
-						gui.Height(40),
-						gui.FlexShrink(0),
-						gui.PaddingLeft(14),
-						gui.PaddingRight(10),
-						gui.BorderBottomWidth(1),
-						gui.BorderColor(app.Theme().Border),
 						func() {
 							gui.Text(
-								gui.Flex(1),
-								gui.MinWidth(0),
-								gui.FontSize(13),
-								gui.FontWeight(600),
-								gui.LineClamp(1),
 								func() string {
 									if target := store.Diff().Target; target != nil {
 										return target.Path
 									}
 									return ""
 								},
+								gui.Style{
+									Flex:       1,
+									MinWidth:   0,
+									FontSize:   13,
+									FontWeight: 600,
+									LineClamp:  1,
+								},
 							)
 							gui.Show(
 								func() bool { return store.DiffStats().Added > 0 },
 								func() {
 									gui.Text(
-										gui.FontSize(11),
-										gui.FontWeight(700),
-										gui.Color(app.Theme().Success),
-										gui.FontFamily("monospace"),
-										fmt.Sprintf("+%d", store.DiffStats().Added),
+										"+"+strconv.Itoa(store.DiffStats().Added),
+										gui.Style{
+											FontSize:   11,
+											FontWeight: 700,
+											Color:      app.Theme().Success,
+											FontFamily: "monospace",
+										},
 									)
 								},
 							)
@@ -567,11 +558,13 @@ func DiffPane() {
 								func() bool { return store.DiffStats().Removed > 0 },
 								func() {
 									gui.Text(
-										gui.FontSize(11),
-										gui.FontWeight(700),
-										gui.Color(app.Theme().Danger),
-										gui.FontFamily("monospace"),
-										fmt.Sprintf("-%d", store.DiffStats().Removed),
+										"-"+strconv.Itoa(store.DiffStats().Removed),
+										gui.Style{
+											FontSize:   11,
+											FontWeight: 700,
+											Color:      app.Theme().Danger,
+											FontFamily: "monospace",
+										},
 									)
 								},
 							)
@@ -579,23 +572,32 @@ func DiffPane() {
 								func() bool { return store.Diff().Loading },
 								func() {
 									gui.Text(
-										gui.FontSize(11),
-										gui.Color(app.Theme().TextTertiary),
 										"Loading…",
+										gui.Style{FontSize: 11, Color: app.Theme().TextTertiary},
 									)
 								},
 							)
 							diffActions()
+						},
+						gui.Style{
+							Display:           "flex",
+							FlexDirection:     "row",
+							AlignItems:        "center",
+							Gap:               8,
+							Height:            40,
+							FlexShrink:        0,
+							PaddingLeft:       14,
+							PaddingRight:      10,
+							BorderBottomWidth: 1,
+							BorderColor:       app.Theme().Border,
 						},
 					)
 					gui.Show(
 						func() bool { return store.Diff().Error != "" },
 						func() {
 							gui.Text(
-								gui.Padding(12),
-								gui.Color(app.Theme().Danger),
-								gui.FontSize(12),
 								store.Diff().Error,
+								gui.Style{Padding: 12, Color: app.Theme().Danger, FontSize: 12},
 							)
 						},
 					)
@@ -611,6 +613,14 @@ func DiffPane() {
 				},
 			)
 		},
+		gui.Style{
+			Display:         "flex",
+			Flex:            1,
+			MinWidth:        0,
+			MinHeight:       0,
+			FlexDirection:   "column",
+			BackgroundColor: app.Theme().Content,
+		},
 	)
 }
 
@@ -625,72 +635,70 @@ func diffActions() {
 			mode := store.Diff().Target.Kind
 			lineCount := store.SelectedDiffLineCount()
 			gui.View(
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.Gap(6),
 				func() {
 					gui.Show(
 						func() bool { return lineCount > 0 },
 						func() {
 							if mode == "staged" {
 								gui.Button(
+									"Unstage "+strconv.Itoa(lineCount)+" Lines",
 									gui.OnClick(func() { store.ApplySelectedLines("unstage") }),
-									gui.WithStyle(app.Theme().Button("primary")),
-									fmt.Sprintf("Unstage %d Lines", lineCount),
+									app.Theme().Button("primary"),
 								)
 								return
 
 							}
 
 							gui.Button(
-								gui.OnClick(func() { store.ApplySelectedLines("discard") }),
-								gui.WithStyle(app.Theme().Button("danger")),
 								"Discard Lines…",
+								gui.OnClick(func() { store.ApplySelectedLines("discard") }),
+								app.Theme().Button("danger"),
 							)
 							gui.Button(
+								"Stage "+strconv.Itoa(lineCount)+" Lines",
 								gui.OnClick(func() { store.ApplySelectedLines("stage") }),
-								gui.WithStyle(app.Theme().Button("primary")),
-								fmt.Sprintf("Stage %d Lines", lineCount),
+								app.Theme().Button("primary"),
 							)
 
 						},
 						func() {
 							if mode == "staged" {
 								gui.Button(
+									"Unstage File",
 									gui.OnClick(func() {
 										if item := store.ActiveItem(); item != nil {
 											store.UnstageItems([]git.ChangeItem{*item})
 										}
 									}),
-									gui.WithStyle(app.Theme().Button("secondary")),
-									"Unstage File",
+									app.Theme().Button("secondary"),
 								)
 								return
 
 							}
 
 							gui.Button(
+								"Discard…",
 								gui.OnClick(func() {
 									if item := store.ActiveItem(); item != nil {
 										confirmDiscard(app, []git.ChangeItem{*item})
 									}
 								}),
-								gui.WithStyle(app.Theme().Button("danger")),
-								"Discard…",
+								app.Theme().Button("danger"),
 							)
 							gui.Button(
+								"Stage File",
 								gui.OnClick(func() {
 									if item := store.ActiveItem(); item != nil {
 										store.StageItems([]git.ChangeItem{*item})
 									}
 								}),
-								gui.WithStyle(app.Theme().Button("primary")),
-								"Stage File",
+								app.Theme().Button("primary"),
 							)
 
 						},
 					)
 				},
+				gui.Style{Display: "flex", FlexDirection: "row", Gap: 6},
 			)
 		},
 	)
@@ -820,8 +828,8 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 						},
 						func() {
 							gui.Text(
-								gui.WithStyle(numberStyle),
-								func() string { return fmt.Sprintf("%d", *row().OldLineNumber) },
+								func() int { return *row().OldLineNumber },
+								numberStyle,
 							)
 						},
 					)
@@ -841,8 +849,8 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 						},
 						func() {
 							gui.Text(
-								gui.WithStyle(numberStyle),
-								func() string { return fmt.Sprintf("%d", *row().NewLineNumber) },
+								func() int { return *row().NewLineNumber },
+								numberStyle,
 							)
 						},
 					)
@@ -857,30 +865,25 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 				},
 				func() {
 					gui.View(
-						gui.Display("flex"),
-						gui.Flex(1),
-						gui.MinWidth(0),
-						gui.FlexDirection("row"),
-						gui.AlignItems("center"),
-						gui.Gap(8),
 						func() {
 							gui.View(
-								gui.Width(12),
-								gui.FlexShrink(0),
 								func() {
 									if mark != "" {
 										icon(mark, 12, func() string { return markColor })
 									}
 								},
+								gui.Style{Width: 12, FlexShrink: 0},
 							)
 							gui.Text(
-								gui.Flex(1),
-								gui.MinWidth(0),
-								gui.FontFamily("monospace"),
-								gui.FontSize(MonoFontSize),
-								gui.Color(textColor),
-								gui.WhiteSpace("nowrap"),
 								func() string { return row().Text },
+								gui.Style{
+									Flex:       1,
+									MinWidth:   0,
+									FontFamily: "monospace",
+									FontSize:   MonoFontSize,
+									Color:      textColor,
+									WhiteSpace: "nowrap",
+								},
 							)
 							gui.Show(
 								func() bool {
@@ -888,6 +891,12 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 								},
 								func() {
 									gui.Button(
+										func() string {
+											if store.Diff().Target != nil && store.Diff().Target.Kind == "staged" {
+												return "Unstage hunk"
+											}
+											return "Stage hunk"
+										},
 										gui.OnClick(func() {
 											current := row()
 											if store.Diff().Target.Kind == "staged" {
@@ -896,23 +905,27 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 											}
 											store.StageHunk(current.FileIndex, current.HunkIndex)
 										}),
-										gui.WithStyle(app.Theme().Button("secondary")),
-										gui.Height(16),
-										gui.FontFamily("system-ui"),
-										gui.FontSize(11),
-										gui.LineHeight(14),
-										gui.PaddingLeft(6),
-										gui.PaddingRight(6),
-										gui.BorderRadius(4),
-										func() string {
-											if store.Diff().Target != nil && store.Diff().Target.Kind == "staged" {
-												return "Unstage hunk"
-											}
-											return "Stage hunk"
+										app.Theme().Button("secondary"),
+										gui.Style{
+											Height:       16,
+											FontFamily:   "system-ui",
+											FontSize:     11,
+											LineHeight:   14,
+											PaddingLeft:  6,
+											PaddingRight: 6,
+											BorderRadius: 4,
 										},
 									)
 								},
 							)
+						},
+						gui.Style{
+							Display:       "flex",
+							Flex:          1,
+							MinWidth:      0,
+							FlexDirection: "row",
+							AlignItems:    "center",
+							Gap:           8,
 						},
 					)
 				},
@@ -947,7 +960,7 @@ func historyTable() {
 			},
 			Columns: func() []gui.TableColumnDeclaration {
 				return []gui.TableColumnDeclaration{
-					{ID: "graph", Track: fmt.Sprintf("%gpx", graphWidth())},
+					{ID: "graph", Track: strconv.FormatFloat(graphWidth(), 'g', -1, 64) + "px"},
 					{ID: "subject", Track: "1fr", RowHeader: true},
 					{ID: "author", Track: "110px"},
 					{ID: "date", Track: "84px", Align: "end"},
@@ -1031,21 +1044,20 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 				},
 				func() {
 					gui.View(
-						gui.Display("flex"),
-						gui.Flex(1),
-						gui.MinWidth(0),
-						gui.FlexDirection("row"),
-						gui.AlignItems("center"),
-						gui.Gap(6),
 						func() {
 							commitRefs(func() []git.CommitRef { return row().Item.Refs })
 							gui.Text(
-								gui.Flex(1),
-								gui.FontSize(12.5),
-								gui.LineClamp(1),
-								gui.MinWidth(0),
 								func() string { return row().Item.Subject },
+								gui.Style{Flex: 1, FontSize: 12.5, LineClamp: 1, MinWidth: 0},
 							)
+						},
+						gui.Style{
+							Display:       "flex",
+							Flex:          1,
+							MinWidth:      0,
+							FlexDirection: "row",
+							AlignItems:    "center",
+							Gap:           6,
 						},
 					)
 				},
@@ -1061,10 +1073,8 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 				},
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.Color(app.Theme().TextTertiary),
-						gui.LineClamp(1),
 						func() string { return row().Item.AuthorName },
+						gui.Style{FontSize: 11, Color: app.Theme().TextTertiary, LineClamp: 1},
 					)
 				},
 			)
@@ -1075,11 +1085,13 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 				},
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.Color(app.Theme().TextTertiary),
-						gui.TextAlign("right"),
 						func() string {
 							return git.RelativeTime(row().Item.AuthorTime, time.Now())
+						},
+						gui.Style{
+							FontSize:  11,
+							Color:     app.Theme().TextTertiary,
+							TextAlign: "right",
 						},
 					)
 				},
@@ -1092,36 +1104,12 @@ func HistoryView() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinWidth(0),
-		gui.MinHeight(0),
-		gui.FlexDirection("row"),
 		func() {
 			gui.View(
-				gui.Display("flex"),
-				gui.Width(store.HistorySplit),
-				gui.FlexShrink(0),
-				gui.MinHeight(0),
-				gui.FlexDirection("column"),
 				func() {
 					gui.View(
-						gui.Display("flex"),
-						gui.FlexDirection("row"),
-						gui.AlignItems("center"),
-						gui.Height(32),
-						gui.FlexShrink(0),
-						gui.PaddingLeft(12),
-						gui.PaddingRight(8),
-						gui.Gap(8),
-						gui.BorderBottomWidth(1),
-						gui.BorderColor(app.Theme().Border),
 						func() {
 							gui.Text(
-								gui.FontSize(11),
-								gui.FontWeight(700),
-								gui.TextTransform("uppercase"),
-								gui.Color(app.Theme().TextTertiary),
 								func() string {
 									if store.History().AllBranches {
 										return "All branches"
@@ -1131,20 +1119,37 @@ func HistoryView() {
 									}
 									return "History"
 								},
+								gui.Style{
+									FontSize:      11,
+									FontWeight:    700,
+									TextTransform: "uppercase",
+									Color:         app.Theme().TextTertiary,
+								},
 							)
 							gui.Text(
-								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
 								func() string {
 									suffix := ""
 									if !store.History().Exhausted {
 										suffix = "+"
 									}
-									return fmt.Sprintf("%d%s commits", len(store.History().Commits), suffix)
+									return strconv.Itoa(len(store.History().Commits)) + suffix + " commits"
 								},
+								gui.Style{FontSize: 11, Color: app.Theme().TextTertiary},
 							)
-							gui.View(gui.Flex(1))
+							gui.View(gui.Style{Flex: 1})
 							CheckRow("All branches", func() bool { return store.History().AllBranches }, store.SetHistoryAllBranches)
+						},
+						gui.Style{
+							Display:           "flex",
+							FlexDirection:     "row",
+							AlignItems:        "center",
+							Height:            32,
+							FlexShrink:        0,
+							PaddingLeft:       12,
+							PaddingRight:      8,
+							Gap:               8,
+							BorderBottomWidth: 1,
+							BorderColor:       app.Theme().Border,
 						},
 					)
 					gui.Show(
@@ -1157,20 +1162,30 @@ func HistoryView() {
 						},
 					)
 				},
+				gui.Style{
+					Display:       "flex",
+					Width:         store.HistorySplit,
+					FlexShrink:    0,
+					MinHeight:     0,
+					FlexDirection: "column",
+				},
 			)
 			resizeDivider("Resize history", store.HistorySplit, store.SetHistorySplit)
 			gui.View(
-				gui.Display("flex"),
-				gui.Flex(1),
-				gui.MinWidth(0),
-				gui.MinHeight(0),
-				gui.FlexDirection("column"),
 				func() {
 					commitDetail()
 					DiffPane()
 				},
+				gui.Style{
+					Display:       "flex",
+					Flex:          1,
+					MinWidth:      0,
+					MinHeight:     0,
+					FlexDirection: "column",
+				},
 			)
 		},
+		gui.Style{Display: "flex", Flex: 1, MinWidth: 0, MinHeight: 0, FlexDirection: "row"},
 	)
 }
 
@@ -1251,10 +1266,12 @@ func commitFileTable() {
 								},
 								func() {
 									gui.Text(
-										gui.Width(16),
-										gui.FontWeight(700),
-										gui.Color(StatusColor(app.Theme(), row().Item.Status)),
 										func() string { return row().Item.Status },
+										gui.Style{
+											Width:      16,
+											FontWeight: 700,
+											Color:      StatusColor(app.Theme(), row().Item.Status),
+										},
 									)
 								},
 							)
@@ -1265,10 +1282,8 @@ func commitFileTable() {
 								},
 								func() {
 									gui.Text(
-										gui.Flex(1),
-										gui.MinWidth(0),
-										gui.LineClamp(1),
 										func() string { return row().Item.Path },
+										gui.Style{Flex: 1, MinWidth: 0, LineClamp: 1},
 									)
 								},
 							)
@@ -1285,34 +1300,21 @@ func commitDetail() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.FlexShrink(0),
-		gui.MaxHeight("45%"),
-		gui.MinHeight(0),
-		gui.OverflowY("auto"),
-		gui.BorderBottomWidth(1),
-		gui.BorderColor(app.Theme().Border),
 		func() {
 			gui.Show(
 				func() bool { return store.SelectedCommit() != nil },
 				func() {
 
 					gui.View(
-						gui.Padding(12),
-						gui.Display("flex"),
-						gui.FlexDirection("column"),
-						gui.Gap(4),
 						func() {
 							gui.Text(
-								gui.FontSize(14),
-								gui.FontWeight(700),
 								func() string {
 									if commit := store.SelectedCommit(); commit != nil {
 										return commit.Subject
 									}
 									return ""
 								},
+								gui.Style{FontSize: 14, FontWeight: 700},
 							)
 							gui.Show(
 								func() bool {
@@ -1321,39 +1323,37 @@ func commitDetail() {
 								},
 								func() {
 									gui.Text(
-										gui.FontSize(12.5),
-										gui.LineHeight(18),
-										gui.UserSelect("text"),
-										gui.Color(app.Theme().TextSecondary),
 										func() string {
 											if commit := store.SelectedCommit(); commit != nil {
 												return commit.Body
 											}
 											return ""
 										},
+										gui.Style{
+											FontSize:   12.5,
+											LineHeight: 18,
+											UserSelect: "text",
+											Color:      app.Theme().TextSecondary,
+										},
 									)
 								},
 							)
 							gui.Text(
-								gui.FontSize(12),
-								gui.Color(app.Theme().TextSecondary),
 								func() string {
 									if commit := store.SelectedCommit(); commit != nil {
 										return commit.AuthorName + " · " + git.AbsoluteTime(commit.AuthorTime) + " · " + commit.ShortSha
 									}
 									return ""
 								},
+								gui.Style{FontSize: 12, Color: app.Theme().TextSecondary},
 							)
 						},
+						gui.Style{Padding: 12, Display: "flex", FlexDirection: "column", Gap: 4},
 					)
 					gui.Show(
 						func() bool { return store.CommitDetail().Loading },
 						func() {
-							gui.Text(
-								gui.PaddingLeft(12),
-								gui.FontSize(12),
-								"Loading files…",
-							)
+							gui.Text("Loading files…", gui.Style{PaddingLeft: 12, FontSize: 12})
 						},
 					)
 					commitFileTable()
@@ -1364,6 +1364,16 @@ func commitDetail() {
 				},
 			)
 		},
+		gui.Style{
+			Display:           "flex",
+			FlexDirection:     "column",
+			FlexShrink:        0,
+			MaxHeight:         "45%",
+			MinHeight:         0,
+			OverflowY:         "auto",
+			BorderBottomWidth: 1,
+			BorderColor:       app.Theme().Border,
+		},
 	)
 }
 
@@ -1371,40 +1381,60 @@ func BranchesView() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinHeight(0),
-		gui.FlexDirection("column"),
-		gui.OverflowY("auto"),
-		gui.Padding(12),
-		gui.Gap(4),
 		func() {
 			gui.View(
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.Height(32),
-				gui.Gap(8),
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.FontWeight(700),
-						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
-						gui.Flex(1),
 						"Local branches",
+						gui.Style{
+							FontSize:      11,
+							FontWeight:    700,
+							TextTransform: "uppercase",
+							Color:         app.Theme().TextTertiary,
+							Flex:          1,
+						},
 					)
 					gui.Button(
-						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch}) }),
-						gui.WithStyle(app.Theme().Button("primary")),
 						"New Branch",
+						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch}) }),
+						app.Theme().Button("primary"),
 					)
+				},
+				gui.Style{
+					Display:       "flex",
+					FlexDirection: "row",
+					AlignItems:    "center",
+					Height:        32,
+					Gap:           8,
 				},
 			)
 			gui.For(
 				func() []git.BranchRef { return store.Refs().Local },
 				func(branch git.BranchRef, _ func() int) {
 					gui.Button(
+						func() {
+							gui.Text(
+								branch.Name,
+								gui.Style{
+									Flex:       1,
+									FontWeight: ternary(branch.Current, 700, 500),
+									LineClamp:  1,
+								},
+							)
+							gui.Show(
+								func() bool { return branch.Current },
+								func() {
+									gui.Text(
+										"current",
+										gui.Style{FontSize: 11, Color: app.Theme().Accent},
+									)
+								},
+							)
+							gui.Text(
+								branch.ShortSha,
+								gui.Style{FontSize: 11, Color: app.Theme().TextTertiary},
+							)
+						},
 						gui.OnClick(func() {}),
 						gui.OnDoubleClick(func(*native.Event) {
 							if !branch.Current {
@@ -1426,30 +1456,7 @@ func BranchesView() {
 								func(error) {},
 							)
 						}),
-						gui.WithStyle(rowStyle(app.Theme(), branch.Current)),
-						func() {
-							gui.Text(
-								gui.Flex(1),
-								gui.FontWeight(ternary(branch.Current, 700, 500)),
-								gui.LineClamp(1),
-								branch.Name,
-							)
-							gui.Show(
-								func() bool { return branch.Current },
-								func() {
-									gui.Text(
-										gui.FontSize(11),
-										gui.Color(app.Theme().Accent),
-										"current",
-									)
-								},
-							)
-							gui.Text(
-								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
-								branch.ShortSha,
-							)
-						},
+						rowStyle(app.Theme(), branch.Current),
 					)
 				},
 				func(branch git.BranchRef) any { return branch.FullName },
@@ -1459,12 +1466,14 @@ func BranchesView() {
 				func() bool { return len(store.Refs().Remote) > 0 },
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.FontWeight(700),
-						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
-						gui.MarginTop(16),
 						"Remote branches",
+						gui.Style{
+							FontSize:      11,
+							FontWeight:    700,
+							TextTransform: "uppercase",
+							Color:         app.Theme().TextTertiary,
+							MarginTop:     16,
+						},
 					)
 				},
 			)
@@ -1472,25 +1481,31 @@ func BranchesView() {
 				func() []git.BranchRef { return store.Refs().Remote },
 				func(branch git.BranchRef, _ func() int) {
 					gui.View(
-						gui.WithStyle(rowStyle(app.Theme(), false)),
 						func() {
 							gui.Text(
-								gui.Flex(1),
-								gui.LineClamp(1),
-								gui.Color(app.Theme().TextSecondary),
 								branch.Name,
+								gui.Style{Flex: 1, LineClamp: 1, Color: app.Theme().TextSecondary},
 							)
 							gui.Text(
-								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
 								branch.ShortSha,
+								gui.Style{FontSize: 11, Color: app.Theme().TextTertiary},
 							)
 						},
+						rowStyle(app.Theme(), false),
 					)
 				},
 				func(branch git.BranchRef) any { return branch.FullName },
 				nil,
 			)
+		},
+		gui.Style{
+			Display:       "flex",
+			Flex:          1,
+			MinHeight:     0,
+			FlexDirection: "column",
+			OverflowY:     "auto",
+			Padding:       12,
+			Gap:           4,
 		},
 	)
 }
@@ -1499,34 +1514,26 @@ func WorktreesView() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinHeight(0),
-		gui.FlexDirection("column"),
-		gui.OverflowY("auto"),
-		gui.Padding(12),
-		gui.Gap(4),
 		func() {
 			gui.View(
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.Height(32),
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.FontWeight(700),
-						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
-						gui.Flex(1),
 						"Worktrees",
+						gui.Style{
+							FontSize:      11,
+							FontWeight:    700,
+							TextTransform: "uppercase",
+							Color:         app.Theme().TextTertiary,
+							Flex:          1,
+						},
 					)
 					gui.Button(
-						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewWorktree}) }),
-						gui.WithStyle(app.Theme().Button("primary")),
 						"New Worktree",
+						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewWorktree}) }),
+						app.Theme().Button("primary"),
 					)
 				},
+				gui.Style{Display: "flex", FlexDirection: "row", AlignItems: "center", Height: 32},
 			)
 			gui.For(
 				store.Worktrees,
@@ -1537,6 +1544,13 @@ func WorktreesView() {
 						label = filepath.Base(worktree.Path)
 					}
 					gui.Button(
+						func() {
+							gui.Text(label, gui.Style{Flex: 1, LineClamp: 1})
+							gui.Text(
+								gui.Style{FontSize: 11, Color: app.Theme().TextTertiary},
+								filepath.Base(worktree.Path),
+							)
+						},
 						gui.OnClick(func() { store.SelectWorktree(worktree.Path) }),
 						gui.OnContextMenu(func(*native.Event) {
 							items := []native.MenuItem{
@@ -1562,20 +1576,21 @@ func WorktreesView() {
 								func(error) {},
 							)
 						}),
-						gui.WithStyle(rowStyle(app.Theme(), active)),
-						func() {
-							gui.Text(gui.Flex(1), gui.LineClamp(1), label)
-							gui.Text(
-								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
-								filepath.Base(worktree.Path),
-							)
-						},
+						rowStyle(app.Theme(), active),
 					)
 				},
 				func(worktree git.Worktree) any { return worktree.Path },
 				nil,
 			)
+		},
+		gui.Style{
+			Display:       "flex",
+			Flex:          1,
+			MinHeight:     0,
+			FlexDirection: "column",
+			OverflowY:     "auto",
+			Padding:       12,
+			Gap:           4,
 		},
 	)
 }
@@ -1584,35 +1599,27 @@ func StashesView() {
 	app := UseApp()
 	store := app.Store
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinHeight(0),
-		gui.FlexDirection("column"),
-		gui.OverflowY("auto"),
-		gui.Padding(12),
-		gui.Gap(4),
 		func() {
 			gui.View(
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.Height(32),
 				func() {
 					gui.Text(
-						gui.FontSize(11),
-						gui.FontWeight(700),
-						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
-						gui.Flex(1),
 						"Stashes",
+						gui.Style{
+							FontSize:      11,
+							FontWeight:    700,
+							TextTransform: "uppercase",
+							Color:         app.Theme().TextTertiary,
+							Flex:          1,
+						},
 					)
 					gui.Button(
+						"Stash Changes",
 						gui.Disabled(store.ChangeCount() == 0),
 						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogStash}) }),
-						gui.WithStyle(app.Theme().Button("primary")),
-						"Stash Changes",
+						app.Theme().Button("primary"),
 					)
 				},
+				gui.Style{Display: "flex", FlexDirection: "row", AlignItems: "center", Height: 32},
 			)
 			gui.Show(
 				func() bool { return len(store.Stashes()) > 0 },
@@ -1621,6 +1628,36 @@ func StashesView() {
 						store.Stashes,
 						func(stash git.StashEntry, _ func() int) {
 							gui.Button(
+								func() {
+									gui.View(
+										func() {
+											gui.Text(stash.Summary, gui.Style{LineClamp: 1})
+											gui.Text(
+												stash.Ref+" · "+git.RelativeTime(stash.Time, time.Now()),
+												gui.Style{
+													FontSize: 11,
+													Color:    app.Theme().TextTertiary,
+												},
+											)
+										},
+										gui.Style{
+											Display:       "flex",
+											Flex:          1,
+											MinWidth:      0,
+											FlexDirection: "column",
+										},
+									)
+									gui.Button(
+										"Apply",
+										gui.OnClick(func() { store.StashApply(stash.Ref) }),
+										app.Theme().Button("secondary"),
+									)
+									gui.Button(
+										"Pop",
+										gui.OnClick(func() { store.StashPop(stash.Ref) }),
+										app.Theme().Button("secondary"),
+									)
+								},
 								gui.OnContextMenu(func(*native.Event) {
 									native.PopupMenu(
 										app.Window,
@@ -1634,33 +1671,7 @@ func StashesView() {
 										func(error) {},
 									)
 								}),
-								gui.WithStyle(rowStyle(app.Theme(), false)),
-								func() {
-									gui.View(
-										gui.Display("flex"),
-										gui.Flex(1),
-										gui.MinWidth(0),
-										gui.FlexDirection("column"),
-										func() {
-											gui.Text(gui.LineClamp(1), stash.Summary)
-											gui.Text(
-												gui.FontSize(11),
-												gui.Color(app.Theme().TextTertiary),
-												stash.Ref+" · "+git.RelativeTime(stash.Time, time.Now()),
-											)
-										},
-									)
-									gui.Button(
-										gui.OnClick(func() { store.StashApply(stash.Ref) }),
-										gui.WithStyle(app.Theme().Button("secondary")),
-										"Apply",
-									)
-									gui.Button(
-										gui.OnClick(func() { store.StashPop(stash.Ref) }),
-										gui.WithStyle(app.Theme().Button("secondary")),
-										"Pop",
-									)
-								},
+								rowStyle(app.Theme(), false),
 							)
 						},
 						func(stash git.StashEntry) any { return stash.Ref },
@@ -1672,36 +1683,51 @@ func StashesView() {
 				},
 			)
 		},
+		gui.Style{
+			Display:       "flex",
+			Flex:          1,
+			MinHeight:     0,
+			FlexDirection: "column",
+			OverflowY:     "auto",
+			Padding:       12,
+			Gap:           4,
+		},
 	)
 }
 
 func emptyState(title, description string) {
 	app := UseApp()
 	gui.View(
-		gui.Display("flex"),
-		gui.Flex(1),
-		gui.MinHeight(0),
-		gui.FlexDirection("column"),
-		gui.AlignItems("center"),
-		gui.JustifyContent("center"),
-		gui.Gap(8),
-		gui.Padding(32),
 		func() {
 			gui.Text(
-				gui.FontSize(15),
-				gui.FontWeight(500),
-				gui.Color(app.Theme().TextTertiary),
-				gui.TextAlign("center"),
 				title,
+				gui.Style{
+					FontSize:   15,
+					FontWeight: 500,
+					Color:      app.Theme().TextTertiary,
+					TextAlign:  "center",
+				},
 			)
 			gui.Text(
-				gui.FontSize(12),
-				gui.LineHeight(17),
-				gui.Color(app.Theme().TextTertiary),
-				gui.TextAlign("center"),
-				gui.MaxWidth(360),
 				description,
+				gui.Style{
+					FontSize:   12,
+					LineHeight: 17,
+					Color:      app.Theme().TextTertiary,
+					TextAlign:  "center",
+					MaxWidth:   360,
+				},
 			)
+		},
+		gui.Style{
+			Display:        "flex",
+			Flex:           1,
+			MinHeight:      0,
+			FlexDirection:  "column",
+			AlignItems:     "center",
+			JustifyContent: "center",
+			Gap:            8,
+			Padding:        32,
 		},
 	)
 }

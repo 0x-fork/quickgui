@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -114,6 +113,7 @@ func runProcess(ctx context.Context, command []string, cwd string, stdin []byte,
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, command[0], command[1:]...)
+	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Dir = cwd
 	if len(env) > 0 {
 		cmd.Env = env
@@ -123,17 +123,18 @@ func runProcess(ctx context.Context, command []string, cwd string, stdin []byte,
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd.Stdout = limitWriter{buf: &stdout, limit: maxOutput}
-	cmd.Stderr = limitWriter{buf: &stderr, limit: stderrCap}
+	output := &limitWriter{buf: &stdout, limit: maxOutput, onLimit: cancel}
+	cmd.Stdout = output
+	cmd.Stderr = &limitWriter{buf: &stderr, limit: stderrCap}
 	err := cmd.Run()
-	result := Result{Stdout: stdout.Bytes(), Stderr: stderr.String()}
+	result := Result{Stdout: stdout.Bytes(), Stderr: stderr.String(), Truncated: output.truncated}
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 		result.TimedOut = true
 		result.ExitCode = -1
-	} else if errors.Is(runCtx.Err(), context.Canceled) {
+	} else if errors.Is(ctx.Err(), context.Canceled) || (errors.Is(runCtx.Err(), context.Canceled) && !result.Truncated) {
 		result.Aborted = true
 		result.ExitCode = -1
 	} else if err != nil && result.ExitCode == 0 {
@@ -142,24 +143,26 @@ func runProcess(ctx context.Context, command []string, cwd string, stdin []byte,
 			result.Stderr = err.Error()
 		}
 	}
-	if stdout.Len() >= maxOutput {
-		result.Truncated = true
-	}
 	return result
 }
 
 type limitWriter struct {
-	buf   *bytes.Buffer
-	limit int
+	buf       *bytes.Buffer
+	limit     int
+	truncated bool
+	onLimit   context.CancelFunc
 }
 
-func (w limitWriter) Write(p []byte) (int, error) {
+func (w *limitWriter) Write(p []byte) (int, error) {
 	room := w.limit - w.buf.Len()
-	if room <= 0 {
-		return len(p), nil
-	}
 	if len(p) > room {
 		w.buf.Write(p[:room])
+		if !w.truncated {
+			w.truncated = true
+			if w.onLimit != nil {
+				w.onLimit()
+			}
+		}
 		return len(p), nil
 	}
 	return w.buf.Write(p)
@@ -238,6 +241,9 @@ func (r *Runner) Run(ctx context.Context, args []string, options CommandOptions)
 }
 
 func (r *Runner) acquire(ctx context.Context, interactive bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	if r.inFlight < r.concurrency {
 		r.inFlight++
@@ -264,16 +270,27 @@ func (r *Runner) acquire(ctx context.Context, interactive bool) error {
 	r.mu.Unlock()
 	select {
 	case <-ready:
+		if err := ctx.Err(); err != nil {
+			r.release()
+			return err
+		}
 		return nil
 	case <-ctx.Done():
 		r.mu.Lock()
+		acquired := true
 		for i, existing := range r.waiters {
 			if existing.ready == ready {
 				r.waiters = append(r.waiters[:i], r.waiters[i+1:]...)
+				acquired = false
 				break
 			}
 		}
 		r.mu.Unlock()
+		// release may have handed this waiter a slot at the same instant cancellation
+		// won the select. Return that slot instead of permanently reducing capacity.
+		if acquired {
+			r.release()
+		}
 		return ctx.Err()
 	}
 }
@@ -330,5 +347,3 @@ func LookPath(command string) string {
 	}
 	return ""
 }
-
-var _ = io.Discard

@@ -13,36 +13,84 @@ import (
 
 // Props configure a primitive node. Accessor children and values create bindings.
 type Props struct {
-	Style               Style
-	Children            any
-	OnClick             func(*native.Event)
-	OnInput             func(*native.Event)
-	OnSubmit            func(*native.Event)
-	OnDoubleClick       func(*native.Event)
-	OnContextMenu       func(*native.Event)
-	OnPointer           func(*native.Event)
-	Disabled            any
-	Value               any
-	Placeholder         string
-	Multiline           bool
-	AriaLabel           string
-	Selected            bool
-	Group               any
-	FocusOnPointer      *bool
-	HitSlop             any
-	HitSlopTop          any
-	HitSlopRight        any
-	HitSlopBottom       any
-	HitSlopLeft         any
-	Ref                 func(*native.Node)
-	Password            any
-	Streaming           any
-	EstimatedItemHeight any
-	Overscan            any
-	ListAlignment       string
-	FollowMode          string
-	ObjectFit           string
-	ShaderParameters    any
+	Style                   Style
+	Children                any
+	OnClick                 func(*native.Event)
+	OnMouseEnter            func(*native.Event)
+	OnMouseLeave            func(*native.Event)
+	OnInput                 func(*native.Event)
+	OnSubmit                func(*native.Event)
+	OnDismiss               func(*native.Event)
+	OnStatus                func(*native.Event)
+	OnPointer               func(*native.Event)
+	OnPresentationChange    func(*native.Event)
+	OnSelect                func(*native.Event)
+	OnKeyDown               func(*native.Event)
+	OnKeyUp                 func(*native.Event)
+	OnMouseDown             func(*native.Event)
+	OnMouseUp               func(*native.Event)
+	OnMouseMove             func(*native.Event)
+	OnDoubleClick           func(*native.Event)
+	OnWheel                 func(*native.Event)
+	OnContextMenu           func(*native.Event)
+	OnPinch                 func(*native.Event)
+	OnRotate                func(*native.Event)
+	OnSmartMagnify          func(*native.Event)
+	OnPressure              func(*native.Event)
+	OnFocus                 func(*native.Event)
+	OnBlur                  func(*native.Event)
+	OnAction                func(*native.Event)
+	OnDragStart             func(*native.Event)
+	OnDragEnd               func(*native.Event)
+	OnDrop                  func(*native.Event)
+	OnFilesDropped          func(*native.Event)
+	OnComponentChange       func(*native.Event)
+	OnCommit                func(*native.Event)
+	Disabled                any
+	Value                   any
+	Placeholder             string
+	Multiline               bool
+	AriaLabel               any
+	Selected                any
+	Group                   any
+	FocusOnPointer          any
+	FocusableWhenDisabled   any
+	HitSlop                 any
+	HitSlopTop              any
+	HitSlopRight            any
+	HitSlopBottom           any
+	HitSlopLeft             any
+	Ref                     func(*native.Node)
+	Password                any
+	Streaming               any
+	EstimatedItemHeight     any
+	Overscan                any
+	ListAlignment           string
+	FollowMode              string
+	ObjectFit               string
+	ShaderParameters        any
+	Invalid                 any
+	Role                    any
+	TabIndex                any
+	Overlay                 any
+	FocusTrap               any
+	RestorePreviousFocus    any
+	AutoFocus               any
+	AriaModal               any
+	DismissOnEscape         any
+	DismissOnPointerOutside any
+	TooltipText             any
+	TooltipPlacement        any
+	TooltipDelay            any
+	TooltipGap              any
+	TooltipViewportMargin   any
+	AnchorTarget            any
+	AnchorPlacement         any
+	AnchorGap               any
+	ViewportMargin          any
+	Keymap                  any
+	Draggable               any
+	DropKinds               any
 }
 
 func applyProps(node *native.Node, props Props) {
@@ -91,35 +139,9 @@ func applyPropValues(node *native.Node, props Props) {
 	if props.Multiline {
 		native.SetBoolean(node, protocol.Multiline, true)
 	}
-	if props.OnClick != nil {
-		setListener(node, protocol.EventClick, props.OnClick)
-	}
-	if props.OnInput != nil {
-		setListener(node, protocol.EventInput, props.OnInput)
-	}
-	if props.OnSubmit != nil {
-		setListener(node, protocol.EventSubmit, props.OnSubmit)
-	}
-	if props.OnDoubleClick != nil {
-		setListener(node, protocol.EventDoubleClick, props.OnDoubleClick)
-	}
-	if props.OnContextMenu != nil {
-		setListener(node, protocol.EventContextMenu, props.OnContextMenu)
-	}
-	if props.OnPointer != nil {
-		setListener(node, protocol.EventPointer, props.OnPointer)
-	}
-	if props.AriaLabel != "" {
-		native.SetString(node, protocol.AccessibilityLabel, props.AriaLabel)
-	}
-	if props.Selected {
-		native.SetBoolean(node, protocol.Selected, true)
-	}
+	applyPrimitiveBehavior(node, props)
 	if props.Group != nil {
 		bindHoverGroup(node, props.Group)
-	}
-	if props.FocusOnPointer != nil {
-		native.SetBoolean(node, protocol.FocusOnPointer, *props.FocusOnPointer)
 	}
 	for _, property := range []struct {
 		code  uint16
@@ -203,7 +225,11 @@ func setMilliseconds(node *native.Node, code uint16, value any) {
 		native.ClearProperty(node, code)
 		return
 	}
-	setNumber(node, code, value)
+	milliseconds, ok := durationMilliseconds(value)
+	if !ok {
+		panic(fmt.Sprintf("QuickGUI duration %v must be milliseconds or seconds", value))
+	}
+	native.SetNumber(node, code, float32(milliseconds))
 }
 
 func setExtent(node *native.Node, code uint16, value *Extent) {
@@ -256,20 +282,7 @@ func setInputType(node *native.Node, value string) {
 }
 
 func bindHoverGroup(node *native.Node, value any) {
-	switch read := value.(type) {
-	case func() bool:
-		node.Bind(func() { setHoverGroup(node, read()) })
-	case reactive.Accessor[bool]:
-		node.Bind(func() { setHoverGroup(node, read()) })
-	case func() string:
-		node.Bind(func() { setHoverGroup(node, read()) })
-	case reactive.Accessor[string]:
-		node.Bind(func() { setHoverGroup(node, read()) })
-	case func() any:
-		node.Bind(func() { setHoverGroup(node, read()) })
-	default:
-		setHoverGroup(node, value)
-	}
+	bindDeclaration(node, value, func(value any) { setHoverGroup(node, value) })
 }
 
 func setHoverGroup(node *native.Node, value any) {

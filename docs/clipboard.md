@@ -77,28 +77,47 @@ cx.write_to_find_pasteboard(ClipboardItem::new_string("needle")?)?;
 let shared_search = cx.read_from_find_pasteboard()?;
 ```
 
-### JavaScript
+### Go
 
-`@quickgui/native` projects the same pasteboard onto Electron-shaped helpers over the core's typed
-entries. `availableFormats()` lists one MIME type per retained entry, `has(format)` tests one, and
-`readBuffer`/`writeBuffer` move arbitrary MIME data. `text/plain` maps to the typed text entry,
-`text/uri-list` to the native file list, and `text/x-moz-url` to a URL bookmark; every other type is
-an arbitrary data entry.
+`native.Clipboard` exposes asynchronous `Read`, `ReadText`, `Write`, `WriteText`,
+`WriteImage`, `WriteFiles`, `ReadFind`, and `WriteFind` operations. A
+`native.ClipboardItem` contains ordered `ClipboardEntry` values with a `Type` of
+`"text"`, `"data"`, `"image"`, `"files"`, or `"bookmark"`. Arbitrary MIME data uses
+`MIMEType` and `Data`; encoded images use those fields with `Type: "image"`.
 
-```ts
-import { Clipboard } from "@quickgui/native";
-
-await Clipboard.writeBuffer("application/x-quickgui", new Uint8Array([1, 2, 3]));
-await Clipboard.availableFormats(); // ["application/x-quickgui"]
-await Clipboard.has("text/plain"); // false
-await Clipboard.readBuffer("application/x-quickgui");
-
-await Clipboard.writeFindText("needle");
-await Clipboard.readFindText(); // "needle"
+```go
+func CopyCustomData() {
+	native.Clipboard.Write(
+		native.ClipboardItem{Entries: []native.ClipboardEntry{
+			{Type: "text", Text: "Selected item", Metadata: `{"selection_count":1}`},
+			{Type: "data", MIMEType: "application/x-quickgui", Data: []byte{1, 2, 3}},
+		}},
+		func(err error) {
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			native.Clipboard.Read(func(item *native.ClipboardItem, err error) {
+				if err != nil {
+					log.Print(err)
+				} else if item != nil {
+					for _, entry := range item.Entries {
+						log.Print(entry.Type, entry.MIMEType)
+					}
+				}
+			})
+		},
+	)
+}
 ```
 
-`writeFindText("")` clears the shared Find pasteboard. Off macOS `readFindText()` returns an empty
-string and `writeFindText` rejects rather than silently writing to the general clipboard.
+`ReadText` returns the first text representation, or `nil` when none is available.
+Use `Read` to inspect image, file, bookmark, or MIME representations; it does not
+flatten them into text. `Write(native.ClipboardItem{}, done)` clears the general
+clipboard. `ReadFind` and `WriteFind` target the separate macOS Find pasteboard;
+an empty item clears it. Off macOS, Find reads return no item and writes report an
+unsupported-operation error. Completion callbacks run on the Go application
+goroutine; callers never synchronously wait for native main-thread execution.
 
 ## Other platforms
 
