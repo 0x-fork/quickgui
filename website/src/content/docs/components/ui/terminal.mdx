@@ -2,10 +2,11 @@ Embeds the retained Ghostty terminal surface and reports process lifecycle event
 
 ## Import
 
-Import `ui` from `github.com/egoist/quickgui/go/ui`.
+Import the optional `terminal` package and `ui` for shared styles. The CLI detects this import, resolves the matching prebuilt `@quickgui/native-terminal` library, and bundles it with your app. Apps that do not import `terminal` do not download or bundle the backend.
 
 ```go
 import (
+	"github.com/egoist/quickgui/go/terminal"
 	"github.com/egoist/quickgui/go/ui"
 )
 ```
@@ -14,7 +15,7 @@ import (
 
 ```go
 func TerminalExample(directory string) {
-	ui.Terminal(ui.TerminalProps{
+	terminal.View(terminal.Props{
 		Program:          "/bin/zsh",
 		Args:             []string{"-l"},
 		WorkingDirectory: directory,
@@ -32,7 +33,7 @@ func TerminalExample(directory string) {
 | `WorkingDirectory` | Initial working directory for the terminal process. |
 | `Environment` | Environment entries added to the terminal process. |
 | `OnStatus` | Reports terminal process lifecycle changes. |
-| `Palette` | Sixteen ANSI colors (`ui.TerminalPalette`) or an accessor. Updates preserve the PTY. |
+| `Palette` | Sixteen ANSI colors (`terminal.Palette`) or an accessor. Updates preserve the PTY. |
 | `CursorColor` | Cursor color or color accessor. |
 | `PaddingColor` | Use `"extend"` to paint padding with terminal edge backgrounds. |
 | `FontThicken` | Enables native font thickening. |

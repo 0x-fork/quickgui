@@ -32,10 +32,13 @@ func resizablePanel(label string, width func() float64, setWidth func(float64), 
 			}},
 		},
 		func() {
-			gui.Splitter.Pane(gui.SplitterPaneProps{
-				Index:     &index,
-				PartProps: gui.PartProps{Style: style},
-			}, children)
+			gui.Splitter.Pane(
+				gui.SplitterPaneProps{
+					Index:     &index,
+					PartProps: gui.PartProps{Style: style},
+				},
+				children,
+			)
 			gui.Splitter.Handle(gui.SplitterPaneProps{
 				Index: &index,
 				PartProps: gui.PartProps{

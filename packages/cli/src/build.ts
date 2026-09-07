@@ -14,7 +14,7 @@ import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
 import type { MacOSNotarizationConfig, ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
-import { compileNativeApplication, sharedLibraryName } from "./native-build.ts";
+import { compileNativeApplication } from "./native-build.ts";
 import {
   macDocumentTypesPlist,
   macTypeDeclarationsPlist,
@@ -375,11 +375,11 @@ async function buildExecutable(
   const suffix = info.platform === "windows" ? ".exe" : "";
   const executablePath = resolve(stagingRoot, `${config.executableName}${suffix}`);
   const fonts = stageFonts(config, resolve(stagingRoot, "fonts"));
-  await compileExecutable(config, options, executablePath, fonts);
+  const libraries = await compileExecutable(config, options, executablePath, fonts);
   if (info.platform !== "windows") chmodSync(executablePath, 0o755);
   const result: StagedBuild = {
     artifactPath: executablePath,
-    extraArtifacts: [resolve(stagingRoot, sharedLibraryName(options.target))],
+    extraArtifacts: libraries,
     executablePath,
     target: options.target,
     mode: options.mode,
@@ -391,6 +391,7 @@ async function buildExecutable(
     info.platform === "linux"
       ? await packageLinux({
           config,
+          libraries,
           target: options.target,
           executablePath,
           stagingRoot,
@@ -399,6 +400,7 @@ async function buildExecutable(
         })
       : await packageWindows({
           config,
+          libraries,
           executablePath,
           stagingRoot,
           run: (command, cwd) => run(command, cwd),
@@ -416,9 +418,9 @@ async function compileExecutable(
   options: BuildProjectOptions,
   executablePath: string,
   fonts: string[],
-): Promise<void> {
+): Promise<string[]> {
   const started = performance.now();
-  await compileNativeApplication({
+  const libraries = await compileNativeApplication({
     config,
     mode: options.mode,
     target: options.target,
@@ -426,6 +428,7 @@ async function compileExecutable(
     fonts,
   });
   console.log(`[quickgui] Compiled ${basename(executablePath)} in ${Math.round(performance.now() - started)} ms`);
+  return libraries;
 }
 
 /** Copy the configured fonts beside the executable and return their resource-relative names. */

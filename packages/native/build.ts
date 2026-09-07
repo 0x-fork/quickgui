@@ -6,10 +6,22 @@ import { join, resolve } from "node:path";
 const packageRoot = resolve(import.meta.dir);
 const repoRoot = resolve(packageRoot, "..", "..");
 const debug = process.argv.includes("--debug");
+const extensionIndex = process.argv.indexOf("--extension");
+const extension = extensionIndex < 0 ? undefined : process.argv[extensionIndex + 1];
+if (extensionIndex >= 0 && extension !== "terminal")
+  throw new Error(`Unknown native extension: ${extension ?? "(missing)"}`);
 
-const architecture = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : undefined;
+const architecture =
+  process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : undefined;
 if (architecture === undefined) throw new Error(`Unsupported host architecture: ${process.arch}`);
-const platform = process.platform === "darwin" ? "darwin" : process.platform === "linux" ? "linux" : process.platform === "win32" ? "windows" : undefined;
+const platform =
+  process.platform === "darwin"
+    ? "darwin"
+    : process.platform === "linux"
+      ? "linux"
+      : process.platform === "win32"
+        ? "windows"
+        : undefined;
 if (platform === undefined) throw new Error(`Unsupported host platform: ${process.platform}`);
 const requestedIndex = process.argv.indexOf("--target");
 const requested = requestedIndex < 0 ? undefined : process.argv[requestedIndex + 1];
@@ -20,23 +32,59 @@ const triples: Record<string, { triple: string; stage: string }> = {
   "darwin-x64": { triple: "x86_64-apple-darwin", stage: "darwin-x64" },
 };
 const selected = requested === undefined ? undefined : triples[requested];
-if (requestedIndex >= 0 && selected === undefined) throw new Error(`Unsupported Rust host target: ${requested ?? "(missing)"}`);
+if (requestedIndex >= 0 && selected === undefined)
+  throw new Error(`Unsupported Rust host target: ${requested ?? "(missing)"}`);
 const target = selected?.stage ?? `${platform}-${architecture}`;
 
 const profile = debug ? "debug" : "release";
-const cargo = ["cargo", "build", "-p", "quickgui-host", "--lib", ...(selected === undefined ? [] : ["--target", selected.triple]), ...(debug ? [] : ["--release"])];
-const command = platform === "darwin" ? [join(repoRoot, "scripts", "with-macos-ghostty-zig.sh"), ...cargo] : cargo;
+const crate = extension ? `quickgui-${extension}` : "quickgui-host";
+const cargo = [
+  "cargo",
+  "build",
+  "-p",
+  crate,
+  "--lib",
+  ...(selected === undefined ? [] : ["--target", selected.triple]),
+  ...(debug ? [] : ["--release"]),
+];
+const command =
+  platform === "darwin" && extension === "terminal"
+    ? [join(repoRoot, "scripts", "with-macos-ghostty-zig.sh"), ...cargo]
+    : cargo;
 console.log(`[native] ${command.join(" ")}`);
-const build = Bun.spawnSync(command, { cwd: repoRoot, stdin: "inherit", stdout: "inherit", stderr: "pipe", env: process.env });
+const build = Bun.spawnSync(command, {
+  cwd: repoRoot,
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "pipe",
+  env: process.env,
+});
 const stderr = build.stderr.toString();
 process.stderr.write(stderr);
 if (build.exitCode !== 0) process.exit(build.exitCode);
 
-const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(repoRoot, "target");
-const name = platform === "darwin" ? "libquickgui_host.dylib" : platform === "windows" ? "quickgui_host.dll" : "libquickgui_host.so";
-const library = join(targetDir, ...(selected === undefined ? [] : [selected.triple]), profile, name);
+const targetDir = process.env.CARGO_TARGET_DIR
+  ? resolve(process.env.CARGO_TARGET_DIR)
+  : join(repoRoot, "target");
+const basename = extension ? `quickgui_${extension}` : "quickgui_host";
+const name =
+  platform === "darwin"
+    ? `lib${basename}.dylib`
+    : platform === "windows"
+      ? `${basename}.dll`
+      : `lib${basename}.so`;
+const library = join(
+  targetDir,
+  ...(selected === undefined ? [] : [selected.triple]),
+  profile,
+  name,
+);
 if (!existsSync(library)) throw new Error(`Expected the shared library at ${library}`);
-const stage = join(packageRoot, "lib", target);
+const stage = join(
+  extension ? resolve(packageRoot, "..", `native-${extension}`) : packageRoot,
+  "lib",
+  target,
+);
 mkdirSync(stage, { recursive: true });
 cpSync(library, join(stage, name));
 console.log(`[native] Staged ${realpathSync(join(stage, name))}`);

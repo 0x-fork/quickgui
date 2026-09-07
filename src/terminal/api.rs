@@ -3,6 +3,7 @@ use super::*;
 impl Terminal {
     /// Start a PTY and terminal-emulation worker. Process-launch failures are published through
     /// [`TerminalSnapshot::status`] so a declarative terminal remains mounted and informative.
+    #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
     pub fn spawn(
         options: TerminalOptions,
         invalidator: WindowInvalidator,
@@ -41,14 +42,23 @@ impl Terminal {
             inner: Arc::new(TerminalInner {
                 messages,
                 snapshot,
+                #[cfg(not(quickgui_terminal_extension))]
                 last_size: AtomicU64::new(pack_size(initial_size)),
+                #[cfg(not(quickgui_terminal_extension))]
                 viewport_height_bits: AtomicU32::new(0),
+                #[cfg(not(quickgui_terminal_extension))]
                 viewport_bounds: Mutex::new(Rect::ZERO),
+                #[cfg(not(quickgui_terminal_extension))]
                 selection_epoch: Instant::now(),
+                #[cfg(not(quickgui_terminal_extension))]
                 wheel_remainder: Mutex::new(0.0),
+                #[cfg(not(quickgui_terminal_extension))]
                 scrollbar_drag_remainder: Mutex::new(0.0),
+                #[cfg(not(quickgui_terminal_extension))]
                 scrollbar_interaction: Mutex::new(TerminalScrollbarInteraction::default()),
+                #[cfg(not(quickgui_terminal_extension))]
                 cursor_blink: Mutex::new(TerminalCursorBlink::new(Instant::now())),
+                #[cfg(not(quickgui_terminal_extension))]
                 theme: Mutex::new(None),
                 shutdown,
             }),
@@ -57,14 +67,22 @@ impl Terminal {
 
     /// Read the latest complete terminal frame without locking the emulator or PTY.
     pub fn snapshot(&self) -> Arc<TerminalSnapshot> {
-        self.inner
-            .snapshot
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+        {
+            self.inner
+                .snapshot
+                .read()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
+        }
+        #[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+        {
+            self.inner.session.snapshot()
+        }
     }
 
     /// Write raw bytes to the PTY. Prefer normal keyboard events or [`Self::paste`] for user input.
+    #[cfg(not(quickgui_terminal_extension))]
     pub fn write(&self, bytes: impl AsRef<[u8]>) -> bool {
         let bytes = bytes.as_ref();
         if bytes.is_empty() || bytes.len() > MAX_TERMINAL_INPUT_BYTES {
@@ -78,6 +96,7 @@ impl Terminal {
     }
 
     /// Encode text using libghostty's bracketed-paste and control-byte rules, then write it.
+    #[cfg(not(quickgui_terminal_extension))]
     pub fn paste(&self, value: impl Into<String>) -> bool {
         let value = value.into();
         if value.is_empty() || value.len() > MAX_TERMINAL_INPUT_BYTES {
@@ -91,6 +110,7 @@ impl Terminal {
     }
 
     /// Scroll libghostty's retained viewport by terminal rows. Negative values move into history.
+    #[cfg(not(quickgui_terminal_extension))]
     pub fn scroll_rows(&self, rows: isize) -> bool {
         let sent = rows != 0
             && self.try_send(WorkerMessage::Scroll(
@@ -102,6 +122,7 @@ impl Terminal {
         sent
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn scroll_pixel_delta(&self, delta_y: f32, line_height: f32, phase: GesturePhase) -> bool {
         if matches!(phase, GesturePhase::Ended | GesturePhase::Cancelled) {
             *self
@@ -126,6 +147,7 @@ impl Terminal {
         true
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn update_viewport_height(&self, height: f32) {
         let height = if height.is_finite() {
             height.max(0.0)
@@ -137,6 +159,7 @@ impl Terminal {
             .store(height.to_bits(), Ordering::Relaxed);
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn update_viewport_bounds(&self, bounds: Rect) {
         self.update_viewport_height(bounds.height);
         *self
@@ -146,6 +169,7 @@ impl Terminal {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = bounds;
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn send_selection_pointer(
         &self,
         event: &PointerEvent,
@@ -174,10 +198,12 @@ impl Terminal {
         self.try_send(WorkerMessage::Selection(input))
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn viewport_height(&self) -> f32 {
         f32::from_bits(self.inner.viewport_height_bits.load(Ordering::Relaxed))
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn begin_scrollbar_drag(&self) {
         *self
             .inner
@@ -191,6 +217,7 @@ impl Terminal {
             .begin_drag(Instant::now());
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn end_scrollbar_drag(&self) {
         *self
             .inner
@@ -204,6 +231,7 @@ impl Terminal {
             .end_drag(Instant::now());
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn set_scrollbar_hovered(&self, hovered: bool) {
         self.inner
             .scrollbar_interaction
@@ -212,6 +240,7 @@ impl Terminal {
             .set_hovered(hovered, Instant::now());
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn reveal_scrollbar(&self) {
         self.inner
             .scrollbar_interaction
@@ -220,6 +249,7 @@ impl Terminal {
             .reveal(Instant::now());
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn scrollbar_presentation(&self, now: Instant) -> TerminalScrollbarPresentation {
         self.inner
             .scrollbar_interaction
@@ -228,6 +258,7 @@ impl Terminal {
             .presentation(now)
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn reset_cursor_blink(&self) {
         self.inner
             .cursor_blink
@@ -236,6 +267,7 @@ impl Terminal {
             .reset(Instant::now());
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn cursor_blink_epoch_for_focus(&self, focused: bool, now: Instant) -> Instant {
         self.inner
             .cursor_blink
@@ -244,6 +276,7 @@ impl Terminal {
             .update_focus(focused, now)
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn drag_scrollbar(&self, delta_y: f32) -> bool {
         if !delta_y.is_finite() || delta_y == 0.0 {
             return false;
@@ -271,6 +304,7 @@ impl Terminal {
     }
 
     /// Resize both the PTY and libghostty viewport, coalescing identical measurements.
+    #[cfg(not(quickgui_terminal_extension))]
     pub fn resize(&self, cols: u16, rows: u16, cell_width_px: u32, cell_height_px: u32) -> bool {
         let size = TerminalSize {
             cols: cols.clamp(1, MAX_COLS),
@@ -287,6 +321,7 @@ impl Terminal {
 
     /// Build the complete retained terminal surface, including focus, keyboard, paste, scroll, and
     /// exact bounds-to-PTY resize behavior.
+    #[cfg(not(quickgui_terminal_extension))]
     pub fn element<V: 'static>(
         &self,
         id: impl Into<ElementId>,
@@ -611,12 +646,17 @@ impl Terminal {
     }
 
     pub(super) fn try_send(&self, message: WorkerMessage) -> bool {
-        match self.inner.messages.try_send(message) {
-            Ok(()) => true,
-            Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => false,
+        #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+        {
+            self.inner.messages.try_send(message).is_ok()
+        }
+        #[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+        {
+            self.inner.session.command(message)
         }
     }
 
+    #[cfg(not(quickgui_terminal_extension))]
     fn sync_theme(&self, theme: Option<TerminalTheme>) {
         let mut current = self
             .inner

@@ -1,0 +1,89 @@
+#!/usr/bin/env bun
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const mode = process.argv[2];
+if (mode !== "--check" && mode !== "--publish")
+  throw new Error("usage: bun scripts/release-npm.ts --check|--publish [archive-directory]");
+const publish = mode === "--publish";
+const root = resolve(import.meta.dir, "..");
+const directory = resolve(root, process.argv[3] ?? "target/npm-release");
+const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
+
+function run(argv: string[]): string {
+  const child = Bun.spawnSync(argv, {
+    cwd: root,
+    stdin: "inherit",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  if (child.exitCode !== 0) throw new Error(`${argv.join(" ")} exited ${child.exitCode}`);
+  return child.stdout.toString().trim();
+}
+run(["bun", join(import.meta.dir, "release-metadata.ts")]);
+
+async function isPublished(name: string, integrity: string): Promise<boolean> {
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${version}`, {
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (response.ok || response.status === 404) break;
+      if (response.status < 500 && response.status !== 429)
+        throw new Error(`Registry returned HTTP ${response.status} for ${name}`);
+    } catch (error) {
+      if (attempt === 5) throw error;
+    }
+    if (attempt < 5) await Bun.sleep(1000 * (attempt + 1));
+  }
+  if (response?.status === 404) return false;
+  if (!response?.ok) throw new Error(`Registry request failed for ${name}`);
+  const metadata = (await response.json()) as { dist?: { integrity?: string } };
+  if (metadata.dist?.integrity !== integrity)
+    throw new Error(`${name}@${version} is public with different bytes`);
+  return true;
+}
+
+if (publish) {
+  const [nodeMajor = 0, nodeMinor = 0] = run(["node", "--version"])
+    .replace(/^v/, "")
+    .split(".")
+    .map(Number);
+  const [npmMajor = 0, npmMinor = 0, npmPatch = 0] = run(["npm", "--version"])
+    .split(".")
+    .map(Number);
+  if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 14))
+    throw new Error("npm trusted publishing requires Node 22.14 or newer");
+  if (npmMajor < 11 || (npmMajor === 11 && (npmMinor < 5 || (npmMinor === 5 && npmPatch < 1))))
+    throw new Error("npm trusted publishing requires npm 11.5.1 or newer");
+  if (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL && !process.env.NODE_AUTH_TOKEN)
+    throw new Error("GitHub OIDC or NODE_AUTH_TOKEN authentication is required");
+}
+
+for (const part of ["native", "native-terminal", "cli"]) {
+  const name = `@quickgui/${part}`;
+  const archive = join(directory, `quickgui-${part}-${version}.tgz`);
+  if (!existsSync(archive)) throw new Error(`Missing archive: ${archive}`);
+  const integrity = `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`;
+  if (await isPublished(name, integrity)) {
+    console.log(`${name}@${version} is already public with matching bytes; skipping`);
+    continue;
+  }
+  if (!publish) {
+    console.log(`${name}@${version} is ready to publish`);
+    continue;
+  }
+  console.log(run(["npm", "publish", archive, "--access", "public"]));
+  let available = false;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (await isPublished(name, integrity)) {
+      available = true;
+      break;
+    }
+    await Bun.sleep(5000);
+  }
+  if (!available) throw new Error(`Timed out waiting for ${name}@${version}`);
+  console.log(`Published ${name}@${version}`);
+}

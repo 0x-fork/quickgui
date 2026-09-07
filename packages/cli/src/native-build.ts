@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import type { ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError } from "./error.ts";
 import { hostTarget, targetInfo, type QuickGuiTarget } from "./targets.ts";
+import { discoverExtensions, extensionLibraryName, resolveExtension } from "./extensions.ts";
 
 export interface NativeCompileOptions {
   config: ResolvedQuickGuiConfig;
@@ -64,17 +65,26 @@ export function goBuildPlan(options: NativeCompileOptions): { argv: string[]; en
   };
 }
 
-export async function compileNativeApplication(options: NativeCompileOptions): Promise<void> {
+export async function compileNativeApplication(options: NativeCompileOptions): Promise<string[]> {
   const { config, target } = options;
   if (!Bun.which("go")) throw new CliError("Go 1.23 or later is required on PATH");
   const library = resolveHostLibrary(target, config.projectRoot, config.native.libraryPath);
   const plan = goBuildPlan(options);
+  const extensions = await discoverExtensions(config, plan.argv.at(-1)!, plan.env);
+  const destination = targetInfo(target).platform === "darwin"
+    ? join(dirname(options.executablePath), "..", "Frameworks") : dirname(options.executablePath);
+  mkdirSync(destination, { recursive: true });
+  const libraries = [join(destination, sharedLibraryName(target))];
+  copyFileSync(library, libraries[0]!, constants.COPYFILE_FICLONE);
+  for (const extension of extensions) {
+    const source = await resolveExtension(extension, target, config.projectRoot);
+    const path = join(destination, extensionLibraryName(extension, target));
+    copyFileSync(source, path, constants.COPYFILE_FICLONE);
+    libraries.push(path);
+  }
   const child = Bun.spawn(plan.argv, { cwd: config.projectRoot, stdin: "ignore", stdout: "pipe", stderr: "pipe", env: plan.env });
   const [status, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
   if (status !== 0) throw new CliError(`Go compilation failed\n${stderr.trim() || stdout.trim()}`);
   if (!existsSync(options.executablePath)) throw new CliError(`Go did not write ${options.executablePath}`);
-  const destination = targetInfo(target).platform === "darwin"
-    ? join(dirname(options.executablePath), "..", "Frameworks") : dirname(options.executablePath);
-  mkdirSync(destination, { recursive: true });
-  copyFileSync(library, join(destination, sharedLibraryName(target)), constants.COPYFILE_FICLONE);
+  return libraries;
 }

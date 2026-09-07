@@ -1231,6 +1231,15 @@ fn native_virtual_list_mounts_only_the_initial_window_and_overscan() {
 #[cfg(unix)]
 #[test]
 fn native_terminal_runs_a_real_pty_and_rerenders_ghostty_output() {
+    // Production loads this descriptor from its separate image through purego. The native
+    // integration test links the same backend as a dev dependency and exercises the C ABI.
+    unsafe {
+        quickgui::extensions::register_extension(
+            quickgui_terminal::quickgui_extension_v1().cast(),
+            b"terminal",
+        )
+    }
+    .unwrap();
     let terminal_id = 50;
     let mut tree = NativeTree::default();
     let mut terminal = NativeNode::new(NodeTag::Terminal);

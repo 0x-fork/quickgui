@@ -227,3 +227,69 @@ pub(super) fn terminal_pointer_cell(position: f32, cell_size: f32, count: u16) -
     let maximum = i32::from(count.saturating_sub(1));
     ((position / cell_size).floor() as i32).clamp(0, maximum) as u16
 }
+
+#[cfg(not(quickgui_terminal_extension))]
+pub(super) fn handle_terminal_copy(
+    terminal: &Terminal,
+    event: &KeyDownEvent,
+    cx: &mut EventContext,
+) -> bool {
+    if !terminal_command_shortcut(event, "c") {
+        return false;
+    }
+    if let Some(text) = terminal.snapshot().selected_text.clone()
+        && let Ok(item) = ClipboardItem::new_string(text)
+    {
+        let _ = cx.write_to_clipboard(item);
+    }
+    cx.prevent_default();
+    cx.stop_propagation();
+    true
+}
+
+#[cfg(not(quickgui_terminal_extension))]
+pub(super) fn handle_terminal_select_all(
+    terminal: &Terminal,
+    event: &KeyDownEvent,
+    cx: &mut EventContext,
+) -> bool {
+    if !terminal_command_shortcut(event, "a") {
+        return false;
+    }
+    let _ = terminal.try_send(WorkerMessage::SelectAll);
+    cx.clear_text_selection();
+    cx.prevent_default();
+    cx.stop_propagation();
+    cx.invalidate();
+    true
+}
+
+#[cfg(not(quickgui_terminal_extension))]
+pub(super) fn handle_terminal_paste(
+    terminal: &Terminal,
+    event: &KeyDownEvent,
+    cx: &mut EventContext,
+) -> bool {
+    if !terminal_command_shortcut(event, "v") {
+        return false;
+    }
+    if let Ok(Some(item)) = cx.read_from_clipboard()
+        && let Some(value) = item.text()
+    {
+        let _ = terminal.paste(value);
+    }
+    cx.clear_text_selection();
+    cx.prevent_default();
+    cx.stop_propagation();
+    true
+}
+
+#[cfg(not(quickgui_terminal_extension))]
+pub(super) fn terminal_command_shortcut(event: &KeyDownEvent, key: &str) -> bool {
+    key_character(&event.key).is_some_and(|value| value.eq_ignore_ascii_case(key))
+        && (event.modifiers.contains(Modifiers::SUPER)
+            || (cfg!(not(target_os = "macos"))
+                && event
+                    .modifiers
+                    .contains(Modifiers::CONTROL | Modifiers::SHIFT)))
+}

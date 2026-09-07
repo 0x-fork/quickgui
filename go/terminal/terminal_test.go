@@ -1,4 +1,4 @@
-package ui
+package terminal
 
 import (
 	"bytes"
@@ -13,13 +13,13 @@ import (
 func TestTerminalThemeUpdatesWithoutRestartingSession(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
-		var initial TerminalPalette
+		var initial Palette
 		for i := range initial {
 			initial[i] = "#112233"
 		}
 		palette := reactive.NewSignal(initial)
 		cursor := reactive.NewSignal("#123456")
-		node := Terminal(TerminalProps{Program: "/bin/sh", Palette: palette.Read, CursorColor: cursor.Read, FontThicken: true, PaddingColor: "extend"})
+		node := View(Props{Program: "/bin/sh", Palette: palette.Read, CursorColor: cursor.Read, FontThicken: true, PaddingColor: "extend"})
 		offset := len(node.Pending.Body())
 		next := initial
 		next[3] = "#abcdef"
@@ -42,8 +42,8 @@ func TestTerminalThemeUpdatesWithoutRestartingSession(t *testing.T) {
 func TestTerminalStatusDecodesNativeAgentLifecycle(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
-		var status *TerminalStatusDetails
-		node := Terminal(TerminalProps{OnStatus: func(event *native.Event) { status = TerminalStatusFromEvent(event) }})
+		var status *StatusDetails
+		node := View(Props{OnStatus: func(event *native.Event) { status = StatusFromEvent(event) }})
 		host := &native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node}}
 		native.DispatchEvent(
 			host,

@@ -97,7 +97,7 @@ mod svg_renderer;
 mod swift_ui;
 mod table;
 mod tabs;
-#[cfg(feature = "terminal")]
+#[cfg(any(feature = "terminal", feature = "terminal-extension"))]
 mod terminal;
 #[cfg(feature = "terminal")]
 mod terminal_process;
@@ -577,7 +577,7 @@ pub use tabs::{
     Tab, TabState, Tabs, TabsActivationDirection, TabsActivationMovement, TabsIndicatorGeometry,
     TabsOrientation, TabsState,
 };
-#[cfg(feature = "terminal")]
+#[cfg(any(feature = "terminal", feature = "terminal-extension"))]
 pub use terminal::{
     MAX_TERMINAL_ARGUMENTS, MAX_TERMINAL_ENVIRONMENT, MAX_TERMINAL_SCROLLBACK,
     MAX_TERMINAL_STRING_BYTES, TERMINAL_ANSI_COLOR_COUNT, Terminal, TerminalAgent,
@@ -642,3 +642,12 @@ pub fn run<V: View>(view: V) -> Result<(), AppError> {
 
 #[cfg(feature = "file-watcher")]
 pub use quickgui_system::{FileWatchEvent, FileWatcher, MAX_WATCH_EVENT_PATHS, MAX_WATCH_ROOTS};
+
+#[doc(hidden)]
+pub mod extension_api;
+
+#[doc(hidden)]
+pub mod extensions;
+
+#[cfg(feature = "terminal")]
+use ui_tree::static_selection_color;

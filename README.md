@@ -146,6 +146,8 @@ cd examples/counter
 bun run dev
 ```
 
+For the Herdr terminal example, also run `bun packages/native/build.ts --extension terminal` once. Terminal is a separate native extension selected by the Go `terminal` import; apps using only `ui` do not bundle its backend. See [native extensions](docs/architecture/extensions.md).
+
 The routing example uses the Rust core for matching and memory history while QuickGUI UI renders nested
 layouts, links, dynamic parameters, queries, and fallback routes:
 

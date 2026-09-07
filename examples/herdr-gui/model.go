@@ -9,7 +9,7 @@ import (
 
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/reactive"
-	"github.com/egoist/quickgui/go/ui"
+	"github.com/egoist/quickgui/go/terminal"
 )
 
 type space struct{ ID, Name, Path string }
@@ -28,7 +28,7 @@ type pane struct {
 	Arguments                     []string
 	Environment                   map[string]string
 	RequestedAgent, InitialPrompt string
-	Status                        *reactive.Signal[ui.TerminalStatusDetails]
+	Status                        *reactive.Signal[terminal.StatusDetails]
 }
 type launcher struct{ ID, Label, Mark, Description, Executable string }
 
@@ -197,7 +197,7 @@ func (m *model) shellPane(s space, tabID int) *pane {
 			count++
 		}
 	}
-	p := &pane{ID: m.nextPane, TabID: tabID, SpaceID: s.ID, Label: fmt.Sprintf("Terminal %d", count), Program: loginShell(), Arguments: []string{"-l"}, Environment: m.Environment, Status: reactive.NewSignal(ui.TerminalStatusDetails{
+	p := &pane{ID: m.nextPane, TabID: tabID, SpaceID: s.ID, Label: fmt.Sprintf("Terminal %d", count), Program: loginShell(), Arguments: []string{"-l"}, Environment: m.Environment, Status: reactive.NewSignal(terminal.StatusDetails{
 		Status:           "starting",
 		WorkingDirectory: s.Path,
 	})}
@@ -391,7 +391,7 @@ func (m *model) closeFocusedItem() {
 }
 func (m *model) restartPane(p *pane) {
 	replacement := *p
-	replacement.Status = reactive.NewSignal(ui.TerminalStatusDetails{
+	replacement.Status = reactive.NewSignal(terminal.StatusDetails{
 		Status:           "starting",
 		WorkingDirectory: p.Status.Peek().WorkingDirectory,
 	})

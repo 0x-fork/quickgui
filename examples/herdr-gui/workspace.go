@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/terminal"
 	"github.com/egoist/quickgui/go/ui"
 )
 
@@ -334,18 +335,18 @@ func terminalPane(m *model, p *pane) {
 		func() {
 			ui.View(
 				func() {
-					ui.Terminal(ui.TerminalProps{
+					terminal.View(terminal.Props{
 						Program:          p.Program,
 						Args:             p.Arguments,
 						WorkingDirectory: directory,
 						Environment:      p.Environment,
 						Scrollback:       50000,
-						Palette:          func() ui.TerminalPalette { return m.theme().TerminalPalette },
+						Palette:          func() terminal.Palette { return m.theme().TerminalPalette },
 						CursorColor:      m.color(func(t theme) string { return t.TerminalCursor }),
 						PaddingColor:     "extend",
 						FontThicken:      true,
 						OnStatus: func(event *native.Event) {
-							if status := ui.TerminalStatusFromEvent(event); status != nil {
+							if status := terminal.StatusFromEvent(event); status != nil {
 								p.Status.Write(*status)
 							}
 						},

@@ -592,13 +592,6 @@ pub(super) fn ghostty_key(
     Some((answer, text, unshifted))
 }
 
-pub(super) fn key_character(key: &Key) -> Option<&str> {
-    match key {
-        Key::Character(value) => Some(value),
-        _ => None,
-    }
-}
-
 pub(super) fn ghostty_character_key(value: char) -> GhosttyKey {
     match value.to_ascii_lowercase() {
         'a' => GhosttyKey::A,
@@ -707,66 +700,4 @@ pub(super) fn ghostty_function_key(value: u8) -> GhosttyKey {
         24 => GhosttyKey::F24,
         _ => GhosttyKey::Unidentified,
     }
-}
-
-pub(super) fn handle_terminal_copy(
-    terminal: &Terminal,
-    event: &KeyDownEvent,
-    cx: &mut EventContext,
-) -> bool {
-    if !terminal_command_shortcut(event, "c") {
-        return false;
-    }
-    if let Some(text) = terminal.snapshot().selected_text.clone()
-        && let Ok(item) = ClipboardItem::new_string(text)
-    {
-        let _ = cx.write_to_clipboard(item);
-    }
-    cx.prevent_default();
-    cx.stop_propagation();
-    true
-}
-
-pub(super) fn handle_terminal_select_all(
-    terminal: &Terminal,
-    event: &KeyDownEvent,
-    cx: &mut EventContext,
-) -> bool {
-    if !terminal_command_shortcut(event, "a") {
-        return false;
-    }
-    let _ = terminal.try_send(WorkerMessage::SelectAll);
-    cx.clear_text_selection();
-    cx.prevent_default();
-    cx.stop_propagation();
-    cx.invalidate();
-    true
-}
-
-pub(super) fn handle_terminal_paste(
-    terminal: &Terminal,
-    event: &KeyDownEvent,
-    cx: &mut EventContext,
-) -> bool {
-    if !terminal_command_shortcut(event, "v") {
-        return false;
-    }
-    if let Ok(Some(item)) = cx.read_from_clipboard()
-        && let Some(value) = item.text()
-    {
-        let _ = terminal.paste(value);
-    }
-    cx.clear_text_selection();
-    cx.prevent_default();
-    cx.stop_propagation();
-    true
-}
-
-pub(super) fn terminal_command_shortcut(event: &KeyDownEvent, key: &str) -> bool {
-    key_character(&event.key).is_some_and(|value| value.eq_ignore_ascii_case(key))
-        && (event.modifiers.contains(Modifiers::SUPER)
-            || (cfg!(not(target_os = "macos"))
-                && event
-                    .modifiers
-                    .contains(Modifiers::CONTROL | Modifiers::SHIFT)))
 }

@@ -1,6 +1,9 @@
 package main
 
-import "github.com/egoist/quickgui/go/ui"
+import (
+	"github.com/egoist/quickgui/go/terminal"
+	"github.com/egoist/quickgui/go/ui"
+)
 
 type theme struct {
 	App             string
@@ -32,7 +35,7 @@ type theme struct {
 	Danger          string
 	Scrim           string
 	ErrorBackground string
-	TerminalPalette ui.TerminalPalette
+	TerminalPalette terminal.Palette
 }
 
 var lightTheme = theme{
@@ -65,7 +68,7 @@ var lightTheme = theme{
 	Terminal:        "#ffffff",
 	TerminalText:    "#1f2328",
 	TerminalCursor:  "#0969da",
-	TerminalPalette: ui.TerminalPalette{
+	TerminalPalette: terminal.Palette{
 		"#24292f",
 		"#cf222e",
 		"#116329",
@@ -114,7 +117,7 @@ var darkTheme = theme{
 	Terminal:        "#0d1117",
 	TerminalText:    "#e6edf3",
 	TerminalCursor:  "#2f81f7",
-	TerminalPalette: ui.TerminalPalette{
+	TerminalPalette: terminal.Palette{
 		"#484f58",
 		"#ff7b72",
 		"#3fb950",

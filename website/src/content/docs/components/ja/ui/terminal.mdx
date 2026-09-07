@@ -1,3 +1,5 @@
+ターミナルのバックエンドは独立したネイティブ拡張です。CLI は `terminal` のインポートを検出し、対応する `@quickgui/native-terminal` を取得して同梱します。インポートしないアプリには含まれません。
+
 保持型の Ghostty ターミナルサーフェスを埋め込み、プロセスのライフサイクルイベントを通知します。
 
 ## インポート
@@ -6,6 +8,7 @@
 
 ```go
 import (
+	"github.com/egoist/quickgui/go/terminal"
 	"github.com/egoist/quickgui/go/ui"
 )
 ```
@@ -14,7 +17,7 @@ import (
 
 ```go
 func TerminalExample(directory string) {
-	ui.Terminal(ui.TerminalProps{
+	terminal.View(terminal.Props{
 		Program:          "/bin/zsh",
 		Args:             []string{"-l"},
 		WorkingDirectory: directory,
@@ -32,7 +35,7 @@ func TerminalExample(directory string) {
 | `WorkingDirectory` | ターミナルプロセスの初期作業ディレクトリです。 |
 | `Environment` | ターミナルプロセスに追加する環境変数です。 |
 | `OnStatus` | ターミナルプロセスのライフサイクル変更を通知します。 |
-| `Palette` | 16 色の ANSI パレット（`ui.TerminalPalette`）またはアクセサー。更新しても PTY は維持されます。 |
+| `Palette` | 16 色の ANSI パレット（`terminal.Palette`）またはアクセサー。更新しても PTY は維持されます。 |
 | `CursorColor` | カーソル色または色のアクセサー。 |
 | `PaddingColor` | `"extend"` で端の背景色を余白まで延長します。 |
 | `FontThicken` | ネイティブのフォント増厚を有効にします。 |

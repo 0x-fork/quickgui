@@ -28,6 +28,24 @@ Components and events run on a dedicated Go goroutine pinned to an OS thread. Ap
 
 From this repository, run `bun run build:native` once to stage the Rust library. Ordinary app edits only rebuild Go. A released `@quickgui/native` package supplies the library; consumers do not need Rust or a C compiler. Go 1.23+, Bun, and macOS Xcode Command Line Tools are required for development/packaging.
 
+## Optional native extensions
+
+Import `github.com/egoist/quickgui/go/terminal` to use `terminal.View(terminal.Props{…})`. The core UI package does not import the terminal backend. The CLI examines the actual Go dependency graph, including transitive imports, target files, and build tags, then bundles the required extension libraries beside the core library.
+
+Terminal uses the separate `@quickgui/native-terminal` package. The CLI uses an installed package or downloads the exact SDK-matched version on first use, verifies its SHA-512 integrity, and caches it. Apps without that import neither download nor bundle it. Ordinary Go edits reuse these prebuilt artifacts; no native build or feature-combination matrix is needed.
+
+For offline builds, install the matching `@quickgui/native-terminal` version beforehand, or put the target libraries in `QUICKGUI_EXTENSION_DIR`. `QUICKGUI_CACHE_DIR` selects the download cache root (default: `~/.cache/quickgui`). Downloads and extracted libraries are limited to 128 MiB each, and the extension cache evicts old libraries above 512 MiB. At runtime, libraries are loaded locally through purego; there is no network access or IPC.
+
+From a source checkout, build each native artifact once:
+
+```console
+bun packages/native/build.ts
+bun packages/native/build.ts --extension terminal
+bun packages/cli/src/cli.ts dev --project examples/herdr-gui
+```
+
+Core and extension releases and ABI versions must match. Packaged apps include their selected libraries and work without Bun, Go, Rust, or npm installed.
+
 ## Configuration
 
 Both `quickgui.toml` and `quickgui.config.ts` are supported. `dev` and `build` look for `quickgui.toml` first, then `quickgui.config.ts`. Pass `--config path/to/file.toml` (or a TypeScript file) to select one explicitly. Both formats use the same option names and validation; relative paths are resolved from the project directory. The generated scaffold continues to use TypeScript.

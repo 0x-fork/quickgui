@@ -17,6 +17,8 @@ Read [rendering architecture](rendering.md) and [optimization coverage](renderin
 - Bound caches and upload shadows by explicit entry/byte limits, allocate them lazily, and evict or release stale resources. Preserve bounded text caches and stable text identities. Do not trade reduced CPU work for unbounded retained memory.
 - GPU upload reuse must track each physical rotating buffer and reset its shadow after reallocation; preserve write alignment and bounded write counts. Compositing reuse must account for content, nested effects, scale, and physical texture generations, including pooled texture repurposing. Pointer identity alone is insufficient. Base and overlay work encoded before one submission must not overwrite each other's uniforms. Do not assume swapchain pixels survive presentation.
 
+Optional native backends follow the [extension contract](extensions.md): keep one renderer/runtime in the core, transfer bounded immutable frames only when revisions change, release session workers on unmount, and reuse prebuilt artifacts during Go edits.
+
 ## Performance validation
 
 - For rendering or invalidation changes, add or update meaningful correctness and work regressions. Compare incremental layout or cached pixels against fresh results, and assert that unrelated branches avoid declaration, reconciliation, measurement, geometry, or paint work as appropriate. Preserve the hover regression where work and allocations remain independent of unrelated panel size. Do not weaken these checks to accommodate a regression.

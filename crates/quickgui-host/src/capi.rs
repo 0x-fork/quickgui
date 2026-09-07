@@ -142,6 +142,34 @@ pub extern "C" fn quickgui_protocol_version() -> u32 {
     PROTOCOL_VERSION as u32
 }
 
+/// Register an optional native provider before creating application windows.
+///
+/// # Safety
+/// The descriptor and its code must remain loaded until process exit. `name` is a readable
+/// UTF-8 span identifying the extension requested by the importing Go package.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quickgui_register_extension(
+    descriptor: *const quickgui::extension_api::Extension,
+    name: *const u8,
+    length: usize,
+) -> c_int {
+    let result = (|| {
+        if descriptor.is_null() || length > quickgui::extension_api::MAX_EXTENSION_NAME {
+            return Err("invalid extension registration".to_owned());
+        }
+        let expected = unsafe { text(name, length) }?;
+        unsafe { quickgui::extensions::register_extension(descriptor, expected.as_bytes()) }
+            .map_err(str::to_owned)
+    })();
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("quickgui: {error}");
+            -1
+        }
+    }
+}
+
 /// Register the application thread's event callback. Events published earlier are flushed to it.
 ///
 /// # Safety

@@ -1,3 +1,5 @@
+终端后端是独立的原生扩展。CLI 会根据 `terminal` 导入获取并打包匹配版本的 `@quickgui/native-terminal`；未导入的应用不会包含终端后端。
+
 嵌入保留式 Ghostty 终端表面，并报告进程生命周期事件。
 
 ## 导入
@@ -6,6 +8,7 @@
 
 ```go
 import (
+	"github.com/egoist/quickgui/go/terminal"
 	"github.com/egoist/quickgui/go/ui"
 )
 ```
@@ -14,7 +17,7 @@ import (
 
 ```go
 func TerminalExample(directory string) {
-	ui.Terminal(ui.TerminalProps{
+	terminal.View(terminal.Props{
 		Program:          "/bin/zsh",
 		Args:             []string{"-l"},
 		WorkingDirectory: directory,
@@ -32,7 +35,7 @@ func TerminalExample(directory string) {
 | `WorkingDirectory` | 终端进程的初始工作目录。 |
 | `Environment` | 添加到终端进程的环境变量。 |
 | `OnStatus` | 报告终端进程的生命周期变化。 |
-| `Palette` | 16 色 ANSI 调色板（`ui.TerminalPalette`）或访问器，更新时保留 PTY。 |
+| `Palette` | 16 色 ANSI 调色板（`terminal.Palette`）或访问器，更新时保留 PTY。 |
 | `CursorColor` | 光标颜色或颜色访问器。 |
 | `PaddingColor` | 使用 `"extend"` 将终端边缘背景延伸到内边距。 |
 | `FontThicken` | 启用原生字体加粗处理。 |

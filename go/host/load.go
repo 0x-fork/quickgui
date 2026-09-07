@@ -24,6 +24,16 @@ func Load() error {
 			loadErr = err
 			return
 		}
+		for _, name := range requiredExtensions() {
+			extension, err := findExtensionLibrary(name, path)
+			if err == nil {
+				err = api.(*loaded).library.LoadExtension(name, extension)
+			}
+			if err != nil {
+				loadErr = err
+				return
+			}
+		}
 		Current = api
 	})
 	return loadErr

@@ -5,6 +5,7 @@ use std::{
 };
 
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(quickgui_terminal_extension)");
     println!("cargo:rerun-if-changed=src/macos/swift_ui.swift");
 
     if env::var_os("CARGO_FEATURE_SWIFT_UI").is_none() {

@@ -18,7 +18,7 @@ esac
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 cd "$repository_root"
-"$script_dir/release-metadata.sh" >/dev/null
+bun "$script_dir/release-metadata.ts" >/dev/null
 
 package_version() {
   awk -F '"' '/^version = "/ { print $2; exit }' "$1"

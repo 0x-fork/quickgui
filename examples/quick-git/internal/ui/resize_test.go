@@ -40,7 +40,13 @@ func TestNativeResizeReportsSizesWithoutRebuildingPanel(t *testing.T) {
 		host := native.NewNodeHost(1, 1)
 		host.Nodes[root.ID] = root
 		offset := len(root.Pending.Body())
-		native.DispatchEvent(host, protocol.EventComponentChange, root.ID, `{"sizes":[460,540]}`, true)
+		native.DispatchEvent(
+			host,
+			protocol.EventComponentChange,
+			root.ID,
+			`{"sizes":[460,540]}`,
+			true,
+		)
 		if width() != 460 {
 			t.Fatalf("native resize did not update the saved width: %v", width())
 		}

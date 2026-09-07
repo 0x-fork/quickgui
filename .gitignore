@@ -13,3 +13,6 @@ worktrees/
 packages/native/lib/**/*.dylib
 packages/native/lib/**/*.so
 packages/native/lib/**/*.dll
+packages/native-*/lib/**/*.dylib
+packages/native-*/lib/**/*.so
+packages/native-*/lib/**/*.dll

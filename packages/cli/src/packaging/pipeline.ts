@@ -141,6 +141,8 @@ function safeContainer(build: () => Uint8Array): Uint8Array | undefined {
 
 export interface LinuxPackagingInput {
   config: ResolvedQuickGuiConfig;
+  /** Core and selected extension libraries staged beside the executable. */
+  libraries?: string[];
   target: QuickGuiTarget;
   /** Compiled executable inside the staging directory. */
   executablePath: string;
@@ -183,7 +185,9 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
     mkdirSync(join(appDir, "usr", "bin"), { recursive: true });
     cpSync(input.executablePath, join(appDir, "usr", "bin", config.executableName));
     chmodSync(join(appDir, "usr", "bin", config.executableName), 0o755);
-    cpSync(join(input.stagingRoot, sharedLibraryName(input.target)), join(appDir, "usr", "bin", sharedLibraryName(input.target)));
+    for (const library of input.libraries ?? [join(input.stagingRoot, sharedLibraryName(input.target))]) {
+      cpSync(library, join(appDir, "usr", "bin", basename(library)));
+    }
     writeFileSync(join(appDir, `${config.executableName}.desktop`), entry);
     writeFileSync(join(appDir, "AppRun"), appRunScript(config.executableName));
     chmodSync(join(appDir, "AppRun"), 0o755);
@@ -219,7 +223,7 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
     const executable = new Uint8Array(readFileSync(input.executablePath));
     const data: TarEntry[] = [
       { path: paths.executable, data: executable, mode: 0o755 },
-      { path: join(dirname(paths.executable), sharedLibraryName(input.target)), data: new Uint8Array(readFileSync(join(input.stagingRoot, sharedLibraryName(input.target)))) },
+      ...(input.libraries ?? [join(input.stagingRoot, sharedLibraryName(input.target))]).map(library => ({ path: join(dirname(paths.executable), basename(library)), data: new Uint8Array(readFileSync(library)) })),
       { path: paths.desktopEntry, data: new TextEncoder().encode(entry) },
       ...(mimeXml
         ? [{ path: paths.mimePackage, data: new TextEncoder().encode(mimeXml) }]
@@ -289,6 +293,7 @@ function largestIcon(icons: IconBuildResult | undefined): Uint8Array | undefined
 
 export interface WindowsPackagingInput {
   config: ResolvedQuickGuiConfig;
+  libraries?: string[];
   executablePath: string;
   stagingRoot: string;
   icons?: IconBuildResult;
@@ -315,7 +320,7 @@ export async function packageWindows(input: WindowsPackagingInput): Promise<Pack
     version: config.version,
     publisher: config.windows.publisher ?? config.name,
     executablePath: input.executablePath,
-    extraFiles: [[join(input.stagingRoot, "quickgui_host.dll"), "quickgui_host.dll"]],
+    extraFiles: (input.libraries ?? [join(input.stagingRoot, "quickgui_host.dll")]).map(library => [library, basename(library)]),
     outputFile: installerPath,
     protocols: config.protocols,
     documentTypes: config.documentTypes,

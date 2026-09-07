@@ -27,6 +27,14 @@ func Flush() { reactive.Flush() }
 
 func OnCleanup(fn func()) { reactive.OnCleanup(fn) }
 
+// NativeElement applies ordinary children, styles, options, and reactive ownership
+// to a native node kind supplied by an extension package.
+func NativeElement(tag uint8, arguments ...any) *native.Node {
+	node := native.CreateElement(tag)
+	applyArguments(node, arguments)
+	return node
+}
+
 // View declares children followed by style records and property options.
 // Multiple styles merge in order; callback children run once when mounted.
 func View(arguments ...any) *native.Node {

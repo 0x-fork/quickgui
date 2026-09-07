@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -10,7 +10,7 @@ const supportedArguments = new Set(["--check"]);
 
 for (const argument of argumentsSet) {
   if (!supportedArguments.has(argument)) {
-    console.error(`usage: sync-release-version.mjs [--check]`);
+    console.error(`usage: sync-release-version.ts [--check]`);
     process.exit(2);
   }
 }
@@ -19,27 +19,36 @@ const checkOnly = argumentsSet.has("--check");
 const rootManifest = JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8"));
 const version = rootManifest.version;
 
-if (typeof version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
+if (
+  typeof version !== "string" ||
+  !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)
+) {
   throw new Error(`package.json has an invalid release version: ${JSON.stringify(version)}`);
 }
 
-const originalFiles = new Map();
-const updatedFiles = new Map();
+const originalFiles = new Map<string, string>();
+const updatedFiles = new Map<string, string>();
 
-function fileContents(relativePath) {
+function fileContents(relativePath: string): string {
   if (!originalFiles.has(relativePath)) {
     const contents = readFileSync(join(repositoryRoot, relativePath), "utf8");
     originalFiles.set(relativePath, contents);
     updatedFiles.set(relativePath, contents);
   }
-  return updatedFiles.get(relativePath);
+  return updatedFiles.get(relativePath)!;
 }
 
-function edit(relativePath, transform) {
+function edit(relativePath: string, transform: (contents: string) => string) {
   updatedFiles.set(relativePath, transform(fileContents(relativePath)));
 }
 
-function replaceMatches(relativePath, contents, pattern, replacement, expectedMatches = 1) {
+function replaceMatches(
+  relativePath: string,
+  contents: string,
+  pattern: RegExp,
+  replacement: (...matches: string[]) => string,
+  expectedMatches = 1,
+) {
   let matches = 0;
   const updated = contents.replace(pattern, (...groups) => {
     matches += 1;
@@ -54,11 +63,11 @@ function replaceMatches(relativePath, contents, pattern, replacement, expectedMa
   return updated;
 }
 
-function escapeRegExp(value) {
+function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function replaceCargoPackageVersion(relativePath, packageName) {
+function replaceCargoPackageVersion(relativePath: string, packageName: string) {
   edit(relativePath, (contents) => {
     const packageStart = contents.indexOf("[package]");
     if (packageStart === -1) {
@@ -82,7 +91,7 @@ function replaceCargoPackageVersion(relativePath, packageName) {
   });
 }
 
-function replaceCargoSectionVersion(relativePath, sectionName) {
+function replaceCargoSectionVersion(relativePath: string, sectionName: string) {
   edit(relativePath, (contents) => {
     const header = `[${sectionName}]`;
     const sectionStart = contents.indexOf(header);
@@ -102,7 +111,7 @@ function replaceCargoSectionVersion(relativePath, sectionName) {
   });
 }
 
-function replaceInlineCargoDependency(relativePath, dependencyName) {
+function replaceInlineCargoDependency(relativePath: string, dependencyName: string) {
   edit(relativePath, (contents) => {
     const dependencyPattern = new RegExp(
       `(^${escapeRegExp(dependencyName)} = \\{[^\\n]*?version = ")([^"]+)("[^\\n]*\\}$)`,
@@ -117,11 +126,13 @@ function replaceInlineCargoDependency(relativePath, dependencyName) {
   });
 }
 
-function replaceJsonPackageVersion(relativePath, packageName) {
+function replaceJsonPackageVersion(relativePath: string, packageName: string) {
   edit(relativePath, (contents) => {
     const manifest = JSON.parse(contents);
     if (manifest.name !== packageName) {
-      throw new Error(`${relativePath}: expected package name ${packageName}, found ${manifest.name}`);
+      throw new Error(
+        `${relativePath}: expected package name ${packageName}, found ${manifest.name}`,
+      );
     }
     return replaceMatches(
       relativePath,
@@ -132,7 +143,7 @@ function replaceJsonPackageVersion(relativePath, packageName) {
   });
 }
 
-function replaceCargoLockPackageVersion(relativePath, packageName) {
+function replaceCargoLockPackageVersion(relativePath: string, packageName: string) {
   edit(relativePath, (contents) => {
     const pattern = new RegExp(
       `(\\[\\[package\\]\\]\\r?\\nname = "${escapeRegExp(packageName)}"\\r?\\nversion = ")[^"]+(")`,
@@ -147,7 +158,11 @@ function replaceCargoLockPackageVersion(relativePath, packageName) {
   });
 }
 
-function replaceBunWorkspaceVersion(relativePath, workspacePath, packageName) {
+function replaceBunWorkspaceVersion(
+  relativePath: string,
+  workspacePath: string,
+  packageName: string,
+) {
   edit(relativePath, (contents) => {
     const pattern = new RegExp(
       `(    "${escapeRegExp(workspacePath)}": \\{\\r?\\n      "name": "${escapeRegExp(packageName)}",\\r?\\n      "version": ")[^"]+(")`,
@@ -161,10 +176,11 @@ function replaceBunWorkspaceVersion(relativePath, workspacePath, packageName) {
   });
 }
 
-const cargoPackages = [
+const cargoPackages: [string, string][] = [
   ["Cargo.toml", "quickgui"],
   ["crates/quickgui-system/Cargo.toml", "quickgui-system"],
   ["crates/quickgui-host/Cargo.toml", "quickgui-host"],
+  ["crates/quickgui-terminal/Cargo.toml", "quickgui-terminal"],
   ["vendor/winit/Cargo.toml", "quickgui-winit"],
   ["vendor/winit/Cargo.toml.orig", "quickgui-winit"],
   ["vendor/accesskit_winit/Cargo.toml", "quickgui-accesskit-winit"],
@@ -189,8 +205,9 @@ replaceInlineCargoDependency("tests/downstream_smoke/Cargo.toml", "quickgui");
 
 for (const [relativePath, packageName] of [
   ["packages/native/package.json", "@quickgui/native"],
+  ["packages/native-terminal/package.json", "@quickgui/native-terminal"],
   ["packages/cli/package.json", "@quickgui/cli"],
-]) {
+] as const) {
   replaceJsonPackageVersion(relativePath, packageName);
 }
 
@@ -215,16 +232,32 @@ for (const packageName of ["cli"]) {
 }
 
 edit("packages/cli/templates/native/go.mod", (contents) =>
-  replaceMatches("packages/cli/templates/native/go.mod", contents,
+  replaceMatches(
+    "packages/cli/templates/native/go.mod",
+    contents,
     /(github\.com\/egoist\/quickgui\/go v)[^\s]+/,
-    (_match, prefix) => `${prefix}${version}`),
+    (_match, prefix) => `${prefix}${version}`,
+  ),
+);
+
+edit("go/terminal/quickgui.extension.json", (contents) =>
+  replaceMatches(
+    "go/terminal/quickgui.extension.json",
+    contents,
+    /("version": ")[^"]+(")/,
+    (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
+  ),
 );
 
 for (const directory of readdirSync(join(repositoryRoot, "examples"))) {
   const relativePath = `examples/${directory}/go.mod`;
   if (existsSync(join(repositoryRoot, relativePath))) {
-    edit(relativePath, (contents) => contents.replace(/(github\.com\/egoist\/quickgui\/go v)[^\s]+/,
-      (_match, prefix) => `${prefix}${version}`));
+    edit(relativePath, (contents) =>
+      contents.replace(
+        /(github\.com\/egoist\/quickgui\/go v)[^\s]+/,
+        (_match, prefix) => `${prefix}${version}`,
+      ),
+    );
   }
 }
 
@@ -236,14 +269,16 @@ for (const packageName of [
   "quickgui-glyphon",
   "quickgui-system",
   "quickgui-host",
-]) {
+  "quickgui-terminal",
+] as const) {
   replaceCargoLockPackageVersion("Cargo.lock", packageName);
 }
 
 for (const [workspacePath, packageName] of [
   ["packages/native", "@quickgui/native"],
+  ["packages/native-terminal", "@quickgui/native-terminal"],
   ["packages/cli", "@quickgui/cli"],
-]) {
+] as const) {
   replaceBunWorkspaceVersion("bun.lock", workspacePath, packageName);
 }
 
@@ -262,9 +297,13 @@ if (checkOnly && changedFiles.length > 0) {
 
 if (!checkOnly) {
   for (const relativePath of changedFiles) {
-    writeFileSync(join(repositoryRoot, relativePath), updatedFiles.get(relativePath));
+    writeFileSync(join(repositoryRoot, relativePath), updatedFiles.get(relativePath)!);
   }
 }
 
-const action = checkOnly ? "verified" : changedFiles.length > 0 ? "updated" : "already synchronized";
+const action = checkOnly
+  ? "verified"
+  : changedFiles.length > 0
+    ? "updated"
+    : "already synchronized";
 console.log(`release version ${version}: ${action} ${updatedFiles.size} files`);

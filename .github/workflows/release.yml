@@ -32,14 +32,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
       - name: Synchronize package versions
-        run: node scripts/sync-release-version.mjs
+        run: bun scripts/sync-release-version.ts
       - name: Resolve release source
         id: source
         shell: bash
         run: |
           release_sha=$(git rev-parse HEAD)
-          release_version=$(node -p 'require("./package.json").version')
+          release_version=$(bun -p 'require("./package.json").version')
           if [[ $GITHUB_REF_TYPE == tag ]]; then
             release_tag=$GITHUB_REF_NAME
           else
@@ -57,9 +60,6 @@ jobs:
           rustup toolchain install 1.90.0 --profile minimal
           rustup default stable
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
@@ -71,7 +71,7 @@ jobs:
           cache-dependency-path: '**/go.sum'
       - name: Verify tagged release metadata
         id: release
-        run: scripts/release-metadata.sh "$GITHUB_OUTPUT"
+        run: bun scripts/release-metadata.ts "$GITHUB_OUTPUT"
       - name: Verify release tag target
         shell: bash
         run: |
@@ -89,16 +89,20 @@ jobs:
         run: |
           bun run build:native --target aarch64-apple-darwin
           bun run build:native --target x86_64-apple-darwin
+          bun run build:native --extension terminal --target aarch64-apple-darwin
+          bun run build:native --extension terminal --target x86_64-apple-darwin
       - name: Test JavaScript packages
         run: |
           bun run test:js
           bun run typecheck:js
+      - name: Verify optional native extension bundles
+        run: bun scripts/check-extensions.ts
       - name: Build and verify npm tarballs
-        run: scripts/package-npm-release.sh target/npm-release
+        run: bun scripts/package-npm-release.ts target/npm-release
       - name: Verify registry publication plan
         run: |
           scripts/release-crates.sh --check
-          scripts/release-npm.sh --check target/npm-release
+          bun scripts/release-npm.ts --check target/npm-release
       - name: Upload npm release candidates
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -127,9 +131,9 @@ jobs:
             git push origin "refs/tags/$go_tag"
           fi
       - name: Publish npm packages
-        run: scripts/release-npm.sh --publish target/npm-release
+        run: bun scripts/release-npm.ts --publish target/npm-release
       - name: Verify public registry installs
-        run: scripts/release-registry-smoke.sh '${{ steps.release.outputs.version }}'
+        run: bun scripts/release-registry-smoke.ts '${{ steps.release.outputs.version }}'
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

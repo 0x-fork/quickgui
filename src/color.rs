@@ -102,6 +102,7 @@ impl Default for Color {
     }
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 impl From<quickgui_system::SystemColor> for Color {
     fn from(color: quickgui_system::SystemColor) -> Self {
         Self::rgba8(color.red, color.green, color.blue, color.alpha)

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use super::data::EdgeBackgrounds;
 
 use crate::{Canvas, Color, Rect};
 
@@ -38,53 +38,6 @@ impl CellMetrics {
             physical_height,
             scale_factor,
         }
-    }
-}
-
-/// Resolved backgrounds along the four edges of the terminal grid.
-///
-/// Ghostty's `window-padding-color=extend` paints each padding pixel with the nearest edge cell.
-/// Retaining only the edges keeps that behavior bounded to O(columns + rows) snapshot storage.
-#[derive(Clone, Debug)]
-pub(super) struct EdgeBackgrounds {
-    pub(super) top: Arc<[Option<Color>]>,
-    pub(super) right: Arc<[Option<Color>]>,
-    pub(super) bottom: Arc<[Option<Color>]>,
-    pub(super) left: Arc<[Option<Color>]>,
-}
-
-impl EdgeBackgrounds {
-    pub(super) fn new(
-        top: Vec<Option<Color>>,
-        right: Vec<Option<Color>>,
-        bottom: Vec<Option<Color>>,
-        left: Vec<Option<Color>>,
-    ) -> Self {
-        Self {
-            top: top.into(),
-            right: right.into(),
-            bottom: bottom.into(),
-            left: left.into(),
-        }
-    }
-
-    pub(super) fn empty(columns: u16, rows: u16) -> Self {
-        Self::new(
-            vec![None; usize::from(columns)],
-            vec![None; usize::from(rows)],
-            vec![None; usize::from(columns)],
-            vec![None; usize::from(rows)],
-        )
-    }
-
-    #[cfg(test)]
-    fn solid(columns: u16, rows: u16, color: Color) -> Self {
-        Self::new(
-            vec![Some(color); usize::from(columns)],
-            vec![Some(color); usize::from(rows)],
-            vec![Some(color); usize::from(columns)],
-            vec![Some(color); usize::from(rows)],
-        )
     }
 }
 
@@ -255,10 +208,6 @@ fn for_each_color_run(
         }
         start = end;
     }
-}
-
-pub(super) fn is_block_element(character: char) -> bool {
-    matches!(character as u32, 0x2580..=0x259f)
 }
 
 /// Paint one Unicode Block Elements glyph using Ghostty's cell-fraction rules.

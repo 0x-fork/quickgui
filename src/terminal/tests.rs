@@ -42,6 +42,7 @@ fn terminal_rows_drop_invisible_grid_padding_and_clip_highlights() {
     assert_eq!(highlights[0].0, 4..6);
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_pointer_cells_clamp_to_the_complete_grid() {
     assert_eq!(terminal_pointer_cell(-12.0, 8.0, 10), 0);
@@ -61,6 +62,7 @@ fn terminal_cursor_and_blank_cell_backgrounds_remain_visible() {
     );
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_cursor_highlight_overrides_and_splits_ansi_runs() {
     let ansi = HighlightStyle::default().color(Color::rgb8(255, 0, 0));
@@ -75,6 +77,7 @@ fn terminal_cursor_highlight_overrides_and_splits_ansi_runs() {
     assert_eq!(highlights[2], (5..10, ansi));
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_cursor_blink_restarts_immediately_on_each_focus_gain() {
     let start = Instant::now();
@@ -96,6 +99,7 @@ fn terminal_cursor_blink_restarts_immediately_on_each_focus_gain() {
     assert_eq!(blink.update_focus(true, second_focus), second_focus);
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_wheel_follows_platform_content_motion_and_retains_fractional_rows() {
     let mut remainder = 0.0;
@@ -118,6 +122,7 @@ fn terminal_wheel_follows_platform_content_motion_and_retains_fractional_rows() 
     );
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_scrollbar_geometry_reaches_both_ends() {
     let mut state = TerminalScrollState {
@@ -136,6 +141,7 @@ fn terminal_scrollbar_geometry_reaches_both_ends() {
     assert!(terminal_scrollbar_geometry(TerminalScrollState::initial(24), 200.0).is_none());
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_scrollbar_reveals_expands_and_auto_hides() {
     let start = Instant::now();
@@ -231,6 +237,7 @@ fn every_encoded_keystroke_follows_the_live_prompt() {
     ));
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_style_normalizes_content_padding() {
     let style = TerminalStyle {
@@ -252,6 +259,7 @@ fn terminal_style_normalizes_content_padding() {
     assert!(style.font_thicken);
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[test]
 fn terminal_selection_uses_pointer_coordinates_local_to_the_terminal() {
     let event = PointerEvent {

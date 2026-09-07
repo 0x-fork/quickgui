@@ -8,7 +8,7 @@ import (
 
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/reactive"
-	"github.com/egoist/quickgui/go/ui"
+	"github.com/egoist/quickgui/go/terminal"
 )
 
 func testModel(t *testing.T, fn func(*model)) {
@@ -151,7 +151,7 @@ func TestAgentsAreDetectedNotAssumedFromLaunch(t *testing.T) {
 		if len(m.visibleAgents()) != 0 {
 			t.Fatal("requested program was counted as a detected agent")
 		}
-		p.Status.Write(ui.TerminalStatusDetails{
+		p.Status.Write(terminal.StatusDetails{
 			Status:      "running",
 			Agent:       "codex",
 			AgentStatus: "working",
@@ -160,7 +160,7 @@ func TestAgentsAreDetectedNotAssumedFromLaunch(t *testing.T) {
 		if len(m.visibleAgents()) != 1 || paneTitle(p) != "Codex" || aggregateStatus(m.visibleAgents()) != "working" {
 			t.Fatal("native agent state not reflected")
 		}
-		p.Status.Write(ui.TerminalStatusDetails{
+		p.Status.Write(terminal.StatusDetails{
 			Status:      "running",
 			Agent:       "codex",
 			AgentStatus: "blocked",
@@ -169,7 +169,7 @@ func TestAgentsAreDetectedNotAssumedFromLaunch(t *testing.T) {
 		if paneTitle(p) != "Review changes" || aggregateStatus(m.visibleAgents()) != "blocked" {
 			t.Fatal("agent title or blocked status lost")
 		}
-		p.Status.Write(ui.TerminalStatusDetails{Status: "running", Title: "zsh"})
+		p.Status.Write(terminal.StatusDetails{Status: "running", Title: "zsh"})
 		if len(m.visibleAgents()) != 0 {
 			t.Fatal("agent lingered after returning to shell")
 		}

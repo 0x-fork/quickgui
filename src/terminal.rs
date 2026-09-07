@@ -1,23 +1,21 @@
 //! A retained, PTY-backed terminal component powered by libghostty-vt.
 
+#[cfg(not(quickgui_terminal_extension))]
+#[path = "terminal/graphics.rs"]
 mod graphics;
 
-use std::{
-    cell::RefCell,
-    ffi::{OsStr, OsString},
-    io::{Read, Write},
-    ops::Range,
-    path::PathBuf,
-    rc::Rc,
-    sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
-        mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_channel},
-    },
-    thread,
-    time::{Duration, Instant},
+#[cfg(not(quickgui_terminal_extension))]
+use self::graphics::{CellMetrics, paint_block, paint_padding_extension};
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+use crate::terminal_process::DetectedAgentProcess;
+#[cfg(not(quickgui_terminal_extension))]
+use crate::{
+    AccessibilityRole, ClipboardItem, Element, ElementId, EventContext, FontFamily, GesturePhase,
+    IntoElement, KeyDownEvent, KeyUpEvent, MouseButton, PointerEvent, PointerPhase, Rect,
+    StyledText, ViewContext, canvas, div,
 };
-
+use crate::{Color, HighlightStyle, Key, MAX_TEXT_HIGHLIGHTS, Modifiers, WindowInvalidator};
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 use libghostty_vt::{
     RenderState, Terminal as GhosttyTerminal, TerminalOptions as GhosttyTerminalOptions,
     fmt::Format as GhosttyFormat,
@@ -38,20 +36,42 @@ use libghostty_vt::{
     style::{RgbColor, Underline},
     terminal::{Mode, Point as GhosttyPoint, PointCoordinate, ScrollViewport},
 };
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-
-use self::graphics::{
-    CellMetrics, EdgeBackgrounds, is_block_element, paint_block, paint_padding_extension,
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+use std::{
+    cell::RefCell,
+    io::{Read, Write},
+    rc::Rc,
+    sync::{
+        RwLock,
+        atomic::AtomicBool,
+        mpsc::{Receiver, SyncSender, TryRecvError, sync_channel},
+    },
+    thread,
 };
-use crate::terminal_process::DetectedAgentProcess;
-use crate::ui_tree::static_selection_color;
-use crate::{
-    AccessibilityRole, ClipboardItem, Color, Element, ElementId, EventContext, FontFamily,
-    GesturePhase, HighlightStyle, IntoElement, Key, KeyDownEvent, KeyUpEvent, MAX_TEXT_HIGHLIGHTS,
-    Modifiers, MouseButton, PointerEvent, PointerPhase, Rect, StyledText, ViewContext,
-    WindowInvalidator, canvas, div,
+use std::{
+    ffi::{OsStr, OsString},
+    ops::Range,
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU32, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
 };
-
+#[path = "terminal/data.rs"]
+mod data;
+use data::EdgeBackgrounds;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+use data::is_block_element;
+#[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+#[path = "terminal/extension.rs"]
+mod extension;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+use crate::static_selection_color;
+#[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+use extension::{GhosttyKeyAction, GhosttySelectionGeometry};
 /// Maximum UTF-8 bytes accepted for a program, argument, environment entry, or working directory.
 pub const MAX_TERMINAL_STRING_BYTES: usize = 32 * 1024;
 /// Maximum arguments retained by one terminal process declaration.
@@ -70,11 +90,17 @@ const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_CELL_WIDTH_RATIO: f32 = 0.6;
 const MAX_COLS: u16 = 512;
 const MAX_ROWS: u16 = 256;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 const MESSAGE_CAPACITY: usize = 256;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 const READ_CHUNK_BYTES: usize = 16 * 1024;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 const WORKER_BATCH_LIMIT: usize = 256;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 const AGENT_PROCESS_PROBE_INTERVAL: Duration = Duration::from_millis(500);
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 const AGENT_RECENT_ACTIVITY: Duration = Duration::from_millis(1_200);
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 const TERM_PROGRAM_VALUE: &str = "ghostty";
 const TERMINAL_SCROLLBAR_HIT_WIDTH: f32 = 12.0;
 const TERMINAL_SCROLLBAR_IDLE_WIDTH: f32 = 3.0;
@@ -87,6 +113,7 @@ const TERMINAL_SCROLLBAR_ID_TAG: u64 = 0x7465_726d_7363_726c;
 const TERMINAL_TEXT_ID_TAG: u64 = 0x7465_726d_7465_7874;
 const TERMINAL_SELECTION_ID_TAG: u64 = 0x7465_726d_7365_6c65;
 const TERMINAL_CURSOR_BLINK_HALF_PERIOD: Duration = Duration::from_millis(500);
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 const TERMINAL_MULTI_CLICK_INTERVAL: Duration = Duration::from_millis(500);
 const TERMINAL_MULTI_CLICK_DISTANCE: f32 = 4.0;
 
@@ -124,7 +151,7 @@ impl Default for TerminalOptions {
 }
 
 impl TerminalOptions {
-    fn validate(&self) -> Result<(), TerminalError> {
+    pub(crate) fn validate(&self) -> Result<(), TerminalError> {
         if !(1..=MAX_COLS).contains(&self.cols) || !(1..=MAX_ROWS).contains(&self.rows) {
             return Err(TerminalError::InvalidSize);
         }
@@ -324,10 +351,10 @@ pub struct TerminalSnapshot {
     pub working_directory: Arc<str>,
     pub scroll: TerminalScrollState,
     pub cursor: Option<TerminalCursor>,
-    selected_text: Option<Arc<str>>,
-    cursor_range: Option<Range<usize>>,
-    graphics: Arc<[TerminalCellGraphic]>,
-    edge_backgrounds: EdgeBackgrounds,
+    pub(crate) selected_text: Option<Arc<str>>,
+    pub(crate) cursor_range: Option<Range<usize>>,
+    pub(crate) graphics: Arc<[TerminalCellGraphic]>,
+    pub(crate) edge_backgrounds: EdgeBackgrounds,
     pub status: TerminalStatus,
     pub agent: Option<TerminalAgent>,
 }
@@ -361,14 +388,15 @@ impl TerminalSnapshot {
 /// Terminal emulators synthesize these glyphs so adjoining blocks cover the grid exactly. Keeping
 /// the original character in `TerminalSnapshot::content` preserves selection and clipboard text.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct TerminalCellGraphic {
-    column: u16,
-    row: u16,
-    character: char,
-    foreground: Option<Color>,
+pub(crate) struct TerminalCellGraphic {
+    pub(crate) column: u16,
+    pub(crate) row: u16,
+    pub(crate) character: char,
+    pub(crate) foreground: Option<Color>,
 }
 
 /// How a terminal paints the space between its grid and its element bounds.
+#[cfg(not(quickgui_terminal_extension))]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum TerminalPaddingColor {
     /// Paint padding with the terminal's default background.
@@ -379,6 +407,7 @@ pub enum TerminalPaddingColor {
 }
 
 /// Visual metrics for a [`Terminal`] element.
+#[cfg(not(quickgui_terminal_extension))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TerminalStyle {
     pub font_family: FontFamily,
@@ -403,6 +432,7 @@ pub struct TerminalStyle {
     pub theme: Option<TerminalTheme>,
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 impl Default for TerminalStyle {
     fn default() -> Self {
         Self {
@@ -423,6 +453,7 @@ impl Default for TerminalStyle {
     }
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 impl TerminalStyle {
     fn normalized(&self) -> Self {
         Self {
@@ -455,26 +486,42 @@ pub struct Terminal {
 }
 
 struct TerminalInner {
+    #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
     messages: SyncSender<WorkerMessage>,
+    #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
     snapshot: Arc<RwLock<Arc<TerminalSnapshot>>>,
+    #[cfg(not(quickgui_terminal_extension))]
     last_size: AtomicU64,
+    #[cfg(not(quickgui_terminal_extension))]
     viewport_height_bits: AtomicU32,
+    #[cfg(not(quickgui_terminal_extension))]
     viewport_bounds: Mutex<Rect>,
+    #[cfg(not(quickgui_terminal_extension))]
     selection_epoch: Instant,
+    #[cfg(not(quickgui_terminal_extension))]
     wheel_remainder: Mutex<f32>,
+    #[cfg(not(quickgui_terminal_extension))]
     scrollbar_drag_remainder: Mutex<f32>,
+    #[cfg(not(quickgui_terminal_extension))]
     scrollbar_interaction: Mutex<TerminalScrollbarInteraction>,
+    #[cfg(not(quickgui_terminal_extension))]
     cursor_blink: Mutex<TerminalCursorBlink>,
+    #[cfg(not(quickgui_terminal_extension))]
     theme: Mutex<Option<TerminalTheme>>,
+    #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
     shutdown: Arc<AtomicBool>,
+    #[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+    session: extension::Session,
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[derive(Clone, Copy, Debug)]
 struct TerminalCursorBlink {
     focused: bool,
     epoch: Instant,
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 impl TerminalCursorBlink {
     fn new(now: Instant) -> Self {
         Self {
@@ -496,6 +543,7 @@ impl TerminalCursorBlink {
     }
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[derive(Default)]
 struct TerminalScrollbarInteraction {
     hovered: bool,
@@ -503,6 +551,7 @@ struct TerminalScrollbarInteraction {
     visible_until: Option<Instant>,
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct TerminalScrollbarPresentation {
     visible: bool,
@@ -510,6 +559,7 @@ struct TerminalScrollbarPresentation {
     hide_at: Option<Instant>,
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 impl TerminalScrollbarInteraction {
     fn reveal(&mut self, now: Instant) {
         self.visible_until = Some(now + TERMINAL_SCROLLBAR_HIDE_DELAY);
@@ -541,6 +591,7 @@ impl TerminalScrollbarInteraction {
     }
 }
 
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 impl Drop for TerminalInner {
     fn drop(&mut self) {
         self.shutdown.store(true, Ordering::Release);
@@ -548,13 +599,26 @@ impl Drop for TerminalInner {
     }
 }
 
+#[path = "terminal/api.rs"]
 mod api;
+#[cfg(quickgui_terminal_extension)]
+#[path = "terminal/extension_backend.rs"]
+pub(crate) mod extension_backend;
+#[cfg(not(quickgui_terminal_extension))]
+#[path = "terminal/render.rs"]
 mod render;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+#[path = "terminal/snapshot.rs"]
 mod snapshot;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+#[path = "terminal/worker.rs"]
 mod worker;
 
+#[cfg(not(quickgui_terminal_extension))]
 use render::*;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 use snapshot::*;
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 use worker::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -566,7 +630,9 @@ struct TerminalSize {
 }
 
 enum WorkerMessage {
+    #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
     Output(Vec<u8>),
+    #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
     ReaderClosed,
     Input(Vec<u8>),
     Paste(String),
@@ -576,6 +642,7 @@ enum WorkerMessage {
     Selection(TerminalSelectionInput),
     SelectAll,
     Theme(Option<Box<TerminalTheme>>),
+    #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
     Shutdown,
 }
 
@@ -600,6 +667,7 @@ struct TerminalSelectionInput {
     rectangle: bool,
 }
 
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 struct TerminalSelectionState {
     gesture: GhosttySelectionGesture<'static>,
     press: GhosttySelectionPressEvent<'static>,
@@ -608,6 +676,7 @@ struct TerminalSelectionState {
     anchor: Option<(u16, u16)>,
 }
 
+#[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 impl TerminalSelectionState {
     fn new() -> Result<Self, libghostty_vt::Error> {
         Ok(Self {
@@ -697,6 +766,7 @@ struct TerminalKeyInput {
     action: GhosttyKeyAction,
 }
 
+#[cfg(not(quickgui_terminal_extension))]
 impl TerminalKeyInput {
     fn down(event: &KeyDownEvent) -> Self {
         Self {
@@ -723,5 +793,36 @@ impl TerminalKeyInput {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(feature = "terminal", quickgui_terminal_extension)))]
+#[path = "terminal/tests.rs"]
 mod tests;
+
+#[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+fn valid_os_string(value: &OsStr) -> bool {
+    let value = value.to_string_lossy();
+    value.len() <= MAX_TERMINAL_STRING_BYTES && !value.contains('\0')
+}
+
+#[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+fn finite_clamp(value: f32, min: f32, max: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(min, max)
+    } else {
+        fallback
+    }
+}
+
+#[cfg(not(any(feature = "terminal", quickgui_terminal_extension)))]
+fn pack_size(size: TerminalSize) -> u64 {
+    u64::from(size.cols)
+        | (u64::from(size.rows) << 16)
+        | (u64::from(size.cell_width_px.min(u16::MAX as u32)) << 32)
+        | (u64::from(size.cell_height_px.min(u16::MAX as u32)) << 48)
+}
+
+fn key_character(key: &Key) -> Option<&str> {
+    match key {
+        Key::Character(value) => Some(value),
+        _ => None,
+    }
+}

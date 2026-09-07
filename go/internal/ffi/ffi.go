@@ -27,6 +27,7 @@ type Event struct {
 type Library struct {
 	handle              uintptr // Keep loaded for process lifetime: AppKit and service threads retain code pointers.
 	ProtocolVersion     func() uint32
+	RegisterExtension   func(uintptr, []byte, uintptr) int32
 	RunHost             func() int32
 	SetEventCallback    func(uintptr, uintptr)
 	ClearEventCallback  func(uintptr, uintptr)
@@ -64,6 +65,7 @@ func Load(path string, protocol uint32) (lib *Library, err error) {
 		fn   any
 	}{
 		{"protocol_version", &lib.ProtocolVersion}, {"run_host", &lib.RunHost},
+		{"register_extension", &lib.RegisterExtension},
 		{"set_event_callback", &lib.SetEventCallback}, {"clear_event_callback", &lib.ClearEventCallback},
 		{"create_app", &lib.CreateApp}, {"prepare_app", &lib.PrepareApp},
 		{"allocate_window", &lib.AllocateWindow}, {"create_window", &lib.CreateWindow},

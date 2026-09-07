@@ -41,6 +41,7 @@ Winit + AccessKit events
 
 - [Runtime and ownership](runtime.md) — windows, platform effects, shared entities, and globals.
 - [Scheduling](scheduling.md) — damage-driven frames, foreground work, and performance invariants.
+- [Native extensions](extensions.md) — optional backends, Go import discovery, ABI ownership, and release artifacts.
 - [Performance guide](performance.md) — required invariants and regression checks for runtime and rendering changes.
 - [Input and interaction](input.md) — keyboard layouts, retained identity, actions, menus, drag/drop, gestures, text, and accessibility.
 - [Layout and rendering](rendering.md) — Taffy layout, WGPU pipelines, caches, images, animation, and first-frame presentation.
