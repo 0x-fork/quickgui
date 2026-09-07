@@ -1,0 +1,233 @@
+拡張は、QuickGUI のコンポーネントを組み合わせる通常の Go パッケージとしても、別途ビルドしたネイティブライブラリを使う Go パッケージとしても作成できます。既存の UI とプラットフォーム API で実現できる機能には Go を使います。オプションのネイティブ依存関係が必要な場合は、terminal や[自動更新](/docs/updater)パッケージのようなプロバイダーを追加します。
+
+## 拡張の種類を選ぶ
+
+| 追加する機能 | 配布するもの | コアの変更 |
+| --- | --- | --- |
+| コンポーネント、テーマ、アプリのロジック | Go モジュール | 不要 |
+| 既存のプロバイダーインターフェースの実装 | Go パッケージ、マニフェスト、ネイティブ成果物 | 登録済みプロバイダーとの一致が必要 |
+| 新しいネイティブサービスやノード型 | 上記に加えてコアへの統合 | 現時点では必要 |
+
+**ネイティブ拡張には現在、コアへの統合が必要です。** コアが認識する名前は `terminal` と `updater` で、任意のサードパーティープロバイダー名は受け付けません。CLI は npm パッケージ名にも `@quickgui/native-<name>` という形式を要求します。マニフェストを追加するだけでは登録されず、別の npm scope も使用できません。以下のネイティブ手順は QuickGUI への機能提供、または対応する fork の作成を対象としています。通常の Go パッケージでは、自分のモジュールパスとリリースサイクルを使用できます。
+
+拡張はアプリと同じプロセスで動作します。Go アプリは purego を通じてコアと選択されたプロバイダーを読み込みます。各プロバイダーがバックエンドの依存関係を所有し、レンダラー、レイアウト、ネイティブイベントループはコアに残ります。Go コードの編集時にはライブラリを再利用するため、利用者が毎回ネイティブバックエンドを再ビルドする必要はありません。
+
+## Go コンポーネントを共有する
+
+自分のリポジトリパスで Go モジュールを作り、Go SDK に依存してコンポーネント関数を公開します。このパッケージにネイティブマニフェストや npm パッケージは必要ありません。
+
+```go
+package notice
+
+import "github.com/egoist/quickgui/go/ui"
+
+func Notice(message func() string, style ui.Style) {
+	ui.Text(
+		message,
+		ui.Style{
+			Padding:         12,
+			BackgroundColor: "#eff6ff",
+			Color:           "#1e40af",
+			BorderRadius:    8,
+		},
+		style,
+	)
+}
+```
+
+コンポーネントや children コールバック内で `notice.Notice(message, ui.Style{Padding: 16})` を呼びます。アクセサーはリアクティブなままで、呼び出し側のスタイルが既定のスタイルの後にマージされます。コンポーネント関数はノードを返さず、子を宣言します。マウントされたコンポーネントのリソースは `ui.OnCleanup` で解放し、アプリ全体のサービスはコンポーネントの所有権から切り離します。
+
+Go のバージョンタグでモジュールを公開し、対応する SDK バージョンを明記します。利用者はモジュールパスを指定して `go get` します。`terminal` や `updater` の間接的なインポートも、そのネイティブ拡張をアプリに含めます。オプションの統合は別パッケージやビルドタグ付きファイルに分けてください。
+
+## ネイティブ拡張の構成
+
+以降の `echo` は QuickGUI の checkout に追加するサービスプロバイダーの例で、**標準コアには含まれません**。既存の updater 拡張と同じ構成を使います。
+
+```text
+go/echo/
+  echo.go
+  quickgui.extension.json
+crates/quickgui-echo/
+  Cargo.toml
+  src/lib.rs
+packages/native-echo/
+  package.json
+  lib/darwin-arm64/libquickgui_echo.dylib
+scripts/build-echo.ts
+```
+
+crate を workspace members に追加し、`cdylib` としてビルドします。`quickgui`、`quickgui-host`、WGPU、Taffy に依存せず、同じコアのリビジョンにある小さな ABI 定義を共有します。別のランタイムをリンクしないでください。動作する例は updater の [Cargo 設定](https://github.com/egoist/quickgui/blob/main/crates/quickgui-updater/Cargo.toml)と[エントリポイント](https://github.com/egoist/quickgui/blob/main/crates/quickgui-updater/src/lib.rs)です。
+
+例ではリリース `0.1.3` を使用します。すべての箇所を対象コアのリリースに置き換えてください。ネイティブ記述子のバージョンはコアと完全に一致する必要があり、ABI `1` が同じでもリリース間の互換性は保証されません。Go マニフェストと npm パッケージのバージョンも一致させます。
+
+## Go 依存関係を宣言する
+
+マニフェストは**実際にインポートされる Go パッケージのソースの隣**に置きます。モジュールのルートやアプリ設定だけに置いても検出されません。
+
+```json
+{
+  "schema": 1,
+  "name": "echo",
+  "abi": 1,
+  "package": "@quickgui/native-echo",
+  "version": "0.1.3",
+  "library": "quickgui_echo"
+}
+```
+
+名前は小文字で始め、小文字、数字、ハイフンのみを使い、64 文字以内にします。`library` は `quickgui_` と、名前のハイフンをアンダースコアにした文字列です。`lib` 接頭辞や拡張子は含めません。マニフェストの上限は 16 KiB、アプリごとのプロバイダー数の上限は 32 です。
+
+Go パッケージは初期化時に同じ名前を記録し、明示的な起動関数を公開します。
+
+```go
+package echo
+
+import (
+	"github.com/egoist/quickgui/go/host"
+	"github.com/egoist/quickgui/go/native"
+)
+
+func init() {
+	host.RequireExtension("echo")
+}
+
+func Open(changed func(string), ready func(error)) *native.ExtensionSession {
+	return native.OpenExtension("echo", struct{}{}, changed, ready)
+}
+```
+
+`RequireExtension` は依存関係を記録するだけです。`init` でライブラリをロードしたり、ウィンドウやワーカーを起動したりしないでください。`native.Run` の準備完了後に `Open` を呼び、`ready` の成功コールバックを待ってから `session.Command("send", value, done)` を使います。所有者の破棄時に UI goroutine でセッションを閉じます。コールバックも同じ goroutine で実行されます。公開パッケージでは通常、生の JSON イベント文字列やコマンドを、型付きのオプション、イベント、メソッドで包みます。
+
+CLI はコンパイルと同じエントリパッケージ、ターゲット、ビルドタグで `go list -deps` を実行します。間接インポートも対象になり、除外されたファイルは対象になりません。マニフェストは同梱する成果物を、`RequireExtension` は実行時にロードするライブラリを決めるため、両方が必要です。
+
+## ネイティブインターフェースを実装する
+
+対象コアのリビジョンにある [`src/extension_api.rs`](https://github.com/egoist/quickgui/blob/main/src/extension_api.rs) を使います。境界を渡るのは C レイアウト、固定幅のフィールド、借用されたバイト範囲、関数ポインター、不透明なハンドルだけです。Rust の文字列、trait オブジェクト、アロケーターの所有権は作成元のライブラリ内に保ちます。
+
+サービスは `ServiceApi.invoke` と `ServiceApi.shutdown` を実装します。次の記述子はその実装の後に置く断片です。`ECHO_EXTENSION` は次節で追加する種類を表します。
+
+```rust
+#[path = "../../../src/extension_api.rs"]
+mod abi;
+
+static API: abi::ServiceApi = abi::ServiceApi { invoke, shutdown };
+
+static EXTENSION: abi::Extension = abi::Extension {
+    abi_version: abi::ABI_VERSION,
+    descriptor_size: size_of::<abi::Extension>() as u32,
+    kind: abi::ECHO_EXTENSION,
+    api_size: size_of::<abi::ServiceApi>() as u32,
+    name: abi::Bytes::new(b"echo"),
+    version: abi::Bytes::new(env!("CARGO_PKG_VERSION").as_bytes()),
+    api: std::ptr::addr_of!(API).cast(),
+};
+
+/// # Safety
+/// Use this descriptor only according to the matching QuickGUI extension ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quickgui_extension_v1() -> *const abi::Extension {
+    &EXTENSION
+}
+```
+
+記述子、文字列、関数テーブルには静的なライフタイムが必要です。`invoke` が戻る前に借用入力を検証・コピーし、処理をキューに入れて即座に戻ります。ネットワーク、他のワーカー、ネイティブメインスレッドの実行を同期的に待たないでください。キュー、メッセージ、セッション数、保持データには上限を設けます。回復可能な Rust の panic は `extern "C"` 境界を越える前に捕捉します。
+
+Go セッションのプロトコルは次のとおりです。
+
+| リクエスト | パラメーター | プロバイダーの責任 |
+| --- | --- | --- |
+| `start` | `OpenExtension` に渡したオプションの JSON | リクエスト ID をセッション ID とし、応答後もイベント sink を保持 |
+| `send` などのコマンド | `{"session": 123, "value": "hello"}` | セッションを検索し、そのコマンド自身の応答を完了 |
+| `stop` | `{"session": 123}` | 新規作業の受付を停止し、リソースをキャンセルして応答 |
+| `shutdown` 関数 | なし | UI スレッドをブロックせずに全セッションをキャンセル |
+
+`ServiceSink.emit` の kind `0` は成功した JSON 応答、`1` は UTF-8 のエラー、`2` は JSON のセッションイベントです。戻り値のない成功応答にも `null` などの有効な JSON を渡します。現在の host は出力ペイロードを 64 KiB に制限します。バイト列が借用されるのは `emit` の間だけで、host は既存のイベントキューにコピーします。
+
+start の sink は応答後もイベントを送れるように保持します。各コマンドは別の sink を持ちます。エラーや受付拒否を含むすべての経路で、最後のコールバック後に各 sink の `release` を正確に一度だけ呼びます。セッションを閉じたら以降のイベントを抑止してワーカーを解放し、ライブラリがロードされたままであることを理由にセッションを残さないでください。関数ポインターが参照される可能性があるため、ライブラリ自体はプロセス終了までロードされたままです。
+
+サービス全体、上限付きスケジューリング、コールバック所有権は [updater](https://github.com/egoist/quickgui/tree/main/crates/quickgui-updater/src) を、型付きフレームの受け渡しは [terminal](https://github.com/egoist/quickgui/tree/main/crates/quickgui-terminal) を参照してください。表示バックエンドは保持型のコアアダプターに変化したデータを返し、別のレンダラーを動かしません。`ui.NativeElement` に任意の tag を渡しても、新しいノード型の登録にはなりません。
+
+## コアに登録する
+
+新しいプロバイダーには現在、同じコアビルド内で次の変更が必要です。
+
+1. `src/extension_api.rs` に固有の拡張種類と、必要に応じて型付き関数テーブルを追加します。リクエストとイベントのサービスには `ServiceApi` を再利用できます。
+2. `src/extensions.rs` を拡張し、名前、種類、テーブルサイズ、ABI、正確なリリースバージョンを検証してからテーブルを保存します。重複登録の検証も保持します。
+3. サービス名を `service(name)` に追加し、`shutdown_services()` の対象に含めます。既存の host ルーターが `crates/quickgui-host/src/extension_services.rs` を通じて `extension/echo/<method>` を処理します。
+4. 新しい表示ノードにはコアアダプターとプロトコル/tag 処理も追加し、保持型ノードの同一性、細かな無効化、コンポーネントの後始末を維持します。
+5. ビルド、バージョン同期、パッケージ化、リリース検証のスクリプトに追加します。標準の `--extension` ビルド引数は現在 `terminal` と `updater` のみを認識します。
+
+アプリはプロバイダーとともに変更済みのコアをロードする必要があります。新しい種類でコンパイルしたプロバイダーを公開しても、古い標準コアが理解できるようにはなりません。再利用可能なネイティブ機能はコア統合を貢献するか、対応するコア/CLI fork を配布し、互換性条件を明記します。自分の npm scope で公開する場合、現在の CLI では fork のマニフェスト検証器も変更する必要があります。`@quickgui` はプロジェクトが予約する名前空間です。
+
+## 成果物のビルドとパッケージ化
+
+TypeScript スクリプトを Bun で実行し、ネイティブ成果物を一度ビルドします。crate を checkout に追加した後、次の `scripts/build-echo.ts` は現在のホストアーキテクチャ用の成果物を配置します。
+
+```ts
+import { copyFileSync, mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const root = resolve(import.meta.dir, "..");
+const platforms: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: "darwin", linux: "linux", win32: "windows",
+};
+const platform = platforms[process.platform];
+if (!platform || !["arm64", "x64"].includes(process.arch)) {
+  throw new Error("Unsupported build host");
+}
+const build = Bun.spawn(["cargo", "build", "-p", "quickgui-echo", "--lib", "--release"], {
+  cwd: root,
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if (await build.exited !== 0) throw new Error("Native build failed");
+
+const filename = platform === "darwin" ? "libquickgui_echo.dylib"
+  : platform === "windows" ? "quickgui_echo.dll" : "libquickgui_echo.so";
+const destination = join(root, "packages/native-echo/lib", `${platform}-${process.arch}`);
+const cargoTarget = resolve(root, process.env.CARGO_TARGET_DIR ?? "target");
+mkdirSync(destination, { recursive: true });
+copyFileSync(join(cargoTarget, "release", filename), join(destination, filename));
+```
+
+対応する各ターゲットのホストで `bun scripts/build-echo.ts` を実行します。このスクリプトはクロスコンパイルしません。macOS は `.dylib`、Linux は `.so`、Windows は `.dll` を使います。ターゲットディレクトリは `darwin-arm64`、`darwin-x64`、`linux-arm64`、`linux-x64`、`windows-arm64`、`windows-x64` です。実際にビルドして検証したターゲットだけを配布します。
+
+ネイティブ npm パッケージには成果物を含め、リゾルバー用のメタデータを公開します。
+
+```json
+{
+  "name": "@quickgui/native-echo",
+  "version": "0.1.3",
+  "files": ["lib", "README.md"],
+  "exports": { "./package.json": "./package.json" }
+}
+```
+
+このパッケージはオプションのままにします。Go のインポートが必要性を決めるので、コア npm パッケージの依存関係には追加しません。機能の組み合わせごとにパッケージを作らず、独立したプロバイダーパッケージを公開します。現在の QuickGUI リリースパイプラインは macOS のビルド済み成果物を公開します。他のターゲットはビルド、パッケージ化、テストを明示的に追加する必要があります。
+
+ヘルパー実行ファイルやリソースは、マニフェストの `resources` オブジェクトにファイルの basename を宣言します。キーは `darwin`、`linux`、`windows` で、各プラットフォームの上限は重複のない 16 ファイルです。同じリストを両アーキテクチャに適用します。対応ターゲットのライブラリの隣に配置すると、CLI が一緒にコピーし、通常のリソース実行ファイルに実行権限を設定します。
+
+ディレクトリのリソースには、リポジトリの [`packResources`](https://github.com/egoist/quickgui/blob/main/packages/cli/src/extension-resources.ts) で生成した `.qgr` を使います。エントリー数とバイト数を制限しつつ、実行権限と制限された相対シンボリックリンクを保持します。これは内部のパッケージツールで、独立してバージョン管理された拡張作者向け SDK ではありません。Sparkle の設定とネストしたコードの署名は CLI が個別に扱っており、別の macOS framework には専用の署名とリソース統合が必要です。
+
+## テストと配布
+
+ローカルでは対応するコアとプロバイダーをビルドし、絶対パスを指定して利用側アプリを構築します。`QUICKGUI_EXTENSION_DIR` は親の `lib` ではなく、選択したターゲットの成果物ディレクトリを直接指します。
+
+```sh
+QUICKGUI_LIBRARY=/absolute/path/libquickgui_host.dylib \
+QUICKGUI_EXTENSION_DIR=/absolute/path/native-echo/lib/darwin-arm64 \
+bun packages/cli/src/cli.ts dev --project examples/echo --once --no-launch
+```
+
+実行前に `go/echo` をインポートする利用側の例を作成してください。明示した拡張ディレクトリは優先され、間接的な要件を含むすべての必須拡張と宣言済みリソースが必要です。上書きがなければ CLI は、同じバージョンのインストール済み npm パッケージ、checkout の配置済み成果物、公開 npm registry からの正確なバージョンのダウンロードの順で解決します。tarball には SHA-512 整合性情報が必要です。リゾルバーは宣言された成果物だけを抽出し、キャッシュのバイト列も検証します。プライベート registry からの自動ダウンロードには現在対応していません。
+
+出荷前に次の動作を確認します。
+
+- インポートがなければ、プロバイダーやそのオプションの依存関係が含まれないこと。間接インポートの追加と削除が新しいバンドルに反映されること。
+- 配布用実行ファイルが、対応するコアとプロバイダーを purego で読み込むこと。ファイル不足、名前や ABI/リリースバージョンの不一致、依存関係の競合がエラーになること。
+- 起動、起動完了前のクローズ、繰り返しのクローズ、キャンセル、アプリ終了で、すべてのコールバックコンテキストとワーカーが解放され、破棄後にイベントを送らないこと。
+- バックグラウンド処理が UI をブロックしないこと。クリーンなセッションは休眠し、キュー、スナップショット、キャッシュ、リソースのペイロードに上限があること。[性能ガイド](https://github.com/egoist/quickgui/blob/main/docs/architecture/performance.md)に従ってください。
+- `bun pm pack` にマニフェスト内のすべてのライブラリとリソースが含まれること。別の利用側プロジェクトにアーカイブをインストールし、ネイティブソースの配置済み成果物が使えない状態でビルドして、対応する OS とアーキテクチャで実行すること。
+
+リポジトリの [`scripts/check-extensions.ts`](https://github.com/egoist/quickgui/blob/main/scripts/check-extensions.ts) は標準プロバイダーとその組み合わせを検証します。貢献するプロバイダー向けに拡張するか、fork に同等のテストを用意してください。エンドユーザーが必要とするのはパッケージ化されたアプリだけで、実行に Bun、Cargo、npm パッケージ、ネイティブツールチェーンは不要です。

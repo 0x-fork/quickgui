@@ -211,6 +211,7 @@ function navGroups(locale: Locale): readonly NavGroup[] {
         guideItem('getting-started', locale),
         guideItem('project-structure', locale),
         guideItem('updater', locale),
+        guideItem('extensions', locale),
       ],
     },
     {

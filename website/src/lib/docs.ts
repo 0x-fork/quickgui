@@ -2,6 +2,7 @@ export type DocsSlug =
   | 'getting-started'
   | 'project-structure'
   | 'updater'
+  | 'extensions'
   | 'ui'
   | 'styling'
   | 'animations'
@@ -31,6 +32,22 @@ export interface DocsNavGroup {
 }
 
 export const DOCS_PAGES: readonly DocsPageMeta[] = [
+  {
+    slug: 'extensions',
+    title: 'Authoring Extensions',
+    description: 'Share Go components and build optional native providers for QuickGUI.',
+    outline: [
+      { id: 'choose-an-extension-type', title: 'Choose an extension type' },
+      { id: 'share-a-go-component', title: 'Share a Go component' },
+      { id: 'lay-out-a-native-extension', title: 'Lay out a native extension' },
+      { id: 'declare-the-go-dependency', title: 'Declare the Go dependency' },
+      { id: 'implement-the-native-contract', title: 'Implement the native contract' },
+      { id: 'register-with-the-core', title: 'Register with the core' },
+      { id: 'build-and-package-artifacts', title: 'Build and package artifacts' },
+      { id: 'test-and-distribute', title: 'Test and distribute' },
+    ],
+    searchTerms: ['extension', 'authoring', 'plugin', 'native provider', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'OpenExtension', 'npm'],
+  },
   {
     slug: 'updater', title: 'Automatic Updates',
     description: 'Add optional Sparkle-compatible updates to a Go application.',
@@ -179,7 +196,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
 export const DOCS_NAV: readonly DocsNavGroup[] = [
   {
     title: 'Introduction',
-    items: ['getting-started', 'project-structure', 'updater'],
+    items: ['getting-started', 'project-structure', 'updater', 'extensions'],
   },
   {
     title: 'QuickGUI UI',

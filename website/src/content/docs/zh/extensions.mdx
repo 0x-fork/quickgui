@@ -1,0 +1,233 @@
+扩展既可以是组合 QuickGUI 组件的普通 Go 包，也可以是由独立原生库提供后端的 Go 包。如果现有 UI 和平台 API 已能满足需求，直接使用 Go 即可。需要可选的原生依赖时，再采用 terminal 和[自动更新](/docs/updater)包的原生后端方式。
+
+## 选择扩展类型
+
+| 要添加的功能 | 分发内容 | 是否修改核心 |
+| --- | --- | --- |
+| 组件、主题或应用逻辑 | Go 模块 | 不需要 |
+| 使用现有后端接口的实现 | Go 包、清单和原生产物 | 必须匹配已注册的后端 |
+| 新的原生服务或节点类型 | 上述产物及核心集成 | 目前需要 |
+
+**原生扩展目前需要集成到核心。** 核心只识别 `terminal` 和 `updater`，不会接受任意第三方后端名称。CLI 还要求 npm 包名为 `@quickgui/native-<name>`。仅添加清单不会注册后端，其他 npm scope 也不被接受。下面的原生示例适用于向 QuickGUI 贡献功能，或维护配套的 fork。普通 Go 包则可以使用自己的模块路径和发布周期。
+
+扩展在应用进程内运行。Go 应用通过 purego 加载核心和选中的后端。后端拥有自己的原生依赖，核心继续负责渲染、布局和原生事件循环。修改 Go 代码时会复用这些库，使用者不需要在每次编辑后重新编译原生后端。
+
+## 共享 Go 组件
+
+在自己的仓库路径下创建 Go 模块，依赖 Go SDK，并导出组件函数。这类包不需要原生清单或 npm 包：
+
+```go
+package notice
+
+import "github.com/egoist/quickgui/go/ui"
+
+func Notice(message func() string, style ui.Style) {
+	ui.Text(
+		message,
+		ui.Style{
+			Padding:         12,
+			BackgroundColor: "#eff6ff",
+			Color:           "#1e40af",
+			BorderRadius:    8,
+		},
+		style,
+	)
+}
+```
+
+在组件或 children 回调中调用 `notice.Notice(message, ui.Style{Padding: 16})`。访问器保持响应式，调用者的样式在默认样式之后合并。组件函数直接声明子节点，不返回节点。组件拥有的资源使用 `ui.OnCleanup` 清理；应用级服务应放在组件所有权之外。
+
+使用 Go 版本标签发布模块，并说明支持的 SDK 版本。使用者通过自己的模块路径运行 `go get`。传递导入 `terminal` 或 `updater` 仍会让应用包含对应原生扩展，因此请将可选集成放在独立包或带构建标签的文件中。
+
+## 组织原生扩展
+
+后续示例中的 `echo` 是需要添加到 QuickGUI checkout 的服务后端，**标准核心不包含它**。目录结构参照现有 updater 扩展：
+
+```text
+go/echo/
+  echo.go
+  quickgui.extension.json
+crates/quickgui-echo/
+  Cargo.toml
+  src/lib.rs
+packages/native-echo/
+  package.json
+  lib/darwin-arm64/libquickgui_echo.dylib
+scripts/build-echo.ts
+```
+
+将 crate 加入 workspace members，并以 `cdylib` 构建。不要依赖 `quickgui`、`quickgui-host`、WGPU 或 Taffy。共享同一核心版本的小型 ABI 定义，不要链接另一份运行时。可参考 updater 的 [Cargo 配置](https://github.com/egoist/quickgui/blob/main/crates/quickgui-updater/Cargo.toml)和[入口实现](https://github.com/egoist/quickgui/blob/main/crates/quickgui-updater/src/lib.rs)。
+
+示例使用版本 `0.1.3`。请统一替换为目标核心版本。原生描述符版本必须与核心完全一致；同为 ABI `1` 并不代表跨版本兼容。Go 清单与 npm 包版本也必须一致。
+
+## 声明 Go 依赖
+
+将清单放在**实际导入的 Go 包源码旁边**，不要只放在模块根目录或应用配置中：
+
+```json
+{
+  "schema": 1,
+  "name": "echo",
+  "abi": 1,
+  "package": "@quickgui/native-echo",
+  "version": "0.1.3",
+  "library": "quickgui_echo"
+}
+```
+
+名称以小写字母开头，最长 64 个字符，只能包含小写字母、数字和连字符。`library` 是 `quickgui_` 加上将连字符替换为下划线后的名称，不包含 `lib` 前缀或文件扩展名。清单上限为 16 KiB，一个应用最多可声明 32 个后端。
+
+Go 包在初始化时记录同一个名称，并提供显式启动函数：
+
+```go
+package echo
+
+import (
+	"github.com/egoist/quickgui/go/host"
+	"github.com/egoist/quickgui/go/native"
+)
+
+func init() {
+	host.RequireExtension("echo")
+}
+
+func Open(changed func(string), ready func(error)) *native.ExtensionSession {
+	return native.OpenExtension("echo", struct{}{}, changed, ready)
+}
+```
+
+`RequireExtension` 只记录依赖。不要在 `init` 中加载库、打开窗口或启动工作线程。在 `native.Run` 就绪后调用 `Open`，并等待 `ready` 成功回调，再调用 `session.Command("send", value, done)`。所有者销毁时在 UI goroutine 上关闭会话；回调也在该 goroutine 执行。公开的包通常应将原始 JSON 事件字符串和会话命令包装成自己的类型化选项、事件和方法。
+
+CLI 使用与编译相同的入口包、目标和构建标签运行 `go list -deps`。传递导入会计入依赖，被排除的文件不会。清单决定打包哪些产物，`RequireExtension` 决定运行时加载哪些库，两者缺一不可。
+
+## 实现原生接口
+
+使用目标核心版本的 [`src/extension_api.rs`](https://github.com/egoist/quickgui/blob/main/src/extension_api.rs)。边界上只传递 C 布局、固定宽度字段、借用的字节区间、函数指针和不透明句柄。Rust 字符串、trait 对象和分配器所有权必须留在创建它们的库中。
+
+服务实现 `ServiceApi.invoke` 和 `ServiceApi.shutdown`。下面是实现这两个函数后使用的描述符片段；`ECHO_EXTENSION` 是下一节需要新增的类型：
+
+```rust
+#[path = "../../../src/extension_api.rs"]
+mod abi;
+
+static API: abi::ServiceApi = abi::ServiceApi { invoke, shutdown };
+
+static EXTENSION: abi::Extension = abi::Extension {
+    abi_version: abi::ABI_VERSION,
+    descriptor_size: size_of::<abi::Extension>() as u32,
+    kind: abi::ECHO_EXTENSION,
+    api_size: size_of::<abi::ServiceApi>() as u32,
+    name: abi::Bytes::new(b"echo"),
+    version: abi::Bytes::new(env!("CARGO_PKG_VERSION").as_bytes()),
+    api: std::ptr::addr_of!(API).cast(),
+};
+
+/// # Safety
+/// Use this descriptor only according to the matching QuickGUI extension ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quickgui_extension_v1() -> *const abi::Extension {
+    &EXTENSION
+}
+```
+
+描述符、字符串和函数表拥有静态生命周期。在 `invoke` 返回前验证并复制借用的请求数据，然后将任务入队并立即返回。不要同步等待网络、其他工作线程或原生主线程。为队列、消息、活动会话和保留数据设置上限。可恢复的 Rust panic 必须在跨越 `extern "C"` 边界前捕获。
+
+Go 会话协议如下：
+
+| 请求 | 参数 | 后端职责 |
+| --- | --- | --- |
+| `start` | 传给 `OpenExtension` 的选项 JSON | 将请求 ID 作为会话 ID，回复后保留事件 sink |
+| `send` 等命令 | `{"session": 123, "value": "hello"}` | 查找会话，并完成该命令自己的回复 |
+| `stop` | `{"session": 123}` | 停止接受该会话的任务、取消资源并回复 |
+| `shutdown` 函数 | 无 | 取消所有会话，不阻塞 UI 线程 |
+
+`ServiceSink.emit` 的 kind `0` 表示一次成功的 JSON 回复，`1` 表示 UTF-8 错误，`2` 表示 JSON 会话事件。没有返回值的成功命令也应发送 `null` 等合法 JSON。当前 host 对每个输出载荷的限制为 64 KiB。字节仅在 `emit` 调用期间被借用，host 将其复制到现有事件队列。
+
+启动 sink 在启动回复后继续存活以发送事件，命令使用各自独立的 sink。包括错误和拒绝任务的路径在内，每个 sink 都必须在最后一次回调后且仅调用一次 `release`。关闭会话后应抑制后续事件并释放工作线程，不能因为库仍在加载就保留会话。库本身保持加载直到进程结束，因为回调可能仍引用其函数指针。
+
+完整的服务实现、受限调度和回调所有权可参考 [updater](https://github.com/egoist/quickgui/tree/main/crates/quickgui-updater/src)，类型化帧接口可参考 [terminal 后端](https://github.com/egoist/quickgui/tree/main/crates/quickgui-terminal)。可视后端向保留式核心适配器返回变化的数据，不运行第二个渲染器。向 `ui.NativeElement` 传入任意 tag 并不能注册新的节点类型。
+
+## 注册到核心
+
+新的后端目前需要在同一核心构建中完成以下修改：
+
+1. 在 `src/extension_api.rs` 中添加独立的扩展类型，必要时添加类型化函数表。请求/事件服务可复用 `ServiceApi`。
+2. 扩展 `src/extensions.rs`，验证后端名称、类型、函数表大小、ABI 和精确发布版本后再保存函数表，保留重复注册检查。
+3. 服务需要加入 `service(name)` 和 `shutdown_services()`。现有 host 路由通过 `crates/quickgui-host/src/extension_services.rs` 处理 `extension/echo/<method>`。
+4. 新的可视节点还需要核心适配器和协议/tag 处理，并保留节点身份、细粒度失效和组件清理机制。
+5. 将后端加入构建、版本同步、打包和发布验证脚本。内置构建参数 `--extension` 目前只支持 `terminal` 和 `updater`。
+
+应用必须同时加载修改后的核心。发布一个使用新类型的后端，不会让旧的标准核心自动支持它。通用的原生能力应贡献核心集成，或分发配套的核心/CLI fork 并明确兼容版本。当前 CLI 规则下，使用自己的 npm scope 发布还需要在 fork 中修改清单验证器；`@quickgui` 是项目保留的命名空间。
+
+## 构建与打包产物
+
+使用 TypeScript 脚本和 Bun 一次性构建原生产物。将 crate 加入 QuickGUI checkout 后，示例 `scripts/build-echo.ts` 会构建并暂存当前主机架构的产物：
+
+```ts
+import { copyFileSync, mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const root = resolve(import.meta.dir, "..");
+const platforms: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: "darwin", linux: "linux", win32: "windows",
+};
+const platform = platforms[process.platform];
+if (!platform || !["arm64", "x64"].includes(process.arch)) {
+  throw new Error("Unsupported build host");
+}
+const build = Bun.spawn(["cargo", "build", "-p", "quickgui-echo", "--lib", "--release"], {
+  cwd: root,
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if (await build.exited !== 0) throw new Error("Native build failed");
+
+const filename = platform === "darwin" ? "libquickgui_echo.dylib"
+  : platform === "windows" ? "quickgui_echo.dll" : "libquickgui_echo.so";
+const destination = join(root, "packages/native-echo/lib", `${platform}-${process.arch}`);
+const cargoTarget = resolve(root, process.env.CARGO_TARGET_DIR ?? "target");
+mkdirSync(destination, { recursive: true });
+copyFileSync(join(cargoTarget, "release", filename), join(destination, filename));
+```
+
+在每个支持的目标主机上运行 `bun scripts/build-echo.ts`，该脚本不进行交叉编译。macOS 使用 `.dylib`，Linux 使用 `.so`，Windows 使用 `.dll`。目标目录为 `darwin-arm64`、`darwin-x64`、`linux-arm64`、`linux-x64`、`windows-arm64` 和 `windows-x64`。只分发已构建并验证的目标。
+
+原生 npm 包包含构建产物，并向解析器公开包元数据：
+
+```json
+{
+  "name": "@quickgui/native-echo",
+  "version": "0.1.3",
+  "files": ["lib", "README.md"],
+  "exports": { "./package.json": "./package.json" }
+}
+```
+
+保持此包可选，由 Go 导入决定是否需要，不要将它作为核心 npm 包的依赖。分别发布后端包，不要为各种功能组合发布不同的包。当前 QuickGUI 发布流程提供 macOS 预编译产物，其他目标需要明确增加构建、打包和测试。
+
+辅助可执行文件和资源通过清单中的 `resources` 对象声明，以 `darwin`、`linux` 或 `windows` 为键，值为文件 basename 列表。每个平台最多 16 个不同文件，该列表同时用于两种架构。在对应目标目录中将文件放在库旁边，CLI 会一起复制，并将普通资源可执行文件设置为可执行。
+
+目录资源使用仓库 [`packResources`](https://github.com/egoist/quickgui/blob/main/packages/cli/src/extension-resources.ts) 辅助函数生成的 `.qgr` 包。它在条目和字节上限内保留可执行权限及受限的相对符号链接。这是内部打包工具，不是独立版本的扩展作者 SDK。CLI 目前专门处理 Sparkle 的配置和嵌套签名；其他 macOS framework 需要自己的签名与资源集成。
+
+## 测试与分发
+
+本地开发时，先构建配套的核心和后端，再使用绝对路径打包使用者应用。`QUICKGUI_EXTENSION_DIR` 直接指向所选目标的产物目录，而不是上一级 `lib` 目录：
+
+```sh
+QUICKGUI_LIBRARY=/absolute/path/libquickgui_host.dylib \
+QUICKGUI_EXTENSION_DIR=/absolute/path/native-echo/lib/darwin-arm64 \
+bun packages/cli/src/cli.ts dev --project examples/echo --once --no-launch
+```
+
+运行前先创建导入 `go/echo` 的使用者示例。显式扩展目录具有优先权，必须包含所有必需的扩展和资源，包括传递依赖。未设置覆盖路径时，CLI 依次查找版本匹配的已安装 npm 包、checkout 暂存产物，再从公共 npm registry 下载精确版本。下载的 tarball 必须有 SHA-512 完整性信息，解析器只提取声明的产物并验证缓存字节。目前不自动从私有 registry 下载。
+
+发布前验证以下行为：
+
+- 没有导入时，应用不包含后端及其可选依赖。添加或移除传递导入后，重新生成的包应相应变化。
+- 打包后的程序通过 purego 加载匹配核心与后端。缺少文件、名称或 ABI/发布版本不匹配，以及冲突的依赖，应产生明确错误。
+- 启动、启动完成前关闭、重复关闭、取消和应用退出都能释放每个回调上下文与工作线程，销毁后不再发送事件。
+- 后台任务不阻塞 UI，空闲会话保持休眠，队列、快照、缓存和资源载荷都有上限。遵循[性能指南](https://github.com/egoist/quickgui/blob/main/docs/architecture/performance.md)。
+- `bun pm pack` 包含清单声明的所有库和资源。将归档安装到独立使用者项目，在原生源码暂存产物不可用的情况下构建，并在每个支持的系统和架构上实际运行。
+
+仓库的 [`scripts/check-extensions.ts`](https://github.com/egoist/quickgui/blob/main/scripts/check-extensions.ts) 验证内置后端及其组合。贡献新后端时扩展它，或为 fork 编写等效测试。最终用户只需安装打包后的应用，运行时无需 Bun、Cargo、npm 包或原生工具链。

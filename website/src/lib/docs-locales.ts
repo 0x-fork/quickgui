@@ -20,6 +20,21 @@ const GUIDE_TRANSLATIONS: Record<
   Record<DocsSlug, GuideTranslation>
 > = {
   zh: {
+    extensions: {
+      title: '编写扩展',
+      description: '共享 Go 组件，并为 QuickGUI 构建可选的原生后端。',
+      outline: [
+        { id: '选择扩展类型', title: '选择扩展类型' },
+        { id: '共享-go-组件', title: '共享 Go 组件' },
+        { id: '组织原生扩展', title: '组织原生扩展' },
+        { id: '声明-go-依赖', title: '声明 Go 依赖' },
+        { id: '实现原生接口', title: '实现原生接口' },
+        { id: '注册到核心', title: '注册到核心' },
+        { id: '构建与打包产物', title: '构建与打包产物' },
+        { id: '测试与分发', title: '测试与分发' },
+      ],
+      searchTerms: ['扩展', '插件', '编写', '原生后端', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'OpenExtension', 'npm'],
+    },
     updater: {
       title: '自动更新', description: '通过可选扩展为 Go 应用添加兼容 Sparkle 的更新功能。',
       outline: [
@@ -150,6 +165,21 @@ const GUIDE_TRANSLATIONS: Record<
     },
   },
   ja: {
+    extensions: {
+      title: '拡張の作成',
+      description: 'Go コンポーネントを共有し、QuickGUI のオプションのネイティブバックエンドを作成します。',
+      outline: [
+        { id: '拡張の種類を選ぶ', title: '拡張の種類を選ぶ' },
+        { id: 'go-コンポーネントを共有する', title: 'Go コンポーネントを共有する' },
+        { id: 'ネイティブ拡張の構成', title: 'ネイティブ拡張の構成' },
+        { id: 'go-依存関係を宣言する', title: 'Go 依存関係を宣言する' },
+        { id: 'ネイティブインターフェースを実装する', title: 'ネイティブインターフェースを実装する' },
+        { id: 'コアに登録する', title: 'コアに登録する' },
+        { id: '成果物のビルドとパッケージ化', title: '成果物のビルドとパッケージ化' },
+        { id: 'テストと配布', title: 'テストと配布' },
+      ],
+      searchTerms: ['拡張', 'プラグイン', '作成', 'ネイティブバックエンド', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'OpenExtension', 'npm'],
+    },
     updater: {
       title: '自動更新', description: 'Go アプリに Sparkle 互換の更新機能を追加します。',
       outline: [

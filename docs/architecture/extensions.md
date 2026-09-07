@@ -1,5 +1,7 @@
 # Native extensions
 
+For the authoring walkthrough, see the [website guide](../../website/src/content/docs/en/extensions.mdx). It covers reusable Go packages, native provider integration, packaging, and the current core-registration and npm-namespace requirements.
+
 Go applications load one QuickGUI core shared library through purego. Optional backends ship as separate libraries with the same release version. The terminal extension separates rendering from its backend: the core keeps its retained terminal view while `quickgui-terminal` owns Ghostty, the PTY, and terminal workers. The updater extension uses Sparkle on macOS and a compatible signed-appcast backend on Windows/Linux. Its network and installer code is absent from the default core.
 
 ## Application usage
