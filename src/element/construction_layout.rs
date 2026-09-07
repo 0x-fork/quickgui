@@ -147,6 +147,7 @@ impl Element {
             list_item_measurement: None,
             animation: None,
             spring: None,
+            resolved_motion: false,
             transition: None,
             blocks_pointer: false,
             dismiss_policy: DismissPolicy::default(),

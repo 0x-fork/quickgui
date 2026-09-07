@@ -73,7 +73,7 @@ pub(super) enum PropertyValue {
     String(Arc<str>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct NativeNode {
     pub(super) tag: NodeTag,
     pub(super) parent: Option<u32>,
@@ -394,7 +394,12 @@ pub(super) fn commit_overlay(
     tree: &mut NativeTree,
     overlay: HashMap<u32, Option<NativeNode>>,
 ) -> u32 {
+    let mut changed = false;
     for (id, node) in overlay {
+        if tree.nodes.get(&id) == node.as_ref() {
+            continue;
+        }
+        changed = true;
         match node {
             Some(node) => {
                 tree.nodes.insert(id, node);
@@ -404,7 +409,9 @@ pub(super) fn commit_overlay(
             }
         }
     }
-    tree.revision = tree.revision.wrapping_add(1).max(1);
+    if changed {
+        tree.revision = tree.revision.wrapping_add(1).max(1);
+    }
     tree.revision
 }
 
@@ -435,6 +442,94 @@ pub(super) fn apply_mutations(
     }
     let overlay = transaction.finish()?;
     Ok(commit_overlay(tree, overlay))
+}
+
+/// Translate ordinary signal writes into the core's targeted retained updates. Structural,
+/// listener, layout, and component-owned changes use the normal declaration path. The core is
+/// still responsible for layout dirtiness, inheritance, selection, and accessibility.
+pub(super) fn retained_element_updates(
+    tree: &NativeTree,
+    mutations: &[Mutation],
+) -> Option<Vec<quickgui::ElementUpdate>> {
+    use quickgui::ElementUpdate;
+    let mut updates = Vec::with_capacity(mutations.len());
+    for mutation in mutations {
+        let (id, update) = match mutation {
+            Mutation::ReplaceText { id, text } => (
+                *id,
+                ElementUpdate::Text {
+                    id: ElementId::new(*id as u64),
+                    content: text.clone(),
+                },
+            ),
+            Mutation::SetProperty {
+                id,
+                key,
+                value: Some(PropertyValue::Color(color)),
+            } => {
+                let element_id = ElementId::new(*id as u64);
+                let color = unpack_color(*color);
+                let update = match *key {
+                    property::BACKGROUND_COLOR => ElementUpdate::BackgroundColor {
+                        id: element_id,
+                        color,
+                    },
+                    property::COLOR => ElementUpdate::TextColor {
+                        id: element_id,
+                        color,
+                    },
+                    _ => return None,
+                };
+                (*id, update)
+            }
+            Mutation::SetProperty {
+                id,
+                key: property::OPACITY,
+                value: Some(PropertyValue::Number(opacity)),
+            } if opacity.is_finite() => (
+                *id,
+                ElementUpdate::Opacity {
+                    id: ElementId::new(*id as u64),
+                    opacity: *opacity,
+                },
+            ),
+            _ => return None,
+        };
+        if id == ROOT_NODE {
+            return None;
+        }
+        if matches!(update, ElementUpdate::BackgroundColor { .. })
+            && tree
+                .nodes
+                .get(&id)?
+                .property(property::BACKGROUND_GRADIENT)
+                .is_some()
+        {
+            // A gradient declaration is applied after the solid background, and may resolve
+            // to a solid color itself. Preserve that precedence through a normal rebuild.
+            return None;
+        }
+        let mut current = id;
+        let mut mounted = false;
+        for _ in 0..MAX_TREE_DEPTH {
+            if current == ROOT_NODE {
+                mounted = true;
+                break;
+            }
+            let node = tree.nodes.get(&current)?;
+            if node.string(property::PART).is_some()
+                || !matches!(node.tag, NodeTag::View | NodeTag::Button | NodeTag::Text)
+            {
+                return None;
+            }
+            current = node.parent?;
+        }
+        if !mounted {
+            return None;
+        }
+        updates.push(update);
+    }
+    Some(updates)
 }
 
 #[derive(Debug)]

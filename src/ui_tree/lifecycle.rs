@@ -9,8 +9,10 @@ impl UiTree {
         Self {
             root: None,
             taffy: TaffyTree::with_capacity(256),
+            layout_nodes: LayoutNodeCache::default(),
             root_node: None,
             mounted_state_dirty: false,
+            retained_semantics_dirty: false,
             seen_ids: HashSet::with_capacity(256),
             displayed_ids: HashSet::with_capacity(256),
             visible_ids: HashSet::with_capacity(256),
@@ -235,9 +237,6 @@ impl UiTree {
         viewport: Size,
         scale_factor: f32,
     ) -> Result<(), UiError> {
-        self.viewport = viewport;
-        self.scale_factor = scale_factor;
-        self.taffy.clear();
         self.seen_ids.clear();
         self.seen_ids
             .insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
@@ -246,9 +245,12 @@ impl UiTree {
         validate_container_query_limits(&root)?;
         validate_sticky_limits(&root)?;
         collect_explicit_ids(&root, &mut self.seen_ids)?;
+        self.update_layout_scale_factor(scale_factor)?;
+        self.viewport = viewport;
         let inherited = TextStyle::default();
-        let root_node = build_layout_node(
+        let root_node = build_retained_layout_node(
             &mut self.taffy,
+            &mut self.layout_nodes,
             &mut self.seen_ids,
             &mut root,
             ElementId::new(0x9e37_79b9_7f4a_7c15),
@@ -257,6 +259,7 @@ impl UiTree {
             true,
             Direction::Ltr,
         )?;
+        self.layout_nodes.commit_children(&mut self.taffy)?;
         self.root = Some(root);
         self.root_node = Some(root_node);
         self.mounted_state_dirty = true;
@@ -267,6 +270,9 @@ impl UiTree {
     /// declaration. Intermediate container-query shells deliberately skip this phase so they
     /// cannot transiently unmount stable text input, scroll, transition, or image state.
     pub(super) fn sync_mounted_root(&mut self, now: Instant) -> Result<(), UiError> {
+        // Query callbacks may temporarily replace their descendants with an empty shell. Keep
+        // their layout nodes until the complete declaration has converged, just like mount state.
+        self.layout_nodes.retain(&mut self.taffy, &self.seen_ids)?;
         let root = self
             .root
             .as_ref()
@@ -825,6 +831,15 @@ impl UiTree {
         )
     }
 
+    fn update_layout_scale_factor(&mut self, scale_factor: f32) -> Result<(), UiError> {
+        if self.scale_factor != scale_factor {
+            // Display scale participates in text shaping but not in Taffy's constraint key.
+            self.layout_nodes.invalidate_measurements(&mut self.taffy)?;
+            self.scale_factor = scale_factor;
+        }
+        Ok(())
+    }
+
     /// Measure the mounted root with max-content constraints on selected axes, then restore its
     /// ordinary finite viewport layout. Embedded native hosts use this bounded two-pass path so
     /// intrinsic SwiftUI sizing does not create a second renderer or a parallel layout engine.
@@ -892,8 +907,8 @@ impl UiTree {
         now: Instant,
         prepare: &mut impl FnMut(&mut Element),
     ) -> Result<(), UiError> {
+        self.update_layout_scale_factor(scale_factor)?;
         self.viewport = viewport;
-        self.scale_factor = scale_factor;
         let mut converged = self.root_node.is_none();
         let mut needs_outer_layout = true;
         for _ in 0..=MAX_CONTAINER_QUERY_DEPTH {
@@ -902,7 +917,7 @@ impl UiTree {
                 break;
             };
             if needs_outer_layout {
-                compute_detached_layout(
+                self.layout_nodes.compute_layout(
                     &mut self.taffy,
                     root_node,
                     viewport,
@@ -916,6 +931,7 @@ impl UiTree {
                     &mut self.taffy,
                     scale_factor,
                     renderer,
+                    Some(&mut self.layout_nodes),
                 )?;
             }
             let resolution = self.resolve_container_queries(now, prepare)?;
@@ -999,6 +1015,13 @@ impl UiTree {
         let mut style_transition_count = 0;
         validate_style_transition_count(root, &mut style_transition_count)?;
         validate_container_query_limits(root)?;
-        build_pending_container_query_subtrees(root, &mut self.taffy, &mut self.seen_ids)
+        let rebuild = build_pending_container_query_subtrees(
+            root,
+            &mut self.taffy,
+            &mut self.layout_nodes,
+            &mut self.seen_ids,
+        )?;
+        self.layout_nodes.commit_children(&mut self.taffy)?;
+        Ok(rebuild)
     }
 }

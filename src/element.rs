@@ -2031,6 +2031,9 @@ impl TypographyStyle {
 }
 
 /// A declarative UI node with Tailwind-like fluent styling.
+///
+/// See [`ElementUpdate`] for targeted updates from an embedding runtime that already owns a
+/// retained declaration.
 #[derive(Clone, Debug)]
 pub struct Element {
     pub(crate) explicit_id: Option<ElementId>,
@@ -2109,6 +2112,8 @@ pub struct Element {
     pub(crate) list_item_measurement: Option<ListItemMeasurement>,
     pub(crate) animation: Option<ElementAnimation>,
     pub(crate) spring: Option<ElementSpring>,
+    /// The declaration callback was consumed, but still owns this resolved subtree's values.
+    pub(crate) resolved_motion: bool,
     pub(crate) transition: Option<Transition>,
     pub(crate) blocks_pointer: bool,
     pub(crate) dismiss_policy: DismissPolicy,
@@ -2129,6 +2134,31 @@ pub struct Element {
     pub(crate) snap_align: Option<SnapAlign>,
     /// Whether a scroll gesture may never skip past this snap child.
     pub(crate) snap_stop_always: bool,
+}
+
+/// A change to a mounted element that does not replace its identity, children, or listeners.
+///
+/// Embedding runtimes can submit a batch with [`crate::AppRunner::update_elements`] after
+/// updating their source declaration. Text changes invalidate intrinsic layout along the
+/// affected ancestor path. Colors and opacity require paint only. Unsupported or unmounted
+/// targets reject the entire batch, allowing the caller to request an ordinary view rebuild.
+#[derive(Clone, Debug)]
+pub enum ElementUpdate {
+    Text { id: ElementId, content: Arc<str> },
+    BackgroundColor { id: ElementId, color: Color },
+    TextColor { id: ElementId, color: Color },
+    Opacity { id: ElementId, opacity: f32 },
+}
+
+impl ElementUpdate {
+    pub fn id(&self) -> ElementId {
+        match self {
+            Self::Text { id, .. }
+            | Self::BackgroundColor { id, .. }
+            | Self::TextColor { id, .. }
+            | Self::Opacity { id, .. } => *id,
+        }
+    }
 }
 
 impl Element {

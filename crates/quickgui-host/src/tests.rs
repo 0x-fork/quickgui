@@ -10,7 +10,10 @@ fn go_mutation_fixture_uses_native_text_and_color_encoding() {
     apply_mutations(&mut tree, decode_batch(bytes).unwrap()).unwrap();
     let node = tree.nodes.get(&1).unwrap();
     assert_eq!(node.text.as_ref(), "Hello 世界");
-    assert_eq!(node.color(property::COLOR), Some(Color::rgba8(0x12, 0x34, 0x56, 0x78)));
+    assert_eq!(
+        node.color(property::COLOR),
+        Some(Color::rgba8(0x12, 0x34, 0x56, 0x78))
+    );
 }
 
 #[test]
@@ -317,6 +320,176 @@ fn malformed_batch_is_rejected_before_tree_mutation() {
     assert!(error.to_string().contains("magic"));
 }
 
+#[test]
+fn equivalent_mutation_batches_do_not_advance_the_render_revision() {
+    let mut tree = NativeTree::default();
+    assert_eq!(apply_mutations(&mut tree, vec![]).unwrap(), 0);
+    let mut create = TreeTransaction::new(&tree);
+    create.create(1, NodeTag::Text, Arc::from("Hello")).unwrap();
+    create
+        .set_property(1, property::COLOR, Some(PropertyValue::Color(0xff0000ff)))
+        .unwrap();
+    create.insert(ROOT_NODE, 1, None).unwrap();
+    let overlay = create.finish().unwrap();
+    assert_eq!(commit_overlay(&mut tree, overlay), 1);
+
+    for mutations in [
+        vec![],
+        vec![Mutation::ReplaceText {
+            id: 1,
+            text: Arc::from("Hello"),
+        }],
+        vec![Mutation::SetProperty {
+            id: 1,
+            key: property::COLOR,
+            value: Some(PropertyValue::Color(0xff0000ff)),
+        }],
+        vec![Mutation::SetProperty {
+            id: 1,
+            key: property::WIDTH,
+            value: None,
+        }],
+        vec![Mutation::Insert {
+            parent: ROOT_NODE,
+            child: 1,
+            before: None,
+        }],
+        vec![
+            Mutation::ReplaceText {
+                id: 1,
+                text: Arc::from("Temporary"),
+            },
+            Mutation::ReplaceText {
+                id: 1,
+                text: Arc::from("Hello"),
+            },
+        ],
+    ] {
+        assert_eq!(apply_mutations(&mut tree, mutations).unwrap(), 1);
+    }
+    assert_eq!(
+        apply_mutations(
+            &mut tree,
+            vec![Mutation::ReplaceText {
+                id: 1,
+                text: Arc::from("Changed")
+            },]
+        )
+        .unwrap(),
+        2
+    );
+    assert_eq!(tree.nodes[&1].text.as_ref(), "Changed");
+}
+
+fn retained_update_tree() -> NativeTree {
+    let mut tree = NativeTree::default();
+    let mut transaction = TreeTransaction::new(&tree);
+    transaction
+        .create(1, NodeTag::Button, Arc::from(""))
+        .unwrap();
+    transaction
+        .set_property(1, property::CLICK_LISTENER, Some(PropertyValue::Bool(true)))
+        .unwrap();
+    transaction
+        .create(2, NodeTag::Text, Arc::from("Before"))
+        .unwrap();
+    transaction.insert(1, 2, None).unwrap();
+    transaction.insert(ROOT_NODE, 1, None).unwrap();
+    let overlay = transaction.finish().unwrap();
+    commit_overlay(&mut tree, overlay);
+    tree
+}
+
+#[test]
+fn signal_text_and_color_batches_skip_native_view_rebuild_and_keep_click_delivery() {
+    let events = Rc::new(RefCell::new(VecDeque::new()));
+    let native_view = component_part_view(7, retained_update_tree(), events.clone());
+    let tree = native_view.tree.clone();
+    let (mut cx, view) = quickgui::TestAppContext::new(native_view).unwrap();
+    let window = view.window_handle();
+    cx.focus(window, ElementId::new(1)).unwrap();
+    events.borrow_mut().clear();
+    let renders = cx.render_count(window).unwrap();
+    let mutations = vec![
+        Mutation::ReplaceText {
+            id: 2,
+            text: Arc::from("After"),
+        },
+        Mutation::SetProperty {
+            id: 1,
+            key: property::COLOR,
+            value: Some(PropertyValue::Color(0xff0000ff)),
+        },
+    ];
+    let updates = retained_element_updates(&tree.borrow(), &mutations).unwrap();
+    apply_mutations(&mut tree.borrow_mut(), mutations).unwrap();
+    assert!(cx.update_elements(window, &updates).unwrap());
+    assert_eq!(cx.render_count(window).unwrap(), renders);
+    let accessibility = cx.accessibility_update(window).unwrap();
+    assert_eq!(
+        accessibility
+            .nodes
+            .iter()
+            .find(|(id, _)| id.0 == 1)
+            .unwrap()
+            .1
+            .label(),
+        Some("After")
+    );
+    cx.click(window, ElementId::new(1)).unwrap();
+    assert_eq!(cx.render_count(window).unwrap(), renders);
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .any(|event| event.kind == "click" && event.window == 7 && event.target == 1)
+    );
+}
+
+#[test]
+fn component_and_structural_batches_use_the_declaration_path() {
+    let mut tree = retained_update_tree();
+    let replace = || Mutation::ReplaceText {
+        id: 2,
+        text: Arc::from("After"),
+    };
+    assert!(retained_element_updates(&tree, &[replace()]).is_some());
+    for mutation in [
+        Mutation::SetProperty {
+            id: 1,
+            key: property::WIDTH,
+            value: Some(PropertyValue::Number(100.0)),
+        },
+        Mutation::SetProperty {
+            id: 1,
+            key: property::COLOR,
+            value: None,
+        },
+        Mutation::SetProperty {
+            id: 1,
+            key: property::CLICK_LISTENER,
+            value: Some(PropertyValue::Bool(false)),
+        },
+        Mutation::Remove {
+            parent: 1,
+            child: 2,
+        },
+    ] {
+        assert!(retained_element_updates(&tree, &[replace(), mutation]).is_none());
+    }
+    tree.nodes.get_mut(&1).unwrap().set_property(
+        property::PART,
+        Some(PropertyValue::String(Arc::from("menu-item"))),
+    );
+    assert!(retained_element_updates(&tree, &[replace()]).is_none());
+    tree.nodes
+        .get_mut(&1)
+        .unwrap()
+        .set_property(property::PART, None);
+    tree.nodes.get_mut(&1).unwrap().tag = NodeTag::SwiftUiButton;
+    assert!(retained_element_updates(&tree, &[replace()]).is_none());
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn swift_ui_host_children_skip_region_sentinels() {
@@ -335,7 +508,10 @@ fn swift_ui_host_children_skip_region_sentinels() {
     let elements = swift_ui_children(&[1, 2], &tree, &embedded).unwrap();
     assert_eq!(elements.len(), 1);
     let error = swift_ui_children(&[1, 3], &tree, &embedded).unwrap_err();
-    assert!(error.contains("node 3 is not a SwiftUI component"), "{error}");
+    assert!(
+        error.contains("node 3 is not a SwiftUI component"),
+        "{error}"
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -2661,6 +2837,7 @@ fn declared_input_listeners_report_bounded_core_payloads() {
     let focus = queued(&events, "focus").expect("focus is reported once");
     assert_eq!(focus.target, target_id);
     assert_eq!(focus.window, 21);
+    let renders = cx.render_count(window).unwrap();
 
     cx.simulate_keystrokes(window, "cmd-shift-k").unwrap();
     let key = queued(&events, "keydown").expect("a declared key listener reports the press");
@@ -2826,6 +3003,11 @@ fn declared_input_listeners_report_bounded_core_payloads() {
             .value
             .expect("a pressure event carries its payload")
             .contains("\"stage\":\"force\"")
+    );
+    assert_eq!(
+        cx.render_count(window).unwrap(),
+        renders,
+        "forwarding input without a mutation must not rebuild the view"
     );
 }
 

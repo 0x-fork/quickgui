@@ -790,6 +790,31 @@ impl TestAppContext {
         Ok(self.window(window)?.render_count)
     }
 
+    /// Headless counterpart to [`AppRunner::update_elements`], using the same retained tree
+    /// update and layout paths without declaring the view again.
+    pub fn update_elements(
+        &mut self,
+        window: WindowHandle,
+        updates: &[crate::ElementUpdate],
+    ) -> Result<bool, TestAppError> {
+        let state = self.window_mut(window)?;
+        if state.dirty {
+            return Ok(true);
+        }
+        let Some(kind) = state
+            .ui
+            .update_elements(updates)
+            .map_err(|error| TestAppError::View(error.to_string()))?
+        else {
+            return Ok(false);
+        };
+        if kind != crate::ui_tree::ElementUpdateKind::None {
+            state.retained_geometry_ready = false;
+        }
+        self.prepare_retained_geometry(window)?;
+        Ok(true)
+    }
+
     pub fn window_state(&self, window: WindowHandle) -> Result<WindowState, TestAppError> {
         Ok(self.window(window)?.state)
     }

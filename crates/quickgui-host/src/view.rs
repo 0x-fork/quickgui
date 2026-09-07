@@ -1644,7 +1644,7 @@ fn build_element_inner(
         && node.boolean(property::CLICK_LISTENER).unwrap_or(false)
     {
         let events = Rc::clone(events);
-        let listener = cx.listener(element_id, move |_view, cx| {
+        let listener = cx.listener(element_id, move |_view, _cx| {
             enqueue_event(
                 &events,
                 QueuedEvent {
@@ -1654,13 +1654,12 @@ fn build_element_inner(
                     value: None,
                 },
             );
-            cx.invalidate();
         });
         element = element.on_click(listener);
     }
     if listeners_enabled && node.boolean(property::HOVER_LISTENER).unwrap_or(false) {
         let events = Rc::clone(events);
-        let listener = cx.hover_listener(element_id, move |_view, hovered, cx| {
+        let listener = cx.hover_listener(element_id, move |_view, hovered, _cx| {
             enqueue_event(
                 &events,
                 QueuedEvent {
@@ -1670,7 +1669,6 @@ fn build_element_inner(
                     value: None,
                 },
             );
-            cx.invalidate();
         });
         element = element.on_hover(listener);
     }
@@ -1691,7 +1689,6 @@ fn build_element_inner(
             );
             cx.prevent_default();
             cx.stop_propagation();
-            cx.invalidate();
         });
         element = element.on_pointer(listener);
     }
@@ -1820,7 +1817,7 @@ pub(super) fn attach_dismiss_listener(
         return element;
     }
     let events = Rc::clone(events);
-    let listener = cx.dismiss_listener(element_id, move |_view, cx| {
+    let listener = cx.dismiss_listener(element_id, move |_view, _cx| {
         enqueue_event(
             &events,
             QueuedEvent {
@@ -1830,7 +1827,6 @@ pub(super) fn attach_dismiss_listener(
                 value: None,
             },
         );
-        cx.invalidate();
     });
     element = element.on_dismiss(listener);
     element

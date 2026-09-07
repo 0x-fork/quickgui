@@ -542,6 +542,21 @@ fn accessibility_geometry_updates_are_coalesced_without_an_idle_loop() {
 }
 
 #[test]
+fn semantic_update_supersedes_a_pending_scroll_accessibility_correction() {
+    let mut updates = AccessibilityUpdateSchedule::default();
+    updates.activate();
+    let now = Instant::now();
+    updates.should_update(Some(AccessibilityUpdateKind::ScrollGeometry), now);
+    assert!(updates.advance(now + ACCESSIBILITY_GEOMETRY_UPDATE_INTERVAL));
+    updates.semantic_change();
+    assert_eq!(
+        updates.should_update(None, now),
+        Some(AccessibilityUpdateKind::Full)
+    );
+    assert_eq!(updates.deadline(), None);
+}
+
+#[test]
 fn platform_effect_queue_completes_overflow_without_retaining_it() {
     let mut pending = (0..crate::MAX_PENDING_PLATFORM_REQUESTS)
         .map(|index| {

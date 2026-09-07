@@ -1,4 +1,187 @@
 use super::*;
+use taffy::TraversePartialTree;
+
+/// Layout identities outlive a view declaration. Taffy's per-node cache then skips clean
+/// subtrees using its constraint keys, and a changed leaf dirties only its ancestor path.
+#[derive(Default)]
+pub(super) struct LayoutNodeCache {
+    pub(super) nodes: HashMap<ElementId, NodeId>,
+    pub(super) positions: HashMap<ElementId, (ElementId, usize)>,
+    child_updates: Vec<(NodeId, Vec<NodeId>)>,
+    root_constraints: HashMap<NodeId, (Size, f32)>,
+    #[cfg(test)]
+    pub(super) layout_passes: usize,
+}
+
+impl LayoutNodeCache {
+    fn reconcile(
+        &mut self,
+        taffy: &mut TaffyTree<MeasureContext>,
+        id: ElementId,
+        style: &TaffyStyle,
+        context: Option<MeasureContext>,
+        children: Vec<NodeId>,
+    ) -> Result<NodeId, UiError> {
+        let node = if let Some(&node) = self.nodes.get(&id) {
+            if taffy.style(node)? != style {
+                taffy.set_style(node, style.clone())?;
+            }
+            match (taffy.get_node_context(node), context) {
+                (None, None) => {}
+                (Some(old), Some(new)) if old.same_measurement(&new) => {
+                    // Keep the complete current style for any later measurement, without
+                    // invalidating layout for foreground, shadow, or decoration changes.
+                    *taffy.get_node_context_mut(node).unwrap() = new;
+                }
+                (_, context) => taffy.set_node_context(node, context)?,
+            }
+            node
+        } else {
+            let node = match context {
+                Some(context) => taffy.new_leaf_with_context(style.clone(), context)?,
+                None => taffy.new_leaf(style.clone())?,
+            };
+            self.nodes.insert(id, node);
+            node
+        };
+        if !taffy.child_ids(node).eq(children.iter().copied()) {
+            self.child_updates.push((node, children));
+        }
+        Ok(node)
+    }
+
+    pub(super) fn commit_children(
+        &mut self,
+        taffy: &mut TaffyTree<MeasureContext>,
+    ) -> Result<(), UiError> {
+        if !self.child_updates.is_empty() {
+            // A disconnected query root can become an ordinary child (or vice versa). Its
+            // last root constraints no longer describe the layout written by its new parent.
+            self.root_constraints.clear();
+        }
+        // Detach all changed edges before attaching any. A keyed child can move to a parent
+        // visited earlier, or swap ancestry with an old parent; neither may create a transient
+        // cycle during Taffy's upward dirty propagation.
+        for (node, _) in &self.child_updates {
+            taffy.set_children(*node, &[])?;
+        }
+        for (node, children) in self.child_updates.drain(..) {
+            if !children.is_empty() {
+                taffy.set_children(node, &children)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn retain(
+        &mut self,
+        taffy: &mut TaffyTree<MeasureContext>,
+        mounted: &HashSet<ElementId>,
+    ) -> Result<(), UiError> {
+        let removed: Vec<_> = self
+            .nodes
+            .iter()
+            .filter_map(|(id, node)| (!mounted.contains(id)).then_some((*id, *node)))
+            .collect();
+        for (id, node) in removed {
+            // Taffy removes the layout node separately from its measurement context. Drop
+            // text/image references too, so unmounting a large document releases its contents.
+            taffy.set_node_context(node, None)?;
+            taffy.remove(node)?;
+            self.nodes.remove(&id);
+            self.positions.remove(&id);
+            self.root_constraints.remove(&node);
+        }
+        Ok(())
+    }
+
+    pub(super) fn invalidate_measurements(
+        &self,
+        taffy: &mut TaffyTree<MeasureContext>,
+    ) -> Result<(), UiError> {
+        for &node in self.nodes.values() {
+            if taffy.get_node_context(node).is_some() {
+                taffy.mark_dirty(node)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn compute_layout(
+        &mut self,
+        taffy: &mut TaffyTree<MeasureContext>,
+        root: NodeId,
+        viewport: Size,
+        scale_factor: f32,
+        renderer: &mut impl TextLayoutEngine,
+    ) -> Result<(), UiError> {
+        if self.root_constraints.get(&root) == Some(&(viewport, scale_factor))
+            && !taffy.dirty(root)?
+        {
+            // Avoid even Taffy's final whole-subtree pixel-rounding walk on paint-only
+            // declarations. Its internal cache still skips clean branches of a dirty root.
+            return Ok(());
+        }
+        compute_detached_layout(taffy, root, viewport, scale_factor, renderer)?;
+        self.root_constraints.insert(root, (viewport, scale_factor));
+        #[cfg(test)]
+        {
+            self.layout_passes += 1;
+        }
+        Ok(())
+    }
+}
+
+impl MeasureContext {
+    fn same_measurement(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Text {
+                    id,
+                    content,
+                    style,
+                    highlights,
+                },
+                Self::Text {
+                    id: other_id,
+                    content: other_content,
+                    style: other_style,
+                    highlights: other_highlights,
+                },
+            ) => {
+                id == other_id
+                    && content == other_content
+                    && same_text_metrics(style, other_style)
+                    && highlights == other_highlights
+            }
+            (Self::Image { intrinsic }, Self::Image { intrinsic: other }) => intrinsic == other,
+            _ => false,
+        }
+    }
+}
+
+fn same_text_metrics(a: &TextStyle, b: &TextStyle) -> bool {
+    a.font_size == b.font_size
+        && a.line_height == b.line_height
+        && a.monospace_width == b.monospace_width
+        && a.family == b.family
+        && a.features == b.features
+        && a.fallbacks == b.fallbacks
+        && a.weight == b.weight
+        && a.font_style == b.font_style
+        && a.align == b.align
+        && a.wrap == b.wrap
+        && a.text_overflow == b.text_overflow
+        && a.line_clamp == b.line_clamp
+        && a.shaping == b.shaping
+        && a.direction == b.direction
+        && a.letter_spacing == b.letter_spacing
+        && a.word_spacing == b.word_spacing
+        && a.transform == b.transform
+        && a.word_break == b.word_break
+        && a.overflow_wrap == b.overflow_wrap
+        && a.hyphens == b.hyphens
+}
 
 pub(super) fn fixed_text_layout_size(
     known: TaffySize<Option<f32>>,
@@ -130,6 +313,7 @@ pub(super) fn compute_container_query_child_layouts(
     taffy: &mut TaffyTree<MeasureContext>,
     scale_factor: f32,
     renderer: &mut impl TextLayoutEngine,
+    mut layout_nodes: Option<&mut LayoutNodeCache>,
 ) -> Result<(), UiError> {
     if element.is_display_none() {
         return Ok(());
@@ -150,13 +334,23 @@ pub(super) fn compute_container_query_child_layouts(
         let child_node = child
             .taffy_node
             .expect("container query children are assigned before isolated layout");
-        compute_detached_layout(taffy, child_node, available, scale_factor, renderer)?;
-        compute_container_query_child_layouts(child, taffy, scale_factor, renderer)?;
+        if let Some(cache) = layout_nodes.as_deref_mut() {
+            cache.compute_layout(taffy, child_node, available, scale_factor, renderer)?;
+        } else {
+            compute_detached_layout(taffy, child_node, available, scale_factor, renderer)?;
+        }
+        compute_container_query_child_layouts(child, taffy, scale_factor, renderer, layout_nodes)?;
         return Ok(());
     }
 
     for child in &element.children {
-        compute_container_query_child_layouts(child, taffy, scale_factor, renderer)?;
+        compute_container_query_child_layouts(
+            child,
+            taffy,
+            scale_factor,
+            renderer,
+            layout_nodes.as_deref_mut(),
+        )?;
     }
     Ok(())
 }
@@ -629,6 +823,7 @@ pub(super) fn fit_path(bounds: Rect, path: &Path, fit: ObjectFit) -> Option<([f3
 pub(super) fn build_pending_container_query_subtrees(
     element: &mut Element,
     taffy: &mut TaffyTree<MeasureContext>,
+    layout_nodes: &mut LayoutNodeCache,
     seen_ids: &mut HashSet<ElementId>,
 ) -> Result<bool, UiError> {
     if element.is_display_none() {
@@ -653,8 +848,9 @@ pub(super) fn build_pending_container_query_subtrees(
             Err(UiError::DuplicateId(_)) => return Ok(true),
             Err(error) => return Err(error),
         }
-        build_layout_node(
+        build_retained_layout_node(
             taffy,
+            layout_nodes,
             seen_ids,
             child,
             parent_id,
@@ -670,7 +866,7 @@ pub(super) fn build_pending_container_query_subtrees(
     }
 
     for child in &mut element.children {
-        if build_pending_container_query_subtrees(child, taffy, seen_ids)? {
+        if build_pending_container_query_subtrees(child, taffy, layout_nodes, seen_ids)? {
             return Ok(true);
         }
     }
@@ -680,6 +876,34 @@ pub(super) fn build_pending_container_query_subtrees(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_layout_node(
     taffy: &mut TaffyTree<MeasureContext>,
+    seen_ids: &mut HashSet<ElementId>,
+    element: &mut Element,
+    parent_id: ElementId,
+    child_index: usize,
+    inherited_typography: &TextStyle,
+    inherited_user_select: bool,
+    inherited_direction: Direction,
+) -> Result<NodeId, UiError> {
+    let mut layout_nodes = LayoutNodeCache::default();
+    let node = build_retained_layout_node(
+        taffy,
+        &mut layout_nodes,
+        seen_ids,
+        element,
+        parent_id,
+        child_index,
+        inherited_typography,
+        inherited_user_select,
+        inherited_direction,
+    )?;
+    layout_nodes.commit_children(taffy)?;
+    Ok(node)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn build_retained_layout_node(
+    taffy: &mut TaffyTree<MeasureContext>,
+    layout_nodes: &mut LayoutNodeCache,
     seen_ids: &mut HashSet<ElementId>,
     element: &mut Element,
     parent_id: ElementId,
@@ -700,6 +924,7 @@ pub(super) fn build_layout_node(
         generated
     };
     element.runtime_id = id;
+    layout_nodes.positions.insert(id, (parent_id, child_index));
     element.resolved_direction = element.direction.unwrap_or(inherited_direction);
     apply_logical_insets(element);
     element.resolved_typography = element.typography.resolve(inherited_typography);
@@ -732,8 +957,9 @@ pub(super) fn build_layout_node(
 
     let mut child_nodes = Vec::with_capacity(element.children.len());
     for (index, child) in element.children.iter_mut().enumerate() {
-        child_nodes.push(build_layout_node(
+        child_nodes.push(build_retained_layout_node(
             taffy,
+            layout_nodes,
             seen_ids,
             child,
             id,
@@ -762,71 +988,45 @@ pub(super) fn build_layout_node(
         element.resolved_typography.transform = None;
     }
 
-    let node = match &element.kind {
-        ElementKind::Container => taffy.new_with_children(element.layout.clone(), &child_nodes)?,
+    let context = match &element.kind {
+        ElementKind::Container => None,
         // Query contents are deliberately disconnected from this leaf. Their layout is computed
         // later as a separate root using this node's assigned size, so callback contents cannot
         // feed intrinsic size back into the query box.
-        ElementKind::ContainerQuery(_) => taffy.new_leaf(element.layout.clone())?,
-        ElementKind::Text(content) => taffy.new_leaf_with_context(
-            element.layout.clone(),
-            MeasureContext::Text {
-                id: TextId::new(id.value()),
-                content: content.clone(),
-                style: Box::new(element.resolved_typography.clone()),
-                highlights: None,
-            },
-        )?,
-        ElementKind::StyledText(styled) => taffy.new_leaf_with_context(
-            element.layout.clone(),
-            MeasureContext::Text {
-                id: TextId::new(id.value()),
-                content: styled.content().clone(),
-                style: Box::new(element.resolved_typography.clone()),
-                highlights: Some(styled.shared_highlights().clone()),
-            },
-        )?,
+        ElementKind::ContainerQuery(_) => None,
+        ElementKind::Text(content) => Some(MeasureContext::Text {
+            id: TextId::new(id.value()),
+            content: content.clone(),
+            style: Box::new(element.resolved_typography.clone()),
+            highlights: None,
+        }),
+        ElementKind::StyledText(styled) => Some(MeasureContext::Text {
+            id: TextId::new(id.value()),
+            content: styled.content().clone(),
+            style: Box::new(element.resolved_typography.clone()),
+            highlights: Some(styled.shared_highlights().clone()),
+        }),
         ElementKind::Image(image) => match &image.resolved {
-            ImageResolution::Ready(source) => taffy.new_leaf_with_context(
-                element.layout.clone(),
-                MeasureContext::Image {
-                    intrinsic: source.size(),
-                },
-            )?,
-            ImageResolution::Animated(animation) => taffy.new_leaf_with_context(
-                element.layout.clone(),
-                MeasureContext::Image {
-                    intrinsic: animation.size(),
-                },
-            )?,
-            ImageResolution::Loading | ImageResolution::Failed => {
-                if child_nodes.is_empty() {
-                    taffy.new_leaf(element.layout.clone())?
-                } else {
-                    taffy.new_with_children(element.layout.clone(), &child_nodes)?
-                }
-            }
+            ImageResolution::Ready(source) => Some(MeasureContext::Image {
+                intrinsic: source.size(),
+            }),
+            ImageResolution::Animated(animation) => Some(MeasureContext::Image {
+                intrinsic: animation.size(),
+            }),
+            ImageResolution::Loading | ImageResolution::Failed => None,
         },
-        ElementKind::Svg(svg) => taffy.new_leaf_with_context(
-            element.layout.clone(),
-            MeasureContext::Image {
-                intrinsic: svg.svg.size(),
-            },
-        )?,
+        ElementKind::Svg(svg) => Some(MeasureContext::Image {
+            intrinsic: svg.svg.size(),
+        }),
         ElementKind::Path(path) => {
             let intrinsic = path.path.size();
             if intrinsic.is_empty() {
-                taffy.new_leaf(element.layout.clone())?
+                None
             } else {
-                taffy.new_leaf_with_context(
-                    element.layout.clone(),
-                    MeasureContext::Image { intrinsic },
-                )?
+                Some(MeasureContext::Image { intrinsic })
             }
         }
-        ElementKind::Canvas(_) | ElementKind::CustomShader(_) => {
-            taffy.new_leaf(element.layout.clone())?
-        }
+        ElementKind::Canvas(_) | ElementKind::CustomShader(_) => None,
         ElementKind::TextInput(input) => {
             let content = if input.value.is_empty() {
                 input.placeholder.clone()
@@ -838,19 +1038,23 @@ pub(super) fn build_layout_node(
             let highlights =
                 (!input.password && !input.value.is_empty() && !input.highlights.is_empty())
                     .then(|| input.highlights.clone());
-            taffy.new_leaf_with_context(
-                element.layout.clone(),
-                MeasureContext::Text {
-                    id: TextId::new(id.value()),
-                    content,
-                    style: Box::new(element.resolved_typography.clone()),
-                    highlights,
-                },
-            )?
+            Some(MeasureContext::Text {
+                id: TextId::new(id.value()),
+                content,
+                style: Box::new(element.resolved_typography.clone()),
+                highlights,
+            })
         }
         #[cfg(target_os = "macos")]
-        ElementKind::NativeView(_) => taffy.new_leaf(element.layout.clone())?,
+        ElementKind::NativeView(_) => None,
     };
+    let attaches_children = matches!(&element.kind, ElementKind::Container)
+        || matches!(&element.kind, ElementKind::Image(image)
+            if matches!(&image.resolved, ImageResolution::Loading | ImageResolution::Failed));
+    if !attaches_children {
+        child_nodes.clear();
+    }
+    let node = layout_nodes.reconcile(taffy, id, &element.layout, context, child_nodes)?;
     if let ElementKind::ContainerQuery(query) = &mut element.kind {
         query.layout_pending = false;
     }

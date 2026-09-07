@@ -9,6 +9,8 @@ use crate::{
 thread_local! {
     static RECORDED_TEXT_WIDTHS: std::cell::RefCell<Option<Vec<Option<f32>>>> =
         const { std::cell::RefCell::new(None) };
+    static RECORDED_TEXT_IDS: std::cell::RefCell<Option<Vec<TextId>>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 struct TestTextLayout;
@@ -16,12 +18,17 @@ struct TestTextLayout;
 impl TextLayoutEngine for TestTextLayout {
     fn measure_text(
         &mut self,
-        _id: TextId,
+        id: TextId,
         content: &Arc<str>,
         style: &TextStyle,
         max_width: Option<f32>,
         _scale_factor: f32,
     ) -> Size {
+        RECORDED_TEXT_IDS.with(|recording| {
+            if let Some(ids) = recording.borrow_mut().as_mut() {
+                ids.push(id);
+            }
+        });
         RECORDED_TEXT_WIDTHS.with(|recording| {
             if let Some(widths) = recording.borrow_mut().as_mut() {
                 widths.push(max_width);
@@ -133,6 +140,7 @@ fn assign_runtime_ids(element: &mut Element) {
 mod direction_sticky_snap;
 mod drag_selection;
 mod focus_accessibility;
+mod layout_invalidation;
 mod layout_motion;
 mod pointer_scroll;
 mod state_styles;

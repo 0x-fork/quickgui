@@ -256,6 +256,38 @@ impl Runtime {
         true
     }
 
+    pub(super) fn update_external_elements(
+        &mut self,
+        handle: WindowHandle,
+        updates: &[crate::ElementUpdate],
+    ) -> Result<bool, crate::ui_tree::UiError> {
+        let window = if self.current_handle() == Some(handle) {
+            self.window.as_mut()
+        } else {
+            self.window_handles
+                .get(&handle)
+                .and_then(|id| self.windows.get_mut(id))
+                .map(|entry| &mut entry.state)
+        };
+        let Some(window) = window else {
+            return Ok(false);
+        };
+        if window.view_dirty {
+            return Ok(true);
+        }
+        let Some(kind) = window.ui.update_elements(updates)? else {
+            return Ok(false);
+        };
+        window.layout_dirty |= kind == crate::ui_tree::ElementUpdateKind::Layout;
+        if kind != crate::ui_tree::ElementUpdateKind::None
+            && window.visible
+            && window.scheduler.invalidate()
+        {
+            window.window.request_redraw();
+        }
+        Ok(true)
+    }
+
     pub(super) fn focus_external(&mut self, handle: WindowHandle, element: ElementId) -> bool {
         if self.current_handle() == Some(handle) {
             let Some(window) = self.window.as_mut() else {

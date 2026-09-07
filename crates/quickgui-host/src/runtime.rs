@@ -1104,10 +1104,23 @@ impl NativeRuntime {
             .windows
             .get(&window)
             .ok_or_else(|| format!("unknown QuickGUI window {window}"))?;
-        let revision = apply_mutations(&mut native_window.tree.borrow_mut(), mutations)
-            .map_err(|error| error.to_string())?;
-        if let (Some(runner), Some(handle)) = (&mut self.runner, native_window.handle) {
-            runner.invalidate_window(handle);
+        let mut tree = native_window.tree.borrow_mut();
+        let previous_revision = tree.revision;
+        let retained_updates = retained_element_updates(&tree, &mutations);
+        let revision = apply_mutations(&mut tree, mutations).map_err(|error| error.to_string())?;
+        drop(tree);
+        if revision != previous_revision
+            && let (Some(runner), Some(handle)) = (&mut self.runner, native_window.handle)
+        {
+            let updated = match retained_updates {
+                Some(updates) => runner
+                    .update_elements(handle, &updates)
+                    .map_err(|error| error.to_string())?,
+                None => false,
+            };
+            if !updated {
+                runner.invalidate_window(handle);
+            }
         }
         Ok(revision)
     }
@@ -1359,8 +1372,8 @@ pub(crate) fn native_font_data(options: &NativeAppOptions) -> Option<Vec<Arc<[u8
                 // Packaged applications declare fonts relative to their resources,
                 // independent of the working directory used to launch the app.
                 // Path::join preserves explicitly absolute font paths.
-                let path = std::path::Path::new(options.resource_dir.as_deref().unwrap_or("."))
-                    .join(path);
+                let path =
+                    std::path::Path::new(options.resource_dir.as_deref().unwrap_or(".")).join(path);
                 match std::fs::read(&path) {
                     Ok(bytes) => Some(Arc::<[u8]>::from(bytes)),
                     Err(error) => {

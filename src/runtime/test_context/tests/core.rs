@@ -1,5 +1,63 @@
 use super::*;
 
+struct RetainedUpdateView {
+    label: Arc<str>,
+    clicks: usize,
+}
+
+impl View for RetainedUpdateView {
+    fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let click = cx.listener("button", |view, _cx| view.clicks += 1);
+        button()
+            .id("button")
+            .on_click(click)
+            .child(text(self.label.clone()).id("label"))
+    }
+}
+
+#[test]
+fn retained_updates_preserve_listeners_and_accessibility_without_rendering_view() {
+    let (mut cx, view) = TestAppContext::new(RetainedUpdateView {
+        label: Arc::from("Before"),
+        clicks: 0,
+    })
+    .unwrap();
+    let window = view.window_handle();
+    cx.focus(window, "button").unwrap();
+    let renders = cx.render_count(window).unwrap();
+    cx.update(view, |view, _cx| view.label = Arc::from("After 🌍"))
+        .unwrap();
+    assert!(
+        cx.update_elements(
+            window,
+            &[
+                crate::ElementUpdate::Text {
+                    id: "label".into(),
+                    content: Arc::from("After 🌍")
+                },
+                crate::ElementUpdate::BackgroundColor {
+                    id: "button".into(),
+                    color: Color::WHITE
+                },
+            ]
+        )
+        .unwrap()
+    );
+    assert_eq!(cx.render_count(window).unwrap(), renders);
+    let accessibility = cx.accessibility_update(window).unwrap();
+    let button = accessibility
+        .nodes
+        .iter()
+        .find(|(id, _)| id.0 == ElementId::from("button").value())
+        .unwrap();
+    assert_eq!(button.1.label(), Some("After 🌍"));
+    cx.click(window, "button").unwrap();
+    assert_eq!(cx.read(view, |view| view.clicks).unwrap(), 1);
+    assert_eq!(cx.render_count(window).unwrap(), renders);
+    cx.update(view, |_view, cx| cx.invalidate()).unwrap();
+    assert_eq!(cx.render_count(window).unwrap(), renders + 1);
+}
+
 #[cfg(feature = "inspector")]
 struct InspectorTestView;
 

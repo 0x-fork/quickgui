@@ -186,7 +186,8 @@ impl NativeKeymap {
 /// Attach every declared input listener to one caller-owned element.
 ///
 /// Listeners are additive and independent; an element that declares none keeps the untouched fast
-/// path with no core listener registration at all.
+/// path with no core listener registration at all. Forwarding only wakes the host event queue;
+/// Go's eventual mutation batch determines whether the retained view needs layout or paint.
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn attach_input_listeners(
@@ -223,7 +224,6 @@ pub(super) fn attach_input_listeners(
                 );
                 cx.prevent_default();
                 cx.stop_propagation();
-                cx.invalidate();
                 return;
             }
             if !wants_key_down {
@@ -245,14 +245,13 @@ pub(super) fn attach_input_listeners(
                     value: Some(event_object(fields, event.modifiers)),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_key_down(listener);
     }
 
     if declared(property::KEY_UP_LISTENER) {
         let queue = Rc::clone(events);
-        let listener = cx.key_up_listener(element_id, move |_view, event, cx| {
+        let listener = cx.key_up_listener(element_id, move |_view, event, _cx| {
             enqueue_event(
                 &queue,
                 QueuedEvent {
@@ -265,7 +264,6 @@ pub(super) fn attach_input_listeners(
                     )),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_key_up(listener);
     }
@@ -274,7 +272,7 @@ pub(super) fn attach_input_listeners(
     let wants_double_click = declared(property::DOUBLE_CLICK_LISTENER);
     if wants_mouse_down || wants_double_click {
         let queue = Rc::clone(events);
-        let listener = cx.mouse_down_listener(element_id, move |_view, event, cx| {
+        let listener = cx.mouse_down_listener(element_id, move |_view, event, _cx| {
             let payload = || {
                 let mut fields = point_fields(event.position);
                 fields.push(("button".to_owned(), mouse_button_name(event.button).into()));
@@ -306,14 +304,13 @@ pub(super) fn attach_input_listeners(
                     },
                 );
             }
-            cx.invalidate();
         });
         element = element.on_any_mouse_down(listener);
     }
 
     if declared(property::MOUSE_UP_LISTENER) {
         let queue = Rc::clone(events);
-        let listener = cx.mouse_up_listener(element_id, move |_view, event, cx| {
+        let listener = cx.mouse_up_listener(element_id, move |_view, event, _cx| {
             let mut fields = point_fields(event.position);
             fields.push(("button".to_owned(), mouse_button_name(event.button).into()));
             fields.push(("clickCount".to_owned(), event.click_count.into()));
@@ -326,14 +323,13 @@ pub(super) fn attach_input_listeners(
                     value: Some(event_object(fields, event.modifiers)),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_any_mouse_up(listener);
     }
 
     if declared(property::MOUSE_MOVE_LISTENER) {
         let queue = Rc::clone(events);
-        let listener = cx.mouse_move_listener(element_id, move |_view, event, cx| {
+        let listener = cx.mouse_move_listener(element_id, move |_view, event, _cx| {
             let mut fields = point_fields(event.position);
             fields.push((
                 "pressedButton".to_owned(),
@@ -351,14 +347,13 @@ pub(super) fn attach_input_listeners(
                     value: Some(event_object(fields, event.modifiers)),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_mouse_move(listener);
     }
 
     if declared(property::SCROLL_LISTENER) && !core_owns_scroll_wheel {
         let queue = Rc::clone(events);
-        let listener = cx.scroll_wheel_listener(element_id, move |_view, event, cx| {
+        let listener = cx.scroll_wheel_listener(element_id, move |_view, event, _cx| {
             let pixels = event.delta.pixel_delta(DEFAULT_SCROLL_LINE_HEIGHT);
             let mut fields = point_fields(event.position);
             fields.push(("deltaX".to_owned(), f64::from(pixels.x).into()));
@@ -374,7 +369,6 @@ pub(super) fn attach_input_listeners(
                     value: Some(event_object(fields, event.modifiers)),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_scroll_wheel(listener);
     }
@@ -385,7 +379,7 @@ pub(super) fn attach_input_listeners(
         && node.string(property::PART) != Some(CONTEXT_MENU_TRIGGER_PART)
     {
         let queue = Rc::clone(events);
-        let listener = cx.context_menu_listener(element_id, move |_view, event, cx| {
+        let listener = cx.context_menu_listener(element_id, move |_view, event, _cx| {
             enqueue_event(
                 &queue,
                 QueuedEvent {
@@ -395,14 +389,13 @@ pub(super) fn attach_input_listeners(
                     value: Some(event_object(point_fields(event.position), event.modifiers)),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_context_menu(listener);
     }
 
     if declared(property::PINCH_LISTENER) {
         let queue = Rc::clone(events);
-        let listener = cx.pinch_listener(element_id, move |_view, event, cx| {
+        let listener = cx.pinch_listener(element_id, move |_view, event, _cx| {
             enqueue_event(
                 &queue,
                 QueuedEvent {
@@ -417,14 +410,13 @@ pub(super) fn attach_input_listeners(
                     )),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_pinch(listener);
     }
 
     if declared(property::ROTATION_LISTENER) {
         let queue = Rc::clone(events);
-        let listener = cx.rotation_listener(element_id, move |_view, event, cx| {
+        let listener = cx.rotation_listener(element_id, move |_view, event, _cx| {
             enqueue_event(
                 &queue,
                 QueuedEvent {
@@ -439,14 +431,13 @@ pub(super) fn attach_input_listeners(
                     )),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_rotation(listener);
     }
 
     if declared(property::SMART_MAGNIFY_LISTENER) {
         let queue = Rc::clone(events);
-        let listener = cx.smart_magnify_listener(element_id, move |_view, event, cx| {
+        let listener = cx.smart_magnify_listener(element_id, move |_view, event, _cx| {
             enqueue_event(
                 &queue,
                 QueuedEvent {
@@ -456,14 +447,13 @@ pub(super) fn attach_input_listeners(
                     value: Some(event_object(point_fields(event.position), event.modifiers)),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_smart_magnify(listener);
     }
 
     if declared(property::PRESSURE_LISTENER) {
         let queue = Rc::clone(events);
-        let listener = cx.mouse_pressure_listener(element_id, move |_view, event, cx| {
+        let listener = cx.mouse_pressure_listener(element_id, move |_view, event, _cx| {
             let mut fields = point_fields(event.position);
             fields.push(("pressure".to_owned(), f64::from(event.pressure).into()));
             fields.push((
@@ -485,7 +475,6 @@ pub(super) fn attach_input_listeners(
                     value: Some(event_object(fields, event.modifiers)),
                 },
             );
-            cx.invalidate();
         });
         element = element.on_mouse_pressure(listener);
     }
@@ -543,7 +532,7 @@ fn attach_drag_and_drop(
         let external = external_drag_payload(&declaration);
         let queue = Rc::clone(events);
         let wants_start = node.boolean(property::DRAG_LISTENER).unwrap_or(false);
-        let listener = cx.drag_listener(element_id, move |_view, event, cx| {
+        let listener = cx.drag_listener(element_id, move |_view, event, _cx| {
             if wants_start {
                 enqueue_event(
                     &queue,
@@ -554,7 +543,6 @@ fn attach_drag_and_drop(
                         value: Some(event_object(point_fields(event.position), event.modifiers)),
                     },
                 );
-                cx.invalidate();
             }
             let drag = quickgui::Drag::new(payload.clone());
             match external.clone() {
@@ -579,7 +567,7 @@ fn attach_drag_and_drop(
             let queue = Rc::clone(events);
             let listener = cx.drop_listener::<NativeDragPayload>(
                 element_id,
-                move |_view, payload, event, cx| {
+                move |_view, payload, event, _cx| {
                     let mut fields = point_fields(event.position);
                     fields.push(("id".to_owned(), payload.id.to_string().into()));
                     fields.push(("source".to_owned(), payload.source.into()));
@@ -593,7 +581,6 @@ fn attach_drag_and_drop(
                             value: Some(event_object(fields, event.modifiers)),
                         },
                     );
-                    cx.invalidate();
                 },
             );
             element = element.on_drop(listener);
@@ -602,7 +589,7 @@ fn attach_drag_and_drop(
             let queue = Rc::clone(events);
             let listener = cx.drop_listener::<quickgui::DroppedFiles>(
                 element_id,
-                move |_view, files, event, cx| {
+                move |_view, files, event, _cx| {
                     let mut fields = point_fields(event.position);
                     fields.push((
                         "paths".to_owned(),
@@ -626,7 +613,6 @@ fn attach_drag_and_drop(
                             value: Some(event_object(fields, event.modifiers)),
                         },
                     );
-                    cx.invalidate();
                 },
             );
             element = element.on_drop(listener);

@@ -2,6 +2,62 @@
 
 [Architecture index](README.md) · [Documentation](../README.md)
 
+## Invalidation and subtree reuse
+
+The useful comparison is phase-specific invalidation: a state change should restart only the work
+that depends on it. Compose documents separate composition, measurement/placement, and drawing
+phases, with state reads determining which phases restart. SwiftUI tracks view dependencies and
+uses them to decide which views need updating. Neither model implies that every state change can
+skip layout, or that only a damaged screen rectangle is drawn.
+Sources: [Compose phases](https://developer.android.com/develop/ui/compose/phases) and
+[SwiftUI performance](https://developer.apple.com/documentation/Xcode/understanding-and-improving-swiftui-performance).
+
+QuickGUI now retains its Taffy nodes across view declarations, matching them by runtime element
+identity. Previously, every declaration cleared the complete layout arena and discarded all of
+Taffy's subtree caches. Reconciliation changes only differing layout styles, intrinsic measurement
+inputs, and child edges. Taffy propagates dirtiness to ancestors and reuses unchanged branches
+under unchanged constraints. A clean layout root with the same viewport and scale skips the layout
+call entirely, including the final pixel-rounding traversal. Text foreground, shadows, and
+decorations do not invalidate intrinsic measurement. Font metrics, content, inherited direction,
+constraints, and display scale still do.
+
+The Go host also translates ordinary text, background-color, text-color, and opacity mutations into
+`AppRunner::update_elements` batches. These locate mounted elements through retained parent/index
+metadata and change their properties without invoking `View::render` or replacing listeners.
+Inherited text color visits only the affected descendants and stops at explicit color overrides.
+Text changes update the same measurement, selection, and accessibility state used by ordinary
+declarations. A batch validates every target before applying any changes. Callers update their
+source declaration first, so later rebuilds preserve the new values.
+
+| Change | Declaration | Layout | Paint |
+| --- | --- | --- | --- |
+| Equivalent native mutation batch | Skipped; revision unchanged | Skipped | No redraw requested |
+| Ordinary mounted text mutation | Skipped | Changed leaf and affected ancestors; clean branches cached | Rebuilt |
+| Ordinary mounted color or opacity mutation | Skipped | Skipped | Rebuilt |
+| Structural, layout, listener, or component-owned mutation | Rebuilt | Reconciled; clean branches cached | Rebuilt |
+| Hover, selection, retained scrolling, style transition | Usually skipped; virtualization or application callbacks can request a declaration | Retained boxes | Rebuilt |
+| Viewport resize | Skipped unless the view observes viewport geometry | Recomputed for changed constraints | Rebuilt |
+
+Removed nodes and their measurement contexts are released after container-query expansion
+converges. Child edges are detached before reparenting to avoid transient cycles. Unsupported
+targeted updates, callback-owned subtrees, and component parts fall back to the declaration path;
+they cannot silently freeze derived state. Forwarded events wake the host queue without requesting
+a speculative declaration before Go handles them. Native redraw requests remain coalesced once
+per mutation batch, while core-owned interaction paint still runs when needed.
+
+This is layout subtree reuse and targeted declaration skipping, not complete SwiftUI/Compose
+parity. General Rust `View` dependencies are still tracked at window scope, and a normal view
+invalidation executes its root render method. Painting still traverses the mounted tree to rebuild
+the scene and hit regions; there is no retained display-list subtree cache or GPU damage-region
+renderer. The compositor's texture reuse is allocation caching, not cached subtree pixels.
+
+Regression tests compare retained layout with a fresh layout after updates, reordering,
+reparenting, resizing, query expansion, and unmounting. Work counters assert that updating one
+label measures none of the 100 text leaves in an unchanged sibling panel, and that identical or
+paint-only declarations perform no additional layout pass. Core and native-host tests also assert
+that targeted updates preserve click delivery and accessible names without incrementing the view
+render count.
+
 ## Layout
 
 Taffy implements Flexbox, CSS Grid, and intrinsic measurement. Grid containers accept the
@@ -27,8 +83,8 @@ projection; later layout, paint, hit testing, selection, and decoration geometry
 variants are deliberately paint-only so a pointer move cannot trigger relayout. Opted-in style
 transitions retain their current and target paint values by runtime element identity; every active
 frame reuses the same boxes and interpolates fixed-size color, border, radius, opacity, text-color,
-and at-most-eight-shadow state. Grid participates in the same retained layout boundary: resize or a
-rebuilt view recomputes it, while scrolling, selection, hover, and other paint-only changes reuse
+and at-most-eight-shadow state. Grid participates in the same retained layout boundary: resize or
+changed layout inputs recompute it, while scrolling, selection, hover, and other paint-only changes reuse
 its boxes and schedule no idle frames.
 
 Scrollable nodes retain offsets outside the declaration tree. Their vertical overlay scrollbar has

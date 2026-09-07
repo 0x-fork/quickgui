@@ -828,7 +828,13 @@ impl DetachedTree {
                 Direction::Ltr,
             )?;
             compute_detached_layout(&mut self.taffy, root_node, viewport, scale_factor, renderer)?;
-            compute_container_query_child_layouts(&root, &mut self.taffy, scale_factor, renderer)?;
+            compute_container_query_child_layouts(
+                &root,
+                &mut self.taffy,
+                scale_factor,
+                renderer,
+                None,
+            )?;
 
             let resolution = {
                 let mut prepare = |_: &mut Element| {};
@@ -899,6 +905,7 @@ impl DetachedTree {
                 &mut self.taffy,
                 scale_factor,
                 renderer,
+                None,
             )?;
             if container_queries_need_resolution(&self.root, &self.taffy)? {
                 self.motion.needs_resolve = true;

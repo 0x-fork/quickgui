@@ -379,6 +379,7 @@ pub(super) fn resolve_declarative_animations(
         // The wrapper is declaration metadata, not part of the retained paint tree. An animator
         // may still create independently animated descendants, which are resolved below.
         resolved.animation = None;
+        resolved.resolved_motion = true;
         *element = resolved;
     }
 
@@ -402,6 +403,7 @@ pub(super) fn resolve_declarative_animations(
         let base = std::mem::replace(element, crate::div());
         let mut resolved = (spring.animator)(base, sample.value);
         resolved.spring = None;
+        resolved.resolved_motion = true;
         *element = resolved;
     }
 

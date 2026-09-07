@@ -638,6 +638,12 @@ impl AccessibilityUpdateSchedule {
         *self = Self::default();
     }
 
+    fn semantic_change(&mut self) {
+        self.geometry_deadline = None;
+        self.pending_geometry = None;
+        self.update_due = false;
+    }
+
     /// Coalesce geometry-only scroll and resize updates while keeping accessibility responsive at
     /// 10 Hz. Semantic redraws are never delayed, and an idle correction is scheduled after the
     /// last geometry frame without keeping the event loop awake in between.

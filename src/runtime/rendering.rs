@@ -91,7 +91,16 @@ impl Runtime {
         let retained_layout_only = state.layout_dirty && !state.view_dirty;
         let retained_geometry_changed =
             state.view_dirty || state.layout_dirty || scroll_result.changed;
-        let accessibility_geometry = if retained_layout_only {
+        let retained_semantics_changed = state.ui.take_retained_semantics_dirty();
+        if retained_semantics_changed {
+            state.accessibility_updates.semantic_change();
+        }
+        let accessibility_geometry = if retained_semantics_changed {
+            // A patched label changes its accessible value (and possibly its parent's name),
+            // even though its frame takes the retained-layout path. Do not debounce semantics
+            // as if this were only a live resize.
+            None
+        } else if retained_layout_only {
             Some(AccessibilityUpdateKind::LayoutGeometry)
         } else if retained_scroll_only {
             Some(AccessibilityUpdateKind::ScrollGeometry)

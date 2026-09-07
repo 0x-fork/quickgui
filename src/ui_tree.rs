@@ -641,8 +641,10 @@ struct ScrollEndState {
 pub(crate) struct UiTree {
     root: Option<Element>,
     taffy: TaffyTree<MeasureContext>,
+    layout_nodes: LayoutNodeCache,
     root_node: Option<NodeId>,
     mounted_state_dirty: bool,
+    retained_semantics_dirty: bool,
     seen_ids: HashSet<ElementId>,
     /// IDs whose complete ancestor chain participates in layout (`display != none`).
     displayed_ids: HashSet<ElementId>,
@@ -1053,6 +1055,7 @@ mod lifecycle;
 mod motion;
 mod painting;
 mod pointer;
+mod updates;
 
 use accessibility::*;
 use dispatch::*;
@@ -1066,6 +1069,7 @@ pub use layout::{
     MAX_SCROLL_SNAP_CONTAINERS_PER_WINDOW, MAX_SCROLL_SNAP_POINTS_PER_WINDOW,
     MAX_STICKY_ELEMENTS_PER_WINDOW,
 };
+pub(crate) use updates::ElementUpdateKind;
 
 #[cfg(test)]
 mod tests;

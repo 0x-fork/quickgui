@@ -317,6 +317,26 @@ impl AppRunner {
         self.runtime.invalidate_external(handle)
     }
 
+    /// Update mounted text or paint properties without rebuilding the view declaration.
+    ///
+    /// Update the embedding runtime's source state first, so a later ordinary view rebuild
+    /// preserves these values. Returns `false` without applying the batch when its targets are
+    /// not mounted or are owned by a container-query/animation callback; call
+    /// [`Self::invalidate_window`] in that case. A pending view rebuild already reads the latest
+    /// source state and accepts the batch without redundant work.
+    pub fn update_elements(
+        &mut self,
+        handle: WindowHandle,
+        updates: &[crate::ElementUpdate],
+    ) -> Result<bool, AppError> {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return Ok(false);
+        }
+        self.runtime
+            .update_external_elements(handle, updates)
+            .map_err(|error| AppError::View(error.to_string()))
+    }
+
     /// Focus one mounted element from an embedding runtime.
     ///
     /// This is the imperative counterpart to [`crate::Element::auto_focus`]. It is intended for
