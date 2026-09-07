@@ -69,9 +69,17 @@ export interface DocumentTypeConfig {
   description?: string;
 }
 
-/** Signed updater manifest generation. */
+/** Signed Sparkle-compatible appcasts for the optional updater extension. */
 export interface UpdatesConfig {
-  /** Write `latest.json` next to the signed artifact during `quickgui build`. */
+  /** Appcast URL; {target} expands to e.g. darwin-arm64. Defaults to baseUrl/appcast-{target}.xml. */
+  feedUrl?: string;
+  /** Base64 raw Ed25519 public key shared by Sparkle and portable backends. */
+  publicKey?: string;
+  /** Default preference; user choices persist across launches. */
+  automaticChecks?: boolean;
+  /** Base64 Sparkle secret-key file, overridden by QUICKGUI_UPDATER_PRIVATE_KEY. */
+  ed25519SecretKey?: string;
+  /** Write a signed appcast during build. Legacy Minisign config still writes latest.json. */
   manifest?: boolean;
   /** Public base URL the artifact is published under, e.g. "https://dl.example.com/app". */
   baseUrl: string;
@@ -204,11 +212,13 @@ export async function loadConfig(
   configFile?: string,
 ): Promise<ResolvedQuickGuiConfig> {
   const root = resolve(projectRoot);
-  const selected = configFile ?? ["quickgui.toml", "quickgui.config.ts"].find((name) =>
-    existsSync(resolve(root, name)),
-  );
+  const selected =
+    configFile ??
+    ["quickgui.toml", "quickgui.config.ts"].find((name) => existsSync(resolve(root, name)));
   if (selected === undefined) {
-    throw new CliError(`QuickGUI config not found in ${root}: expected quickgui.toml or quickgui.config.ts`);
+    throw new CliError(
+      `QuickGUI config not found in ${root}: expected quickgui.toml or quickgui.config.ts`,
+    );
   }
   const configPath = isAbsolute(selected) ? selected : resolve(root, selected);
   if (!existsSync(configPath)) {
@@ -245,14 +255,18 @@ export function resolveConfig(
   const version = optionalString(input.version, "version", 64) ?? "0.1.0";
   const buildVersion = optionalString(input.buildVersion, "buildVersion", 64) ?? version;
   const entry = resolveRelative(projectRoot, optionalString(input.entry, "entry", 1_024) ?? ".");
-  const outDir = resolveRelative(projectRoot, optionalString(input.outDir, "outDir", 1_024) ?? "dist");
-  const target = input.target === undefined ? undefined : parseTarget(requiredString(input.target, "target", 64));
+  const outDir = resolveRelative(
+    projectRoot,
+    optionalString(input.outDir, "outDir", 1_024) ?? "dist",
+  );
+  const target =
+    input.target === undefined
+      ? undefined
+      : parseTarget(requiredString(input.target, "target", 64));
   const resources = stringArray(input.resources, "resources").map((path) =>
     resolveRelative(projectRoot, path),
   );
-  const fonts = stringArray(input.fonts, "fonts").map((path) =>
-    resolveRelative(projectRoot, path),
-  );
+  const fonts = stringArray(input.fonts, "fonts").map((path) => resolveRelative(projectRoot, path));
   const protocols = protocolArray(input.protocols);
   const macos = objectOrEmpty(input.macos, "macos");
   const windows = objectOrEmpty(input.windows, "windows");
@@ -282,7 +296,9 @@ export function resolveConfig(
     outDir,
     ...(target ? { target } : {}),
     native: {
-      ...(optionalString(native.libraryPath, "native.libraryPath", 1024) ? { libraryPath: resolveRelative(projectRoot, String(native.libraryPath)) } : {}),
+      ...(optionalString(native.libraryPath, "native.libraryPath", 1024)
+        ? { libraryPath: resolveRelative(projectRoot, String(native.libraryPath)) }
+        : {}),
       tags: stringArray(native.tags, "native.tags"),
     },
     resources,
@@ -388,7 +404,8 @@ function resolveDocumentTypes(value: unknown): ResolvedDocumentType[] {
       }
       seen.add(extension);
     }
-    const role = type.role === undefined ? "Editor" : requiredString(type.role, `${field}.role`, 16);
+    const role =
+      type.role === undefined ? "Editor" : requiredString(type.role, `${field}.role`, 16);
     if (role !== "Editor" && role !== "Viewer") {
       throw new CliError(`\`${field}.role\` must be "Editor" or "Viewer"`);
     }
@@ -433,11 +450,36 @@ function resolveUpdates(
   if (!/^https:\/\/[^\s"']+$/.test(baseUrl)) {
     throw new CliError("`updates.baseUrl` must be an HTTPS URL");
   }
+  const publicKey = optionalString(updates.publicKey, "updates.publicKey", 128);
+  if (
+    publicKey &&
+    (Buffer.from(publicKey, "base64").length !== 32 ||
+      Buffer.from(publicKey, "base64").toString("base64") !== publicKey)
+  )
+    throw new CliError("updates.publicKey must be a base64 32-byte Ed25519 public key");
+  const feedUrl = optionalString(updates.feedUrl, "updates.feedUrl", 2048);
+  if (feedUrl) {
+    const url = new URL(feedUrl.replaceAll("{target}", "darwin-arm64"));
+    if (url.protocol !== "https:" || url.username || url.password || url.hash)
+      throw new CliError("updates.feedUrl must use HTTPS without credentials or fragments");
+  }
+  const ed25519SecretKey = optionalString(
+    updates.ed25519SecretKey,
+    "updates.ed25519SecretKey",
+    1024,
+  );
+  const automaticChecks = optionalBoolean(updates.automaticChecks, "updates.automaticChecks");
   const secretKey = optionalString(updates.minisignSecretKey, "updates.minisignSecretKey", 1_024);
   const notesFile = optionalString(updates.notesFile, "updates.notesFile", 1_024);
   return {
     manifest: optionalBoolean(updates.manifest, "updates.manifest") ?? false,
     baseUrl: baseUrl.replace(/\/+$/, ""),
+    ...(publicKey ? { publicKey } : {}),
+    ...(feedUrl ? { feedUrl } : {}),
+    ...(ed25519SecretKey
+      ? { ed25519SecretKey: resolveRelative(projectRoot, ed25519SecretKey) }
+      : {}),
+    ...(automaticChecks === undefined ? {} : { automaticChecks }),
     ...(secretKey ? { minisignSecretKey: resolveRelative(projectRoot, secretKey) } : {}),
     ...(notesFile ? { notesFile: resolveRelative(projectRoot, notesFile) } : {}),
   };
@@ -446,11 +488,7 @@ function resolveUpdates(
 function resolveMacAppStore(value: unknown, projectRoot: string): MacAppStoreConfig | undefined {
   if (value === undefined) return undefined;
   const appStore = objectOrEmpty(value, "macos.appStore");
-  const entitlements = optionalString(
-    appStore.entitlements,
-    "macos.appStore.entitlements",
-    1_024,
-  );
+  const entitlements = optionalString(appStore.entitlements, "macos.appStore.entitlements", 1_024);
   return {
     applicationIdentity: requiredString(
       appStore.applicationIdentity,
@@ -464,11 +502,7 @@ function resolveMacAppStore(value: unknown, projectRoot: string): MacAppStoreCon
     ),
     provisioningProfile: resolveRelative(
       projectRoot,
-      requiredString(
-        appStore.provisioningProfile,
-        "macos.appStore.provisioningProfile",
-        1_024,
-      ),
+      requiredString(appStore.provisioningProfile, "macos.appStore.provisioningProfile", 1_024),
     ),
     ...(entitlements ? { entitlements: resolveRelative(projectRoot, entitlements) } : {}),
   };
@@ -511,9 +545,7 @@ function resolveWindowsSigning(
   );
   const subjectName = optionalString(signing.subjectName, "windows.signing.subjectName", 512);
   if ((certificateFile === undefined) === (subjectName === undefined)) {
-    throw new CliError(
-      "`windows.signing` needs exactly one of `certificateFile` or `subjectName`",
-    );
+    throw new CliError("`windows.signing` needs exactly one of `certificateFile` or `subjectName`");
   }
   const passwordEnvironmentVariable = optionalString(
     signing.passwordEnvironmentVariable,

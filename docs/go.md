@@ -234,3 +234,5 @@ QUICKGUI_LIBRARY="$PWD/target/release/libquickgui_host.dylib" /tmp/quickgui-coun
 A Go `replace` directive points each repository example at `../../go`. External applications depend on `github.com/egoist/quickgui/go`; releases use the submodule tag `go/v<version>`. The CLI bundles the matching library under macOS `Contents/Frameworks`, or beside the executable on Linux/Windows. `QUICKGUI_LIBRARY` can select an explicit library for development. Rust and Go protocol versions are checked at load time.
 
 Run `bun run test:go` to check formatting, generated Rust protocol constants, the SDK, and every Go example with CGO disabled. Run `go -C go generate ./protocol` after changing Rust wire constants.
+
+Automatic updates are a separate opt-in import: `github.com/egoist/quickgui/go/updater`. Call `updater.Start` once per app, configure `[updates]` in `quickgui.toml`, and publish signed appcasts with the Bun CLI. See [automatic updates](https://github.com/egoist/quickgui/blob/main/docs/updater.md).

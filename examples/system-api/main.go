@@ -54,12 +54,7 @@ func main() {
 
 func SystemAPIs() {
 	window := native.CurrentWindow()
-	target, err := native.Updater.DefaultTarget()
-	initial := "Primary instance · updater target " + target
-	if err != nil {
-		initial = err.Error()
-	}
-	status, setStatus := ui.CreateSignal(initial)
+	status, setStatus := ui.CreateSignal("Primary instance")
 	busy, setBusy := ui.CreateSignal(false)
 	state := &systemState{window: window, status: setStatus, busy: busy, setBusy: setBusy}
 	ui.OnCleanup(state.dispose)

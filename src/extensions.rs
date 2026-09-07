@@ -1,7 +1,22 @@
 //! Extension registration happens before the host starts. Registered images remain loaded for
 //! process lifetime; individual sessions still release all resources when they unmount.
-use crate::extension_api::{self as abi, Extension, TerminalApi};
+use crate::extension_api::{self as abi, Extension, ServiceApi, TerminalApi};
 use std::sync::OnceLock;
+
+static UPDATER: OnceLock<ServiceApi> = OnceLock::new();
+
+pub fn service(name: &str) -> Option<&'static ServiceApi> {
+    match name {
+        "updater" => UPDATER.get(),
+        _ => None,
+    }
+}
+
+pub fn shutdown_services() {
+    if let Some(api) = UPDATER.get() {
+        unsafe { (api.shutdown)() };
+    }
+}
 
 static TERMINAL: OnceLock<TerminalApi> = OnceLock::new();
 
@@ -45,6 +60,21 @@ pub unsafe fn register_extension(
         unsafe { std::slice::from_raw_parts(descriptor.version.data, descriptor.version.len) };
     if version != env!("CARGO_PKG_VERSION").as_bytes() {
         return Err("extension and core release versions differ");
+    }
+    if descriptor.kind == abi::UPDATER_EXTENSION && name == b"updater" {
+        if descriptor.api.is_null() || descriptor.api_size as usize != size_of::<ServiceApi>() {
+            return Err("updater extension function table mismatch");
+        }
+        let api = unsafe { *(descriptor.api.cast::<ServiceApi>()) };
+        if let Err(api) = UPDATER.set(api) {
+            let current = UPDATER.get().unwrap();
+            if current.invoke as usize != api.invoke as usize
+                || current.shutdown as usize != api.shutdown as usize
+            {
+                return Err("a different updater extension is already registered");
+            }
+        }
+        return Ok(());
     }
     if descriptor.kind != abi::TERMINAL_EXTENSION || name != b"terminal" {
         return Err("extension is not supported by this core version");

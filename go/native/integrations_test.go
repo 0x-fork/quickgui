@@ -1,7 +1,6 @@
 package native
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -94,35 +93,6 @@ func TestSecureStorageBinaryAndAbsentValuesUseTheNativeWireContract(t *testing.T
 	}
 	if calls != 1 {
 		t.Fatal("credential write did not settle exactly once")
-	}
-}
-
-func TestUpdaterProgressDoesNotCompleteOrOutliveTheRequest(t *testing.T) {
-	fake := installServiceHost(t)
-	progress, completions := 0, 0
-	Updater.Stage(AvailableUpdate{Version: "2.0.0"}, "/tmp/staged", UpdateClientOptions{CurrentVersion: "1.0.0", PublicKey: "public"}, func(event UpdateProgress) {
-		progress++
-		if event.DownloadedBytes != 12 || event.TotalBytes != nil {
-			t.Fatalf("progress = %+v", event)
-		}
-	}, func(path string, err error) {
-		completions++
-		if err != nil || path != "/tmp/staged/update.zip" {
-			t.Fatalf("stage result = %q, %v", path, err)
-		}
-	})
-	request := fake.invocations[0]
-	if !bytes.Contains([]byte(request.params), []byte(`"progress":true`)) || request.method != "stage-update" {
-		t.Fatal("stage request did not enable host progress")
-	}
-	App.dispatchHostEvent(hostEvent{kind: "update-progress", target: request.id, flags: 1, value: `{"phase":"download","downloadedBytes":12}`})
-	if progress != 1 || completions != 0 {
-		t.Fatal("a progress event completed the request")
-	}
-	App.dispatchHostEvent(hostEvent{kind: "invoke", target: request.id, flags: 1, value: `"/tmp/staged/update.zip"`})
-	App.dispatchHostEvent(hostEvent{kind: "update-progress", target: request.id, flags: 1, value: `{"phase":"late"}`})
-	if progress != 1 || completions != 1 || pendingProgress[request.id] != nil || pendingReplies[request.id] != nil {
-		t.Fatal("completed request retained its progress callback")
 	}
 }
 

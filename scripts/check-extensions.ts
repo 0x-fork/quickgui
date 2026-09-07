@@ -48,8 +48,12 @@ const coreGraph = await run([
   "--prefix",
   "none",
 ]);
-if (/^(libghostty|portable-pty|quickgui-terminal)\b/m.test(coreGraph))
-  throw new Error("Core library pulled in a terminal backend dependency");
+if (
+  /^(libghostty|portable-pty|quickgui-terminal|quickgui-updater|ed25519-dalek|minisign-verify)\b/m.test(
+    coreGraph,
+  )
+)
+  throw new Error("Core library pulled in an optional backend dependency");
 const extensionGraph = await run([
   "cargo",
   "tree",
@@ -85,8 +89,8 @@ try {
     join(root, "go"),
     { QUICKGUI_TEST_CORE: core, QUICKGUI_TEST_TERMINAL: backend },
   );
-  for (const extension of [false, true]) {
-    const project = join(directory, extension ? "terminal" : "core");
+  for (const extensions of [[], ["terminal"], ["updater"], ["terminal", "updater"]]) {
+    const project = join(directory, extensions.join("-") || "core");
     mkdirSync(project);
     writeFileSync(
       join(project, "go.mod"),
@@ -98,7 +102,7 @@ try {
 import (
   "github.com/egoist/quickgui/go/host"
   _ "github.com/egoist/quickgui/go/ui"
-  ${extension ? '_ "github.com/egoist/quickgui/go/terminal"' : ""}
+  ${extensions.map((name) => '_ "github.com/egoist/quickgui/go/' + name + '"').join("\n")}
 )
 func main() { if err := host.Load(); err != nil { panic(err) } }
 `,
@@ -119,13 +123,15 @@ func main() { if err := host.Load(); err != nil { panic(err) } }
       executablePath,
       fonts: [],
     });
-    if (libraries.length !== (extension ? 2 : 1))
+    const expectedImages = 1 + extensions.length;
+    const expectedResources = extensions.includes("updater") ? 1 : 0;
+    if (libraries.length !== expectedImages + expectedResources)
       throw new Error("Incorrect selected extension set");
     const actual = readdirSync(dirname(libraries[0]!)).filter((name) =>
       /\.(dylib|so|dll)$/.test(name),
     );
     if (
-      actual.length !== libraries.length ||
+      actual.length !== expectedImages ||
       actual.some((name) => !libraries.some((path) => basename(path) === name))
     )
       throw new Error("Bundle contains unexpected libraries");
@@ -135,10 +141,22 @@ func main() { if err := host.Load(); err != nil { panic(err) } }
       QUICKGUI_EXTENSION_DIR: undefined,
     });
     console.log(
-      `[extensions] ${extension ? "Terminal app" : "Core-only app"}: ${actual.join(", ")} — loaded through purego`,
+      `[extensions] ${extensions.join(" + ") || "Core-only"}: ${actual.join(", ")} — loaded through purego`,
     );
   }
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }
+const updaterGraph = await run([
+  "cargo",
+  "tree",
+  "-p",
+  "quickgui-updater",
+  "--edges",
+  "normal",
+  "--prefix",
+  "none",
+]);
+if (/^(quickgui |quickgui-host|wgpu|taffy)\b/m.test(updaterGraph))
+  throw new Error("Updater links another renderer/runtime");
 console.log("Native extension dependency and bundle checks passed");

@@ -29,6 +29,7 @@ export interface ExtensionManifest {
   package: string;
   version: string;
   library: string;
+  resources?: Partial<Record<"darwin" | "linux" | "windows", string[]>>;
 }
 
 interface GoPackage {
@@ -89,6 +90,27 @@ export function extensionManifests(packages: GoPackage[]): ExtensionManifest[] {
     ) {
       throw new CliError(`Invalid QuickGUI extension manifest: ${path}`);
     }
+    const resources: NonNullable<ExtensionManifest["resources"]> = {};
+    if (value.resources !== undefined) {
+      if (!value.resources || typeof value.resources !== "object" || Array.isArray(value.resources))
+        throw new CliError("Invalid extension resources");
+      for (const platform of ["darwin", "linux", "windows"] as const) {
+        const files = value.resources[platform];
+        if (files === undefined) continue;
+        if (
+          !Array.isArray(files) ||
+          files.length > 16 ||
+          files.some(
+            (file) => typeof file !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(file),
+          ) ||
+          new Set(files).size !== files.length
+        )
+          throw new CliError("Invalid extension resource names");
+        resources[platform] = [...files].sort();
+      }
+      if (Object.keys(value.resources).some((key) => !["darwin", "linux", "windows"].includes(key)))
+        throw new CliError("Unknown extension resource platform");
+    }
     const manifest: ExtensionManifest = {
       schema: value.schema,
       name: value.name,
@@ -96,6 +118,7 @@ export function extensionManifests(packages: GoPackage[]): ExtensionManifest[] {
       package: value.package,
       version: value.version,
       library: value.library,
+      ...(Object.keys(resources).length ? { resources } : {}),
     };
     const previous = found.get(value.name);
     if (previous && JSON.stringify(previous) !== JSON.stringify(manifest))
@@ -202,8 +225,11 @@ export async function resolveExtension(
   manifest: ExtensionManifest,
   target: QuickGuiTarget,
   projectRoot: string,
+  resource?: string,
 ): Promise<string> {
-  const filename = extensionLibraryName(manifest, target);
+  if (resource && !manifest.resources?.[targetInfo(target).platform]?.includes(resource))
+    throw new CliError("Undeclared extension resource");
+  const filename = resource ?? extensionLibraryName(manifest, target);
   if (process.env.QUICKGUI_EXTENSION_DIR) {
     const explicit = resolve(projectRoot, process.env.QUICKGUI_EXTENSION_DIR, filename);
     if (!existsSync(explicit))
@@ -312,7 +338,7 @@ async function downloadExtension(
 
 function pruneCache(directory: string, keep: string): void {
   const files = readdirSync(directory)
-    .filter((name) => /\.(dylib|dll|so)$/.test(name))
+    .filter((name) => !/^(\.|.*\.sha256$)/.test(name))
     .map((name) => {
       const path = join(directory, name);
       try {

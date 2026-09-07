@@ -1,6 +1,6 @@
 # Native extensions
 
-Go applications load one QuickGUI core shared library through purego. Optional backends ship as separate libraries with the same release version. Terminal is the first extension: the core keeps its retained terminal view while `quickgui-terminal` owns Ghostty, the PTY, and terminal workers. SwiftUI, file watching, and the other existing core integrations are unchanged.
+Go applications load one QuickGUI core shared library through purego. Optional backends ship as separate libraries with the same release version. The terminal extension separates rendering from its backend: the core keeps its retained terminal view while `quickgui-terminal` owns Ghostty, the PTY, and terminal workers. The updater extension uses Sparkle on macOS and a compatible signed-appcast backend on Windows/Linux. Its network and installer code is absent from the default core.
 
 ## Application usage
 
@@ -29,9 +29,17 @@ Each optional Go package contains a `quickgui.extension.json` manifest and calls
 
 The CLI runs `go list -deps` with the same entry, target, environment, and build tags as `go build`. A transitive import opts in too; excluded target/tag files do not. The resolver deduplicates requirements, rejects conflicting versions, and supports at most 32 extensions. No feature list is duplicated in application config.
 
-Artifacts are resolved from an explicit `QUICKGUI_EXTENSION_DIR`, an installed matching npm package, source-checkout staging, or an exact-version npm download. Downloaded tarballs require SHA-512 integrity; only the requested target library is extracted, with bounded input and decompressed sizes. Cached libraries have checked digests and a 512 MiB eviction budget. The runtime only loads local files and never downloads anything.
+Artifacts are resolved from an explicit `QUICKGUI_EXTENSION_DIR`, an installed matching npm package, source-checkout staging, or an exact-version npm download. Downloaded tarballs require SHA-512 integrity; only declared target libraries and resources are extracted, with bounded input and decompressed sizes. Cached libraries have checked digests and a 512 MiB eviction budget. The extension loader only loads local files. An updater session starts update networking only after the application explicitly initializes it.
+
+Manifests may declare bounded per-platform `resources`: installer helpers or `.qgr` resource bundles. Framework bundles validate every path and byte budget before writing files, then create confined symlinks. macOS preserves Sparkle framework links and signs its nested code with the app identity.
 
 macOS bundles place core and extension images in `Contents/Frameworks`. Linux and Windows payloads place them beside the executable, including AppDir, Debian, and NSIS payloads. Removing a Go import removes the extension from the next fresh bundle. End users need only the packaged application.
+
+## Updater service
+
+Import `github.com/egoist/quickgui/go/updater` and call `updater.Start` once after application readiness. The core routes service replies and events through the existing Go event queue. `ServiceApi` copies bounded inputs and queues native work; a start sink persists for its session and releases exactly once after its last worker. Command replies do not tear down event subscriptions. Sparkle objects are confined to the macOS main queue. Portable service commands serialize, downloads run off-thread, and closing a session cancels outstanding network work without joining a worker on the UI thread.
+
+The signed installer handoff uses a helper only after payload verification, allowing normal quit hooks to run before loaded application files are replaced. See [automatic updates](../updater.md) for configuration, publication, and platform limits.
 
 ## Native contract
 
@@ -48,11 +56,12 @@ The extension compiles the existing backend sources without depending on the cor
 ```console
 bun packages/native/build.ts
 bun packages/native/build.ts --extension terminal
+bun packages/native/build.ts --extension updater
 bun scripts/check-extensions.ts
 ```
 
-The first two commands rebuild framework artifacts after native changes. Go application edits only run Go compilation and reuse them. Cross-architecture release builds pass `--target aarch64-apple-darwin` or `--target x86_64-apple-darwin` for each artifact.
+The native build commands rebuild framework artifacts after native changes. Go application edits only run Go compilation and reuse them. Cross-architecture release builds pass `--target aarch64-apple-darwin` or `--target x86_64-apple-darwin` for each artifact.
 
-Version synchronization covers the backend crate, npm package, and Go manifest. The release workflow builds and validates the two core images and two terminal images, packages three independent npm archives, then publishes them in dependency order. `@quickgui/cli` depends on `@quickgui/native`; `@quickgui/native-terminal` remains optional.
+Version synchronization covers the backend crate, npm package, and Go manifest. The release workflow builds and validates the two core images, two terminal images, and two updater images with Sparkle resources, packages four independent npm archives, then publishes them in dependency order. `@quickgui/cli` depends on `@quickgui/native`; `@quickgui/native-terminal` and `@quickgui/native-updater` remain optional.
 
 For future extensions, add a Go manifest/registration, a separately built backend, and a versioned typed provider contract consumed by a core adapter. Extend the core registry and release build list; do not generate bundles for combinations of extensions or link another renderer into a backend.

@@ -37,6 +37,7 @@ export type ParsedCliCommand =
     }
   | {
       command: "keygen";
+      sparkle?: boolean;
       outDir: string;
       force: boolean;
       passwordless: boolean;
@@ -169,10 +170,12 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       "--out-dir": { key: "outDir", value: true },
       "--force": { key: "force", value: false },
       "--password": { key: "password", value: false },
+      "--sparkle": { key: "sparkle", value: false },
     });
     rejectPositionals(parsed, "quickgui keygen");
     return {
       command: "keygen",
+      ...(parsed.values.has("sparkle") ? { sparkle: true } : {}),
       outDir: stringOption(parsed, "outDir") ?? ".",
       force: parsed.values.has("force"),
       passwordless: !parsed.values.has("password"),

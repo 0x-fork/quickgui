@@ -10,6 +10,7 @@ import { runDev } from "./dev.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { initProject } from "./init.ts";
 import { findMinisignTool } from "./packaging/pipeline.ts";
+import { generateUpdaterKeys } from "./packaging/appcast.ts";
 import { minisignKeygenArguments } from "./packaging/updates.ts";
 import { hostTarget } from "./targets.ts";
 
@@ -37,14 +38,22 @@ export async function runCli(argv: string[]): Promise<number> {
     case "build":
       return await runBuild(command);
     case "fmt": {
-      const child = Bun.spawn([
-        "go", "run", "github.com/egoist/quickgui/go/cmd/quickguifmt",
-        command.check ? "-check" : "-w", ".",
-      ], {
-        cwd: resolve(command.project),
-        env: { ...process.env, CGO_ENABLED: "0" },
-        stdin: "inherit", stdout: "inherit", stderr: "inherit",
-      });
+      const child = Bun.spawn(
+        [
+          "go",
+          "run",
+          "github.com/egoist/quickgui/go/cmd/quickguifmt",
+          command.check ? "-check" : "-w",
+          ".",
+        ],
+        {
+          cwd: resolve(command.project),
+          env: { ...process.env, CGO_ENABLED: "0" },
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
+        },
+      );
       return await child.exited;
     }
     case "keygen":
@@ -52,11 +61,22 @@ export async function runCli(argv: string[]): Promise<number> {
   }
 }
 
-
-
 async function runKeygen(
   command: Extract<ParsedCliCommand, { command: "keygen" }>,
 ): Promise<number> {
+  if (command.sparkle) {
+    if (!command.passwordless)
+      throw new CliError(
+        "Sparkle keys are raw Ed25519 keys; store the private key in your CI secret store",
+      );
+    const paths = generateUpdaterKeys(resolve(command.outDir), command.force);
+    console.log("[quickgui] Wrote " + paths.publicKeyPath);
+    console.log("[quickgui] Wrote " + paths.secretKeyPath);
+    console.log(
+      "Set updates.publicKey to the public key, and keep the secret key outside version control.",
+    );
+    return 0;
+  }
   const tool = findMinisignTool();
   if (!tool) {
     throw new CliError(
@@ -72,13 +92,13 @@ async function runKeygen(
       throw new CliError(`${path} already exists. Pass --force to overwrite it.`);
     }
   }
-  const argv = minisignKeygenArguments(
-    tool,
-    publicKeyPath,
-    secretKeyPath,
-    command.passwordless,
-  );
-  const child = Bun.spawn(argv, { cwd: outDir, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+  const argv = minisignKeygenArguments(tool, publicKeyPath, secretKeyPath, command.passwordless);
+  const child = Bun.spawn(argv, {
+    cwd: outDir,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
   const status = await child.exited;
   if (status !== 0) throw new CliError(`Command failed: ${argv.join(" ")}`);
   console.log(`\n[quickgui] Wrote ${publicKeyPath}`);
@@ -91,9 +111,7 @@ async function runKeygen(
   return 0;
 }
 
-async function runBuild(
-  command: Extract<ParsedCliCommand, { command: "build" }>,
-): Promise<number> {
+async function runBuild(command: Extract<ParsedCliCommand, { command: "build" }>): Promise<number> {
   const projectRoot = resolve(command.project);
   const config = await loadConfig(projectRoot, command.configFile);
   const target = command.target ?? config.target ?? hostTarget();
@@ -125,9 +143,10 @@ function helpText(topic?: HelpTopic): string {
   if (topic === "keygen") {
     return `Usage: quickgui keygen [options]
 
-Create a Minisign key pair for signing application updates.
+Create an update signing key pair. Use --sparkle for the Go updater extension.
 
 Options:
+  --sparkle                  Generate a Sparkle-compatible Ed25519 key pair
   --out-dir <directory>      Where to write the key pair (default: .)
   --force                    Overwrite an existing key pair
   --password                 Encrypt the secret key with a password
@@ -173,7 +192,7 @@ Options:
   --sign <identity>          macOS signing identity (default: ad-hoc)
   --notarize <profile>       Notary Keychain profile for the macOS DMG
   --mas                      Sign for the Mac App Store and build a .pkg
-  --update-manifest          Sign the update artifact and write latest.json
+  --update-manifest          Sign the artifact and write an appcast (or legacy latest.json)
   --update-base-url <url>    Publication URL for the signed update artifact
   -h, --help                 Show this help`;
   }

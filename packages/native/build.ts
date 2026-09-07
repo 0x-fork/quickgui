@@ -2,13 +2,14 @@
 
 import { cpSync, existsSync, mkdirSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { stageSparkle } from "../../scripts/sparkle.ts";
 
 const packageRoot = resolve(import.meta.dir);
 const repoRoot = resolve(packageRoot, "..", "..");
 const debug = process.argv.includes("--debug");
 const extensionIndex = process.argv.indexOf("--extension");
 const extension = extensionIndex < 0 ? undefined : process.argv[extensionIndex + 1];
-if (extensionIndex >= 0 && extension !== "terminal")
+if (extensionIndex >= 0 && extension !== "terminal" && extension !== "updater")
   throw new Error(`Unknown native extension: ${extension ?? "(missing)"}`);
 
 const architecture =
@@ -43,7 +44,9 @@ const cargo = [
   "build",
   "-p",
   crate,
-  "--lib",
+  ...(extension === "updater" && platform !== "darwin"
+    ? ["--lib", "--bin", "quickgui-updater-helper"]
+    : ["--lib"]),
   ...(selected === undefined ? [] : ["--target", selected.triple]),
   ...(debug ? [] : ["--release"]),
 ];
@@ -88,3 +91,14 @@ const stage = join(
 mkdirSync(stage, { recursive: true });
 cpSync(library, join(stage, name));
 console.log(`[native] Staged ${realpathSync(join(stage, name))}`);
+
+if (extension === "updater") {
+  if (platform === "darwin") await stageSparkle(stage);
+  else {
+    const helper = "quickgui-updater-helper" + (platform === "windows" ? ".exe" : "");
+    cpSync(
+      join(targetDir, ...(selected ? [selected.triple] : []), profile, helper),
+      join(stage, helper),
+    );
+  }
+}

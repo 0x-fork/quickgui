@@ -1,0 +1,94 @@
+import { expect, test } from "bun:test";
+import { createPublicKey, verify } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  renderAppcast,
+  sparklePrivateKey,
+  sparklePublicKey,
+  generateUpdaterKeys,
+  updaterMetadata,
+} from "./appcast.ts";
+import { resolveConfig } from "../config.ts";
+import { macInfoPlist } from "../build.ts";
+
+const secret = Buffer.alloc(32, 42).toString("base64"); // Test-only signing seed.
+const key = sparklePrivateKey(secret),
+  publicKey = sparklePublicKey(key);
+
+test("appcasts use Sparkle raw Ed25519 signatures on every platform", () => {
+  const bytes = Buffer.from("test update payload");
+  for (const target of ["darwin-arm64", "linux-x64", "windows-arm64"] as const) {
+    const xml = renderAppcast({
+      name: "Test & App",
+      version: "2.0.0",
+      target,
+      url: "https://example.com/app?x=1&y=2",
+      bytes,
+      privateKey: secret,
+      publicKey,
+      notes: "<not markup>",
+    });
+    const signature = xml.match(/sparkle:edSignature="([^"]+)"/)![1]!;
+    expect(verify(null, bytes, createPublicKey(key), Buffer.from(signature, "base64"))).toBe(true);
+    expect(
+      verify(null, Buffer.from("tampered"), createPublicKey(key), Buffer.from(signature, "base64")),
+    ).toBe(false);
+    expect(xml).toContain("Test &amp; App");
+    expect(xml).toContain("&lt;not markup&gt;");
+  }
+  expect(() =>
+    renderAppcast({
+      name: "Test",
+      version: "1.0.0",
+      target: "linux-x64",
+      url: "https://example.com/update",
+      bytes,
+      privateKey: secret,
+      publicKey: Buffer.alloc(32).toString("base64"),
+    }),
+  ).toThrow("does not match");
+});
+test("keygen writes Sparkle-compatible key material without overwriting existing keys", () => {
+  const dir = mkdtempSync(join(tmpdir(), "quickgui-keygen-"));
+  try {
+    const paths = generateUpdaterKeys(dir);
+    const privateKey = sparklePrivateKey(readFileSync(paths.secretKeyPath, "utf8"));
+    expect(sparklePublicKey(privateKey)).toBe(readFileSync(paths.publicKeyPath, "utf8").trim());
+    if (process.platform !== "win32")
+      expect(statSync(paths.secretKeyPath).mode & 0o777).toBe(0o600);
+    expect(() => generateUpdaterKeys(dir)).toThrow("already exists");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("TOML updater defaults are shared by Go metadata and Sparkle Info.plist", () => {
+  const config = resolveConfig(
+    {
+      name: "Test",
+      identifier: "test.app",
+      updates: { baseUrl: "https://example.com/releases", publicKey, automaticChecks: false },
+    },
+    "/tmp",
+  );
+  const metadata = updaterMetadata(config, "darwin-arm64", "production");
+  expect(metadata.feedUrl).toBe("https://example.com/releases/appcast-darwin-arm64.xml");
+  expect(metadata.automaticChecks).toBe(false);
+  expect(metadata.development).toBe(false);
+  const plist = macInfoPlist({
+    name: config.name,
+    displayName: config.name,
+    executableName: config.executableName,
+    identifier: config.identifier,
+    version: config.version,
+    buildVersion: config.buildVersion,
+    minimumSystemVersion: config.macos.minimumSystemVersion,
+    category: config.macos.category,
+    updater: metadata,
+  });
+  expect(plist).toContain("<key>SUPublicEDKey</key><string>" + publicKey);
+  expect(plist).toContain("<key>SUEnableAutomaticChecks</key><false/>");
+  expect(plist).toContain("<key>SUVerifyUpdateBeforeExtraction</key><true/>");
+  expect(updaterMetadata(config, "linux-x64", "development").development).toBe(true);
+});

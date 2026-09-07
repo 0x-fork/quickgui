@@ -20,6 +20,14 @@ const GUIDE_TRANSLATIONS: Record<
   Record<DocsSlug, GuideTranslation>
 > = {
   zh: {
+    updater: {
+      title: '自动更新', description: '通过可选扩展为 Go 应用添加兼容 Sparkle 的更新功能。',
+      outline: [
+        { id: '配置', title: '配置' }, { id: '应用用法', title: '应用用法' },
+        { id: '生命周期', title: '生命周期' }, { id: '平台支持', title: '平台支持' },
+        { id: '发布更新', title: '发布更新' }, { id: '原生产物', title: '原生产物' },
+      ], searchTerms: ['更新', 'Sparkle', 'appcast', '扩展', '签名'],
+    },
     'getting-started': {
       title: '入门',
       description: '使用 QuickGUI UI 创建并运行原生 QuickGUI 应用。',
@@ -142,6 +150,14 @@ const GUIDE_TRANSLATIONS: Record<
     },
   },
   ja: {
+    updater: {
+      title: '自動更新', description: 'Go アプリに Sparkle 互換の更新機能を追加します。',
+      outline: [
+        { id: '設定', title: '設定' }, { id: 'アプリでの使用', title: 'アプリでの使用' },
+        { id: 'ライフサイクル', title: 'ライフサイクル' }, { id: '対応プラットフォーム', title: '対応プラットフォーム' },
+        { id: '更新の公開', title: '更新の公開' }, { id: 'ネイティブ成果物', title: 'ネイティブ成果物' },
+      ], searchTerms: ['更新', 'Sparkle', 'appcast', '拡張', '署名'],
+    },
     'getting-started': {
       title: 'はじめに',
       description: 'QuickGUI UI を使ってネイティブ QuickGUI アプリを作成し、実行します。',

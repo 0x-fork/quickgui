@@ -498,6 +498,10 @@ pub unsafe extern "C" fn quickgui_invoke(
         (Ok(method), Ok(params)) => (method.to_owned(), params.to_owned()),
         (Err(error), _) | (_, Err(error)) => return fatal(error),
     };
+    if let Some(service) = method.strip_prefix("extension/") {
+        crate::extension_services::invoke(request, service, &params);
+        return 0;
+    }
     let spawned = std::thread::Builder::new()
         .name("quickgui-invoke".to_owned())
         .spawn(move || {
@@ -581,6 +585,9 @@ pub(super) fn run_app_host_loop(
     let mut active_app = None;
     let mut runtime: Option<NativeRuntime> = None;
     let mut ready_reported = false;
+    // Release services on normal exit, explicit destruction, and error paths, while AppKit's
+    // main-thread autorelease pool and runtime are still alive.
+    let _services = crate::extension_services::ApplicationServices;
 
     loop {
         let running = runtime

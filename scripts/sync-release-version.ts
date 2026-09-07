@@ -181,6 +181,7 @@ const cargoPackages: [string, string][] = [
   ["crates/quickgui-system/Cargo.toml", "quickgui-system"],
   ["crates/quickgui-host/Cargo.toml", "quickgui-host"],
   ["crates/quickgui-terminal/Cargo.toml", "quickgui-terminal"],
+  ["crates/quickgui-updater/Cargo.toml", "quickgui-updater"],
   ["vendor/winit/Cargo.toml", "quickgui-winit"],
   ["vendor/winit/Cargo.toml.orig", "quickgui-winit"],
   ["vendor/accesskit_winit/Cargo.toml", "quickgui-accesskit-winit"],
@@ -206,6 +207,7 @@ replaceInlineCargoDependency("tests/downstream_smoke/Cargo.toml", "quickgui");
 for (const [relativePath, packageName] of [
   ["packages/native/package.json", "@quickgui/native"],
   ["packages/native-terminal/package.json", "@quickgui/native-terminal"],
+  ["packages/native-updater/package.json", "@quickgui/native-updater"],
   ["packages/cli/package.json", "@quickgui/cli"],
 ] as const) {
   replaceJsonPackageVersion(relativePath, packageName);
@@ -240,14 +242,15 @@ edit("packages/cli/templates/native/go.mod", (contents) =>
   ),
 );
 
-edit("go/terminal/quickgui.extension.json", (contents) =>
-  replaceMatches(
-    "go/terminal/quickgui.extension.json",
-    contents,
-    /("version": ")[^"]+(")/,
-    (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
-  ),
-);
+for (const extension of ["terminal", "updater"])
+  edit(`go/${extension}/quickgui.extension.json`, (contents) =>
+    replaceMatches(
+      `go/${extension}/quickgui.extension.json`,
+      contents,
+      /("version": ")[^"]+(")/,
+      (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
+    ),
+  );
 
 for (const directory of readdirSync(join(repositoryRoot, "examples"))) {
   const relativePath = `examples/${directory}/go.mod`;
@@ -270,6 +273,7 @@ for (const packageName of [
   "quickgui-system",
   "quickgui-host",
   "quickgui-terminal",
+  "quickgui-updater",
 ] as const) {
   replaceCargoLockPackageVersion("Cargo.lock", packageName);
 }
@@ -277,6 +281,7 @@ for (const packageName of [
 for (const [workspacePath, packageName] of [
   ["packages/native", "@quickgui/native"],
   ["packages/native-terminal", "@quickgui/native-terminal"],
+  ["packages/native-updater", "@quickgui/native-updater"],
   ["packages/cli", "@quickgui/cli"],
 ] as const) {
   replaceBunWorkspaceVersion("bun.lock", workspacePath, packageName);

@@ -93,9 +93,9 @@ jobs:
         run: bash -n scripts/*.sh
       - name: Run all tests
         run: scripts/with-macos-ghostty-zig.sh cargo test --all-targets --all-features --locked
-      - name: Test dynamic host and standalone terminal backend
+      - name: Test dynamic host and standalone extension backends
         run: |
-          scripts/with-macos-ghostty-zig.sh cargo test -p quickgui-host -p quickgui-terminal --lib --locked
+          scripts/with-macos-ghostty-zig.sh cargo test -p quickgui-host -p quickgui-terminal -p quickgui-updater --lib --locked
           cargo test --lib --features terminal-extension --locked
       - name: Check every target and feature
         run: scripts/with-macos-ghostty-zig.sh cargo check --all-targets --all-features --locked
@@ -165,3 +165,6 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-${{ matrix.toolchain }}-
       - name: Check every target and feature
         run: cargo check --all-targets --all-features --locked
+
+      - name: Test optional updater and installer helper
+        run: cargo test -p quickgui-updater --locked

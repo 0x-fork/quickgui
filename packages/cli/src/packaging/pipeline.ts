@@ -43,6 +43,7 @@ import {
   DEBIAN_ARCHITECTURES,
   desktopEntry,
 } from "./linux.ts";
+import { writeAppcast } from "./appcast.ts";
 import { makensisArguments, nsisScript, signToolArguments } from "./windows.ts";
 import {
   buildUpdateManifest,
@@ -166,10 +167,9 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
     documentTypes: config.documentTypes,
     ...(config.linux.comment ? { comment: config.linux.comment } : {}),
   });
-  const mimeXml =
-    config.documentTypes.some((type) => type.mimeTypes.length > 0)
-      ? sharedMimeInfoXml(config.documentTypes)
-      : undefined;
+  const mimeXml = config.documentTypes.some((type) => type.mimeTypes.length > 0)
+    ? sharedMimeInfoXml(config.documentTypes)
+    : undefined;
 
   const desktopPath = resolve(input.stagingRoot, `${config.executableName}.desktop`);
   writeFileSync(desktopPath, entry);
@@ -185,7 +185,9 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
     mkdirSync(join(appDir, "usr", "bin"), { recursive: true });
     cpSync(input.executablePath, join(appDir, "usr", "bin", config.executableName));
     chmodSync(join(appDir, "usr", "bin", config.executableName), 0o755);
-    for (const library of input.libraries ?? [join(input.stagingRoot, sharedLibraryName(input.target))]) {
+    for (const library of input.libraries ?? [
+      join(input.stagingRoot, sharedLibraryName(input.target)),
+    ]) {
       cpSync(library, join(appDir, "usr", "bin", basename(library)));
     }
     writeFileSync(join(appDir, `${config.executableName}.desktop`), entry);
@@ -217,17 +219,20 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
 
   if (config.linux.deb) {
     if (!config.linux.maintainer) {
-      throw new CliError("Building a .deb requires `linux.maintainer` (\"Name <email>\")");
+      throw new CliError('Building a .deb requires `linux.maintainer` ("Name <email>")');
     }
     const architecture = DEBIAN_ARCHITECTURES[targetInfo(input.target).architecture];
     const executable = new Uint8Array(readFileSync(input.executablePath));
     const data: TarEntry[] = [
       { path: paths.executable, data: executable, mode: 0o755 },
-      ...(input.libraries ?? [join(input.stagingRoot, sharedLibraryName(input.target))]).map(library => ({ path: join(dirname(paths.executable), basename(library)), data: new Uint8Array(readFileSync(library)) })),
+      ...(input.libraries ?? [join(input.stagingRoot, sharedLibraryName(input.target))]).map(
+        (library) => ({
+          path: join(dirname(paths.executable), basename(library)),
+          data: new Uint8Array(readFileSync(library)),
+        }),
+      ),
       { path: paths.desktopEntry, data: new TextEncoder().encode(entry) },
-      ...(mimeXml
-        ? [{ path: paths.mimePackage, data: new TextEncoder().encode(mimeXml) }]
-        : []),
+      ...(mimeXml ? [{ path: paths.mimePackage, data: new TextEncoder().encode(mimeXml) }] : []),
       ...[...(input.icons?.png ?? [])]
         .filter(([size]) => LINUX_ICON_SIZES.includes(size))
         .map(([size, png]) => ({ path: paths.icon(size), data: png })),
@@ -240,10 +245,8 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
       description: config.linux.comment ?? config.name,
       section: config.linux.section,
       depends: config.linux.depends,
-      installedSizeKilobytes: data.reduce(
-        (total, member) => total + (member.data?.byteLength ?? 0),
-        0,
-      ) / 1024,
+      installedSizeKilobytes:
+        data.reduce((total, member) => total + (member.data?.byteLength ?? 0), 0) / 1024,
     });
     const md5sums = debianMd5Sums(
       data.map((member) => ({
@@ -320,7 +323,9 @@ export async function packageWindows(input: WindowsPackagingInput): Promise<Pack
     version: config.version,
     publisher: config.windows.publisher ?? config.name,
     executablePath: input.executablePath,
-    extraFiles: (input.libraries ?? [join(input.stagingRoot, "quickgui_host.dll")]).map(library => [library, basename(library)]),
+    extraFiles: (input.libraries ?? [join(input.stagingRoot, "quickgui_host.dll")]).map(
+      (library) => [library, basename(library)],
+    ),
     outputFile: installerPath,
     protocols: config.protocols,
     documentTypes: config.documentTypes,
@@ -414,6 +419,7 @@ export async function writeUpdateManifest(
   input: UpdateManifestInput,
 ): Promise<UpdateManifestOutput> {
   const { config } = input;
+  if (config.updates?.publicKey) return writeAppcast(input);
   const platform = targetInfo(input.target).platform;
   let artifactPath: string;
   if (platform === "darwin" || input.source.endsWith(".AppImage")) {

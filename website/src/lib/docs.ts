@@ -1,6 +1,7 @@
 export type DocsSlug =
   | 'getting-started'
   | 'project-structure'
+  | 'updater'
   | 'ui'
   | 'styling'
   | 'animations'
@@ -30,6 +31,19 @@ export interface DocsNavGroup {
 }
 
 export const DOCS_PAGES: readonly DocsPageMeta[] = [
+  {
+    slug: 'updater', title: 'Automatic Updates',
+    description: 'Add optional Sparkle-compatible updates to a Go application.',
+    outline: [
+      { id: 'configuration', title: 'Configuration' },
+      { id: 'application-usage', title: 'Application usage' },
+      { id: 'lifecycle', title: 'Lifecycle' },
+      { id: 'platforms', title: 'Platforms' },
+      { id: 'publishing', title: 'Publishing' },
+      { id: 'native-artifacts', title: 'Native artifacts' },
+    ],
+    searchTerms: ['updater', 'sparkle', 'appcast', 'ed25519', 'extension', 'updates'],
+  },
   {
     slug: 'getting-started',
     title: 'Getting Started',
@@ -165,7 +179,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
 export const DOCS_NAV: readonly DocsNavGroup[] = [
   {
     title: 'Introduction',
-    items: ['getting-started', 'project-structure'],
+    items: ['getting-started', 'project-structure', 'updater'],
   },
   {
     title: 'QuickGUI UI',

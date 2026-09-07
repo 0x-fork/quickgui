@@ -16,3 +16,6 @@ packages/native/lib/**/*.dll
 packages/native-*/lib/**/*.dylib
 packages/native-*/lib/**/*.so
 packages/native-*/lib/**/*.dll
+
+# Extension resources and installation helpers are generated native artifacts.
+packages/native-*/lib/

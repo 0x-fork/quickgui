@@ -32,9 +32,11 @@ native application and core lifecycle cannot disagree.
 The deterministic `TestAppContext` performs the complete window/callback teardown but never
 spawns. `relaunch_request()` exposes the prepared value for assertions.
 
-## Signed updater flow
+## Legacy Rust updater flow
 
-With the default `updater` feature, `UpdateClient` accepts Tauri-compatible update JSON, requires
+Go applications use the optional [automatic updater extension](updater.md), which provides Sparkle on macOS and compatible signed appcasts on Windows/Linux. The section below documents the separate Rust-only Minisign client.
+
+With the explicitly enabled `updater` Cargo feature, `UpdateClient` accepts Tauri-compatible update JSON, requires
 HTTPS, selects a newer target artifact, and verifies modern prehashed Minisign signatures while
 streaming to disk. `download_and_stage_with_progress` reports connection-independent milestones
 and bounded byte counts:
@@ -89,42 +91,9 @@ orderly relaunch to execute the new image, while a launched Windows installer ne
 application to leave its files and locks. Downloading is synchronous and belongs in bounded
 background work; lifecycle calls such as `cx.relaunch()` remain on the application thread.
 
-### Download progress from Go
+## Publishing legacy Minisign updates
 
-`native.Updater.Stage` downloads and verifies an artifact on a native worker.
-Progress and completion return through the in-process purego callback boundary;
-neither the download nor a Go callback blocks the native main thread.
-
-```go
-func StageUpdate(update native.AvailableUpdate, directory string, options native.UpdateClientOptions) {
-	native.Updater.Stage(
-		update,
-		directory,
-		options,
-		func(progress native.UpdateProgress) {
-			if progress.Phase == "downloaded" && progress.TotalBytes != nil && *progress.TotalBytes > 0 {
-				percent := float64(progress.DownloadedBytes) / float64(*progress.TotalBytes) * 100
-				log.Print("Downloaded percent: ", percent)
-			}
-		},
-		func(artifact string, err error) {
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			log.Print("Verified artifact: ", artifact)
-		},
-	)
-}
-```
-
-`Phase` is `download-started`, `downloaded`, `download-finished`,
-`verification-started`, `verification-finished`, or `staged`. Byte counts are
-`uint64`; `TotalBytes` is nil when the server supplies no length. Installation is
-an explicit `native.Updater.Install` call and does not emit stage progress.
-Pass nil for the progress callback to allocate no progress listener.
-
-## Publishing updates from the CLI
+For the Go updater extension, use `quickgui keygen --sparkle` and configure `updates.publicKey`; the same build flag then writes a Sparkle appcast. See [the updater guide](updater.md). Without `updates.publicKey`, the legacy configuration below still writes Minisign JSON.
 
 `quickgui build --update-manifest` produces exactly the artifact `install_staged` accepts for the
 target, signs it, and writes `latest.json` beside it.

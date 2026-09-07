@@ -172,6 +172,11 @@ func (a *Application) dispatchHostEvent(ev hostEvent) {
 	case "file-watch":
 		dispatchFileWatch(ev.target, value)
 		return
+	case "extension-event":
+		if listener := extensionListeners[ev.target]; listener != nil {
+			listener(value)
+		}
+		return
 	case "update-progress":
 		if progress := pendingProgress[ev.target]; progress != nil {
 			progress(value)
@@ -293,6 +298,7 @@ func Run(start func(), options ...AppOptions) error {
 			App.Windows = nil
 			App.clearListeners()
 			fileWatchers = map[uint32]func(FileWatchEvent){}
+			extensionListeners = map[uint32]func(string){}
 			menuCallbacks = map[uint32]menuCallback{}
 			screenListeners.clear()
 			preferencesListeners.clear()

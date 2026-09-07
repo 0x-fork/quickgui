@@ -24,7 +24,7 @@ include = [
 ]
 
 [workspace]
-members = ["crates/quickgui-host", "crates/quickgui-system", "crates/quickgui-terminal"]
+members = ["crates/quickgui-host", "crates/quickgui-system", "crates/quickgui-terminal", "crates/quickgui-updater"]
 exclude = [
   "vendor/accesskit_winit",
   "vendor/cosmic_text",
@@ -34,7 +34,7 @@ exclude = [
 resolver = "3"
 
 [features]
-default = ["crash-reporter", "updater"]
+default = ["crash-reporter"]
 crash-reporter = ["quickgui-system/crash-reporter"]
 inspector = []
 file-watcher = ["quickgui-system/file-watcher"]

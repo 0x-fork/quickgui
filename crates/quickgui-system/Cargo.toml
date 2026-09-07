@@ -9,7 +9,7 @@ repository = "https://github.com/egoist/quickgui"
 include = ["/src/**"]
 
 [features]
-default = ["autostart", "crash-reporter", "protocol", "secure-storage", "updater"]
+default = ["autostart", "crash-reporter", "protocol", "secure-storage"]
 autostart = ["dep:auto-launch"]
 file-watcher = ["dep:notify"]
 crash-reporter = ["dep:serde", "dep:serde_json", "dep:ureq"]

@@ -22,6 +22,7 @@ for (const file of readdirSync(output)) {
 const packages = [
   { name: "native", library: "quickgui_host" },
   { name: "native-terminal", library: "quickgui_terminal" },
+  { name: "native-updater", library: "quickgui_updater" },
   { name: "cli", library: undefined },
 ];
 const archives: Record<string, string> = {};
@@ -53,11 +54,17 @@ for (const pkg of packages) {
     pkg.name === "cli" &&
     (manifest.dependencies?.["@quickgui/native"] !== version ||
       manifest.dependencies?.["@quickgui/native-terminal"] ||
+      manifest.dependencies?.["@quickgui/native-updater"] ||
       manifest.bin?.quickgui !== "src/cli.ts")
   ) {
     throw new Error("CLI must depend only on the core native package; extensions are optional");
   }
   const entries = run(["tar", "-tzf", archive]).trim().split("\n");
+  if (pkg.name === "native-updater") {
+    for (const arch of ["arm64", "x64"])
+      if (!entries.includes("package/lib/darwin-" + arch + "/Sparkle.framework.qgr"))
+        throw new Error("Missing Sparkle resources in updater package");
+  }
   const binaries = entries.filter((entry) => /\.(dylib|dll|so)$/.test(entry));
   if (binaries.length !== expected.length || expected.some((entry) => !binaries.includes(entry))) {
     throw new Error(`Incorrect native library set in ${filename}: ${binaries.join(", ")}`);

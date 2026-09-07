@@ -5,6 +5,7 @@ use std::ffi::c_void;
 
 pub const ABI_VERSION: u32 = 1;
 pub const TERMINAL_EXTENSION: u32 = 1;
+pub const UPDATER_EXTENSION: u32 = 2;
 pub const MAX_EXTENSION_NAME: usize = 64;
 pub const MAX_FRAME_TEXT: usize = 16 * 1024 * 1024;
 pub const MAX_FRAME_HIGHLIGHTS: usize = 4096;
@@ -18,7 +19,7 @@ pub struct Bytes {
 }
 
 impl Bytes {
-    pub fn new(value: &[u8]) -> Self {
+    pub const fn new(value: &[u8]) -> Self {
         Self {
             data: value.as_ptr(),
             len: value.len(),
@@ -149,4 +150,25 @@ pub struct TerminalApi {
     pub destroy: unsafe extern "C" fn(*mut c_void),
     pub command: unsafe extern "C" fn(*mut c_void, u32, Bytes) -> i32,
     pub frame: unsafe extern "C" fn(*mut c_void, u64, *mut c_void, FrameCallback) -> i32,
+}
+
+/// A service owns this context until its last callback, including rejection paths. Kind 0 is
+/// one successful command reply, kind 1 an error, and kind 2 a session event. Spans are borrowed
+/// only during emit. Events may follow the start reply until stop; release is called exactly once.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ServiceSink {
+    pub context: *mut c_void,
+    pub emit: unsafe extern "C" fn(*mut c_void, u32, Bytes),
+    pub release: unsafe extern "C" fn(*mut c_void),
+}
+
+/// Calls enqueue work and return immediately. Request IDs identify sessions started with
+/// "start"; subsequent commands carry that ID in their JSON. Shutdown cancels sessions without
+/// waiting for network or main-thread work. All borrowed input is copied before returning.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ServiceApi {
+    pub invoke: unsafe extern "C" fn(u32, Bytes, Bytes, ServiceSink),
+    pub shutdown: unsafe extern "C" fn(),
 }

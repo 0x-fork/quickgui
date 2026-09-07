@@ -91,6 +91,8 @@ jobs:
           bun run build:native --target x86_64-apple-darwin
           bun run build:native --extension terminal --target aarch64-apple-darwin
           bun run build:native --extension terminal --target x86_64-apple-darwin
+          bun run build:native --extension updater --target aarch64-apple-darwin
+          bun run build:native --extension updater --target x86_64-apple-darwin
       - name: Test JavaScript packages
         run: |
           bun run test:js

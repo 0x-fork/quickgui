@@ -1,0 +1,9 @@
+name = "Updater Example"
+identifier = "dev.quickgui.updater-example"
+version = "0.1.0"
+
+[updates]
+baseUrl = "https://example.com/quickgui-updater"
+# Demonstration public key only. Generate your own key with quickgui keygen --sparkle.
+publicKey = "GX9rI+FsU4YtjNSAyOdwmHw28GPA59ORGo2SvUhRXvY="
+automaticChecks = false

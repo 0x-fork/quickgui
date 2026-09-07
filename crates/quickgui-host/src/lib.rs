@@ -75,6 +75,7 @@ use quickgui::{
 };
 
 mod dialog;
+mod extension_services;
 mod integrations;
 mod system;
 

@@ -3,6 +3,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   mkdtempSync,
   renameSync,
   rmSync,
@@ -34,6 +35,7 @@ import {
   writeUpdateManifest,
   type IconBuildResult,
 } from "./packaging/pipeline.ts";
+import { updaterMetadata } from "./packaging/appcast.ts";
 import { targetInfo, type QuickGuiTarget } from "./targets.ts";
 
 export type BuildMode = "development" | "production";
@@ -154,9 +156,7 @@ async function buildMacApp(
   }
   const identity = options.signingIdentity ?? config.macos.signingIdentity ?? "-";
   const notarization =
-    options.mode === "production"
-      ? (options.notarization ?? config.macos.notarization)
-      : undefined;
+    options.mode === "production" ? (options.notarization ?? config.macos.notarization) : undefined;
   const displayName = options.mode === "development" ? `${config.name} Dev` : config.name;
   const identifier =
     options.mode === "development" ? `${config.identifier}.dev` : config.identifier;
@@ -168,7 +168,19 @@ async function buildMacApp(
   mkdirSync(resources, { recursive: true });
   const executablePath = resolve(macos, config.executableName);
   const fonts = stageFonts(config, resolve(resources, "fonts"));
-  await compileExecutable(config, options, executablePath, fonts);
+  const libraries = await compileExecutable(config, options, executablePath, fonts);
+  const sparkle = libraries.find((path) => path.endsWith("Sparkle.framework"));
+  if (
+    sparkle &&
+    (options.macAppStore ||
+      (config.macos.entitlements &&
+        /<key>com\.apple\.security\.app-sandbox<\/key>\s*<true\s*\//.test(
+          readFileSync(config.macos.entitlements, "utf8"),
+        )))
+  )
+    throw new CliError(
+      "The updater extension targets unsandboxed apps; omit its Go import from App Store/sandboxed builds",
+    );
   chmodSync(executablePath, 0o755);
 
   let iconFile: string | undefined;
@@ -206,6 +218,9 @@ async function buildMacApp(
       category: config.macos.category,
       urlSchemes: config.protocols,
       documentTypes: config.documentTypes,
+      ...(sparkle && config.updates?.publicKey
+        ? { updater: updaterMetadata(config, options.target, options.mode) }
+        : {}),
       ...(iconFile ? { iconFile } : {}),
     }),
   );
@@ -222,6 +237,25 @@ async function buildMacApp(
     };
   }
 
+  if (sparkle) {
+    for (const part of [
+      join(sparkle, "Versions/B/Autoupdate"),
+      join(sparkle, "Versions/B/Updater.app"),
+      sparkle,
+    ]) {
+      await run(
+        [
+          "codesign",
+          "--force",
+          ...(identity === "-" ? [] : ["--options", "runtime", "--timestamp"]),
+          "--sign",
+          identity,
+          part,
+        ],
+        config.projectRoot,
+      );
+    }
+  }
   const signArguments = ["codesign", "--force", "--deep"];
   if (options.mode === "production" && identity !== "-") {
     signArguments.push("--options", "runtime", "--timestamp");
@@ -338,8 +372,26 @@ async function buildMacDmg(
 }
 
 /** The `hdiutil` invocation that packs `sourceFolder` into a compressed, read-only disk image. */
-export function hdiutilCreateArguments(volumeName: string, sourceFolder: string, dmgPath: string): string[] {
-  return ["hdiutil", "create", "-volname", volumeName, "-srcfolder", sourceFolder, "-ov", "-format", "UDZO", "-fs", "HFS+", "-quiet", dmgPath];
+export function hdiutilCreateArguments(
+  volumeName: string,
+  sourceFolder: string,
+  dmgPath: string,
+): string[] {
+  return [
+    "hdiutil",
+    "create",
+    "-volname",
+    volumeName,
+    "-srcfolder",
+    sourceFolder,
+    "-ov",
+    "-format",
+    "UDZO",
+    "-fs",
+    "HFS+",
+    "-quiet",
+    dmgPath,
+  ];
 }
 
 export function macDmgFilename(name: string, version: string): string {
@@ -427,7 +479,9 @@ async function compileExecutable(
     executablePath,
     fonts,
   });
-  console.log(`[quickgui] Compiled ${basename(executablePath)} in ${Math.round(performance.now() - started)} ms`);
+  console.log(
+    `[quickgui] Compiled ${basename(executablePath)} in ${Math.round(performance.now() - started)} ms`,
+  );
   return libraries;
 }
 
@@ -475,11 +529,7 @@ function replaceArtifacts(
   }
 }
 
-
-function updateBaseUrl(
-  config: ResolvedQuickGuiConfig,
-  options: BuildProjectOptions,
-): string {
+function updateBaseUrl(config: ResolvedQuickGuiConfig, options: BuildProjectOptions): string {
   const baseUrl = options.updateBaseUrl ?? config.updates?.baseUrl;
   if (!baseUrl) {
     throw new CliError(
@@ -529,10 +579,7 @@ function resolveIcons(
   });
 }
 
-function validateMacPackaging(
-  config: ResolvedQuickGuiConfig,
-  options: BuildProjectOptions,
-): void {
+function validateMacPackaging(config: ResolvedQuickGuiConfig, options: BuildProjectOptions): void {
   macDmgFilename(config.name, config.version);
   const dmgTitle = config.macos.dmgTitle ?? config.name;
   if (dmgTitle.length > 27) {
@@ -644,9 +691,21 @@ interface MacInfoPlistOptions {
   urlSchemes?: readonly string[];
   documentTypes?: readonly ResolvedDocumentType[];
   iconFile?: string;
+  updater?: ReturnType<typeof updaterMetadata>;
 }
 
 export function macInfoPlist(options: MacInfoPlistOptions): string {
+  const updater = options.updater
+    ? `
+  <key>SUFeedURL</key><string>${xml(options.updater.feedUrl)}</string>
+  <key>SUPublicEDKey</key><string>${xml(options.updater.publicKey)}</string>
+  <key>SUEnableAutomaticChecks</key><${options.updater.automaticChecks ? "true" : "false"}/>
+  <key>SUAutomaticallyUpdate</key><false/>
+  <key>SUAllowsAutomaticUpdates</key><false/>
+  <key>SUVerifyUpdateBeforeExtraction</key><true/>
+  <key>SUEnableJavaScript</key><false/>
+  <key>SUEnableSystemProfiling</key><false/>`
+    : "";
   const icon = options.iconFile
     ? `\n  <key>CFBundleIconFile</key>\n  <string>${xml(options.iconFile)}</string>`
     : "";
@@ -691,7 +750,7 @@ export function macInfoPlist(options: MacInfoPlistOptions): string {
   <key>CFBundleShortVersionString</key>
   <string>${xml(options.version)}</string>
   <key>CFBundleVersion</key>
-  <string>${xml(options.buildVersion)}</string>${urlTypes}${documents}
+  <string>${xml(options.buildVersion)}</string>${urlTypes}${documents}${updater}
   <key>LSApplicationCategoryType</key>
   <string>${xml(options.category)}</string>
   <key>LSMinimumSystemVersion</key>
