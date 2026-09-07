@@ -452,33 +452,36 @@ fn apply(plan: &Plan, bytes: Vec<u8>, stage: &Path) -> Result<()> {
         let backup = tempfile::Builder::new()
             .prefix(".quickgui-backup-")
             .tempdir_in(parent)
-            .map_err(|e| e.to_string())?
-            .keep();
-        let previous = backup.join("previous.AppImage");
-        let replacement = backup.join("new.AppImage");
-        write_new(&replacement, &bytes)?;
-        drop(bytes);
-        fs::set_permissions(
-            &replacement,
-            fs::metadata(&plan.target)
-                .map_err(|e| e.to_string())?
-                .permissions(),
-        )
-        .map_err(|e| e.to_string())?;
-        replace_with_backup(&plan.target, &replacement, &previous)?;
-        if let Err(error) = relaunch(&plan.target, stage) {
-            fs::rename(&previous, &plan.target).map_err(|e| {
-                format!(
-                    "{error}; rollback failed: {e}; old AppImage: {}",
-                    previous.display()
-                )
-            })?;
-            let _ = clean_command(&plan.target).spawn();
-            let _ = fs::remove_dir_all(backup);
-            return Err(format!("{error}; previous AppImage restored"));
+            .map_err(|e| e.to_string())?;
+        let previous = backup.path().join("previous.AppImage");
+        let replacement = backup.path().join("new.AppImage");
+        let result = (|| {
+            write_new(&replacement, &bytes)?;
+            drop(bytes);
+            fs::set_permissions(
+                &replacement,
+                fs::metadata(&plan.target)
+                    .map_err(|e| e.to_string())?
+                    .permissions(),
+            )
+            .map_err(|e| e.to_string())?;
+            replace_with_backup(&plan.target, &replacement, &previous)?;
+            if let Err(error) = relaunch(&plan.target, stage) {
+                fs::rename(&previous, &plan.target).map_err(|e| {
+                    format!(
+                        "{error}; rollback failed: {e}; old AppImage: {}",
+                        previous.display()
+                    )
+                })?;
+                let _ = clean_command(&plan.target).spawn();
+                return Err(format!("{error}; previous AppImage restored"));
+            }
+            Ok(())
+        })();
+        if result.is_err() && previous.exists() {
+            let _ = backup.keep(); // Preserve the recovery copy only if restoring it failed.
         }
-        fs::remove_dir_all(backup).map_err(|e| e.to_string())?;
-        Ok(())
+        result
     }
 }
 
@@ -576,10 +579,9 @@ fn run_windows_installer(installer: &Path, directory: &Path) -> Result<()> {
     let wide = |value: &std::ffi::OsStr| value.encode_wide().chain(Some(0)).collect::<Vec<u16>>();
     let file = wide(installer.as_os_str());
     // /D must be the final NSIS parameter and is intentionally not quoted.
-    let parameters = wide(std::ffi::OsStr::new(&format!(
-        "/S /D={}",
-        directory.display()
-    )));
+    let mut parameters: Vec<u16> = "/S /D=".encode_utf16().collect();
+    parameters.extend(installer_directory(directory));
+    parameters.push(0);
     let verb = wide(std::ffi::OsStr::new("open"));
     let initialized =
         unsafe { CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32) } >= 0;
@@ -612,9 +614,43 @@ fn run_windows_installer(installer: &Path, directory: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
+fn installer_directory(directory: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    let path: Vec<u16> = directory.as_os_str().encode_wide().collect();
+    // canonicalize() returns verbatim paths; NSIS requires the normal DOS/UNC spelling.
+    let unc: Vec<u16> = "\\\\?\\UNC\\".encode_utf16().collect();
+    let verbatim: Vec<u16> = "\\\\?\\".encode_utf16().collect();
+    if let Some(rest) = path.strip_prefix(unc.as_slice()) {
+        "\\\\".encode_utf16().chain(rest.iter().copied()).collect()
+    } else {
+        path.strip_prefix(verbatim.as_slice())
+            .unwrap_or(&path)
+            .to_vec()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn installer_accepts_canonical_disk_and_unc_directories() {
+        assert_eq!(
+            String::from_utf16(&installer_directory(Path::new(
+                r"\\?\C:\Program Files\Test"
+            )))
+            .unwrap(),
+            r"C:\Program Files\Test"
+        );
+        assert_eq!(
+            String::from_utf16(&installer_directory(Path::new(
+                r"\\?\UNC\server\share\Test"
+            )))
+            .unwrap(),
+            r"\\server\share\Test"
+        );
+    }
     #[test]
     fn stages_have_a_fixed_limit_and_preserve_live_owners() {
         let dir = tempfile::tempdir().unwrap();

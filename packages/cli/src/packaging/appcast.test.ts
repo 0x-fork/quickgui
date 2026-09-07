@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createPublicKey, sign, verify } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,6 +9,7 @@ import {
   sparklePublicKey,
   generateUpdaterKeys,
   updaterMetadata,
+  writeAppcast,
 } from "./appcast.ts";
 import { resolveConfig } from "../config.ts";
 import { macInfoPlist } from "../build.ts";
@@ -101,4 +102,48 @@ test("TOML updater defaults are shared by Go metadata and Sparkle Info.plist", (
   expect(plist).toContain("<key>SUEnableAutomaticChecks</key><false/>");
   expect(plist).toContain("<key>SUVerifyUpdateBeforeExtraction</key><true/>");
   expect(updaterMetadata(config, "linux-x64", "development").development).toBe(true);
+});
+
+test("portable appcasts publish separate signed artifacts for each architecture", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "quickgui-appcast-targets-"));
+  try {
+    const secretPath = join(dir, "test.key"),
+      source = join(dir, "setup.exe");
+    writeFileSync(secretPath, secret);
+    const config = resolveConfig(
+      {
+        name: "Test",
+        identifier: "test.app",
+        version: "2.0.0",
+        updates: {
+          baseUrl: "https://example.com/releases",
+          publicKey,
+          ed25519SecretKey: secretPath,
+        },
+      },
+      dir,
+    );
+    const paths: string[] = [];
+    for (const target of ["windows-x64", "windows-arm64"] as const) {
+      writeFileSync(source, target);
+      const result = await writeAppcast({
+        config,
+        target,
+        outputDirectory: dir,
+        source,
+        baseUrl: "https://example.com/releases",
+        run: async () => {
+          throw new Error("unexpected tool call");
+        },
+      });
+      paths.push(result.artifactPath);
+      expect(result.url).toContain(target);
+      expect(readFileSync(result.manifestPath, "utf8")).toContain(result.url);
+    }
+    expect(paths[0]).not.toBe(paths[1]);
+    expect(readFileSync(paths[0]!, "utf8")).toBe("windows-x64");
+    expect(readFileSync(paths[1]!, "utf8")).toBe("windows-arm64");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

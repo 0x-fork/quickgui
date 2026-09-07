@@ -2,6 +2,7 @@
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -142,6 +143,16 @@ export async function writeAppcast(input: {
     throw new CliError("The updater extension requires an AppImage on Linux");
   else if (targetInfo(target).platform === "windows" && !artifactPath.endsWith(".exe"))
     throw new CliError("The updater extension requires a QuickGUI NSIS installer on Windows");
+  if (targetInfo(target).platform !== "darwin") {
+    // Different architectures may share a release directory and base URL.
+    const extension = targetInfo(target).platform === "windows" ? "exe" : "AppImage";
+    const publishedPath = join(
+      input.outputDirectory,
+      `${config.executableName}-${config.version}-${target}.${extension}`,
+    );
+    if (resolve(artifactPath) !== resolve(publishedPath)) copyFileSync(artifactPath, publishedPath);
+    artifactPath = publishedPath;
+  }
   const secretPath = config.updates?.ed25519SecretKey;
   if (secretPath && statSync(secretPath).size > 1024)
     throw new CliError("Update signing key file is too large");

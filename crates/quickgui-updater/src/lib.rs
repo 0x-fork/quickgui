@@ -61,6 +61,7 @@ impl Options {
         semver::Version::parse(&self.current_version)
             .map_err(|_| "updater currentVersion must be a semantic version")?;
         if self.identifier.is_empty()
+            || matches!(self.identifier.as_str(), "." | "..")
             || self.identifier.len() > 255
             || !self
                 .identifier
