@@ -66,7 +66,7 @@ func shell() {
 				func() bool { return store.Repository() != nil },
 				func() {
 
-					gui.View(
+					resizablePanel("Resize sidebar", store.SidebarWidth, store.SetSidebarWidth, 180, 420,
 						func() {
 							Sidebar()
 						},
@@ -76,12 +76,10 @@ func shell() {
 							Height:          "100%",
 							MinWidth:        0,
 							MinHeight:       0,
-							Width:           store.SidebarWidth,
 							FlexShrink:      0,
 							BackgroundColor: app.Theme().SidebarWash,
 						},
 					)
-					resizeDivider("Resize sidebar", store.SidebarWidth, store.SetSidebarWidth)
 					gui.View(
 						func() {
 							Toolbar()

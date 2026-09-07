@@ -436,16 +436,7 @@ impl Runtime {
                             hover_changed | ui.pointer_moved(point, renderer),
                         )
                     };
-                    let cursor = if state.drag_session.is_some() {
-                        CursorIcon::Grabbing
-                    } else if over_scrollbar || scrollbar_dragging || app_region_drag {
-                        CursorIcon::Default
-                    } else {
-                        state
-                            .ui
-                            .cursor_style_at(point)
-                            .map_or(CursorIcon::Default, platform_cursor)
-                    };
+                    let cursor = desired_cursor(state, point);
                     set_cursor_if_changed(state, cursor);
                     let pressed_button = state.pressed_mouse_buttons.current();
                     if repaint && state.scheduler.invalidate() {
@@ -511,10 +502,10 @@ impl Runtime {
                     let state = self.window.as_mut().expect("window checked above");
                     let pressed_button = state.pressed_mouse_buttons.current();
                     state.pointer = None;
-                    if state.cursor != CursorIcon::Default {
-                        state.cursor = CursorIcon::Default;
-                        state.window.set_cursor(CursorIcon::Default);
-                    }
+                    let cursor = state
+                        .pointer_capture
+                        .map_or(CursorIcon::Default, |capture| capture.cursor);
+                    set_cursor_if_changed(state, cursor);
                     let repaint = state.ui.pointer_left()
                         | state.ui.update_scrollbar_hover(None, Instant::now())
                         | state.ui.set_drag_over(None)
@@ -792,6 +783,14 @@ impl Runtime {
                         {
                             break 'mouse_input;
                         }
+                        if terminal_capture.is_some()
+                            && let Some(window) = &mut self.window
+                        {
+                            let cursor = window
+                                .pointer
+                                .map_or(CursorIcon::Default, |point| desired_cursor(window, point));
+                            set_cursor_if_changed(window, cursor);
+                        }
 
                         let default_prevented = if let Some(position) = mouse_position {
                             let result = if pressed {
@@ -937,6 +936,10 @@ impl Runtime {
                                             button,
                                             origin: position,
                                             position,
+                                            cursor: window
+                                                .ui
+                                                .cursor_style_at(position)
+                                                .map_or(CursorIcon::Default, platform_cursor),
                                         };
                                         window.pointer_capture = Some(capture);
                                         Some((
@@ -992,6 +995,10 @@ impl Runtime {
                             }
                             if result.repaint && window.scheduler.invalidate() {
                                 window.window.request_redraw();
+                            }
+                            if let Some(point) = window.pointer {
+                                let cursor = desired_cursor(window, point);
+                                set_cursor_if_changed(window, cursor);
                             }
                             (result, previous_focus, captured)
                         };
@@ -1437,6 +1444,10 @@ impl Runtime {
                             let repaint = state.ui.cancel_pointer_interaction()
                                 | (internal_drag && state.ui.end_drag())
                                 | (internal_drag && state.ui.clear_drag_preview());
+                            let cursor = state
+                                .pointer
+                                .map_or(CursorIcon::Default, |point| desired_cursor(state, point));
+                            set_cursor_if_changed(state, cursor);
                             if repaint && state.scheduler.invalidate() {
                                 state.window.request_redraw();
                             }

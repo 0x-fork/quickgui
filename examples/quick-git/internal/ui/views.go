@@ -39,7 +39,7 @@ func ChangesView() {
 	store := app.Store
 	gui.View(
 		func() {
-			gui.View(
+			resizablePanel("Resize file list", store.ChangesSplit, store.SetChangesSplit, 220, 800,
 				func() {
 					gui.Show(
 						func() bool { return store.ChangeCount() > 0 },
@@ -55,13 +55,11 @@ func ChangesView() {
 				},
 				gui.Style{
 					Display:       "flex",
-					Width:         store.ChangesSplit,
 					FlexShrink:    0,
 					MinHeight:     0,
 					FlexDirection: "column",
 				},
 			)
-			resizeDivider("Resize file list", store.ChangesSplit, store.SetChangesSplit)
 			DiffPane()
 		},
 		gui.Style{Display: "flex", Flex: 1, MinWidth: 0, MinHeight: 0, FlexDirection: "row"},
@@ -1107,7 +1105,7 @@ func HistoryView() {
 	store := app.Store
 	gui.View(
 		func() {
-			gui.View(
+			resizablePanel("Resize history", store.HistorySplit, store.SetHistorySplit, 260, 1000,
 				func() {
 					gui.View(
 						func() {
@@ -1166,13 +1164,11 @@ func HistoryView() {
 				},
 				gui.Style{
 					Display:       "flex",
-					Width:         store.HistorySplit,
 					FlexShrink:    0,
 					MinHeight:     0,
 					FlexDirection: "column",
 				},
 			)
-			resizeDivider("Resize history", store.HistorySplit, store.SetHistorySplit)
 			gui.View(
 				func() {
 					commitDetail()

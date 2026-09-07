@@ -742,6 +742,8 @@ struct PointerCapture {
     button: MouseButton,
     origin: Point,
     position: Point,
+    /// Keep the pressed control's cursor while its bounds follow an asynchronous layout update.
+    cursor: CursorIcon,
 }
 
 const MAX_SIMULTANEOUS_MOUSE_BUTTONS: usize = 8;
@@ -1710,9 +1712,12 @@ fn desired_cursor(state: &RuntimeWindow, point: Point) -> CursorIcon {
     if state.drag_session.is_some() {
         return CursorIcon::Grabbing;
     }
+    if let Some(capture) = state.pointer_capture {
+        return capture.cursor;
+    }
     if state.ui.scrollbar_drag_active()
-        || (state.pointer_capture.is_none()
-            && (state.ui.is_over_scrollbar(point) || state.ui.is_app_region_drag(point)))
+        || state.ui.is_over_scrollbar(point)
+        || state.ui.is_app_region_drag(point)
     {
         return CursorIcon::Default;
     }
