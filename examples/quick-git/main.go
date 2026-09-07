@@ -266,65 +266,67 @@ func startApp(statePath string) {
 	}
 
 	openWindow = func(initial string) *native.Window {
-		store := model.CreateStore(model.StoreOptions{
-			Runner: runner, Persistence: persistence,
-			Trash: func(path string) error {
-				done := make(chan error, 1)
-				native.Dispatch(func() {
-					native.TrashItem(
-						path,
-						func(err error) { done <- err },
-					)
-				})
-				return <-done
-			},
-		})
-		var window *native.Window
-		var context appui.AppContext
-		window = native.NewWindow(native.WindowOptions{
-			Title:                "Quick Git",
-			Width:                1240,
-			Height:               800,
-			MinimumWidth:         900,
-			MinimumHeight:        560,
-			Background:           "transparent",
-			Vibrancy:             "sidebar",
-			VisualEffectState:    "followWindow",
-			Appearance:           "system",
-			TitleBarStyle:        "hiddenInset",
-			TrafficLightPosition: &native.Point{X: 14, Y: 19},
-			Component: appui.App(store, appearance, func(_ string) {
-				openRepositoryDialog(window)
-			}, func(path string) {
-				openRepositoryPath(path, window)
-			}, func(mounted appui.AppContext) { context = mounted }),
-		})
-		sessions[window.NativeID] = &session{window: window, store: store, ui: context}
-		setActive(window)
-		window.On(native.WindowReadyToShow, func(native.WindowEvent) {
-			window.Focus()
-			window.GetState(func(state native.WindowState, err error) {
-				if err == nil && !window.Closed {
-					if state.Appearance == "dark" {
-						setAppearance("dark")
-					} else {
-						setAppearance("light")
+		// Repository-menu callbacks belong to the source window. Keep the new
+		// window and its observers alive independently until its own close event.
+		return reactive.CreateRoot(func(dispose func()) *native.Window {
+			store := model.CreateStore(model.StoreOptions{
+				Runner: runner, Persistence: persistence,
+				Trash: func(path string) error {
+					done := make(chan error, 1)
+					native.Dispatch(func() {
+						native.TrashItem(
+							path,
+							func(err error) { done <- err },
+						)
+					})
+					return <-done
+				},
+			})
+			var window *native.Window
+			var context appui.AppContext
+			window = native.NewWindow(native.WindowOptions{
+				Title:                "Quick Git",
+				Width:                1240,
+				Height:               800,
+				MinimumWidth:         900,
+				MinimumHeight:        560,
+				Background:           "transparent",
+				Vibrancy:             "sidebar",
+				VisualEffectState:    "followWindow",
+				Appearance:           "system",
+				TitleBarStyle:        "hiddenInset",
+				TrafficLightPosition: &native.Point{X: 14, Y: 19},
+				Component: appui.App(store, appearance, func(_ string) {
+					openRepositoryDialog(window)
+				}, func(path string) {
+					openRepositoryPath(path, window)
+				}, func(mounted appui.AppContext) { context = mounted }),
+			})
+			sessions[window.NativeID] = &session{window: window, store: store, ui: context}
+			setActive(window)
+			window.On(native.WindowReadyToShow, func(native.WindowEvent) {
+				window.Focus()
+				window.GetState(func(state native.WindowState, err error) {
+					if err == nil && !window.Closed {
+						if state.Appearance == "dark" {
+							setAppearance("dark")
+						} else {
+							setAppearance("light")
+						}
 					}
+				})
+			})
+			window.On(native.WindowAppearance, func(event native.WindowEvent) {
+				if event.Appearance == "dark" || event.Appearance == "light" {
+					setAppearance(event.Appearance)
 				}
 			})
-		})
-		window.On(native.WindowAppearance, func(event native.WindowEvent) {
-			if event.Appearance == "dark" || event.Appearance == "light" {
-				setAppearance(event.Appearance)
-			}
-		})
-		window.On(native.WindowFocus, func(native.WindowEvent) {
-			setActive(window)
-			if store.Repository() != nil {
-				store.Refresh()
-			}
-		})
-		reactive.CreateRoot(func(dispose func()) struct{} {
+			window.On(native.WindowFocus, func(native.WindowEvent) {
+				setActive(window)
+				if store.Repository() != nil {
+					store.Refresh()
+				}
+			})
 			gui.CreateEffect(func() {
 				name := store.RepositoryName()
 				branch := ""
@@ -350,27 +352,24 @@ func startApp(statePath string) {
 			})
 			window.On(native.WindowClosed, func(native.WindowEvent) {
 				dispose()
-			})
-			return struct{}{}
-		})
-		window.On(native.WindowClosed, func(native.WindowEvent) {
-			delete(sessions, window.NativeID)
-			store.Dispose()
-			if active() == window {
-				var next *native.Window
-				for _, session := range sessions {
-					if !session.window.Closed {
-						next = session.window
-						break
+				delete(sessions, window.NativeID)
+				store.Dispose()
+				if active() == window {
+					var next *native.Window
+					for _, session := range sessions {
+						if !session.window.Closed {
+							next = session.window
+							break
+						}
 					}
+					setActive(next)
 				}
-				setActive(next)
+			})
+			if initial != "" {
+				store.OpenRepository(initial)
 			}
+			return window
 		})
-		if initial != "" {
-			store.OpenRepository(initial)
-		}
-		return window
 	}
 
 	reactive.CreateRoot(func(func()) struct{} {
